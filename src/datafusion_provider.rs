@@ -29,12 +29,24 @@ use crate::{
 const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
 
 /// DataFusion-specific scan settings for one provider.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct DeltaDataFusionScanOptions {
     /// Reader execution settings used by each provider scan.
     pub execution_options: DeltaReaderExecutionOptions,
     /// Optional explicit scan partition target.
     pub target_partitions: Option<usize>,
+    /// Decode string and binary data-file columns into Arrow view arrays.
+    pub use_view_types: bool,
+}
+
+impl Default for DeltaDataFusionScanOptions {
+    fn default() -> Self {
+        Self {
+            execution_options: DeltaReaderExecutionOptions::default(),
+            target_partitions: None,
+            use_view_types: true,
+        }
+    }
 }
 
 /// Immutable DataFusion provider for one loaded Delta table snapshot.
@@ -87,7 +99,7 @@ impl DeltaTableProvider {
         }
         table.validate_protocol()?;
         let partition_columns = table.partition_columns().iter().cloned().collect();
-        let schema = datafusion_schema(table.schema(), &partition_columns);
+        let schema = datafusion_schema(table.schema(), &partition_columns, options.use_view_types);
         Ok(Self {
             table,
             schema,
@@ -178,11 +190,26 @@ impl DeltaTableProvider {
                 caller_target_partitions: Some(state.config().target_partitions()),
             },
         )?;
-        core.logical_schema = datafusion_schema(&core.logical_schema, &partition_columns);
-        core.physical_schema = datafusion_schema(&core.physical_schema, &partition_columns);
-        core.projected_schema = datafusion_schema(&core.projected_schema, &partition_columns);
-        planning.projection.output_schema =
-            datafusion_schema(&planning.projection.output_schema, &partition_columns);
+        core.logical_schema = datafusion_schema(
+            &core.logical_schema,
+            &partition_columns,
+            self.options.use_view_types,
+        );
+        core.physical_schema = datafusion_schema(
+            &core.physical_schema,
+            &partition_columns,
+            self.options.use_view_types,
+        );
+        core.projected_schema = datafusion_schema(
+            &core.projected_schema,
+            &partition_columns,
+            self.options.use_view_types,
+        );
+        planning.projection.output_schema = datafusion_schema(
+            &planning.projection.output_schema,
+            &partition_columns,
+            self.options.use_view_types,
+        );
         let partition_count = core.partitions.len();
         let plan = {
             let _setup = tracing::debug_span!(
@@ -195,13 +222,18 @@ impl DeltaTableProvider {
                 planning,
                 row_predicate,
                 self.source_name.clone(),
+                self.options.use_view_types,
             )
         };
         Ok((plan, partition_count))
     }
 }
 
-fn datafusion_schema(schema: &Schema, partition_columns: &HashSet<String>) -> SchemaRef {
+fn datafusion_schema(
+    schema: &Schema,
+    partition_columns: &HashSet<String>,
+    use_view_types: bool,
+) -> SchemaRef {
     let view_schema = schema_with_view_types(schema);
     Arc::new(Schema::new_with_metadata(
         schema
@@ -226,8 +258,10 @@ fn datafusion_schema(schema: &Schema, partition_columns: &HashSet<String>) -> Sc
                                 logical.data_type().clone(),
                             )),
                     )
-                } else {
+                } else if use_view_types {
                     Arc::clone(view)
+                } else {
+                    Arc::clone(logical)
                 }
             })
             .collect::<Vec<_>>(),
@@ -558,7 +592,7 @@ mod tests {
         );
         let partitions = HashSet::from(["region".to_owned(), "partition_payload".to_owned()]);
 
-        let mapped = datafusion_schema(&schema, &partitions);
+        let mapped = datafusion_schema(&schema, &partitions, true);
 
         assert_eq!(
             mapped.as_ref(),
@@ -581,8 +615,22 @@ mod tests {
                     ),
                     Field::new("id", DataType::Int32, false),
                 ],
-                schema_metadata,
+                schema_metadata.clone(),
             )
         );
+
+        let standard = datafusion_schema(&schema, &partitions, false);
+        assert_eq!(standard.field(0).data_type(), &DataType::Utf8);
+        assert_eq!(standard.field(1).data_type(), &DataType::Binary);
+        assert_eq!(
+            standard.field(2).data_type(),
+            &DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8))
+        );
+        assert_eq!(
+            standard.field(3).data_type(),
+            &DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::LargeBinary),)
+        );
+        assert_eq!(standard.field(4).data_type(), &DataType::Int32);
+        assert_eq!(standard.metadata(), &schema_metadata);
     }
 }

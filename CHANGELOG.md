@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Allow DataFusion consumers to disable string and binary view arrays while keeping them enabled by default.
+
 ## 0.1.3 - 2026-08-11
 
 - Decode DataFusion string and binary columns directly into Arrow view arrays and dictionary-encode string and binary partition columns.

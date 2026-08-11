@@ -13,8 +13,8 @@ use std::{
 
 use arrow::{
     array::{
-        Array, BinaryViewArray, DictionaryArray, Int32Array, Int64Array, MapArray, StringArray,
-        StringViewArray, StructArray,
+        Array, BinaryArray, BinaryViewArray, DictionaryArray, Int32Array, Int64Array, MapArray,
+        StringArray, StringViewArray, StructArray,
     },
     datatypes::{DataType, Field, Schema, UInt16Type},
     record_batch::RecordBatch,
@@ -260,6 +260,7 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
         DeltaReaderExecutionOptions::default()
     );
     assert_eq!(defaults.target_partitions, None);
+    assert!(defaults.use_view_types);
 
     let provider = DeltaTableProvider::try_new(table.clone(), defaults)?;
     assert_eq!(table.schema().field(1).data_type(), &DataType::Utf8);
@@ -390,6 +391,7 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
             DeltaDataFusionScanOptions {
                 execution_options,
                 target_partitions: None,
+                ..Default::default()
             },
         )
         .expect_err("disabled backend must fail");
@@ -557,6 +559,7 @@ async fn native_exact_and_official_residual_execution_return_the_same_rows() -> 
             DeltaDataFusionScanOptions {
                 execution_options,
                 target_partitions: Some(2),
+                use_view_types: true,
             },
         )?;
         let data_filter = col("id").gt(lit(1_i32));
@@ -872,6 +875,7 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
         DeltaDataFusionScanOptions {
             execution_options,
             target_partitions: Some(1),
+            use_view_types: true,
         },
     )?;
     let context = SessionContext::new();
@@ -922,6 +926,7 @@ async fn native_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
             DeltaDataFusionScanOptions {
                 execution_options,
                 target_partitions: Some(1),
+                use_view_types: true,
             },
         )?;
         let plan = context
@@ -1033,10 +1038,11 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
     register_delta_table(
         &context,
         "orders",
-        table,
+        table.clone(),
         DeltaDataFusionScanOptions {
             execution_options,
             target_partitions: Some(1),
+            use_view_types: true,
         },
     )?;
 
@@ -1057,6 +1063,7 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
 
     let metrics = collect_delta_datafusion_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
+    assert!(metrics[0].snapshot().use_view_types);
     assert_eq!(metrics[0].snapshot().reader.estimated_rows, Some(3));
     let batches = collect_plan(&context, plan).await?;
     assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
@@ -1067,27 +1074,55 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
         .ok_or("official kernel did not preserve the DataFusion view schema")?;
     assert_eq!(names.iter().collect::<Vec<_>>(), [Some("bob")]);
     assert_eq!(metrics[0].snapshot().reader.rows_produced, 3);
+
+    register_delta_table(
+        &context,
+        "orders_standard",
+        table,
+        DeltaDataFusionScanOptions {
+            execution_options,
+            target_partitions: Some(1),
+            use_view_types: false,
+        },
+    )?;
+    let plan = context
+        .sql("SELECT customer_name FROM orders_standard WHERE id > 1 LIMIT 1")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let batches = collect_plan(&context, plan).await?;
+    assert!(!metrics[0].snapshot().use_view_types);
+    let names = batches[0]
+        .column(0)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or("official kernel did not preserve the standard Utf8 schema")?;
+    assert_eq!(names.iter().collect::<Vec<_>>(), [Some("bob")]);
     Ok(())
 }
 
 #[tokio::test]
 #[cfg(feature = "native-async")]
-async fn native_scan_decodes_top_level_and_nested_views_with_exact_values() -> TestResult {
+async fn native_scan_decodes_both_string_representations_with_exact_values() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_supported_types("provider-view-values")?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
     register_delta_table(
         &context,
         "typed",
-        table,
+        table.clone(),
         DeltaDataFusionScanOptions::default(),
     )?;
 
-    let batches = context
+    let plan = context
         .sql("SELECT customer_name, payload, attributes FROM typed")
         .await?
-        .collect()
+        .create_physical_plan()
         .await?;
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let batches = collect_plan(&context, plan).await?;
+    assert!(metrics[0].snapshot().use_view_types);
     assert_eq!(batches.len(), 1);
     let batch = &batches[0];
     let names = batch
@@ -1118,6 +1153,69 @@ async fn native_scan_decodes_top_level_and_nested_views_with_exact_values() -> T
         .as_any()
         .downcast_ref::<StringViewArray>()
         .ok_or("attributes.label was not Utf8View")?;
+    assert_eq!(
+        labels.iter().collect::<Vec<_>>(),
+        [Some("low"), Some("high"), None]
+    );
+
+    let standard = DeltaTableProvider::try_new(
+        table,
+        DeltaDataFusionScanOptions {
+            use_view_types: false,
+            ..Default::default()
+        },
+    )?;
+    assert_eq!(
+        standard
+            .schema()
+            .field_with_name("customer_name")?
+            .data_type(),
+        &DataType::Utf8
+    );
+    assert_eq!(
+        standard.schema().field_with_name("payload")?.data_type(),
+        &DataType::Binary
+    );
+    context.register_table("typed_standard", Arc::new(standard))?;
+
+    let plan = context
+        .sql("SELECT customer_name, payload, attributes FROM typed_standard")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let batches = collect_plan(&context, plan).await?;
+    assert!(!metrics[0].snapshot().use_view_types);
+    assert_eq!(batches.len(), 1);
+    let batch = &batches[0];
+    let names = batch
+        .column(0)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or("customer_name was not Utf8")?;
+    assert_eq!(
+        names.iter().collect::<Vec<_>>(),
+        [Some("alice"), Some("bob"), None]
+    );
+    let payloads = batch
+        .column(1)
+        .as_any()
+        .downcast_ref::<BinaryArray>()
+        .ok_or("payload was not Binary")?;
+    assert_eq!(
+        payloads.iter().collect::<Vec<_>>(),
+        [Some(b"alpha".as_slice()), Some(b"beta".as_slice()), None]
+    );
+    let attributes = batch
+        .column(2)
+        .as_any()
+        .downcast_ref::<StructArray>()
+        .ok_or("attributes was not Struct")?;
+    let labels = attributes
+        .column(1)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or("attributes.label was not Utf8")?;
     assert_eq!(
         labels.iter().collect::<Vec<_>>(),
         [Some("low"), Some("high"), None]

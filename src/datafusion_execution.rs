@@ -48,6 +48,8 @@ use crate::{
 pub struct DeltaDataFusionMetricsSnapshot {
     /// Core reader planning and execution metrics.
     pub reader: DeltaReadMetricsSnapshot,
+    /// Whether the provider requested Arrow view arrays for string and binary data columns.
+    pub use_view_types: bool,
     /// Effective DataFusion task batch size observed at execution.
     pub output_batch_size: Option<u64>,
     /// Files pruned before admission by a dynamic partition filter.
@@ -77,6 +79,7 @@ pub struct DeltaDataFusionMetrics {
 struct DeltaDataFusionMetricsInner {
     source_name: Option<String>,
     reader: DeltaReadMetrics,
+    use_view_types: bool,
     output_batch_size: AtomicU64,
     dynamic_partition_files_pruned: AtomicU64,
     dynamic_partition_files_kept: AtomicU64,
@@ -90,11 +93,12 @@ struct DeltaDataFusionMetricsInner {
 
 impl DeltaDataFusionMetrics {
     #[allow(dead_code)]
-    fn new(source_name: Option<String>, reader: DeltaReadMetrics) -> Self {
+    fn new(source_name: Option<String>, reader: DeltaReadMetrics, use_view_types: bool) -> Self {
         Self {
             inner: Arc::new(DeltaDataFusionMetricsInner {
                 source_name,
                 reader,
+                use_view_types,
                 output_batch_size: AtomicU64::new(0),
                 dynamic_partition_files_pruned: AtomicU64::new(0),
                 dynamic_partition_files_kept: AtomicU64::new(0),
@@ -118,6 +122,7 @@ impl DeltaDataFusionMetrics {
         let inner = self.inner.as_ref();
         DeltaDataFusionMetricsSnapshot {
             reader: inner.reader.snapshot(),
+            use_view_types: inner.use_view_types,
             output_batch_size: nonzero_load(&inner.output_batch_size),
             dynamic_partition_files_pruned: load(&inner.dynamic_partition_files_pruned),
             dynamic_partition_files_kept: load(&inner.dynamic_partition_files_kept),
@@ -247,12 +252,14 @@ pub(crate) fn create_datafusion_execution_plan(
     planning: DataFusionScanPlanning,
     row_predicate: Option<DeltaKernelPredicate>,
     source_name: Option<String>,
+    use_view_types: bool,
 ) -> Arc<dyn ExecutionPlan> {
     Arc::new(DeltaDataFusionExec::new(
         plan,
         planning,
         row_predicate,
         source_name,
+        use_view_types,
     ))
 }
 
@@ -274,6 +281,7 @@ impl DeltaDataFusionExec {
         planning: DataFusionScanPlanning,
         row_predicate: Option<DeltaKernelPredicate>,
         source_name: Option<String>,
+        use_view_types: bool,
     ) -> Self {
         let schema = planning.projection.output_schema;
         let output_projection = planning.projection.output_projection.map(Arc::from);
@@ -284,7 +292,8 @@ impl DeltaDataFusionExec {
             Boundedness::Bounded,
         )
         .with_scheduling_type(SchedulingType::Cooperative);
-        let metrics = DeltaDataFusionMetrics::new(source_name, plan.metrics.clone());
+        let metrics =
+            DeltaDataFusionMetrics::new(source_name, plan.metrics.clone(), use_view_types);
         let limiter = ScanReadLimiter::new(
             plan.execution_options,
             plan.partition_target_diagnostic.target_partitions,
@@ -808,6 +817,7 @@ mod tests {
             planning,
             row_predicate,
             source_name,
+            true,
         ))
     }
 
