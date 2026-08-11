@@ -12,8 +12,11 @@ use std::{
 };
 
 use arrow::{
-    array::{Int32Array, Int64Array, StringArray},
-    datatypes::{DataType, Field, Schema},
+    array::{
+        Array, BinaryViewArray, DictionaryArray, Int32Array, Int64Array, MapArray, StringArray,
+        StringViewArray, StructArray,
+    },
+    datatypes::{DataType, Field, Schema, UInt16Type},
     record_batch::RecordBatch,
 };
 use datafusion::{
@@ -179,13 +182,24 @@ fn regions(batches: &[RecordBatch]) -> Vec<String> {
     batches
         .iter()
         .flat_map(|batch| {
-            batch
+            let regions = batch
                 .column(batch.schema().index_of("region").expect("region column"))
                 .as_any()
+                .downcast_ref::<DictionaryArray<UInt16Type>>()
+                .expect("dictionary region");
+            let values = regions
+                .values()
+                .as_any()
                 .downcast_ref::<StringArray>()
-                .expect("Utf8 region")
+                .expect("Utf8 dictionary values");
+            regions
+                .keys()
                 .iter()
-                .map(|value| value.expect("non-null region").to_owned())
+                .map(|key| {
+                    values
+                        .value(usize::from(key.expect("non-null region")))
+                        .to_owned()
+                })
                 .collect::<Vec<_>>()
         })
         .collect()
@@ -248,7 +262,11 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
     assert_eq!(defaults.target_partitions, None);
 
     let provider = DeltaTableProvider::try_new(table.clone(), defaults)?;
-    assert_eq!(provider.schema(), table.schema().clone());
+    assert_eq!(table.schema().field(1).data_type(), &DataType::Utf8);
+    assert_eq!(
+        provider.schema().field(1).data_type(),
+        &DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8))
+    );
     assert_eq!(provider.table_type(), TableType::Base);
     let debug = format!("{provider:?}");
     assert!(!debug.contains(&fixture.uri()));
@@ -1042,7 +1060,131 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
     assert_eq!(metrics[0].snapshot().reader.estimated_rows, Some(3));
     let batches = collect_plan(&context, plan).await?;
     assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
+    let names = batches[0]
+        .column(0)
+        .as_any()
+        .downcast_ref::<StringViewArray>()
+        .ok_or("official kernel did not preserve the DataFusion view schema")?;
+    assert_eq!(names.iter().collect::<Vec<_>>(), [Some("bob")]);
     assert_eq!(metrics[0].snapshot().reader.rows_produced, 3);
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "native-async")]
+async fn native_scan_decodes_top_level_and_nested_views_with_exact_values() -> TestResult {
+    let fixture = RealParquetDeltaTable::new_with_supported_types("provider-view-values")?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
+    register_delta_table(
+        &context,
+        "typed",
+        table,
+        DeltaDataFusionScanOptions::default(),
+    )?;
+
+    let batches = context
+        .sql("SELECT customer_name, payload, attributes FROM typed")
+        .await?
+        .collect()
+        .await?;
+    assert_eq!(batches.len(), 1);
+    let batch = &batches[0];
+    let names = batch
+        .column(0)
+        .as_any()
+        .downcast_ref::<StringViewArray>()
+        .ok_or("customer_name was not Utf8View")?;
+    assert_eq!(
+        names.iter().collect::<Vec<_>>(),
+        [Some("alice"), Some("bob"), None]
+    );
+    let payloads = batch
+        .column(1)
+        .as_any()
+        .downcast_ref::<BinaryViewArray>()
+        .ok_or("payload was not BinaryView")?;
+    assert_eq!(
+        payloads.iter().collect::<Vec<_>>(),
+        [Some(b"alpha".as_slice()), Some(b"beta".as_slice()), None]
+    );
+    let attributes = batch
+        .column(2)
+        .as_any()
+        .downcast_ref::<StructArray>()
+        .ok_or("attributes was not Struct")?;
+    let labels = attributes
+        .column(1)
+        .as_any()
+        .downcast_ref::<StringViewArray>()
+        .ok_or("attributes.label was not Utf8View")?;
+    assert_eq!(
+        labels.iter().collect::<Vec<_>>(),
+        [Some("low"), Some("high"), None]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg(feature = "native-async")]
+async fn native_scan_preserves_views_through_nested_map_reordering() -> TestResult {
+    let fixture = RealParquetDeltaTable::new_with_reordered_map_value_struct_fields(
+        "provider-reordered-map-views",
+    )?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
+    register_delta_table(
+        &context,
+        "mapped",
+        table,
+        DeltaDataFusionScanOptions::default(),
+    )?;
+
+    let batches = context
+        .sql("SELECT attributes FROM mapped")
+        .await?
+        .collect()
+        .await?;
+    assert_eq!(batches.len(), 1);
+    let attributes = batches[0]
+        .column(0)
+        .as_any()
+        .downcast_ref::<MapArray>()
+        .ok_or("attributes was not Map")?;
+    let keys = attributes
+        .keys()
+        .as_any()
+        .downcast_ref::<StringViewArray>()
+        .ok_or("map keys were not Utf8View")?;
+    assert_eq!(
+        keys.iter().collect::<Vec<_>>(),
+        [Some("home"), Some("work"), Some("mailing")]
+    );
+    let values = attributes
+        .values()
+        .as_any()
+        .downcast_ref::<StructArray>()
+        .ok_or("map values were not Struct")?;
+    assert_eq!(values.fields()[0].name(), "zip");
+    assert_eq!(values.fields()[1].name(), "city");
+    let zips = values
+        .column(0)
+        .as_any()
+        .downcast_ref::<Int32Array>()
+        .ok_or("map value zip was not Int32")?;
+    assert_eq!(
+        zips.iter().collect::<Vec<_>>(),
+        [Some(94110), Some(10001), None]
+    );
+    let cities = values
+        .column(1)
+        .as_any()
+        .downcast_ref::<StringViewArray>()
+        .ok_or("map value city was not Utf8View")?;
+    assert_eq!(
+        cities.iter().collect::<Vec<_>>(),
+        [Some("san francisco"), Some("new york"), Some("phoenix")]
+    );
     Ok(())
 }
 
@@ -1070,14 +1212,14 @@ async fn joined_delta_scans_keep_distinct_metrics_and_limit_above_join() -> Test
     assert_eq!(star.schema().field(0).name(), "id");
     assert_eq!(star.schema().field(0).data_type(), &DataType::Int32);
     assert_eq!(star.schema().field(1).name(), "customer_name");
-    assert_eq!(star.schema().field(1).data_type(), &DataType::Utf8);
+    assert_eq!(star.schema().field(1).data_type(), &DataType::Utf8View);
     let projected = context
         .sql("SELECT customer_name FROM orders")
         .await?
         .into_optimized_plan()?;
     assert_eq!(projected.schema().fields().len(), 1);
     assert_eq!(projected.schema().field(0).name(), "customer_name");
-    assert_eq!(projected.schema().field(0).data_type(), &DataType::Utf8);
+    assert_eq!(projected.schema().field(0).data_type(), &DataType::Utf8View);
 
     let plan = context
         .sql(

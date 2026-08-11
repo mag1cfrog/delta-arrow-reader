@@ -5,14 +5,14 @@ use std::sync::Arc;
 use arrow::{
     array::{Array, ArrayRef, Int64Array, ListArray, MapArray, StructArray, new_null_array},
     compute::cast,
-    datatypes::{DataType, Field, Fields, SchemaRef},
+    datatypes::{DataType, Field, Fields, Schema, SchemaRef},
     record_batch::RecordBatch,
 };
 use futures_util::{StreamExt, stream};
 use object_store::{ObjectStore, ObjectStoreExt, memory::InMemory, path::Path};
 use parquet::arrow::{
     PARQUET_FIELD_ID_META_KEY, ProjectionMask, RowNumber,
-    arrow_reader::{ArrowPredicateFn, ArrowReaderOptions, RowFilter},
+    arrow_reader::{ArrowPredicateFn, ArrowReaderMetadata, ArrowReaderOptions, RowFilter},
     async_reader::{
         ParquetObjectReader, ParquetRecordBatchStream, ParquetRecordBatchStreamBuilder,
     },
@@ -36,7 +36,7 @@ use crate::{
     native_async_row_group_pruning::native_async_pruned_row_groups,
     planning::{DeltaScanFileTask, DeltaScanPlan},
     scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
-    transform::align_batch_to_logical_schema,
+    transform::{align_batch_to_logical_schema, schema_uses_view_types, schema_with_view_types},
 };
 
 struct NativeAsyncFileReader {
@@ -185,12 +185,42 @@ impl NativeAsyncFileReader {
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
             })?;
-        let builder = ParquetRecordBatchStreamBuilder::new_with_options(reader, reader_options)
-            .await
+        let builder = if schema_uses_view_types(&provider_schema) {
+            let mut metadata_reader = reader.clone();
+            let metadata =
+                ArrowReaderMetadata::load_async(&mut metadata_reader, reader_options.clone())
+                    .await
+                    .boxed()
+                    .context(DataFileReadSnafu {
+                        reason: "parquet_read_setup_failed",
+                    })?;
+            let file_schema = Schema::new_with_metadata(
+                metadata
+                    .schema()
+                    .fields()
+                    .iter()
+                    .filter(|field| field.name() != ORIGINAL_ROW_INDEX_COLUMN)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                metadata.schema().metadata().clone(),
+            );
+            let metadata = ArrowReaderMetadata::try_new(
+                Arc::clone(metadata.metadata()),
+                reader_options.with_schema(schema_with_view_types(&file_schema)),
+            )
             .boxed()
             .context(DataFileReadSnafu {
                 reason: "parquet_read_setup_failed",
             })?;
+            ParquetRecordBatchStreamBuilder::new_with_metadata(reader, metadata)
+        } else {
+            ParquetRecordBatchStreamBuilder::new_with_options(reader, reader_options)
+                .await
+                .boxed()
+                .context(DataFileReadSnafu {
+                    reason: "parquet_read_setup_failed",
+                })?
+        };
         let schema_match = build_native_async_schema_match(
             builder.parquet_schema(),
             builder.schema(),
