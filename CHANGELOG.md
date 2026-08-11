@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.2 - 2026-08-11
+
+- Add staged snapshot loading for protocol checks before Arrow schema conversion.
+- Expose protocol and shared metrics identity needed by downstream integrations.
+- Preserve planning and object-store diagnostic context across DataFusion tasks.
+
 ## 0.1.1 - 2026-08-10
 
 - Preserve the extracted reader's independent scan, partition, and prefetch bounds.
