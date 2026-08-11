@@ -7,11 +7,11 @@ whole result in memory.
 
 ## Installation
 
-The 0.1.0 package declaration is:
+The 0.1.1 package declaration is:
 
 ```toml
 [dependencies]
-delta-arrow-reader = "0.1.0"
+delta-arrow-reader = "0.1.1"
 futures-util = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -22,7 +22,7 @@ you need SQL integration:
 ```toml
 [dependencies]
 datafusion = { version = "54.1.0", default-features = false, features = ["sql"] }
-delta-arrow-reader = { version = "0.1.0", features = ["datafusion"] }
+delta-arrow-reader = { version = "0.1.1", features = ["datafusion"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
