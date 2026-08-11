@@ -49,7 +49,10 @@ pub use datafusion_execution::{
 pub use datafusion_provider::{
     DeltaDataFusionScanOptions, DeltaTableProvider, RegisteredDeltaTable, register_delta_table,
 };
-pub use direct::{DeltaBatchStream, DeltaScan, DeltaScanBuilder, DeltaTable, DeltaTableBuilder};
+pub use direct::{
+    DeltaBatchStream, DeltaScan, DeltaScanBuilder, DeltaTable, DeltaTableBuilder,
+    DeltaTableSnapshot,
+};
 pub use error::{DeltaReaderError, DeltaReaderPhase};
 pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
 #[doc(hidden)]
