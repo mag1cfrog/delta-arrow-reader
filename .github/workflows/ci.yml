@@ -8,27 +8,81 @@ on:
 permissions:
   contents: read
 
+env:
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_GHA_RW_MODE: READ_ONLY
+  RUSTC_WRAPPER: sccache
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  feature-tests:
+    name: Feature Tests / ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Minimal
+            base: --no-default-features
+            official: --no-default-features --features official-kernel
+          - name: DataFusion
+            base: --no-default-features --features datafusion
+            official: --no-default-features --features datafusion,official-kernel
+          - name: Native
+            base: ""
+            official: --features official-kernel
+          - name: Native + DataFusion
+            base: --features datafusion
+            official: --all-features
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - run: cargo test --locked ${{ matrix.base }}
+      - run: cargo test --locked ${{ matrix.official }}
+
+  checks:
+    name: ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [Lints and Docs, Package]
+
+    steps:
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
           components: clippy, rustfmt
-      - run: cargo fmt --all -- --check
-      - run: cargo check --locked --no-default-features --all-targets
-      - run: cargo check --locked --all-features --all-targets
-      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
-      - run: cargo test --locked --no-default-features
-      - run: cargo test --locked --no-default-features --features official-kernel
-      - run: cargo test --locked --no-default-features --features datafusion
-      - run: cargo test --locked --no-default-features --features datafusion,official-kernel
-      - run: cargo test --locked
-      - run: cargo test --locked --features official-kernel
-      - run: cargo test --locked --features datafusion
-      - run: cargo test --locked --all-features
-      - run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
-      - run: cargo package --locked
-      - run: git diff --check
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - if: matrix.task == 'Lints and Docs'
+        run: cargo fmt --all -- --check
+      - if: matrix.task == 'Lints and Docs'
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - if: matrix.task == 'Lints and Docs'
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
+      - if: matrix.task == 'Lints and Docs'
+        run: git diff --check
+      - if: matrix.task == 'Package'
+        run: cargo package --locked
