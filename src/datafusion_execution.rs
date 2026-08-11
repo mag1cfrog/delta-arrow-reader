@@ -1297,6 +1297,7 @@ mod tests {
         let missing = DeltaScanFileTask {
             path: "missing-partition.parquet".to_owned(),
             estimated_bytes: None,
+            parquet_byte_range: None,
             estimated_rows: None,
             stats: None,
             modification_time_ms: None,

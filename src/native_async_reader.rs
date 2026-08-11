@@ -229,7 +229,11 @@ impl NativeAsyncFileReader {
         .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
         let projection =
             ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
-        let row_groups = native_async_pruned_row_groups(builder.metadata(), physical_predicate);
+        let row_groups = native_async_pruned_row_groups(
+            builder.metadata(),
+            task.parquet_byte_range.as_ref(),
+            physical_predicate,
+        );
         let builder = match row_groups {
             Some(row_groups) => builder.with_row_groups(row_groups),
             None => builder,

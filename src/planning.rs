@@ -3,6 +3,7 @@
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BinaryHeap, HashSet},
+    ops::Range,
     sync::Arc,
 };
 
@@ -506,6 +507,7 @@ fn validate_projection(
 pub(crate) struct DeltaScanFileTask {
     pub(crate) path: String,
     pub(crate) estimated_bytes: Option<u64>,
+    pub(crate) parquet_byte_range: Option<Range<u64>>,
     pub(crate) estimated_rows: Option<u64>,
     pub(crate) stats: Option<DeltaScanFileStats>,
     pub(crate) modification_time_ms: Option<i64>,
@@ -536,6 +538,7 @@ impl DeltaScanFileTask {
         Ok(Self {
             path: file.path,
             estimated_bytes: Some(estimated_bytes),
+            parquet_byte_range: None,
             estimated_rows: stats.as_ref().map(|stats| stats.num_records),
             stats,
             modification_time_ms: file.modification_time_ms,
