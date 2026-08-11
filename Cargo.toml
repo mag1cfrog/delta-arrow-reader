@@ -11,7 +11,6 @@ repository = "https://github.com/mag1cfrog/delta-arrow-reader"
 readme = "README.md"
 keywords = ["delta-lake", "arrow", "parquet", "datafusion"]
 categories = ["asynchronous", "database"]
-publish = false
 exclude = [
     ".github/**",
     ".gitignore",
