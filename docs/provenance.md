@@ -24,9 +24,9 @@ validated staging subtree to this repository with unchanged crate bytes and
 file modes. The independent import added only its Cargo lockfile, root target
 ignore rule, and CI workflow. This repository is now the canonical source.
 
-The 0.1.0 candidate remains unpublished while
-[issue #471](https://github.com/mag1cfrog/delta-funnel/issues/471) validates its
-documentation and package contents.
+[Issue #471](https://github.com/mag1cfrog/delta-funnel/issues/471) validated the
+0.1.0 documentation and package contents. Issue #472 owns publication, tagging,
+and independent registry verification.
 
 ## Path mapping
 

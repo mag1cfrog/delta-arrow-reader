@@ -11,8 +11,8 @@ adapter without depending on Delta Funnel orchestration.
 [Issue #486](https://github.com/mag1cfrog/delta-funnel/issues/486) exported the
 validated staging crate and transferred canonical ownership to this
 repository. Delta Funnel retains its existing internal reader until it adopts
-an independently released package. This crate remains unpublished while the
-0.1.0 candidate is validated.
+the independently released package. That adoption is a separate migration
+step.
 
 ## Current boundary
 

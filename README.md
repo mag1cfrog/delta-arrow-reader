@@ -5,9 +5,6 @@ batches. It provides a direct pull-driven stream API and an optional DataFusion
 table provider. The caller owns the Tokio runtime, and scans do not collect the
 whole result in memory.
 
-The 0.1.0 release candidate is not published while package validation is in
-progress.
-
 ## Installation
 
 The 0.1.0 package declaration is:
