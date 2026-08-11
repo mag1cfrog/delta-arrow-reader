@@ -7,11 +7,11 @@ whole result in memory.
 
 ## Installation
 
-The 0.1.3 package declaration is:
+The 0.2.0 package declaration is:
 
 ```toml
 [dependencies]
-delta-arrow-reader = "0.1.3"
+delta-arrow-reader = "0.2.0"
 futures-util = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -22,7 +22,7 @@ you need SQL integration:
 ```toml
 [dependencies]
 datafusion = { version = "54.1.0", default-features = false, features = ["sql"] }
-delta-arrow-reader = { version = "0.1.3", features = ["datafusion"] }
+delta-arrow-reader = { version = "0.2.0", features = ["datafusion"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -100,6 +100,21 @@ The DataFusion provider uses Arrow view arrays for string and binary data-file
 columns and dictionary arrays for string and binary partition columns. Direct
 reader scans retain the Delta table's ordinary Arrow schema.
 
+For transformation-heavy queries that benefit from ordinary Arrow arrays,
+disable view types without changing partition dictionary encoding:
+
+```rust
+# #[cfg(feature = "datafusion")]
+# fn configure() {
+# use delta_arrow_reader::DeltaDataFusionScanOptions;
+let scan_options = DeltaDataFusionScanOptions {
+    use_view_types: false,
+    ..Default::default()
+};
+# let _ = scan_options;
+# }
+```
+
 ## Features
 
 | Feature | Default | Purpose |
@@ -117,6 +132,7 @@ When default features are enabled, NativeAsync is selected by default.
 - The caller supplies the Tokio runtime and drives returned streams.
 - Execution limits, buffering, Parquet metadata prefetch, and optional
   full-file reads are configured through `DeltaReaderExecutionOptions`.
+- DataFusion scan metrics report whether the provider requested view arrays.
 - `DeltaReaderError::phase` and `DeltaReaderError::as_str` return stable,
   redacted categories. Dependency failures remain available through the
   standard error source chain.

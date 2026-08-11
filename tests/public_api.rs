@@ -324,6 +324,7 @@ fn datafusion_provider_contract_is_public() {
     fn assert_result_traits<T: std::fmt::Debug + Clone + PartialEq + Eq>() {}
 
     assert_debug_clone::<DeltaDataFusionScanOptions>();
+    assert!(DeltaDataFusionScanOptions::default().use_view_types);
     assert_clone::<DeltaTableProvider>();
     assert_result_traits::<RegisteredDeltaTable>();
     let construct: fn(
