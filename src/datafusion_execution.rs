@@ -440,11 +440,16 @@ fn scan_file_task(file: PartitionedFile) -> DataFusionResult<DeltaScanFileTask> 
         .ok_or_else(|| adapter_error("scan_file_range_missing"))?;
     let start = u64::try_from(range.start).map_err(|_| adapter_error("scan_file_range_invalid"))?;
     let end = u64::try_from(range.end).map_err(|_| adapter_error("scan_file_range_invalid"))?;
-    if start >= end || task.file_size.is_none_or(|file_size| end > file_size) {
+    let file_size = task
+        .file_size
+        .ok_or_else(|| adapter_error("scan_file_size_missing"))?;
+    if start >= end || end > file_size {
         return Err(adapter_error("scan_file_range_invalid"));
     }
-    task.parquet_byte_range = Some(start..end);
-    task.estimated_rows = None;
+    task.parquet_byte_range = (start != 0 || end != file_size).then_some(start..end);
+    if task.parquet_byte_range.is_some() {
+        task.estimated_rows = None;
+    }
     Ok(task)
 }
 
@@ -1020,10 +1025,11 @@ mod tests {
             .iter()
             .flat_map(|partition| &partition.file_tasks)
         {
-            ranges
-                .entry(task.path.as_str())
-                .or_default()
-                .push(task.parquet_byte_range.clone().ok_or("missing range")?);
+            ranges.entry(task.path.as_str()).or_default().push(
+                task.parquet_byte_range
+                    .clone()
+                    .unwrap_or(0..task.file_size.ok_or("missing file size")?),
+            );
             assert_eq!(
                 task.file_size,
                 Some(if task.path == "large.parquet" {
@@ -1032,7 +1038,12 @@ mod tests {
                     20
                 })
             );
-            assert_eq!(task.estimated_rows, None);
+            if task.path == "small.parquet" {
+                assert!(task.parquet_byte_range.is_none());
+                assert_eq!(task.estimated_rows, Some(20));
+            } else {
+                assert_eq!(task.estimated_rows, None);
+            }
         }
         assert_eq!(
             ranges.remove("large.parquet"),

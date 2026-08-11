@@ -265,6 +265,92 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
     Ok(())
 }
 
+#[tokio::test]
+async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates() -> TestResult {
+    let fixture = RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
+        "provider-repartitioned-dv",
+        3_000,
+        &[0, 2_999, 3_000, 5_999],
+    )?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_target_partitions(8)
+            .with_repartition_file_min_size(1),
+    );
+    register_delta_table(
+        &context,
+        "orders",
+        table,
+        DeltaDataFusionScanOptions::default(),
+    )?;
+
+    let plan = context
+        .sql("SELECT id FROM orders WHERE id >= 2999 ORDER BY id")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(display.contains("partitions=8"), "{display}");
+
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let actual = ids(&collect_plan(&context, plan).await?);
+    let expected = (2_999..=6_000)
+        .filter(|id| ![3_000, 3_001, 6_000].contains(id))
+        .collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+    let metrics = metrics[0].snapshot().reader;
+    assert_eq!(metrics.scan_partitions_started, 8);
+    assert_eq!(metrics.files_started, 8);
+    assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
+    assert_eq!(metrics.deletion_vectors_applied, 2);
+    assert_eq!(metrics.deletion_vector_rows_deleted, 3);
+    assert_eq!(metrics.deletion_vector_failures, 0);
+    assert_eq!(metrics.deletion_vector_rejections, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn repartitioned_scan_preserves_physical_to_logical_transforms() -> TestResult {
+    let fixture = RealParquetDeltaTable::new_with_column_mapping("provider-repartitioned-mapping")?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_target_partitions(2)
+            .with_repartition_file_min_size(1),
+    );
+    register_delta_table(
+        &context,
+        "mapped",
+        table,
+        DeltaDataFusionScanOptions::default(),
+    )?;
+
+    let plan = context
+        .sql("SELECT customer_name, id FROM mapped WHERE id >= 2 ORDER BY id")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(display.contains("partitions=2"), "{display}");
+    let batches = collect_plan(&context, plan).await?;
+
+    assert_eq!(ids(&batches), [2, 3]);
+    let names = batches
+        .iter()
+        .flat_map(|batch| {
+            batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<StringViewArray>()
+                .expect("customer_name was not Utf8View")
+                .iter()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(names, [Some("bob"), None]);
+    Ok(())
+}
+
 fn register_fixture(
     context: &SessionContext,
     name: &str,
