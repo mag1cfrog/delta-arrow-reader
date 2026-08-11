@@ -574,7 +574,10 @@ impl Query {
 
     const fn expected_columns(self) -> &'static [(&'static str, DataType)] {
         match self {
-            Self::FullRows => &[("id", DataType::Int32), ("customer_name", DataType::Utf8)],
+            Self::FullRows => &[
+                ("id", DataType::Int32),
+                ("customer_name", DataType::Utf8View),
+            ],
             Self::ProjectId | Self::FilterTailIds => &[("id", DataType::Int32)],
         }
     }

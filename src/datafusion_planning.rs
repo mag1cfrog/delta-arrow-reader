@@ -629,11 +629,15 @@ fn partition_literal_matches(
         return false;
     };
     match (field.data_type(), literal) {
-        (
-            DataType::Utf8 | DataType::LargeUtf8,
-            Expr::Literal(ScalarValue::Utf8(Some(_)) | ScalarValue::LargeUtf8(Some(_)), _),
-        )
-        | (DataType::Int8, Expr::Literal(ScalarValue::Int8(Some(_)), _))
+        (DataType::Utf8 | DataType::LargeUtf8, Expr::Literal(value, _))
+            if matches!(
+                scalar_value(value),
+                Some(DeltaScalar::Utf8(_) | DeltaScalar::LargeUtf8(_))
+            ) =>
+        {
+            true
+        }
+        (DataType::Int8, Expr::Literal(ScalarValue::Int8(Some(_)), _))
         | (DataType::Int16, Expr::Literal(ScalarValue::Int16(Some(_)), _))
         | (DataType::Int32, Expr::Literal(ScalarValue::Int32(Some(_)), _))
         | (DataType::Int64, Expr::Literal(ScalarValue::Int64(Some(_)), _))
@@ -649,13 +653,10 @@ fn partition_literal_matches(
             DataType::Decimal128(precision, scale),
             Expr::Literal(ScalarValue::Decimal128(Some(_), other_precision, other_scale), _),
         ) => *scale >= 0 && precision == other_precision && scale == other_scale,
-        (
-            DataType::Binary | DataType::LargeBinary,
-            Expr::Literal(
-                ScalarValue::Binary(Some(value)) | ScalarValue::LargeBinary(Some(value)),
-                _,
-            ),
-        ) => !value.is_empty(),
+        (DataType::Binary | DataType::LargeBinary, Expr::Literal(value, _)) => matches!(
+            scalar_value(value),
+            Some(DeltaScalar::Binary(value) | DeltaScalar::LargeBinary(value)) if !value.is_empty()
+        ),
         (
             DataType::FixedSizeBinary(size),
             Expr::Literal(ScalarValue::FixedSizeBinary(other_size, Some(value)), _),
@@ -780,10 +781,10 @@ fn data_stats_column_literal(column: &Expr, op: Operator, literal: &Expr, schema
             DataType::Decimal128(precision, scale),
             Expr::Literal(ScalarValue::Decimal128(Some(_), other_precision, other_scale), _),
         ) => *scale >= 0 && precision == other_precision && scale == other_scale,
-        (
-            DataType::Utf8 | DataType::LargeUtf8,
-            Expr::Literal(ScalarValue::Utf8(Some(_)) | ScalarValue::LargeUtf8(Some(_)), _),
-        ) => true,
+        (DataType::Utf8 | DataType::LargeUtf8, Expr::Literal(value, _)) => matches!(
+            scalar_value(value),
+            Some(DeltaScalar::Utf8(_) | DeltaScalar::LargeUtf8(_))
+        ),
         (DataType::Float32, Expr::Literal(ScalarValue::Float32(Some(value)), _)) => {
             value.is_finite() && *value != 0.0
         }
@@ -1027,6 +1028,7 @@ fn expr_literal(expr: &Expr) -> Option<&ScalarValue> {
 
 fn scalar_value(value: &ScalarValue) -> Option<DeltaScalar> {
     match value {
+        ScalarValue::Dictionary(_, value) => scalar_value(value),
         ScalarValue::Boolean(Some(value)) => Some(DeltaScalar::Boolean(*value)),
         ScalarValue::Int8(Some(value)) => Some(DeltaScalar::Int8(*value)),
         ScalarValue::Int16(Some(value)) => Some(DeltaScalar::Int16(*value)),
@@ -1045,8 +1047,10 @@ fn scalar_value(value: &ScalarValue) -> Option<DeltaScalar> {
             scale: *scale,
         }),
         ScalarValue::Utf8(Some(value)) => Some(DeltaScalar::Utf8(value.clone())),
+        ScalarValue::Utf8View(Some(value)) => Some(DeltaScalar::Utf8(value.clone())),
         ScalarValue::LargeUtf8(Some(value)) => Some(DeltaScalar::LargeUtf8(value.clone())),
         ScalarValue::Binary(Some(value)) => Some(DeltaScalar::Binary(value.clone())),
+        ScalarValue::BinaryView(Some(value)) => Some(DeltaScalar::Binary(value.clone())),
         ScalarValue::LargeBinary(Some(value)) => Some(DeltaScalar::LargeBinary(value.clone())),
         ScalarValue::FixedSizeBinary(size, Some(value)) => Some(DeltaScalar::FixedSizeBinary {
             size: *size,
@@ -1759,6 +1763,28 @@ mod tests {
 
     #[test]
     fn unsupported_scalar_families_never_enter_core_predicates() {
+        assert_eq!(
+            scalar_value(&ScalarValue::Utf8View(Some("value".to_owned()))),
+            Some(DeltaScalar::Utf8("value".to_owned()))
+        );
+        assert_eq!(
+            scalar_value(&ScalarValue::BinaryView(Some(vec![1]))),
+            Some(DeltaScalar::Binary(vec![1]))
+        );
+        assert_eq!(
+            scalar_value(&ScalarValue::Dictionary(
+                Box::new(DataType::UInt16),
+                Box::new(ScalarValue::Utf8View(Some("value".to_owned()))),
+            )),
+            Some(DeltaScalar::Utf8("value".to_owned()))
+        );
+        assert!(
+            scalar_value(&ScalarValue::Dictionary(
+                Box::new(DataType::UInt16),
+                Box::new(ScalarValue::UInt16(Some(1))),
+            ))
+            .is_none()
+        );
         let unsupported = [
             ScalarValue::Null,
             ScalarValue::Float16(None),
@@ -1769,8 +1795,6 @@ mod tests {
             ScalarValue::UInt16(Some(1)),
             ScalarValue::UInt32(Some(1)),
             ScalarValue::UInt64(Some(1)),
-            ScalarValue::Utf8View(Some("value".to_owned())),
-            ScalarValue::BinaryView(Some(vec![1])),
             ScalarValue::Date64(Some(1)),
             ScalarValue::Time32Second(Some(1)),
             ScalarValue::Time32Millisecond(Some(1)),

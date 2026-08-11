@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Decode DataFusion string and binary columns directly into Arrow view arrays and dictionary-encode string and binary partition columns.
+
 ## 0.1.2 - 2026-08-11
 
 - Add staged snapshot loading for protocol checks before Arrow schema conversion.

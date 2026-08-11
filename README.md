@@ -96,6 +96,10 @@ println!("batches={}", batches.len());
 # }
 ```
 
+The DataFusion provider uses Arrow view arrays for string and binary data-file
+columns and dictionary arrays for string and binary partition columns. Direct
+reader scans retain the Delta table's ordinary Arrow schema.
+
 ## Features
 
 | Feature | Default | Purpose |

@@ -2,12 +2,12 @@
 
 use std::{collections::HashSet, fmt, sync::Arc};
 
-use arrow::datatypes::SchemaRef;
+use arrow::datatypes::{DataType, Schema, SchemaRef};
 use async_trait::async_trait;
 use datafusion::{
     catalog::Session,
     common::{DataFusionError, Result as DataFusionResult},
-    datasource::{TableProvider, TableType},
+    datasource::{TableProvider, TableType, physical_plan::wrap_partition_type_in_dict},
     execution::context::SessionContext,
     logical_expr::{Expr, TableProviderFilterPushDown},
     physical_plan::ExecutionPlan,
@@ -23,6 +23,7 @@ use crate::{
     planning::{
         DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan, validate_backend_available,
     },
+    transform::schema_with_view_types,
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
@@ -58,6 +59,7 @@ pub struct DeltaDataFusionScanOptions {
 #[derive(Clone)]
 pub struct DeltaTableProvider {
     table: DeltaTable,
+    schema: SchemaRef,
     options: DeltaDataFusionScanOptions,
     source_name: Option<String>,
 }
@@ -84,8 +86,11 @@ impl DeltaTableProvider {
             });
         }
         table.validate_protocol()?;
+        let partition_columns = table.partition_columns().iter().cloned().collect();
+        let schema = datafusion_schema(table.schema(), &partition_columns);
         Ok(Self {
             table,
+            schema,
             options,
             source_name,
         })
@@ -109,7 +114,7 @@ impl DeltaTableProvider {
             .cloned()
             .collect::<HashSet<_>>();
         let filter_refs = filters.iter().collect::<Vec<_>>();
-        let planning = plan_datafusion_scan(
+        let mut planning = plan_datafusion_scan(
             self.table.schema(),
             &partition_columns,
             projection,
@@ -161,7 +166,7 @@ impl DeltaTableProvider {
             &hidden_columns,
             row_predicate,
         )?;
-        let core = plan_scan(
+        let mut core = plan_scan(
             self.table.snapshot(),
             physical_projection.as_deref(),
             &hidden_columns,
@@ -173,6 +178,11 @@ impl DeltaTableProvider {
                 caller_target_partitions: Some(state.config().target_partitions()),
             },
         )?;
+        core.logical_schema = datafusion_schema(&core.logical_schema, &partition_columns);
+        core.physical_schema = datafusion_schema(&core.physical_schema, &partition_columns);
+        core.projected_schema = datafusion_schema(&core.projected_schema, &partition_columns);
+        planning.projection.output_schema =
+            datafusion_schema(&planning.projection.output_schema, &partition_columns);
         let partition_count = core.partitions.len();
         let plan = {
             let _setup = tracing::debug_span!(
@@ -191,6 +201,40 @@ impl DeltaTableProvider {
     }
 }
 
+fn datafusion_schema(schema: &Schema, partition_columns: &HashSet<String>) -> SchemaRef {
+    let view_schema = schema_with_view_types(schema);
+    Arc::new(Schema::new_with_metadata(
+        schema
+            .fields()
+            .iter()
+            .zip(view_schema.fields())
+            .map(|(logical, view)| {
+                if partition_columns.contains(logical.name())
+                    && matches!(
+                        logical.data_type(),
+                        DataType::Utf8
+                            | DataType::LargeUtf8
+                            | DataType::Binary
+                            | DataType::LargeBinary
+                    )
+                {
+                    Arc::new(
+                        logical
+                            .as_ref()
+                            .clone()
+                            .with_data_type(wrap_partition_type_in_dict(
+                                logical.data_type().clone(),
+                            )),
+                    )
+                } else {
+                    Arc::clone(view)
+                }
+            })
+            .collect::<Vec<_>>(),
+        schema.metadata().clone(),
+    ))
+}
+
 impl fmt::Debug for DeltaTableProvider {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -203,7 +247,7 @@ impl fmt::Debug for DeltaTableProvider {
 #[async_trait]
 impl TableProvider for DeltaTableProvider {
     fn schema(&self) -> SchemaRef {
-        Arc::clone(self.table.schema())
+        Arc::clone(&self.schema)
     }
 
     fn table_type(&self) -> TableType {
@@ -467,7 +511,11 @@ fn trace_failure(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_registration_name;
+    use std::collections::{HashMap, HashSet};
+
+    use arrow::datatypes::{DataType, Field, Schema};
+
+    use super::{datafusion_schema, validate_registration_name};
 
     #[test]
     fn registration_names_preserve_the_frozen_unquoted_identifier_boundary() {
@@ -492,5 +540,49 @@ mod tests {
         ] {
             assert!(validate_registration_name(name).is_err(), "{name}");
         }
+    }
+
+    #[test]
+    fn datafusion_schema_uses_views_except_for_dictionary_partitions() {
+        let field_metadata = HashMap::from([("field-key".to_owned(), "field-value".to_owned())]);
+        let schema_metadata = HashMap::from([("schema-key".to_owned(), "schema-value".to_owned())]);
+        let schema = Schema::new_with_metadata(
+            vec![
+                Field::new("text", DataType::Utf8, true).with_metadata(field_metadata.clone()),
+                Field::new("payload", DataType::Binary, true),
+                Field::new("region", DataType::Utf8, true),
+                Field::new("partition_payload", DataType::LargeBinary, true),
+                Field::new("id", DataType::Int32, false),
+            ],
+            schema_metadata.clone(),
+        );
+        let partitions = HashSet::from(["region".to_owned(), "partition_payload".to_owned()]);
+
+        let mapped = datafusion_schema(&schema, &partitions);
+
+        assert_eq!(
+            mapped.as_ref(),
+            &Schema::new_with_metadata(
+                vec![
+                    Field::new("text", DataType::Utf8View, true).with_metadata(field_metadata),
+                    Field::new("payload", DataType::BinaryView, true),
+                    Field::new(
+                        "region",
+                        DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Utf8)),
+                        true,
+                    ),
+                    Field::new(
+                        "partition_payload",
+                        DataType::Dictionary(
+                            Box::new(DataType::UInt16),
+                            Box::new(DataType::LargeBinary),
+                        ),
+                        true,
+                    ),
+                    Field::new("id", DataType::Int32, false),
+                ],
+                schema_metadata,
+            )
+        );
     }
 }

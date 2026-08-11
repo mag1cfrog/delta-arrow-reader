@@ -208,7 +208,12 @@ fn arrow_partition_type_to_kernel_primitive(
     data_type: &ArrowDataType,
 ) -> Option<KernelPrimitiveType> {
     match data_type {
-        ArrowDataType::Utf8 | ArrowDataType::LargeUtf8 => Some(KernelPrimitiveType::String),
+        ArrowDataType::Dictionary(_, value_type) => {
+            arrow_partition_type_to_kernel_primitive(value_type)
+        }
+        ArrowDataType::Utf8 | ArrowDataType::LargeUtf8 | ArrowDataType::Utf8View => {
+            Some(KernelPrimitiveType::String)
+        }
         ArrowDataType::Int8 => Some(KernelPrimitiveType::Byte),
         ArrowDataType::Int16 => Some(KernelPrimitiveType::Short),
         ArrowDataType::Int32 => Some(KernelPrimitiveType::Integer),
@@ -217,9 +222,10 @@ fn arrow_partition_type_to_kernel_primitive(
         ArrowDataType::Float64 => Some(KernelPrimitiveType::Double),
         ArrowDataType::Boolean => Some(KernelPrimitiveType::Boolean),
         ArrowDataType::Date32 => Some(KernelPrimitiveType::Date),
-        ArrowDataType::Binary | ArrowDataType::LargeBinary | ArrowDataType::FixedSizeBinary(_) => {
-            Some(KernelPrimitiveType::Binary)
-        }
+        ArrowDataType::Binary
+        | ArrowDataType::LargeBinary
+        | ArrowDataType::BinaryView
+        | ArrowDataType::FixedSizeBinary(_) => Some(KernelPrimitiveType::Binary),
         ArrowDataType::Timestamp(ArrowTimeUnit::Microsecond, Some(timezone))
             if !timezone.is_empty() =>
         {
@@ -242,10 +248,17 @@ fn kernel_partition_scalar_to_datafusion_scalar(
     match (scalar, data_type) {
         (Scalar::Null(_), data_type) => ScalarValue::try_from(data_type)
             .map_err(|_| PartitionScalarAdapterError::UnsupportedArrowType),
+        (scalar, ArrowDataType::Dictionary(key_type, value_type)) => Ok(ScalarValue::Dictionary(
+            key_type.clone(),
+            Box::new(kernel_partition_scalar_to_datafusion_scalar(
+                scalar, value_type,
+            )?),
+        )),
         (Scalar::String(value), ArrowDataType::Utf8) => Ok(ScalarValue::Utf8(Some(value))),
         (Scalar::String(value), ArrowDataType::LargeUtf8) => {
             Ok(ScalarValue::LargeUtf8(Some(value)))
         }
+        (Scalar::String(value), ArrowDataType::Utf8View) => Ok(ScalarValue::Utf8View(Some(value))),
         (Scalar::Byte(value), ArrowDataType::Int8) => Ok(ScalarValue::Int8(Some(value))),
         (Scalar::Short(value), ArrowDataType::Int16) => Ok(ScalarValue::Int16(Some(value))),
         (Scalar::Integer(value), ArrowDataType::Int32) => Ok(ScalarValue::Int32(Some(value))),
@@ -265,6 +278,9 @@ fn kernel_partition_scalar_to_datafusion_scalar(
         }
         (Scalar::Binary(value), ArrowDataType::LargeBinary) if !value.is_empty() => {
             Ok(ScalarValue::LargeBinary(Some(value)))
+        }
+        (Scalar::Binary(value), ArrowDataType::BinaryView) if !value.is_empty() => {
+            Ok(ScalarValue::BinaryView(Some(value)))
         }
         (Scalar::Binary(value), ArrowDataType::FixedSizeBinary(size))
             if usize::try_from(*size).is_ok_and(|size| value.len() == size)
@@ -487,6 +503,10 @@ mod tests {
     fn partition_scalar_adapter_preserves_provider_arrow_shapes()
     -> Result<(), Box<dyn std::error::Error>> {
         let timezone = Arc::<str>::from("America/Phoenix");
+        let dictionary_type = ArrowDataType::Dictionary(
+            Box::new(ArrowDataType::UInt16),
+            Box::new(ArrowDataType::Utf8),
+        );
 
         assert_eq!(
             kernel_partition_scalar_to_datafusion_scalar(
@@ -497,10 +517,44 @@ mod tests {
         );
         assert_eq!(
             kernel_partition_scalar_to_datafusion_scalar(
+                Scalar::String("value".to_owned()),
+                &ArrowDataType::Utf8View,
+            ),
+            Ok(ScalarValue::Utf8View(Some("value".to_owned())))
+        );
+        assert_eq!(
+            kernel_partition_scalar_to_datafusion_scalar(
+                Scalar::String("value".to_owned()),
+                &dictionary_type,
+            ),
+            Ok(ScalarValue::Dictionary(
+                Box::new(ArrowDataType::UInt16),
+                Box::new(ScalarValue::Utf8(Some("value".to_owned()))),
+            ))
+        );
+        assert_eq!(
+            kernel_partition_scalar_to_datafusion_scalar(
+                Scalar::Null(delta_kernel::schema::DataType::STRING),
+                &dictionary_type,
+            ),
+            Ok(ScalarValue::Dictionary(
+                Box::new(ArrowDataType::UInt16),
+                Box::new(ScalarValue::Utf8(None)),
+            ))
+        );
+        assert_eq!(
+            kernel_partition_scalar_to_datafusion_scalar(
                 Scalar::Binary(b"abc".to_vec()),
                 &ArrowDataType::LargeBinary,
             ),
             Ok(ScalarValue::LargeBinary(Some(b"abc".to_vec())))
+        );
+        assert_eq!(
+            kernel_partition_scalar_to_datafusion_scalar(
+                Scalar::Binary(b"abc".to_vec()),
+                &ArrowDataType::BinaryView,
+            ),
+            Ok(ScalarValue::BinaryView(Some(b"abc".to_vec())))
         );
         assert_eq!(
             kernel_partition_scalar_to_datafusion_scalar(
