@@ -3,9 +3,18 @@ name = "delta-arrow-reader"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
+description = "Read-only Delta Lake to Apache Arrow reader"
 license = "Apache-2.0"
+documentation = "https://docs.rs/delta-arrow-reader"
+homepage = "https://github.com/mag1cfrog/delta-arrow-reader"
+repository = "https://github.com/mag1cfrog/delta-arrow-reader"
+readme = "README.md"
+keywords = ["delta-lake", "arrow", "parquet", "datafusion"]
+categories = ["asynchronous", "database"]
 publish = false
 exclude = [
+    ".github/**",
+    ".gitignore",
     "benches/reader.rs",
     "tests/benchmark_harness.rs",
     "tests/datafusion_provider.rs",
@@ -24,6 +33,9 @@ default = ["native-async"]
 native-async = []
 official-kernel = []
 datafusion = ["dep:datafusion"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 async-trait = "0.1"

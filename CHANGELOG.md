@@ -2,5 +2,9 @@
 
 ## Unreleased
 
-- Add the temporary standalone-ready crate scaffold.
-- Add the DataFusion-independent Delta-to-Arrow streaming reader API.
+## 0.1.0 - Release candidate
+
+- Add the read-only direct Delta Lake to Arrow streaming API.
+- Add NativeAsync and OfficialKernel data-file reader backends.
+- Add projections, predicates, deletion vectors, bounded scheduling, and scan metrics.
+- Add the optional DataFusion provider, registration, filtering, execution, and metrics API.
