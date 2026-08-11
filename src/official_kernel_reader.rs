@@ -69,7 +69,7 @@ fn read_file(
     }
     let DeltaScanFileTask {
         path,
-        estimated_bytes,
+        file_size,
         modification_time_ms,
         deletion_vector,
         transform,
@@ -91,7 +91,7 @@ fn read_file(
     if cancellation.is_cancelled() {
         return Ok(());
     }
-    let size = estimated_bytes.ok_or_else(|| {
+    let size = file_size.ok_or_else(|| {
         data_file_error(
             "data_file_size_missing",
             delta_kernel::Error::generic("file size is required for OfficialKernel reads"),

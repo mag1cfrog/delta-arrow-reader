@@ -357,7 +357,7 @@ impl NativeAsyncFileReader {
             .context(DataFileReadSnafu {
                 reason: "data_file_path_resolution_failed",
             })?;
-        let file_size = task.estimated_bytes.ok_or_else(|| {
+        let file_size = task.file_size.ok_or_else(|| {
             data_file_error(
                 "data_file_size_missing",
                 delta_kernel::Error::generic("file size is required for NativeAsync reads"),
@@ -427,7 +427,7 @@ pub(crate) fn native_async_file_executor(
     let physical_predicate = plan.physical_predicate.clone();
 
     Arc::new(move |task, permit, cancellation| {
-        if let Some(bytes) = task.estimated_bytes {
+        if let Some(bytes) = task.estimated_scan_bytes() {
             reader.metrics.record_parquet_data_file_opened_bytes(bytes);
         }
         let reader = Arc::clone(&reader);
@@ -1619,7 +1619,7 @@ mod tests {
                 transform: None,
                 partition_values: HashMap::new(),
             }))?;
-        task.estimated_bytes = file_size;
+        task.file_size = file_size;
         Ok(task)
     }
 
@@ -3379,7 +3379,7 @@ mod tests {
             .ok_or("expected unique metadata plan")?
             .partitions[0]
             .file_tasks[0]
-            .estimated_bytes = None;
+            .file_size = None;
         let metadata_metrics = metadata_plan.metrics.clone();
         let error = execute_official_plan(metadata_plan)
             .await

@@ -486,7 +486,7 @@ mod tests {
     fn file_task(partition_values: &[(&str, &str)]) -> DeltaScanFileTask {
         DeltaScanFileTask {
             path: "part-000.parquet".to_owned(),
-            estimated_bytes: None,
+            file_size: None,
             parquet_byte_range: None,
             estimated_rows: None,
             modification_time_ms: None,
