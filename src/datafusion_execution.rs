@@ -56,9 +56,11 @@ pub struct DeltaDataFusionMetricsSnapshot {
     pub use_view_types: bool,
     /// Effective DataFusion task batch size observed at execution.
     pub output_batch_size: Option<u64>,
-    /// Files pruned before admission by a dynamic partition filter.
+    /// File tasks pruned before admission by a dynamic partition filter.
+    /// A task is either a whole physical file or one independently read file range.
     pub dynamic_partition_files_pruned: u64,
-    /// Files kept after consulting retained dynamic partition filters.
+    /// File tasks kept after consulting retained dynamic partition filters.
+    /// A task is either a whole physical file or one independently read file range.
     pub dynamic_partition_files_kept: u64,
     /// Physical filters offered to the post-optimization hook.
     pub dynamic_filters_received: u64,
@@ -68,9 +70,9 @@ pub struct DeltaDataFusionMetricsSnapshot {
     pub dynamic_filters_unsupported: u64,
     /// Current dynamic expressions consulted during file admission.
     pub dynamic_filter_snapshots: u64,
-    /// Kept files with missing, invalid, or unparsable partition metadata.
+    /// Kept file tasks with missing, invalid, or unparsable partition metadata.
     pub dynamic_files_not_pruned_missing_metadata: u64,
-    /// Kept files with unavailable, unsupported, or failed expressions.
+    /// Kept file tasks with unavailable, unsupported, or failed expressions.
     pub dynamic_files_not_pruned_unsupported_expression: u64,
 }
 
@@ -154,11 +156,11 @@ impl DeltaDataFusionMetrics {
             .store(u64::try_from(value).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
-    fn record_dynamic_partition_file_pruned(&self) {
+    fn record_dynamic_partition_task_pruned(&self) {
         saturating_fetch_add(&self.inner.dynamic_partition_files_pruned, 1);
     }
 
-    fn record_dynamic_partition_file_kept(&self) {
+    fn record_dynamic_partition_task_kept(&self) {
         saturating_fetch_add(&self.inner.dynamic_partition_files_kept, 1);
     }
 
@@ -328,6 +330,7 @@ impl DeltaDataFusionExec {
         let partition_count = partitions.len();
         let mut plan = (*self.plan).clone();
         plan.partitions = partitions;
+        plan.metrics.record_scan_partitions_planned(partition_count);
         let target_partitions = plan.partition_target_diagnostic.target_partitions;
         let limiter =
             ScanReadLimiter::new(plan.execution_options, target_partitions, partition_count);
@@ -632,7 +635,7 @@ fn dynamic_admission(
             metrics.record_dynamic_filter_snapshot();
             match evaluate_dynamic_partition_filter(filter, task) {
                 DeltaDynamicPartitionPruningDecision::Prune(_) => {
-                    metrics.record_dynamic_partition_file_pruned();
+                    metrics.record_dynamic_partition_task_pruned();
                     return Ok(FileAdmission::Skip);
                 }
                 DeltaDynamicPartitionPruningDecision::Keep(reason) => {
@@ -647,7 +650,7 @@ fn dynamic_admission(
         if unsupported_expression {
             metrics.record_unsupported_expression();
         }
-        metrics.record_dynamic_partition_file_kept();
+        metrics.record_dynamic_partition_task_kept();
         Ok(FileAdmission::Admit)
     })
 }
@@ -1121,6 +1124,7 @@ mod tests {
         actual_ids.sort_unstable();
         assert_eq!(actual_ids, [1, 2, 3, 4]);
         let metrics = collect_delta_datafusion_metrics(repartitioned.as_ref())[0].snapshot();
+        assert_eq!(metrics.reader.scan_partitions_planned, 4);
         assert_eq!(
             metrics.reader.parquet_data_file_opened_bytes,
             expected_bytes
@@ -1698,8 +1702,8 @@ mod tests {
             let metrics = metrics.clone();
             handles.push(thread::spawn(move || {
                 for _ in 0..ITERATIONS {
-                    metrics.record_dynamic_partition_file_pruned();
-                    metrics.record_dynamic_partition_file_kept();
+                    metrics.record_dynamic_partition_task_pruned();
+                    metrics.record_dynamic_partition_task_kept();
                     metrics.record_dynamic_filters_received(3);
                     metrics.record_dynamic_filters_accepted(1);
                     metrics.record_dynamic_filters_unsupported(2);

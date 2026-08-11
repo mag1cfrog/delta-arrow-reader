@@ -212,6 +212,59 @@ async fn collect_plan(
     Ok(datafusion::physical_plan::collect(plan, context.task_ctx()).await?)
 }
 
+#[tokio::test]
+async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> TestResult {
+    let fixture = TestTable::partitioned("optimizer-file-repartitioning")?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_target_partitions(4)
+            .with_repartition_file_min_size(1),
+    );
+    register_delta_table(
+        &context,
+        "orders",
+        table,
+        DeltaDataFusionScanOptions::default(),
+    )?;
+
+    let plan = context
+        .sql("SELECT count(*) AS row_count, sum(id) AS id_sum FROM orders")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(
+        display.contains("DeltaDataFusionExec: snapshot_version=0, partitions=4"),
+        "{display}"
+    );
+
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    assert_eq!(metrics.len(), 1);
+    assert_eq!(metrics[0].snapshot().reader.scan_partitions_planned, 4);
+    let batches = collect_plan(&context, plan).await?;
+    let batch = batches.first().ok_or("aggregate returned no batch")?;
+    assert_eq!(
+        batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or("count was not Int64")?
+            .value(0),
+        4
+    );
+    assert_eq!(
+        batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or("sum was not Int64")?
+            .value(0),
+        10
+    );
+    Ok(())
+}
+
 fn register_fixture(
     context: &SessionContext,
     name: &str,

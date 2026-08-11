@@ -161,6 +161,9 @@ impl NativeAsyncFileReader {
         task: &DeltaScanFileTask,
     ) -> Result<NativeAsyncParquetObject, DeltaReaderError> {
         let object = self.resolve_parquet_object(task)?;
+        if task.parquet_byte_range.is_some() {
+            return Ok(object);
+        }
         self.buffer_small_parquet_object(object).await
     }
 
@@ -2249,15 +2252,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn threshold_buffers_only_eligible_files_with_one_metered_full_get()
+    async fn threshold_buffers_only_eligible_unsplit_files_with_one_metered_full_get()
     -> Result<(), Box<dyn std::error::Error>> {
         let bytes = b"0123456789abcdef";
 
-        for (name, threshold, expect_buffered) in [
-            ("disabled", None, false),
-            ("below", Some(bytes.len() - 1), false),
-            ("exact", Some(bytes.len()), true),
-            ("above", Some(bytes.len() + 1), true),
+        for (name, threshold, byte_range, expect_buffered) in [
+            ("disabled", None, None, false),
+            ("below", Some(bytes.len() - 1), None, false),
+            ("exact", Some(bytes.len()), None, true),
+            ("above", Some(bytes.len() + 1), None, true),
+            ("split", Some(bytes.len()), Some(0..8), false),
         ] {
             let root = TestDir::new(name)?;
             fs::write(root.path().join("part.parquet"), bytes)?;
@@ -2265,9 +2269,9 @@ mod tests {
             let options = DeltaReaderExecutionOptions::new()
                 .with_parquet_full_file_read_threshold(threshold)?;
             let reader = reader(&root, options, metrics.clone())?;
-            let object = reader
-                .parquet_object_for_task(&task("part.parquet", Some(u64::try_from(bytes.len())?))?)
-                .await?;
+            let mut task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
+            task.parquet_byte_range = byte_range;
+            let object = reader.parquet_object_for_task(&task).await?;
             let snapshot = metrics.snapshot();
             assert_eq!(
                 snapshot.parquet_data_file_full_get_operations,

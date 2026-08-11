@@ -14,7 +14,7 @@ pub struct DeltaReadMetricsSnapshot {
     pub reader_backend: DeltaReaderBackend,
     /// Whether planning exhausted the Delta scan metadata iterator.
     pub scan_metadata_exhausted: Option<bool>,
-    /// Execution partitions planned for the scan.
+    /// Final execution partitions planned for the scan, including source repartitioning.
     pub scan_partitions_planned: u64,
     /// Data files selected during planning.
     pub files_planned: u64,
@@ -28,9 +28,9 @@ pub struct DeltaReadMetricsSnapshot {
     pub scan_partitions_started: u64,
     /// Scan partitions that completed normally.
     pub scan_partitions_completed: u64,
-    /// Data-file reads that started.
+    /// Data-file tasks that started, including independently read file ranges.
     pub files_started: u64,
-    /// Data-file reads that completed normally.
+    /// Data-file tasks that completed normally, including independently read file ranges.
     pub files_completed: u64,
     /// Backend-logical record batches handed to the scheduler.
     pub batches_produced: u64,
@@ -66,7 +66,7 @@ struct DeltaReadMetricsInner {
     snapshot_version: u64,
     reader_backend: DeltaReaderBackend,
     scan_metadata_exhausted: Option<bool>,
-    scan_partitions_planned: u64,
+    scan_partitions_planned: AtomicU64,
     files_planned: u64,
     files_filtered_during_planning: Option<u64>,
     estimated_rows: Option<u64>,
@@ -108,7 +108,9 @@ impl DeltaReadMetrics {
                 snapshot_version: config.snapshot_version,
                 reader_backend: config.reader_backend,
                 scan_metadata_exhausted: config.scan_metadata_exhausted,
-                scan_partitions_planned: usize_to_u64_saturating(config.scan_partitions_planned),
+                scan_partitions_planned: AtomicU64::new(usize_to_u64_saturating(
+                    config.scan_partitions_planned,
+                )),
                 files_planned: usize_to_u64_saturating(config.files_planned),
                 files_filtered_during_planning: config.files_filtered_during_planning,
                 estimated_rows: config.estimated_rows,
@@ -139,7 +141,7 @@ impl DeltaReadMetrics {
             snapshot_version: inner.snapshot_version,
             reader_backend: inner.reader_backend,
             scan_metadata_exhausted: inner.scan_metadata_exhausted,
-            scan_partitions_planned: inner.scan_partitions_planned,
+            scan_partitions_planned: load(&inner.scan_partitions_planned),
             files_planned: inner.files_planned,
             files_filtered_during_planning: inner.files_filtered_during_planning,
             estimated_rows: inner.estimated_rows,
@@ -171,6 +173,13 @@ impl DeltaReadMetrics {
             DeltaReaderBackend::NativeAsync => Some(load(counter)),
             DeltaReaderBackend::OfficialKernel => None,
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn record_scan_partitions_planned(&self, value: usize) {
+        self.inner
+            .scan_partitions_planned
+            .store(usize_to_u64_saturating(value), Ordering::Relaxed);
     }
 
     #[allow(dead_code)]
@@ -323,6 +332,7 @@ mod tests {
     #[test]
     fn snapshot_maps_live_counters() {
         let metrics = metrics(DeltaReaderBackend::NativeAsync);
+        metrics.record_scan_partitions_planned(16);
         let counters = [
             &metrics.inner.scan_partitions_started,
             &metrics.inner.scan_partitions_completed,
@@ -345,6 +355,7 @@ mod tests {
         }
 
         let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.scan_partitions_planned, 16);
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 2);
         assert_eq!(snapshot.files_started, 3);
