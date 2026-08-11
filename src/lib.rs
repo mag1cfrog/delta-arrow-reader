@@ -1,4 +1,4 @@
-//! Read-only Delta Lake to Arrow support.
+#![doc = include_str!("../README.md")]
 
 mod config;
 #[cfg(feature = "datafusion")]

@@ -17,12 +17,16 @@ The governing issues are
 [#459](https://github.com/mag1cfrog/delta-funnel/issues/459), and
 [#460](https://github.com/mag1cfrog/delta-funnel/issues/460).
 
-## Independent handoff
+## Independent repository
 
-[Issue #486](https://github.com/mag1cfrog/delta-funnel/issues/486) will export
-one later frozen staging SHA into the independent repository and become the
-final repository and provenance authority. This scaffold does not reserve or
-publish the candidate package.
+[Issue #486](https://github.com/mag1cfrog/delta-funnel/issues/486) exported the
+validated staging subtree to this repository with unchanged crate bytes and
+file modes. The independent import added only its Cargo lockfile, root target
+ignore rule, and CI workflow. This repository is now the canonical source.
+
+The 0.1.0 candidate remains unpublished while
+[issue #471](https://github.com/mag1cfrog/delta-funnel/issues/471) validates its
+documentation and package contents.
 
 ## Path mapping
 

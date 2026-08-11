@@ -1,25 +1,38 @@
 # delta-arrow-reader
 
-This is the temporary staging crate for extracting Delta Funnel's read-only
-Delta Lake to Arrow implementation. It contains the reader foundation, snapshot
-and protocol loading, deletion-vector handling, predicates, scan planning,
-partition grouping, backend-neutral scheduling, NativeAsync and OfficialKernel
-file executors, the public DataFusion-independent streaming reader, and an
-optional public DataFusion provider with registration, filtering, execution,
-dynamic partition pruning, and metrics support. It is not published or used by
-Delta Funnel production code.
+`delta-arrow-reader` is a read-only Delta Lake reader for Apache Arrow record
+batches. It provides a direct pull-driven stream API and an optional DataFusion
+table provider. The caller owns the Tokio runtime, and scans do not collect the
+whole result in memory.
 
-The crate exists only on the
-[`refactor/delta-arrow-reader-staging`](https://github.com/mag1cfrog/delta-funnel/tree/refactor/delta-arrow-reader-staging)
-branch. [Issue #460](https://github.com/mag1cfrog/delta-funnel/issues/460)
-owns this scaffold, and
-[issue #447](https://github.com/mag1cfrog/delta-funnel/issues/447) owns the
-extraction lifecycle.
+The 0.1.0 release candidate is not published while package validation is in
+progress.
 
-## Read a table without SQL
+## Installation
 
-The caller owns the Tokio runtime and pulls batches from the returned stream.
-The reader does not collect the full result in memory.
+The 0.1.0 package declaration is:
+
+```toml
+[dependencies]
+delta-arrow-reader = "0.1.0"
+futures-util = "0.3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+Enable the DataFusion adapter and add the matching DataFusion dependency when
+you need SQL integration:
+
+```toml
+[dependencies]
+datafusion = { version = "54.1.0", default-features = false, features = ["sql"] }
+delta-arrow-reader = { version = "0.1.0", features = ["datafusion"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+## Read a table directly
+
+Use `load_async` from asynchronous code. The returned stream exposes live scan
+metrics and yields batches as the caller requests them.
 
 ```rust,no_run
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTableBuilder};
@@ -41,35 +54,96 @@ let scan = table
     .build()
     .await?;
 let mut batches = scan.execute().await?;
+let metrics = batches.metrics();
 
 while let Some(batch) = batches.try_next().await? {
     println!("rows={}", batch.num_rows());
 }
+
+println!("files={}", metrics.snapshot().files_completed);
 # Ok(())
 # }
 ```
 
-Run the deterministic local end-to-end example, which creates its own Delta
-table and reads it through only the public API:
+`DeltaTableBuilder::load` is the blocking table-load alternative. Scan building
+and execution remain asynchronous.
 
-```console
-cargo test -p delta-arrow-reader --test direct_reader local_end_to_end_example_reads_without_sql -- --exact --nocapture
+## Register a DataFusion table
+
+The `datafusion` feature exposes `DeltaTableProvider`, `register_delta_table`,
+and DataFusion execution metrics. Registration loads no data files; reads begin
+when DataFusion executes a query.
+
+```rust,no_run
+# #[cfg(feature = "datafusion")]
+# async fn query() -> Result<(), Box<dyn std::error::Error>> {
+use datafusion::prelude::SessionContext;
+use delta_arrow_reader::{
+    DeltaDataFusionScanOptions, DeltaTableBuilder, register_delta_table,
+};
+
+let context = SessionContext::new();
+let table = DeltaTableBuilder::new("/tmp/example-delta-table")
+    .load_async()
+    .await?;
+register_delta_table(
+    &context,
+    "orders",
+    table,
+    DeltaDataFusionScanOptions::default(),
+)?;
+
+let batches = context.sql("SELECT * FROM orders").await?.collect().await?;
+println!("batches={}", batches.len());
+# Ok(())
+# }
 ```
 
-## Validate the staging crate
+## Features
 
-Run these commands from the Delta Funnel repository root:
+| Feature | Default | Purpose |
+| --- | --- | --- |
+| `native-async` | Yes | Native asynchronous Parquet data-file reader and I/O metrics. |
+| `official-kernel` | No | Official Delta Kernel data-file reader backend. |
+| `datafusion` | No | DataFusion provider, registration, filtering, execution, and metrics. |
+
+At least one reader backend must be enabled to execute a scan. Select the
+backend for a scan with `DeltaReaderExecutionOptions::with_reader_backend`.
+When default features are enabled, NativeAsync is selected by default.
+
+## Runtime, errors, and metrics
+
+- The caller supplies the Tokio runtime and drives returned streams.
+- Execution limits, buffering, Parquet metadata prefetch, and optional
+  full-file reads are configured through `DeltaReaderExecutionOptions`.
+- `DeltaReaderError::phase` and `DeltaReaderError::as_str` return stable,
+  redacted categories. Dependency failures remain available through the
+  standard error source chain.
+- `DeltaReadMetrics` is a cloneable live handle. `snapshot` returns an
+  immutable point-in-time view. NativeAsync Parquet I/O counters are `None`
+  when the OfficialKernel backend is selected.
+
+## Scope
+
+The crate supports the extracted read path: snapshot selection, protocol and
+schema loading, projections, predicates, deletion vectors, partition planning,
+bounded scheduling, NativeAsync and OfficialKernel data-file reads, and the
+optional DataFusion adapter.
+
+It does not write Delta tables, manage transactions, create a Tokio runtime,
+or provide Delta Funnel orchestration, reporting, or Python APIs.
+
+See [architecture](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/architecture.md),
+[provenance](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/provenance.md),
+and the [security policy](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/SECURITY.md)
+for repository details.
+
+## Development checks
+
+The repository CI runs every feature combination. The focused local checks are:
 
 ```console
-cargo fmt --all -- --check
-cargo check -p delta-arrow-reader --no-default-features --all-targets
-cargo check -p delta-arrow-reader --all-features --all-targets
-cargo clippy -p delta-arrow-reader --all-targets --all-features -- -D warnings
-cargo test -p delta-arrow-reader --no-default-features
-cargo test -p delta-arrow-reader --no-default-features --features official-kernel
-cargo test -p delta-arrow-reader --features official-kernel
-cargo test -p delta-arrow-reader --all-features
-RUSTDOCFLAGS="-D warnings" cargo doc -p delta-arrow-reader --all-features --no-deps
-cargo package -p delta-arrow-reader --allow-dirty
-git diff --check
+cargo test --locked --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
+cargo package --locked
 ```
