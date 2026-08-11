@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   SCCACHE_GHA_ENABLED: "true"
@@ -18,8 +19,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Detect code changes
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: .github/path-filters.json
+
   feature-tests:
     name: Feature Tests / ${{ matrix.name }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -56,6 +75,8 @@ jobs:
 
   checks:
     name: ${{ matrix.task }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -86,3 +107,32 @@ jobs:
         run: git diff --check
       - if: matrix.task == 'Package'
         run: cargo package --locked
+
+  ci:
+    name: CI
+    needs: [changes, feature-tests, checks]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "Detect Changes did not pass: ${{ needs.changes.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
+            echo "No code changes detected"
+            exit 0
+          fi
+
+          if [ "${{ needs.feature-tests.result }}" != "success" ]; then
+            echo "Feature Tests did not pass: ${{ needs.feature-tests.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.checks.result }}" != "success" ]; then
+            echo "Checks did not pass: ${{ needs.checks.result }}"
+            exit 1
+          fi

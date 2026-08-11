@@ -1,0 +1,12 @@
+{
+  "code": [
+    ".cargo/**",
+    ".github/path-filters.json",
+    ".github/workflows/ci.yml",
+    "Cargo.toml",
+    "Cargo.lock",
+    "src/**",
+    "tests/**",
+    "benches/**"
+  ]
+}
