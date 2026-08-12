@@ -1327,6 +1327,7 @@ async fn run_once(
         DeltaDataFusionScanOptions {
             execution_options,
             target_partitions: Some(target_partitions),
+            intra_file_repartitioning: Default::default(),
             use_view_types: true,
         },
     )?;

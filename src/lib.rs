@@ -44,7 +44,8 @@ pub use config::{
 };
 #[cfg(feature = "datafusion")]
 pub use datafusion_execution::{
-    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, collect_delta_datafusion_metrics,
+    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, DeltaFileRepartitioning,
+    collect_delta_datafusion_metrics,
 };
 #[cfg(feature = "datafusion")]
 pub use datafusion_provider::{

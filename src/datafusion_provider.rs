@@ -15,7 +15,7 @@ use datafusion::{
 
 use crate::{
     DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions, DeltaTable,
-    datafusion_execution::create_datafusion_execution_plan,
+    datafusion_execution::{DeltaFileRepartitioning, create_datafusion_execution_plan},
     datafusion_planning::{
         DataFusionFilterCapabilities, plan_datafusion_filters, plan_datafusion_scan,
     },
@@ -35,6 +35,8 @@ pub struct DeltaDataFusionScanOptions {
     pub execution_options: DeltaReaderExecutionOptions,
     /// Optional explicit scan partition target.
     pub target_partitions: Option<usize>,
+    /// Controls when DataFusion may split NativeAsync Parquet files into ranged scan tasks.
+    pub intra_file_repartitioning: DeltaFileRepartitioning,
     /// Decode string and binary data-file columns into Arrow view arrays.
     pub use_view_types: bool,
 }
@@ -44,6 +46,7 @@ impl Default for DeltaDataFusionScanOptions {
         Self {
             execution_options: DeltaReaderExecutionOptions::default(),
             target_partitions: None,
+            intra_file_repartitioning: DeltaFileRepartitioning::default(),
             use_view_types: true,
         }
     }
@@ -223,6 +226,7 @@ impl DeltaTableProvider {
                 row_predicate,
                 self.source_name.clone(),
                 self.options.use_view_types,
+                self.options.intra_file_repartitioning,
             )
         };
         Ok((plan, partition_count))
