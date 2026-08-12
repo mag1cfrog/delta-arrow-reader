@@ -1,4 +1,20 @@
 //! Optional DataFusion physical execution adapter.
+//!
+//! # Intra-file repartitioning
+//!
+//! Scan planning first balances whole Delta data files across the resolved
+//! partition target. If those groups do not fill the target, DataFusion's
+//! `FileGroupPartitioner` flattens them, divides their total bytes across the
+//! target, and returns new groups containing whole files or byte ranges. Its
+//! `repartition_file_min_size` setting is the minimum total input size needed
+//! to attempt this operation, not the size of each generated range.
+//!
+//! Each returned range is stored on its `DeltaScanFileTask`. During
+//! NativeAsync execution, the range containing a Parquet row group's first
+//! column chunk's page offset owns that complete row group. Range ownership and
+//! footer-statistics pruning are intersected before the selected row groups
+//! are passed to the Parquet reader, so a byte boundary never splits a row
+//! group.
 
 use std::{
     collections::HashSet,
@@ -368,9 +384,15 @@ fn scan_properties(schema: &SchemaRef, partition_count: usize) -> Arc<PlanProper
     )
 }
 
-/// Attempts to split file tasks into additional DataFusion execution partitions.
+/// Uses DataFusion to split and regroup file tasks across a partition target.
 ///
-/// `Ok(None)` preserves the existing plan when splitting is unnecessary or unsafe.
+/// DataFusion flattens the current groups and aims for
+/// `ceil(total_input_bytes / target_partitions)` bytes per output group. The
+/// `minimum_total_bytes` argument controls whether the complete input is large
+/// enough to repartition; it is not a generated range size.
+///
+/// `Ok(None)` preserves the existing plan when it already fills the target,
+/// file sizes are unavailable, or DataFusion finds no useful repartitioning.
 fn repartition_file_tasks(
     partitions: &[DeltaScanFileTaskPartition],
     target_partitions: usize,
