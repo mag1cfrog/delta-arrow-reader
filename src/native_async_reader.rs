@@ -326,6 +326,8 @@ impl NativeAsyncFileReader {
             reason: "parquet_row_group_range_invalid",
         })?;
         let builder = match row_groups {
+            // This is where approximate byte ranges become complete Parquet
+            // row-group reads; the reader never slices through a row group.
             Some(row_groups) => builder.with_row_groups(row_groups),
             None => builder,
         };

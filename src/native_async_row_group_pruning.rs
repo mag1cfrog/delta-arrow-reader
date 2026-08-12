@@ -30,6 +30,14 @@ use crate::kernel::DeltaKernelPredicate;
 
 /// Computes the row groups selected by a byte range and footer statistics.
 ///
+/// A row group belongs to the half-open byte range containing its first column
+/// chunk's dictionary-page offset, or its data-page offset when no dictionary
+/// page exists. A row group can therefore belong to at most one non-overlapping
+/// range, and covering ranges assign every row group exactly once rather than
+/// splitting rows at an arbitrary byte boundary. When a predicate is present,
+/// the result is the intersection of range ownership and conservative
+/// footer-statistics pruning.
+///
 /// `None` means there is no byte range or physical predicate to use for pruning.
 /// `Some(Vec::new())` means every row group was proven impossible and the
 /// parquet reader should return no rows.
