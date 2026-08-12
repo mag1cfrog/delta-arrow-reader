@@ -286,7 +286,10 @@ async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates
         &context,
         "orders",
         table,
-        DeltaDataFusionScanOptions::default(),
+        DeltaDataFusionScanOptions {
+            target_partitions: Some(8),
+            ..Default::default()
+        },
     )?;
 
     let plan = context
@@ -533,7 +536,10 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
         &context,
         "orders",
         &fixture,
-        DeltaDataFusionScanOptions::default(),
+        DeltaDataFusionScanOptions {
+            target_partitions: Some(8),
+            ..Default::default()
+        },
     )?;
     let plan = context
         .sql("SELECT id FROM orders")
