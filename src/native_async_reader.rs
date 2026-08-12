@@ -23,7 +23,7 @@ use parquet::arrow::{
 };
 use parquet::file::metadata::ParquetMetaData;
 use parquet::schema::types::{SchemaDescriptor, TypePtr};
-use snafu::ResultExt;
+use snafu::{IntoError, ResultExt};
 use tokio::sync::OnceCell;
 
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
@@ -1421,10 +1421,7 @@ fn data_file_error(
     reason: &'static str,
     source: impl std::error::Error + Send + Sync + 'static,
 ) -> DeltaReaderError {
-    Err::<(), _>(source)
-        .boxed()
-        .context(DataFileReadSnafu { reason })
-        .expect_err("constructed data-file error")
+    DataFileReadSnafu { reason }.into_error(Box::new(source))
 }
 
 #[cfg(test)]

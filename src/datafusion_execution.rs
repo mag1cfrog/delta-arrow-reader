@@ -1037,6 +1037,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::expect_used)]
     fn ids(batches: &[RecordBatch]) -> Vec<i32> {
         batches
             .iter()

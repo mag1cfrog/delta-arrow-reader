@@ -36,6 +36,14 @@ datafusion = ["dep:datafusion"]
 [package.metadata.docs.rs]
 all-features = true
 
+[lints.rust]
+missing_docs = "deny"
+
+[lints.clippy]
+expect_used = "deny"
+panic = "deny"
+unwrap_used = "deny"
+
 [dependencies]
 async-trait = "0.1"
 arrow = "58.3.0"

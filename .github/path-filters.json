@@ -5,6 +5,7 @@
     ".github/workflows/ci.yml",
     "Cargo.toml",
     "Cargo.lock",
+    "clippy.toml",
     "src/**",
     "tests/**",
     "benches/**"

@@ -1,3 +1,5 @@
+//! Portable fixture coverage across reader backends.
+
 mod support;
 
 use std::{error::Error, path::Path};

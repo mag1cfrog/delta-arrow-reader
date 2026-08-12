@@ -1,3 +1,5 @@
+//! Compile-time and behavioral coverage for the public reader API.
+
 use std::{error::Error as _, future::Future};
 
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
