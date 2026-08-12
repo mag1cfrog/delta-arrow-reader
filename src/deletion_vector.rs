@@ -20,7 +20,21 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct DeletionVectorMetadata {
     handle: Option<KernelDeletionVectorHandle>,
-    cached_row_indexes: Arc<tokio::sync::Mutex<Option<Weak<[u64]>>>>,
+    cached_rows: Arc<tokio::sync::Mutex<Option<Weak<DeletionVectorRows>>>>,
+}
+
+struct DeletionVectorRows {
+    indexes: Box<[u64]>,
+}
+
+impl DeletionVectorRows {
+    fn new(mut indexes: Vec<u64>) -> Self {
+        indexes.sort_unstable();
+        indexes.dedup();
+        Self {
+            indexes: indexes.into_boxed_slice(),
+        }
+    }
 }
 
 impl Default for DeletionVectorMetadata {
@@ -38,7 +52,7 @@ impl DeletionVectorMetadata {
     pub(crate) fn from_kernel(handle: Option<KernelDeletionVectorHandle>) -> Self {
         Self {
             handle,
-            cached_row_indexes: Arc::new(tokio::sync::Mutex::new(None)),
+            cached_rows: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 }
@@ -66,12 +80,12 @@ pub(crate) async fn load_deletion_vector_selection_from_engine_context(
     let Some(handle) = metadata.handle.clone() else {
         return Ok(None);
     };
-    let mut cached_row_indexes = metadata.cached_row_indexes.lock().await;
-    let row_indexes = match cached_row_indexes.as_ref().and_then(Weak::upgrade) {
-        Some(row_indexes) => row_indexes,
+    let mut cached_rows = metadata.cached_rows.lock().await;
+    let rows = match cached_rows.as_ref().and_then(Weak::upgrade) {
+        Some(rows) => rows,
         None => {
             let metrics_for_task = metrics.clone();
-            let row_indexes = match tokio::task::spawn_blocking(move || {
+            let rows = match tokio::task::spawn_blocking(move || {
                 load_deletion_vector_row_indexes(
                     engine_context.as_ref(),
                     &handle,
@@ -86,12 +100,12 @@ pub(crate) async fn load_deletion_vector_selection_from_engine_context(
                     Err(dependency_error("deletion_vector_load_task_failed", source))
                 }
             }?;
-            *cached_row_indexes = Some(Arc::downgrade(&row_indexes));
-            row_indexes
+            *cached_rows = Some(Arc::downgrade(&rows));
+            rows
         }
     };
     Ok(Some(DeletionVectorSelection::from_shared(
-        row_indexes,
+        rows,
         metrics.clone(),
     )))
 }
@@ -116,8 +130,8 @@ fn load_deletion_vector_row_indexes(
     engine_context: &DeltaKernelEngineContext,
     handle: &KernelDeletionVectorHandle,
     metrics: &DeltaReadMetrics,
-) -> Result<Arc<[u64]>, DeltaReaderError> {
-    let mut row_indexes = match engine_context.load_deletion_vector_row_indexes(handle) {
+) -> Result<Arc<DeletionVectorRows>, DeltaReaderError> {
+    let row_indexes = match engine_context.load_deletion_vector_row_indexes(handle) {
         Ok(row_indexes) => row_indexes,
         Err(source) => {
             metrics.record_deletion_vector_failure();
@@ -129,14 +143,12 @@ fn load_deletion_vector_row_indexes(
     };
 
     metrics.record_deletion_vector_payload_loaded();
-    row_indexes.sort_unstable();
-    row_indexes.dedup();
-    Ok(row_indexes.into())
+    Ok(Arc::new(DeletionVectorRows::new(row_indexes)))
 }
 
 #[allow(dead_code)]
 pub(crate) struct DeletionVectorSelection {
-    deleted_row_indexes: Arc<[u64]>,
+    deleted_rows: Arc<DeletionVectorRows>,
     consumed_row_count: u64,
     original_row_index_deleted_cursor: Option<usize>,
     last_original_row_index: Option<u64>,
@@ -157,18 +169,18 @@ enum DeletionVectorAccessMode {
 #[allow(dead_code)]
 impl DeletionVectorSelection {
     pub(crate) fn try_new(
-        mut deleted_row_indexes: Vec<u64>,
+        deleted_row_indexes: Vec<u64>,
         metrics: DeltaReadMetrics,
     ) -> Result<Self, DeltaReaderError> {
-        deleted_row_indexes.sort_unstable();
-        deleted_row_indexes.dedup();
-
-        Ok(Self::from_shared(deleted_row_indexes.into(), metrics))
+        Ok(Self::from_shared(
+            Arc::new(DeletionVectorRows::new(deleted_row_indexes)),
+            metrics,
+        ))
     }
 
-    fn from_shared(deleted_row_indexes: Arc<[u64]>, metrics: DeltaReadMetrics) -> Self {
+    fn from_shared(deleted_rows: Arc<DeletionVectorRows>, metrics: DeltaReadMetrics) -> Self {
         Self {
-            deleted_row_indexes,
+            deleted_rows,
             consumed_row_count: 0,
             original_row_index_deleted_cursor: Some(0),
             last_original_row_index: None,
@@ -237,12 +249,14 @@ impl DeletionVectorSelection {
         };
         let mut keep_mask = vec![true; batch_len];
         let deleted_start = self
-            .deleted_row_indexes
+            .deleted_rows
+            .indexes
             .partition_point(|row_index| *row_index < self.consumed_row_count);
         let deleted_end = self
-            .deleted_row_indexes
+            .deleted_rows
+            .indexes
             .partition_point(|row_index| *row_index < requested_end);
-        for deleted_row_index in &self.deleted_row_indexes[deleted_start..deleted_end] {
+        for deleted_row_index in &self.deleted_rows.indexes[deleted_start..deleted_end] {
             let batch_index = match usize::try_from(*deleted_row_index - self.consumed_row_count) {
                 Ok(batch_index) => batch_index,
                 Err(_) => {
@@ -295,17 +309,19 @@ impl DeletionVectorSelection {
 
             let keep = if cursor_is_valid {
                 while self
-                    .deleted_row_indexes
+                    .deleted_rows
+                    .indexes
                     .get(cursor)
                     .is_some_and(|deleted_row_index| *deleted_row_index < row_index)
                 {
                     cursor += 1;
                 }
-                self.deleted_row_indexes
+                self.deleted_rows
+                    .indexes
                     .get(cursor)
                     .is_none_or(|deleted_row_index| *deleted_row_index != row_index)
             } else {
-                self.deleted_row_indexes.binary_search(&row_index).is_err()
+                self.deleted_rows.indexes.binary_search(&row_index).is_err()
             };
             keep_mask.push(keep);
             last_row_index = Some(row_index);
@@ -366,9 +382,10 @@ impl DeletionVectorSelection {
         }
 
         let consumed_deleted = self
-            .deleted_row_indexes
+            .deleted_rows
+            .indexes
             .partition_point(|row_index| *row_index < self.consumed_row_count);
-        if consumed_deleted < self.deleted_row_indexes.len() {
+        if consumed_deleted < self.deleted_rows.indexes.len() {
             return self.reject(
                 "invalid_deletion_vector_coordinates",
                 "deletion-vector entries remain after physical file completion",
@@ -568,7 +585,7 @@ mod tests {
         let inline_metrics = metrics();
         let inline_metadata = inline_metadata()?;
         assert!(inline_metadata.is_present());
-        let cached_row_indexes = Arc::clone(&inline_metadata.cached_row_indexes);
+        let cached_rows = Arc::clone(&inline_metadata.cached_rows);
         let second_metadata = inline_metadata.clone();
         let (selection, second_selection) = tokio::join!(
             load_deletion_vector_selection(&snapshot, inline_metadata.clone(), &inline_metrics),
@@ -579,16 +596,16 @@ mod tests {
             second_selection?.expect("inline descriptor must produce a second selection");
         for selection in [&selection, &second_selection] {
             assert_eq!(
-                selection.deleted_row_indexes.as_ref(),
+                selection.deleted_rows.indexes.as_ref(),
                 INLINE_DV_DELETED_ROW_INDEXES
             );
         }
         assert!(Arc::ptr_eq(
-            &selection.deleted_row_indexes,
-            &second_selection.deleted_row_indexes
+            &selection.deleted_rows,
+            &second_selection.deleted_rows
         ));
         assert!(
-            cached_row_indexes
+            cached_rows
                 .lock()
                 .await
                 .as_ref()
@@ -598,7 +615,7 @@ mod tests {
         drop(selection);
         drop(second_selection);
         assert!(
-            cached_row_indexes
+            cached_rows
                 .lock()
                 .await
                 .as_ref()
@@ -610,7 +627,7 @@ mod tests {
             .await?
             .expect("released inline payload must reload");
         assert_eq!(
-            reloaded.deleted_row_indexes.as_ref(),
+            reloaded.deleted_rows.indexes.as_ref(),
             INLINE_DV_DELETED_ROW_INDEXES
         );
         let metrics = inline_metrics.snapshot();
@@ -639,7 +656,7 @@ mod tests {
                 &relative_metrics,
             ))?
             .expect("relative descriptor must produce a selection");
-        assert_eq!(selection.deleted_row_indexes.as_ref(), [0, 9]);
+        assert_eq!(selection.deleted_rows.indexes.as_ref(), [0, 9]);
         assert_eq!(
             relative_metrics.snapshot().deletion_vector_payloads_loaded,
             1
@@ -654,7 +671,7 @@ mod tests {
                 &empty_metrics,
             ))?
             .expect("empty present descriptor must produce a selection");
-        assert!(empty.deleted_row_indexes.is_empty());
+        assert!(empty.deleted_rows.indexes.is_empty());
         empty.finish()?;
         let metrics = empty_metrics.snapshot();
         assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
@@ -791,7 +808,7 @@ mod tests {
         let metrics = metrics();
         let mut selection = DeletionVectorSelection::try_new(vec![3, 1, 3], metrics.clone())?;
 
-        assert_eq!(selection.deleted_row_indexes.as_ref(), [1, 3]);
+        assert_eq!(selection.deleted_rows.indexes.as_ref(), [1, 3]);
         assert_eq!(
             selection.select_original_row_indexes(&row_indexes(&[0, 1, 2, 3, 4]))?,
             [true, false, true, false, true]

@@ -177,8 +177,8 @@ impl NativeAsyncFileReader {
         include_original_row_index: bool,
     ) -> Result<NativeAsyncParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
-        let reader =
-            ParquetObjectReader::new(object.store, object.path).with_file_size(object.file_size);
+        let file_size = object.file_size;
+        let reader = ParquetObjectReader::new(object.store, object.path).with_file_size(file_size);
         let reader = match self.execution_options.parquet_metadata_size_hint() {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
@@ -234,9 +234,14 @@ impl NativeAsyncFileReader {
             ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
         let row_groups = native_async_pruned_row_groups(
             builder.metadata(),
+            file_size,
             task.parquet_byte_range.as_ref(),
             physical_predicate,
-        );
+        )
+        .boxed()
+        .context(DataFileReadSnafu {
+            reason: "parquet_row_group_range_invalid",
+        })?;
         let builder = match row_groups {
             Some(row_groups) => builder.with_row_groups(row_groups),
             None => builder,
