@@ -1,3 +1,5 @@
+//! Test target for the frozen reader benchmark harness.
+
 #![cfg(all(
     feature = "datafusion",
     feature = "native-async",

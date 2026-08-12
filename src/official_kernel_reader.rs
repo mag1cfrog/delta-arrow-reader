@@ -5,7 +5,7 @@ use std::sync::Arc;
 use arrow::record_batch::RecordBatch;
 use delta_kernel::{FileMeta, engine::arrow_data::EngineDataArrowExt};
 use futures_util::stream;
-use snafu::ResultExt;
+use snafu::{IntoError, ResultExt};
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
@@ -203,10 +203,7 @@ fn data_file_error(
     reason: &'static str,
     source: impl std::error::Error + Send + Sync + 'static,
 ) -> DeltaReaderError {
-    Err::<(), _>(source)
-        .boxed()
-        .context(DataFileReadSnafu { reason })
-        .expect_err("constructed data-file error")
+    DataFileReadSnafu { reason }.into_error(Box::new(source))
 }
 
 #[cfg(test)]

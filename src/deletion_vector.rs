@@ -7,7 +7,7 @@ use arrow::{
     compute::filter_record_batch,
     record_batch::RecordBatch,
 };
-use snafu::ResultExt;
+use snafu::{IntoError, ResultExt};
 
 use crate::{
     DeltaReadMetrics, DeltaReaderError,
@@ -445,10 +445,7 @@ fn dependency_error(
     reason: &'static str,
     source: impl std::error::Error + Send + Sync + 'static,
 ) -> DeltaReaderError {
-    Err::<(), _>(source)
-        .boxed()
-        .context(DeletionVectorReadSnafu { reason })
-        .expect_err("constructed deletion-vector error")
+    DeletionVectorReadSnafu { reason }.into_error(Box::new(source))
 }
 
 #[cfg(test)]

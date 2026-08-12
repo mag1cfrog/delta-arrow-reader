@@ -31,9 +31,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - name: Read Rust version
+        id: rust-version
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88.0
+          toolchain: ${{ steps.rust-version.outputs.version }}
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
