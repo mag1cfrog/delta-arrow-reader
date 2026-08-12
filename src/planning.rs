@@ -343,11 +343,15 @@ fn logical_projection(
     }))
 }
 
+/// File-read tasks executed together as one scan partition.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct DeltaScanFileTaskPartition {
+    /// Whole-file or ranged Parquet reads assigned to this partition.
     pub(crate) file_tasks: Vec<DeltaScanFileTask>,
+    /// Total bytes to read when every task has a known size.
     pub(crate) estimated_bytes: Option<u64>,
+    /// Total output rows when every task has a valid whole-file estimate.
     pub(crate) estimated_rows: Option<u64>,
 }
 
@@ -440,6 +444,7 @@ fn group_by_file_count(
     Ok(partitions)
 }
 
+/// Builds a scan partition and its aggregate size and row estimates.
 pub(crate) fn build_partition(
     file_tasks: Vec<DeltaScanFileTask>,
 ) -> Result<DeltaScanFileTaskPartition, DeltaReaderError> {
@@ -508,28 +513,41 @@ fn validate_projection(
     Ok(())
 }
 
+/// One physical Parquet read, covering either a whole data file or a byte range.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct DeltaScanFileTask {
+    /// Object-store path of the physical data file.
     pub(crate) path: String,
+    /// Size of the complete physical file, when known.
     pub(crate) file_size: Option<u64>,
+    /// Byte range assigned by intra-file repartitioning, or `None` for the whole file.
     pub(crate) parquet_byte_range: Option<Range<u64>>,
+    /// Expected output rows, available only for whole-file tasks with statistics.
     pub(crate) estimated_rows: Option<u64>,
+    /// Delta file statistics used by planning and pruning.
     pub(crate) stats: Option<DeltaScanFileStats>,
+    /// Data-file modification time from the Delta add action.
     pub(crate) modification_time_ms: Option<i64>,
+    /// Logical partition-column values from the Delta add action.
     pub(crate) partition_values: BTreeMap<String, String>,
+    /// Deletion vector associated with the complete physical file.
     pub(crate) deletion_vector: DeletionVectorMetadata,
+    /// Physical-to-logical expression applied after reading the Parquet data.
     pub(crate) transform: KernelPhysicalToLogicalTransform,
 }
 
+/// Row-count statistics retained from a Delta add action.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct DeltaScanFileStats {
+    /// Number of physical rows in the complete data file.
     pub(crate) num_records: u64,
 }
 
 #[allow(dead_code)]
 impl DeltaScanFileTask {
+    /// Returns bytes assigned to this task, using its range when split.
     pub(crate) fn estimated_scan_bytes(&self) -> Option<u64> {
         match &self.parquet_byte_range {
             Some(range) => range.end.checked_sub(range.start),

@@ -16,10 +16,13 @@ use crate::{
     snapshot::LoadedDeltaTableSnapshot,
 };
 
+/// A data file's deletion-vector handle and reusable decoded row coordinates.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct DeletionVectorMetadata {
+    /// Kernel handle used to load the deletion-vector payload.
     handle: Option<KernelDeletionVectorHandle>,
+    /// Weakly cached coordinates shared by overlapping readers of the same file.
     cached_rows: Arc<tokio::sync::Mutex<Option<Weak<DeletionVectorRows>>>>,
 }
 
@@ -80,6 +83,8 @@ pub(crate) async fn load_deletion_vector_selection_from_engine_context(
     let Some(handle) = metadata.handle.clone() else {
         return Ok(None);
     };
+    // Serialize the first load across range tasks. Keeping only a weak entry
+    // avoids retaining a potentially large payload after the last reader exits.
     let mut cached_rows = metadata.cached_rows.lock().await;
     let rows = match cached_rows.as_ref().and_then(Weak::upgrade) {
         Some(rows) => rows,

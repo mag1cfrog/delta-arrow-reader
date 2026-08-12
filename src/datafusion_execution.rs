@@ -368,6 +368,9 @@ fn scan_properties(schema: &SchemaRef, partition_count: usize) -> Arc<PlanProper
     )
 }
 
+/// Attempts to split file tasks into additional DataFusion execution partitions.
+///
+/// `Ok(None)` preserves the existing plan when splitting is unnecessary or unsafe.
 fn repartition_file_tasks(
     partitions: &[DeltaScanFileTaskPartition],
     target_partitions: usize,
@@ -383,6 +386,7 @@ fn repartition_file_tasks(
         return Ok(None);
     }
 
+    // DataFusion cannot safely split tasks whose physical file size is unknown.
     let Some(file_groups) = file_groups_from_partitions(partitions)? else {
         return Ok(None);
     };
@@ -391,6 +395,7 @@ fn repartition_file_tasks(
         .with_repartition_file_min_size(minimum_total_bytes)
         .repartition_file_groups(&file_groups)
     else {
+        // Preserve the original plan when DataFusion finds no useful split.
         return Ok(None);
     };
 
@@ -469,6 +474,8 @@ fn task_from_partitioned_file(file: PartitionedFile) -> DataFusionResult<DeltaSc
     }
     task.parquet_byte_range = (start != 0 || end != file_size).then_some(start..end);
     if task.parquet_byte_range.is_some() {
+        // A range covers an unknown subset of the file's rows, so the original
+        // whole-file estimate is no longer valid for partition accounting.
         task.estimated_rows = None;
     }
     Ok(task)

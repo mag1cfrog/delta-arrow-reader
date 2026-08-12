@@ -52,8 +52,10 @@ struct NativeAsyncFileReader {
     metrics: DeltaReadMetrics,
 }
 
+/// Parquet footer metadata shared by ranged tasks within one physical scan.
 #[derive(Default)]
 pub(crate) struct NativeAsyncParquetMetadataCache {
+    /// In-flight or completed footer loads keyed by file path and planned size.
     entries: Mutex<HashMap<(Path, u64), Arc<ParquetMetadataCell>>>,
 }
 
@@ -259,6 +261,8 @@ impl NativeAsyncFileReader {
                 reason: "parquet_row_index_setup_failed",
             })?;
         let builder = if task.parquet_byte_range.is_some() {
+            // Ranged tasks need explicit footer metadata to select row groups.
+            // Sharing it avoids one footer read for every range of the same file.
             let metadata = self
                 .load_split_parquet_metadata(
                     metadata_cache,
@@ -280,6 +284,8 @@ impl NativeAsyncFileReader {
             };
             ParquetRecordBatchStreamBuilder::new_with_metadata(reader, metadata)
         } else if schema_uses_view_types(&provider_schema) {
+            // View arrays require rewriting the Arrow schema stored in the
+            // metadata before constructing the stream builder.
             let mut metadata_reader = reader.clone();
             let metadata =
                 ArrowReaderMetadata::load_async(&mut metadata_reader, reader_options.clone())
@@ -293,6 +299,7 @@ impl NativeAsyncFileReader {
                 metadata_with_view_types(metadata, reader_options)?,
             )
         } else {
+            // Ordinary whole-file scans can let the builder load its metadata.
             ParquetRecordBatchStreamBuilder::new_with_options(reader, reader_options)
                 .await
                 .boxed()
