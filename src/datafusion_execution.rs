@@ -84,7 +84,7 @@ pub enum DeltaFileRepartitioning {
 }
 
 impl DeltaFileRepartitioning {
-    fn applies_to(self, current_partitions: usize, target_partitions: usize) -> bool {
+    fn allows_repartitioning(self, current_partitions: usize, target_partitions: usize) -> bool {
         match self {
             Self::FillMissingParallelism => current_partitions < target_partitions,
             Self::Rebalance => true,
@@ -435,7 +435,7 @@ fn repartition_file_tasks(
     }
     // Whole-file planning already balances up to the requested partition count.
     // The default avoids extra ranged reads unless the scan lacks parallelism.
-    if !policy.applies_to(partitions.len(), target_partitions) {
+    if !policy.allows_repartitioning(partitions.len(), target_partitions) {
         return Ok(None);
     }
 
@@ -1251,9 +1251,9 @@ mod tests {
                 .any(|task| task.parquet_byte_range.is_some())
         );
         assert!(
-            repartition_file_tasks(&input, 4, 1_031, DeltaFileRepartitioning::Rebalance,)?
-                .is_none()
+            repartition_file_tasks(&input, 4, 1_031, DeltaFileRepartitioning::Rebalance)?.is_none()
         );
+        assert!(repartition_file_tasks(&[], 4, 1, DeltaFileRepartitioning::Rebalance)?.is_none());
         assert!(
             input
                 .iter()
@@ -1271,7 +1271,7 @@ mod tests {
         )])?];
 
         assert!(
-            repartition_file_tasks(&input, 4, 121, DeltaFileRepartitioning::default(),)?.is_none()
+            repartition_file_tasks(&input, 4, 121, DeltaFileRepartitioning::default())?.is_none()
         );
         assert!(
             repartition_file_tasks(
@@ -1297,7 +1297,7 @@ mod tests {
             )?
             .is_none()
         );
-        assert!(repartition_file_tasks(&input, 0, 1, DeltaFileRepartitioning::default(),).is_err());
+        assert!(repartition_file_tasks(&input, 0, 1, DeltaFileRepartitioning::default()).is_err());
 
         for range in [90..110, std::ops::Range { start: 90, end: 80 }, 90..90] {
             let mut invalid = sized_file_task("invalid.parquet", Some(100));
