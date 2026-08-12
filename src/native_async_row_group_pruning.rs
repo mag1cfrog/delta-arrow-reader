@@ -435,8 +435,8 @@ mod tests {
     }
 
     #[test]
-    fn byte_range_rejects_malformed_row_group_coordinates() -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn regression_byte_range_rejects_malformed_row_group_coordinates()
+    -> Result<(), Box<dyn std::error::Error>> {
         assert!(
             native_async_pruned_row_groups(
                 &metadata_without_columns()?,

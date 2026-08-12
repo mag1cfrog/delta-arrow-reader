@@ -2257,6 +2257,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn regression_invalid_parquet_range_is_redacted_at_the_reader_boundary()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = TestDir::new("native-invalid-parquet-range")?;
+        let bytes = parquet_bytes()?;
+        fs::write(root.path().join("secret.parquet"), &bytes)?;
+        let file_size = u64::try_from(bytes.len())?;
+        let mut task = task("secret.parquet", Some(file_size))?;
+        task.parquet_byte_range = Some(0..file_size + 1);
+        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, true),
+        ]));
+
+        let error = match reader
+            .open_parquet_stream(&task, schema, None, None, None, false)
+            .await
+        {
+            Ok(_) => return Err("invalid Parquet range unexpectedly succeeded".into()),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.to_string(),
+            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_row_group_range_invalid"
+        );
+        assert!(!error.to_string().contains("secret.parquet"));
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn threshold_buffers_only_eligible_unsplit_files_with_one_metered_full_get()
     -> Result<(), Box<dyn std::error::Error>> {
         let bytes = b"0123456789abcdef";
