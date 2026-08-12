@@ -317,8 +317,8 @@ fn datafusion_metrics_contract_is_public() {
 #[test]
 fn datafusion_provider_contract_is_public() {
     use delta_arrow_reader::{
-        DeltaDataFusionScanOptions, DeltaReaderError, DeltaTable, DeltaTableProvider,
-        RegisteredDeltaTable, register_delta_table,
+        DeltaDataFusionScanOptions, DeltaFileRepartitioning, DeltaReaderError, DeltaTable,
+        DeltaTableProvider, RegisteredDeltaTable, register_delta_table,
     };
 
     fn assert_clone<T: Clone>() {}
@@ -327,6 +327,11 @@ fn datafusion_provider_contract_is_public() {
 
     assert_debug_clone::<DeltaDataFusionScanOptions>();
     assert!(DeltaDataFusionScanOptions::default().use_view_types);
+    assert_result_traits::<DeltaFileRepartitioning>();
+    assert_eq!(
+        DeltaDataFusionScanOptions::default().intra_file_repartitioning,
+        DeltaFileRepartitioning::FillMissingParallelism
+    );
     assert_clone::<DeltaTableProvider>();
     assert_result_traits::<RegisteredDeltaTable>();
     let construct: fn(

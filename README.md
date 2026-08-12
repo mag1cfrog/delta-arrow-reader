@@ -115,6 +115,12 @@ let scan_options = DeltaDataFusionScanOptions {
 # }
 ```
 
+Whole-file planning normally avoids extra ranged reads once it fills the scan
+partition target. For skewed NativeAsync scans, opt in to DataFusion
+rebalancing with `DeltaFileRepartitioning::Rebalance`.
+DataFusion's `repartition_file_scans` and `repartition_file_min_size` settings
+still control whether repartitioning runs.
+
 ## Features
 
 | Feature | Default | Purpose |

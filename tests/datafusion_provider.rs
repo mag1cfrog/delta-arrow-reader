@@ -32,8 +32,9 @@ use datafusion::{
 };
 use delta_arrow_reader::DeltaReaderBackend;
 use delta_arrow_reader::{
-    DeltaDataFusionScanOptions, DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase,
-    DeltaTableBuilder, DeltaTableProvider, collect_delta_datafusion_metrics, register_delta_table,
+    DeltaDataFusionScanOptions, DeltaFileRepartitioning, DeltaReaderError,
+    DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaTableBuilder, DeltaTableProvider,
+    collect_delta_datafusion_metrics, register_delta_table,
 };
 use futures_util::StreamExt;
 use parquet::{
@@ -62,8 +63,22 @@ impl TestTable {
         table.write_log(&[
             protocol(1),
             metadata(),
-            add("west.parquet", west, "west", 1, 2),
-            add("east.parquet", east, "east", 3, 4),
+            add("west.parquet", west, "west", 2, 1, 2),
+            add("east.parquet", east, "east", 2, 3, 4),
+        ])?;
+        Ok(table)
+    }
+
+    fn skewed(name: &str) -> TestResult<Self> {
+        let table = Self::new(name)?;
+        let large_ids = (1..=10_000).collect::<Vec<_>>();
+        let large = table.write_parquet("large.parquet", &large_ids)?;
+        let small = table.write_parquet("small.parquet", &[10_001, 10_002])?;
+        table.write_log(&[
+            protocol(1),
+            metadata(),
+            add("large.parquet", large, "west", 10_000, 1, 10_000),
+            add("small.parquet", small, "east", 2, 10_001, 10_002),
         ])?;
         Ok(table)
     }
@@ -149,9 +164,9 @@ fn metadata() -> Value {
     })
 }
 
-fn add(path: &str, size: u64, region: &str, min_id: i32, max_id: i32) -> Value {
+fn add(path: &str, size: u64, region: &str, num_records: u64, min_id: i32, max_id: i32) -> Value {
     let stats = json!({
-        "numRecords": 2,
+        "numRecords": num_records,
         "minValues": {"id": min_id},
         "maxValues": {"id": max_id},
         "nullCount": {"id": 0}
@@ -269,6 +284,68 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
             .value(0),
         10
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn intra_file_repartitioning_policy_controls_full_plan_rebalancing() -> TestResult {
+    let fixture = TestTable::skewed("optimizer-full-plan-rebalancing")?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+
+    for (name, policy, expected_tasks) in [
+        (
+            "default_orders",
+            DeltaFileRepartitioning::FillMissingParallelism,
+            2,
+        ),
+        ("rebalanced_orders", DeltaFileRepartitioning::Rebalance, 3),
+    ] {
+        let context = SessionContext::new_with_config(
+            SessionConfig::new()
+                .with_target_partitions(2)
+                .with_repartition_file_min_size(1),
+        );
+        register_delta_table(
+            &context,
+            name,
+            table.clone(),
+            DeltaDataFusionScanOptions {
+                target_partitions: Some(2),
+                intra_file_repartitioning: policy,
+                ..Default::default()
+            },
+        )?;
+        let plan = context
+            .sql(&format!(
+                "SELECT count(*) AS row_count, sum(id) AS id_sum FROM {name}"
+            ))
+            .await?
+            .create_physical_plan()
+            .await?;
+        let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+        let batches = collect_plan(&context, plan).await?;
+        let batch = batches.first().ok_or("aggregate returned no batch")?;
+        assert_eq!(
+            batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .ok_or("count was not Int64")?
+                .value(0),
+            10_002
+        );
+        assert_eq!(
+            batch
+                .column(1)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .ok_or("sum was not Int64")?
+                .value(0),
+            50_025_003
+        );
+        assert_eq!(metrics[0].snapshot().reader.files_started, expected_tasks);
+    }
+
     Ok(())
 }
 
@@ -409,6 +486,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     let options = DeltaDataFusionScanOptions {
         execution_options,
         target_partitions: Some(TARGET_PARTITIONS),
+        intra_file_repartitioning: DeltaFileRepartitioning::Rebalance,
         ..Default::default()
     };
     let context = SessionContext::new_with_config(
@@ -629,6 +707,10 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
     );
     assert_eq!(defaults.target_partitions, None);
     assert!(defaults.use_view_types);
+    assert_eq!(
+        defaults.intra_file_repartitioning,
+        DeltaFileRepartitioning::FillMissingParallelism
+    );
 
     let provider = DeltaTableProvider::try_new(table.clone(), defaults)?;
     assert_eq!(table.schema().field(1).data_type(), &DataType::Utf8);
@@ -927,6 +1009,7 @@ async fn native_exact_and_official_residual_execution_return_the_same_rows() -> 
             DeltaDataFusionScanOptions {
                 execution_options,
                 target_partitions: Some(2),
+                intra_file_repartitioning: Default::default(),
                 use_view_types: true,
             },
         )?;
@@ -1243,6 +1326,7 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
         DeltaDataFusionScanOptions {
             execution_options,
             target_partitions: Some(1),
+            intra_file_repartitioning: Default::default(),
             use_view_types: true,
         },
     )?;
@@ -1294,6 +1378,7 @@ async fn native_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
             DeltaDataFusionScanOptions {
                 execution_options,
                 target_partitions: Some(1),
+                intra_file_repartitioning: Default::default(),
                 use_view_types: true,
             },
         )?;
@@ -1410,6 +1495,7 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
         DeltaDataFusionScanOptions {
             execution_options,
             target_partitions: Some(1),
+            intra_file_repartitioning: Default::default(),
             use_view_types: true,
         },
     )?;
@@ -1450,6 +1536,7 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
         DeltaDataFusionScanOptions {
             execution_options,
             target_partitions: Some(1),
+            intra_file_repartitioning: Default::default(),
             use_view_types: false,
         },
     )?;
