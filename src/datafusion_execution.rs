@@ -1059,6 +1059,32 @@ mod tests {
     }
 
     #[test]
+    fn file_repartitioning_never_escapes_an_existing_range() -> TestResult {
+        let mut task = sized_file_task("partial.parquet", Some(100));
+        task.parquet_byte_range = Some(20..80);
+        task.estimated_rows = None;
+        let partitions = repartition_file_tasks(&[build_partition(vec![task])?], 3, 1)?
+            .ok_or("partial range was not repartitioned")?;
+
+        assert_eq!(
+            partitions
+                .iter()
+                .flat_map(|partition| &partition.file_tasks)
+                .map(|task| task.parquet_byte_range.clone())
+                .collect::<Vec<_>>(),
+            [Some(20..40), Some(40..60), Some(60..80)]
+        );
+        assert!(
+            partitions
+                .iter()
+                .flat_map(|partition| &partition.file_tasks)
+                .all(|task| task.file_size == Some(100) && task.estimated_rows.is_none())
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn file_repartitioning_refuses_unsupported_inputs_and_rejects_invalid_ranges() -> TestResult {
         let input = vec![build_partition(vec![sized_file_task(
             "known.parquet",
@@ -1090,11 +1116,56 @@ mod tests {
         );
         assert!(repartition_file_tasks(&input, 0, 1).is_err());
 
-        let mut invalid = sized_file_task("invalid.parquet", Some(100));
-        invalid.parquet_byte_range = Some(90..110);
-        assert!(repartition_file_tasks(&[build_partition(vec![invalid])?], 4, 1).is_err());
+        for range in [90..110, std::ops::Range { start: 90, end: 80 }, 90..90] {
+            let mut invalid = sized_file_task("invalid.parquet", Some(100));
+            invalid.parquet_byte_range = Some(range);
+            assert!(repartition_file_tasks(&[build_partition(vec![invalid])?], 4, 1).is_err());
+        }
+
+        let oversized = u64::try_from(i64::MAX)? + 1;
+        assert!(
+            repartition_file_tasks(
+                &[build_partition(vec![sized_file_task(
+                    "oversized.parquet",
+                    Some(oversized),
+                )])?],
+                2,
+                1,
+            )
+            .is_err()
+        );
 
         Ok(())
+    }
+
+    #[test]
+    fn scan_file_task_rejects_malformed_partitioner_output() {
+        let mut missing_extension = PartitionedFile::new("missing-extension.parquet", 100);
+        missing_extension.range = Some(FileRange { start: 0, end: 100 });
+        assert!(scan_file_task(missing_extension).is_err());
+
+        let missing_range = PartitionedFile::new("missing-range.parquet", 100)
+            .with_extension(sized_file_task("missing-range.parquet", Some(100)));
+        assert!(scan_file_task(missing_range).is_err());
+
+        for range in [
+            FileRange {
+                start: -1,
+                end: 100,
+            },
+            FileRange { start: 50, end: 50 },
+            FileRange { start: 0, end: 101 },
+        ] {
+            let mut invalid = PartitionedFile::new("invalid-range.parquet", 100)
+                .with_extension(sized_file_task("invalid-range.parquet", Some(100)));
+            invalid.range = Some(range);
+            assert!(scan_file_task(invalid).is_err());
+        }
+
+        let mut missing_size = PartitionedFile::new("missing-size.parquet", 100)
+            .with_extension(sized_file_task("missing-size.parquet", None));
+        missing_size.range = Some(FileRange { start: 0, end: 100 });
+        assert!(scan_file_task(missing_size).is_err());
     }
 
     #[tokio::test]
