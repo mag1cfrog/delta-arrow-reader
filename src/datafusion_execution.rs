@@ -30,6 +30,13 @@ use datafusion::{
 };
 use futures_util::{StreamExt, stream};
 
+#[cfg(not(feature = "native-async"))]
+use crate::direct::native_async_executor;
+#[cfg(feature = "native-async")]
+use crate::native_async_reader::{
+    NativeAsyncParquetMetadataCache, native_async_file_executor,
+    native_async_file_executor_with_metadata_cache,
+};
 use crate::{
     DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend, DeltaReaderError,
     datafusion_dynamic_filters::{
@@ -40,7 +47,7 @@ use crate::{
         evaluate_dynamic_partition_filter,
     },
     datafusion_planning::DataFusionScanPlanning,
-    direct::{native_async_executor, official_kernel_executor},
+    direct::official_kernel_executor,
     kernel::DeltaKernelPredicate,
     metrics::saturating_fetch_add,
     planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
@@ -279,6 +286,8 @@ struct DeltaDataFusionExec {
     metrics: DeltaDataFusionMetrics,
     limiter: Arc<ScanReadLimiter>,
     dynamic_filters: Arc<[DeltaRetainedDynamicFilter]>,
+    #[cfg(feature = "native-async")]
+    parquet_metadata_cache: Option<Arc<NativeAsyncParquetMetadataCache>>,
 }
 
 impl DeltaDataFusionExec {
@@ -310,6 +319,8 @@ impl DeltaDataFusionExec {
             metrics,
             limiter,
             dynamic_filters: Arc::from([]),
+            #[cfg(feature = "native-async")]
+            parquet_metadata_cache: None,
         }
     }
 
@@ -338,6 +349,8 @@ impl DeltaDataFusionExec {
             plan: Arc::new(plan),
             properties: scan_properties(&self.schema, partition_count),
             limiter,
+            #[cfg(feature = "native-async")]
+            parquet_metadata_cache: Some(Arc::new(NativeAsyncParquetMetadataCache::default())),
             ..self.clone()
         })
     }
@@ -362,6 +375,12 @@ fn repartition_file_tasks(
 ) -> DataFusionResult<Option<Vec<DeltaScanFileTaskPartition>>> {
     if target_partitions == 0 {
         return Err(adapter_error("scan_partition_target_must_be_positive"));
+    }
+    // Whole-file planning already balances up to the requested partition count.
+    // Intra-file splitting fills missing parallelism; rebalancing a full plan
+    // requires a separate, evidence-backed skew policy.
+    if partitions.len() >= target_partitions {
+        return Ok(None);
     }
 
     let Some(file_groups) = datafusion_file_groups(partitions)? else {
@@ -542,12 +561,33 @@ impl ExecutionPlan for DeltaDataFusionExec {
         self.metrics.record_output_batch_size(output_batch_size);
         let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
         let executor = match self.plan.execution_options.reader_backend() {
-            DeltaReaderBackend::NativeAsync => native_async_executor(
-                &self.plan,
-                Some(output_batch_size),
-                self.row_predicate.clone(),
-            )
-            .map_err(datafusion_error)?,
+            DeltaReaderBackend::NativeAsync => {
+                #[cfg(feature = "native-async")]
+                {
+                    match &self.parquet_metadata_cache {
+                        Some(cache) => native_async_file_executor_with_metadata_cache(
+                            &self.plan,
+                            Some(output_batch_size),
+                            self.row_predicate.clone(),
+                            Arc::clone(cache),
+                        ),
+                        None => native_async_file_executor(
+                            &self.plan,
+                            Some(output_batch_size),
+                            self.row_predicate.clone(),
+                        ),
+                    }
+                }
+                #[cfg(not(feature = "native-async"))]
+                {
+                    native_async_executor(
+                        &self.plan,
+                        Some(output_batch_size),
+                        self.row_predicate.clone(),
+                    )
+                    .map_err(datafusion_error)?
+                }
+            }
             DeltaReaderBackend::OfficialKernel => {
                 official_kernel_executor(&self.plan).map_err(datafusion_error)?
             }
@@ -1085,6 +1125,25 @@ mod tests {
     }
 
     #[test]
+    fn file_repartitioning_does_not_rebalance_a_full_whole_file_plan() -> TestResult {
+        let input = vec![
+            build_partition(vec![sized_file_task("huge.parquet", Some(1_000))])?,
+            build_partition(vec![sized_file_task("small-0.parquet", Some(10))])?,
+            build_partition(vec![sized_file_task("small-1.parquet", Some(10))])?,
+            build_partition(vec![sized_file_task("small-2.parquet", Some(10))])?,
+        ];
+
+        assert!(repartition_file_tasks(&input, 4, 1)?.is_none());
+        assert!(
+            input
+                .iter()
+                .flat_map(|partition| &partition.file_tasks)
+                .all(|task| task.parquet_byte_range.is_none())
+        );
+        Ok(())
+    }
+
+    #[test]
     fn file_repartitioning_refuses_unsupported_inputs_and_rejects_invalid_ranges() -> TestResult {
         let input = vec![build_partition(vec![sized_file_task(
             "known.parquet",
@@ -1220,16 +1279,7 @@ mod tests {
             DeltaReaderExecutionOptions::new(),
             None,
         )?;
-        let explicit_one = explicit_one
-            .repartitioned(4, &config)?
-            .ok_or("explicit one-partition scan was not normalized")?;
-        assert_eq!(
-            explicit_one
-                .properties()
-                .output_partitioning()
-                .partition_count(),
-            1
-        );
+        assert!(explicit_one.repartitioned(4, &config)?.is_none());
 
         #[cfg(feature = "official-kernel")]
         {
