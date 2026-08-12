@@ -1,6 +1,6 @@
 //! Private deletion-vector coordinate handling and Arrow masking.
 
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use arrow::{
     array::{Array, BooleanArray, Int64Array},
@@ -20,7 +20,7 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct DeletionVectorMetadata {
     handle: Option<KernelDeletionVectorHandle>,
-    shared_row_indexes: Arc<tokio::sync::OnceCell<Arc<[u64]>>>,
+    cached_row_indexes: Arc<tokio::sync::Mutex<Option<Weak<[u64]>>>>,
 }
 
 impl Default for DeletionVectorMetadata {
@@ -38,7 +38,7 @@ impl DeletionVectorMetadata {
     pub(crate) fn from_kernel(handle: Option<KernelDeletionVectorHandle>) -> Self {
         Self {
             handle,
-            shared_row_indexes: Arc::new(tokio::sync::OnceCell::new()),
+            cached_row_indexes: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 }
@@ -66,11 +66,12 @@ pub(crate) async fn load_deletion_vector_selection_from_engine_context(
     let Some(handle) = metadata.handle.clone() else {
         return Ok(None);
     };
-    let metrics_for_task = metrics.clone();
-    let row_indexes = metadata
-        .shared_row_indexes
-        .get_or_try_init(|| async move {
-            match tokio::task::spawn_blocking(move || {
+    let mut cached_row_indexes = metadata.cached_row_indexes.lock().await;
+    let row_indexes = match cached_row_indexes.as_ref().and_then(Weak::upgrade) {
+        Some(row_indexes) => row_indexes,
+        None => {
+            let metrics_for_task = metrics.clone();
+            let row_indexes = match tokio::task::spawn_blocking(move || {
                 load_deletion_vector_row_indexes(
                     engine_context.as_ref(),
                     &handle,
@@ -84,11 +85,13 @@ pub(crate) async fn load_deletion_vector_selection_from_engine_context(
                     metrics.record_deletion_vector_failure();
                     Err(dependency_error("deletion_vector_load_task_failed", source))
                 }
-            }
-        })
-        .await?;
+            }?;
+            *cached_row_indexes = Some(Arc::downgrade(&row_indexes));
+            row_indexes
+        }
+    };
     Ok(Some(DeletionVectorSelection::from_shared(
-        Arc::clone(row_indexes),
+        row_indexes,
         metrics.clone(),
     )))
 }
@@ -432,7 +435,7 @@ mod tests {
         error::Error as _,
         fs,
         path::{Path, PathBuf},
-        sync::Arc,
+        sync::{Arc, Weak},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -547,37 +550,30 @@ mod tests {
         .map(metadata)
     }
 
-    #[test]
-    fn lazy_loader_skips_absence_and_shares_inline_payloads()
+    #[tokio::test]
+    async fn lazy_loader_skips_absence_and_shares_inline_payloads()
     -> Result<(), Box<dyn std::error::Error>> {
         let table = DeltaLogTable::new("inline")?;
         let snapshot = table.snapshot()?;
         let engine_context = Arc::clone(snapshot.engine_context());
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()?;
 
         let absent_metrics = metrics();
         let absent_metadata =
             DeletionVectorMetadata::from_kernel(preserve_deletion_vector(DvInfo::default()));
-        let absent = runtime.block_on(load_deletion_vector_selection(
-            &snapshot,
-            absent_metadata,
-            &absent_metrics,
-        ))?;
+        let absent =
+            load_deletion_vector_selection(&snapshot, absent_metadata, &absent_metrics).await?;
         assert!(absent.is_none());
         assert_eq!(absent_metrics.snapshot().deletion_vector_payloads_loaded, 0);
 
         let inline_metrics = metrics();
         let inline_metadata = inline_metadata()?;
         assert!(inline_metadata.is_present());
+        let cached_row_indexes = Arc::clone(&inline_metadata.cached_row_indexes);
         let second_metadata = inline_metadata.clone();
-        let (selection, second_selection) = runtime.block_on(async {
-            tokio::join!(
-                load_deletion_vector_selection(&snapshot, inline_metadata, &inline_metrics,),
-                load_deletion_vector_selection(&snapshot, second_metadata, &inline_metrics,)
-            )
-        });
+        let (selection, second_selection) = tokio::join!(
+            load_deletion_vector_selection(&snapshot, inline_metadata.clone(), &inline_metrics),
+            load_deletion_vector_selection(&snapshot, second_metadata, &inline_metrics)
+        );
         let selection = selection?.expect("inline descriptor must produce a selection");
         let second_selection =
             second_selection?.expect("inline descriptor must produce a second selection");
@@ -587,8 +583,38 @@ mod tests {
                 INLINE_DV_DELETED_ROW_INDEXES
             );
         }
+        assert!(Arc::ptr_eq(
+            &selection.deleted_row_indexes,
+            &second_selection.deleted_row_indexes
+        ));
+        assert!(
+            cached_row_indexes
+                .lock()
+                .await
+                .as_ref()
+                .and_then(Weak::upgrade)
+                .is_some()
+        );
+        drop(selection);
+        drop(second_selection);
+        assert!(
+            cached_row_indexes
+                .lock()
+                .await
+                .as_ref()
+                .and_then(Weak::upgrade)
+                .is_none()
+        );
+
+        let reloaded = load_deletion_vector_selection(&snapshot, inline_metadata, &inline_metrics)
+            .await?
+            .expect("released inline payload must reload");
+        assert_eq!(
+            reloaded.deleted_row_indexes.as_ref(),
+            INLINE_DV_DELETED_ROW_INDEXES
+        );
         let metrics = inline_metrics.snapshot();
-        assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
+        assert_eq!(metrics.deletion_vector_payloads_loaded, 2);
         assert_eq!(metrics.deletion_vector_failures, 0);
         assert_eq!(metrics.deletion_vector_rejections, 0);
         assert!(Arc::ptr_eq(&engine_context, snapshot.engine_context()));

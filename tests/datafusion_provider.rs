@@ -306,7 +306,12 @@ async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates
     let metrics = metrics[0].snapshot().reader;
     assert_eq!(metrics.scan_partitions_started, 8);
     assert_eq!(metrics.files_started, 8);
-    assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
+    assert!(
+        (1..=metrics.files_started).contains(&metrics.deletion_vector_payloads_loaded),
+        "unexpected payload load count: {} for {} tasks",
+        metrics.deletion_vector_payloads_loaded,
+        metrics.files_started
+    );
     assert_eq!(metrics.deletion_vectors_applied, 2);
     assert_eq!(metrics.deletion_vector_rows_deleted, 3);
     assert_eq!(metrics.deletion_vector_failures, 0);
@@ -450,7 +455,11 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
         metrics.rows_produced,
         u64::try_from(expected.len())? * executions
     );
-    assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
+    assert!(
+        (1..=expected_tasks).contains(&metrics.deletion_vector_payloads_loaded),
+        "unexpected payload load count: {} for {expected_tasks} tasks",
+        metrics.deletion_vector_payloads_loaded
+    );
     assert_eq!(
         metrics.deletion_vectors_applied,
         u64::try_from(ROW_GROUPS)? * executions
