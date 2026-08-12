@@ -25,18 +25,6 @@ pub(crate) struct DeletionVectorMetadata {
 
 struct DeletionVectorRows {
     indexes: Box<[u64]>,
-    #[cfg(test)]
-    drop_probe: Option<DeletionVectorRowsDropProbe>,
-}
-
-#[cfg(test)]
-struct DeletionVectorRowsDropProbe(Arc<std::sync::atomic::AtomicBool>);
-
-#[cfg(test)]
-impl Drop for DeletionVectorRowsDropProbe {
-    fn drop(&mut self) {
-        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
 }
 
 impl DeletionVectorRows {
@@ -45,15 +33,7 @@ impl DeletionVectorRows {
         indexes.dedup();
         Self {
             indexes: indexes.into_boxed_slice(),
-            #[cfg(test)]
-            drop_probe: None,
         }
-    }
-
-    #[cfg(test)]
-    fn with_drop_probe(mut self, dropped: Arc<std::sync::atomic::AtomicBool>) -> Self {
-        self.drop_probe = Some(DeletionVectorRowsDropProbe(dropped));
-        self
     }
 }
 
@@ -472,10 +452,7 @@ mod tests {
         error::Error as _,
         fs,
         path::{Path, PathBuf},
-        sync::{
-            Arc, Weak,
-            atomic::{AtomicBool, Ordering},
-        },
+        sync::{Arc, Weak},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -595,17 +572,13 @@ mod tests {
 
     #[test]
     fn regression_weak_cache_drops_the_payload_owner() {
-        let dropped = Arc::new(AtomicBool::new(false));
-        let rows =
-            Arc::new(DeletionVectorRows::new(vec![3, 1, 3]).with_drop_probe(Arc::clone(&dropped)));
+        let rows = Arc::new(DeletionVectorRows::new(vec![3, 1, 3]));
         let cached_rows = Arc::downgrade(&rows);
 
         assert_eq!(rows.indexes.as_ref(), [1, 3]);
-        assert!(!dropped.load(Ordering::SeqCst));
         drop(rows);
 
         assert!(cached_rows.upgrade().is_none());
-        assert!(dropped.load(Ordering::SeqCst));
     }
 
     #[tokio::test]

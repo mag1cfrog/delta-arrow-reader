@@ -334,7 +334,7 @@ impl DeltaDataFusionExec {
         })
     }
 
-    fn with_partitions(
+    fn with_repartitioned_partitions(
         &self,
         partitions: Vec<DeltaScanFileTaskPartition>,
     ) -> Arc<dyn ExecutionPlan> {
@@ -383,7 +383,7 @@ fn repartition_file_tasks(
         return Ok(None);
     }
 
-    let Some(file_groups) = datafusion_file_groups(partitions)? else {
+    let Some(file_groups) = file_groups_from_partitions(partitions)? else {
         return Ok(None);
     };
     let Some(file_groups) = FileGroupPartitioner::new()
@@ -394,17 +394,17 @@ fn repartition_file_tasks(
         return Ok(None);
     };
 
-    scan_task_partitions(file_groups).map(Some)
+    partitions_from_file_groups(file_groups).map(Some)
 }
 
-fn datafusion_file_groups(
+fn file_groups_from_partitions(
     partitions: &[DeltaScanFileTaskPartition],
 ) -> DataFusionResult<Option<Vec<FileGroup>>> {
     let mut groups = Vec::with_capacity(partitions.len());
     for partition in partitions {
         let mut files = Vec::with_capacity(partition.file_tasks.len());
         for task in &partition.file_tasks {
-            let Some(file) = datafusion_file(task)? else {
+            let Some(file) = partitioned_file_from_task(task)? else {
                 return Ok(None);
             };
             files.push(file);
@@ -414,7 +414,9 @@ fn datafusion_file_groups(
     Ok(Some(groups))
 }
 
-fn datafusion_file(task: &DeltaScanFileTask) -> DataFusionResult<Option<PartitionedFile>> {
+fn partitioned_file_from_task(
+    task: &DeltaScanFileTask,
+) -> DataFusionResult<Option<PartitionedFile>> {
     let Some(file_size) = task.file_size.filter(|size| *size > 0) else {
         return Ok(None);
     };
@@ -434,7 +436,7 @@ fn datafusion_file(task: &DeltaScanFileTask) -> DataFusionResult<Option<Partitio
     Ok(Some(file.with_extension(task.clone())))
 }
 
-fn scan_task_partitions(
+fn partitions_from_file_groups(
     groups: Vec<FileGroup>,
 ) -> DataFusionResult<Vec<DeltaScanFileTaskPartition>> {
     let mut partitions = Vec::with_capacity(groups.len());
@@ -442,14 +444,14 @@ fn scan_task_partitions(
         let tasks = group
             .into_inner()
             .into_iter()
-            .map(scan_file_task)
+            .map(task_from_partitioned_file)
             .collect::<DataFusionResult<Vec<_>>>()?;
         partitions.push(build_partition(tasks).map_err(datafusion_error)?);
     }
     Ok(partitions)
 }
 
-fn scan_file_task(file: PartitionedFile) -> DataFusionResult<DeltaScanFileTask> {
+fn task_from_partitioned_file(file: PartitionedFile) -> DataFusionResult<DeltaScanFileTask> {
     let mut task = file
         .extension::<DeltaScanFileTask>()
         .cloned()
@@ -545,7 +547,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
         else {
             return Ok(None);
         };
-        Ok(Some(self.with_partitions(partitions)))
+        Ok(Some(self.with_repartitioned_partitions(partitions)))
     }
 
     fn execute(
@@ -1198,14 +1200,14 @@ mod tests {
     }
 
     #[test]
-    fn scan_file_task_rejects_malformed_partitioner_output() {
+    fn task_from_partitioned_file_rejects_malformed_partitioner_output() {
         let mut missing_extension = PartitionedFile::new("missing-extension.parquet", 100);
         missing_extension.range = Some(FileRange { start: 0, end: 100 });
-        assert!(scan_file_task(missing_extension).is_err());
+        assert!(task_from_partitioned_file(missing_extension).is_err());
 
         let missing_range = PartitionedFile::new("missing-range.parquet", 100)
             .with_extension(sized_file_task("missing-range.parquet", Some(100)));
-        assert!(scan_file_task(missing_range).is_err());
+        assert!(task_from_partitioned_file(missing_range).is_err());
 
         for range in [
             FileRange {
@@ -1218,13 +1220,13 @@ mod tests {
             let mut invalid = PartitionedFile::new("invalid-range.parquet", 100)
                 .with_extension(sized_file_task("invalid-range.parquet", Some(100)));
             invalid.range = Some(range);
-            assert!(scan_file_task(invalid).is_err());
+            assert!(task_from_partitioned_file(invalid).is_err());
         }
 
         let mut missing_size = PartitionedFile::new("missing-size.parquet", 100)
             .with_extension(sized_file_task("missing-size.parquet", None));
         missing_size.range = Some(FileRange { start: 0, end: 100 });
-        assert!(scan_file_task(missing_size).is_err());
+        assert!(task_from_partitioned_file(missing_size).is_err());
     }
 
     #[tokio::test]

@@ -181,7 +181,7 @@ impl NativeAsyncFileReader {
         }
     }
 
-    async fn split_parquet_metadata(
+    async fn load_split_parquet_metadata(
         &self,
         metadata_cache: Option<&NativeAsyncParquetMetadataCache>,
         path: &Path,
@@ -260,7 +260,7 @@ impl NativeAsyncFileReader {
             })?;
         let builder = if task.parquet_byte_range.is_some() {
             let metadata = self
-                .split_parquet_metadata(
+                .load_split_parquet_metadata(
                     metadata_cache,
                     &path,
                     file_size,
