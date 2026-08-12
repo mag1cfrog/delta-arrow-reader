@@ -18,6 +18,7 @@ permissions:
 
 concurrency:
   group: sccache-write
+  queue: max
 
 jobs:
   core:
