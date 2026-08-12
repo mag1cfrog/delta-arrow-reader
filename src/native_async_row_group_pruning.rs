@@ -8,14 +8,18 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::ops::Range;
 
 use chrono::{DateTime, Days};
 use delta_kernel::kernel_predicates::{
     DataSkippingPredicateEvaluator, KernelPredicateEvaluator, KernelPredicateEvaluatorDefaults,
 };
-use parquet::file::metadata::{ParquetMetaData, RowGroupMetaData};
 use parquet::file::statistics::Statistics;
 use parquet::schema::types::ColumnDescPtr;
+use parquet::{
+    errors::{ParquetError, Result as ParquetResult},
+    file::metadata::{ParquetMetaData, RowGroupMetaData},
+};
 
 use delta_kernel::{
     expressions::{ColumnName, DecimalData, Scalar},
@@ -24,30 +28,60 @@ use delta_kernel::{
 
 use crate::kernel::DeltaKernelPredicate;
 
-/// Computes the row groups that cannot be eliminated by footer statistics.
+/// Computes the row groups selected by a byte range and footer statistics.
 ///
-/// `None` means there is no physical predicate to use for row-group pruning.
+/// `None` means there is no byte range or physical predicate to use for pruning.
 /// `Some(Vec::new())` means every row group was proven impossible and the
 /// parquet reader should return no rows.
 #[allow(dead_code)]
 pub(crate) fn native_async_pruned_row_groups(
     metadata: &ParquetMetaData,
+    file_size: u64,
+    byte_range: Option<&Range<u64>>,
     predicate: Option<&DeltaKernelPredicate>,
-) -> Option<Vec<usize>> {
-    let predicate = predicate?;
+) -> ParquetResult<Option<Vec<usize>>> {
+    if byte_range.is_none() && predicate.is_none() {
+        return Ok(None);
+    }
 
-    Some(
-        metadata
-            .row_groups()
-            .iter()
-            .enumerate()
-            .filter_map(|(ordinal, row_group)| {
-                NativeAsyncRowGroupStats::new(row_group)
-                    .may_contain_matching_rows(predicate.as_ref())
-                    .then_some(ordinal)
-            })
-            .collect(),
-    )
+    if byte_range.is_some_and(|range| range.start >= range.end || range.end > file_size) {
+        return Err(ParquetError::General(
+            "parquet scan byte range is outside the file".to_owned(),
+        ));
+    }
+
+    let mut selected = Vec::new();
+    for (ordinal, row_group) in metadata.row_groups().iter().enumerate() {
+        let in_range = match byte_range {
+            None => true,
+            Some(range) => {
+                let column = row_group.columns().first().ok_or_else(|| {
+                    ParquetError::General(
+                        "parquet row group has no first-column metadata".to_owned(),
+                    )
+                })?;
+                let offset = column
+                    .dictionary_page_offset()
+                    .unwrap_or_else(|| column.data_page_offset());
+                let offset = u64::try_from(offset).map_err(|_| {
+                    ParquetError::General("parquet row-group offset is negative".to_owned())
+                })?;
+                if offset >= file_size {
+                    return Err(ParquetError::General(
+                        "parquet row-group offset is outside the file".to_owned(),
+                    ));
+                }
+                range.contains(&offset)
+            }
+        };
+        let may_match = predicate.is_none_or(|predicate| {
+            NativeAsyncRowGroupStats::new(row_group).may_contain_matching_rows(predicate.as_ref())
+        });
+        if in_range && may_match {
+            selected.push(ordinal);
+        }
+    }
+    Ok(Some(selected))
 }
 
 struct NativeAsyncRowGroupStats<'a> {
@@ -304,7 +338,135 @@ fn decimal_scalar_from_bytes(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use parquet::{
+        basic::Type as PhysicalType,
+        file::metadata::{ColumnChunkMetaData, FileMetaData, RowGroupMetaData},
+        schema::types::{SchemaDescriptor, Type as SchemaType},
+    };
+
     use super::*;
+
+    fn metadata_with_row_group_offsets(
+        offsets: &[(i64, Option<i64>)],
+    ) -> Result<ParquetMetaData, parquet::errors::ParquetError> {
+        let schema = SchemaType::group_type_builder("schema")
+            .with_fields(vec![Arc::new(
+                SchemaType::primitive_type_builder("value", PhysicalType::INT32).build()?,
+            )])
+            .build()?;
+        let schema = Arc::new(SchemaDescriptor::new(Arc::new(schema)));
+        let row_groups = offsets
+            .iter()
+            .enumerate()
+            .map(|(ordinal, (data_offset, dictionary_offset))| {
+                let column = ColumnChunkMetaData::builder(schema.columns()[0].clone())
+                    .set_data_page_offset(*data_offset)
+                    .set_dictionary_page_offset(*dictionary_offset)
+                    .build()?;
+                RowGroupMetaData::builder(Arc::clone(&schema))
+                    .set_num_rows(1)
+                    .set_ordinal(ordinal as i16)
+                    .set_column_metadata(vec![column])
+                    .build()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let file = FileMetaData::new(1, row_groups.len() as i64, None, None, schema, None);
+        Ok(ParquetMetaData::new(file, row_groups))
+    }
+
+    fn metadata_without_columns() -> Result<ParquetMetaData, parquet::errors::ParquetError> {
+        let schema = SchemaType::group_type_builder("schema").build()?;
+        let schema = Arc::new(SchemaDescriptor::new(Arc::new(schema)));
+        let row_group = RowGroupMetaData::builder(Arc::clone(&schema))
+            .set_num_rows(1)
+            .set_ordinal(0)
+            .set_column_metadata(vec![])
+            .build()?;
+        let file = FileMetaData::new(1, 1, None, None, schema, None);
+        Ok(ParquetMetaData::new(file, vec![row_group]))
+    }
+
+    #[test]
+    fn byte_range_selects_each_row_group_exactly_once() -> Result<(), Box<dyn std::error::Error>> {
+        let metadata = metadata_with_row_group_offsets(&[
+            (10, None),
+            (30, Some(25)),
+            (50, None),
+            (70, Some(65)),
+        ])?;
+
+        assert_eq!(
+            native_async_pruned_row_groups(&metadata, 80, Some(&(0..25)), None)?,
+            Some(vec![0])
+        );
+        assert_eq!(
+            native_async_pruned_row_groups(&metadata, 80, Some(&(25..50)), None)?,
+            Some(vec![1])
+        );
+        assert_eq!(
+            native_async_pruned_row_groups(&metadata, 80, Some(&(50..65)), None)?,
+            Some(vec![2])
+        );
+        assert_eq!(
+            native_async_pruned_row_groups(&metadata, 80, Some(&(65..80)), None)?,
+            Some(vec![3])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn byte_range_uses_dictionary_offset_and_half_open_bounds()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let metadata = metadata_with_row_group_offsets(&[(30, Some(20)), (40, None)])?;
+
+        assert_eq!(
+            native_async_pruned_row_groups(&metadata, 41, Some(&(20..40)), None)?,
+            Some(vec![0])
+        );
+        assert_eq!(
+            native_async_pruned_row_groups(&metadata, 41, Some(&(40..41)), None)?,
+            Some(vec![1])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn regression_byte_range_rejects_malformed_row_group_coordinates()
+    -> Result<(), Box<dyn std::error::Error>> {
+        assert!(
+            native_async_pruned_row_groups(
+                &metadata_without_columns()?,
+                100,
+                Some(&(0..100)),
+                None,
+            )
+            .is_err()
+        );
+        for metadata in [
+            metadata_with_row_group_offsets(&[(-1, None)])?,
+            metadata_with_row_group_offsets(&[(10, Some(-1))])?,
+            metadata_with_row_group_offsets(&[(100, None)])?,
+            metadata_with_row_group_offsets(&[(101, None)])?,
+        ] {
+            assert!(native_async_pruned_row_groups(&metadata, 100, Some(&(0..100)), None).is_err());
+        }
+
+        let metadata = metadata_with_row_group_offsets(&[(0, None), (99, None)])?;
+        assert_eq!(
+            native_async_pruned_row_groups(&metadata, 100, Some(&(0..100)), None)?,
+            Some(vec![0, 1])
+        );
+        for (start, end) in [(0, 0), (0, 101), (100, 99)] {
+            let range = start..end;
+            assert!(native_async_pruned_row_groups(&metadata, 100, Some(&range), None).is_err());
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn decimal_scalar_from_fixed_len_bytes_sign_extends_negative_values()

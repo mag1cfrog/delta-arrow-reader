@@ -12,6 +12,10 @@ use std::{
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use datafusion::{
     common::{DataFusionError, Result as DataFusionResult, config::ConfigOptions},
+    datasource::{
+        listing::{FileRange, PartitionedFile},
+        physical_plan::{FileGroup, FileGroupPartitioner},
+    },
     execution::TaskContext,
     physical_expr::EquivalenceProperties,
     physical_plan::{
@@ -26,6 +30,13 @@ use datafusion::{
 };
 use futures_util::{StreamExt, stream};
 
+#[cfg(not(feature = "native-async"))]
+use crate::direct::native_async_executor;
+#[cfg(feature = "native-async")]
+use crate::native_async_reader::{
+    NativeAsyncParquetMetadataCache, native_async_file_executor,
+    native_async_file_executor_with_metadata_cache,
+};
 use crate::{
     DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend, DeltaReaderError,
     datafusion_dynamic_filters::{
@@ -36,10 +47,10 @@ use crate::{
         evaluate_dynamic_partition_filter,
     },
     datafusion_planning::DataFusionScanPlanning,
-    direct::{native_async_executor, official_kernel_executor},
+    direct::official_kernel_executor,
     kernel::DeltaKernelPredicate,
     metrics::saturating_fetch_add,
-    planning::{DeltaScanFileTask, DeltaScanPlan},
+    planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
     scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
 };
 
@@ -52,9 +63,11 @@ pub struct DeltaDataFusionMetricsSnapshot {
     pub use_view_types: bool,
     /// Effective DataFusion task batch size observed at execution.
     pub output_batch_size: Option<u64>,
-    /// Files pruned before admission by a dynamic partition filter.
+    /// File tasks pruned before admission by a dynamic partition filter.
+    /// A task is either a whole physical file or one independently read file range.
     pub dynamic_partition_files_pruned: u64,
-    /// Files kept after consulting retained dynamic partition filters.
+    /// File tasks kept after consulting retained dynamic partition filters.
+    /// A task is either a whole physical file or one independently read file range.
     pub dynamic_partition_files_kept: u64,
     /// Physical filters offered to the post-optimization hook.
     pub dynamic_filters_received: u64,
@@ -64,9 +77,9 @@ pub struct DeltaDataFusionMetricsSnapshot {
     pub dynamic_filters_unsupported: u64,
     /// Current dynamic expressions consulted during file admission.
     pub dynamic_filter_snapshots: u64,
-    /// Kept files with missing, invalid, or unparsable partition metadata.
+    /// Kept file tasks with missing, invalid, or unparsable partition metadata.
     pub dynamic_files_not_pruned_missing_metadata: u64,
-    /// Kept files with unavailable, unsupported, or failed expressions.
+    /// Kept file tasks with unavailable, unsupported, or failed expressions.
     pub dynamic_files_not_pruned_unsupported_expression: u64,
 }
 
@@ -150,11 +163,11 @@ impl DeltaDataFusionMetrics {
             .store(u64::try_from(value).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
-    fn record_dynamic_partition_file_pruned(&self) {
+    fn record_dynamic_partition_task_pruned(&self) {
         saturating_fetch_add(&self.inner.dynamic_partition_files_pruned, 1);
     }
 
-    fn record_dynamic_partition_file_kept(&self) {
+    fn record_dynamic_partition_task_kept(&self) {
         saturating_fetch_add(&self.inner.dynamic_partition_files_kept, 1);
     }
 
@@ -263,6 +276,7 @@ pub(crate) fn create_datafusion_execution_plan(
     ))
 }
 
+#[derive(Clone)]
 struct DeltaDataFusionExec {
     plan: Arc<DeltaScanPlan>,
     schema: SchemaRef,
@@ -272,6 +286,8 @@ struct DeltaDataFusionExec {
     metrics: DeltaDataFusionMetrics,
     limiter: Arc<ScanReadLimiter>,
     dynamic_filters: Arc<[DeltaRetainedDynamicFilter]>,
+    #[cfg(feature = "native-async")]
+    parquet_metadata_cache: Option<Arc<NativeAsyncParquetMetadataCache>>,
 }
 
 impl DeltaDataFusionExec {
@@ -285,13 +301,7 @@ impl DeltaDataFusionExec {
     ) -> Self {
         let schema = planning.projection.output_schema;
         let output_projection = planning.projection.output_projection.map(Arc::from);
-        let properties = PlanProperties::new(
-            EquivalenceProperties::new(Arc::clone(&schema)),
-            Partitioning::UnknownPartitioning(plan.partitions.len()),
-            EmissionType::Incremental,
-            Boundedness::Bounded,
-        )
-        .with_scheduling_type(SchedulingType::Cooperative);
+        let properties = scan_properties(&schema, plan.partitions.len());
         let metrics =
             DeltaDataFusionMetrics::new(source_name, plan.metrics.clone(), use_view_types);
         let limiter = ScanReadLimiter::new(
@@ -305,10 +315,12 @@ impl DeltaDataFusionExec {
             schema,
             output_projection,
             row_predicate,
-            properties: Arc::new(properties),
+            properties,
             metrics,
             limiter,
             dynamic_filters: Arc::from([]),
+            #[cfg(feature = "native-async")]
+            parquet_metadata_cache: None,
         }
     }
 
@@ -317,16 +329,156 @@ impl DeltaDataFusionExec {
         dynamic_filters: Vec<DeltaRetainedDynamicFilter>,
     ) -> Arc<dyn ExecutionPlan> {
         Arc::new(Self {
-            plan: Arc::clone(&self.plan),
-            schema: Arc::clone(&self.schema),
-            output_projection: self.output_projection.clone(),
-            row_predicate: self.row_predicate.clone(),
-            properties: Arc::clone(&self.properties),
-            metrics: self.metrics.clone(),
-            limiter: Arc::clone(&self.limiter),
             dynamic_filters: Arc::from(dynamic_filters),
+            ..self.clone()
         })
     }
+
+    fn with_repartitioned_partitions(
+        &self,
+        partitions: Vec<DeltaScanFileTaskPartition>,
+    ) -> Arc<dyn ExecutionPlan> {
+        let partition_count = partitions.len();
+        let mut plan = (*self.plan).clone();
+        plan.partitions = partitions;
+        plan.metrics.record_scan_partitions_planned(partition_count);
+        let target_partitions = plan.partition_target_diagnostic.target_partitions;
+        let limiter =
+            ScanReadLimiter::new(plan.execution_options, target_partitions, partition_count);
+        Arc::new(Self {
+            plan: Arc::new(plan),
+            properties: scan_properties(&self.schema, partition_count),
+            limiter,
+            #[cfg(feature = "native-async")]
+            parquet_metadata_cache: Some(Arc::new(NativeAsyncParquetMetadataCache::default())),
+            ..self.clone()
+        })
+    }
+}
+
+fn scan_properties(schema: &SchemaRef, partition_count: usize) -> Arc<PlanProperties> {
+    Arc::new(
+        PlanProperties::new(
+            EquivalenceProperties::new(Arc::clone(schema)),
+            Partitioning::UnknownPartitioning(partition_count),
+            EmissionType::Incremental,
+            Boundedness::Bounded,
+        )
+        .with_scheduling_type(SchedulingType::Cooperative),
+    )
+}
+
+/// Attempts to split file tasks into additional DataFusion execution partitions.
+///
+/// `Ok(None)` preserves the existing plan when splitting is unnecessary or unsafe.
+fn repartition_file_tasks(
+    partitions: &[DeltaScanFileTaskPartition],
+    target_partitions: usize,
+    minimum_total_bytes: usize,
+) -> DataFusionResult<Option<Vec<DeltaScanFileTaskPartition>>> {
+    if target_partitions == 0 {
+        return Err(adapter_error("scan_partition_target_must_be_positive"));
+    }
+    // Whole-file planning already balances up to the requested partition count.
+    // Intra-file splitting fills missing parallelism; rebalancing a full plan
+    // requires a separate, evidence-backed skew policy.
+    if partitions.len() >= target_partitions {
+        return Ok(None);
+    }
+
+    // DataFusion cannot safely split tasks whose physical file size is unknown.
+    let Some(file_groups) = file_groups_from_partitions(partitions)? else {
+        return Ok(None);
+    };
+    let Some(file_groups) = FileGroupPartitioner::new()
+        .with_target_partitions(target_partitions)
+        .with_repartition_file_min_size(minimum_total_bytes)
+        .repartition_file_groups(&file_groups)
+    else {
+        // Preserve the original plan when DataFusion finds no useful split.
+        return Ok(None);
+    };
+
+    partitions_from_file_groups(file_groups).map(Some)
+}
+
+fn file_groups_from_partitions(
+    partitions: &[DeltaScanFileTaskPartition],
+) -> DataFusionResult<Option<Vec<FileGroup>>> {
+    let mut groups = Vec::with_capacity(partitions.len());
+    for partition in partitions {
+        let mut files = Vec::with_capacity(partition.file_tasks.len());
+        for task in &partition.file_tasks {
+            let Some(file) = partitioned_file_from_task(task)? else {
+                return Ok(None);
+            };
+            files.push(file);
+        }
+        groups.push(FileGroup::new(files));
+    }
+    Ok(Some(groups))
+}
+
+fn partitioned_file_from_task(
+    task: &DeltaScanFileTask,
+) -> DataFusionResult<Option<PartitionedFile>> {
+    let Some(file_size) = task.file_size.filter(|size| *size > 0) else {
+        return Ok(None);
+    };
+    let mut file = PartitionedFile::new(&task.path, file_size);
+    if let Some(range) = &task.parquet_byte_range {
+        if range.start >= range.end || range.end > file_size {
+            return Err(adapter_error("scan_file_range_invalid"));
+        }
+        file.range = Some(FileRange {
+            start: i64::try_from(range.start)
+                .map_err(|_| adapter_error("scan_file_range_invalid"))?,
+            end: i64::try_from(range.end).map_err(|_| adapter_error("scan_file_range_invalid"))?,
+        });
+    }
+    // DataFusion copies extensions to every output range. Carry the Delta task
+    // so its schema, partition, transform, and deletion-vector metadata survive.
+    Ok(Some(file.with_extension(task.clone())))
+}
+
+fn partitions_from_file_groups(
+    groups: Vec<FileGroup>,
+) -> DataFusionResult<Vec<DeltaScanFileTaskPartition>> {
+    let mut partitions = Vec::with_capacity(groups.len());
+    for group in groups {
+        let tasks = group
+            .into_inner()
+            .into_iter()
+            .map(task_from_partitioned_file)
+            .collect::<DataFusionResult<Vec<_>>>()?;
+        partitions.push(build_partition(tasks).map_err(datafusion_error)?);
+    }
+    Ok(partitions)
+}
+
+fn task_from_partitioned_file(file: PartitionedFile) -> DataFusionResult<DeltaScanFileTask> {
+    let mut task = file
+        .extension::<DeltaScanFileTask>()
+        .cloned()
+        .ok_or_else(|| adapter_error("scan_file_task_extension_missing"))?;
+    let range = file
+        .range
+        .ok_or_else(|| adapter_error("scan_file_range_missing"))?;
+    let start = u64::try_from(range.start).map_err(|_| adapter_error("scan_file_range_invalid"))?;
+    let end = u64::try_from(range.end).map_err(|_| adapter_error("scan_file_range_invalid"))?;
+    let file_size = task
+        .file_size
+        .ok_or_else(|| adapter_error("scan_file_size_missing"))?;
+    if start >= end || end > file_size {
+        return Err(adapter_error("scan_file_range_invalid"));
+    }
+    task.parquet_byte_range = (start != 0 || end != file_size).then_some(start..end);
+    if task.parquet_byte_range.is_some() {
+        // A range covers an unknown subset of the file's rows, so the original
+        // whole-file estimate is no longer valid for partition accounting.
+        task.estimated_rows = None;
+    }
+    Ok(task)
 }
 
 impl fmt::Debug for DeltaDataFusionExec {
@@ -384,6 +536,27 @@ impl ExecutionPlan for DeltaDataFusionExec {
         }
     }
 
+    fn repartitioned(
+        &self,
+        _datafusion_target_partitions: usize,
+        config: &ConfigOptions,
+    ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
+        if self.plan.execution_options.reader_backend() != DeltaReaderBackend::NativeAsync {
+            return Ok(None);
+        }
+        // Scan planning already applied the provider override and resource caps.
+        let target_partitions = self.plan.partition_target_diagnostic.target_partitions;
+        let Some(partitions) = repartition_file_tasks(
+            &self.plan.partitions,
+            target_partitions,
+            config.optimizer.repartition_file_min_size,
+        )?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(self.with_repartitioned_partitions(partitions)))
+    }
+
     fn execute(
         &self,
         partition: usize,
@@ -397,12 +570,33 @@ impl ExecutionPlan for DeltaDataFusionExec {
         self.metrics.record_output_batch_size(output_batch_size);
         let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
         let executor = match self.plan.execution_options.reader_backend() {
-            DeltaReaderBackend::NativeAsync => native_async_executor(
-                &self.plan,
-                Some(output_batch_size),
-                self.row_predicate.clone(),
-            )
-            .map_err(datafusion_error)?,
+            DeltaReaderBackend::NativeAsync => {
+                #[cfg(feature = "native-async")]
+                {
+                    match &self.parquet_metadata_cache {
+                        Some(cache) => native_async_file_executor_with_metadata_cache(
+                            &self.plan,
+                            Some(output_batch_size),
+                            self.row_predicate.clone(),
+                            Arc::clone(cache),
+                        ),
+                        None => native_async_file_executor(
+                            &self.plan,
+                            Some(output_batch_size),
+                            self.row_predicate.clone(),
+                        ),
+                    }
+                }
+                #[cfg(not(feature = "native-async"))]
+                {
+                    native_async_executor(
+                        &self.plan,
+                        Some(output_batch_size),
+                        self.row_predicate.clone(),
+                    )
+                    .map_err(datafusion_error)?
+                }
+            }
             DeltaReaderBackend::OfficialKernel => {
                 official_kernel_executor(&self.plan).map_err(datafusion_error)?
             }
@@ -495,7 +689,7 @@ fn dynamic_admission(
             metrics.record_dynamic_filter_snapshot();
             match evaluate_dynamic_partition_filter(filter, task) {
                 DeltaDynamicPartitionPruningDecision::Prune(_) => {
-                    metrics.record_dynamic_partition_file_pruned();
+                    metrics.record_dynamic_partition_task_pruned();
                     return Ok(FileAdmission::Skip);
                 }
                 DeltaDynamicPartitionPruningDecision::Keep(reason) => {
@@ -510,7 +704,7 @@ fn dynamic_admission(
         if unsupported_expression {
             metrics.record_unsupported_expression();
         }
-        metrics.record_dynamic_partition_file_kept();
+        metrics.record_dynamic_partition_task_kept();
         Ok(FileAdmission::Admit)
     })
 }
@@ -825,6 +1019,24 @@ mod tests {
         SessionContext::new_with_config(SessionConfig::new().with_batch_size(batch_size))
     }
 
+    fn sized_file_task(path: &str, size: Option<u64>) -> DeltaScanFileTask {
+        use crate::{
+            deletion_vector::DeletionVectorMetadata, kernel::KernelPhysicalToLogicalTransform,
+        };
+
+        DeltaScanFileTask {
+            path: path.to_owned(),
+            file_size: size,
+            parquet_byte_range: None,
+            estimated_rows: size,
+            stats: None,
+            modification_time_ms: None,
+            partition_values: Default::default(),
+            deletion_vector: DeletionVectorMetadata::default(),
+            transform: KernelPhysicalToLogicalTransform::default(),
+        }
+    }
+
     fn ids(batches: &[RecordBatch]) -> Vec<i32> {
         batches
             .iter()
@@ -840,6 +1052,259 @@ mod tests {
                     .collect::<Vec<_>>()
             })
             .collect()
+    }
+
+    #[test]
+    fn file_repartitioning_balances_ranges_without_losing_file_identity() -> TestResult {
+        let input = vec![build_partition(vec![
+            sized_file_task("large.parquet", Some(100)),
+            sized_file_task("small.parquet", Some(20)),
+        ])?];
+        let partitions = repartition_file_tasks(&input, 4, 1)?.ok_or("not repartitioned")?;
+
+        assert_eq!(
+            partitions
+                .iter()
+                .map(|partition| partition.estimated_bytes)
+                .collect::<Vec<_>>(),
+            vec![Some(30); 4]
+        );
+        let mut ranges = std::collections::BTreeMap::<_, Vec<_>>::new();
+        for task in partitions
+            .iter()
+            .flat_map(|partition| &partition.file_tasks)
+        {
+            ranges.entry(task.path.as_str()).or_default().push(
+                task.parquet_byte_range
+                    .clone()
+                    .unwrap_or(0..task.file_size.ok_or("missing file size")?),
+            );
+            assert_eq!(
+                task.file_size,
+                Some(if task.path == "large.parquet" {
+                    100
+                } else {
+                    20
+                })
+            );
+            if task.path == "small.parquet" {
+                assert!(task.parquet_byte_range.is_none());
+                assert_eq!(task.estimated_rows, Some(20));
+            } else {
+                assert_eq!(task.estimated_rows, None);
+            }
+        }
+        assert_eq!(
+            ranges.remove("large.parquet"),
+            Some(vec![0..30, 30..60, 60..90, 90..100])
+        );
+        assert_eq!(
+            ranges.remove("small.parquet"),
+            Some(std::iter::once(0..20).collect())
+        );
+        assert!(ranges.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn file_repartitioning_never_escapes_an_existing_range() -> TestResult {
+        let mut task = sized_file_task("partial.parquet", Some(100));
+        task.parquet_byte_range = Some(20..80);
+        task.estimated_rows = None;
+        let partitions = repartition_file_tasks(&[build_partition(vec![task])?], 3, 1)?
+            .ok_or("partial range was not repartitioned")?;
+
+        assert_eq!(
+            partitions
+                .iter()
+                .flat_map(|partition| &partition.file_tasks)
+                .map(|task| task.parquet_byte_range.clone())
+                .collect::<Vec<_>>(),
+            [Some(20..40), Some(40..60), Some(60..80)]
+        );
+        assert!(
+            partitions
+                .iter()
+                .flat_map(|partition| &partition.file_tasks)
+                .all(|task| task.file_size == Some(100) && task.estimated_rows.is_none())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn file_repartitioning_does_not_rebalance_a_full_whole_file_plan() -> TestResult {
+        let input = vec![
+            build_partition(vec![sized_file_task("huge.parquet", Some(1_000))])?,
+            build_partition(vec![sized_file_task("small-0.parquet", Some(10))])?,
+            build_partition(vec![sized_file_task("small-1.parquet", Some(10))])?,
+            build_partition(vec![sized_file_task("small-2.parquet", Some(10))])?,
+        ];
+
+        assert!(repartition_file_tasks(&input, 4, 1)?.is_none());
+        assert!(
+            input
+                .iter()
+                .flat_map(|partition| &partition.file_tasks)
+                .all(|task| task.parquet_byte_range.is_none())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn file_repartitioning_refuses_unsupported_inputs_and_rejects_invalid_ranges() -> TestResult {
+        let input = vec![build_partition(vec![sized_file_task(
+            "known.parquet",
+            Some(120),
+        )])?];
+
+        assert!(repartition_file_tasks(&input, 4, 121)?.is_none());
+        assert!(
+            repartition_file_tasks(
+                &[build_partition(vec![sized_file_task(
+                    "unknown.parquet",
+                    None,
+                )])?],
+                4,
+                1
+            )?
+            .is_none()
+        );
+        assert!(
+            repartition_file_tasks(
+                &[build_partition(vec![sized_file_task(
+                    "empty.parquet",
+                    Some(0),
+                )])?],
+                4,
+                1
+            )?
+            .is_none()
+        );
+        assert!(repartition_file_tasks(&input, 0, 1).is_err());
+
+        for range in [90..110, std::ops::Range { start: 90, end: 80 }, 90..90] {
+            let mut invalid = sized_file_task("invalid.parquet", Some(100));
+            invalid.parquet_byte_range = Some(range);
+            assert!(repartition_file_tasks(&[build_partition(vec![invalid])?], 4, 1).is_err());
+        }
+
+        let oversized = u64::try_from(i64::MAX)? + 1;
+        assert!(
+            repartition_file_tasks(
+                &[build_partition(vec![sized_file_task(
+                    "oversized.parquet",
+                    Some(oversized),
+                )])?],
+                2,
+                1,
+            )
+            .is_err()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn task_from_partitioned_file_rejects_malformed_partitioner_output() {
+        let mut missing_extension = PartitionedFile::new("missing-extension.parquet", 100);
+        missing_extension.range = Some(FileRange { start: 0, end: 100 });
+        assert!(task_from_partitioned_file(missing_extension).is_err());
+
+        let missing_range = PartitionedFile::new("missing-range.parquet", 100)
+            .with_extension(sized_file_task("missing-range.parquet", Some(100)));
+        assert!(task_from_partitioned_file(missing_range).is_err());
+
+        for range in [
+            FileRange {
+                start: -1,
+                end: 100,
+            },
+            FileRange { start: 50, end: 50 },
+            FileRange { start: 0, end: 101 },
+        ] {
+            let mut invalid = PartitionedFile::new("invalid-range.parquet", 100)
+                .with_extension(sized_file_task("invalid-range.parquet", Some(100)));
+            invalid.range = Some(range);
+            assert!(task_from_partitioned_file(invalid).is_err());
+        }
+
+        let mut missing_size = PartitionedFile::new("missing-size.parquet", 100)
+            .with_extension(sized_file_task("missing-size.parquet", None));
+        missing_size.range = Some(FileRange { start: 0, end: 100 });
+        assert!(task_from_partitioned_file(missing_size).is_err());
+    }
+
+    #[tokio::test]
+    async fn native_repartitioning_reads_each_row_once_and_preserves_byte_accounting() -> TestResult
+    {
+        let fixture = TestTable::partitioned("file-repartitioning")?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let plan = build_plan(
+            &table,
+            None,
+            &[],
+            4,
+            DeltaReaderExecutionOptions::new(),
+            None,
+        )?;
+        let expected_bytes = collect_delta_datafusion_metrics(plan.as_ref())[0]
+            .snapshot()
+            .reader
+            .estimated_bytes;
+        let mut config = ConfigOptions::new();
+        config.optimizer.repartition_file_min_size = 1;
+        let repartitioned = plan
+            .repartitioned(4, &config)?
+            .ok_or("native scan was not repartitioned")?;
+
+        assert_eq!(
+            repartitioned
+                .properties()
+                .output_partitioning()
+                .partition_count(),
+            4
+        );
+        let mut actual_ids = ids(&datafusion::physical_plan::collect(
+            Arc::clone(&repartitioned),
+            session(1024).task_ctx(),
+        )
+        .await?);
+        actual_ids.sort_unstable();
+        assert_eq!(actual_ids, [1, 2, 3, 4]);
+        let metrics = collect_delta_datafusion_metrics(repartitioned.as_ref())[0].snapshot();
+        assert_eq!(metrics.reader.scan_partitions_planned, 4);
+        assert_eq!(
+            metrics.reader.parquet_data_file_opened_bytes,
+            expected_bytes
+        );
+
+        let explicit_one = build_plan(
+            &table,
+            None,
+            &[],
+            1,
+            DeltaReaderExecutionOptions::new(),
+            None,
+        )?;
+        assert!(explicit_one.repartitioned(4, &config)?.is_none());
+
+        #[cfg(feature = "official-kernel")]
+        {
+            let official = build_plan(
+                &table,
+                None,
+                &[],
+                4,
+                DeltaReaderExecutionOptions::new()
+                    .with_reader_backend(DeltaReaderBackend::OfficialKernel)?,
+                None,
+            )?;
+            assert!(official.repartitioned(4, &config)?.is_none());
+        }
+
+        Ok(())
     }
 
     fn dynamic_filter(name: &str, index: usize) -> Arc<DynamicFilterPhysicalExpr> {
@@ -1296,7 +1761,8 @@ mod tests {
         let second = retained(dynamic_filter("region", 1))?;
         let missing = DeltaScanFileTask {
             path: "missing-partition.parquet".to_owned(),
-            estimated_bytes: None,
+            file_size: None,
+            parquet_byte_range: None,
             estimated_rows: None,
             stats: None,
             modification_time_ms: None,
@@ -1377,8 +1843,8 @@ mod tests {
             let metrics = metrics.clone();
             handles.push(thread::spawn(move || {
                 for _ in 0..ITERATIONS {
-                    metrics.record_dynamic_partition_file_pruned();
-                    metrics.record_dynamic_partition_file_kept();
+                    metrics.record_dynamic_partition_task_pruned();
+                    metrics.record_dynamic_partition_task_kept();
                     metrics.record_dynamic_filters_received(3);
                     metrics.record_dynamic_filters_accepted(1);
                     metrics.record_dynamic_filters_unsupported(2);

@@ -3,6 +3,7 @@
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BinaryHeap, HashSet},
+    ops::Range,
     sync::Arc,
 };
 
@@ -37,6 +38,7 @@ pub(crate) struct DeltaScanPartitionTargetOptions {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub(crate) struct DeltaScanPlan {
     pub(crate) snapshot_version: u64,
     pub(crate) engine_context: Arc<DeltaKernelEngineContext>,
@@ -217,7 +219,7 @@ fn build_unpartitioned_scan_plan(
         .map(DeltaScanFileTask::try_from_kernel)
         .collect::<Result<Vec<_>, _>>()?;
     let estimated_bytes = checked_sum(
-        file_tasks.iter().map(|task| task.estimated_bytes),
+        file_tasks.iter().map(|task| task.file_size),
         "scan_estimated_bytes_overflow",
     )?;
     let estimated_rows = checked_sum(
@@ -341,10 +343,15 @@ fn logical_projection(
     }))
 }
 
+/// File-read tasks executed together as one scan partition.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub(crate) struct DeltaScanFileTaskPartition {
+    /// Whole-file or ranged Parquet reads assigned to this partition.
     pub(crate) file_tasks: Vec<DeltaScanFileTask>,
+    /// Total bytes to read when every task has a known size.
     pub(crate) estimated_bytes: Option<u64>,
+    /// Total output rows when every task has a valid whole-file estimate.
     pub(crate) estimated_rows: Option<u64>,
 }
 
@@ -361,7 +368,9 @@ pub(crate) fn group_scan_file_tasks(
     }
 
     let estimated_bytes = checked_sum(
-        file_tasks.iter().map(|task| task.estimated_bytes),
+        file_tasks
+            .iter()
+            .map(DeltaScanFileTask::estimated_scan_bytes),
         "scan_estimated_bytes_overflow",
     )?;
     if file_tasks.is_empty() {
@@ -379,7 +388,7 @@ fn group_by_estimated_bytes(
     target_partitions: usize,
 ) -> Result<Vec<DeltaScanFileTaskPartition>, DeltaReaderError> {
     let output_limit = target_partitions.min(file_tasks.len());
-    file_tasks.sort_by_key(|task| Reverse(task.estimated_bytes));
+    file_tasks.sort_by_key(|task| Reverse(task.estimated_scan_bytes()));
     let mut file_tasks = file_tasks.into_iter();
     let mut partition_tasks = Vec::with_capacity(output_limit);
     let mut partition_loads = BinaryHeap::with_capacity(output_limit);
@@ -388,7 +397,7 @@ fn group_by_estimated_bytes(
         let Some(file_task) = file_tasks.next() else {
             return partition_planning_error("known_size_grouping_exhausted_tasks");
         };
-        let Some(file_bytes) = file_task.estimated_bytes else {
+        let Some(file_bytes) = file_task.estimated_scan_bytes() else {
             return partition_planning_error("known_size_grouping_missing_estimated_bytes");
         };
         partition_tasks.push(vec![file_task]);
@@ -396,7 +405,7 @@ fn group_by_estimated_bytes(
     }
 
     for file_task in file_tasks {
-        let Some(file_bytes) = file_task.estimated_bytes else {
+        let Some(file_bytes) = file_task.estimated_scan_bytes() else {
             return partition_planning_error("known_size_grouping_missing_estimated_bytes");
         };
         let Some(Reverse((partition_bytes, partition_index))) = partition_loads.pop() else {
@@ -435,11 +444,14 @@ fn group_by_file_count(
     Ok(partitions)
 }
 
-fn build_partition(
+/// Builds a scan partition and its aggregate size and row estimates.
+pub(crate) fn build_partition(
     file_tasks: Vec<DeltaScanFileTask>,
 ) -> Result<DeltaScanFileTaskPartition, DeltaReaderError> {
     let estimated_bytes = checked_sum(
-        file_tasks.iter().map(|task| task.estimated_bytes),
+        file_tasks
+            .iter()
+            .map(DeltaScanFileTask::estimated_scan_bytes),
         "partition_estimated_bytes_overflow",
     )?;
     let estimated_rows = checked_sum(
@@ -501,29 +513,50 @@ fn validate_projection(
     Ok(())
 }
 
+/// One physical Parquet read, covering either a whole data file or a byte range.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct DeltaScanFileTask {
+    /// Object-store path of the physical data file.
     pub(crate) path: String,
-    pub(crate) estimated_bytes: Option<u64>,
+    /// Size of the complete physical file, when known.
+    pub(crate) file_size: Option<u64>,
+    /// Byte range assigned by intra-file repartitioning, or `None` for the whole file.
+    pub(crate) parquet_byte_range: Option<Range<u64>>,
+    /// Expected output rows, available only for whole-file tasks with statistics.
     pub(crate) estimated_rows: Option<u64>,
+    /// Delta file statistics used by planning and pruning.
     pub(crate) stats: Option<DeltaScanFileStats>,
+    /// Data-file modification time from the Delta add action.
     pub(crate) modification_time_ms: Option<i64>,
+    /// Logical partition-column values from the Delta add action.
     pub(crate) partition_values: BTreeMap<String, String>,
+    /// Deletion vector associated with the complete physical file.
     pub(crate) deletion_vector: DeletionVectorMetadata,
+    /// Physical-to-logical expression applied after reading the Parquet data.
     pub(crate) transform: KernelPhysicalToLogicalTransform,
 }
 
+/// Row-count statistics retained from a Delta add action.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct DeltaScanFileStats {
+    /// Number of physical rows in the complete data file.
     pub(crate) num_records: u64,
 }
 
 #[allow(dead_code)]
 impl DeltaScanFileTask {
+    /// Returns bytes assigned to this task, using its range when split.
+    pub(crate) fn estimated_scan_bytes(&self) -> Option<u64> {
+        match &self.parquet_byte_range {
+            Some(range) => range.end.checked_sub(range.start),
+            None => self.file_size,
+        }
+    }
+
     pub(crate) fn try_from_kernel(file: KernelScanFileMetadata) -> Result<Self, DeltaReaderError> {
-        let estimated_bytes = u64::try_from(file.size)
+        let file_size = u64::try_from(file.size)
             .boxed()
             .context(ScanPlanningSnafu {
                 reason: "negative_file_size",
@@ -535,7 +568,8 @@ impl DeltaScanFileTask {
 
         Ok(Self {
             path: file.path,
-            estimated_bytes: Some(estimated_bytes),
+            file_size: Some(file_size),
+            parquet_byte_range: None,
             estimated_rows: stats.as_ref().map(|stats| stats.num_records),
             stats,
             modification_time_ms: file.modification_time_ms,
@@ -768,7 +802,7 @@ mod tests {
         estimated_rows: Option<u64>,
     ) -> Result<DeltaScanFileTask, crate::DeltaReaderError> {
         let mut task = task(kernel_file(path))?;
-        task.estimated_bytes = estimated_bytes;
+        task.file_size = estimated_bytes;
         task.estimated_rows = estimated_rows;
         task.stats = estimated_rows.map(|num_records| DeltaScanFileStats { num_records });
         Ok(task)
@@ -851,7 +885,7 @@ mod tests {
         let task = task(file)?;
 
         assert_eq!(task.path, "part-00000.parquet");
-        assert_eq!(task.estimated_bytes, Some(123));
+        assert_eq!(task.file_size, Some(123));
         assert_eq!(task.estimated_rows, Some(7));
         assert_eq!(task.stats.as_ref().map(|stats| stats.num_records), Some(7));
         assert_eq!(task.modification_time_ms, Some(1_587_968_586_000));
@@ -877,7 +911,7 @@ mod tests {
 
         let task = task(file)?;
 
-        assert_eq!(task.estimated_bytes, Some(0));
+        assert_eq!(task.file_size, Some(0));
         assert_eq!(task.estimated_rows, None);
         assert!(task.stats.is_none());
         assert!(!task.deletion_vector.is_present());
@@ -965,7 +999,7 @@ mod tests {
         let single_task = planned_tasks(&single).next().ok_or("expected one task")?;
         assert_eq!(planned_tasks(&single).count(), 1);
         assert_eq!(single_task.path, "single.parquet");
-        assert_eq!(single_task.estimated_bytes, Some(0));
+        assert_eq!(single_task.file_size, Some(0));
         assert_eq!(single.estimated_bytes, Some(0));
         assert_eq!(single.estimated_rows, None);
 
@@ -999,9 +1033,9 @@ mod tests {
         let last = planned_tasks(&many)
             .find(|task| task.path == "part-1000.parquet")
             .ok_or("expected last task")?;
-        assert_eq!(first.estimated_bytes, Some(0));
+        assert_eq!(first.file_size, Some(0));
         assert_eq!(second.estimated_rows, None);
-        assert_eq!(last.estimated_bytes, Some(1_000));
+        assert_eq!(last.file_size, Some(1_000));
         assert_eq!(last.estimated_rows, Some(1_000));
         assert!(many.scan_metadata_exhausted);
         assert_eq!(many.files_filtered_during_planning, Some(0));
@@ -1600,7 +1634,7 @@ mod tests {
         let grouped = &partitions[0].file_tasks[0];
 
         assert_eq!(grouped.path, "part-with-delta-metadata.parquet");
-        assert_eq!(grouped.estimated_bytes, Some(123));
+        assert_eq!(grouped.file_size, Some(123));
         assert_eq!(grouped.estimated_rows, Some(7));
         assert_eq!(
             grouped.partition_values.get("region").map(String::as_str),

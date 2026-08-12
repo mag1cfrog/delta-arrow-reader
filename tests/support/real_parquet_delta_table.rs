@@ -143,20 +143,38 @@ impl RealParquetDeltaTable {
         rows_per_group: usize,
         deleted_rows: &[u64],
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        if rows_per_group == 0 {
-            return Err("row count must be positive".into());
+        Self::new_with_row_groups_and_deletion_vector(name, 2, rows_per_group, deleted_rows)
+    }
+
+    /// Creates a local Delta table whose single DV-backed Parquet file has the
+    /// requested number of equal-sized row groups.
+    pub(crate) fn new_with_row_groups_and_deletion_vector(
+        name: &str,
+        row_groups: usize,
+        rows_per_group: usize,
+        deleted_rows: &[u64],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        if row_groups == 0 || rows_per_group == 0 {
+            return Err("row-group and row counts must be positive".into());
         }
-        let rows = rows_per_group.saturating_mul(2);
+        let rows = row_groups
+            .checked_mul(rows_per_group)
+            .ok_or("row count overflow")?;
+        let mut batches = Vec::with_capacity(row_groups);
+        for row_group in 0..row_groups {
+            let first_id = row_group
+                .checked_mul(rows_per_group)
+                .and_then(|value| value.checked_add(1))
+                .ok_or("row index overflow")?;
+            batches.push(sequential_batch_starting_at(first_id, rows_per_group)?);
+        }
 
         Self::new_with_protocol_file_batches(
             name,
             DELETION_VECTOR_PROTOCOL_JSON,
             vec![RealParquetDataFile {
                 path: DATA_FILE.to_owned(),
-                batches: vec![
-                    sequential_batch_starting_at(1, rows_per_group)?,
-                    sequential_batch_starting_at(rows_per_group.saturating_add(1), rows_per_group)?,
-                ],
+                batches,
                 stats: AddStats {
                     rows,
                     max_id: i32::try_from(rows)?,
@@ -2343,7 +2361,8 @@ fn sequential_batch_starting_at(
 
     let first_id = i32::try_from(first_id)?;
     let row_count = i32::try_from(rows)?;
-    let ids = (first_id..first_id + row_count).collect::<Vec<_>>();
+    let end_id = first_id.checked_add(row_count).ok_or("row id overflow")?;
+    let ids = (first_id..end_id).collect::<Vec<_>>();
     let names = (1..=row_count)
         .map(|offset| {
             let id = first_id.saturating_add(offset).saturating_sub(1);

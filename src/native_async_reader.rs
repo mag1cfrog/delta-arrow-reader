@@ -1,6 +1,9 @@
 //! NativeAsync Parquet data-file reader.
 
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use arrow::{
     array::{Array, ArrayRef, Int64Array, ListArray, MapArray, StructArray, new_null_array},
@@ -14,11 +17,14 @@ use parquet::arrow::{
     PARQUET_FIELD_ID_META_KEY, ProjectionMask, RowNumber,
     arrow_reader::{ArrowPredicateFn, ArrowReaderMetadata, ArrowReaderOptions, RowFilter},
     async_reader::{
-        ParquetObjectReader, ParquetRecordBatchStream, ParquetRecordBatchStreamBuilder,
+        AsyncFileReader, ParquetObjectReader, ParquetRecordBatchStream,
+        ParquetRecordBatchStreamBuilder,
     },
 };
+use parquet::file::metadata::ParquetMetaData;
 use parquet::schema::types::{SchemaDescriptor, TypePtr};
 use snafu::ResultExt;
+use tokio::sync::OnceCell;
 
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
 
@@ -44,6 +50,27 @@ struct NativeAsyncFileReader {
     store: Arc<dyn ObjectStore>,
     execution_options: DeltaReaderExecutionOptions,
     metrics: DeltaReadMetrics,
+}
+
+/// Parquet footer metadata shared by ranged tasks within one physical scan.
+#[derive(Default)]
+pub(crate) struct NativeAsyncParquetMetadataCache {
+    /// In-flight or completed footer loads keyed by file path and planned size.
+    entries: Mutex<HashMap<(Path, u64), Arc<ParquetMetadataCell>>>,
+}
+
+type ParquetMetadataCell = OnceCell<Arc<ParquetMetaData>>;
+
+impl NativeAsyncParquetMetadataCache {
+    fn entry(&self, path: &Path, file_size: u64) -> Arc<ParquetMetadataCell> {
+        Arc::clone(
+            self.entries
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .entry((path.clone(), file_size))
+                .or_insert_with(|| Arc::new(OnceCell::new())),
+        )
+    }
 }
 
 struct NativeAsyncParquetObject {
@@ -156,11 +183,35 @@ impl NativeAsyncFileReader {
         }
     }
 
+    async fn load_split_parquet_metadata(
+        &self,
+        metadata_cache: Option<&NativeAsyncParquetMetadataCache>,
+        path: &Path,
+        file_size: u64,
+        reader: &mut ParquetObjectReader,
+        options: &ArrowReaderOptions,
+    ) -> Result<Arc<ParquetMetaData>, DeltaReaderError> {
+        let metadata = match metadata_cache {
+            Some(cache) => cache
+                .entry(path, file_size)
+                .get_or_try_init(|| reader.get_metadata(Some(options)))
+                .await
+                .map(Arc::clone),
+            None => reader.get_metadata(Some(options)).await,
+        };
+        metadata.boxed().context(DataFileReadSnafu {
+            reason: "parquet_read_setup_failed",
+        })
+    }
+
     async fn parquet_object_for_task(
         &self,
         task: &DeltaScanFileTask,
     ) -> Result<NativeAsyncParquetObject, DeltaReaderError> {
         let object = self.resolve_parquet_object(task)?;
+        if task.parquet_byte_range.is_some() {
+            return Ok(object);
+        }
         self.buffer_small_parquet_object(object).await
     }
 
@@ -173,10 +224,34 @@ impl NativeAsyncFileReader {
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
     ) -> Result<NativeAsyncParquetStream, DeltaReaderError> {
+        self.open_parquet_stream_with_metadata_cache(
+            task,
+            provider_schema,
+            output_batch_size,
+            physical_predicate,
+            row_predicate,
+            include_original_row_index,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn open_parquet_stream_with_metadata_cache(
+        &self,
+        task: &DeltaScanFileTask,
+        provider_schema: SchemaRef,
+        output_batch_size: Option<usize>,
+        physical_predicate: Option<&DeltaKernelPredicate>,
+        row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
+        include_original_row_index: bool,
+        metadata_cache: Option<&NativeAsyncParquetMetadataCache>,
+    ) -> Result<NativeAsyncParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
-        let reader =
-            ParquetObjectReader::new(object.store, object.path).with_file_size(object.file_size);
-        let reader = match self.execution_options.parquet_metadata_size_hint() {
+        let file_size = object.file_size;
+        let path = object.path;
+        let reader = ParquetObjectReader::new(object.store, path.clone()).with_file_size(file_size);
+        let mut reader = match self.execution_options.parquet_metadata_size_hint() {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
         };
@@ -185,7 +260,32 @@ impl NativeAsyncFileReader {
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
             })?;
-        let builder = if schema_uses_view_types(&provider_schema) {
+        let builder = if task.parquet_byte_range.is_some() {
+            // Ranged tasks need explicit footer metadata to select row groups.
+            // Sharing it avoids one footer read for every range of the same file.
+            let metadata = self
+                .load_split_parquet_metadata(
+                    metadata_cache,
+                    &path,
+                    file_size,
+                    &mut reader,
+                    &reader_options,
+                )
+                .await?;
+            let metadata = ArrowReaderMetadata::try_new(metadata, reader_options.clone())
+                .boxed()
+                .context(DataFileReadSnafu {
+                    reason: "parquet_read_setup_failed",
+                })?;
+            let metadata = if schema_uses_view_types(&provider_schema) {
+                metadata_with_view_types(metadata, reader_options)?
+            } else {
+                metadata
+            };
+            ParquetRecordBatchStreamBuilder::new_with_metadata(reader, metadata)
+        } else if schema_uses_view_types(&provider_schema) {
+            // View arrays require rewriting the Arrow schema stored in the
+            // metadata before constructing the stream builder.
             let mut metadata_reader = reader.clone();
             let metadata =
                 ArrowReaderMetadata::load_async(&mut metadata_reader, reader_options.clone())
@@ -194,26 +294,12 @@ impl NativeAsyncFileReader {
                     .context(DataFileReadSnafu {
                         reason: "parquet_read_setup_failed",
                     })?;
-            let file_schema = Schema::new_with_metadata(
-                metadata
-                    .schema()
-                    .fields()
-                    .iter()
-                    .filter(|field| field.name() != ORIGINAL_ROW_INDEX_COLUMN)
-                    .cloned()
-                    .collect::<Vec<_>>(),
-                metadata.schema().metadata().clone(),
-            );
-            let metadata = ArrowReaderMetadata::try_new(
-                Arc::clone(metadata.metadata()),
-                reader_options.with_schema(schema_with_view_types(&file_schema)),
+            ParquetRecordBatchStreamBuilder::new_with_metadata(
+                reader,
+                metadata_with_view_types(metadata, reader_options)?,
             )
-            .boxed()
-            .context(DataFileReadSnafu {
-                reason: "parquet_read_setup_failed",
-            })?;
-            ParquetRecordBatchStreamBuilder::new_with_metadata(reader, metadata)
         } else {
+            // Ordinary whole-file scans can let the builder load its metadata.
             ParquetRecordBatchStreamBuilder::new_with_options(reader, reader_options)
                 .await
                 .boxed()
@@ -229,7 +315,16 @@ impl NativeAsyncFileReader {
         .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
         let projection =
             ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
-        let row_groups = native_async_pruned_row_groups(builder.metadata(), physical_predicate);
+        let row_groups = native_async_pruned_row_groups(
+            builder.metadata(),
+            file_size,
+            task.parquet_byte_range.as_ref(),
+            physical_predicate,
+        )
+        .boxed()
+        .context(DataFileReadSnafu {
+            reason: "parquet_row_group_range_invalid",
+        })?;
         let builder = match row_groups {
             Some(row_groups) => builder.with_row_groups(row_groups),
             None => builder,
@@ -270,11 +365,20 @@ impl NativeAsyncFileReader {
         self: &Arc<Self>,
         request: NativeAsyncFileReadRequest,
     ) -> Result<NativeAsyncFileReadStream, DeltaReaderError> {
+        self.open_logical_file_stream_with_metadata_cache(request, None)
+            .await
+    }
+
+    async fn open_logical_file_stream_with_metadata_cache(
+        self: &Arc<Self>,
+        request: NativeAsyncFileReadRequest,
+        metadata_cache: Option<&NativeAsyncParquetMetadataCache>,
+    ) -> Result<NativeAsyncFileReadStream, DeltaReaderError> {
         let include_original_row_index = request.task.deletion_vector.is_present();
         let parquet = tokio::select! {
             biased;
             () = request.cancellation.cancelled() => return Err(cancelled_error()),
-            result = self.open_parquet_stream(
+            result = self.open_parquet_stream_with_metadata_cache(
                 &request.task,
                 request.physical_schema,
                 request.output_batch_size,
@@ -284,6 +388,7 @@ impl NativeAsyncFileReader {
                     .as_ref()
                     .map(|predicate| (predicate, &request.kernel_schemas)),
                 include_original_row_index,
+                metadata_cache,
             ) => result?,
         };
         if request.cancellation.is_cancelled() {
@@ -353,7 +458,7 @@ impl NativeAsyncFileReader {
             .context(DataFileReadSnafu {
                 reason: "data_file_path_resolution_failed",
             })?;
-        let file_size = task.estimated_bytes.ok_or_else(|| {
+        let file_size = task.file_size.ok_or_else(|| {
             data_file_error(
                 "data_file_size_missing",
                 delta_kernel::Error::generic("file size is required for NativeAsync reads"),
@@ -407,6 +512,30 @@ impl NativeAsyncFileReader {
     }
 }
 
+fn metadata_with_view_types(
+    metadata: ArrowReaderMetadata,
+    reader_options: ArrowReaderOptions,
+) -> Result<ArrowReaderMetadata, DeltaReaderError> {
+    let file_schema = Schema::new_with_metadata(
+        metadata
+            .schema()
+            .fields()
+            .iter()
+            .filter(|field| field.name() != ORIGINAL_ROW_INDEX_COLUMN)
+            .cloned()
+            .collect::<Vec<_>>(),
+        metadata.schema().metadata().clone(),
+    );
+    ArrowReaderMetadata::try_new(
+        Arc::clone(metadata.metadata()),
+        reader_options.with_schema(schema_with_view_types(&file_schema)),
+    )
+    .boxed()
+    .context(DataFileReadSnafu {
+        reason: "parquet_read_setup_failed",
+    })
+}
+
 pub(crate) fn native_async_file_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size: Option<usize>,
@@ -417,13 +546,48 @@ pub(crate) fn native_async_file_executor(
         plan.execution_options,
         plan.metrics.clone(),
     ));
+    native_async_file_executor_from_reader::<false>(
+        plan,
+        output_batch_size,
+        row_predicate,
+        reader,
+        None,
+    )
+}
+
+pub(crate) fn native_async_file_executor_with_metadata_cache(
+    plan: &Arc<DeltaScanPlan>,
+    output_batch_size: Option<usize>,
+    row_predicate: Option<DeltaKernelPredicate>,
+    metadata_cache: Arc<NativeAsyncParquetMetadataCache>,
+) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
+    native_async_file_executor_from_reader::<true>(
+        plan,
+        output_batch_size,
+        row_predicate,
+        Arc::new(NativeAsyncFileReader::new(
+            Arc::clone(&plan.engine_context),
+            plan.execution_options,
+            plan.metrics.clone(),
+        )),
+        Some(metadata_cache),
+    )
+}
+
+fn native_async_file_executor_from_reader<const SHARED_METADATA: bool>(
+    plan: &Arc<DeltaScanPlan>,
+    output_batch_size: Option<usize>,
+    row_predicate: Option<DeltaKernelPredicate>,
+    reader: Arc<NativeAsyncFileReader>,
+    metadata_cache: Option<Arc<NativeAsyncParquetMetadataCache>>,
+) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let physical_schema = Arc::clone(&plan.physical_schema);
     let logical_schema = Arc::clone(&plan.logical_schema);
     let kernel_schemas = plan.kernel_schemas.clone();
     let physical_predicate = plan.physical_predicate.clone();
 
     Arc::new(move |task, permit, cancellation| {
-        if let Some(bytes) = task.estimated_bytes {
+        if let Some(bytes) = task.estimated_scan_bytes() {
             reader.metrics.record_parquet_data_file_opened_bytes(bytes);
         }
         let reader = Arc::clone(&reader);
@@ -432,20 +596,29 @@ pub(crate) fn native_async_file_executor(
         let kernel_schemas = kernel_schemas.clone();
         let physical_predicate = physical_predicate.clone();
         let row_predicate = row_predicate.clone();
+        let metadata_cache = metadata_cache.clone();
         Box::pin(async move {
-            let file = reader
-                .open_logical_file_stream(NativeAsyncFileReadRequest {
-                    task,
-                    physical_schema,
-                    logical_schema,
-                    kernel_schemas,
-                    physical_predicate,
-                    row_predicate,
-                    output_batch_size,
-                    permit,
-                    cancellation,
-                })
-                .await?;
+            let request = NativeAsyncFileReadRequest {
+                task,
+                physical_schema,
+                logical_schema,
+                kernel_schemas,
+                physical_predicate,
+                row_predicate,
+                output_batch_size,
+                permit,
+                cancellation,
+            };
+            let file = if SHARED_METADATA {
+                reader
+                    .open_logical_file_stream_with_metadata_cache(
+                        request,
+                        metadata_cache.as_deref(),
+                    )
+                    .await?
+            } else {
+                reader.open_logical_file_stream(request).await?
+            };
             let batches = stream::try_unfold(file, |mut file| async move {
                 file.next_batch()
                     .await
@@ -1296,8 +1469,8 @@ mod tests {
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
-        NativeAsyncFileReadRequest, NativeAsyncFileReader, data_file_error,
-        native_async_file_executor,
+        NativeAsyncFileReadRequest, NativeAsyncFileReader, NativeAsyncParquetMetadataCache,
+        data_file_error, native_async_file_executor,
     };
     #[cfg(feature = "official-kernel")]
     use crate::official_kernel_reader::official_kernel_file_executor;
@@ -1615,7 +1788,7 @@ mod tests {
                 transform: None,
                 partition_values: HashMap::new(),
             }))?;
-        task.estimated_bytes = file_size;
+        task.file_size = file_size;
         Ok(task)
     }
 
@@ -2022,6 +2195,47 @@ mod tests {
         Ok((Arc::new(reader), gated, task))
     }
 
+    async fn gated_split_metadata_reader(
+        name: &str,
+        gate_request: GateRequest,
+    ) -> Result<
+        (
+            Arc<NativeAsyncFileReader>,
+            Arc<GatedObjectStore>,
+            DeltaScanFileTask,
+            Arc<Schema>,
+            Arc<NativeAsyncParquetMetadataCache>,
+        ),
+        Box<dyn std::error::Error>,
+    > {
+        let root = TestDir::new(name)?;
+        let parquet_bytes = parquet_bytes()?;
+        let file_size = u64::try_from(parquet_bytes.len())?;
+        let metrics = metrics();
+        let mut reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics.clone())?;
+        let mut task = task("part.parquet", Some(file_size))?;
+        task.parquet_byte_range = Some(0..file_size);
+        let object = reader.resolve_parquet_object(&task)?;
+        let inner = Arc::new(InMemory::new());
+        inner.put(&object.path, parquet_bytes.into()).await?;
+        let gated = GatedObjectStore::new(inner, gate_request);
+        reader.store = Arc::new(MeteredParquetObjectStore::new(
+            Arc::clone(&gated) as Arc<dyn ObjectStore>,
+            metrics,
+        ));
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, true),
+        ]));
+        Ok((
+            Arc::new(reader),
+            gated,
+            task,
+            schema,
+            Arc::new(NativeAsyncParquetMetadataCache::default()),
+        ))
+    }
+
     fn file_read_request(
         plan: &Arc<crate::planning::DeltaScanPlan>,
         task: DeltaScanFileTask,
@@ -2245,15 +2459,223 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn threshold_buffers_only_eligible_files_with_one_metered_full_get()
+    async fn regression_invalid_parquet_range_is_redacted_at_the_reader_boundary()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = TestDir::new("native-invalid-parquet-range")?;
+        let bytes = parquet_bytes()?;
+        fs::write(root.path().join("secret.parquet"), &bytes)?;
+        let file_size = u64::try_from(bytes.len())?;
+        let mut task = task("secret.parquet", Some(file_size))?;
+        task.parquet_byte_range = Some(0..file_size + 1);
+        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, true),
+        ]));
+
+        let error = match reader
+            .open_parquet_stream(&task, schema, None, None, None, false)
+            .await
+        {
+            Ok(_) => return Err("invalid Parquet range unexpectedly succeeded".into()),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.to_string(),
+            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_row_group_range_invalid"
+        );
+        assert!(!error.to_string().contains("secret.parquet"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn split_tasks_share_one_concurrent_parquet_metadata_load()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (reader, gated, mut first_task, schema, metadata_cache) = gated_split_metadata_reader(
+            "native-split-metadata-single-flight",
+            GateRequest::Range(1),
+        )
+        .await?;
+        let file_size = first_task
+            .file_size
+            .ok_or("test task must have a file size")?;
+        first_task.parquet_byte_range = Some(0..file_size / 2);
+        let mut second_task = first_task.clone();
+        second_task.parquet_byte_range = Some(file_size / 2..file_size);
+
+        let first_reader = Arc::clone(&reader);
+        let first_schema = Arc::clone(&schema);
+        let first_cache = Arc::clone(&metadata_cache);
+        let first = tokio::spawn(async move {
+            first_reader
+                .open_parquet_stream_with_metadata_cache(
+                    &first_task,
+                    first_schema,
+                    None,
+                    None,
+                    None,
+                    false,
+                    Some(first_cache.as_ref()),
+                )
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
+
+        let second_reader = Arc::clone(&reader);
+        let second = tokio::spawn(async move {
+            second_reader
+                .open_parquet_stream_with_metadata_cache(
+                    &second_task,
+                    schema,
+                    None,
+                    None,
+                    None,
+                    false,
+                    Some(metadata_cache.as_ref()),
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert_eq!(gated.range_calls.load(Ordering::Acquire), 1);
+        assert!(!second.is_finished());
+
+        gated.release.add_permits(1);
+        tokio::time::timeout(std::time::Duration::from_secs(5), first).await???;
+        tokio::time::timeout(std::time::Duration::from_secs(5), second).await???;
+        assert_eq!(
+            reader
+                .metrics
+                .snapshot()
+                .parquet_data_file_range_get_operations,
+            Some(1)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn failed_split_metadata_load_can_be_retried() -> Result<(), Box<dyn std::error::Error>> {
+        let (reader, gated, task, schema, metadata_cache) = gated_split_metadata_reader(
+            "native-split-metadata-retry",
+            GateRequest::Range(usize::MAX),
+        )
+        .await?;
+        gated.fail_next_range();
+
+        let error = match reader
+            .open_parquet_stream_with_metadata_cache(
+                &task,
+                Arc::clone(&schema),
+                None,
+                None,
+                None,
+                false,
+                Some(metadata_cache.as_ref()),
+            )
+            .await
+        {
+            Ok(_) => return Err("injected metadata failure must fail the first split task".into()),
+            Err(error) => error,
+        };
+        assert_eq!(error.as_str(), "data_file_read");
+        reader
+            .open_parquet_stream_with_metadata_cache(
+                &task,
+                schema,
+                None,
+                None,
+                None,
+                false,
+                Some(metadata_cache.as_ref()),
+            )
+            .await?;
+
+        assert_eq!(gated.range_calls.load(Ordering::Acquire), 2);
+        assert_eq!(
+            reader
+                .metrics
+                .snapshot()
+                .parquet_data_file_range_get_operations,
+            Some(2)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancelled_split_metadata_load_wakes_a_retrying_task()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (reader, gated, task, schema, metadata_cache) = gated_split_metadata_reader(
+            "native-split-metadata-cancellation",
+            GateRequest::Range(1),
+        )
+        .await?;
+
+        let first_reader = Arc::clone(&reader);
+        let first_task = task.clone();
+        let first_schema = Arc::clone(&schema);
+        let first_cache = Arc::clone(&metadata_cache);
+        let first = tokio::spawn(async move {
+            first_reader
+                .open_parquet_stream_with_metadata_cache(
+                    &first_task,
+                    first_schema,
+                    None,
+                    None,
+                    None,
+                    false,
+                    Some(first_cache.as_ref()),
+                )
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
+        first.abort();
+        let join_error = match first.await {
+            Ok(_) => return Err("aborted metadata task unexpectedly completed".into()),
+            Err(error) => error,
+        };
+        assert!(join_error.is_cancelled());
+        assert!(gated.was_cancelled());
+
+        gated.gate_next_range();
+        let second_reader = Arc::clone(&reader);
+        let second = tokio::spawn(async move {
+            second_reader
+                .open_parquet_stream_with_metadata_cache(
+                    &task,
+                    schema,
+                    None,
+                    None,
+                    None,
+                    false,
+                    Some(metadata_cache.as_ref()),
+                )
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
+        gated.release.add_permits(1);
+        tokio::time::timeout(std::time::Duration::from_secs(5), second).await???;
+
+        assert_eq!(gated.range_calls.load(Ordering::Acquire), 2);
+        assert_eq!(
+            reader
+                .metrics
+                .snapshot()
+                .parquet_data_file_range_get_operations,
+            Some(2)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn threshold_buffers_only_eligible_unsplit_files_with_one_metered_full_get()
     -> Result<(), Box<dyn std::error::Error>> {
         let bytes = b"0123456789abcdef";
 
-        for (name, threshold, expect_buffered) in [
-            ("disabled", None, false),
-            ("below", Some(bytes.len() - 1), false),
-            ("exact", Some(bytes.len()), true),
-            ("above", Some(bytes.len() + 1), true),
+        for (name, threshold, byte_range, expect_buffered) in [
+            ("disabled", None, None, false),
+            ("below", Some(bytes.len() - 1), None, false),
+            ("exact", Some(bytes.len()), None, true),
+            ("above", Some(bytes.len() + 1), None, true),
+            ("split", Some(bytes.len()), Some(0..8), false),
         ] {
             let root = TestDir::new(name)?;
             fs::write(root.path().join("part.parquet"), bytes)?;
@@ -2261,9 +2683,9 @@ mod tests {
             let options = DeltaReaderExecutionOptions::new()
                 .with_parquet_full_file_read_threshold(threshold)?;
             let reader = reader(&root, options, metrics.clone())?;
-            let object = reader
-                .parquet_object_for_task(&task("part.parquet", Some(u64::try_from(bytes.len())?))?)
-                .await?;
+            let mut task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
+            task.parquet_byte_range = byte_range;
+            let object = reader.parquet_object_for_task(&task).await?;
             let snapshot = metrics.snapshot();
             assert_eq!(
                 snapshot.parquet_data_file_full_get_operations,
@@ -3375,7 +3797,7 @@ mod tests {
             .ok_or("expected unique metadata plan")?
             .partitions[0]
             .file_tasks[0]
-            .estimated_bytes = None;
+            .file_size = None;
         let metadata_metrics = metadata_plan.metrics.clone();
         let error = execute_official_plan(metadata_plan)
             .await

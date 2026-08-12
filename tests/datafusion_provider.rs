@@ -4,6 +4,7 @@
 mod support;
 
 use std::{
+    collections::HashSet,
     error::Error,
     fs,
     path::{Path, PathBuf},
@@ -32,7 +33,10 @@ use delta_arrow_reader::{
     DeltaTableBuilder, DeltaTableProvider, collect_delta_datafusion_metrics, register_delta_table,
 };
 use futures_util::StreamExt;
-use parquet::arrow::ArrowWriter;
+use parquet::{
+    arrow::ArrowWriter,
+    file::reader::{FileReader, SerializedFileReader},
+};
 use serde_json::{Value, json};
 
 use support::RealParquetDeltaTable;
@@ -210,6 +214,367 @@ async fn collect_plan(
     plan: Arc<dyn ExecutionPlan>,
 ) -> TestResult<Vec<RecordBatch>> {
     Ok(datafusion::physical_plan::collect(plan, context.task_ctx()).await?)
+}
+
+#[tokio::test]
+async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> TestResult {
+    let fixture = TestTable::partitioned("optimizer-file-repartitioning")?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_target_partitions(4)
+            .with_repartition_file_min_size(1),
+    );
+    register_delta_table(
+        &context,
+        "orders",
+        table,
+        DeltaDataFusionScanOptions::default(),
+    )?;
+
+    let plan = context
+        .sql("SELECT count(*) AS row_count, sum(id) AS id_sum FROM orders")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(
+        display.contains("DeltaDataFusionExec: snapshot_version=0, partitions=4"),
+        "{display}"
+    );
+
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    assert_eq!(metrics.len(), 1);
+    assert_eq!(metrics[0].snapshot().reader.scan_partitions_planned, 4);
+    let batches = collect_plan(&context, plan).await?;
+    let batch = batches.first().ok_or("aggregate returned no batch")?;
+    assert_eq!(
+        batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or("count was not Int64")?
+            .value(0),
+        4
+    );
+    assert_eq!(
+        batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or("sum was not Int64")?
+            .value(0),
+        10
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates() -> TestResult {
+    let fixture = RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
+        "provider-repartitioned-dv",
+        3_000,
+        &[0, 2_999, 3_000, 5_999],
+    )?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_target_partitions(8)
+            .with_repartition_file_min_size(1),
+    );
+    register_delta_table(
+        &context,
+        "orders",
+        table,
+        DeltaDataFusionScanOptions {
+            target_partitions: Some(8),
+            ..Default::default()
+        },
+    )?;
+
+    let plan = context
+        .sql("SELECT id FROM orders WHERE id >= 2999 ORDER BY id")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(display.contains("partitions=8"), "{display}");
+
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let actual = ids(&collect_plan(&context, plan).await?);
+    let expected = (2_999..=6_000)
+        .filter(|id| ![3_000, 3_001, 6_000].contains(id))
+        .collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+    let metrics = metrics[0].snapshot().reader;
+    assert_eq!(metrics.scan_partitions_started, 8);
+    assert_eq!(metrics.files_started, 8);
+    assert!(
+        (1..=metrics.files_started).contains(&metrics.deletion_vector_payloads_loaded),
+        "unexpected payload load count: {} for {} tasks",
+        metrics.deletion_vector_payloads_loaded,
+        metrics.files_started
+    );
+    assert_eq!(metrics.deletion_vectors_applied, 2);
+    assert_eq!(metrics.deletion_vector_rows_deleted, 3);
+    assert_eq!(metrics.deletion_vector_failures, 0);
+    assert_eq!(metrics.deletion_vector_rejections, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn repartitioned_scan_preserves_physical_to_logical_transforms() -> TestResult {
+    let fixture = RealParquetDeltaTable::new_with_column_mapping("provider-repartitioned-mapping")?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_target_partitions(2)
+            .with_repartition_file_min_size(1),
+    );
+    register_delta_table(
+        &context,
+        "mapped",
+        table,
+        DeltaDataFusionScanOptions::default(),
+    )?;
+
+    let plan = context
+        .sql("SELECT customer_name, id FROM mapped WHERE id >= 2 ORDER BY id")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(display.contains("partitions=2"), "{display}");
+    let batches = collect_plan(&context, plan).await?;
+
+    assert_eq!(ids(&batches), [2, 3]);
+    let names = batches
+        .iter()
+        .flat_map(|batch| {
+            batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<StringViewArray>()
+                .expect("customer_name was not Utf8View")
+                .iter()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(names, [Some("bob"), None]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecution() -> TestResult {
+    const ROW_GROUPS: usize = 32;
+    const ROWS_PER_GROUP: usize = 8_192;
+    const TARGET_PARTITIONS: usize = 64;
+    let rows = ROW_GROUPS
+        .checked_mul(ROWS_PER_GROUP)
+        .ok_or("row overflow")?;
+    let mut stored_deleted_rows = Vec::with_capacity(ROW_GROUPS * 3 + 2);
+    for row_group in 0..ROW_GROUPS {
+        let start = u64::try_from(
+            row_group
+                .checked_mul(ROWS_PER_GROUP)
+                .ok_or("row overflow")?,
+        )?;
+        stored_deleted_rows.extend([
+            start,
+            start + u64::try_from(ROWS_PER_GROUP / 2)?,
+            start + u64::try_from(ROWS_PER_GROUP - 1)?,
+        ]);
+    }
+    stored_deleted_rows.extend([0, u64::try_from(rows - 1)?]);
+    let mut deleted_rows = stored_deleted_rows.clone();
+    deleted_rows.sort_unstable();
+    deleted_rows.dedup();
+
+    let fixture = RealParquetDeltaTable::new_with_row_groups_and_deletion_vector(
+        "provider-large-repartitioned-dv",
+        ROW_GROUPS,
+        ROWS_PER_GROUP,
+        &stored_deleted_rows,
+    )?;
+    assert_eq!(fixture.rows(), rows);
+    let parquet = SerializedFileReader::new(fs::File::open(
+        fixture.path().join(fixture.data_file_path()),
+    )?)?;
+    assert_eq!(parquet.metadata().num_row_groups(), ROW_GROUPS);
+
+    let execution_options = DeltaReaderExecutionOptions::new()
+        .with_parquet_full_file_read_threshold(Some(usize::MAX))?;
+    let options = DeltaDataFusionScanOptions {
+        execution_options,
+        target_partitions: Some(TARGET_PARTITIONS),
+        ..Default::default()
+    };
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_batch_size(1_024)
+            .with_target_partitions(TARGET_PARTITIONS)
+            .with_repartition_file_min_size(1),
+    );
+    register_fixture(&context, "orders", &fixture, options.clone())?;
+    let plan = context
+        .sql("SELECT id FROM orders ORDER BY id")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(
+        display.contains(&format!("partitions={TARGET_PARTITIONS}")),
+        "{display}"
+    );
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    assert_eq!(metrics.len(), 1);
+
+    let (first, second) = tokio::join!(
+        collect_plan(&context, Arc::clone(&plan)),
+        collect_plan(&context, Arc::clone(&plan)),
+    );
+    let deleted_ids = deleted_rows
+        .iter()
+        .map(|row| i32::try_from(row + 1))
+        .collect::<Result<HashSet<_>, _>>()?;
+    let expected = (1..=i32::try_from(rows)?)
+        .filter(|id| !deleted_ids.contains(id))
+        .collect::<Vec<_>>();
+    for actual in [first?, second?] {
+        assert_eq!(ids(&actual), expected);
+    }
+
+    let metrics = metrics[0].snapshot().reader;
+    let executions = 2_u64;
+    let expected_tasks = u64::try_from(TARGET_PARTITIONS)? * executions;
+    assert_eq!(
+        metrics.scan_partitions_planned,
+        u64::try_from(TARGET_PARTITIONS)?
+    );
+    assert_eq!(metrics.scan_partitions_started, expected_tasks);
+    assert_eq!(metrics.scan_partitions_completed, expected_tasks);
+    assert_eq!(metrics.files_started, expected_tasks);
+    assert_eq!(metrics.files_completed, expected_tasks);
+    assert_eq!(
+        metrics.rows_produced,
+        u64::try_from(expected.len())? * executions
+    );
+    assert!(
+        (1..=expected_tasks).contains(&metrics.deletion_vector_payloads_loaded),
+        "unexpected payload load count: {} for {expected_tasks} tasks",
+        metrics.deletion_vector_payloads_loaded
+    );
+    assert_eq!(
+        metrics.deletion_vectors_applied,
+        u64::try_from(ROW_GROUPS)? * executions
+    );
+    assert_eq!(
+        metrics.deletion_vector_rows_deleted,
+        u64::try_from(deleted_rows.len())? * executions
+    );
+    assert_eq!(metrics.deletion_vector_failures, 0);
+    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(
+        metrics.parquet_data_file_opened_bytes,
+        Some(fixture.data_file_size() * executions)
+    );
+    assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
+    assert!(
+        metrics
+            .parquet_data_file_range_get_operations
+            .is_some_and(|value| value > 0)
+    );
+
+    let control = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_batch_size(1_024)
+            .with_target_partitions(TARGET_PARTITIONS)
+            .with_repartition_file_scans(false),
+    );
+    register_fixture(&control, "orders", &fixture, options)?;
+    let control_plan = control
+        .sql("SELECT id FROM orders ORDER BY id")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let control_display = displayable(control_plan.as_ref()).indent(true).to_string();
+    assert!(
+        control_display.contains("partitions=1"),
+        "{control_display}"
+    );
+    let control_metrics = collect_delta_datafusion_metrics(control_plan.as_ref());
+    assert_eq!(ids(&collect_plan(&control, control_plan).await?), expected);
+    let control_metrics = control_metrics[0].snapshot().reader;
+    assert_eq!(control_metrics.files_started, 1);
+    assert_eq!(control_metrics.deletion_vector_payloads_loaded, 1);
+    assert_eq!(
+        control_metrics.deletion_vector_rows_deleted,
+        u64::try_from(deleted_rows.len())?
+    );
+    assert_eq!(
+        control_metrics.parquet_data_file_full_get_operations,
+        Some(1)
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestResult {
+    const DV_FILE: &str = "deletion_vector_61d16c75-6994-46b7-a15b-8b538852e50e.bin";
+    let fixture = RealParquetDeltaTable::new_with_row_groups_and_deletion_vector(
+        "provider-repartitioned-missing-dv",
+        4,
+        2_048,
+        &[0, 2_047, 2_048, 8_191],
+    )?;
+    fs::remove_file(fixture.path().join(DV_FILE))?;
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_target_partitions(8)
+            .with_repartition_file_min_size(1),
+    );
+    register_fixture(
+        &context,
+        "orders",
+        &fixture,
+        DeltaDataFusionScanOptions {
+            target_partitions: Some(8),
+            ..Default::default()
+        },
+    )?;
+    let plan = context
+        .sql("SELECT id FROM orders")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(display.contains("partitions=8"), "{display}");
+    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+
+    let error = datafusion::physical_plan::collect(plan, context.task_ctx())
+        .await
+        .expect_err("missing deletion-vector payload unexpectedly succeeded");
+    let display = error.to_string();
+    assert!(
+        display.contains("deletion_vector_payload_read_failed"),
+        "{display}"
+    );
+    assert!(!display.contains(DV_FILE), "{display}");
+    let metrics = metrics[0].snapshot().reader;
+    assert!(metrics.files_started > 0);
+    assert_eq!(metrics.files_completed, 0);
+    assert_eq!(metrics.batches_produced, 0);
+    assert_eq!(metrics.rows_produced, 0);
+    assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
+    assert!(
+        (1..=metrics.files_started).contains(&metrics.deletion_vector_failures),
+        "unexpected failure count: {} for {} started tasks",
+        metrics.deletion_vector_failures,
+        metrics.files_started
+    );
+    assert_eq!(metrics.deletion_vectors_applied, 0);
+    assert_eq!(metrics.deletion_vector_rows_deleted, 0);
+    assert_eq!(metrics.deletion_vector_rejections, 0);
+    Ok(())
 }
 
 fn register_fixture(
