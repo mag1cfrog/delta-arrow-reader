@@ -1,0 +1,45 @@
+site_name: Delta Arrow Reader
+site_url: https://mag1cfrog.github.io/delta-arrow-reader/
+site_description: Read Delta Lake tables as Apache Arrow streams or DataFusion tables.
+repo_name: mag1cfrog/delta-arrow-reader
+repo_url: https://github.com/mag1cfrog/delta-arrow-reader
+
+theme:
+  name: material
+  variant: modern
+  features:
+    - navigation.sections
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+
+nav:
+  - Start here:
+      - Overview: index.md
+      - Installation: installation.md
+      - Direct reader quickstart: direct-reader.md
+      - DataFusion quickstart: datafusion.md
+  - How it works:
+      - Architecture: architecture.md
+      - Scan planning: scan-planning.md
+      - Read scheduling: read-scheduling.md
+  - Performance:
+      - Reader benchmarks: benchmarks.md
+  - Reference:
+      - Execution options: reference/execution-options.md
+      - Scan metrics: reference/metrics.md
+      - Rust API: https://docs.rs/delta-arrow-reader
+  - Contributors:
+      - Extraction parity: benchmark-parity.md
+      - Provenance: provenance.md
