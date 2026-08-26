@@ -1,7 +1,5 @@
 //! Portable fixture coverage across reader backends.
 
-mod support;
-
 use std::{error::Error, path::Path};
 
 #[cfg(feature = "native-async")]
@@ -23,7 +21,7 @@ use futures_util::{StreamExt, TryStreamExt};
 #[cfg(feature = "native-async")]
 use parquet::file::{reader::FileReader, serialized_reader::SerializedFileReader};
 
-use support::RealParquetDeltaTable;
+use super::support::RealParquetDeltaTable;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 

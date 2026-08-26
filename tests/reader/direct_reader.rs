@@ -1,6 +1,5 @@
 //! Integration tests for direct reader backends.
 
-#![cfg(any(feature = "native-async", feature = "official-kernel"))]
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use std::{

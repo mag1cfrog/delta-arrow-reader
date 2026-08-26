@@ -1,10 +1,6 @@
 //! Integration tests for the DataFusion table provider.
 
-#![cfg(all(feature = "datafusion", feature = "native-async"))]
 #![allow(clippy::expect_used, clippy::unwrap_used)]
-
-#[allow(dead_code)]
-mod support;
 
 use std::{
     collections::HashSet,
@@ -43,7 +39,7 @@ use parquet::{
 };
 use serde_json::{Value, json};
 
-use support::RealParquetDeltaTable;
+use super::support::RealParquetDeltaTable;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 

@@ -1,4 +1,4 @@
-//! Test fixtures for local Delta tables with real Parquet data files.
+//! Local Delta test fixtures with real Parquet data files.
 
 use std::collections::HashMap;
 use std::fs;
