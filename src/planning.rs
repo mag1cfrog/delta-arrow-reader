@@ -13,22 +13,24 @@ use snafu::ResultExt;
 use crate::{
     DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions,
     deletion_vector::DeletionVectorMetadata,
+    delta::{
+        kernel::{
+            DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
+            KernelScan, KernelScanFileMetadata, KernelScanSchemas,
+        },
+        protocol::validate_protocol,
+        snapshot::LoadedDeltaTableSnapshot,
+    },
     error::{
         InvalidConfigurationSnafu, InvalidProjectionSnafu, ScanPartitionPlanningSnafu,
         ScanPlanningSnafu, UnsupportedPredicateSnafu,
-    },
-    kernel::{
-        DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
-        KernelScan, KernelScanFileMetadata, KernelScanSchemas,
     },
     partition_target::{
         DeltaScanPartitionTargetDiagnosticOutput,
         delta_scan_partition_target_local_environment_diagnostic,
         derive_delta_scan_partition_target_diagnostic,
     },
-    protocol::validate_protocol,
     reader::metrics::DeltaReadMetricsConfig,
-    snapshot::LoadedDeltaTableSnapshot,
 };
 
 #[derive(Default)]
@@ -618,13 +620,15 @@ mod tests {
     use crate::{
         DeltaComparison, DeltaPredicate, DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection,
         DeltaStorageOptions,
-        kernel::{KernelScanFileMetadata, delta_predicate_to_kernel_pruning},
+        delta::{
+            kernel::{KernelScanFileMetadata, delta_predicate_to_kernel_pruning},
+            snapshot::load_delta_table_snapshot_blocking,
+        },
         predicate::validate_predicate,
         scheduling::{
             DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
             FileReadPermit,
         },
-        snapshot::load_delta_table_snapshot_blocking,
     };
 
     const PROTOCOL_JSON: &str = r#"{"protocol":{"minReaderVersion":1,"minWriterVersion":2}}"#;
@@ -676,7 +680,10 @@ mod tests {
     fn loaded_snapshot(
         name: &str,
     ) -> Result<
-        (DeltaLogTable, crate::snapshot::LoadedDeltaTableSnapshot),
+        (
+            DeltaLogTable,
+            crate::delta::snapshot::LoadedDeltaTableSnapshot,
+        ),
         Box<dyn std::error::Error>,
     > {
         loaded_snapshot_with_adds(name, &[])
@@ -686,7 +693,10 @@ mod tests {
         name: &str,
         adds: &[String],
     ) -> Result<
-        (DeltaLogTable, crate::snapshot::LoadedDeltaTableSnapshot),
+        (
+            DeltaLogTable,
+            crate::delta::snapshot::LoadedDeltaTableSnapshot,
+        ),
         Box<dyn std::error::Error>,
     > {
         loaded_snapshot_with_metadata_and_adds(name, METADATA_JSON, adds)
@@ -697,7 +707,10 @@ mod tests {
         metadata: &str,
         adds: &[String],
     ) -> Result<
-        (DeltaLogTable, crate::snapshot::LoadedDeltaTableSnapshot),
+        (
+            DeltaLogTable,
+            crate::delta::snapshot::LoadedDeltaTableSnapshot,
+        ),
         Box<dyn std::error::Error>,
     > {
         let table = DeltaLogTable::new_with_metadata_and_adds(name, metadata, adds)?;
@@ -848,10 +861,10 @@ mod tests {
     }
 
     fn plan_scan(
-        snapshot: &crate::snapshot::LoadedDeltaTableSnapshot,
+        snapshot: &crate::delta::snapshot::LoadedDeltaTableSnapshot,
         projection: Option<&[String]>,
         hidden_columns: &[String],
-        kernel_predicate: Option<crate::kernel::DeltaKernelPredicate>,
+        kernel_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
         include_stats: bool,
         execution_options: crate::DeltaReaderExecutionOptions,
     ) -> Result<DeltaScanPlan, crate::DeltaReaderError> {

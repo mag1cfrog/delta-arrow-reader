@@ -26,7 +26,7 @@ use delta_kernel::{
     schema::{DataType, PrimitiveType},
 };
 
-use crate::kernel::DeltaKernelPredicate;
+use crate::delta::kernel::DeltaKernelPredicate;
 
 /// Computes the row groups selected by a byte range and footer statistics.
 ///

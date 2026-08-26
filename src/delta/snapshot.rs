@@ -5,11 +5,14 @@ use std::sync::Arc;
 use arrow::datatypes::SchemaRef;
 use snafu::ResultExt;
 
-use crate::{
-    DeltaProtocolInfo, DeltaReaderError, DeltaSnapshotSelection, DeltaStorageOptions,
-    error::{SchemaConversionSnafu, SnapshotLoadSnafu, StorageInitializationSnafu},
+use super::{
     kernel::{DeltaKernelEngineContext, KernelSnapshot, snapshot_arrow_schema},
+    protocol::DeltaProtocolInfo,
     uri::normalize_delta_table_uri,
+};
+use crate::{
+    DeltaReaderError, DeltaSnapshotSelection, DeltaStorageOptions,
+    error::{SchemaConversionSnafu, SnapshotLoadSnafu, StorageInitializationSnafu},
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
@@ -402,7 +405,7 @@ mod tests {
     };
     use crate::{
         DeltaReaderError, DeltaReaderPhase, DeltaSnapshotSelection, DeltaStorageOptions,
-        kernel::{DeltaKernelEngineContext, insert_url_handler, is_kernel_error},
+        delta::kernel::{DeltaKernelEngineContext, insert_url_handler, is_kernel_error},
     };
 
     const PROTOCOL_JSON: &str = r#"{"protocol":{"minReaderVersion":1,"minWriterVersion":2}}"#;

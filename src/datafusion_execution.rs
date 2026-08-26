@@ -65,7 +65,7 @@ use crate::{
         evaluate_dynamic_partition_filter,
     },
     datafusion_planning::DataFusionScanPlanning,
-    kernel::DeltaKernelPredicate,
+    delta::kernel::DeltaKernelPredicate,
     planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
     reader::{metrics::saturating_fetch_add, official_kernel_executor},
     scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
@@ -860,7 +860,7 @@ mod tests {
     use crate::{
         DeltaReaderExecutionOptions, DeltaTable, DeltaTableBuilder,
         datafusion_planning::{DataFusionFilterCapabilities, plan_datafusion_scan},
-        kernel::delta_predicate_to_kernel_pruning,
+        delta::kernel::delta_predicate_to_kernel_pruning,
         planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
     };
 
@@ -1097,7 +1097,8 @@ mod tests {
 
     fn sized_file_task(path: &str, size: Option<u64>) -> DeltaScanFileTask {
         use crate::{
-            deletion_vector::DeletionVectorMetadata, kernel::KernelPhysicalToLogicalTransform,
+            deletion_vector::DeletionVectorMetadata,
+            delta::kernel::KernelPhysicalToLogicalTransform,
         };
 
         DeltaScanFileTask {
@@ -1851,7 +1852,8 @@ mod tests {
     fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
         use crate::{
             datafusion_dynamic_filters::DeltaDynamicFilterPlan,
-            deletion_vector::DeletionVectorMetadata, kernel::KernelPhysicalToLogicalTransform,
+            deletion_vector::DeletionVectorMetadata,
+            delta::kernel::KernelPhysicalToLogicalTransform,
         };
 
         let fixture = TestTable::partitioned("dynamic-counters")?;

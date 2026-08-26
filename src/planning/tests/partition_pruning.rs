@@ -5,9 +5,11 @@ use super::{DeltaLogTable, PROTOCOL_JSON, plan_scan, planned_tasks};
 use crate::{
     DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderExecutionOptions,
     DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection, DeltaStorageOptions,
-    kernel::{DeltaKernelPredicate, delta_predicate_to_kernel_pruning},
+    delta::{
+        kernel::{DeltaKernelPredicate, delta_predicate_to_kernel_pruning},
+        snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
+    },
     predicate::validate_predicate,
-    snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
 };
 
 const TIMESTAMP_NTZ_PROTOCOL_JSON: &str = r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz"],"writerFeatures":["timestampNtz"]}}"#;

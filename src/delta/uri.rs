@@ -1,6 +1,7 @@
 //! Delta table URI normalization.
 
-use crate::{DeltaReaderError, error::InvalidTableUriSnafu, kernel::parse_uri};
+use super::kernel::parse_uri;
+use crate::{DeltaReaderError, error::InvalidTableUriSnafu};
 
 /// Normalizes a Delta table URI for snapshot loading.
 pub(crate) fn normalize_delta_table_uri(table_uri: &str) -> Result<url::Url, DeltaReaderError> {

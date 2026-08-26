@@ -19,7 +19,7 @@ use crate::{
     datafusion_planning::{
         DataFusionFilterCapabilities, plan_datafusion_filters, plan_datafusion_scan,
     },
-    kernel::delta_predicate_to_kernel_pruning,
+    delta::kernel::delta_predicate_to_kernel_pruning,
     planning::{
         DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan, validate_backend_available,
     },

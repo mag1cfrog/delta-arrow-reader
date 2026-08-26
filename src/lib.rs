@@ -12,8 +12,8 @@ mod datafusion_planning;
 #[cfg(feature = "datafusion")]
 mod datafusion_provider;
 mod deletion_vector;
+mod delta;
 mod error;
-mod kernel;
 #[cfg(feature = "native-async")]
 #[allow(dead_code)]
 mod metered_object_store;
@@ -29,13 +29,10 @@ mod official_kernel_reader;
 mod partition_target;
 mod planning;
 mod predicate;
-mod protocol;
 mod reader;
 #[allow(dead_code)]
 mod scheduling;
-mod snapshot;
 mod transform;
-mod uri;
 
 #[cfg(feature = "datafusion")]
 pub use datafusion_execution::{
@@ -46,6 +43,7 @@ pub use datafusion_execution::{
 pub use datafusion_provider::{
     DeltaDataFusionScanOptions, DeltaTableProvider, RegisteredDeltaTable, register_delta_table,
 };
+pub use delta::DeltaProtocolInfo;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
 #[doc(hidden)]
 pub use partition_target::{
@@ -56,7 +54,6 @@ pub use partition_target::{
     derive_delta_scan_partition_target_diagnostic,
 };
 pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
-pub use protocol::DeltaProtocolInfo;
 pub use reader::{
     DeltaBatchStream, DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend,
     DeltaReaderExecutionOptions, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection,

@@ -33,11 +33,11 @@ use crate::{
     deletion_vector::{
         DeletionVectorSelection, load_deletion_vector_selection_from_engine_context,
     },
-    error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
-    kernel::{
+    delta::kernel::{
         DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
         KernelScanSchemas,
     },
+    error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     metered_object_store::MeteredParquetObjectStore,
     native_async_row_group_pruning::native_async_pruned_row_groups,
     planning::{DeltaScanFileTask, DeltaScanPlan},
@@ -1476,17 +1476,17 @@ mod tests {
     use crate::{
         DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions,
         DeltaSnapshotSelection, DeltaStorageOptions,
-        kernel::{
+        delta::kernel::{
             DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
             KernelScanFileMetadata,
         },
+        delta::snapshot::load_delta_table_snapshot_blocking,
         metered_object_store::MeteredParquetObjectStore,
         planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
         reader::metrics::DeltaReadMetricsConfig,
         scheduling::{
             DeltaScanExecution, FileAdmission, FileReadPermit, ScanCancellation, ScanReadLimiter,
         },
-        snapshot::load_delta_table_snapshot_blocking,
     };
 
     const DV_ID: &str = "vBn[lx{q8@P<9BNH/isA";

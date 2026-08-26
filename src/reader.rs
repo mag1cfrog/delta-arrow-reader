@@ -22,21 +22,23 @@ use snafu::ResultExt;
 
 use crate::{
     DeltaPredicate, DeltaProtocolInfo, DeltaReaderError,
+    delta::{
+        kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
+        protocol::validate_protocol,
+        snapshot::{
+            LoadedDeltaTableSnapshot, StagedDeltaTableSnapshot, load_delta_table_snapshot_async,
+            load_delta_table_snapshot_blocking, load_staged_delta_table_snapshot_async,
+            load_staged_delta_table_snapshot_blocking,
+        },
+    },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
-    kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
     planning::{
         DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan, validate_backend_available,
     },
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
-    protocol::validate_protocol,
     scheduling::{
         DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
         PartitionStream,
-    },
-    snapshot::{
-        LoadedDeltaTableSnapshot, StagedDeltaTableSnapshot, load_delta_table_snapshot_async,
-        load_delta_table_snapshot_blocking, load_staged_delta_table_snapshot_async,
-        load_staged_delta_table_snapshot_blocking,
     },
 };
 
@@ -669,7 +671,7 @@ fn validate_direct_execution_options(
 pub(crate) fn native_async_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size: Option<usize>,
-    row_predicate: Option<crate::kernel::DeltaKernelPredicate>,
+    row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
 ) -> Result<FileExecutor<crate::planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
     Ok(crate::native_async_reader::native_async_file_executor(
         plan,
@@ -682,7 +684,7 @@ pub(crate) fn native_async_executor(
 pub(crate) fn native_async_executor(
     _plan: &Arc<DeltaScanPlan>,
     _output_batch_size: Option<usize>,
-    _row_predicate: Option<crate::kernel::DeltaKernelPredicate>,
+    _row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
 ) -> Result<FileExecutor<crate::planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
     crate::error::UnsupportedBackendSnafu {
         reason: "native_async_feature_disabled",

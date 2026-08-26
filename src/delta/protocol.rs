@@ -1,13 +1,9 @@
 //! Delta protocol metadata and reader compatibility policy.
 
-use crate::{
-    DeltaReaderError,
-    error::UnsupportedProtocolSnafu,
-    kernel::{
-        DeltaKernelProtocol, KernelSnapshot, TABLE_FEATURES_READER_VERSION,
-        snapshot_protocol_report,
-    },
+use super::kernel::{
+    DeltaKernelProtocol, KernelSnapshot, TABLE_FEATURES_READER_VERSION, snapshot_protocol_report,
 };
+use crate::{DeltaReaderError, error::UnsupportedProtocolSnafu};
 
 #[allow(dead_code)]
 const SUPPORTED_READER_FEATURES: &[&str] = &[
@@ -115,7 +111,7 @@ mod tests {
     use super::{DeltaProtocolInfo, validate_protocol};
     use crate::{
         DeltaReaderError, DeltaReaderPhase, DeltaSnapshotSelection, DeltaStorageOptions,
-        snapshot::load_delta_table_snapshot_blocking,
+        delta::snapshot::load_delta_table_snapshot_blocking,
     };
 
     const METADATA_JSON: &str = r#"{"metaData":{"id":"delta-arrow-reader-test","format":{"provider":"parquet","options":{}},"schemaString":"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"integer\",\"nullable\":true,\"metadata\":{}}]}","partitionColumns":[],"configuration":{},"createdTime":1587968585495}}"#;
@@ -137,7 +133,9 @@ mod tests {
             Ok(Self(path))
         }
 
-        fn load(&self) -> Result<crate::snapshot::LoadedDeltaTableSnapshot, DeltaReaderError> {
+        fn load(
+            &self,
+        ) -> Result<crate::delta::snapshot::LoadedDeltaTableSnapshot, DeltaReaderError> {
             load_delta_table_snapshot_blocking(
                 &self.0.to_string_lossy(),
                 &DeltaStorageOptions::new(),

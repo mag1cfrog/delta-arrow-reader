@@ -11,9 +11,11 @@ use snafu::{IntoError, ResultExt};
 
 use crate::{
     DeltaReadMetrics, DeltaReaderError,
+    delta::{
+        kernel::{DeltaKernelEngineContext, KernelDeletionVectorHandle},
+        snapshot::LoadedDeltaTableSnapshot,
+    },
     error::DeletionVectorReadSnafu,
-    kernel::{DeltaKernelEngineContext, KernelDeletionVectorHandle},
-    snapshot::LoadedDeltaTableSnapshot,
 };
 
 /// A data file's deletion-vector handle and reusable decoded row coordinates.
@@ -478,9 +480,11 @@ mod tests {
     use crate::{
         DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderPhase,
         DeltaSnapshotSelection, DeltaStorageOptions,
-        kernel::{is_kernel_error, preserve_deletion_vector},
+        delta::{
+            kernel::{is_kernel_error, preserve_deletion_vector},
+            snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
+        },
         reader::metrics::DeltaReadMetricsConfig,
-        snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
     };
 
     const INLINE_DV_DELETED_ROW_INDEXES: &[u64] = &[3, 4, 7, 11, 18, 29];
@@ -1094,7 +1098,7 @@ mod tests {
             .split("#[cfg(test)]")
             .next()
             .expect("production source");
-        let kernel_source = include_str!("kernel.rs");
+        let kernel_source = include_str!("delta/kernel.rs");
 
         for forbidden in [
             "DefaultEngineBuilder",
