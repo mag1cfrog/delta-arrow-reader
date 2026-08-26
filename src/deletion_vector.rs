@@ -479,7 +479,7 @@ mod tests {
         DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderPhase,
         DeltaSnapshotSelection, DeltaStorageOptions,
         kernel::{is_kernel_error, preserve_deletion_vector},
-        metrics::DeltaReadMetricsConfig,
+        reader::metrics::DeltaReadMetricsConfig,
         snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
     };
 

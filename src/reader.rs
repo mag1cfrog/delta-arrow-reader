@@ -1,5 +1,13 @@
 //! Public DataFusion-independent Delta-to-Arrow reader.
 
+pub(crate) mod metrics;
+mod options;
+
+pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
+pub use options::{
+    DeltaReaderBackend, DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
+};
+
 use std::{
     collections::VecDeque,
     fmt,
@@ -13,8 +21,7 @@ use futures_util::Stream;
 use snafu::ResultExt;
 
 use crate::{
-    DeltaPredicate, DeltaProtocolInfo, DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError,
-    DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
+    DeltaPredicate, DeltaProtocolInfo, DeltaReaderError,
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
     kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
     planning::{
@@ -836,7 +843,7 @@ mod tests {
     use crate::{
         DeltaReadMetrics, DeltaReaderBackend, DeltaReaderExecutionOptions,
         error::InvalidConfigurationSnafu,
-        metrics::DeltaReadMetricsConfig,
+        reader::metrics::DeltaReadMetricsConfig,
         scheduling::{
             FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor, FileReadPermit,
             PartitionStream, ScanCancellation, ScanReadLimiter,

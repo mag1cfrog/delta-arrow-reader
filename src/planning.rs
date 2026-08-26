@@ -21,13 +21,13 @@ use crate::{
         DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
         KernelScan, KernelScanFileMetadata, KernelScanSchemas,
     },
-    metrics::DeltaReadMetricsConfig,
     partition_target::{
         DeltaScanPartitionTargetDiagnosticOutput,
         delta_scan_partition_target_local_environment_diagnostic,
         derive_delta_scan_partition_target_diagnostic,
     },
     protocol::validate_protocol,
+    reader::metrics::DeltaReadMetricsConfig,
     snapshot::LoadedDeltaTableSnapshot,
 };
 

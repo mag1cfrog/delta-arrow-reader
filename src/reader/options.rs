@@ -1,3 +1,5 @@
+//! Reader backend, snapshot, storage, and execution options.
+
 use std::collections::BTreeMap;
 
 use crate::{DeltaReaderError, error::InvalidConfigurationSnafu};

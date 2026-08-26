@@ -1481,8 +1481,8 @@ mod tests {
             KernelScanFileMetadata,
         },
         metered_object_store::MeteredParquetObjectStore,
-        metrics::DeltaReadMetricsConfig,
         planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
+        reader::metrics::DeltaReadMetricsConfig,
         scheduling::{
             DeltaScanExecution, FileAdmission, FileReadPermit, ScanCancellation, ScanReadLimiter,
         },

@@ -182,7 +182,7 @@ mod tests {
     };
 
     use super::MeteredParquetObjectStore;
-    use crate::{DeltaReadMetrics, DeltaReaderBackend, metrics::DeltaReadMetricsConfig};
+    use crate::{DeltaReadMetrics, DeltaReaderBackend, reader::metrics::DeltaReadMetricsConfig};
 
     fn native_metrics() -> DeltaReadMetrics {
         DeltaReadMetrics::new(DeltaReadMetricsConfig {

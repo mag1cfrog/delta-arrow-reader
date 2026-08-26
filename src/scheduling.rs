@@ -733,7 +733,7 @@ mod tests {
 
     use crate::{
         DeltaReadMetrics, DeltaReaderBackend, DeltaReaderExecutionOptions, DeltaReaderPhase,
-        error::InvalidConfigurationSnafu, metrics::DeltaReadMetricsConfig,
+        error::InvalidConfigurationSnafu, reader::metrics::DeltaReadMetricsConfig,
     };
 
     use super::{

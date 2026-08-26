@@ -1,9 +1,11 @@
+//! Reader execution metrics.
+
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
 };
 
-use crate::DeltaReaderBackend;
+use super::options::DeltaReaderBackend;
 
 /// Immutable point-in-time metrics for one Delta scan.
 #[derive(Debug, Clone, PartialEq, Eq)]

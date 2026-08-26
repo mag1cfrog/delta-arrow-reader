@@ -48,13 +48,13 @@ use datafusion::{
 };
 use futures_util::{StreamExt, stream};
 
-#[cfg(not(feature = "native-async"))]
-use crate::direct::native_async_executor;
 #[cfg(feature = "native-async")]
 use crate::native_async_reader::{
     NativeAsyncParquetMetadataCache, native_async_file_executor,
     native_async_file_executor_with_metadata_cache,
 };
+#[cfg(not(feature = "native-async"))]
+use crate::reader::native_async_executor;
 use crate::{
     DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend, DeltaReaderError,
     datafusion_dynamic_filters::{
@@ -65,10 +65,9 @@ use crate::{
         evaluate_dynamic_partition_filter,
     },
     datafusion_planning::DataFusionScanPlanning,
-    direct::official_kernel_executor,
     kernel::DeltaKernelPredicate,
-    metrics::saturating_fetch_add,
     planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
+    reader::{metrics::saturating_fetch_add, official_kernel_executor},
     scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
 };
 
