@@ -5,16 +5,19 @@ batches. It provides a direct pull-driven stream API and an optional DataFusion
 table provider. The caller owns the Tokio runtime, and scans do not collect the
 whole result in memory.
 
-See [reader benchmarks](BENCHMARKS.md) for a comparison with delta-rs and
-DuckDB on projection and deletion-vector workloads.
+See the [documentation](https://mag1cfrog.github.io/delta-arrow-reader/) for
+quickstarts and design details. The
+[reader benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/)
+compare the crate with delta-rs and DuckDB on projection and deletion-vector
+workloads.
 
 ## Installation
 
-The 0.2.0 package declaration is:
+The 0.3.0 package declaration is:
 
 ```toml
 [dependencies]
-delta-arrow-reader = "0.2.0"
+delta-arrow-reader = "0.3.0"
 futures-util = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
@@ -25,7 +28,7 @@ you need SQL integration:
 ```toml
 [dependencies]
 datafusion = { version = "54.1.0", default-features = false, features = ["sql"] }
-delta-arrow-reader = { version = "0.2.0", features = ["datafusion"] }
+delta-arrow-reader = { version = "0.3.0", features = ["datafusion"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -159,8 +162,8 @@ optional DataFusion adapter.
 It does not write Delta tables, manage transactions, create a Tokio runtime,
 or provide Delta Funnel orchestration, reporting, or Python APIs.
 
-See [architecture](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/architecture.md),
-[provenance](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/provenance.md),
+See [architecture](https://mag1cfrog.github.io/delta-arrow-reader/architecture/),
+[provenance](https://mag1cfrog.github.io/delta-arrow-reader/provenance/),
 and the [security policy](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/SECURITY.md)
 for repository details.
 
