@@ -5,6 +5,9 @@ batches. It provides a direct pull-driven stream API and an optional DataFusion
 table provider. The caller owns the Tokio runtime, and scans do not collect the
 whole result in memory.
 
+See [reader benchmarks](BENCHMARKS.md) for a comparison with delta-rs and
+DuckDB on projection and deletion-vector workloads.
+
 ## Installation
 
 The 0.2.0 package declaration is:
