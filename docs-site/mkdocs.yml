@@ -32,9 +32,14 @@ nav:
       - DataFusion quickstart: datafusion.md
   - How it works:
       - Architecture: architecture.md
+      - Scan planning: scan-planning.md
+      - Read scheduling: read-scheduling.md
   - Performance:
       - Reader benchmarks: benchmarks.md
-  - Reference: https://docs.rs/delta-arrow-reader
+  - Reference:
+      - Execution options: reference/execution-options.md
+      - Scan metrics: reference/metrics.md
+      - Rust API: https://docs.rs/delta-arrow-reader
   - Contributors:
       - Extraction parity: benchmark-parity.md
       - Provenance: provenance.md

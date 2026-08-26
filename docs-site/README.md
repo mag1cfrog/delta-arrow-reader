@@ -16,10 +16,11 @@ python -m zensical serve -f docs-site/mkdocs.yml
 
 - `Start here` teaches a Rust user how to install the crate and complete a
   first direct or DataFusion read.
-- `How it works` explains the read path after a user has completed a
-  quickstart.
+- `How it works` starts with the read path, then offers deeper pages on scan
+  planning and scheduling.
 - `Performance` records public benchmark results and their limits.
-- `Reference` links to the generated Rust API on docs.rs.
+- `Reference` records exact option and metric behavior, then links to the
+  generated Rust API on docs.rs.
 - `Contributors` keeps extraction evidence and repository history out of the
   newcomer path.
 

@@ -57,3 +57,10 @@ Delta Arrow Reader does not write Delta tables, manage transactions, create a
 Tokio runtime, or coordinate application workflows. The
 [provenance page](provenance.md) records how this code was originally extracted
 from Delta Funnel.
+
+## Go deeper
+
+- [Scan planning](scan-planning.md) explains how the reader chooses a partition
+  target, groups files, and optionally splits large files.
+- [Read scheduling](read-scheduling.md) explains concurrency, prefetching,
+  dynamic pruning, backpressure, and cancellation.
