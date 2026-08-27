@@ -89,6 +89,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 /// # Ok(())
 /// # }
 /// ```
+#[must_use = "table builder settings do nothing unless the builder is loaded"]
 pub struct DeltaTableBuilder {
     table_location: String,
     storage_options: DeltaStorageOptions,
@@ -300,6 +301,7 @@ impl fmt::Debug for DeltaTable {
 }
 
 /// Configures one single-use streaming Delta scan.
+#[must_use = "scan builder settings do nothing unless the scan is built"]
 pub struct DeltaScanBuilder<'table> {
     table: &'table DeltaTable,
     projection: Option<Vec<String>>,
