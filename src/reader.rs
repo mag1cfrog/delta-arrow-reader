@@ -108,20 +108,26 @@ impl DeltaTableBuilder {
     }
 
     /// Replaces the storage options forwarded during table loading.
-    pub fn with_storage_options(mut self, value: DeltaStorageOptions) -> Self {
-        self.storage_options = value;
+    pub fn with_storage_options(mut self, storage_options: DeltaStorageOptions) -> Self {
+        self.storage_options = storage_options;
         self
     }
 
     /// Selects the Delta snapshot to load.
-    pub const fn with_snapshot_selection(mut self, value: DeltaSnapshotSelection) -> Self {
-        self.snapshot_selection = value;
+    pub const fn with_snapshot_selection(
+        mut self,
+        snapshot_selection: DeltaSnapshotSelection,
+    ) -> Self {
+        self.snapshot_selection = snapshot_selection;
         self
     }
 
     /// Replaces the default execution settings used by scans of this table.
-    pub const fn with_execution_options(mut self, value: DeltaScanExecutionOptions) -> Self {
-        self.execution_options = value;
+    pub const fn with_execution_options(
+        mut self,
+        execution_options: DeltaScanExecutionOptions,
+    ) -> Self {
+        self.execution_options = execution_options;
         self
     }
 
@@ -332,20 +338,26 @@ impl<'table> DeltaScanBuilder<'table> {
     }
 
     /// Overrides the number of planned scan partitions.
-    pub fn with_target_partitions(mut self, value: usize) -> Result<Self, DeltaReaderError> {
-        if value == 0 {
+    pub fn with_target_partitions(
+        mut self,
+        target_partitions: usize,
+    ) -> Result<Self, DeltaReaderError> {
+        if target_partitions == 0 {
             return InvalidConfigurationSnafu {
                 reason: "scan_partition_target_must_be_positive",
             }
             .fail();
         }
-        self.target_partitions = Some(value);
+        self.target_partitions = Some(target_partitions);
         Ok(self)
     }
 
     /// Replaces the execution settings for this scan.
-    pub const fn with_execution_options(mut self, value: DeltaScanExecutionOptions) -> Self {
-        self.execution_options = value;
+    pub const fn with_execution_options(
+        mut self,
+        execution_options: DeltaScanExecutionOptions,
+    ) -> Self {
+        self.execution_options = execution_options;
         self
     }
 

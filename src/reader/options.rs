@@ -96,73 +96,79 @@ impl DeltaScanExecutionOptions {
     }
 
     /// Selects a Parquet reader backend.
-    pub const fn with_parquet_backend(mut self, value: ParquetReaderBackend) -> Self {
-        self.parquet_backend = value;
+    pub const fn with_parquet_backend(mut self, parquet_backend: ParquetReaderBackend) -> Self {
+        self.parquet_backend = parquet_backend;
         self
     }
 
     /// Sets or clears the scan-wide file-read limit.
     pub fn with_max_concurrent_file_reads_per_scan(
         mut self,
-        value: Option<usize>,
+        max_concurrent_file_reads: Option<usize>,
     ) -> Result<Self, DeltaReaderError> {
-        validate_optional_positive(value, "max_concurrent_file_reads_per_scan_must_be_positive")?;
-        self.max_concurrent_file_reads_per_scan = value;
+        validate_optional_positive(
+            max_concurrent_file_reads,
+            "max_concurrent_file_reads_per_scan_must_be_positive",
+        )?;
+        self.max_concurrent_file_reads_per_scan = max_concurrent_file_reads;
         Ok(self)
     }
 
     /// Sets the per-partition file-read limit.
     pub fn with_max_concurrent_file_reads_per_partition(
         mut self,
-        value: usize,
+        max_concurrent_file_reads: usize,
     ) -> Result<Self, DeltaReaderError> {
         validate_positive(
-            value,
+            max_concurrent_file_reads,
             "max_concurrent_file_reads_per_partition_must_be_positive",
         )?;
-        self.max_concurrent_file_reads_per_partition = value;
+        self.max_concurrent_file_reads_per_partition = max_concurrent_file_reads;
         Ok(self)
     }
 
     /// Sets the number of output batches buffered per partition.
     pub fn with_output_buffer_batches_per_partition(
         mut self,
-        value: usize,
+        output_buffer_batches: usize,
     ) -> Result<Self, DeltaReaderError> {
         validate_positive(
-            value,
+            output_buffer_batches,
             "output_buffer_batches_per_partition_must_be_positive",
         )?;
-        self.output_buffer_batches_per_partition = value;
+        self.output_buffer_batches_per_partition = output_buffer_batches;
         Ok(self)
     }
 
     /// Sets the number of future direct Parquet files prepared per partition.
-    pub const fn with_prefetch_files_per_partition(mut self, value: usize) -> Self {
-        self.prefetch_files_per_partition = value;
+    pub const fn with_prefetch_files_per_partition(mut self, prefetch_files: usize) -> Self {
+        self.prefetch_files_per_partition = prefetch_files;
         self
     }
 
     /// Sets or clears the direct Parquet reader's metadata size hint in bytes.
     pub fn with_parquet_metadata_size_hint_bytes(
         mut self,
-        value: Option<usize>,
+        metadata_size_hint_bytes: Option<usize>,
     ) -> Result<Self, DeltaReaderError> {
-        validate_optional_positive(value, "parquet_metadata_size_hint_bytes_must_be_positive")?;
-        self.parquet_metadata_size_hint_bytes = value;
+        validate_optional_positive(
+            metadata_size_hint_bytes,
+            "parquet_metadata_size_hint_bytes_must_be_positive",
+        )?;
+        self.parquet_metadata_size_hint_bytes = metadata_size_hint_bytes;
         Ok(self)
     }
 
     /// Sets or clears the direct Parquet reader's full-file read threshold in bytes.
     pub fn with_parquet_full_file_read_threshold_bytes(
         mut self,
-        value: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
     ) -> Result<Self, DeltaReaderError> {
         validate_optional_positive(
-            value,
+            full_file_read_threshold_bytes,
             "parquet_full_file_read_threshold_bytes_must_be_positive",
         )?;
-        self.parquet_full_file_read_threshold_bytes = value;
+        self.parquet_full_file_read_threshold_bytes = full_file_read_threshold_bytes;
         Ok(self)
     }
 
