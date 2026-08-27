@@ -5,6 +5,7 @@ on:
     paths:
       - "docs-site/**"
       - "docs/**"
+      - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - "docs-site/**"
       - "docs/**"
+      - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   workflow_dispatch: {}
 
@@ -44,7 +46,7 @@ jobs:
         run: python -m pip install -r docs-site/requirements.txt
 
       - name: Build docs
-        run: python -m zensical build --strict -f docs-site/mkdocs.yml
+        run: python -m zensical build --strict -f mkdocs.yml
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

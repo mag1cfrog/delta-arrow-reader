@@ -90,5 +90,5 @@ Every ranged task keeps the original Delta file metadata, including partition
 values, transforms, and deletion-vector coordinates. A scan therefore returns
 the same rows whether it uses whole-file tasks or ranged tasks.
 
-See [read scheduling](read-scheduling.md) for what happens when these tasks
+See [read scheduling](https://mag1cfrog.github.io/delta-arrow-reader/read-scheduling/) for what happens when these tasks
 start running.

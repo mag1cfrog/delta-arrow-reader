@@ -5,12 +5,12 @@ columns. The rows arrive as Arrow record batches.
 
 ## Before you start
 
-Add the [streaming reader dependencies](installation.md#streaming-reader). You will
+Add the [streaming reader dependencies](https://mag1cfrog.github.io/delta-arrow-reader/installation/#streaming-reader). You will
 also need the path to a Delta table that your application can read.
 
 ## Run the scan
 
-```rust
+```no_run
 use delta_arrow_reader::DeltaTableBuilder;
 use futures_util::TryStreamExt;
 
@@ -43,7 +43,7 @@ needs. The data files are not read until the returned batch stream is polled.
 
 Once the basic scan works, you can add a predicate before building it:
 
-```rust
+```ignore
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar};
 
 let scan = table
@@ -66,7 +66,7 @@ correct even when the table statistics cannot skip a file.
 If you want to see what the scan did, save its metrics handle before consuming
 the stream:
 
-```rust
+```ignore
 let mut batches = scan.into_stream();
 let metrics = batches.metrics();
 

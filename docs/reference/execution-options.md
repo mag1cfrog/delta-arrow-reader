@@ -1,8 +1,8 @@
 # Execution Options
 
 This page lists the scan settings and their defaults. For the behavior behind
-them, see [scan planning](../scan-planning.md) and
-[read scheduling](../read-scheduling.md).
+them, see [scan planning](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/) and
+[read scheduling](https://mag1cfrog.github.io/delta-arrow-reader/read-scheduling/).
 
 ## Reader execution options
 
