@@ -53,9 +53,6 @@ pub(crate) struct DeltaScanPlan {
     pub(crate) kernel_schemas: KernelScanSchemas,
     pub(crate) partitions: Vec<DeltaScanPartition>,
     pub(crate) partition_target_diagnostic: DeltaScanPartitionTargetDiagnosticOutput,
-    pub(crate) add_actions_excluded_during_planning: Option<u64>,
-    pub(crate) estimated_input_bytes: Option<u64>,
-    pub(crate) estimated_input_rows: Option<u64>,
     pub(crate) physical_predicate: Option<DeltaKernelPredicate>,
     pub(crate) execution_options: DeltaScanExecutionOptions,
     pub(crate) metrics: DeltaScanMetrics,
@@ -249,9 +246,6 @@ fn finalize_scan_plan(
         kernel_schemas: unpartitioned.kernel_schemas,
         partitions,
         partition_target_diagnostic,
-        add_actions_excluded_during_planning: unpartitioned.add_actions_excluded_during_planning,
-        estimated_input_bytes: unpartitioned.estimated_input_bytes,
-        estimated_input_rows: unpartitioned.estimated_input_rows,
         physical_predicate: unpartitioned.physical_predicate,
         execution_options: unpartitioned.execution_options,
         metrics,
@@ -4639,8 +4633,6 @@ mod tests {
         let execution_options = crate::DeltaScanExecutionOptions::default();
         let empty = plan_scan(&empty_snapshot, None, &[], None, true, execution_options)?;
         assert!(empty.partitions.is_empty());
-        assert_eq!(empty.estimated_input_bytes, Some(0));
-        assert_eq!(empty.estimated_input_rows, Some(0));
         let empty_metrics = empty.metrics.snapshot();
         assert_eq!(empty_metrics.snapshot_version, empty.snapshot_version);
         assert_eq!(
@@ -4649,10 +4641,7 @@ mod tests {
         );
         assert_eq!(empty_metrics.scan_partitions_planned, 0);
         assert_eq!(empty_metrics.files_planned, 0);
-        assert_eq!(
-            empty_metrics.add_actions_excluded_during_planning,
-            empty.add_actions_excluded_during_planning
-        );
+        assert_eq!(empty_metrics.add_actions_excluded_during_planning, None);
         assert_eq!(empty_metrics.estimated_input_bytes, Some(0));
         assert_eq!(empty_metrics.estimated_input_rows, Some(0));
         assert_eq!(empty_metrics.scan_partitions_started, 0);
@@ -4682,8 +4671,9 @@ mod tests {
         assert_eq!(planned_tasks(&single).count(), 1);
         assert_eq!(single_task.path, "single.parquet");
         assert_eq!(single_task.file_size, Some(0));
-        assert_eq!(single.estimated_input_bytes, Some(0));
-        assert_eq!(single.estimated_input_rows, None);
+        let single_metrics = single.metrics.snapshot();
+        assert_eq!(single_metrics.estimated_input_bytes, Some(0));
+        assert_eq!(single_metrics.estimated_input_rows, None);
 
         let adds = (0_u32..1_001)
             .map(|index| {
@@ -4719,9 +4709,10 @@ mod tests {
         assert_eq!(second.estimated_input_rows, None);
         assert_eq!(last.file_size, Some(1_000));
         assert_eq!(last.estimated_input_rows, Some(1_000));
-        assert_eq!(many.add_actions_excluded_during_planning, Some(0));
-        assert_eq!(many.estimated_input_bytes, Some(500_500));
-        assert_eq!(many.estimated_input_rows, None);
+        let many_metrics = many.metrics.snapshot();
+        assert_eq!(many_metrics.add_actions_excluded_during_planning, Some(0));
+        assert_eq!(many_metrics.estimated_input_bytes, Some(500_500));
+        assert_eq!(many_metrics.estimated_input_rows, None);
         assert!(Arc::ptr_eq(
             &many.engine_context,
             many_snapshot.engine_context()
@@ -5402,9 +5393,6 @@ mod tests {
                 vec!["part-1.parquet", "part-2.parquet"]
             ]
         );
-        assert_eq!(plan.estimated_input_bytes, Some(100));
-        assert_eq!(plan.estimated_input_rows, Some(10));
-
         let retained_metrics = plan.metrics.clone();
         let metrics = retained_metrics.snapshot();
         assert_eq!(metrics.snapshot_version, snapshot.version());
@@ -5701,9 +5689,10 @@ mod tests {
             .collect::<Vec<_>>();
         paths.sort_unstable();
         assert_eq!(paths, ["missing-stats.parquet", "possible.parquet"]);
-        assert_eq!(plan.add_actions_excluded_during_planning, Some(1));
-        assert_eq!(plan.estimated_input_bytes, Some(50));
-        assert_eq!(plan.estimated_input_rows, None);
+        let metrics = plan.metrics.snapshot();
+        assert_eq!(metrics.add_actions_excluded_during_planning, Some(1));
+        assert_eq!(metrics.estimated_input_bytes, Some(50));
+        assert_eq!(metrics.estimated_input_rows, None);
         assert!(plan.physical_predicate.is_some());
 
         let empty_projection = Vec::new();
@@ -5972,12 +5961,13 @@ mod tests {
         assert_eq!(field_names(&plan.logical_schema), ["id", "region"]);
         assert_eq!(field_names(&plan.physical_schema), ["id"]);
         assert_eq!(field_names(&plan.projected_schema), ["id"]);
+        let metrics = plan.metrics.snapshot();
         let final_state = (
             plan.partitions.len(),
             planned_tasks(&plan).count(),
-            plan.add_actions_excluded_during_planning,
-            plan.estimated_input_bytes,
-            plan.estimated_input_rows,
+            metrics.add_actions_excluded_during_planning,
+            metrics.estimated_input_bytes,
+            metrics.estimated_input_rows,
         );
         assert_eq!(final_state, (1, 1, Some(1), Some(20), Some(2)));
         assert!(Arc::ptr_eq(&plan.engine_context, snapshot.engine_context()));
