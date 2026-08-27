@@ -25,7 +25,7 @@ pub(crate) struct DataFusionFilterCapabilities {
 }
 
 pub(crate) struct DataFusionFilterDecision {
-    pub(crate) predicate: Option<DeltaPredicate>,
+    pub(crate) pruning_predicate: Option<DeltaPredicate>,
     pub(crate) pushdown: TableProviderFilterPushDown,
     pub(crate) referenced_columns: Vec<String>,
 }
@@ -215,7 +215,7 @@ fn plan_filters(
                 translate_filter_for_pushdown(&filter, schema, partition_columns)
             else {
                 return DataFusionFilterDecision {
-                    predicate: None,
+                    pruning_predicate: None,
                     pushdown: TableProviderFilterPushDown::Unsupported,
                     referenced_columns,
                 };
@@ -231,7 +231,7 @@ fn plan_filters(
             };
             requires_statistics |= !matches!(translation.kind, TranslatedFilterKind::Partition);
             DataFusionFilterDecision {
-                predicate: Some(translation.predicate),
+                pruning_predicate: Some(translation.predicate),
                 pushdown,
                 referenced_columns: translation.referenced_columns,
             }
@@ -239,7 +239,7 @@ fn plan_filters(
         .collect::<Vec<_>>();
     let predicates = decisions
         .iter()
-        .filter_map(|decision| decision.predicate.clone())
+        .filter_map(|decision| decision.pruning_predicate.clone())
         .collect::<Vec<_>>();
     let pruning_predicate = and_predicates(predicates);
     let exact_row_predicate = and_predicates(
@@ -252,13 +252,13 @@ fn plan_filters(
                     .iter()
                     .all(|column| !partition_columns.contains(column))
             })
-            .filter_map(|decision| decision.predicate.clone())
+            .filter_map(|decision| decision.pruning_predicate.clone())
             .collect(),
     );
     let mut referenced_columns = Vec::new();
     for column in decisions
         .iter()
-        .filter(|decision| decision.predicate.is_some())
+        .filter(|decision| decision.pruning_predicate.is_some())
         .flat_map(|decision| &decision.referenced_columns)
     {
         if !referenced_columns.contains(column) {
@@ -1335,7 +1335,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            plan.filters.decisions[0].predicate,
+            plan.filters.decisions[0].pruning_predicate,
             Some(DeltaPredicate::Compare {
                 column: "text".to_owned(),
                 op: DeltaComparison::Eq,
@@ -1445,7 +1445,7 @@ mod tests {
             plan.filters
                 .decisions
                 .last()
-                .and_then(|decision| decision.predicate.clone()),
+                .and_then(|decision| decision.pruning_predicate.clone()),
             Some(DeltaPredicate::IsNotNull {
                 column: "text".to_owned(),
             })
@@ -1621,7 +1621,7 @@ mod tests {
             TableProviderFilterPushDown::Inexact
         );
         assert_eq!(
-            plan.filters.decisions[0].predicate,
+            plan.filters.decisions[0].pruning_predicate,
             Some(DeltaPredicate::And(vec![
                 DeltaPredicate::Compare {
                     column: "text".to_owned(),
@@ -1716,7 +1716,7 @@ mod tests {
         for (filter, expected) in filters.iter().zip(expected) {
             let plan = plan_scan(&schema, &partitions, None, &[filter], false);
             assert!(matches!(
-                plan.filters.decisions[0].predicate,
+                plan.filters.decisions[0].pruning_predicate,
                 Some(DeltaPredicate::Compare { op, .. }) if op == expected
             ));
         }
