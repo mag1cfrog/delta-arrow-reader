@@ -43,7 +43,7 @@ use self::{
 use crate::{
     DeltaProtocol, DeltaReaderError,
     delta::{
-        kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
+        kernel::{kernel_pruning_is_exact, kernel_pruning_predicate},
         protocol::validate_protocol,
         snapshot::{
             ArrowTableSnapshot, KernelTableSnapshot, load_delta_table_snapshot_async,
@@ -372,12 +372,9 @@ impl<'table> DeltaScanBuilder<'table> {
             .as_ref()
             .map(referenced_columns)
             .unwrap_or_default();
-        let enforce_physical_predicate_rows = predicate
-            .as_ref()
-            .is_some_and(delta_predicate_kernel_pruning_is_exact);
-        let kernel_predicate = predicate
-            .as_ref()
-            .and_then(delta_predicate_to_kernel_pruning);
+        let enforce_physical_predicate_rows =
+            predicate.as_ref().is_some_and(kernel_pruning_is_exact);
+        let kernel_predicate = predicate.as_ref().and_then(kernel_pruning_predicate);
         let include_stats = kernel_predicate.is_some();
         let execution_options = self.execution_options;
         let target_partitions = self.target_partitions;

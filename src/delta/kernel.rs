@@ -254,14 +254,12 @@ impl KernelScanFileMetadata {
 }
 
 #[allow(dead_code)]
-pub(crate) fn delta_predicate_to_kernel_pruning(
-    predicate: &DeltaPredicate,
-) -> Option<DeltaKernelPredicate> {
+pub(crate) fn kernel_pruning_predicate(predicate: &DeltaPredicate) -> Option<DeltaKernelPredicate> {
     convert_predicate(predicate)
         .map(|converted| DeltaKernelPredicate(Arc::new(converted.predicate)))
 }
 
-pub(crate) fn delta_predicate_kernel_pruning_is_exact(predicate: &DeltaPredicate) -> bool {
+pub(crate) fn kernel_pruning_is_exact(predicate: &DeltaPredicate) -> bool {
     convert_predicate(predicate).is_some_and(|converted| converted.exact)
 }
 
@@ -586,7 +584,7 @@ mod tests {
     }
 
     fn converted(predicate: &DeltaPredicate) -> Option<Predicate> {
-        delta_predicate_to_kernel_pruning(predicate)
+        kernel_pruning_predicate(predicate)
             .map(|predicate| predicate.into_predicate().as_ref().clone())
     }
 
@@ -809,7 +807,7 @@ mod tests {
 
         for predicate in predicates {
             let without_pruning = evaluate_predicate(&batch, &predicate)?;
-            let candidates = match delta_predicate_to_kernel_pruning(&predicate) {
+            let candidates = match kernel_pruning_predicate(&predicate) {
                 Some(kernel) => apply_kernel_pruning(&batch, &kernel)?,
                 None => batch.clone(),
             };
@@ -826,9 +824,10 @@ mod tests {
         let safe = compare("id", DeltaComparison::Gt, DeltaScalar::Int32(1));
         let unsupported = compare("score", DeltaComparison::NotEq, DeltaScalar::Float64(0.0));
 
-        assert!(delta_predicate_kernel_pruning_is_exact(&safe));
-        assert!(!delta_predicate_kernel_pruning_is_exact(
-            &DeltaPredicate::And(vec![safe, unsupported])
-        ));
+        assert!(kernel_pruning_is_exact(&safe));
+        assert!(!kernel_pruning_is_exact(&DeltaPredicate::And(vec![
+            safe,
+            unsupported
+        ])));
     }
 }

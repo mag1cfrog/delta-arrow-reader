@@ -548,7 +548,7 @@ mod tests {
             DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderPhase, DeltaScalar,
             DeltaScanExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
             delta::{
-                kernel::{DeltaKernelPredicate, delta_predicate_to_kernel_pruning},
+                kernel::{DeltaKernelPredicate, kernel_pruning_predicate},
                 snapshot::{ArrowTableSnapshot, load_delta_table_snapshot_blocking},
             },
             reader::predicate::validate_predicate,
@@ -595,7 +595,7 @@ mod tests {
                 predicate: &DeltaPredicate,
             ) -> Result<Vec<String>, DeltaReaderError> {
                 validate_predicate(predicate, self.snapshot.schema().as_ref())?;
-                let predicate = delta_predicate_to_kernel_pruning(predicate)
+                let predicate = kernel_pruning_predicate(predicate)
                     .expect("characterization predicate has an exact Kernel representation");
                 self.kernel_paths(Some(predicate))
             }
@@ -2429,7 +2429,7 @@ mod tests {
             DeltaComparison, DeltaPredicate, DeltaScalar, DeltaScanExecutionOptions,
             DeltaSnapshotSelection, DeltaStorageOptions,
             delta::{
-                kernel::delta_predicate_to_kernel_pruning,
+                kernel::kernel_pruning_predicate,
                 snapshot::{ArrowTableSnapshot, load_delta_table_snapshot_blocking},
             },
             reader::predicate::validate_predicate,
@@ -2471,7 +2471,7 @@ mod tests {
                 predicate: &DeltaPredicate,
             ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
                 validate_predicate(predicate, self.snapshot.schema().as_ref())?;
-                let kernel_predicate = delta_predicate_to_kernel_pruning(predicate)
+                let kernel_predicate = kernel_pruning_predicate(predicate)
                     .ok_or("predicate has no safe Kernel pruning representation")?;
                 let plan = plan_scan(
                     &self.snapshot,
@@ -4329,7 +4329,7 @@ mod tests {
         DeltaComparison, DeltaPredicate, DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection,
         DeltaStorageOptions,
         delta::{
-            kernel::{KernelScanFileMetadata, delta_predicate_to_kernel_pruning},
+            kernel::{KernelScanFileMetadata, kernel_pruning_predicate},
             snapshot::load_delta_table_snapshot_blocking,
         },
         reader::{
@@ -4835,7 +4835,7 @@ mod tests {
         };
         validate_predicate(&predicate, snapshot.schema().as_ref())?;
         let kernel_predicate =
-            delta_predicate_to_kernel_pruning(&predicate).ok_or("expected Kernel predicate")?;
+            kernel_pruning_predicate(&predicate).ok_or("expected Kernel predicate")?;
 
         let plan = super::plan_unpartitioned_scan(
             &snapshot,
@@ -4933,7 +4933,7 @@ mod tests {
         };
         validate_predicate(&predicate, snapshot.schema().as_ref())?;
         let kernel_predicate =
-            delta_predicate_to_kernel_pruning(&predicate).ok_or("expected Kernel predicate")?;
+            kernel_pruning_predicate(&predicate).ok_or("expected Kernel predicate")?;
 
         let plan = super::plan_unpartitioned_scan(
             &snapshot,
@@ -5704,7 +5704,7 @@ mod tests {
         };
         validate_predicate(&predicate, snapshot.schema().as_ref())?;
         let kernel_predicate =
-            delta_predicate_to_kernel_pruning(&predicate).ok_or("expected Kernel predicate")?;
+            kernel_pruning_predicate(&predicate).ok_or("expected Kernel predicate")?;
         let projection = ["label".to_owned()];
         let hidden = ["hidden".to_owned()];
 
@@ -5922,7 +5922,7 @@ mod tests {
             &DeltaStorageOptions::new(),
             DeltaSnapshotSelection::Latest,
         )?;
-        let predicate = delta_predicate_to_kernel_pruning(&DeltaPredicate::Compare {
+        let predicate = kernel_pruning_predicate(&DeltaPredicate::Compare {
             column: "id".to_owned(),
             op: DeltaComparison::Gt,
             value: DeltaScalar::Int32(1),
@@ -5981,7 +5981,7 @@ mod tests {
         };
         validate_predicate(&predicate, snapshot.schema().as_ref())?;
         let kernel_predicate =
-            delta_predicate_to_kernel_pruning(&predicate).ok_or("expected Kernel predicate")?;
+            kernel_pruning_predicate(&predicate).ok_or("expected Kernel predicate")?;
         let projection = ["id".to_owned()];
         let hidden = ["region".to_owned()];
         let plan = plan_scan(
@@ -6075,7 +6075,7 @@ mod tests {
         };
         validate_predicate(&predicate, snapshot.schema().as_ref())?;
         let kernel_predicate =
-            delta_predicate_to_kernel_pruning(&predicate).ok_or("expected Kernel predicate")?;
+            kernel_pruning_predicate(&predicate).ok_or("expected Kernel predicate")?;
         let projection = ["label".to_owned()];
 
         let scan = build_kernel_scan(&snapshot, Some(&projection), Some(kernel_predicate), false)?;

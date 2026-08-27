@@ -855,7 +855,7 @@ mod tests {
     use super::*;
     use crate::{
         DeltaScanExecutionOptions, DeltaTable, DeltaTableBuilder,
-        delta::kernel::delta_predicate_to_kernel_pruning,
+        delta::kernel::kernel_pruning_predicate,
         reader::datafusion::planning::{FilterCapabilities, plan_datafusion_scan},
         reader::planning::{
             DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan,
@@ -1051,9 +1051,9 @@ mod tests {
             .filters
             .pruning_predicate
             .as_ref()
-            .and_then(delta_predicate_to_kernel_pruning);
+            .and_then(kernel_pruning_predicate);
         let exact_row_predicate = match datafusion_plan.filters.exact_row_predicate.as_ref() {
-            Some(predicate) => Some(delta_predicate_to_kernel_pruning(predicate).ok_or(
+            Some(predicate) => Some(kernel_pruning_predicate(predicate).ok_or(
                 DeltaReaderError::UnsupportedPredicate {
                     reason: "exact_row_predicate_not_kernel_safe",
                 },

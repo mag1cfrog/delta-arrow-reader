@@ -29,7 +29,7 @@ use self::{
 
 use crate::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
-    delta::kernel::delta_predicate_to_kernel_pruning,
+    delta::kernel::kernel_pruning_predicate,
     reader::planning::{DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan},
     reader::transform::schema_with_view_types,
 };
@@ -166,11 +166,9 @@ impl DeltaTableProvider {
             .pruning_predicate
             .as_ref()
             .map(|predicate| {
-                delta_predicate_to_kernel_pruning(predicate).ok_or(
-                    DeltaReaderError::UnsupportedPredicate {
-                        reason: "datafusion_predicate_not_kernel_safe",
-                    },
-                )
+                kernel_pruning_predicate(predicate).ok_or(DeltaReaderError::UnsupportedPredicate {
+                    reason: "datafusion_predicate_not_kernel_safe",
+                })
             })
             .transpose()?;
         let exact_row_predicate = datafusion_plan
@@ -178,11 +176,9 @@ impl DeltaTableProvider {
             .exact_row_predicate
             .as_ref()
             .map(|predicate| {
-                delta_predicate_to_kernel_pruning(predicate).ok_or(
-                    DeltaReaderError::UnsupportedPredicate {
-                        reason: "exact_row_predicate_not_kernel_safe",
-                    },
-                )
+                kernel_pruning_predicate(predicate).ok_or(DeltaReaderError::UnsupportedPredicate {
+                    reason: "exact_row_predicate_not_kernel_safe",
+                })
             })
             .transpose()?;
         let exact_row_predicate = build_physical_row_predicate(
