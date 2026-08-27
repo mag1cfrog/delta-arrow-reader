@@ -226,7 +226,7 @@ fn direct_reader_contract_is_public() {
     );
 
     let version: fn(&DeltaTable) -> u64 = DeltaTable::version;
-    let schema: for<'a> fn(&'a DeltaTable) -> &'a SchemaRef = DeltaTable::schema;
+    let schema: fn(&DeltaTable) -> SchemaRef = DeltaTable::schema;
     let protocol: for<'a> fn(&'a DeltaTable) -> &'a DeltaProtocolInfo = DeltaTable::protocol;
     let table_uri: for<'a> fn(&'a DeltaTable) -> &'a str = DeltaTable::table_uri;
     let validate_protocol: fn(&DeltaTable) -> Result<(), DeltaReaderError> =
@@ -261,11 +261,11 @@ fn direct_reader_contract_is_public() {
     let _ = configure_scan;
     let _ = assert_scan_contract;
 
-    let scan_schema: for<'a> fn(&'a DeltaScan) -> &'a SchemaRef = DeltaScan::schema;
+    let scan_schema: fn(&DeltaScan) -> SchemaRef = DeltaScan::schema;
     let partition_count: fn(&DeltaScan) -> usize = DeltaScan::partition_count;
     let _ = (scan_schema, partition_count, scan_partition_count);
 
-    let stream_schema: for<'a> fn(&'a DeltaBatchStream) -> &'a SchemaRef = DeltaBatchStream::schema;
+    let stream_schema: fn(&DeltaBatchStream) -> SchemaRef = DeltaBatchStream::schema;
     let metrics: fn(&DeltaBatchStream) -> DeltaReadMetrics = DeltaBatchStream::metrics;
     let _ = (stream_schema, metrics);
 }

@@ -570,7 +570,7 @@ async fn scan_fixture(
     }
     .build()
     .await?;
-    let logical_schema = Arc::clone(scan.schema());
+    let logical_schema = scan.schema();
     let stream = scan.execute()?;
     let metrics = stream.metrics();
 

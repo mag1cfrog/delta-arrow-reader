@@ -243,9 +243,9 @@ impl DeltaTable {
         self.version
     }
 
-    /// Returns the logical Arrow schema.
-    pub fn schema(&self) -> &SchemaRef {
-        self.snapshot.schema_ref()
+    /// Returns a shared handle to the logical Arrow schema.
+    pub fn schema(&self) -> SchemaRef {
+        Arc::clone(self.snapshot.schema_ref())
     }
 
     /// Returns the loaded Delta protocol metadata.
@@ -442,9 +442,9 @@ pub struct DeltaScan {
 }
 
 impl DeltaScan {
-    /// Returns the visible logical output schema.
-    pub fn schema(&self) -> &SchemaRef {
-        &self.plan.projected_schema
+    /// Returns a shared handle to the visible logical output schema.
+    pub fn schema(&self) -> SchemaRef {
+        Arc::clone(&self.plan.projected_schema)
     }
 
     /// Returns the number of planned execution partitions.
@@ -528,9 +528,9 @@ pub struct DeltaBatchStream {
 }
 
 impl DeltaBatchStream {
-    /// Returns the visible logical output schema.
-    pub fn schema(&self) -> &SchemaRef {
-        &self.schema
+    /// Returns a shared handle to the visible logical output schema.
+    pub fn schema(&self) -> SchemaRef {
+        Arc::clone(&self.schema)
     }
 
     /// Returns a lightweight shared handle to point-in-time scan metrics.

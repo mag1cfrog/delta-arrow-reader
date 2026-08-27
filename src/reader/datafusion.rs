@@ -107,7 +107,7 @@ impl DeltaTableProvider {
         table.validate_protocol()?;
         let partition_columns = table.partition_columns().iter().cloned().collect();
         let schema = datafusion_schema(
-            table.schema(),
+            &table.schema(),
             &partition_columns,
             options.use_arrow_view_types,
         );
@@ -138,7 +138,7 @@ impl DeltaTableProvider {
             .collect::<HashSet<_>>();
         let filter_refs = filters.iter().collect::<Vec<_>>();
         let mut planning = plan_datafusion_scan(
-            self.table.schema(),
+            &self.table.schema(),
             &partition_columns,
             projection,
             &filter_refs,
@@ -342,7 +342,7 @@ impl TableProvider for DeltaTableProvider {
             .cloned()
             .collect::<HashSet<_>>();
         let planning = plan_datafusion_filters(
-            self.table.schema(),
+            &self.table.schema(),
             &partition_columns,
             filters,
             DataFusionFilterCapabilities {

@@ -1029,7 +1029,7 @@ mod tests {
             .collect::<HashSet<_>>();
         let filter_refs = filters.iter().collect::<Vec<_>>();
         let planning = plan_datafusion_scan(
-            table.schema(),
+            &table.schema(),
             &partition_columns,
             projection,
             &filter_refs,
