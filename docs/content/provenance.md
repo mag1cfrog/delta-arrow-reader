@@ -85,7 +85,7 @@ Delta Funnel adopted the released crate.
 | Single-table registration portions of `crates/delta-funnel/src/query_engine/datafusion/catalog/registration.rs` | `crates/delta-arrow-reader/src/reader/datafusion.rs` | #468 |
 | Frozen public provider and execution fixtures | `crates/delta-arrow-reader/tests/reader/support/real_parquet_delta_table.rs` | #469 |
 | Applicable public assertions from `catalog/provider_tests.rs`, `catalog/registration.rs`, and `execution/planning_exec.rs` | `crates/delta-arrow-reader/tests/reader/datafusion_adapter.rs` | #483 |
-| Controlled provider-exec cases, fixture generation, delayed storage, measurement, and schema-22 CSV portions of `crates/delta-funnel/src/bin/delta_scan_partition_bench.rs` | `crates/delta-arrow-reader/benches/reader.rs`, `docs/benchmark-parity.md`, and `docs/benchmark-parity-results.csv` | #470 |
+| Controlled provider-exec cases, fixture generation, delayed storage, measurement, and schema-22 CSV portions of `crates/delta-funnel/src/bin/delta_scan_partition_bench.rs` | `crates/delta-arrow-reader/benches/reader.rs`, `docs/content/benchmark-parity.md`, and `docs/content/benchmark-parity-results.csv` | #470 |
 
 ## Test migration
 

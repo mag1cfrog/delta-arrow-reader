@@ -72,7 +72,7 @@ The measured ratios range from 0.71x to 1.09x, with no material extraction
 regression outside the observed sample spread.
 
 The redacted raw schema-22 rows are committed in
-[`benchmark-parity-results.csv`](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/benchmark-parity-results.csv). Its
+[`benchmark-parity-results.csv`](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/docs/content/benchmark-parity-results.csv). Its
 `implementation` and `comparison_case` prefix columns identify each baseline
 and extracted pair; the remaining 80 columns are the unmodified benchmark
 output. Each row records the five-repetition summary, including p50, p95, p99,

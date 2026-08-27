@@ -164,6 +164,23 @@ See [architecture](https://mag1cfrog.github.io/delta-arrow-reader/architecture/)
 and the [security policy](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/SECURITY.md)
 for repository details.
 
+## Documentation
+
+The Markdown files in `docs/content/` are the source for the documentation
+site. The installation, quickstart, architecture, planning, scheduling,
+options, and metrics pages are also included in the generated Rust
+documentation through `src/guides.rs`. Use absolute links between shared
+pages. Mark runnable Rust examples as `no_run` and incomplete snippets as
+`ignore` so both renderers handle the same source correctly.
+
+Build or serve the site locally with:
+
+```console
+python -m pip install -r docs/requirements.txt
+python -m zensical build --strict -f docs/mkdocs.yml
+python -m zensical serve -f docs/mkdocs.yml
+```
+
 ## Development checks
 
 The repository CI runs every feature combination. The focused local checks are:
