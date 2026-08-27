@@ -105,7 +105,7 @@ pub(crate) fn load_delta_table_snapshot_blocking(
 ) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = stage_delta_table_snapshot(table_location, storage_options, selection)
+    let result = build_kernel_table_snapshot(table_location, storage_options, selection)
         .and_then(KernelTableSnapshot::into_arrow_snapshot);
 
     match &result {
@@ -122,7 +122,7 @@ pub(crate) fn load_kernel_table_snapshot_blocking(
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = stage_delta_table_snapshot(table_location, storage_options, selection);
+    let result = build_kernel_table_snapshot(table_location, storage_options, selection);
 
     match &result {
         Ok(snapshot) => trace_kernel_snapshot_load_completed(selection_kind, snapshot),
@@ -131,7 +131,7 @@ pub(crate) fn load_kernel_table_snapshot_blocking(
     result
 }
 
-fn stage_delta_table_snapshot(
+fn build_kernel_table_snapshot(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
