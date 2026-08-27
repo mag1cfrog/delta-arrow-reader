@@ -5496,7 +5496,7 @@ mod tests {
         ];
         let (_table, snapshot) = loaded_snapshot_with_adds("scan-execution", &adds)?;
         let execution_options = crate::DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_batches_per_partition(2)?;
@@ -5584,7 +5584,7 @@ mod tests {
         let adds = [add("part.parquet", 10, Some(1))];
         let (_table, snapshot) = loaded_snapshot_with_adds("concurrent-executions", &adds)?;
         let execution_options = crate::DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?;
         let plan = Arc::new(super::plan_scan(

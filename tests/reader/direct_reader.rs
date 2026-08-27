@@ -476,7 +476,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert_eq!(zero_snapshot.scheduler_batches_emitted, 0);
 
         let early_options = DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_batches_per_partition(1)?;
@@ -524,7 +524,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("drop")?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(1)
+            .with_prefetch_files_per_partition(1)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_batches_per_partition(1)?;

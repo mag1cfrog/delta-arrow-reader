@@ -1324,7 +1324,7 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
         .load_table()
         .await?;
     let execution_options = DeltaReaderExecutionOptions::new()
-        .with_prefetch_file_count_per_partition(0)
+        .with_prefetch_files_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(1)?
         .with_max_concurrent_file_reads_per_scan(Some(1))?
         .with_output_buffer_batches_per_partition(1)?;

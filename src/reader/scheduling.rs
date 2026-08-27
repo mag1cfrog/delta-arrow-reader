@@ -401,8 +401,8 @@ impl PartitionStream {
         Task: Send + 'static,
     {
         let output_capacity = options.output_buffer_batches_per_partition();
-        let prefetch_file_count = match options.reader_backend() {
-            ParquetReaderBackend::Direct => options.prefetch_file_count_per_partition(),
+        let prefetch_files = match options.reader_backend() {
+            ParquetReaderBackend::Direct => options.prefetch_files_per_partition(),
             ParquetReaderBackend::DeltaKernel => 0,
         };
         let measured_metrics = metrics.clone();
@@ -426,14 +426,8 @@ impl PartitionStream {
             );
             span.follows_from(tracing::Span::current().id());
             tokio::spawn(
-                run_partition(
-                    output,
-                    scheduler,
-                    metrics,
-                    run_cancellation,
-                    prefetch_file_count,
-                )
-                .instrument(span),
+                run_partition(output, scheduler, metrics, run_cancellation, prefetch_files)
+                    .instrument(span),
             )
         });
 
@@ -523,7 +517,7 @@ async fn run_partition<Task>(
     mut scheduler: FileScheduler<Task, FileBatchStream>,
     metrics: DeltaScanMetrics,
     cancellation: ScanCancellation,
-    prefetch_file_count: usize,
+    prefetch_files: usize,
 ) where
     Task: Send + 'static,
 {
@@ -536,7 +530,7 @@ async fn run_partition<Task>(
             &mut scheduler,
             &mut in_flight,
             &mut ready,
-            prefetch_file_count,
+            prefetch_files,
             &cancellation,
         )
         .await
@@ -552,12 +546,7 @@ async fn run_partition<Task>(
                 return;
             }
         };
-        refill_file_setups(
-            &mut scheduler,
-            &mut in_flight,
-            ready.len(),
-            prefetch_file_count,
-        );
+        refill_file_setups(&mut scheduler, &mut in_flight, ready.len(), prefetch_files);
 
         match drain_current_file(
             &output,
@@ -565,7 +554,7 @@ async fn run_partition<Task>(
             &mut scheduler,
             &mut in_flight,
             &mut ready,
-            prefetch_file_count,
+            prefetch_files,
             &metrics,
             &cancellation,
         )
@@ -608,7 +597,7 @@ async fn take_next_file<Task>(
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
     in_flight: &mut FileSetups,
     ready: &mut ReadyFiles,
-    prefetch_file_count: usize,
+    prefetch_files: usize,
     cancellation: &ScanCancellation,
 ) -> NextFile
 where
@@ -619,7 +608,7 @@ where
             scheduler,
             in_flight,
             ready.len(),
-            prefetch_file_count.saturating_add(1),
+            prefetch_files.saturating_add(1),
         );
         if let Some(file) = ready.pop_front() {
             return match file {
@@ -648,7 +637,7 @@ async fn drain_current_file<Task>(
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
     in_flight: &mut FileSetups,
     ready: &mut ReadyFiles,
-    prefetch_file_count: usize,
+    prefetch_files: usize,
     metrics: &DeltaScanMetrics,
     cancellation: &ScanCancellation,
 ) -> DrainFile
@@ -670,7 +659,7 @@ where
                         scheduler,
                         in_flight,
                         ready.len(),
-                        prefetch_file_count,
+                        prefetch_files,
                     );
                     continue;
                 }
@@ -770,7 +759,7 @@ mod tests {
         partition_capacity: usize,
     ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(partition_capacity)?
             .with_max_concurrent_file_reads_per_scan(Some(scan_capacity))
     }
@@ -789,10 +778,10 @@ mod tests {
 
     fn stream_options(
         output_capacity: usize,
-        prefetch_file_count: usize,
+        prefetch_files: usize,
     ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(prefetch_file_count)
+            .with_prefetch_files_per_partition(prefetch_files)
             .with_output_buffer_batches_per_partition(output_capacity)
     }
 

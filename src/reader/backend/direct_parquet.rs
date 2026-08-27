@@ -2276,7 +2276,7 @@ mod tests {
         options: DeltaReaderExecutionOptions,
     ) -> Result<Arc<ScanReadLimiter>, DeltaReaderError> {
         let options = options
-            .with_prefetch_file_count_per_partition(1)
+            .with_prefetch_files_per_partition(1)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?;
         Ok(ScanReadLimiter::new(options, 1, 1))

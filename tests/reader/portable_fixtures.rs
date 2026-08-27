@@ -492,11 +492,11 @@ fn runtime() -> TestResult<tokio::runtime::Runtime> {
 
 fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExecutionOptions> {
     Ok(DeltaReaderExecutionOptions::new()
-        .with_prefetch_file_count_per_partition(0)
+        .with_prefetch_files_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(capacity)?
         .with_max_concurrent_file_reads_per_scan(Some(capacity))?
         .with_output_buffer_batches_per_partition(1)?
-        .with_prefetch_file_count_per_partition(prefetch))
+        .with_prefetch_files_per_partition(prefetch))
 }
 
 async fn wait_for_delivered_batch_metrics(metrics: &DeltaScanMetrics) {
@@ -1281,7 +1281,7 @@ fn direct_prefetch_preserves_file_order_and_completes() -> TestResult {
         let fixture =
             RealParquetDeltaTable::new_with_two_large_files("direct-prefetch-order", 9_000)?;
         let options = direct_options(2, 1)?;
-        assert_eq!(options.prefetch_file_count_per_partition(), 1);
+        assert_eq!(options.prefetch_files_per_partition(), 1);
         let stream = direct_stream(&fixture, options).await?;
         let metrics = stream.metrics();
         let batches = stream.try_collect::<Vec<_>>().await?;

@@ -29,7 +29,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 27;
+const BENCHMARK_SCHEMA_VERSION: u32 = 28;
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
@@ -65,7 +65,7 @@ const CSV_HEADER: [&str; 79] = [
     "max_concurrent_file_reads_per_scan",
     "max_concurrent_file_reads_per_partition",
     "output_buffer_batches_per_partition",
-    "prefetch_file_count_per_partition",
+    "prefetch_files_per_partition",
     "repetitions",
     "file_count",
     "row_count",
@@ -1310,7 +1310,7 @@ async fn run_once(
         .with_max_concurrent_file_reads_per_scan(Some(target_partitions.saturating_mul(3).max(1)))?
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_batches_per_partition(1)?
-        .with_prefetch_file_count_per_partition(2)
+        .with_prefetch_files_per_partition(2)
         .with_parquet_metadata_size_hint_bytes(config.metadata_size_hint_bytes)?
         .with_parquet_full_file_read_threshold_bytes(config.full_file_read_threshold_bytes)?;
     let table = DeltaTableBuilder::new(&fixture.table_uri)
@@ -2105,7 +2105,7 @@ mod tests {
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "27");
+            assert_eq!(row[0], "28");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);

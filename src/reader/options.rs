@@ -6,7 +6,7 @@ use crate::{DeltaReaderError, error::InvalidConfigurationSnafu};
 
 const DEFAULT_MAX_CONCURRENT_FILE_READS_PER_PARTITION: usize = 3;
 const DEFAULT_OUTPUT_BUFFER_BATCHES_PER_PARTITION: usize = 1;
-const DEFAULT_PREFETCH_FILE_COUNT_PER_PARTITION: usize = 2;
+const DEFAULT_PREFETCH_FILES_PER_PARTITION: usize = 2;
 const DEFAULT_PARQUET_METADATA_SIZE_HINT_BYTES: usize = 64 * 1024;
 
 /// Storage options forwarded to Delta object-store construction.
@@ -39,7 +39,7 @@ pub struct DeltaReaderExecutionOptions {
     max_concurrent_file_reads_per_scan: Option<usize>,
     max_concurrent_file_reads_per_partition: usize,
     output_buffer_batches_per_partition: usize,
-    prefetch_file_count_per_partition: usize,
+    prefetch_files_per_partition: usize,
     parquet_metadata_size_hint_bytes: Option<usize>,
     parquet_full_file_read_threshold_bytes: Option<usize>,
 }
@@ -53,7 +53,7 @@ impl DeltaReaderExecutionOptions {
             max_concurrent_file_reads_per_partition:
                 DEFAULT_MAX_CONCURRENT_FILE_READS_PER_PARTITION,
             output_buffer_batches_per_partition: DEFAULT_OUTPUT_BUFFER_BATCHES_PER_PARTITION,
-            prefetch_file_count_per_partition: DEFAULT_PREFETCH_FILE_COUNT_PER_PARTITION,
+            prefetch_files_per_partition: DEFAULT_PREFETCH_FILES_PER_PARTITION,
             parquet_metadata_size_hint_bytes: Some(DEFAULT_PARQUET_METADATA_SIZE_HINT_BYTES),
             parquet_full_file_read_threshold_bytes: None,
         }
@@ -79,9 +79,9 @@ impl DeltaReaderExecutionOptions {
         self.output_buffer_batches_per_partition
     }
 
-    /// Returns the direct Parquet reader's per-partition file prefetch depth.
-    pub const fn prefetch_file_count_per_partition(&self) -> usize {
-        self.prefetch_file_count_per_partition
+    /// Returns the number of future direct Parquet files prepared per partition.
+    pub const fn prefetch_files_per_partition(&self) -> usize {
+        self.prefetch_files_per_partition
     }
 
     /// Returns the direct Parquet reader's metadata size hint in bytes.
@@ -136,9 +136,9 @@ impl DeltaReaderExecutionOptions {
         Ok(self)
     }
 
-    /// Sets the direct Parquet reader's per-partition file prefetch depth.
-    pub const fn with_prefetch_file_count_per_partition(mut self, value: usize) -> Self {
-        self.prefetch_file_count_per_partition = value;
+    /// Sets the number of future direct Parquet files prepared per partition.
+    pub const fn with_prefetch_files_per_partition(mut self, value: usize) -> Self {
+        self.prefetch_files_per_partition = value;
         self
     }
 
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(options.max_concurrent_file_reads_per_scan(), None);
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 3);
         assert_eq!(options.output_buffer_batches_per_partition(), 1);
-        assert_eq!(options.prefetch_file_count_per_partition(), 2);
+        assert_eq!(options.prefetch_files_per_partition(), 2);
         assert_eq!(options.parquet_metadata_size_hint_bytes(), Some(65_536));
         assert_eq!(options.parquet_full_file_read_threshold_bytes(), None);
         assert_eq!(DeltaStorageOptions::default(), DeltaStorageOptions::new());
@@ -243,7 +243,7 @@ mod tests {
             .with_max_concurrent_file_reads_per_scan(Some(8))?
             .with_max_concurrent_file_reads_per_partition(4)?
             .with_output_buffer_batches_per_partition(2)?
-            .with_prefetch_file_count_per_partition(0)
+            .with_prefetch_files_per_partition(0)
             .with_parquet_metadata_size_hint_bytes(None)?
             .with_parquet_full_file_read_threshold_bytes(Some(1024))?;
 
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(options.max_concurrent_file_reads_per_scan(), Some(8));
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 4);
         assert_eq!(options.output_buffer_batches_per_partition(), 2);
-        assert_eq!(options.prefetch_file_count_per_partition(), 0);
+        assert_eq!(options.prefetch_files_per_partition(), 0);
         assert_eq!(options.parquet_metadata_size_hint_bytes(), None);
         assert_eq!(options.parquet_full_file_read_threshold_bytes(), Some(1024));
         Ok(())
@@ -279,11 +279,11 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let options = DeltaReaderExecutionOptions::new()
             .with_max_concurrent_file_reads_per_scan(Some(2))?
-            .with_prefetch_file_count_per_partition(4);
+            .with_prefetch_files_per_partition(4);
 
         assert_eq!(options.max_concurrent_file_reads_per_scan(), Some(2));
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 3);
-        assert_eq!(options.prefetch_file_count_per_partition(), 4);
+        assert_eq!(options.prefetch_files_per_partition(), 4);
         Ok(())
     }
 
