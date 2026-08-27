@@ -1,30 +1,11 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(test, allow(clippy::panic))]
 
-#[cfg(feature = "datafusion")]
-mod datafusion_dynamic_filters;
-#[cfg(feature = "datafusion")]
-mod datafusion_dynamic_partition_pruning;
-#[cfg(feature = "datafusion")]
-mod datafusion_execution;
-#[cfg(feature = "datafusion")]
-mod datafusion_planning;
-#[cfg(feature = "datafusion")]
-mod datafusion_provider;
 mod delta;
 mod error;
 mod predicate;
 mod reader;
 
-#[cfg(feature = "datafusion")]
-pub use datafusion_execution::{
-    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, DeltaFileRepartitioning,
-    collect_delta_datafusion_metrics,
-};
-#[cfg(feature = "datafusion")]
-pub use datafusion_provider::{
-    DeltaDataFusionScanOptions, DeltaTableProvider, RegisteredDeltaTable, register_delta_table,
-};
 pub use delta::DeltaProtocolInfo;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
 pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
@@ -40,6 +21,12 @@ pub use reader::{
     DeltaBatchStream, DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend,
     DeltaReaderExecutionOptions, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection,
     DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot,
+};
+#[cfg(feature = "datafusion")]
+pub use reader::{
+    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, DeltaDataFusionScanOptions,
+    DeltaFileRepartitioning, DeltaTableProvider, RegisteredDeltaTable,
+    collect_delta_datafusion_metrics, register_delta_table,
 };
 
 /// The crate version.

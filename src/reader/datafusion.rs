@@ -1,5 +1,15 @@
 //! Optional DataFusion table-provider and registration surface.
 
+mod dynamic_filters;
+mod dynamic_partition_pruning;
+mod execution;
+mod planning;
+
+pub use execution::{
+    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, DeltaFileRepartitioning,
+    collect_delta_datafusion_metrics,
+};
+
 use std::{collections::HashSet, fmt, sync::Arc};
 
 use arrow::datatypes::{DataType, Schema, SchemaRef};
@@ -13,12 +23,13 @@ use datafusion::{
     physical_plan::ExecutionPlan,
 };
 
+use self::{
+    execution::create_datafusion_execution_plan,
+    planning::{DataFusionFilterCapabilities, plan_datafusion_filters, plan_datafusion_scan},
+};
+
 use crate::{
     DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions, DeltaTable,
-    datafusion_execution::{DeltaFileRepartitioning, create_datafusion_execution_plan},
-    datafusion_planning::{
-        DataFusionFilterCapabilities, plan_datafusion_filters, plan_datafusion_scan,
-    },
     delta::kernel::delta_predicate_to_kernel_pruning,
     reader::planning::{
         DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan, validate_backend_available,

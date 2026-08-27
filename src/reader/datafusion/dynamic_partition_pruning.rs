@@ -19,9 +19,8 @@ use datafusion::logical_expr::ColumnarValue;
 use datafusion::physical_expr::expressions::Literal;
 use delta_kernel::{expressions::Scalar, schema::PrimitiveType as KernelPrimitiveType};
 
-use crate::{
-    datafusion_dynamic_filters::DeltaRetainedDynamicFilter, reader::planning::DeltaScanFileTask,
-};
+use super::dynamic_filters::DeltaRetainedDynamicFilter;
+use crate::reader::planning::DeltaScanFileTask;
 
 /// Conservative pruning decision for one retained dynamic filter and file task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -424,8 +423,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        datafusion_dynamic_filters::DeltaDynamicFilterPlan,
         delta::kernel::KernelPhysicalToLogicalTransform,
+        reader::datafusion::dynamic_filters::DeltaDynamicFilterPlan,
         reader::deletion_vector::DeletionVectorMetadata,
     };
 

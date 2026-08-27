@@ -48,6 +48,17 @@ use datafusion::{
 };
 use futures_util::{StreamExt, stream};
 
+use super::{
+    dynamic_filters::{
+        DeltaDynamicFilterOutcome, DeltaDynamicFilterPlan, DeltaRetainedDynamicFilter,
+    },
+    dynamic_partition_pruning::{
+        DeltaDynamicPartitionKeepReason, DeltaDynamicPartitionPruningDecision,
+        evaluate_dynamic_partition_filter,
+    },
+    planning::DataFusionScanPlanning,
+};
+
 #[cfg(feature = "native-async")]
 use crate::reader::backend::native_async::{
     NativeAsyncParquetMetadataCache, native_async_file_executor,
@@ -57,14 +68,6 @@ use crate::reader::backend::native_async::{
 use crate::reader::native_async_executor;
 use crate::{
     DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend, DeltaReaderError,
-    datafusion_dynamic_filters::{
-        DeltaDynamicFilterOutcome, DeltaDynamicFilterPlan, DeltaRetainedDynamicFilter,
-    },
-    datafusion_dynamic_partition_pruning::{
-        DeltaDynamicPartitionKeepReason, DeltaDynamicPartitionPruningDecision,
-        evaluate_dynamic_partition_filter,
-    },
-    datafusion_planning::DataFusionScanPlanning,
     delta::kernel::DeltaKernelPredicate,
     reader::{
         metrics::saturating_fetch_add,
@@ -862,8 +865,8 @@ mod tests {
     use super::*;
     use crate::{
         DeltaReaderExecutionOptions, DeltaTable, DeltaTableBuilder,
-        datafusion_planning::{DataFusionFilterCapabilities, plan_datafusion_scan},
         delta::kernel::delta_predicate_to_kernel_pruning,
+        reader::datafusion::planning::{DataFusionFilterCapabilities, plan_datafusion_scan},
         reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
     };
 
@@ -1854,8 +1857,8 @@ mod tests {
     #[cfg(feature = "native-async")]
     fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
         use crate::{
-            datafusion_dynamic_filters::DeltaDynamicFilterPlan,
             delta::kernel::KernelPhysicalToLogicalTransform,
+            reader::datafusion::dynamic_filters::DeltaDynamicFilterPlan,
             reader::deletion_vector::DeletionVectorMetadata,
         };
 

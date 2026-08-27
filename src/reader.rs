@@ -1,6 +1,8 @@
 //! Public DataFusion-independent Delta-to-Arrow reader.
 
 pub(crate) mod backend;
+#[cfg(feature = "datafusion")]
+mod datafusion;
 pub(crate) mod deletion_vector;
 pub(crate) mod metrics;
 mod options;
@@ -10,6 +12,12 @@ pub(crate) mod planning;
 pub(crate) mod scheduling;
 pub(crate) mod transform;
 
+#[cfg(feature = "datafusion")]
+pub use datafusion::{
+    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, DeltaDataFusionScanOptions,
+    DeltaFileRepartitioning, DeltaTableProvider, RegisteredDeltaTable,
+    collect_delta_datafusion_metrics, register_delta_table,
+};
 pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
 pub use options::{
     DeltaReaderBackend, DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,

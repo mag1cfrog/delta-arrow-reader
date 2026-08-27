@@ -73,16 +73,16 @@ Delta Funnel adopted the released crate.
 | OfficialKernel blocking-producer portions of `crates/delta-funnel/src/query_engine/datafusion/execution/scheduling.rs` and `planning_exec.rs` | `crates/delta-arrow-reader/src/reader/backend/official_kernel.rs` over `src/reader/scheduling.rs` | #465 |
 | OfficialKernel metric-availability portions of `crates/delta-funnel/src/query_engine/datafusion/execution/read_stats.rs` | `crates/delta-arrow-reader/src/reader/metrics.rs` | #465 |
 | Direct table-loading, scan-building, and Arrow stream composition over the extracted services | `crates/delta-arrow-reader/src/reader.rs` | #466 |
-| `crates/delta-funnel/src/query_engine/datafusion/planning/projection.rs` | `crates/delta-arrow-reader/src/datafusion_planning.rs` | #467 |
-| `crates/delta-funnel/src/query_engine/datafusion/planning/filters.rs` | `crates/delta-arrow-reader/src/datafusion_planning.rs` | #467 |
-| `crates/delta-funnel/src/query_engine/datafusion/planning/filters/analysis.rs` | `crates/delta-arrow-reader/src/datafusion_planning.rs` | #467 |
-| `crates/delta-funnel/src/query_engine/datafusion/planning/filters/partition_pushdown.rs` and `stats_pushdown.rs` | `crates/delta-arrow-reader/src/datafusion_planning.rs` over the #484 predicate and Kernel-pruning boundary | #467 |
-| Static filter-normalization and scan-planning portions of `crates/delta-funnel/src/query_engine/datafusion/catalog/provider.rs` | `crates/delta-arrow-reader/src/datafusion_planning.rs` | #467 |
-| `crates/delta-funnel/src/query_engine/datafusion/planning/dynamic_filters.rs` | `crates/delta-arrow-reader/src/datafusion_dynamic_filters.rs` | #480 |
-| `crates/delta-funnel/src/query_engine/datafusion/planning/dynamic_partition_pruning.rs` | `crates/delta-arrow-reader/src/datafusion_dynamic_partition_pruning.rs` | #480 |
-| Dynamic-filter execution portions of `crates/delta-funnel/src/query_engine/datafusion/execution/planning_exec.rs` | `crates/delta-arrow-reader/src/datafusion_execution.rs` | #480 |
-| Provider and physical-plan portions of `crates/delta-funnel/src/query_engine/datafusion/catalog/provider.rs` and `execution/planning_exec.rs` | `crates/delta-arrow-reader/src/datafusion_provider.rs` and `src/datafusion_execution.rs` | #468 |
-| Single-table registration portions of `crates/delta-funnel/src/query_engine/datafusion/catalog/registration.rs` | `crates/delta-arrow-reader/src/datafusion_provider.rs` | #468 |
+| `crates/delta-funnel/src/query_engine/datafusion/planning/projection.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
+| `crates/delta-funnel/src/query_engine/datafusion/planning/filters.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
+| `crates/delta-funnel/src/query_engine/datafusion/planning/filters/analysis.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
+| `crates/delta-funnel/src/query_engine/datafusion/planning/filters/partition_pushdown.rs` and `stats_pushdown.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` over the #484 predicate and Kernel-pruning boundary | #467 |
+| Static filter-normalization and scan-planning portions of `crates/delta-funnel/src/query_engine/datafusion/catalog/provider.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
+| `crates/delta-funnel/src/query_engine/datafusion/planning/dynamic_filters.rs` | `crates/delta-arrow-reader/src/reader/datafusion/dynamic_filters.rs` | #480 |
+| `crates/delta-funnel/src/query_engine/datafusion/planning/dynamic_partition_pruning.rs` | `crates/delta-arrow-reader/src/reader/datafusion/dynamic_partition_pruning.rs` | #480 |
+| Dynamic-filter execution portions of `crates/delta-funnel/src/query_engine/datafusion/execution/planning_exec.rs` | `crates/delta-arrow-reader/src/reader/datafusion/execution.rs` | #480 |
+| Provider and physical-plan portions of `crates/delta-funnel/src/query_engine/datafusion/catalog/provider.rs` and `execution/planning_exec.rs` | `crates/delta-arrow-reader/src/reader/datafusion.rs` and `src/reader/datafusion/execution.rs` | #468 |
+| Single-table registration portions of `crates/delta-funnel/src/query_engine/datafusion/catalog/registration.rs` | `crates/delta-arrow-reader/src/reader/datafusion.rs` | #468 |
 | Frozen public provider and execution fixtures | `crates/delta-arrow-reader/tests/support/real_parquet_delta_table.rs` | #469 |
 | Applicable public assertions from `catalog/provider_tests.rs`, `catalog/registration.rs`, and `execution/planning_exec.rs` | `crates/delta-arrow-reader/tests/datafusion_provider.rs` | #483 |
 | Controlled provider-exec cases, fixture generation, delayed storage, measurement, and schema-22 CSV portions of `crates/delta-funnel/src/bin/delta_scan_partition_bench.rs` | `crates/delta-arrow-reader/benches/reader.rs`, `docs/benchmark-parity.md`, and `docs/benchmark-parity-results.csv` | #470 |

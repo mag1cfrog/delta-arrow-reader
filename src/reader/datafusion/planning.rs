@@ -1822,7 +1822,7 @@ mod tests {
 
     #[test]
     fn static_planner_has_no_provider_runtime_statistics_limit_or_read_path() {
-        let production = include_str!("datafusion_planning.rs")
+        let production = include_str!("planning.rs")
             .split("#[cfg(test)]")
             .next()
             .expect("production source should precede tests");
