@@ -102,7 +102,7 @@ impl KernelPhysicalToLogicalTransform {
         self.0.is_some()
     }
 
-    pub(crate) fn into_inner(self) -> Option<ExpressionRef> {
+    pub(crate) fn into_expression(self) -> Option<ExpressionRef> {
         self.0
     }
 
@@ -211,7 +211,7 @@ impl DeltaKernelPredicate {
         &self.0
     }
 
-    pub(crate) fn into_inner(self) -> PredicateRef {
+    pub(crate) fn into_predicate(self) -> PredicateRef {
         self.0
     }
 
@@ -499,7 +499,7 @@ impl KernelSnapshot {
         let mut builder = Arc::clone(&self.0)
             .scan_builder()
             .with_schema(logical_schema)
-            .with_predicate(predicate.map(DeltaKernelPredicate::into_inner));
+            .with_predicate(predicate.map(DeltaKernelPredicate::into_predicate));
         if include_stats {
             builder = builder.with_stats(StatsOptions::all());
         }
@@ -587,7 +587,7 @@ mod tests {
 
     fn converted(predicate: &DeltaPredicate) -> Option<Predicate> {
         delta_predicate_to_kernel_pruning(predicate)
-            .map(|predicate| predicate.into_inner().as_ref().clone())
+            .map(|predicate| predicate.into_predicate().as_ref().clone())
     }
 
     fn apply_kernel_pruning(

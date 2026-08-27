@@ -4621,7 +4621,7 @@ mod tests {
         );
         assert!(task.deletion_vector.is_present());
         assert!(task.transform.is_required());
-        assert!(task.transform.into_inner().is_some());
+        assert!(task.transform.into_expression().is_some());
 
         Ok(())
     }
