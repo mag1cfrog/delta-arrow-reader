@@ -48,5 +48,6 @@ nav:
       - Scan metrics: reference/metrics.md
       - Rust API: https://docs.rs/delta-arrow-reader
   - Contributors:
+      - Development: contributing.md
       - Extraction parity: benchmark-parity.md
       - Provenance: provenance.md

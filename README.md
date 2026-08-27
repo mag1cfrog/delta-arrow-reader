@@ -1,192 +1,103 @@
-# delta-arrow-reader
+# Delta Arrow Reader
 
-`delta-arrow-reader` is a read-only Delta Lake reader for Apache Arrow record
-batches. It provides a pull-driven streaming API and an optional DataFusion
-table provider. The caller owns the Tokio runtime, and scans do not collect the
-whole result in memory.
+<h3 align="center">
+  <strong>Delta Lake in. Arrow batches out. No Spark required.</strong>
+</h3>
 
-See the [documentation](https://mag1cfrog.github.io/delta-arrow-reader/) for
-quickstarts and design details. The
-[reader benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/)
-compare the crate with delta-rs and DuckDB on projection and deletion-vector
-workloads.
+<p align="center">
+  Stream Arrow batches directly.<br/>
+  Query with DataFusion when you want SQL.
+</p>
 
-## Installation
+Delta Arrow Reader is a read-only Rust library that reads Delta Lake tables as
+Apache Arrow record batches. Use the batch stream directly, or register a table
+with DataFusion and query it with SQL. Batches arrive as your application
+requests them, so a scan does not collect the whole result in memory.
 
-The 0.3.0 package declaration is:
+<p align="center">
+  <a href="https://docs.rs/delta-arrow-reader"><img alt="Rust API" src="https://docs.rs/delta-arrow-reader/badge.svg"></a>
+  <a href="https://crates.io/crates/delta-arrow-reader"><img alt="crates.io" src="https://img.shields.io/crates/v/delta-arrow-reader.svg"></a>
+</p>
 
-```toml
-[dependencies]
-delta-arrow-reader = "0.3.0"
-futures-util = "0.3"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+For guided examples and design details, see the
+[Delta Arrow Reader documentation](https://mag1cfrog.github.io/delta-arrow-reader/).
+
+## When to use it
+
+Delta Arrow Reader is a good fit when:
+
+- You need to read Delta Lake tables from a Rust application.
+- You want to process Arrow batches without loading the full result first.
+- You want to query a Delta table through DataFusion.
+- You want your application to own its Tokio runtime and control read concurrency.
+
+## Install
+
+Add the reader, Tokio, and the futures utilities used by the example:
+
+```console
+cargo add delta-arrow-reader futures-util
+cargo add tokio --features macros,rt-multi-thread
 ```
 
-Enable the DataFusion adapter and add the matching DataFusion dependency when
-you need SQL integration:
+For DataFusion, follow the
+[DataFusion installation instructions](https://mag1cfrog.github.io/delta-arrow-reader/installation/#datafusion-adapter)
+to add the matching dependencies.
 
-```toml
-[dependencies]
-datafusion = { version = "54.1.0", default-features = false, features = ["sql"] }
-delta-arrow-reader = { version = "0.3.0", features = ["datafusion"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-```
+## Read a table
 
-## Read a table as a stream
-
-Use `load_table` from asynchronous code. The returned stream exposes live scan
-metrics and yields batches as the caller requests them.
+Load a table and consume its batches from asynchronous code:
 
 ```rust,no_run
-use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTableBuilder};
+use delta_arrow_reader::DeltaTableBuilder;
 use futures_util::TryStreamExt;
 
 # async fn read_table() -> Result<(), Box<dyn std::error::Error>> {
 let table = DeltaTableBuilder::new("/tmp/example-delta-table")
     .load_table()
     .await?;
-let scan = table
-    .scan()
-    .with_projection(["id", "name"])
-    .with_predicate(DeltaPredicate::Compare {
-        column: "id".into(),
-        op: DeltaComparison::GtEq,
-        value: DeltaScalar::Int64(10),
-    })
-    .with_limit(100)
-    .build()
-    .await?;
-let mut batches = scan.into_stream();
-let metrics = batches.metrics();
+let mut batches = table.scan().build().await?.into_stream();
 
 while let Some(batch) = batches.try_next().await? {
     println!("rows={}", batch.num_rows());
 }
-
-println!("tasks={}", metrics.snapshot().file_tasks_completed);
 # Ok(())
 # }
 ```
 
-## Register a DataFusion table
+Once this works, the
+[streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
+shows how to select columns, filter rows, limit results, and inspect metrics.
 
-The `datafusion` feature exposes the `datafusion` module with its table provider,
-registration helper, scan options, and execution metrics. Registration loads no
-data files; reads begin when DataFusion executes a query.
+## Query with DataFusion
 
-```rust,no_run
-# #[cfg(feature = "datafusion")]
-# async fn query() -> Result<(), Box<dyn std::error::Error>> {
-use datafusion::prelude::SessionContext;
-use delta_arrow_reader::{
-    DeltaTableBuilder,
-    datafusion::{ScanOptions, register_table},
-};
+Enable the `datafusion` feature when you want to register a Delta table with a
+DataFusion `SessionContext`. Registration loads the Delta metadata; Parquet data
+is read when DataFusion executes the query.
 
-let context = SessionContext::new();
-let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-    .load_table()
-    .await?;
-register_table(
-    &context,
-    "orders",
-    table,
-    ScanOptions::default(),
-)?;
-
-let batches = context.sql("SELECT * FROM orders").await?.collect().await?;
-println!("batches={}", batches.len());
-# Ok(())
-# }
-```
-
-The DataFusion provider uses Arrow view arrays for string and binary data-file
-columns and dictionary arrays for string and binary partition columns. Streaming
-scans retain the Delta table's ordinary Arrow schema.
-
-For transformation-heavy queries that benefit from ordinary Arrow arrays,
-disable view types without changing partition dictionary encoding:
-
-```rust
-# #[cfg(feature = "datafusion")]
-# fn configure() {
-# use delta_arrow_reader::datafusion::ScanOptions;
-let scan_options = ScanOptions {
-    use_arrow_view_types: false,
-    ..Default::default()
-};
-# let _ = scan_options;
-# }
-```
-
-Whole-file planning normally avoids extra ranged reads once it fills the scan
-partition target. For skewed direct Parquet scans, allow repartitioning at any
-partition count with `datafusion::IntraFileRepartitioning::Always`.
-DataFusion's `repartition_file_scans` and `repartition_file_min_size` settings
-still control whether repartitioning runs.
-
-## Optional feature
-
-| Feature | Default | Purpose |
-| --- | --- | --- |
-| `datafusion` | No | DataFusion provider, registration, filtering, execution, and metrics. |
-
-The streaming API and both Parquet backends are always available.
-`ParquetReaderBackend::Direct` is the default. Advanced callers can select
-`ParquetReaderBackend::DeltaKernel` with
-`DeltaScanExecutionOptions::with_parquet_backend`.
-
-## Runtime, errors, and metrics
-
-- The caller supplies the Tokio runtime and drives returned streams.
-- Execution limits, buffering, Parquet metadata prefetch, and optional
-  full-file reads are configured through `DeltaScanExecutionOptions`.
-- DataFusion scan metrics report whether the provider requested view arrays.
-- `DeltaReaderError::phase` and `DeltaReaderError::code` return stable,
-  redacted categories. Dependency failures remain available through the
-  standard error source chain.
-- `DeltaScanMetrics` is a cloneable live handle. `snapshot` returns an
-  immutable point-in-time view. Direct Parquet I/O counters are `None` when
-  the Delta Kernel backend is selected.
+The [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
+walks through registration and a first SQL query.
 
 ## Scope
 
-The crate supports the extracted read path: snapshot selection, protocol and
-schema loading, projections, predicates, deletion vectors, partition planning,
-bounded scheduling, direct Parquet and Delta Kernel data-file reads, and the
-optional DataFusion adapter.
+The reader can load the latest or a selected table snapshot. It supports column
+selection, row filters, result limits, deletion vectors, bounded read
+scheduling, and optional DataFusion integration.
 
-It does not write Delta tables, manage transactions, create a Tokio runtime,
-or provide Delta Funnel orchestration, reporting, or Python APIs.
-
-See [architecture](https://mag1cfrog.github.io/delta-arrow-reader/architecture/),
-[provenance](https://mag1cfrog.github.io/delta-arrow-reader/provenance/),
-and the [security policy](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/SECURITY.md)
-for repository details.
+It does not write Delta tables, manage transactions, create a Tokio runtime, or
+provide Delta Funnel orchestration, reporting, or Python APIs.
 
 ## Documentation
 
-The Markdown files in `docs/content/` are the source for the documentation
-site. The installation, quickstart, architecture, planning, scheduling,
-options, and metrics pages are also included in the generated Rust
-documentation through `src/guides.rs`. Use absolute links between shared
-pages. Mark runnable Rust examples as `no_run` and incomplete snippets as
-`ignore` so both renderers handle the same source correctly.
+- [Streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
+- [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
+- [Architecture](https://mag1cfrog.github.io/delta-arrow-reader/architecture/)
+- [Execution options](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/)
+- [Scan metrics](https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/)
+- [Reader benchmarks](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/)
+- [Rust API reference](https://docs.rs/delta-arrow-reader)
 
-Build or serve the site locally with:
+## Development
 
-```console
-python -m pip install -r docs/requirements.txt
-python -m zensical build --strict -f docs/mkdocs.yml
-python -m zensical serve -f docs/mkdocs.yml
-```
-
-## Development checks
-
-The repository CI runs every feature combination. The focused local checks are:
-
-```console
-cargo test --locked --all-features
-RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps
-cargo package --locked
-```
+For local checks and documentation setup, see the
+[development guide](https://mag1cfrog.github.io/delta-arrow-reader/contributing/).
