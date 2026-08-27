@@ -126,17 +126,92 @@ impl Default for DeltaScanPartitionTargetDiagnosticInput {
 pub fn derive_delta_scan_partition_target_diagnostic(
     input: DeltaScanPartitionTargetDiagnosticInput,
 ) -> Result<DeltaScanPartitionTargetDiagnosticOutput, DeltaReaderError> {
-    let decision = DeltaScanPartitionTargetPolicy::from(input).derive(input)?;
+    validate_positive(
+        input.min_default_partitions,
+        "min_default_partitions_must_be_positive",
+    )?;
+    validate_positive(
+        input.parallelism_multiplier,
+        "parallelism_multiplier_must_be_positive",
+    )?;
+    validate_positive(
+        input.file_descriptors_per_partition,
+        "file_descriptors_per_partition_must_be_positive",
+    )?;
+    if input.available_memory_bytes_per_partition == 0 {
+        return InvalidConfigurationSnafu {
+            reason: "available_memory_bytes_per_partition_must_be_positive",
+        }
+        .fail();
+    }
+
+    if let Some(target_partitions) = input.explicit_target_partitions {
+        validate_positive(
+            target_partitions,
+            "explicit_target_partitions_must_be_positive",
+        )?;
+        return Ok(DeltaScanPartitionTargetDiagnosticOutput {
+            target_partitions,
+            source: DeltaScanPartitionTargetDiagnosticSource::ExplicitOverride,
+            explicit_target_partitions: input.explicit_target_partitions,
+            datafusion_target_partitions: input.datafusion_target_partitions,
+            available_parallelism: input.available_parallelism,
+            datafusion_target_cap: None,
+            unix_file_descriptor_cap: None,
+            memory_cap: None,
+        });
+    }
+
+    if let Some(target_partitions) = input.datafusion_target_partitions {
+        validate_positive(
+            target_partitions,
+            "datafusion_target_partitions_must_be_positive",
+        )?;
+    }
+
+    let (source, target_partitions) = match input.available_parallelism {
+        Some(available_parallelism) => {
+            validate_positive(
+                available_parallelism,
+                "available_parallelism_must_be_positive",
+            )?;
+            (
+                DeltaScanPartitionTargetDiagnosticSource::AvailableParallelismFallback,
+                available_parallelism
+                    .saturating_mul(input.parallelism_multiplier)
+                    .max(input.min_default_partitions),
+            )
+        }
+        None => (
+            DeltaScanPartitionTargetDiagnosticSource::StaticFallback,
+            input.min_default_partitions,
+        ),
+    };
+    let datafusion_target_cap = input.datafusion_target_partitions;
+    let unix_file_descriptor_cap = input
+        .unix_soft_file_descriptor_limit
+        .and_then(|limit| usize::try_from(limit).ok())
+        .map(|limit| (limit / input.file_descriptors_per_partition).max(1));
+    let memory_cap = input
+        .available_memory_bytes
+        .map(|bytes| bytes / input.available_memory_bytes_per_partition)
+        .and_then(|partitions| usize::try_from(partitions).ok())
+        .map(|partitions| partitions.max(1));
+    let target_partitions = [datafusion_target_cap, unix_file_descriptor_cap, memory_cap]
+        .into_iter()
+        .flatten()
+        .fold(target_partitions, usize::min)
+        .max(1);
 
     Ok(DeltaScanPartitionTargetDiagnosticOutput {
-        target_partitions: decision.target_partitions,
-        source: decision.source,
+        target_partitions,
+        source,
         explicit_target_partitions: input.explicit_target_partitions,
         datafusion_target_partitions: input.datafusion_target_partitions,
         available_parallelism: input.available_parallelism,
-        datafusion_target_cap: decision.datafusion_target_cap,
-        unix_file_descriptor_cap: decision.unix_file_descriptor_cap,
-        memory_cap: decision.memory_cap,
+        datafusion_target_cap,
+        unix_file_descriptor_cap,
+        memory_cap,
     })
 }
 
@@ -298,128 +373,6 @@ fn unix_soft_file_descriptor_diagnostic(
             None,
             DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus::Unsupported,
         ),
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct DeltaScanPartitionTargetDecision {
-    pub(crate) target_partitions: usize,
-    pub(crate) source: DeltaScanPartitionTargetDiagnosticSource,
-    pub(crate) datafusion_target_cap: Option<usize>,
-    pub(crate) unix_file_descriptor_cap: Option<usize>,
-    pub(crate) memory_cap: Option<usize>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct DeltaScanPartitionTargetPolicy {
-    min_default_partitions: usize,
-    parallelism_multiplier: usize,
-    file_descriptors_per_partition: usize,
-    available_memory_bytes_per_partition: u64,
-}
-
-impl From<DeltaScanPartitionTargetDiagnosticInput> for DeltaScanPartitionTargetPolicy {
-    fn from(input: DeltaScanPartitionTargetDiagnosticInput) -> Self {
-        Self {
-            min_default_partitions: input.min_default_partitions,
-            parallelism_multiplier: input.parallelism_multiplier,
-            file_descriptors_per_partition: input.file_descriptors_per_partition,
-            available_memory_bytes_per_partition: input.available_memory_bytes_per_partition,
-        }
-    }
-}
-
-impl DeltaScanPartitionTargetPolicy {
-    pub(crate) fn derive(
-        self,
-        input: DeltaScanPartitionTargetDiagnosticInput,
-    ) -> Result<DeltaScanPartitionTargetDecision, DeltaReaderError> {
-        self.validate()?;
-
-        if let Some(target_partitions) = input.explicit_target_partitions {
-            validate_positive(
-                target_partitions,
-                "explicit_target_partitions_must_be_positive",
-            )?;
-            return Ok(DeltaScanPartitionTargetDecision {
-                target_partitions,
-                source: DeltaScanPartitionTargetDiagnosticSource::ExplicitOverride,
-                datafusion_target_cap: None,
-                unix_file_descriptor_cap: None,
-                memory_cap: None,
-            });
-        }
-
-        if let Some(target_partitions) = input.datafusion_target_partitions {
-            validate_positive(
-                target_partitions,
-                "datafusion_target_partitions_must_be_positive",
-            )?;
-        }
-
-        let (source, target_partitions) = match input.available_parallelism {
-            Some(available_parallelism) => {
-                validate_positive(
-                    available_parallelism,
-                    "available_parallelism_must_be_positive",
-                )?;
-                (
-                    DeltaScanPartitionTargetDiagnosticSource::AvailableParallelismFallback,
-                    available_parallelism
-                        .saturating_mul(self.parallelism_multiplier)
-                        .max(self.min_default_partitions),
-                )
-            }
-            None => (
-                DeltaScanPartitionTargetDiagnosticSource::StaticFallback,
-                self.min_default_partitions,
-            ),
-        };
-        let datafusion_target_cap = input.datafusion_target_partitions;
-        let unix_file_descriptor_cap = input
-            .unix_soft_file_descriptor_limit
-            .and_then(|limit| usize::try_from(limit).ok())
-            .map(|limit| (limit / self.file_descriptors_per_partition).max(1));
-        let memory_cap = input
-            .available_memory_bytes
-            .map(|bytes| bytes / self.available_memory_bytes_per_partition)
-            .and_then(|partitions| usize::try_from(partitions).ok())
-            .map(|partitions| partitions.max(1));
-        let target_partitions = [datafusion_target_cap, unix_file_descriptor_cap, memory_cap]
-            .into_iter()
-            .flatten()
-            .fold(target_partitions, usize::min)
-            .max(1);
-
-        Ok(DeltaScanPartitionTargetDecision {
-            target_partitions,
-            source,
-            datafusion_target_cap,
-            unix_file_descriptor_cap,
-            memory_cap,
-        })
-    }
-
-    fn validate(self) -> Result<(), DeltaReaderError> {
-        validate_positive(
-            self.min_default_partitions,
-            "min_default_partitions_must_be_positive",
-        )?;
-        validate_positive(
-            self.parallelism_multiplier,
-            "parallelism_multiplier_must_be_positive",
-        )?;
-        validate_positive(
-            self.file_descriptors_per_partition,
-            "file_descriptors_per_partition_must_be_positive",
-        )?;
-        if self.available_memory_bytes_per_partition == 0 {
-            return InvalidConfigurationSnafu {
-                reason: "available_memory_bytes_per_partition_must_be_positive",
-            }
-            .fail();
-        }
-        Ok(())
     }
 }
 
