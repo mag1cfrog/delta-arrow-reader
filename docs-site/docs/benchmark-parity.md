@@ -36,7 +36,7 @@ cargo bench --locked -p delta-arrow-reader --bench reader --all-features -- \
 
 The captured rows predate the backend naming cleanup and retain their original
 schema-22 `native_async` and `official_kernel` values. The current harness uses
-`direct_parquet` and `delta_kernel` and writes schema 25. The workloads and
+`direct_parquet` and `delta_kernel` and writes schema 26. The workloads and
 measurements are unchanged.
 
 Change only the workload, query, backend, storage profile, and Parquet controls
