@@ -7,8 +7,8 @@ same path from a Delta Lake table to Apache Arrow record batches.
 
 At a high level, the reader does three things:
 
-1. It loads the table. The reader resolves the URI and object store, then loads
-   one Delta snapshot with its protocol and schema.
+1. It loads the table. The reader normalizes the table location, resolves the
+   object store, then loads one Delta snapshot with its protocol and schema.
 2. It plans the scan. The reader applies the requested columns and predicate,
    removes files that cannot match, and divides the remaining files into
    partitions.

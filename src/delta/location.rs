@@ -1,20 +1,20 @@
-//! Delta table URI normalization.
+//! Delta table location normalization.
 
-use super::kernel::parse_uri;
-use crate::{DeltaReaderError, error::InvalidTableUriSnafu};
+use super::kernel::parse_table_location;
+use crate::{DeltaReaderError, error::InvalidTableLocationSnafu};
 
-/// Normalizes a Delta table URI for snapshot loading.
-pub(crate) fn normalize_delta_table_uri(table_uri: &str) -> Result<url::Url, DeltaReaderError> {
-    if table_uri.trim().is_empty() {
-        return InvalidTableUriSnafu {
-            reason: "empty_table_uri",
+/// Normalizes a Delta table path or URL for snapshot loading.
+pub(crate) fn normalize_table_location(table_location: &str) -> Result<url::Url, DeltaReaderError> {
+    if table_location.trim().is_empty() {
+        return InvalidTableLocationSnafu {
+            reason: "empty_table_location",
         }
         .fail();
     }
 
-    parse_uri(table_uri).map_err(|_| {
-        InvalidTableUriSnafu {
-            reason: "invalid_table_uri",
+    parse_table_location(table_location).map_err(|_| {
+        InvalidTableLocationSnafu {
+            reason: "invalid_table_location",
         }
         .build()
     })
@@ -28,7 +28,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::normalize_delta_table_uri;
+    use super::normalize_table_location;
     use crate::DeltaReaderPhase;
 
     struct TestDir(PathBuf);
@@ -42,7 +42,7 @@ mod tests {
 
         fn relative(name: &str) -> Result<Self, Box<dyn std::error::Error>> {
             let path = Path::new("target")
-                .join("delta-arrow-reader-uri-tests")
+                .join("delta-arrow-reader-location-tests")
                 .join(unique_name(name)?);
             fs::create_dir_all(&path)?;
             Ok(Self(path))
@@ -65,8 +65,8 @@ mod tests {
         let absolute = TestDir::absolute("absolute")?;
         let relative = TestDir::relative("relative")?;
 
-        let absolute_uri = normalize_delta_table_uri(&absolute.0.to_string_lossy())?;
-        let relative_uri = normalize_delta_table_uri(&relative.0.to_string_lossy())?;
+        let absolute_uri = normalize_table_location(&absolute.0.to_string_lossy())?;
+        let relative_uri = normalize_table_location(&relative.0.to_string_lossy())?;
         let relative_path = relative_uri
             .to_file_path()
             .map_err(|()| std::io::Error::other("expected a local file URI"))?;
@@ -75,7 +75,7 @@ mod tests {
         assert!(absolute_uri.as_str().ends_with('/'));
         assert_eq!(relative_path, fs::canonicalize(&relative.0)?);
         assert_eq!(
-            normalize_delta_table_uri(absolute_uri.as_str())?,
+            normalize_table_location(absolute_uri.as_str())?,
             absolute_uri
         );
         Ok(())
@@ -85,7 +85,7 @@ mod tests {
     fn preserves_remote_url_semantics_without_opening_a_store()
     -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(
-            normalize_delta_table_uri("s3://bucket/path/to/table")?.as_str(),
+            normalize_table_location("s3://bucket/path/to/table")?.as_str(),
             "s3://bucket/path/to/table/"
         );
         Ok(())
@@ -101,16 +101,20 @@ mod tests {
         let regular_file = parent.0.join("not-a-directory");
         fs::write(&regular_file, "not a table")?;
 
-        for (table_uri, expected_reason) in [
-            ("", "empty_table_uri"),
-            (" \t\n", "empty_table_uri"),
-            (&missing.to_string_lossy(), "invalid_table_uri"),
-            (&regular_file.to_string_lossy(), "invalid_table_uri"),
-            ("s3://secret-user:secret-password@[", "invalid_table_uri"),
+        for (table_location, expected_reason) in [
+            ("", "empty_table_location"),
+            (" \t\n", "empty_table_location"),
+            (&missing.to_string_lossy(), "invalid_table_location"),
+            (&regular_file.to_string_lossy(), "invalid_table_location"),
+            (
+                "s3://secret-user:secret-password@[",
+                "invalid_table_location",
+            ),
         ] {
-            let error = normalize_delta_table_uri(table_uri).expect_err("URI should be rejected");
-            assert_eq!(error.code(), "invalid_table_uri");
-            assert_eq!(error.phase(), DeltaReaderPhase::TableUri);
+            let error =
+                normalize_table_location(table_location).expect_err("location should be rejected");
+            assert_eq!(error.code(), "invalid_table_location");
+            assert_eq!(error.phase(), DeltaReaderPhase::TableLocation);
             assert!(error.to_string().contains(expected_reason));
             assert!(!error.to_string().contains("secret"));
             assert!(!format!("{error:?}").contains("secret"));

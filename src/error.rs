@@ -8,8 +8,8 @@ use snafu::Snafu;
 pub enum DeltaReaderPhase {
     /// Reader configuration validation.
     Configuration,
-    /// Delta table URI parsing and normalization.
-    TableUri,
+    /// Delta table path or URL parsing and normalization.
+    TableLocation,
     /// Object-store initialization.
     Storage,
     /// Delta snapshot loading.
@@ -37,7 +37,7 @@ impl DeltaReaderPhase {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Configuration => "configuration",
-            Self::TableUri => "table_uri",
+            Self::TableLocation => "table_location",
             Self::Storage => "storage",
             Self::Snapshot => "snapshot",
             Self::Protocol => "protocol",
@@ -66,10 +66,12 @@ pub enum DeltaReaderError {
         /// Fixed redacted reason category.
         reason: &'static str,
     },
-    /// The table URI is invalid.
+    /// The table path or URL is invalid.
     #[non_exhaustive]
-    #[snafu(display("delta reader error: phase=table_uri code=invalid_table_uri reason={reason}"))]
-    InvalidTableUri {
+    #[snafu(display(
+        "delta reader error: phase=table_location code=invalid_table_location reason={reason}"
+    ))]
+    InvalidTableLocation {
         /// Fixed redacted reason category.
         reason: &'static str,
     },
@@ -214,7 +216,7 @@ impl DeltaReaderError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidConfiguration { .. } => "invalid_configuration",
-            Self::InvalidTableUri { .. } => "invalid_table_uri",
+            Self::InvalidTableLocation { .. } => "invalid_table_location",
             Self::StorageInitialization { .. } => "storage_initialization",
             Self::SnapshotLoad { .. } => "snapshot_load",
             Self::UnsupportedProtocol { .. } => "unsupported_protocol",
@@ -236,7 +238,7 @@ impl DeltaReaderError {
     pub const fn phase(&self) -> DeltaReaderPhase {
         match self {
             Self::InvalidConfiguration { .. } => DeltaReaderPhase::Configuration,
-            Self::InvalidTableUri { .. } => DeltaReaderPhase::TableUri,
+            Self::InvalidTableLocation { .. } => DeltaReaderPhase::TableLocation,
             Self::StorageInitialization { .. } => DeltaReaderPhase::Storage,
             Self::SnapshotLoad { .. } => DeltaReaderPhase::Snapshot,
             Self::UnsupportedProtocol { .. } => DeltaReaderPhase::Protocol,
@@ -271,7 +273,7 @@ mod tests {
     fn phase_names_are_stable() {
         let cases = [
             (DeltaReaderPhase::Configuration, "configuration"),
-            (DeltaReaderPhase::TableUri, "table_uri"),
+            (DeltaReaderPhase::TableLocation, "table_location"),
             (DeltaReaderPhase::Storage, "storage"),
             (DeltaReaderPhase::Snapshot, "snapshot"),
             (DeltaReaderPhase::Protocol, "protocol"),
@@ -301,11 +303,11 @@ mod tests {
                 false,
             ),
             (
-                DeltaReaderError::InvalidTableUri {
-                    reason: "invalid_table_uri",
+                DeltaReaderError::InvalidTableLocation {
+                    reason: "invalid_table_location",
                 },
-                "invalid_table_uri",
-                DeltaReaderPhase::TableUri,
+                "invalid_table_location",
+                DeltaReaderPhase::TableLocation,
                 false,
             ),
             (

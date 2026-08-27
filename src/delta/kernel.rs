@@ -39,8 +39,8 @@ pub(crate) struct DeltaKernelProtocol {
     pub(crate) writer_features: Vec<String>,
 }
 
-pub(crate) fn parse_uri(table_uri: &str) -> delta_kernel::DeltaResult<Url> {
-    try_parse_uri(table_uri)
+pub(crate) fn parse_table_location(table_location: &str) -> delta_kernel::DeltaResult<Url> {
+    try_parse_uri(table_location)
 }
 
 /// One parsed table location, object store, and Kernel engine.

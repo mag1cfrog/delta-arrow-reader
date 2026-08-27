@@ -7,8 +7,8 @@ use snafu::ResultExt;
 
 use super::{
     kernel::{DeltaKernelEngineContext, KernelSnapshot, snapshot_arrow_schema},
+    location::normalize_table_location,
     protocol::DeltaProtocol,
-    uri::normalize_delta_table_uri,
 };
 use crate::{
     DeltaReaderError, DeltaSnapshotSelection, DeltaStorageOptions,
@@ -99,13 +99,13 @@ impl LoadedDeltaTableSnapshot {
 }
 
 pub(crate) fn load_delta_table_snapshot_blocking(
-    table_uri: &str,
+    table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
 ) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = stage_delta_table_snapshot(table_uri, storage_options, selection)
+    let result = stage_delta_table_snapshot(table_location, storage_options, selection)
         .and_then(StagedDeltaTableSnapshot::into_loaded);
 
     match &result {
@@ -116,13 +116,13 @@ pub(crate) fn load_delta_table_snapshot_blocking(
 }
 
 pub(crate) fn load_staged_delta_table_snapshot_blocking(
-    table_uri: &str,
+    table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
 ) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = stage_delta_table_snapshot(table_uri, storage_options, selection);
+    let result = stage_delta_table_snapshot(table_location, storage_options, selection);
 
     match &result {
         Ok(snapshot) => trace_staged_snapshot_load_completed(selection_kind, snapshot),
@@ -132,11 +132,11 @@ pub(crate) fn load_staged_delta_table_snapshot_blocking(
 }
 
 fn stage_delta_table_snapshot(
-    table_uri: &str,
+    table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
 ) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
-    let table_url = normalize_delta_table_uri(table_uri)?;
+    let table_url = normalize_table_location(table_location)?;
     let s3_auth_mode_hint = s3_auth_mode_hint_for_source(&table_url, storage_options);
     let engine_context = DeltaKernelEngineContext::build(table_url, storage_options)
         .boxed()
@@ -169,13 +169,13 @@ fn stage_delta_table_snapshot(
 /// Dropping the returned future cancels result delivery. A blocking load that
 /// already started may still finish before its owned context is dropped.
 pub(crate) async fn load_delta_table_snapshot_async(
-    table_uri: String,
+    table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
 ) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let result = tokio::task::spawn_blocking(move || {
-        load_delta_table_snapshot_blocking(&table_uri, &storage_options, selection)
+        load_delta_table_snapshot_blocking(&table_location, &storage_options, selection)
     })
     .await
     .boxed()
@@ -193,13 +193,13 @@ pub(crate) async fn load_delta_table_snapshot_async(
 }
 
 pub(crate) async fn load_staged_delta_table_snapshot_async(
-    table_uri: String,
+    table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
 ) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let result = tokio::task::spawn_blocking(move || {
-        load_staged_delta_table_snapshot_blocking(&table_uri, &storage_options, selection)
+        load_staged_delta_table_snapshot_blocking(&table_location, &storage_options, selection)
     })
     .await
     .boxed()

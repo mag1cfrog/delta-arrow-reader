@@ -35,12 +35,12 @@ Delta Funnel adopted the released crate.
 
 | Delta Funnel source path | Staged crate path | Owning issue |
 | --- | --- | --- |
-| `crates/delta-funnel/src/table_formats/delta/uri.rs` | `crates/delta-arrow-reader/src/delta/uri.rs` | #462 |
+| `crates/delta-funnel/src/table_formats/delta/uri.rs` | `crates/delta-arrow-reader/src/delta/location.rs` | #462 |
 | `crates/delta-funnel/src/table_formats/delta/kernel.rs` | `crates/delta-arrow-reader/src/delta/kernel.rs` | #462 |
 | `crates/delta-funnel/src/table_formats/delta/snapshot.rs` | `crates/delta-arrow-reader/src/delta/snapshot.rs` | #462 |
 | `crates/delta-funnel/src/table_formats/delta/protocol.rs` | `crates/delta-arrow-reader/src/delta/protocol.rs` | #462 |
 | Source-loading portions of `crates/delta-funnel/src/table_formats/delta.rs` | `crates/delta-arrow-reader/src/delta/snapshot.rs` and `src/delta/kernel.rs` | #462 |
-| Snapshot/protocol/schema fixtures from `crates/delta-funnel/src/table_formats/delta/test_support.rs` | Crate-local tests in `src/delta/uri.rs`, `src/delta/snapshot.rs`, and `src/delta/protocol.rs` | #462 |
+| Snapshot/protocol/schema fixtures from `crates/delta-funnel/src/table_formats/delta/test_support.rs` | Crate-local tests in `src/delta/location.rs`, `src/delta/snapshot.rs`, and `src/delta/protocol.rs` | #462 |
 | `crates/delta-funnel/src/table_formats/delta/deletion_vector.rs` | `crates/delta-arrow-reader/src/reader/deletion_vector.rs` | #477 |
 | DV metadata portions of `crates/delta-funnel/src/table_formats/delta.rs` | `crates/delta-arrow-reader/src/delta/kernel.rs` and `src/reader/deletion_vector.rs` | #477 |
 | DV masking portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` | `crates/delta-arrow-reader/src/reader/deletion_vector.rs` | #477 |
@@ -89,7 +89,7 @@ Delta Funnel adopted the released crate.
 
 ## Test migration
 
-- #462 ports URI normalization, latest/fixed snapshot loading, protocol and
+- #462 ports table-location normalization, latest/fixed snapshot loading, protocol and
   schema conversion, storage construction/context reuse, redaction, and
   unsupported-protocol scan-boundary assertions into the staged crate.
 - #477 ports the focused deletion-vector metadata, payload, coordinate,
