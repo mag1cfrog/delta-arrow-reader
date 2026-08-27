@@ -2052,7 +2052,7 @@ mod tests {
         let options = DeltaReaderExecutionOptions::new()
             .with_parquet_full_file_read_threshold(full_file_threshold)?
             .with_parquet_metadata_size_hint(metadata_size_hint)?
-            .with_reader_backend(backend)?;
+            .with_reader_backend(backend);
         let predicate = with_predicate.then(|| {
             DeltaKernelPredicate::from_test_predicate(Predicate::gt(
                 Expression::Column(ColumnName::new(["id"])),
@@ -2089,7 +2089,7 @@ mod tests {
             &["region".to_owned()],
             Some(DeltaKernelPredicate::from_test_predicate(predicate)),
             true,
-            DeltaReaderExecutionOptions::new().with_reader_backend(backend)?,
+            DeltaReaderExecutionOptions::new().with_reader_backend(backend),
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
                 caller_target_partitions: None,
@@ -2275,7 +2275,7 @@ mod tests {
         options: DeltaReaderExecutionOptions,
     ) -> Result<Arc<ScanReadLimiter>, DeltaReaderError> {
         let options = options
-            .with_prefetch_file_count_per_partition(1)?
+            .with_prefetch_file_count_per_partition(1)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?;
         Ok(ScanReadLimiter::new(options, 1, 1))
@@ -3741,7 +3741,7 @@ mod tests {
                 &[],
                 None,
                 false,
-                DeltaReaderExecutionOptions::new().with_reader_backend(backend)?,
+                DeltaReaderExecutionOptions::new().with_reader_backend(backend),
                 DeltaScanPartitionTargetOptions {
                     explicit_target_partitions: Some(1),
                     caller_target_partitions: None,

@@ -477,14 +477,14 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert_eq!(zero_snapshot.batches_produced, 0);
 
         let early_options = DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
         let early = table
             .scan()
             .with_target_partitions(1)?
-            .with_execution_options(early_options)?
+            .with_execution_options(early_options)
             .with_limit(1)
             .build()
             .await?;
@@ -522,7 +522,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("drop")?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(1)?
+            .with_prefetch_file_count_per_partition(1)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
@@ -575,12 +575,12 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         let kernel = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(
                 DeltaReaderExecutionOptions::new()
-                    .with_reader_backend(ParquetReaderBackend::DeltaKernel)?,
+                    .with_reader_backend(ParquetReaderBackend::DeltaKernel),
             )
             .load_table()
             .await?;
         let kernel_options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel);
         let predicate = DeltaPredicate::Compare {
             column: "id".into(),
             op: DeltaComparison::GtEq,
@@ -643,7 +643,7 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         let per_scan_override = direct
             .scan()
             .with_projection(vec!["id".into()])
-            .with_execution_options(kernel_options)?
+            .with_execution_options(kernel_options)
             .build()
             .await?;
         let (override_batches, override_metrics) = collect_scan(per_scan_override).await?;
@@ -661,7 +661,7 @@ fn delta_kernel_reads_through_the_direct_surface() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("kernel-direct")?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel);
         let table = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(options)
             .load_table()

@@ -133,7 +133,6 @@ impl DeltaTableBuilder {
 
     /// Loads a ready-to-scan table through the caller-owned Tokio runtime.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        self.execution_options.validate()?;
         let snapshot = load_delta_table_snapshot_async(
             self.table_uri,
             self.storage_options,
@@ -145,7 +144,6 @@ impl DeltaTableBuilder {
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        self.execution_options.validate()?;
         let snapshot = load_staged_delta_table_snapshot_async(
             self.table_uri,
             self.storage_options,
@@ -347,19 +345,14 @@ impl<'table> DeltaScanBuilder<'table> {
     }
 
     /// Replaces the execution settings for this scan.
-    pub fn with_execution_options(
-        mut self,
-        value: DeltaReaderExecutionOptions,
-    ) -> Result<Self, DeltaReaderError> {
-        value.validate()?;
+    pub const fn with_execution_options(mut self, value: DeltaReaderExecutionOptions) -> Self {
         self.execution_options = value;
-        Ok(self)
+        self
     }
 
     /// Builds one immutable single-use scan plan without reading data files.
     pub async fn build(self) -> Result<DeltaScan, DeltaReaderError> {
         self.table.validate_protocol()?;
-        self.execution_options.validate()?;
         if let Some(predicate) = self.predicate.as_ref() {
             validate_predicate(predicate, self.table.schema().as_ref())?;
         }
@@ -886,7 +879,7 @@ mod tests {
 
     fn execution_options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(2))?
             .with_output_buffer_capacity_per_partition(1)

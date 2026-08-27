@@ -56,16 +56,15 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
     );
 
     let options = DeltaReaderExecutionOptions::new()
-        .with_reader_backend(ParquetReaderBackend::DeltaKernel)?
+        .with_reader_backend(ParquetReaderBackend::DeltaKernel)
         .with_max_concurrent_file_reads_per_scan(Some(6))?
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_capacity_per_partition(1)?
-        .with_prefetch_file_count_per_partition(2)?
+        .with_prefetch_file_count_per_partition(2)
         .with_parquet_metadata_size_hint(Some(65_536))?
         .with_parquet_full_file_read_threshold(None)?;
 
     assert_eq!(options.reader_backend(), ParquetReaderBackend::DeltaKernel);
-    options.validate()?;
 
     let error = DeltaReaderExecutionOptions::new()
         .with_output_buffer_capacity_per_partition(0)
@@ -256,12 +255,12 @@ fn direct_reader_contract_is_public() {
         predicate: DeltaPredicate,
         options: DeltaReaderExecutionOptions,
     ) -> Result<DeltaScanBuilder<'a>, DeltaReaderError> {
-        builder
+        Ok(builder
             .with_projection(vec!["id".into()])
             .with_predicate(predicate)
             .with_limit(1)
             .with_target_partitions(1)?
-            .with_execution_options(options)
+            .with_execution_options(options))
     }
     fn assert_scan_futures(builder: DeltaScanBuilder<'_>, scan: DeltaScan) {
         assert_future::<Result<DeltaScan, DeltaReaderError>>(builder.build());

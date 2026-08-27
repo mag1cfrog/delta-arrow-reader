@@ -1406,7 +1406,7 @@ mod tests {
                 &[],
                 4,
                 DeltaReaderExecutionOptions::new()
-                    .with_reader_backend(ParquetReaderBackend::DeltaKernel)?,
+                    .with_reader_backend(ParquetReaderBackend::DeltaKernel),
                 None,
                 DeltaFileRepartitioning::Rebalance,
             )?;
@@ -1699,7 +1699,7 @@ mod tests {
         let fixture = TestTable::late_dynamic("late-dynamic")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
@@ -2015,7 +2015,7 @@ mod tests {
         let fixture = TestTable::partitioned("drop")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
@@ -2049,7 +2049,7 @@ mod tests {
             ParquetReaderBackend::DirectParquet,
             ParquetReaderBackend::DeltaKernel,
         ] {
-            let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
+            let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend);
             let plan = build_plan(&table, Some(&[1, 0]), &[], 2, options, None)?;
             let mut batches =
                 datafusion::physical_plan::collect(plan, SessionContext::new().task_ctx()).await?;
@@ -2085,7 +2085,7 @@ mod tests {
         assert_eq!(outputs[0], outputs[1]);
 
         let kernel_options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel);
         let inexact = build_plan(
             &table,
             None,

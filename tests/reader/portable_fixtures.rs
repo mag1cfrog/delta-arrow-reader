@@ -492,11 +492,11 @@ fn runtime() -> TestResult<tokio::runtime::Runtime> {
 
 fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExecutionOptions> {
     Ok(DeltaReaderExecutionOptions::new()
-        .with_prefetch_file_count_per_partition(0)?
+        .with_prefetch_file_count_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(capacity)?
         .with_max_concurrent_file_reads_per_scan(Some(capacity))?
         .with_output_buffer_capacity_per_partition(1)?
-        .with_prefetch_file_count_per_partition(prefetch)?)
+        .with_prefetch_file_count_per_partition(prefetch))
 }
 
 async fn wait_for_delivered_batch_metrics(metrics: &DeltaReadMetrics) {
@@ -554,7 +554,7 @@ async fn scan_fixture(
     projection: Option<Vec<String>>,
     predicate: Option<DeltaPredicate>,
 ) -> TestResult<ScanAttempt> {
-    let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
+    let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend);
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .with_execution_options(options)
         .load_table()

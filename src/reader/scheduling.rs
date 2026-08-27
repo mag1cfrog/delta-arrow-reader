@@ -744,7 +744,7 @@ mod tests {
         partition_capacity: usize,
     ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(partition_capacity)?
             .with_max_concurrent_file_reads_per_scan(Some(scan_capacity))
     }
@@ -767,7 +767,7 @@ mod tests {
         prefetch_file_count: usize,
     ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(prefetch_file_count)?
+            .with_prefetch_file_count_per_partition(prefetch_file_count)
             .with_output_buffer_capacity_per_partition(output_capacity)
     }
 
@@ -1766,7 +1766,7 @@ mod tests {
             })
         };
         let kernel_options =
-            stream_options(1, 1)?.with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+            stream_options(1, 1)?.with_reader_backend(ParquetReaderBackend::DeltaKernel);
         let mut stream = PartitionStream::new(
             vec![1, 2],
             limiter.partition(0)?,
@@ -1835,7 +1835,7 @@ mod tests {
             })
         };
         let kernel_options =
-            stream_options(1, 0)?.with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+            stream_options(1, 0)?.with_reader_backend(ParquetReaderBackend::DeltaKernel);
         let mut stream = PartitionStream::new(
             vec![1, 2],
             limiter.partition(0)?,

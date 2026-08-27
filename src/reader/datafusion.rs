@@ -104,7 +104,6 @@ impl DeltaTableProvider {
         options: DeltaDataFusionScanOptions,
         source_name: Option<String>,
     ) -> Result<Self, DeltaReaderError> {
-        options.execution_options.validate()?;
         if options.target_partitions == Some(0) {
             return Err(DeltaReaderError::InvalidConfiguration {
                 reason: "scan_partition_target_must_be_positive",

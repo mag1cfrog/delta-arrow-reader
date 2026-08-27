@@ -1309,11 +1309,11 @@ async fn run_once(
 ) -> Result<Measurement, Box<dyn Error>> {
     let context = SessionContext::new();
     let execution_options = DeltaReaderExecutionOptions::new()
-        .with_reader_backend(config.backend)?
+        .with_reader_backend(config.backend)
         .with_max_concurrent_file_reads_per_scan(Some(target_partitions.saturating_mul(3).max(1)))?
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_capacity_per_partition(1)?
-        .with_prefetch_file_count_per_partition(2)?
+        .with_prefetch_file_count_per_partition(2)
         .with_parquet_metadata_size_hint(config.metadata_hint)?
         .with_parquet_full_file_read_threshold(config.full_read_threshold)?;
     let table = DeltaTableBuilder::new(&fixture.table_uri)

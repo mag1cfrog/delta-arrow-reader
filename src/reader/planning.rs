@@ -113,7 +113,6 @@ pub(crate) fn plan_scan(
     execution_options: DeltaReaderExecutionOptions,
     partition_target_options: DeltaScanPartitionTargetOptions,
 ) -> Result<DeltaScanPlan, DeltaReaderError> {
-    execution_options.validate()?;
     let partition_target_diagnostic = local_partition_target_diagnostic(partition_target_options)?;
     let unpartitioned = build_unpartitioned_scan_plan(
         snapshot,
@@ -157,7 +156,6 @@ pub(crate) fn plan_unpartitioned_scan(
     include_stats: bool,
     execution_options: DeltaReaderExecutionOptions,
 ) -> Result<DeltaUnpartitionedScanPlan, DeltaReaderError> {
-    execution_options.validate()?;
     build_unpartitioned_scan_plan(
         snapshot,
         projection,
@@ -5510,7 +5508,7 @@ mod tests {
         ];
         let (_table, snapshot) = loaded_snapshot_with_adds("scan-execution", &adds)?;
         let execution_options = crate::DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(2)?;
@@ -5598,7 +5596,7 @@ mod tests {
         let adds = [add("part.parquet", 10, Some(1))];
         let (_table, snapshot) = loaded_snapshot_with_adds("concurrent-executions", &adds)?;
         let execution_options = crate::DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?;
         let plan = Arc::new(super::plan_scan(

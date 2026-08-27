@@ -95,13 +95,9 @@ impl DeltaReaderExecutionOptions {
     }
 
     /// Selects a Parquet reader backend.
-    pub fn with_reader_backend(
-        mut self,
-        value: ParquetReaderBackend,
-    ) -> Result<Self, DeltaReaderError> {
+    pub const fn with_reader_backend(mut self, value: ParquetReaderBackend) -> Self {
         self.reader_backend = value;
-        self.validate()?;
-        Ok(self)
+        self
     }
 
     /// Sets or clears the scan-wide file-read limit.
@@ -109,8 +105,8 @@ impl DeltaReaderExecutionOptions {
         mut self,
         value: Option<usize>,
     ) -> Result<Self, DeltaReaderError> {
+        validate_optional_positive(value, "max_concurrent_file_reads_per_scan_must_be_positive")?;
         self.max_concurrent_file_reads_per_scan = value;
-        self.validate()?;
         Ok(self)
     }
 
@@ -119,8 +115,11 @@ impl DeltaReaderExecutionOptions {
         mut self,
         value: usize,
     ) -> Result<Self, DeltaReaderError> {
+        validate_positive(
+            value,
+            "max_concurrent_file_reads_per_partition_must_be_positive",
+        )?;
         self.max_concurrent_file_reads_per_partition = value;
-        self.validate()?;
         Ok(self)
     }
 
@@ -129,19 +128,18 @@ impl DeltaReaderExecutionOptions {
         mut self,
         value: usize,
     ) -> Result<Self, DeltaReaderError> {
+        validate_positive(
+            value,
+            "output_buffer_capacity_per_partition_must_be_positive",
+        )?;
         self.output_buffer_capacity_per_partition = value;
-        self.validate()?;
         Ok(self)
     }
 
     /// Sets the direct Parquet reader's per-partition file prefetch depth.
-    pub fn with_prefetch_file_count_per_partition(
-        mut self,
-        value: usize,
-    ) -> Result<Self, DeltaReaderError> {
+    pub const fn with_prefetch_file_count_per_partition(mut self, value: usize) -> Self {
         self.prefetch_file_count_per_partition = value;
-        self.validate()?;
-        Ok(self)
+        self
     }
 
     /// Sets or clears the direct Parquet reader's metadata size hint.
@@ -149,8 +147,8 @@ impl DeltaReaderExecutionOptions {
         mut self,
         value: Option<usize>,
     ) -> Result<Self, DeltaReaderError> {
+        validate_optional_positive(value, "parquet_metadata_size_hint_must_be_positive")?;
         self.parquet_metadata_size_hint = value;
-        self.validate()?;
         Ok(self)
     }
 
@@ -159,35 +157,9 @@ impl DeltaReaderExecutionOptions {
         mut self,
         value: Option<usize>,
     ) -> Result<Self, DeltaReaderError> {
+        validate_optional_positive(value, "parquet_full_file_read_threshold_must_be_positive")?;
         self.parquet_full_file_read_threshold = value;
-        self.validate()?;
         Ok(self)
-    }
-
-    /// Validates all execution bounds.
-    pub fn validate(&self) -> Result<(), DeltaReaderError> {
-        validate_optional_positive(
-            self.max_concurrent_file_reads_per_scan,
-            "max_concurrent_file_reads_per_scan_must_be_positive",
-        )?;
-        validate_positive(
-            self.max_concurrent_file_reads_per_partition,
-            "max_concurrent_file_reads_per_partition_must_be_positive",
-        )?;
-        validate_positive(
-            self.output_buffer_capacity_per_partition,
-            "output_buffer_capacity_per_partition_must_be_positive",
-        )?;
-        validate_optional_positive(
-            self.parquet_metadata_size_hint,
-            "parquet_metadata_size_hint_must_be_positive",
-        )?;
-        validate_optional_positive(
-            self.parquet_full_file_read_threshold,
-            "parquet_full_file_read_threshold_must_be_positive",
-        )?;
-
-        Ok(())
     }
 
     pub(crate) fn resolved_max_concurrent_file_reads_per_scan(
@@ -267,11 +239,11 @@ mod tests {
     #[test]
     fn builders_set_every_public_option() -> Result<(), Box<dyn std::error::Error>> {
         let options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel)?
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel)
             .with_max_concurrent_file_reads_per_scan(Some(8))?
             .with_max_concurrent_file_reads_per_partition(4)?
             .with_output_buffer_capacity_per_partition(2)?
-            .with_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)
             .with_parquet_metadata_size_hint(None)?
             .with_parquet_full_file_read_threshold(Some(1024))?;
 
@@ -307,7 +279,7 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let options = DeltaReaderExecutionOptions::new()
             .with_max_concurrent_file_reads_per_scan(Some(2))?
-            .with_prefetch_file_count_per_partition(4)?;
+            .with_prefetch_file_count_per_partition(4);
 
         assert_eq!(options.max_concurrent_file_reads_per_scan(), Some(2));
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 3);

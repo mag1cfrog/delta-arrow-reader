@@ -997,7 +997,7 @@ async fn direct_exact_and_kernel_residual_execution_return_the_same_rows() -> Te
         ("kernel_orders", ParquetReaderBackend::DeltaKernel),
     ] {
         let context = SessionContext::new();
-        let execution_options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
+        let execution_options = DeltaReaderExecutionOptions::new().with_reader_backend(backend);
         let provider = DeltaTableProvider::try_new(
             table.clone(),
             DeltaDataFusionScanOptions {
@@ -1317,7 +1317,7 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
         .load_table()
         .await?;
     let execution_options = DeltaReaderExecutionOptions::new()
-        .with_prefetch_file_count_per_partition(0)?
+        .with_prefetch_file_count_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(1)?
         .with_max_concurrent_file_reads_per_scan(Some(1))?
         .with_output_buffer_capacity_per_partition(1)?;
@@ -1487,8 +1487,8 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
         .await?;
-    let execution_options = DeltaReaderExecutionOptions::new()
-        .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+    let execution_options =
+        DeltaReaderExecutionOptions::new().with_reader_backend(ParquetReaderBackend::DeltaKernel);
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
     register_delta_table(
         &context,

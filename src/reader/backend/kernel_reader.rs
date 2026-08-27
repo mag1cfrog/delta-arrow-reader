@@ -234,11 +234,11 @@ mod tests {
     };
 
     fn options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+        Ok(DeltaReaderExecutionOptions::new()
+            .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel)
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel))
     }
 
     fn batch(id: i32) -> Result<RecordBatch, arrow::error::ArrowError> {
