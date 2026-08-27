@@ -44,9 +44,9 @@ pub(crate) enum DynamicPartitionKeepReason {
     /// The snapshot evaluated to true for this partition row.
     FilterAllowedPartition,
     /// The dynamic filter is still at DataFusion's literal-true placeholder.
-    SnapshotPlaceholder,
+    FilterPlaceholder,
     /// DataFusion could not produce a complete snapshot.
-    SnapshotUnavailable,
+    FilterUnavailable,
     /// A retained partition column does not match the provider schema anymore.
     PartitionMetadataInvalid,
     /// A required partition value was absent from Delta file metadata.
@@ -78,7 +78,7 @@ pub(crate) fn evaluate_dynamic_partition_filter(
         Ok(Some(snapshot)) => snapshot,
         Ok(None) => {
             return DynamicPartitionPruningDecision::Keep(
-                DynamicPartitionKeepReason::SnapshotUnavailable,
+                DynamicPartitionKeepReason::FilterUnavailable,
             );
         }
         Err(_) => {
@@ -338,7 +338,7 @@ fn boolean_decision(
         // distinct keep reason so later diagnostics can separate "not ready"
         // from "real predicate allowed this partition".
         ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))) if is_literal_true_placeholder => {
-            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::SnapshotPlaceholder)
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::FilterPlaceholder)
         }
         ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))) => {
             DynamicPartitionPruningDecision::Keep(
@@ -795,7 +795,7 @@ mod tests {
 
         assert_eq!(
             decision,
-            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::SnapshotPlaceholder)
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::FilterPlaceholder)
         );
         Ok(())
     }

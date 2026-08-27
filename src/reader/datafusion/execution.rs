@@ -774,7 +774,7 @@ fn is_unusable_metadata(reason: DynamicPartitionKeepReason) -> bool {
 fn is_unevaluable_filter(reason: DynamicPartitionKeepReason) -> bool {
     matches!(
         reason,
-        DynamicPartitionKeepReason::SnapshotUnavailable
+        DynamicPartitionKeepReason::FilterUnavailable
             | DynamicPartitionKeepReason::UnsupportedPartitionType
             | DynamicPartitionKeepReason::EvaluationFailed
             | DynamicPartitionKeepReason::NonBooleanResult
