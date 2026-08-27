@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_limit(100)
         .build()
         .await?;
-    let mut batches = scan.execute()?;
+    let mut batches = scan.execute();
 
     while let Some(batch) = batches.try_next().await? {
         println!("rows={}", batch.num_rows());
@@ -67,7 +67,7 @@ If you want to see what the scan did, save its metrics handle before consuming
 the stream:
 
 ```rust
-let mut batches = scan.execute()?;
+let mut batches = scan.execute();
 let metrics = batches.metrics();
 
 while let Some(batch) = batches.try_next().await? {

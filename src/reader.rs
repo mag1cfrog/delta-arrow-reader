@@ -81,7 +81,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 ///     .with_limit(100)
 ///     .build()
 ///     .await?;
-/// let mut batches = scan.execute()?;
+/// let mut batches = scan.execute();
 ///
 /// while let Some(batch) = batches.try_next().await? {
 ///     println!("rows={}", batch.num_rows());
@@ -455,7 +455,7 @@ impl DeltaScan {
     }
 
     /// Creates the pull-driven direct Arrow batch stream without starting data-file reads.
-    pub fn execute(self) -> Result<DeltaBatchStream, DeltaReaderError> {
+    pub fn execute(self) -> DeltaBatchStream {
         let metrics = self.plan.metrics.clone();
         let schema = Arc::clone(&self.plan.projected_schema);
         let partition_count = self.plan.partitions.len();
@@ -463,9 +463,9 @@ impl DeltaScan {
         let backend = self.plan.execution_options.reader_backend();
         let projection = (self.plan.logical_schema.as_ref() != schema.as_ref())
             .then(|| (0..schema.fields().len()).collect::<Vec<_>>());
-        let mut partitions = VecDeque::new();
-
-        if self.limit != Some(0) {
+        let partitions = if self.limit == Some(0) {
+            VecDeque::new()
+        } else {
             let execution = DeltaScanExecution::new(Arc::clone(&self.plan));
             let admission: FileAdmissionFn<_> = Arc::new(|_| Ok(FileAdmission::Admit));
             let executor = match backend {
@@ -475,19 +475,13 @@ impl DeltaScan {
                     self.enforce_physical_predicate_rows
                         .then(|| self.plan.physical_predicate.clone())
                         .flatten(),
-                )?,
-                ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan)?,
+                ),
+                ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
             };
-            for partition in 0..partition_count {
-                partitions.push_back(execution.partition_stream(
-                    partition,
-                    Arc::clone(&admission),
-                    Arc::clone(&executor),
-                )?);
-            }
-        }
+            execution.all_partition_streams(admission, executor)
+        };
 
-        Ok(DeltaBatchStream {
+        DeltaBatchStream {
             schema,
             metrics,
             partitions,
@@ -499,7 +493,7 @@ impl DeltaScan {
             partition_count,
             started: false,
             done: false,
-        })
+        }
     }
 }
 
@@ -650,18 +644,14 @@ pub(crate) fn direct_parquet_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size: Option<usize>,
     row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
-) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    Ok(backend::direct_parquet::direct_parquet_file_executor(
-        plan,
-        output_batch_size,
-        row_predicate,
-    ))
+) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
+    backend::direct_parquet::direct_parquet_file_executor(plan, output_batch_size, row_predicate)
 }
 
 pub(crate) fn delta_kernel_executor(
     plan: &Arc<DeltaScanPlan>,
-) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    Ok(backend::kernel_reader::delta_kernel_file_executor(plan))
+) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
+    backend::kernel_reader::delta_kernel_file_executor(plan)
 }
 
 fn trace_planning_started(snapshot_version: u64, backend: ParquetReaderBackend) {

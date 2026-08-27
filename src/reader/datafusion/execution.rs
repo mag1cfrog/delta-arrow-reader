@@ -649,9 +649,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
                     self.row_predicate.clone(),
                 ),
             },
-            ParquetReaderBackend::DeltaKernel => {
-                delta_kernel_executor(&self.plan).map_err(datafusion_error)?
-            }
+            ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
         };
         let stream = DeltaScanExecution::with_shared_limiter(
             Arc::clone(&self.plan),

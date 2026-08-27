@@ -56,7 +56,7 @@ let scan = table
     .with_limit(100)
     .build()
     .await?;
-let mut batches = scan.execute()?;
+let mut batches = scan.execute();
 let metrics = batches.metrics();
 
 while let Some(batch) = batches.try_next().await? {

@@ -161,6 +161,32 @@ impl DeltaScanExecution {
             self.cancellation.clone(),
         ))
     }
+
+    pub(crate) fn all_partition_streams(
+        &self,
+        admission: FileAdmissionFn<DeltaScanFileTask>,
+        executor: FileExecutor<DeltaScanFileTask, FileBatchStream>,
+    ) -> VecDeque<PartitionStream> {
+        self.plan
+            .partitions
+            .iter()
+            .enumerate()
+            .map(|(partition, tasks)| {
+                PartitionStream::new(
+                    tasks.file_tasks.clone(),
+                    PartitionReadLimiter {
+                        partition,
+                        limiter: Arc::clone(&self.limiter),
+                    },
+                    self.plan.execution_options,
+                    Arc::clone(&admission),
+                    Arc::clone(&executor),
+                    self.plan.metrics.clone(),
+                    self.cancellation.clone(),
+                )
+            })
+            .collect()
+    }
 }
 
 impl ScanReadLimiter {
