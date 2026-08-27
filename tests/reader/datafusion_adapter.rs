@@ -233,7 +233,7 @@ async fn collect_plan(
 #[tokio::test]
 async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> TestResult {
     let fixture = TestTable::partitioned("optimizer-file-repartitioning")?;
-    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let context = SessionContext::new_with_config(
         SessionConfig::new()
             .with_target_partitions(4)
@@ -286,7 +286,7 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
 #[tokio::test]
 async fn intra_file_repartitioning_policy_controls_full_plan_rebalancing() -> TestResult {
     let fixture = TestTable::skewed("optimizer-full-plan-rebalancing")?;
-    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
 
     for (name, policy, expected_tasks) in [
         (
@@ -352,7 +352,9 @@ async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates
         3_000,
         &[0, 2_999, 3_000, 5_999],
     )?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let context = SessionContext::new_with_config(
         SessionConfig::new()
             .with_target_partitions(8)
@@ -401,7 +403,9 @@ async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates
 #[tokio::test]
 async fn repartitioned_scan_preserves_physical_to_logical_transforms() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_column_mapping("provider-repartitioned-mapping")?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let context = SessionContext::new_with_config(
         SessionConfig::new()
             .with_target_partitions(2)
@@ -491,7 +495,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
             .with_target_partitions(TARGET_PARTITIONS)
             .with_repartition_file_min_size(1),
     );
-    register_fixture(&context, "orders", &fixture, options.clone())?;
+    register_fixture(&context, "orders", &fixture, options.clone()).await?;
     let plan = context
         .sql("SELECT id FROM orders ORDER BY id")
         .await?
@@ -567,7 +571,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
             .with_target_partitions(TARGET_PARTITIONS)
             .with_repartition_file_scans(false),
     );
-    register_fixture(&control, "orders", &fixture, options)?;
+    register_fixture(&control, "orders", &fixture, options).await?;
     let control_plan = control
         .sql("SELECT id FROM orders ORDER BY id")
         .await?
@@ -617,7 +621,8 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
             target_partitions: Some(8),
             ..Default::default()
         },
-    )?;
+    )
+    .await?;
     let plan = context
         .sql("SELECT id FROM orders")
         .await?
@@ -654,13 +659,15 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
     Ok(())
 }
 
-fn register_fixture(
+async fn register_fixture(
     context: &SessionContext,
     name: &str,
     fixture: &RealParquetDeltaTable,
     options: DeltaDataFusionScanOptions,
 ) -> TestResult {
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     register_delta_table(context, name, table, options)?;
     Ok(())
 }
@@ -695,7 +702,7 @@ fn external_reader_error(error: &DataFusionError) -> TestResult<&DeltaReaderErro
 #[cfg(feature = "native-async")]
 async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract() -> TestResult {
     let fixture = TestTable::partitioned("provider-contract")?;
-    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let defaults = DeltaDataFusionScanOptions::default();
     assert_eq!(
         defaults.execution_options,
@@ -845,7 +852,9 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
     }
 
     let unsupported_fixture = TestTable::unsupported("unsupported-provider")?;
-    let unsupported = DeltaTableBuilder::new(unsupported_fixture.uri()).load()?;
+    let unsupported = DeltaTableBuilder::new(unsupported_fixture.uri())
+        .load_table()
+        .await?;
     let error = DeltaTableProvider::try_new(unsupported, Default::default())
         .expect_err("unsupported protocol must fail");
     assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
@@ -856,7 +865,7 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
 #[cfg(feature = "native-async")]
 async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> TestResult {
     let fixture = TestTable::partitioned("registration")?;
-    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let context = SessionContext::new();
 
     for invalid in ["", "1orders", "line-items", "select"] {
@@ -970,7 +979,7 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
 #[cfg(feature = "native-async")]
 async fn caller_runtime_owns_concurrent_dataframe_execution() -> TestResult {
     let fixture = TestTable::partitioned("caller-runtime")?;
-    let table = DeltaTableBuilder::new(fixture.uri()).load_async().await?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let context = SessionContext::new();
     register_delta_table(
         &context,
@@ -991,7 +1000,7 @@ async fn caller_runtime_owns_concurrent_dataframe_execution() -> TestResult {
 #[cfg(all(feature = "native-async", feature = "official-kernel"))]
 async fn native_exact_and_official_residual_execution_return_the_same_rows() -> TestResult {
     let fixture = TestTable::partitioned("backend-parity")?;
-    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let mut outputs = Vec::new();
 
     for (name, backend) in [
@@ -1061,7 +1070,8 @@ async fn sql_join_dynamic_filter_prunes_before_file_admission() -> TestResult {
             target_partitions: Some(1),
             ..Default::default()
         },
-    )?;
+    )
+    .await?;
 
     let plan = context
         .sql(
@@ -1125,7 +1135,8 @@ async fn dynamic_join_kept_file_still_applies_deletion_vector() -> TestResult {
             target_partitions: Some(1),
             ..Default::default()
         },
-    )?;
+    )
+    .await?;
 
     let plan = context
         .sql(
@@ -1163,7 +1174,9 @@ async fn native_exact_filter_applies_before_deletion_vector_masking() -> TestRes
         3,
         &[4],
     )?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let provider = DeltaTableProvider::try_new(table, DeltaDataFusionScanOptions::default())?;
     let filter = col("id").gt(lit(3_i32));
     assert_eq!(
@@ -1193,7 +1206,9 @@ async fn native_exact_filter_applies_before_deletion_vector_masking() -> TestRes
 #[cfg(feature = "native-async")]
 async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestResult {
     let fixture = RealParquetDeltaTable::new_default("provider-execution-options")?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let provider = DeltaTableProvider::try_new(
         table,
         DeltaDataFusionScanOptions {
@@ -1237,7 +1252,7 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
 #[cfg(feature = "native-async")]
 async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult {
     let fixture = TestTable::empty("provider-empty-scan")?;
-    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(4));
     let provider = DeltaTableProvider::try_new(table, DeltaDataFusionScanOptions::default())?;
     let plan = provider.scan(&context.state(), None, &[], None).await?;
@@ -1275,7 +1290,9 @@ async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult 
 #[cfg(feature = "native-async")]
 async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestResult {
     let fixture = RealParquetDeltaTable::new_default("provider-missing-file")?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     fs::remove_file(fixture.path().join(fixture.data_file_path()))?;
     let provider = DeltaTableProvider::try_new(
         table,
@@ -1311,7 +1328,9 @@ async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestRe
 #[cfg(feature = "native-async")]
 async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_two_large_files("provider-stream-drop", 20_000)?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let execution_options = DeltaReaderExecutionOptions::new()
         .with_native_async_prefetch_file_count_per_partition(0)?
         .with_max_concurrent_file_reads_per_partition(1)?
@@ -1358,7 +1377,9 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
 async fn native_metadata_hint_preserves_rows_and_request_fallback() -> TestResult {
     let fixture =
         RealParquetDeltaTable::new_with_two_large_files("provider-parquet-metadata-hint", 20_000)?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let mut outputs = Vec::new();
     let mut requests = Vec::new();
 
@@ -1440,7 +1461,8 @@ async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
             target_partitions: Some(1),
             ..Default::default()
         },
-    )?;
+    )
+    .await?;
 
     let plan = context
         .sql(
@@ -1480,7 +1502,9 @@ async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
 #[cfg(all(feature = "native-async", feature = "official-kernel"))]
 async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
     let fixture = RealParquetDeltaTable::new_default("provider-residual-limit")?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let execution_options = DeltaReaderExecutionOptions::new()
         .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
@@ -1557,7 +1581,9 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
 #[cfg(feature = "native-async")]
 async fn native_scan_decodes_both_string_representations_with_exact_values() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_supported_types("provider-view-values")?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
     register_delta_table(
         &context,
@@ -1680,7 +1706,9 @@ async fn native_scan_preserves_views_through_nested_map_reordering() -> TestResu
     let fixture = RealParquetDeltaTable::new_with_reordered_map_value_struct_fields(
         "provider-reordered-map-views",
     )?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
     register_delta_table(
         &context,
@@ -1741,7 +1769,9 @@ async fn native_scan_preserves_views_through_nested_map_reordering() -> TestResu
 #[cfg(feature = "native-async")]
 async fn joined_delta_scans_keep_distinct_metrics_and_limit_above_join() -> TestResult {
     let fixture = RealParquetDeltaTable::new_default("provider-joined-scans")?;
-    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned()).load()?;
+    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
+        .load_table()
+        .await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
     register_delta_table(
         &context,

@@ -1370,7 +1370,7 @@ mod tests {
     async fn native_repartitioning_reads_each_row_once_and_preserves_byte_accounting() -> TestResult
     {
         let fixture = TestTable::partitioned("file-repartitioning")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let plan = build_plan_with_repartitioning(
             &table,
             None,
@@ -1467,7 +1467,7 @@ mod tests {
     async fn properties_projection_partitions_metrics_and_reexecution_match_provider_behavior()
     -> TestResult {
         let fixture = TestTable::partitioned("properties")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let logical_filter = col("id").gt(lit(1_i32));
         let plan = build_plan(
             &table,
@@ -1581,7 +1581,9 @@ mod tests {
         );
 
         let empty_fixture = TestTable::empty("empty-scan")?;
-        let empty_table = DeltaTableBuilder::new(empty_fixture.uri()).load()?;
+        let empty_table = DeltaTableBuilder::new(empty_fixture.uri())
+            .load_table()
+            .await?;
         let empty_plan = build_plan(
             &empty_table,
             None,
@@ -1622,7 +1624,7 @@ mod tests {
     #[cfg(feature = "native-async")]
     async fn dynamic_filter_hook_prunes_before_file_start_and_counts_once() -> TestResult {
         let fixture = TestTable::partitioned("dynamic")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let plan = build_plan(
             &table,
             None,
@@ -1681,7 +1683,7 @@ mod tests {
     #[cfg(feature = "native-async")]
     async fn physical_pushdown_preserves_dynamic_filters_across_plan_rebuild() -> TestResult {
         let fixture = TestTable::partitioned("dynamic-plan-rebuild")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let plan = build_plan(
             &table,
             None,
@@ -1723,7 +1725,7 @@ mod tests {
     #[cfg(feature = "native-async")]
     async fn late_dynamic_filter_keeps_admitted_file_and_prunes_the_next() -> TestResult {
         let fixture = TestTable::late_dynamic("late-dynamic")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let options = DeltaReaderExecutionOptions::new()
             .with_native_async_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
@@ -1762,11 +1764,11 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(feature = "native-async")]
-    fn hook_is_post_only_empty_safe_and_collector_is_ordered_and_distinct() -> TestResult {
+    async fn hook_is_post_only_empty_safe_and_collector_is_ordered_and_distinct() -> TestResult {
         let fixture = TestTable::partitioned("collector")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let first = build_plan(
             &table,
             None,
@@ -1853,9 +1855,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(feature = "native-async")]
-    fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
+    async fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
         use crate::{
             delta::kernel::KernelPhysicalToLogicalTransform,
             reader::datafusion::dynamic_filters::DeltaDynamicFilterPlan,
@@ -1863,7 +1865,7 @@ mod tests {
         };
 
         let fixture = TestTable::partitioned("dynamic-counters")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let plan = build_plan(
             &table,
             None,
@@ -1952,14 +1954,14 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(feature = "native-async")]
-    fn dynamic_metrics_updates_are_thread_safe() -> TestResult {
+    async fn dynamic_metrics_updates_are_thread_safe() -> TestResult {
         const THREADS: usize = 4;
         const ITERATIONS: usize = 100;
 
         let fixture = TestTable::partitioned("dynamic-metrics-concurrency")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let plan = build_plan(
             &table,
             None,
@@ -2012,7 +2014,9 @@ mod tests {
     #[cfg(feature = "native-async")]
     async fn execution_error_and_stream_drop_preserve_partial_metrics() -> TestResult {
         let missing_fixture = TestTable::missing("error")?;
-        let missing_table = DeltaTableBuilder::new(missing_fixture.uri()).load()?;
+        let missing_table = DeltaTableBuilder::new(missing_fixture.uri())
+            .load_table()
+            .await?;
         let missing_plan = build_plan(
             &missing_table,
             None,
@@ -2035,7 +2039,7 @@ mod tests {
         assert_eq!(failed.snapshot().reader.files_started, 1);
 
         let fixture = TestTable::partitioned("drop")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let options = DeltaReaderExecutionOptions::new()
             .with_native_async_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
@@ -2066,7 +2070,7 @@ mod tests {
     #[cfg(all(feature = "native-async", feature = "official-kernel"))]
     async fn reader_backends_produce_the_same_logical_rows() -> TestResult {
         let fixture = TestTable::partitioned("backends")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let mut outputs = Vec::new();
         for backend in [
             DeltaReaderBackend::NativeAsync,

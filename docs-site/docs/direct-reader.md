@@ -17,7 +17,7 @@ use futures_util::TryStreamExt;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-        .load_async()
+        .load_table()
         .await?;
     let scan = table
         .scan()
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Loading the table and reading its rows happen at different times. `load_async`
+Loading the table and reading its rows happen at different times. `load_table`
 loads the Delta metadata, and `build` works out which files and columns the scan
 needs. The data files are not read until `execute` starts the batch stream.
 
@@ -79,9 +79,3 @@ println!("files={}", metrics.snapshot().files_completed);
 
 You can still inspect the handle after the stream finishes or is dropped. If
 you drop the stream early, the reader stops scheduling new files.
-
-## Blocking table loading
-
-If table initialization must happen in synchronous code, use
-`DeltaTableBuilder::load` instead of `load_async`. Building and running the scan
-still requires asynchronous code.

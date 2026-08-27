@@ -21,7 +21,7 @@ use delta_arrow_reader::{
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = SessionContext::new();
     let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-        .load_async()
+        .load_table()
         .await?;
 
     register_delta_table(
