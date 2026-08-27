@@ -40,7 +40,7 @@ calls happen behind the Kernel reader boundary.
 
 ## DataFusion metrics
 
-`datafusion::ScanMetricsSnapshot` contains the reader snapshot above and adds
+`datafusion::ScanMetricsSnapshot` contains the core scan snapshot above and adds
 provider-specific fields.
 
 | Field | Meaning |

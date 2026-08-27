@@ -1378,7 +1378,7 @@ async fn run_once(
     if metrics.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "query plan exposed no Delta reader metrics",
+            "query plan exposed no Delta scan metrics",
         )
         .into());
     }
