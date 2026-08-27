@@ -1,4 +1,4 @@
-//! Reader execution metrics.
+//! Delta scan planning and execution metrics.
 
 use std::sync::{
     Arc,
@@ -9,7 +9,7 @@ use super::options::ParquetReaderBackend;
 
 /// Immutable point-in-time metrics for one Delta scan.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeltaReadMetricsSnapshot {
+pub struct DeltaScanMetricsSnapshot {
     /// Delta snapshot version selected for the scan.
     pub snapshot_version: u64,
     /// Parquet reader backend selected for the scan.
@@ -60,11 +60,11 @@ pub struct DeltaReadMetricsSnapshot {
 
 /// Shared live metrics for one Delta scan.
 #[derive(Clone)]
-pub struct DeltaReadMetrics {
-    inner: Arc<DeltaReadMetricsInner>,
+pub struct DeltaScanMetrics {
+    inner: Arc<DeltaScanMetricsInner>,
 }
 
-struct DeltaReadMetricsInner {
+struct DeltaScanMetricsInner {
     snapshot_version: u64,
     reader_backend: ParquetReaderBackend,
     scan_metadata_exhausted: Option<bool>,
@@ -91,7 +91,7 @@ struct DeltaReadMetricsInner {
 }
 
 #[allow(dead_code)]
-pub(crate) struct DeltaReadMetricsConfig {
+pub(crate) struct DeltaScanMetricsConfig {
     pub(crate) snapshot_version: u64,
     pub(crate) reader_backend: ParquetReaderBackend,
     pub(crate) scan_metadata_exhausted: Option<bool>,
@@ -102,11 +102,11 @@ pub(crate) struct DeltaReadMetricsConfig {
     pub(crate) estimated_input_bytes: Option<u64>,
 }
 
-impl DeltaReadMetrics {
+impl DeltaScanMetrics {
     #[allow(dead_code)]
-    pub(crate) fn new(config: DeltaReadMetricsConfig) -> Self {
+    pub(crate) fn new(config: DeltaScanMetricsConfig) -> Self {
         Self {
-            inner: Arc::new(DeltaReadMetricsInner {
+            inner: Arc::new(DeltaScanMetricsInner {
                 snapshot_version: config.snapshot_version,
                 reader_backend: config.reader_backend,
                 scan_metadata_exhausted: config.scan_metadata_exhausted,
@@ -137,9 +137,9 @@ impl DeltaReadMetrics {
     }
 
     /// Returns an immutable point-in-time copy of all scan metrics.
-    pub fn snapshot(&self) -> DeltaReadMetricsSnapshot {
+    pub fn snapshot(&self) -> DeltaScanMetricsSnapshot {
         let inner = self.inner.as_ref();
-        DeltaReadMetricsSnapshot {
+        DeltaScanMetricsSnapshot {
             snapshot_version: inner.snapshot_version,
             reader_backend: inner.reader_backend,
             scan_metadata_exhausted: inner.scan_metadata_exhausted,
@@ -279,11 +279,11 @@ fn usize_to_u64_saturating(value: usize) -> u64 {
 mod tests {
     use std::{sync::atomic::Ordering, thread};
 
-    use super::{DeltaReadMetrics, DeltaReadMetricsConfig, saturating_fetch_add};
+    use super::{DeltaScanMetrics, DeltaScanMetricsConfig, saturating_fetch_add};
     use crate::ParquetReaderBackend;
 
-    fn metrics(reader_backend: ParquetReaderBackend) -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn metrics(reader_backend: ParquetReaderBackend) -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 7,
             reader_backend,
             scan_metadata_exhausted: Some(true),

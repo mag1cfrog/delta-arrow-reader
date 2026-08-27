@@ -11,15 +11,15 @@ use object_store::{
 };
 use tracing::Instrument;
 
-use crate::DeltaReadMetrics;
+use crate::DeltaScanMetrics;
 
 pub(crate) struct MeteredParquetObjectStore {
     inner: Arc<dyn ObjectStore>,
-    metrics: DeltaReadMetrics,
+    metrics: DeltaScanMetrics,
 }
 
 impl MeteredParquetObjectStore {
-    pub(crate) fn new(inner: Arc<dyn ObjectStore>, metrics: DeltaReadMetrics) -> Self {
+    pub(crate) fn new(inner: Arc<dyn ObjectStore>, metrics: DeltaScanMetrics) -> Self {
         Self { inner, metrics }
     }
 }
@@ -112,7 +112,7 @@ impl ObjectStore for MeteredParquetObjectStore {
     }
 }
 
-fn meter_get_result(result: GetResult, metrics: DeltaReadMetrics) -> GetResult {
+fn meter_get_result(result: GetResult, metrics: DeltaScanMetrics) -> GetResult {
     let GetResult {
         payload,
         meta,
@@ -182,10 +182,10 @@ mod tests {
     };
 
     use super::MeteredParquetObjectStore;
-    use crate::{DeltaReadMetrics, ParquetReaderBackend, reader::metrics::DeltaReadMetricsConfig};
+    use crate::{DeltaScanMetrics, ParquetReaderBackend, reader::metrics::DeltaScanMetricsConfig};
 
-    fn direct_metrics() -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn direct_metrics() -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
             reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),
@@ -197,7 +197,7 @@ mod tests {
         })
     }
 
-    async fn memory_store(metrics: DeltaReadMetrics) -> Result<MeteredParquetObjectStore> {
+    async fn memory_store(metrics: DeltaScanMetrics) -> Result<MeteredParquetObjectStore> {
         let inner = Arc::new(InMemory::new());
         inner
             .put(
@@ -465,7 +465,7 @@ mod tests {
         }
     }
 
-    fn scripted_store(result: GetResult, metrics: DeltaReadMetrics) -> MeteredParquetObjectStore {
+    fn scripted_store(result: GetResult, metrics: DeltaScanMetrics) -> MeteredParquetObjectStore {
         MeteredParquetObjectStore::new(Arc::new(ScriptedGetStore::new(result)), metrics)
     }
 

@@ -13,7 +13,7 @@ pub(crate) mod predicate;
 pub(crate) mod scheduling;
 pub(crate) mod transform;
 
-pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
+pub use metrics::{DeltaScanMetrics, DeltaScanMetricsSnapshot};
 pub use options::{
     DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions, ParquetReaderBackend,
 };
@@ -515,7 +515,7 @@ impl DeltaScan {
 /// ```
 pub struct DeltaBatchStream {
     schema: SchemaRef,
-    metrics: DeltaReadMetrics,
+    metrics: DeltaScanMetrics,
     partitions: VecDeque<PartitionStream>,
     predicate: Option<DeltaPredicate>,
     projection: Option<Vec<usize>>,
@@ -534,7 +534,7 @@ impl DeltaBatchStream {
     }
 
     /// Returns a lightweight shared handle to point-in-time scan metrics.
-    pub fn metrics(&self) -> DeltaReadMetrics {
+    pub fn metrics(&self) -> DeltaScanMetrics {
         self.metrics.clone()
     }
 
@@ -796,10 +796,10 @@ mod tests {
         trace_planning_failed, trace_planning_started,
     };
     use crate::{
-        DeltaReadMetrics, DeltaReaderExecutionOptions, ParquetReaderBackend,
+        DeltaReaderExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
         error::InvalidConfigurationSnafu,
         reader::{
-            metrics::DeltaReadMetricsConfig,
+            metrics::DeltaScanMetricsConfig,
             scheduling::{
                 FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor, FileReadPermit,
                 PartitionStream, ScanCancellation, ScanReadLimiter,
@@ -852,7 +852,7 @@ mod tests {
         stream: DeltaBatchStream,
         limiter: Arc<ScanReadLimiter>,
         cancellation: ScanCancellation,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
         first_partition_gate: Arc<Notify>,
     }
 
@@ -882,8 +882,8 @@ mod tests {
             .with_output_buffer_capacity_per_partition(1)
     }
 
-    fn metrics() -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn metrics() -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 7,
             reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),
@@ -925,7 +925,7 @@ mod tests {
 
     fn direct_stream(
         partitions: VecDeque<PartitionStream>,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
     ) -> DeltaBatchStream {
         DeltaBatchStream {
             schema: schema(),
@@ -992,7 +992,7 @@ mod tests {
         })
     }
 
-    async fn wait_for_batches(metrics: &DeltaReadMetrics, expected: u64) {
+    async fn wait_for_batches(metrics: &DeltaScanMetrics, expected: u64) {
         timeout(Duration::from_secs(5), async {
             while metrics.snapshot().scheduler_batches_emitted < expected {
                 tokio::task::yield_now().await;

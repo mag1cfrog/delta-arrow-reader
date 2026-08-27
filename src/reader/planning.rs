@@ -12,7 +12,7 @@ use snafu::ResultExt;
 
 use super::{
     deletion_vector::DeletionVectorMetadata,
-    metrics::DeltaReadMetricsConfig,
+    metrics::DeltaScanMetricsConfig,
     partition_target::{
         DeltaScanPartitionTargetDiagnosticOutput,
         delta_scan_partition_target_local_environment_diagnostic,
@@ -20,7 +20,7 @@ use super::{
     },
 };
 use crate::{
-    DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions,
+    DeltaReaderError, DeltaReaderExecutionOptions, DeltaScanMetrics,
     delta::{
         kernel::{
             DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
@@ -59,7 +59,7 @@ pub(crate) struct DeltaScanPlan {
     pub(crate) estimated_rows: Option<u64>,
     pub(crate) physical_predicate: Option<DeltaKernelPredicate>,
     pub(crate) execution_options: DeltaReaderExecutionOptions,
-    pub(crate) metrics: DeltaReadMetrics,
+    pub(crate) metrics: DeltaScanMetrics,
 }
 
 #[allow(dead_code)]
@@ -251,7 +251,7 @@ fn finalize_scan_plan(
             partition_target_diagnostic.target_partitions,
         )?
     };
-    let metrics = DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
         snapshot_version: unpartitioned.snapshot_version,
         reader_backend: unpartitioned.execution_options.reader_backend(),
         scan_metadata_exhausted: Some(unpartitioned.scan_metadata_exhausted),

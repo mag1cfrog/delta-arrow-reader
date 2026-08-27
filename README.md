@@ -145,7 +145,7 @@ The direct API and both data-file reader backends are always available.
 - `DeltaReaderError::phase` and `DeltaReaderError::code` return stable,
   redacted categories. Dependency failures remain available through the
   standard error source chain.
-- `DeltaReadMetrics` is a cloneable live handle. `snapshot` returns an
+- `DeltaScanMetrics` is a cloneable live handle. `snapshot` returns an
   immutable point-in-time view. Direct Parquet I/O counters are `None` when
   the Delta Kernel backend is selected.
 

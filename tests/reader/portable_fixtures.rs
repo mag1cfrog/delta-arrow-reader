@@ -9,9 +9,9 @@ use arrow::{
     util::display::array_value_to_string,
 };
 use delta_arrow_reader::{
-    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReadMetrics, DeltaReadMetricsSnapshot,
-    DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScalar,
-    DeltaTableBuilder, ParquetReaderBackend,
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReaderError,
+    DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScalar, DeltaScanMetrics,
+    DeltaScanMetricsSnapshot, DeltaTableBuilder, ParquetReaderBackend,
 };
 use futures_util::{StreamExt, TryStreamExt};
 use parquet::file::{reader::FileReader, serialized_reader::SerializedFileReader};
@@ -476,11 +476,11 @@ enum ScanAttempt {
         batch: RecordBatch,
         batch_count: usize,
         logical_schema: SchemaRef,
-        metrics: DeltaReadMetricsSnapshot,
+        metrics: DeltaScanMetricsSnapshot,
     },
     Failure {
         error: DeltaReaderError,
-        metrics: DeltaReadMetricsSnapshot,
+        metrics: DeltaScanMetricsSnapshot,
     },
 }
 
@@ -499,7 +499,7 @@ fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExe
         .with_prefetch_file_count_per_partition(prefetch))
 }
 
-async fn wait_for_delivered_batch_metrics(metrics: &DeltaReadMetrics) {
+async fn wait_for_delivered_batch_metrics(metrics: &DeltaScanMetrics) {
     for _ in 0..1000 {
         if metrics.snapshot().scheduler_batches_emitted > 0 {
             return;
@@ -635,7 +635,7 @@ fn assert_success(
     backend: ParquetReaderBackend,
     attempt: ScanAttempt,
     expected_ids: &[i32],
-) -> TestResult<(RecordBatch, DeltaReadMetricsSnapshot, usize)> {
+) -> TestResult<(RecordBatch, DeltaScanMetricsSnapshot, usize)> {
     let (batch, batch_count, logical_schema, metrics) = match attempt {
         ScanAttempt::Success {
             batch,
@@ -1311,7 +1311,7 @@ fn assert_parity_success(
     expected_rows: &[&str],
     backend: ParquetReaderBackend,
     attempt: ScanAttempt,
-) -> TestResult<(RecordBatch, DeltaReadMetricsSnapshot)> {
+) -> TestResult<(RecordBatch, DeltaScanMetricsSnapshot)> {
     let ScanAttempt::Success {
         batch,
         logical_schema,

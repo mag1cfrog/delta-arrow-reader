@@ -21,7 +21,7 @@ use tracing::Instrument;
 
 use super::planning::{DeltaScanFileTask, DeltaScanPlan};
 use crate::{
-    DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions, ParquetReaderBackend,
+    DeltaReaderError, DeltaReaderExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
     error::{CancelledSnafu, InvalidConfigurationSnafu},
 };
 
@@ -368,7 +368,7 @@ impl PartitionStream {
         options: DeltaReaderExecutionOptions,
         admission: FileAdmissionFn<Task>,
         executor: FileExecutor<Task, FileBatchStream>,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
         cancellation: ScanCancellation,
     ) -> Self
     where
@@ -495,7 +495,7 @@ impl Drop for PartitionStream {
 async fn run_partition<Task>(
     output: mpsc::Sender<BatchResult>,
     mut scheduler: FileScheduler<Task, FileBatchStream>,
-    metrics: DeltaReadMetrics,
+    metrics: DeltaScanMetrics,
     cancellation: ScanCancellation,
     prefetch_file_count: usize,
 ) where
@@ -623,7 +623,7 @@ async fn drain_current_file<Task>(
     in_flight: &mut FileSetups,
     ready: &mut ReadyFiles,
     prefetch_file_count: usize,
-    metrics: &DeltaReadMetrics,
+    metrics: &DeltaScanMetrics,
     cancellation: &ScanCancellation,
 ) -> DrainFile
 where
@@ -730,8 +730,8 @@ mod tests {
     };
 
     use crate::{
-        DeltaReadMetrics, DeltaReaderExecutionOptions, DeltaReaderPhase, ParquetReaderBackend,
-        error::InvalidConfigurationSnafu, reader::metrics::DeltaReadMetricsConfig,
+        DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScanMetrics, ParquetReaderBackend,
+        error::InvalidConfigurationSnafu, reader::metrics::DeltaScanMetricsConfig,
     };
 
     use super::{
@@ -749,8 +749,8 @@ mod tests {
             .with_max_concurrent_file_reads_per_scan(Some(scan_capacity))
     }
 
-    fn metrics() -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn metrics() -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
             reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),

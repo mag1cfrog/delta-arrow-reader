@@ -37,7 +37,7 @@ use self::{
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
 
 use crate::{
-    DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions,
+    DeltaReaderError, DeltaReaderExecutionOptions, DeltaScanMetrics,
     delta::kernel::{
         DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
         KernelScanSchemas,
@@ -59,7 +59,7 @@ struct DirectParquetFileReader {
     engine_context: Arc<DeltaKernelEngineContext>,
     store: Arc<dyn ObjectStore>,
     execution_options: DeltaReaderExecutionOptions,
-    metrics: DeltaReadMetrics,
+    metrics: DeltaScanMetrics,
 }
 
 /// Parquet footer metadata shared by ranged tasks within one physical scan.
@@ -179,7 +179,7 @@ impl DirectParquetFileReader {
     fn new(
         engine_context: Arc<DeltaKernelEngineContext>,
         execution_options: DeltaReaderExecutionOptions,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
     ) -> Self {
         let store = Arc::new(MeteredParquetObjectStore::new(
             engine_context.object_store(),
@@ -1486,7 +1486,7 @@ mod tests {
     };
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
-        DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions, DeltaSnapshotSelection,
+        DeltaReaderError, DeltaReaderExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection,
         DeltaStorageOptions, ParquetReaderBackend,
         delta::kernel::{
             DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
@@ -1495,7 +1495,7 @@ mod tests {
         delta::snapshot::load_delta_table_snapshot_blocking,
         reader::{
             backend::direct_parquet::metered_object_store::MeteredParquetObjectStore,
-            metrics::DeltaReadMetricsConfig,
+            metrics::DeltaScanMetricsConfig,
             planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
             scheduling::{
                 DeltaScanExecution, FileAdmission, FileReadPermit, ScanCancellation,
@@ -1759,8 +1759,8 @@ mod tests {
         }
     }
 
-    fn metrics() -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn metrics() -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
             reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),
@@ -1775,7 +1775,7 @@ mod tests {
     fn reader(
         root: &TestDir,
         options: DeltaReaderExecutionOptions,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
     ) -> Result<DirectParquetFileReader, Box<dyn std::error::Error>> {
         let table_url = url::Url::from_directory_path(root.path())
             .map_err(|()| "temporary table path cannot become a file URL")?;
@@ -3766,7 +3766,7 @@ mod tests {
     #[tokio::test]
     async fn delta_kernel_reports_redacted_file_dv_transform_and_schema_failures()
     -> Result<(), Box<dyn std::error::Error>> {
-        let assert_failed_metrics = |metrics: &crate::DeltaReadMetricsSnapshot,
+        let assert_failed_metrics = |metrics: &crate::DeltaScanMetricsSnapshot,
                                      deletion_vector_failures| {
             assert_eq!(metrics.scan_partitions_started, 1);
             assert_eq!(metrics.scan_partitions_completed, 0);

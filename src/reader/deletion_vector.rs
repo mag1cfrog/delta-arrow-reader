@@ -10,7 +10,7 @@ use arrow::{
 use snafu::{IntoError, ResultExt};
 
 use crate::{
-    DeltaReadMetrics, DeltaReaderError,
+    DeltaReaderError, DeltaScanMetrics,
     delta::{
         kernel::{DeltaKernelEngineContext, KernelDeletionVectorHandle},
         snapshot::LoadedDeltaTableSnapshot,
@@ -66,7 +66,7 @@ impl DeletionVectorMetadata {
 pub(crate) async fn load_deletion_vector_selection(
     snapshot: &LoadedDeltaTableSnapshot,
     metadata: DeletionVectorMetadata,
-    metrics: &DeltaReadMetrics,
+    metrics: &DeltaScanMetrics,
 ) -> Result<Option<DeletionVectorSelection>, DeltaReaderError> {
     load_deletion_vector_selection_from_engine_context(
         Arc::clone(snapshot.engine_context()),
@@ -80,7 +80,7 @@ pub(crate) async fn load_deletion_vector_selection(
 pub(crate) async fn load_deletion_vector_selection_from_engine_context(
     engine_context: Arc<DeltaKernelEngineContext>,
     metadata: DeletionVectorMetadata,
-    metrics: &DeltaReadMetrics,
+    metrics: &DeltaScanMetrics,
 ) -> Result<Option<DeletionVectorSelection>, DeltaReaderError> {
     let Some(handle) = metadata.handle.clone() else {
         return Ok(None);
@@ -121,7 +121,7 @@ pub(crate) async fn load_deletion_vector_selection_from_engine_context(
 pub(crate) fn load_deletion_vector_selection_blocking(
     engine_context: &DeltaKernelEngineContext,
     metadata: DeletionVectorMetadata,
-    metrics: &DeltaReadMetrics,
+    metrics: &DeltaScanMetrics,
 ) -> Result<Option<DeletionVectorSelection>, DeltaReaderError> {
     let Some(handle) = metadata.handle else {
         return Ok(None);
@@ -136,7 +136,7 @@ pub(crate) fn load_deletion_vector_selection_blocking(
 fn load_deletion_vector_row_indexes(
     engine_context: &DeltaKernelEngineContext,
     handle: &KernelDeletionVectorHandle,
-    metrics: &DeltaReadMetrics,
+    metrics: &DeltaScanMetrics,
 ) -> Result<Arc<DeletionVectorRows>, DeltaReaderError> {
     let row_indexes = match engine_context.load_deletion_vector_row_indexes(handle) {
         Ok(row_indexes) => row_indexes,
@@ -160,7 +160,7 @@ pub(crate) struct DeletionVectorSelection {
     original_row_index_deleted_cursor: Option<usize>,
     last_original_row_index: Option<u64>,
     access_mode: DeletionVectorAccessMode,
-    metrics: DeltaReadMetrics,
+    metrics: DeltaScanMetrics,
     applied: bool,
     closed: bool,
 }
@@ -177,7 +177,7 @@ enum DeletionVectorAccessMode {
 impl DeletionVectorSelection {
     pub(crate) fn try_new(
         deleted_row_indexes: Vec<u64>,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
     ) -> Result<Self, DeltaReaderError> {
         Ok(Self::from_shared(
             Arc::new(DeletionVectorRows::new(deleted_row_indexes)),
@@ -185,7 +185,7 @@ impl DeletionVectorSelection {
         ))
     }
 
-    fn from_shared(deleted_rows: Arc<DeletionVectorRows>, metrics: DeltaReadMetrics) -> Self {
+    fn from_shared(deleted_rows: Arc<DeletionVectorRows>, metrics: DeltaScanMetrics) -> Self {
         Self {
             deleted_rows,
             consumed_row_count: 0,
@@ -478,13 +478,13 @@ mod tests {
         load_deletion_vector_selection,
     };
     use crate::{
-        DeltaReadMetrics, DeltaReaderError, DeltaReaderPhase, DeltaSnapshotSelection,
+        DeltaReaderError, DeltaReaderPhase, DeltaScanMetrics, DeltaSnapshotSelection,
         DeltaStorageOptions, ParquetReaderBackend,
         delta::{
             kernel::{is_kernel_error, preserve_deletion_vector},
             snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
         },
-        reader::metrics::DeltaReadMetricsConfig,
+        reader::metrics::DeltaScanMetricsConfig,
     };
 
     const INLINE_DV_DELETED_ROW_INDEXES: &[u64] = &[3, 4, 7, 11, 18, 29];
@@ -773,8 +773,8 @@ mod tests {
         Ok(())
     }
 
-    fn metrics() -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn metrics() -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 7,
             reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),

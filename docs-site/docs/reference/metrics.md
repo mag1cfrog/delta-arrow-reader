@@ -1,10 +1,10 @@
 # Scan Metrics
 
-`DeltaReadMetrics` is a live, cloneable handle for one scan. Calling `snapshot`
-returns an immutable point-in-time `DeltaReadMetricsSnapshot`. The handle stays
+`DeltaScanMetrics` is a live, cloneable handle for one scan. Calling `snapshot`
+returns an immutable point-in-time `DeltaScanMetricsSnapshot`. The handle stays
 usable after its batch stream finishes or is dropped.
 
-## Reader metrics
+## Core scan metrics
 
 | Field | Meaning |
 | --- | --- |
@@ -46,7 +46,7 @@ provider-specific fields.
 
 | Field | Meaning |
 | --- | --- |
-| `reader_metrics` | Core `DeltaReadMetricsSnapshot` for this physical scan. |
+| `reader_metrics` | Core `DeltaScanMetricsSnapshot` for this physical scan. |
 | `use_arrow_view_types` | Whether the provider requested Arrow view arrays for string and binary data columns. |
 | `output_batch_size` | DataFusion task batch size observed during execution, when known. |
 | `dynamic_partition_tasks_pruned` | Whole-file or ranged tasks skipped by a dynamic partition filter before admission. |

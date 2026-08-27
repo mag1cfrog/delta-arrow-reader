@@ -1484,7 +1484,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         .iter()
         .map(|measurement| measurement.metrics.as_slice())
         .collect::<Vec<_>>();
-    let counter = |reader: fn(&delta_arrow_reader::DeltaReadMetricsSnapshot) -> u64| {
+    let counter = |reader: fn(&delta_arrow_reader::DeltaScanMetricsSnapshot) -> u64| {
         percentile(
             &snapshots
                 .iter()
@@ -1507,7 +1507,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             50,
         )
     };
-    let optional = |select: fn(&delta_arrow_reader::DeltaReadMetricsSnapshot) -> Option<u64>| {
+    let optional = |select: fn(&delta_arrow_reader::DeltaScanMetricsSnapshot) -> Option<u64>| {
         optional_percentile(
             snapshots.iter().map(|snapshots| {
                 snapshots.iter().try_fold(0_u64, |sum, snapshot| {
@@ -1518,7 +1518,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         )
     };
     let optional_max =
-        |select: fn(&delta_arrow_reader::DeltaReadMetricsSnapshot) -> Option<u64>| {
+        |select: fn(&delta_arrow_reader::DeltaScanMetricsSnapshot) -> Option<u64>| {
             snapshots
                 .iter()
                 .filter_map(|snapshots| {

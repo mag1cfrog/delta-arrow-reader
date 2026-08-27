@@ -21,7 +21,7 @@ use delta_arrow_reader::{
     DeltaStorageOptions,
 };
 use delta_arrow_reader::{
-    DeltaReadMetrics, DeltaReaderExecutionOptions, DeltaScan, DeltaTableBuilder,
+    DeltaReaderExecutionOptions, DeltaScan, DeltaScanMetrics, DeltaTableBuilder,
 };
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
@@ -196,7 +196,7 @@ fn runtime() -> TestResult<tokio::runtime::Runtime> {
         .build()?)
 }
 
-async fn collect_scan(scan: DeltaScan) -> TestResult<(Vec<RecordBatch>, DeltaReadMetrics)> {
+async fn collect_scan(scan: DeltaScan) -> TestResult<(Vec<RecordBatch>, DeltaScanMetrics)> {
     let stream = scan.execute()?;
     let metrics = stream.metrics();
     let batches = stream.try_collect().await?;

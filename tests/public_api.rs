@@ -4,9 +4,9 @@ use std::{error::Error as _, future::Future};
 
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use delta_arrow_reader::{
-    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaProtocolInfo, DeltaReadMetrics,
-    DeltaReadMetricsSnapshot, DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase,
-    DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection, DeltaStorageOptions,
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaProtocolInfo, DeltaReaderError,
+    DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScalar, DeltaScan, DeltaScanBuilder,
+    DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection, DeltaStorageOptions,
     DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
     diagnostics::partition_target::{
         Input, LocalEnvironment, Output, Source, UnixFileDescriptorLimitStatus,
@@ -17,8 +17,8 @@ use futures_util::Stream;
 
 #[test]
 fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> {
-    let snapshot: fn(&DeltaReadMetrics) -> DeltaReadMetricsSnapshot = DeltaReadMetrics::snapshot;
-    fn inspect_reader_metrics(snapshot: DeltaReadMetricsSnapshot) {
+    let snapshot: fn(&DeltaScanMetrics) -> DeltaScanMetricsSnapshot = DeltaScanMetrics::snapshot;
+    fn inspect_scan_metrics(snapshot: DeltaScanMetricsSnapshot) {
         let _: Option<u64> = snapshot.add_actions_filtered_during_planning;
         let _: Option<u64> = snapshot.estimated_input_rows;
         let _: Option<u64> = snapshot.estimated_input_bytes;
@@ -29,7 +29,7 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
         let _: Option<u64> = snapshot.parquet_task_bytes_admitted;
     }
     let _ = snapshot;
-    let _ = inspect_reader_metrics;
+    let _ = inspect_scan_metrics;
     let min_reader_version: fn(&DeltaProtocolInfo) -> i32 = DeltaProtocolInfo::min_reader_version;
     let min_writer_version: fn(&DeltaProtocolInfo) -> i32 = DeltaProtocolInfo::min_writer_version;
     let reader_features: for<'a> fn(&'a DeltaProtocolInfo) -> &'a [String] =
@@ -268,7 +268,7 @@ fn direct_reader_contract_is_public() {
     let _ = (scan_schema, partition_count, scan_partition_count);
 
     let stream_schema: fn(&DeltaBatchStream) -> SchemaRef = DeltaBatchStream::schema;
-    let metrics: fn(&DeltaBatchStream) -> DeltaReadMetrics = DeltaBatchStream::metrics;
+    let metrics: fn(&DeltaBatchStream) -> DeltaScanMetrics = DeltaBatchStream::metrics;
     let _ = (stream_schema, metrics);
 }
 
@@ -280,7 +280,7 @@ fn datafusion_metrics_contract_is_public() {
     fn assert_clone<T: Clone>() {}
     fn assert_snapshot_traits<T: std::fmt::Debug + Clone + PartialEq + Eq>() {}
     fn inspect(snapshot: ScanMetricsSnapshot) {
-        let _: DeltaReadMetricsSnapshot = snapshot.reader_metrics;
+        let _: DeltaScanMetricsSnapshot = snapshot.reader_metrics;
         let _: bool = snapshot.use_arrow_view_types;
         let _: Option<u64> = snapshot.output_batch_size;
         let _: u64 = snapshot.dynamic_partition_tasks_pruned;

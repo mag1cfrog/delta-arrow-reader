@@ -64,7 +64,7 @@ use crate::reader::backend::direct_parquet::{
     direct_parquet_file_executor_with_metadata_cache,
 };
 use crate::{
-    DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderError, ParquetReaderBackend,
+    DeltaReaderError, DeltaScanMetrics, DeltaScanMetricsSnapshot, ParquetReaderBackend,
     delta::kernel::DeltaKernelPredicate,
     reader::{
         delta_kernel_executor,
@@ -98,7 +98,7 @@ impl IntraFileRepartitioning {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanMetricsSnapshot {
     /// Core reader planning and execution metrics.
-    pub reader_metrics: DeltaReadMetricsSnapshot,
+    pub reader_metrics: DeltaScanMetricsSnapshot,
     /// Whether the provider requested Arrow view arrays for string and binary data columns.
     pub use_arrow_view_types: bool,
     /// Effective DataFusion task batch size observed at execution.
@@ -131,7 +131,7 @@ pub struct ScanMetrics {
 
 struct MetricsInner {
     registration_name: Option<String>,
-    reader: DeltaReadMetrics,
+    reader: DeltaScanMetrics,
     use_arrow_view_types: bool,
     output_batch_size: AtomicU64,
     dynamic_partition_tasks_pruned: AtomicU64,
@@ -148,7 +148,7 @@ impl ScanMetrics {
     #[allow(dead_code)]
     fn new(
         registration_name: Option<String>,
-        reader: DeltaReadMetrics,
+        reader: DeltaScanMetrics,
         use_arrow_view_types: bool,
     ) -> Self {
         Self {
