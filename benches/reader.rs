@@ -88,7 +88,7 @@ const CSV_HEADER: [&str; 80] = [
     "provider_stats_dynamic_filters_received_p50",
     "provider_stats_dynamic_filters_accepted_p50",
     "provider_stats_dynamic_filters_unsupported_p50",
-    "provider_stats_dynamic_filter_snapshots_p50",
+    "provider_stats_dynamic_filter_snapshot_attempts_p50",
     "provider_stats_dynamic_partition_tasks_kept_missing_metadata_p50",
     "provider_stats_dynamic_partition_tasks_kept_unsupported_expression_p50",
     "provider_stats_batches_produced_p50",
@@ -259,7 +259,7 @@ struct ReadSummary {
     dynamic_filters_received: u64,
     dynamic_filters_accepted: u64,
     dynamic_filters_unsupported: u64,
-    dynamic_filter_snapshots: u64,
+    dynamic_filter_snapshot_attempts: u64,
     dynamic_partition_tasks_kept_missing_metadata: u64,
     dynamic_partition_tasks_kept_unsupported_expression: u64,
     batches_produced: u64,
@@ -1571,7 +1571,9 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         dynamic_filters_received: dynamic(|snapshot| snapshot.dynamic_filters_received),
         dynamic_filters_accepted: dynamic(|snapshot| snapshot.dynamic_filters_accepted),
         dynamic_filters_unsupported: dynamic(|snapshot| snapshot.dynamic_filters_unsupported),
-        dynamic_filter_snapshots: dynamic(|snapshot| snapshot.dynamic_filter_snapshots),
+        dynamic_filter_snapshot_attempts: dynamic(|snapshot| {
+            snapshot.dynamic_filter_snapshot_attempts
+        }),
         dynamic_partition_tasks_kept_missing_metadata: dynamic(|snapshot| {
             snapshot.dynamic_partition_tasks_kept_missing_metadata
         }),
@@ -1660,7 +1662,7 @@ fn csv_row(
         read.dynamic_filters_received.to_string(),
         read.dynamic_filters_accepted.to_string(),
         read.dynamic_filters_unsupported.to_string(),
-        read.dynamic_filter_snapshots.to_string(),
+        read.dynamic_filter_snapshot_attempts.to_string(),
         read.dynamic_partition_tasks_kept_missing_metadata
             .to_string(),
         read.dynamic_partition_tasks_kept_unsupported_expression

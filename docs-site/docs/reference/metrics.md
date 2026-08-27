@@ -54,7 +54,7 @@ provider-specific fields.
 | `dynamic_filters_received` | Physical filters offered after optimization. |
 | `dynamic_filters_accepted` | Offered filters retained for partition pruning. |
 | `dynamic_filters_unsupported` | Offered filters rejected by the dynamic-filter policy. |
-| `dynamic_filter_snapshots` | Current dynamic expressions consulted during task admission. |
+| `dynamic_filter_snapshot_attempts` | Attempts to snapshot current dynamic expressions during task admission. |
 | `dynamic_partition_tasks_kept_missing_metadata` | Tasks kept because partition metadata was missing, invalid, or could not be parsed. |
 | `dynamic_partition_tasks_kept_unsupported_expression` | Tasks kept because an expression was unavailable, unsupported, or failed. |
 

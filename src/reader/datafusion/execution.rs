@@ -115,8 +115,8 @@ pub struct MetricsSnapshot {
     pub dynamic_filters_accepted: u64,
     /// Offered filters rejected by the dynamic partition policy.
     pub dynamic_filters_unsupported: u64,
-    /// Current dynamic expressions consulted during file admission.
-    pub dynamic_filter_snapshots: u64,
+    /// Attempts to snapshot current dynamic expressions during file admission.
+    pub dynamic_filter_snapshot_attempts: u64,
     /// Kept file tasks with missing, invalid, or unparsable partition metadata.
     pub dynamic_partition_tasks_kept_missing_metadata: u64,
     /// Kept file tasks with unavailable, unsupported, or failed expressions.
@@ -139,7 +139,7 @@ struct MetricsInner {
     dynamic_filters_received: AtomicU64,
     dynamic_filters_accepted: AtomicU64,
     dynamic_filters_unsupported: AtomicU64,
-    dynamic_filter_snapshots: AtomicU64,
+    dynamic_filter_snapshot_attempts: AtomicU64,
     dynamic_partition_tasks_kept_missing_metadata: AtomicU64,
     dynamic_partition_tasks_kept_unsupported_expression: AtomicU64,
 }
@@ -162,7 +162,7 @@ impl Metrics {
                 dynamic_filters_received: AtomicU64::new(0),
                 dynamic_filters_accepted: AtomicU64::new(0),
                 dynamic_filters_unsupported: AtomicU64::new(0),
-                dynamic_filter_snapshots: AtomicU64::new(0),
+                dynamic_filter_snapshot_attempts: AtomicU64::new(0),
                 dynamic_partition_tasks_kept_missing_metadata: AtomicU64::new(0),
                 dynamic_partition_tasks_kept_unsupported_expression: AtomicU64::new(0),
             }),
@@ -186,7 +186,7 @@ impl Metrics {
             dynamic_filters_received: load(&inner.dynamic_filters_received),
             dynamic_filters_accepted: load(&inner.dynamic_filters_accepted),
             dynamic_filters_unsupported: load(&inner.dynamic_filters_unsupported),
-            dynamic_filter_snapshots: load(&inner.dynamic_filter_snapshots),
+            dynamic_filter_snapshot_attempts: load(&inner.dynamic_filter_snapshot_attempts),
             dynamic_partition_tasks_kept_missing_metadata: load(
                 &inner.dynamic_partition_tasks_kept_missing_metadata,
             ),
@@ -236,8 +236,8 @@ impl Metrics {
         );
     }
 
-    fn record_dynamic_filter_snapshot(&self) {
-        saturating_fetch_add(&self.inner.dynamic_filter_snapshots, 1);
+    fn record_dynamic_filter_snapshot_attempt(&self) {
+        saturating_fetch_add(&self.inner.dynamic_filter_snapshot_attempts, 1);
     }
 
     fn record_missing_metadata(&self) {
@@ -734,7 +734,7 @@ fn dynamic_admission(
         let mut missing_metadata = false;
         let mut unsupported_expression = false;
         for filter in filters.iter() {
-            metrics.record_dynamic_filter_snapshot();
+            metrics.record_dynamic_filter_snapshot_attempt();
             match evaluate_dynamic_partition_filter(filter, task) {
                 DeltaDynamicPartitionPruningDecision::Prune(_) => {
                     metrics.record_dynamic_partition_task_pruned();
@@ -1639,7 +1639,7 @@ mod tests {
         assert_eq!(metrics.dynamic_filters_received, 2);
         assert_eq!(metrics.dynamic_filters_accepted, 1);
         assert_eq!(metrics.dynamic_filters_unsupported, 1);
-        assert_eq!(metrics.dynamic_filter_snapshots, 2);
+        assert_eq!(metrics.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
         assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
         assert_eq!(metrics.reader.file_tasks_started, 1);
@@ -1728,7 +1728,7 @@ mod tests {
 
         assert_eq!(ids(&batches), [1, 2, 3]);
         let metrics = collect_metrics(updated.as_ref())[0].snapshot();
-        assert_eq!(metrics.dynamic_filter_snapshots, 2);
+        assert_eq!(metrics.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
         assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
         assert_eq!(metrics.reader.file_tasks_started, 1);
@@ -1791,7 +1791,7 @@ mod tests {
                 initial.dynamic_filters_received,
                 initial.dynamic_filters_accepted,
                 initial.dynamic_filters_unsupported,
-                initial.dynamic_filter_snapshots,
+                initial.dynamic_filter_snapshot_attempts,
                 initial.dynamic_partition_tasks_kept_missing_metadata,
                 initial.dynamic_partition_tasks_kept_unsupported_expression,
             ],
@@ -1881,7 +1881,7 @@ mod tests {
             FileAdmission::Admit
         );
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.dynamic_filter_snapshots, 2);
+        assert_eq!(snapshot.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(snapshot.dynamic_partition_tasks_kept, 1);
         assert_eq!(snapshot.dynamic_partition_tasks_kept_missing_metadata, 1);
 
@@ -1898,7 +1898,7 @@ mod tests {
             FileAdmission::Skip
         );
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.dynamic_filter_snapshots, 3);
+        assert_eq!(snapshot.dynamic_filter_snapshot_attempts, 3);
         assert_eq!(snapshot.dynamic_partition_tasks_pruned, 1);
         assert_eq!(snapshot.dynamic_partition_tasks_kept, 1);
         assert_eq!(snapshot.dynamic_partition_tasks_kept_missing_metadata, 1);
@@ -1910,7 +1910,7 @@ mod tests {
             FileAdmission::Admit
         );
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.dynamic_filter_snapshots, 4);
+        assert_eq!(snapshot.dynamic_filter_snapshot_attempts, 4);
         assert_eq!(snapshot.dynamic_partition_tasks_kept, 2);
         assert_eq!(
             snapshot.dynamic_partition_tasks_kept_unsupported_expression,
@@ -1956,7 +1956,7 @@ mod tests {
                     metrics.record_dynamic_filters_received(3);
                     metrics.record_dynamic_filters_accepted(1);
                     metrics.record_dynamic_filters_unsupported(2);
-                    metrics.record_dynamic_filter_snapshot();
+                    metrics.record_dynamic_filter_snapshot_attempt();
                     metrics.record_missing_metadata();
                     metrics.record_unsupported_expression();
                 }
@@ -1973,7 +1973,7 @@ mod tests {
         assert_eq!(snapshot.dynamic_filters_received, calls * 3);
         assert_eq!(snapshot.dynamic_filters_accepted, calls);
         assert_eq!(snapshot.dynamic_filters_unsupported, calls * 2);
-        assert_eq!(snapshot.dynamic_filter_snapshots, calls);
+        assert_eq!(snapshot.dynamic_filter_snapshot_attempts, calls);
         assert_eq!(
             snapshot.dynamic_partition_tasks_kept_missing_metadata,
             calls
