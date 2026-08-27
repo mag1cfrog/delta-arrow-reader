@@ -97,7 +97,6 @@ struct LogicalDataFileStream {
     logical_schema: SchemaRef,
     transform: KernelPhysicalToLogicalTransform,
     deletion_vector: Option<DeletionVectorMasker>,
-    uses_original_row_indexes: bool,
     cancellation: ScanCancellation,
     _permit: FileReadPermit,
 }
@@ -416,7 +415,6 @@ impl DirectParquetReader {
             logical_schema: request.logical_schema,
             transform: request.task.transform,
             deletion_vector,
-            uses_original_row_indexes: include_original_row_index,
             cancellation: request.cancellation,
             _permit: request.permit,
         })
@@ -690,11 +688,7 @@ impl LogicalDataFileStream {
         };
         let Some((physical_batch, original_row_indexes)) = next else {
             if let Some(deletion_vector) = self.deletion_vector.as_mut() {
-                if self.uses_original_row_indexes {
-                    deletion_vector.finish_original_row_indexes()?;
-                } else {
-                    deletion_vector.finish()?;
-                }
+                deletion_vector.finish_original_row_indexes()?;
             }
             return Ok(None);
         };
