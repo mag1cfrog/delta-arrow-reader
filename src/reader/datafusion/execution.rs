@@ -1031,7 +1031,7 @@ mod tests {
             projection,
             &filter_refs,
             DataFusionFilterCapabilities {
-                exact_predicate_evaluation: execution_options.parquet_backend()
+                supports_exact_row_filtering: execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },
         )?;

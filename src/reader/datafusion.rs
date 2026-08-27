@@ -145,7 +145,7 @@ impl DeltaTableProvider {
             projection,
             &filter_refs,
             DataFusionFilterCapabilities {
-                exact_predicate_evaluation: self.options.execution_options.parquet_backend()
+                supports_exact_row_filtering: self.options.execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },
         )?;
@@ -348,7 +348,7 @@ impl TableProvider for DeltaTableProvider {
             &partition_columns,
             filters,
             DataFusionFilterCapabilities {
-                exact_predicate_evaluation: self.options.execution_options.parquet_backend()
+                supports_exact_row_filtering: self.options.execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },
         );

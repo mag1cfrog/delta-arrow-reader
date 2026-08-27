@@ -21,7 +21,7 @@ use crate::{
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct DataFusionFilterCapabilities {
-    pub(crate) exact_predicate_evaluation: bool,
+    pub(crate) supports_exact_row_filtering: bool,
 }
 
 pub(crate) struct DataFusionFilterDecision {
@@ -222,7 +222,7 @@ fn plan_filters(
             };
             let pushdown = match translation.kind {
                 TranslatedFilterKind::Partition => TableProviderFilterPushDown::Exact,
-                TranslatedFilterKind::DataStats if capabilities.exact_predicate_evaluation => {
+                TranslatedFilterKind::DataStats if capabilities.supports_exact_row_filtering => {
                     TableProviderFilterPushDown::Exact
                 }
                 TranslatedFilterKind::DataStats | TranslatedFilterKind::MixedAnd => {
@@ -1142,7 +1142,7 @@ mod tests {
         partitions: &HashSet<String>,
         projection: Option<&[usize]>,
         filters: &[&Expr],
-        exact_predicate_evaluation: bool,
+        supports_exact_row_filtering: bool,
     ) -> DataFusionScanPlanning {
         plan_datafusion_scan(
             schema,
@@ -1150,7 +1150,7 @@ mod tests {
             projection,
             filters,
             DataFusionFilterCapabilities {
-                exact_predicate_evaluation,
+                supports_exact_row_filtering,
             },
         )
         .expect("DataFusion scan should plan")
@@ -1655,7 +1655,7 @@ mod tests {
             Some(&[0]),
             &[&filter],
             DataFusionFilterCapabilities {
-                exact_predicate_evaluation: true,
+                supports_exact_row_filtering: true,
             },
         )
         .err()
