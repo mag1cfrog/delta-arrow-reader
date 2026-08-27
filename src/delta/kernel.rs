@@ -170,24 +170,26 @@ impl KernelScan {
         }
 
         let mut files = Vec::new();
-        let mut filtered = Some(0_u64);
+        let mut excluded_add_actions = Some(0_u64);
         let mut saw_batch = false;
         for metadata in self.scan.scan_metadata(engine_context.engine.as_ref())? {
             let metadata = metadata?;
             saw_batch = true;
-            filtered = filtered.and_then(|total| {
-                files_filtered(&metadata).and_then(|count| total.checked_add(count))
+            excluded_add_actions = excluded_add_actions.and_then(|total| {
+                excluded_add_action_count(&metadata).and_then(|count| total.checked_add(count))
             });
             files = metadata.visit_scan_files(files, collect)?;
         }
         Ok(KernelScanFileCollection {
             files,
-            add_actions_excluded_during_planning: saw_batch.then_some(filtered).flatten(),
+            add_actions_excluded_during_planning: saw_batch
+                .then_some(excluded_add_actions)
+                .flatten(),
         })
     }
 }
 
-fn files_filtered(metadata: &ScanMetadata) -> Option<u64> {
+fn excluded_add_action_count(metadata: &ScanMetadata) -> Option<u64> {
     let data = metadata
         .scan_files
         .data()
