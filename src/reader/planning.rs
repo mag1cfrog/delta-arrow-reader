@@ -111,7 +111,7 @@ pub(crate) fn plan_scan(
     execution_options: DeltaScanExecutionOptions,
     partition_target_options: DeltaScanPartitionTargetOptions,
 ) -> Result<DeltaScanPlan, DeltaReaderError> {
-    let partition_target_diagnostic = local_partition_target_diagnostic(partition_target_options)?;
+    let partition_target_diagnostic = resolve_partition_target(partition_target_options)?;
     let unpartitioned = plan_unpartitioned_scan(
         snapshot,
         projection,
@@ -258,7 +258,7 @@ fn finalize_scan_plan(
     })
 }
 
-fn local_partition_target_diagnostic(
+fn resolve_partition_target(
     options: DeltaScanPartitionTargetOptions,
 ) -> Result<DeltaScanPartitionTargetDiagnosticOutput, DeltaReaderError> {
     let _planning = tracing::debug_span!(
