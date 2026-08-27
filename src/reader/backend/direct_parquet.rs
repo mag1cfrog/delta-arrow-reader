@@ -1678,7 +1678,7 @@ mod tests {
     ) -> Result<DirectParquetReader, Box<dyn std::error::Error>> {
         let table_url = url::Url::from_directory_path(root.path())
             .map_err(|()| "temporary table path cannot become a file URL")?;
-        let engine_context = Arc::new(DeltaKernelEngineContext::build(
+        let engine_context = Arc::new(DeltaKernelEngineContext::try_new(
             table_url,
             &DeltaStorageOptions::default(),
         )?);
@@ -2327,7 +2327,7 @@ mod tests {
     async fn resolves_and_reads_remote_like_memory_object_store_path()
     -> Result<(), Box<dyn std::error::Error>> {
         let table_url = url::Url::parse("memory:///table/root/")?;
-        let engine_context = Arc::new(DeltaKernelEngineContext::build(
+        let engine_context = Arc::new(DeltaKernelEngineContext::try_new(
             table_url,
             &DeltaStorageOptions::default(),
         )?);

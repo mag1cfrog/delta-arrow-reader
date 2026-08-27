@@ -134,7 +134,7 @@ fn build_kernel_table_snapshot(
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let table_url = normalize_table_location(table_location)?;
     let s3_auth_mode_hint = s3_auth_mode_hint_for_source(&table_url, storage_options);
-    let engine_context = DeltaKernelEngineContext::build(table_url, storage_options)
+    let engine_context = DeltaKernelEngineContext::try_new(table_url, storage_options)
         .boxed()
         .context(StorageInitializationSnafu {
             reason: "storage_initialization_failed",
@@ -927,7 +927,7 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let table_url = url::Url::parse("s3://bucket/root")?;
         let _implicit =
-            DeltaKernelEngineContext::build(table_url.clone(), &DeltaStorageOptions::new())?;
+            DeltaKernelEngineContext::try_new(table_url.clone(), &DeltaStorageOptions::new())?;
         for (access_key, secret_key, token_key, region_key) in [
             (
                 "AWS_ACCESS_KEY_ID",
@@ -966,7 +966,7 @@ mod tests {
                 (token_key, "token"),
                 (region_key, "us-east-1"),
             ]);
-            let context = DeltaKernelEngineContext::build(table_url.clone(), &options)?;
+            let context = DeltaKernelEngineContext::try_new(table_url.clone(), &options)?;
             assert_eq!(context.table_url(), &table_url);
         }
         Ok(())

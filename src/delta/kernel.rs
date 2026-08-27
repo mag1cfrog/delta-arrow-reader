@@ -390,7 +390,7 @@ fn convert_scalar(scalar: &DeltaScalar) -> Option<Scalar> {
 }
 
 impl DeltaKernelEngineContext {
-    pub(crate) fn build(
+    pub(crate) fn try_new(
         table_url: Url,
         storage_options: &DeltaStorageOptions,
     ) -> delta_kernel::DeltaResult<Self> {
