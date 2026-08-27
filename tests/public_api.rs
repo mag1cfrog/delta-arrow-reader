@@ -6,13 +6,12 @@ use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use delta_arrow_reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaProtocolInfo, DeltaReadMetrics,
     DeltaReadMetricsSnapshot, DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase,
-    DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaScanPartitionTargetDiagnosticInput,
-    DeltaScanPartitionTargetDiagnosticOutput, DeltaScanPartitionTargetDiagnosticSource,
-    DeltaScanPartitionTargetLocalEnvironmentDiagnostic,
-    DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus, DeltaSnapshotSelection,
-    DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
-    delta_scan_partition_target_local_environment_diagnostic,
-    derive_delta_scan_partition_target_diagnostic,
+    DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection, DeltaStorageOptions,
+    DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
+    diagnostics::partition_target::{
+        Input, LocalEnvironment, Output, Source, UnixFileDescriptorLimitStatus,
+        collect_local_environment, derive,
+    },
 };
 use futures_util::Stream;
 
@@ -76,22 +75,20 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
 
 #[test]
 fn scan_partition_target_diagnostic_contract_is_public() -> Result<(), DeltaReaderError> {
-    let _: DeltaScanPartitionTargetDiagnosticInput = Default::default();
-    let local: DeltaScanPartitionTargetLocalEnvironmentDiagnostic =
-        delta_scan_partition_target_local_environment_diagnostic();
-    let _: DeltaScanPartitionTargetDiagnosticInput = local.policy_input;
+    let _: Input = Default::default();
+    let local: LocalEnvironment = collect_local_environment();
+    let _: Input = local.policy_input;
     let _: Option<u64> = local.memory_total_bytes;
     let _: Option<u64> = local.memory_available_bytes;
     let _: Option<u64> = local.unix_soft_file_descriptor_limit;
-    let _: DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus =
-        local.unix_soft_file_descriptor_limit_status;
+    let _: UnixFileDescriptorLimitStatus = local.unix_soft_file_descriptor_limit_status;
     let _ = [
-        DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus::Unsupported,
-        DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus::Unknown,
-        DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus::Finite,
-        DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus::Unlimited,
+        UnixFileDescriptorLimitStatus::Unsupported,
+        UnixFileDescriptorLimitStatus::Unknown,
+        UnixFileDescriptorLimitStatus::Finite,
+        UnixFileDescriptorLimitStatus::Unlimited,
     ];
-    let input = DeltaScanPartitionTargetDiagnosticInput {
+    let input = Input {
         explicit_target_partitions: None,
         datafusion_target_partitions: Some(8),
         available_parallelism: Some(4),
@@ -102,18 +99,14 @@ fn scan_partition_target_diagnostic_contract_is_public() -> Result<(), DeltaRead
         file_descriptors_per_partition: 16,
         available_memory_bytes_per_partition: 256 * 1024 * 1024,
     };
-    let output: DeltaScanPartitionTargetDiagnosticOutput =
-        derive_delta_scan_partition_target_diagnostic(input)?;
+    let output: Output = derive(input)?;
 
     assert_eq!(output.target_partitions, 4);
-    assert_eq!(
-        output.source,
-        DeltaScanPartitionTargetDiagnosticSource::AvailableParallelismFallback
-    );
+    assert_eq!(output.source, Source::AvailableParallelismFallback);
     let _ = [
-        DeltaScanPartitionTargetDiagnosticSource::ExplicitOverride,
-        DeltaScanPartitionTargetDiagnosticSource::AvailableParallelismFallback,
-        DeltaScanPartitionTargetDiagnosticSource::StaticFallback,
+        Source::ExplicitOverride,
+        Source::AvailableParallelismFallback,
+        Source::StaticFallback,
     ];
     assert_eq!(output.explicit_target_partitions, None);
     assert_eq!(output.datafusion_target_partitions, Some(8));

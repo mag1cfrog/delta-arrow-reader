@@ -5453,7 +5453,7 @@ mod tests {
         assert_eq!(plan.partition_target_diagnostic.target_partitions, 2);
         assert_eq!(
             plan.partition_target_diagnostic.source,
-            crate::DeltaScanPartitionTargetDiagnosticSource::ExplicitOverride
+            crate::diagnostics::partition_target::Source::ExplicitOverride
         );
         assert_eq!(
             partition_paths(&plan.partitions),

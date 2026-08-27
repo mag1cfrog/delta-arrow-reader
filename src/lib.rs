@@ -11,13 +11,19 @@ pub use reader::datafusion;
 pub use delta::DeltaProtocolInfo;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
 #[doc(hidden)]
-pub use reader::partition_target::{
-    DeltaScanPartitionTargetDiagnosticInput, DeltaScanPartitionTargetDiagnosticOutput,
-    DeltaScanPartitionTargetDiagnosticSource, DeltaScanPartitionTargetLocalEnvironmentDiagnostic,
-    DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus,
-    delta_scan_partition_target_local_environment_diagnostic,
-    derive_delta_scan_partition_target_diagnostic,
-};
+pub mod diagnostics {
+    pub mod partition_target {
+        pub use crate::reader::partition_target::{
+            DeltaScanPartitionTargetDiagnosticInput as Input,
+            DeltaScanPartitionTargetDiagnosticOutput as Output,
+            DeltaScanPartitionTargetDiagnosticSource as Source,
+            DeltaScanPartitionTargetLocalEnvironmentDiagnostic as LocalEnvironment,
+            DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus as UnixFileDescriptorLimitStatus,
+            delta_scan_partition_target_local_environment_diagnostic as collect_local_environment,
+            derive_delta_scan_partition_target_diagnostic as derive,
+        };
+    }
+}
 pub use reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReadMetrics, DeltaReadMetricsSnapshot,
     DeltaReaderExecutionOptions, DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection,
