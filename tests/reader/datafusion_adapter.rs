@@ -250,7 +250,7 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
         .await?;
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(
-        display.contains("DeltaDataFusionExec: snapshot_version=0, partitions=4"),
+        display.contains("DeltaScanExec: snapshot_version=0, partitions=4"),
         "{display}"
     );
 
@@ -1088,7 +1088,7 @@ async fn sql_join_dynamic_filter_prunes_before_file_admission() -> TestResult {
         .await?;
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(display.contains("HashJoinExec"), "{display}");
-    assert!(display.contains("DeltaDataFusionExec"), "{display}");
+    assert!(display.contains("DeltaScanExec"), "{display}");
 
     let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
@@ -1531,11 +1531,11 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(display.contains("fetch=1"), "{display}");
     assert!(display.contains("FilterExec"), "{display}");
-    assert!(display.contains("DeltaDataFusionExec"), "{display}");
+    assert!(display.contains("DeltaScanExec"), "{display}");
     let filter = display.find("FilterExec").ok_or("missing FilterExec")?;
     let scan = display
-        .find("DeltaDataFusionExec")
-        .ok_or("missing DeltaDataFusionExec")?;
+        .find("DeltaScanExec")
+        .ok_or("missing DeltaScanExec")?;
     assert!(filter < scan, "{display}");
 
     let metrics = collect_scan_metrics(plan.as_ref());

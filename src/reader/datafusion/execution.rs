@@ -284,7 +284,7 @@ pub fn collect_scan_metrics(plan: &dyn ExecutionPlan) -> Vec<ScanMetrics> {
         if !seen_plans.insert(plan_identity) {
             return;
         }
-        if let Some(scan) = plan.downcast_ref::<DeltaDataFusionExec>() {
+        if let Some(scan) = plan.downcast_ref::<DeltaScanExec>() {
             let handle = scan.metrics.clone();
             if seen_metrics.insert(handle.identity()) {
                 metrics.push(handle);
@@ -309,7 +309,7 @@ pub(crate) fn create_datafusion_execution_plan(
     use_arrow_view_types: bool,
     intra_file_repartitioning: IntraFileRepartitioning,
 ) -> Arc<dyn ExecutionPlan> {
-    Arc::new(DeltaDataFusionExec::new(
+    Arc::new(DeltaScanExec::new(
         reader_plan,
         datafusion_plan,
         exact_row_predicate,
@@ -320,7 +320,7 @@ pub(crate) fn create_datafusion_execution_plan(
 }
 
 #[derive(Clone)]
-struct DeltaDataFusionExec {
+struct DeltaScanExec {
     reader_plan: Arc<DeltaScanPlan>,
     schema: SchemaRef,
     output_projection: Option<Arc<[usize]>>,
@@ -333,7 +333,7 @@ struct DeltaDataFusionExec {
     parquet_metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 }
 
-impl DeltaDataFusionExec {
+impl DeltaScanExec {
     #[allow(dead_code)]
     fn new(
         reader_plan: DeltaScanPlan,
@@ -534,10 +534,10 @@ fn task_from_partitioned_file(file: PartitionedFile) -> DataFusionResult<DeltaSc
     Ok(task)
 }
 
-impl fmt::Debug for DeltaDataFusionExec {
+impl fmt::Debug for DeltaScanExec {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("DeltaDataFusionExec")
+            .debug_struct("DeltaScanExec")
             .field("snapshot_version", &self.reader_plan.snapshot_version)
             .field("partition_count", &self.reader_plan.partitions.len())
             .field("dynamic_filter_count", &self.dynamic_filters.len())
@@ -545,7 +545,7 @@ impl fmt::Debug for DeltaDataFusionExec {
     }
 }
 
-impl DisplayAs for DeltaDataFusionExec {
+impl DisplayAs for DeltaScanExec {
     fn fmt_as(
         &self,
         display_type: DisplayFormatType,
@@ -554,18 +554,18 @@ impl DisplayAs for DeltaDataFusionExec {
         match display_type {
             DisplayFormatType::Default | DisplayFormatType::Verbose => write!(
                 formatter,
-                "DeltaDataFusionExec: snapshot_version={}, partitions={}",
+                "DeltaScanExec: snapshot_version={}, partitions={}",
                 self.reader_plan.snapshot_version,
                 self.reader_plan.partitions.len()
             ),
-            DisplayFormatType::TreeRender => write!(formatter, "DeltaDataFusionExec"),
+            DisplayFormatType::TreeRender => write!(formatter, "DeltaScanExec"),
         }
     }
 }
 
-impl ExecutionPlan for DeltaDataFusionExec {
+impl ExecutionPlan for DeltaScanExec {
     fn name(&self) -> &str {
-        "DeltaDataFusionExec"
+        "DeltaScanExec"
     }
 
     fn properties(&self) -> &Arc<PlanProperties> {
@@ -584,7 +584,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
             Ok(self)
         } else {
             Err(DataFusionError::Internal(
-                "DeltaDataFusionExec does not accept child execution plans".to_owned(),
+                "DeltaScanExec does not accept child execution plans".to_owned(),
             ))
         }
     }
@@ -1445,7 +1445,7 @@ mod tests {
             None,
         )?;
 
-        assert_eq!(plan.name(), "DeltaDataFusionExec");
+        assert_eq!(plan.name(), "DeltaScanExec");
         assert!(plan.children().is_empty());
         assert!(plan.metrics().is_none());
         assert_eq!(plan.schema().fields().len(), 2);
@@ -1661,7 +1661,7 @@ mod tests {
         let display = datafusion::physical_plan::displayable(rebuilt.as_ref())
             .one_line()
             .to_string();
-        assert!(display.contains("DeltaDataFusionExec:"), "{display}");
+        assert!(display.contains("DeltaScanExec:"), "{display}");
         assert!(display.contains("partitions="), "{display}");
         assert!(!display.contains("DynamicFilter"), "{display}");
         assert!(
