@@ -49,7 +49,7 @@ use datafusion::{
 use futures_util::{StreamExt, stream};
 
 use super::{
-    dynamic_filters::{DynamicFilterOutcome, DynamicFilterPlan, RetainedDynamicFilter},
+    dynamic_filters::{DynamicFilterClassification, DynamicFilterDecision, RetainedDynamicFilter},
     dynamic_partition_pruning::{
         DynamicPartitionKeepReason, DynamicPartitionPruningDecision,
         evaluate_dynamic_partition_filter,
@@ -697,32 +697,36 @@ impl ExecutionPlan for DeltaDataFusionExec {
             return Ok(unsupported());
         }
 
-        let dynamic_filter_plan = DynamicFilterPlan::from_filters(
+        let classification = DynamicFilterClassification::from_filters(
             &parent_filters,
             &self.schema,
             &self.reader_plan.partition_columns,
         );
-        let accepted = dynamic_filter_plan.accepted_filters.len();
+        let accepted_filters = classification
+            .accepted_filters()
+            .cloned()
+            .collect::<Vec<_>>();
+        let accepted = accepted_filters.len();
         self.metrics
             .record_dynamic_filters_received(parent_filters.len());
         self.metrics.record_dynamic_filters_accepted(accepted);
         self.metrics
             .record_dynamic_filters_rejected(parent_filters.len().saturating_sub(accepted));
-        if !dynamic_filter_plan.has_accepted_filters() {
+        if accepted_filters.is_empty() {
             return Ok(unsupported());
         }
 
-        let pushed = dynamic_filter_plan
+        let pushed = classification
             .decisions
             .iter()
-            .map(|decision| match decision.outcome {
-                DynamicFilterOutcome::Accepted => PushedDown::Yes,
-                DynamicFilterOutcome::Rejected => PushedDown::No,
+            .map(|decision| match decision {
+                DynamicFilterDecision::Accepted(_) => PushedDown::Yes,
+                DynamicFilterDecision::Rejected => PushedDown::No,
             })
             .collect();
         Ok(
             FilterPushdownPropagation::with_parent_pushdown_result(pushed)
-                .with_updated_node(self.with_dynamic_filters(dynamic_filter_plan.accepted_filters)),
+                .with_updated_node(self.with_dynamic_filters(accepted_filters)),
         )
     }
 }
@@ -1820,7 +1824,7 @@ mod tests {
     async fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
         use crate::{
             delta::kernel::KernelPhysicalToLogicalTransform,
-            reader::datafusion::dynamic_filters::DynamicFilterPlan,
+            reader::datafusion::dynamic_filters::DynamicFilterClassification,
             reader::deletion_vector::DeletionVectorMetadata,
         };
 
@@ -1836,14 +1840,14 @@ mod tests {
         ]));
         let retained = |dynamic: Arc<DynamicFilterPhysicalExpr>| -> TestResult<_> {
             let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic;
-            Ok(DynamicFilterPlan::from_filters(
+            Ok(DynamicFilterClassification::from_filters(
                 std::slice::from_ref(&physical),
                 &schema,
                 &["region".to_owned()],
             )
-            .accepted_filters
-            .into_iter()
+            .accepted_filters()
             .next()
+            .cloned()
             .ok_or("dynamic filter was not retained")?)
         };
         let first = retained(dynamic_filter("region", 1))?;

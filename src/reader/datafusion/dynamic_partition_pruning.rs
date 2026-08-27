@@ -412,7 +412,7 @@ mod tests {
     use super::*;
     use crate::{
         delta::kernel::KernelPhysicalToLogicalTransform,
-        reader::datafusion::dynamic_filters::DynamicFilterPlan,
+        reader::datafusion::dynamic_filters::DynamicFilterClassification,
         reader::deletion_vector::DeletionVectorMetadata,
     };
 
@@ -434,7 +434,7 @@ mod tests {
     ) -> Result<(Arc<DynamicFilterPhysicalExpr>, RetainedDynamicFilter), String> {
         let dynamic = Arc::new(DynamicFilterPhysicalExpr::new(children, lit(true)));
         let filter: Arc<dyn PhysicalExpr> = dynamic.clone();
-        let plan = DynamicFilterPlan::from_filters(
+        let classification = DynamicFilterClassification::from_filters(
             std::slice::from_ref(&filter),
             &test_schema(),
             &[
@@ -443,9 +443,9 @@ mod tests {
                 "event_date".to_owned(),
             ],
         );
-        let retained = plan
-            .accepted_filters
-            .first()
+        let retained = classification
+            .accepted_filters()
+            .next()
             .cloned()
             .ok_or_else(|| "dynamic filter was not retained".to_owned())?;
 
