@@ -56,7 +56,7 @@ use super::{
         DeltaDynamicPartitionKeepReason, DeltaDynamicPartitionPruningDecision,
         evaluate_dynamic_partition_filter,
     },
-    planning::DataFusionScanPlanning,
+    planning::DataFusionScanPlan,
 };
 
 use crate::reader::backend::direct_parquet::{
@@ -304,7 +304,7 @@ pub fn collect_scan_metrics(plan: &dyn ExecutionPlan) -> Vec<ScanMetrics> {
 #[allow(dead_code)]
 pub(crate) fn create_datafusion_execution_plan(
     plan: DeltaScanPlan,
-    planning: DataFusionScanPlanning,
+    planning: DataFusionScanPlan,
     exact_row_predicate: Option<DeltaKernelPredicate>,
     registration_name: Option<String>,
     use_arrow_view_types: bool,
@@ -339,7 +339,7 @@ impl DeltaDataFusionExec {
     #[allow(dead_code)]
     fn new(
         plan: DeltaScanPlan,
-        planning: DataFusionScanPlanning,
+        planning: DataFusionScanPlan,
         exact_row_predicate: Option<DeltaKernelPredicate>,
         registration_name: Option<String>,
         use_arrow_view_types: bool,

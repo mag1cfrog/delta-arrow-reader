@@ -46,7 +46,7 @@ pub(crate) struct DataFusionProjectionPlan {
     pub(crate) output_projection: Option<Vec<usize>>,
 }
 
-pub(crate) struct DataFusionScanPlanning {
+pub(crate) struct DataFusionScanPlan {
     pub(crate) projection: DataFusionProjectionPlan,
     pub(crate) filters: DataFusionFilterPlan,
 }
@@ -57,7 +57,7 @@ pub(crate) fn plan_datafusion_scan(
     projection: Option<&[usize]>,
     filters: &[&Expr],
     capabilities: DataFusionFilterCapabilities,
-) -> Result<DataFusionScanPlanning, DeltaReaderError> {
+) -> Result<DataFusionScanPlan, DeltaReaderError> {
     validate_projection(schema, projection)?;
     let filter_plan = {
         let _planning = tracing::debug_span!(
@@ -76,7 +76,7 @@ pub(crate) fn plan_datafusion_scan(
         .entered();
         plan_projection(schema, projection, &filter_plan.referenced_columns)?
     };
-    Ok(DataFusionScanPlanning {
+    Ok(DataFusionScanPlan {
         projection: projection_plan,
         filters: filter_plan,
     })
@@ -1143,7 +1143,7 @@ mod tests {
         projection: Option<&[usize]>,
         filters: &[&Expr],
         supports_exact_row_filtering: bool,
-    ) -> DataFusionScanPlanning {
+    ) -> DataFusionScanPlan {
         plan_datafusion_scan(
             schema,
             partitions,
@@ -1156,7 +1156,7 @@ mod tests {
         .expect("DataFusion scan should plan")
     }
 
-    fn pushdowns(plan: &DataFusionScanPlanning) -> Vec<TableProviderFilterPushDown> {
+    fn pushdowns(plan: &DataFusionScanPlan) -> Vec<TableProviderFilterPushDown> {
         plan.filters
             .decisions
             .iter()
