@@ -440,6 +440,7 @@ impl<'table> DeltaScanBuilder<'table> {
 ///     let _ = scan.clone();
 /// }
 /// ```
+#[must_use = "scans do nothing unless converted into a stream"]
 pub struct DeltaScan {
     plan: Arc<DeltaScanPlan>,
     predicate: Option<DeltaPredicate>,
@@ -516,6 +517,7 @@ impl DeltaScan {
 ///     let _ = stream.collect();
 /// }
 /// ```
+#[must_use = "streams do nothing unless polled"]
 pub struct DeltaBatchStream {
     schema: SchemaRef,
     metrics: DeltaScanMetrics,
