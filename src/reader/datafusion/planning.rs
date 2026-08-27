@@ -82,15 +82,6 @@ pub(crate) fn plan_datafusion_scan(
     })
 }
 
-pub(crate) fn plan_datafusion_filters(
-    schema: &SchemaRef,
-    partition_columns: &HashSet<String>,
-    filters: &[&Expr],
-    capabilities: DataFusionFilterCapabilities,
-) -> DataFusionFilterPlan {
-    plan_filters(schema, partition_columns, filters, capabilities)
-}
-
 fn validate_inexact_residual_projection(
     schema: &Schema,
     projection: Option<&[usize]>,
@@ -199,7 +190,7 @@ fn plan_projection(
     })
 }
 
-fn plan_filters(
+pub(crate) fn plan_datafusion_filters(
     schema: &SchemaRef,
     partition_columns: &HashSet<String>,
     filters: &[&Expr],

@@ -112,7 +112,7 @@ pub(crate) fn plan_scan(
     partition_target_options: DeltaScanPartitionTargetOptions,
 ) -> Result<DeltaScanPlan, DeltaReaderError> {
     let partition_target_diagnostic = local_partition_target_diagnostic(partition_target_options)?;
-    let unpartitioned = build_unpartitioned_scan_plan(
+    let unpartitioned = plan_unpartitioned_scan(
         snapshot,
         projection,
         hidden_columns,
@@ -145,26 +145,7 @@ pub(crate) fn build_physical_row_predicate(
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn plan_unpartitioned_scan(
-    snapshot: &LoadedDeltaTableSnapshot,
-    projection: Option<&[String]>,
-    hidden_columns: &[String],
-    kernel_predicate: Option<DeltaKernelPredicate>,
-    include_stats: bool,
-    execution_options: DeltaScanExecutionOptions,
-) -> Result<DeltaUnpartitionedScanPlan, DeltaReaderError> {
-    build_unpartitioned_scan_plan(
-        snapshot,
-        projection,
-        hidden_columns,
-        kernel_predicate,
-        include_stats,
-        execution_options,
-    )
-}
-
-fn build_unpartitioned_scan_plan(
     snapshot: &LoadedDeltaTableSnapshot,
     projection: Option<&[String]>,
     hidden_columns: &[String],
