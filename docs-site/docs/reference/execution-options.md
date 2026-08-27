@@ -15,8 +15,8 @@ them, see [scan planning](../scan-planning.md) and
 | `max_concurrent_file_reads_per_partition` | `3` | Active-read cap for one execution partition. |
 | `output_buffer_capacity_per_partition` | `1` | Batches held between a partition producer and its consumer. |
 | `prefetch_file_count_per_partition` | `2` | Future direct Parquet file streams prepared per partition. `0` is fully lazy. |
-| `parquet_metadata_size_hint` | `Some(65_536)` | Parquet footer bytes prefetched by the direct reader. `None` disables the hint. |
-| `parquet_full_file_read_threshold` | `None` | Largest file the direct reader may fetch once and buffer for local range reads. `None` disables full-file buffering. |
+| `parquet_metadata_size_hint_bytes` | `Some(65_536)` | Parquet footer bytes prefetched by the direct reader. `None` disables the hint. |
+| `parquet_full_file_read_threshold_bytes` | `None` | Largest file the direct reader may fetch once and buffer for local range reads. `None` disables full-file buffering. |
 
 The concurrency limits, output capacity, and enabled byte-size values must be
 greater than zero. Prefetch depth may be zero.

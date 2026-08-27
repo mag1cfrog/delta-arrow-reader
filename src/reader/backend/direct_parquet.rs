@@ -262,7 +262,7 @@ impl DirectParquetFileReader {
         let file_size = object.file_size;
         let path = object.path;
         let reader = ParquetObjectReader::new(object.store, path.clone()).with_file_size(file_size);
-        let mut reader = match self.execution_options.parquet_metadata_size_hint() {
+        let mut reader = match self.execution_options.parquet_metadata_size_hint_bytes() {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
         };
@@ -491,7 +491,7 @@ impl DirectParquetFileReader {
     ) -> Result<DirectParquetObject, DeltaReaderError> {
         let should_buffer = self
             .execution_options
-            .parquet_full_file_read_threshold()
+            .parquet_full_file_read_threshold_bytes()
             .map(|threshold| u64::try_from(threshold).unwrap_or(u64::MAX))
             .is_some_and(|threshold| object.file_size <= threshold);
         if !should_buffer {
@@ -2005,11 +2005,11 @@ mod tests {
 
     fn pipeline_plan(
         root: &TestDir,
-        full_file_threshold: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
     ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         pipeline_plan_for_backend(
             root,
-            full_file_threshold,
+            full_file_read_threshold_bytes,
             Some(64 * 1024),
             ParquetReaderBackend::DirectParquet,
             true,
@@ -2018,15 +2018,15 @@ mod tests {
 
     fn pipeline_plan_for_backend(
         root: &TestDir,
-        full_file_threshold: Option<usize>,
-        metadata_size_hint: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
+        metadata_size_hint_bytes: Option<usize>,
         backend: ParquetReaderBackend,
         with_predicate: bool,
     ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         pipeline_plan_for_backend_at(
             root,
-            full_file_threshold,
-            metadata_size_hint,
+            full_file_read_threshold_bytes,
+            metadata_size_hint_bytes,
             backend,
             with_predicate,
             DeltaSnapshotSelection::Latest,
@@ -2037,8 +2037,8 @@ mod tests {
     #[allow(clippy::too_many_arguments)]
     fn pipeline_plan_for_backend_at(
         root: &TestDir,
-        full_file_threshold: Option<usize>,
-        metadata_size_hint: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
+        metadata_size_hint_bytes: Option<usize>,
         backend: ParquetReaderBackend,
         with_predicate: bool,
         selection: DeltaSnapshotSelection,
@@ -2050,8 +2050,8 @@ mod tests {
             selection,
         )?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_parquet_full_file_read_threshold(full_file_threshold)?
-            .with_parquet_metadata_size_hint(metadata_size_hint)?
+            .with_parquet_full_file_read_threshold_bytes(full_file_read_threshold_bytes)?
+            .with_parquet_metadata_size_hint_bytes(metadata_size_hint_bytes)?
             .with_reader_backend(backend);
         let predicate = with_predicate.then(|| {
             DeltaKernelPredicate::from_test_predicate(Predicate::gt(
@@ -2697,7 +2697,7 @@ mod tests {
             fs::write(root.path().join("part.parquet"), bytes)?;
             let metrics = metrics();
             let options = DeltaReaderExecutionOptions::new()
-                .with_parquet_full_file_read_threshold(threshold)?;
+                .with_parquet_full_file_read_threshold_bytes(threshold)?;
             let reader = reader(&root, options, metrics.clone())?;
             let mut task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
             task.parquet_byte_range = byte_range;
@@ -2742,7 +2742,7 @@ mod tests {
         let reader = reader(
             &root,
             DeltaReaderExecutionOptions::new()
-                .with_parquet_full_file_read_threshold(Some(bytes.len()))?,
+                .with_parquet_full_file_read_threshold_bytes(Some(bytes.len()))?,
             metrics.clone(),
         )?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
@@ -2910,8 +2910,8 @@ mod tests {
 
         for options in [
             DeltaReaderExecutionOptions::new(),
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint(None)?,
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint(Some(9))?,
+            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint_bytes(None)?,
+            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint_bytes(Some(9))?,
         ] {
             let metrics = metrics();
             let reader = reader(&root, options, metrics.clone())?;
@@ -4105,7 +4105,8 @@ mod tests {
         let missing_metrics = metrics();
         let missing_reader = reader(
             &missing_root,
-            DeltaReaderExecutionOptions::new().with_parquet_full_file_read_threshold(Some(64))?,
+            DeltaReaderExecutionOptions::new()
+                .with_parquet_full_file_read_threshold_bytes(Some(64))?,
             missing_metrics.clone(),
         )?;
         let error = match missing_reader

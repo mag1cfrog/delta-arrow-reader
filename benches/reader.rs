@@ -30,7 +30,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 24;
+const BENCHMARK_SCHEMA_VERSION: u32 = 25;
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
@@ -123,8 +123,8 @@ const CSV_HEADER: [&str; 80] = [
     "execution_profile_operator_count_max",
     "execution_profile_metric_count_max",
     "execution_profile_mode",
-    "parquet_metadata_size_hint",
-    "parquet_full_file_read_threshold",
+    "parquet_metadata_size_hint_bytes",
+    "parquet_full_file_read_threshold_bytes",
     "provider_stats_parquet_data_file_range_get_operations_p50",
     "provider_stats_parquet_data_file_full_get_operations_p50",
     "provider_stats_parquet_data_file_bytes_received_p50",
@@ -141,8 +141,8 @@ struct Config {
     query: Query,
     backend: ParquetReaderBackend,
     repetitions: usize,
-    metadata_hint: Option<usize>,
-    full_read_threshold: Option<usize>,
+    metadata_size_hint_bytes: Option<usize>,
+    full_file_read_threshold_bytes: Option<usize>,
     retain_fixture: bool,
     seed: u64,
 }
@@ -306,8 +306,8 @@ impl Config {
             query: Query::FullRows,
             backend: ParquetReaderBackend::DirectParquet,
             repetitions: DEFAULT_REPETITIONS,
-            metadata_hint: Some(65_536),
-            full_read_threshold: None,
+            metadata_size_hint_bytes: Some(65_536),
+            full_file_read_threshold_bytes: None,
             retain_fixture: false,
             seed: 0,
         };
@@ -352,12 +352,12 @@ impl Config {
                         .into());
                     }
                 }
-                "--provider-exec-parquet-metadata-size-hint" => {
-                    config.metadata_hint =
+                "--provider-exec-parquet-metadata-size-hint-bytes" => {
+                    config.metadata_size_hint_bytes =
                         parse_optional_positive(&required_arg(&mut args, &argument)?)?
                 }
-                "--provider-exec-parquet-full-file-read-threshold" => {
-                    config.full_read_threshold =
+                "--provider-exec-parquet-full-file-read-threshold-bytes" => {
+                    config.full_file_read_threshold_bytes =
                         parse_optional_positive(&required_arg(&mut args, &argument)?)?
                 }
                 "--provider-exec-repetitions" => {
@@ -385,8 +385,8 @@ impl Config {
             self.query,
             self.backend,
             self.storage.name,
-            self.metadata_hint,
-            self.full_read_threshold,
+            self.metadata_size_hint_bytes,
+            self.full_file_read_threshold_bytes,
         );
         let frozen = matches!(
             case,
@@ -1314,8 +1314,8 @@ async fn run_once(
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_capacity_per_partition(1)?
         .with_prefetch_file_count_per_partition(2)
-        .with_parquet_metadata_size_hint(config.metadata_hint)?
-        .with_parquet_full_file_read_threshold(config.full_read_threshold)?;
+        .with_parquet_metadata_size_hint_bytes(config.metadata_size_hint_bytes)?
+        .with_parquet_full_file_read_threshold_bytes(config.full_file_read_threshold_bytes)?;
     let table = DeltaTableBuilder::new(&fixture.table_uri)
         .with_storage_options(fixture.storage_options.clone())
         .with_execution_options(execution_options)
@@ -1697,8 +1697,8 @@ fn csv_row(
         "0".to_owned(),
         "0".to_owned(),
         "disabled".to_owned(),
-        optional_usize(config.metadata_hint),
-        optional_usize(config.full_read_threshold),
+        optional_usize(config.metadata_size_hint_bytes),
+        optional_usize(config.full_file_read_threshold_bytes),
         optional(read.range_gets),
         optional(read.full_gets),
         optional(read.bytes_received),
@@ -1790,8 +1790,8 @@ mod tests {
         query: Query,
         backend: ParquetReaderBackend,
         storage: StorageProfile,
-        metadata_hint: Option<usize>,
-        full_read_threshold: Option<usize>,
+        metadata_size_hint_bytes: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
     ) -> Config {
         Config {
             output: None,
@@ -1801,8 +1801,8 @@ mod tests {
             query,
             backend,
             repetitions: 1,
-            metadata_hint,
-            full_read_threshold,
+            metadata_size_hint_bytes,
+            full_file_read_threshold_bytes,
             retain_fixture: false,
             seed: 0,
         }
@@ -1944,9 +1944,9 @@ mod tests {
                 "direct_parquet",
                 "--provider-exec-scheduling-profile",
                 "prefetch_2_ap_target_scan_3x",
-                "--provider-exec-parquet-metadata-size-hint",
+                "--provider-exec-parquet-metadata-size-hint-bytes",
                 "65536",
-                "--provider-exec-parquet-full-file-read-threshold",
+                "--provider-exec-parquet-full-file-read-threshold-bytes",
                 "disabled",
                 "--provider-exec-repetitions",
                 "5",
@@ -1967,8 +1967,8 @@ mod tests {
             ParquetReaderBackend::DirectParquet
         ));
         assert_eq!(parsed.repetitions, 5);
-        assert_eq!(parsed.metadata_hint, Some(65_536));
-        assert_eq!(parsed.full_read_threshold, None);
+        assert_eq!(parsed.metadata_size_hint_bytes, Some(65_536));
+        assert_eq!(parsed.full_file_read_threshold_bytes, None);
         assert_eq!(parsed.temp_dir, PathBuf::from("target/frozen-fixtures"));
         assert!(parsed.retain_fixture);
         assert_eq!(parsed.output, Some(PathBuf::from("target/frozen.csv")));
@@ -1983,19 +1983,19 @@ mod tests {
             ParquetReaderBackend::DirectParquet
         ));
         assert_eq!(defaults.repetitions, DEFAULT_REPETITIONS);
-        assert_eq!(defaults.metadata_hint, Some(65_536));
-        assert_eq!(defaults.full_read_threshold, None);
+        assert_eq!(defaults.metadata_size_hint_bytes, Some(65_536));
+        assert_eq!(defaults.full_file_read_threshold_bytes, None);
         assert!(!defaults.retain_fixture);
         assert_eq!(defaults.output, None);
 
         let full_read = Config::parse(
             [
-                "--provider-exec-parquet-full-file-read-threshold",
+                "--provider-exec-parquet-full-file-read-threshold-bytes",
                 "1000000",
             ]
             .map(str::to_owned),
         )?;
-        assert_eq!(full_read.full_read_threshold, Some(1_000_000));
+        assert_eq!(full_read.full_file_read_threshold_bytes, Some(1_000_000));
         assert!(Config::parse(["--provider-exec-repetitions", "0"].map(str::to_owned)).is_err());
         assert!(Config::parse(["--provider-exec-repetitions"].map(str::to_owned)).is_err());
         assert!(
@@ -2133,7 +2133,7 @@ mod tests {
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "24");
+            assert_eq!(row[0], "25");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);

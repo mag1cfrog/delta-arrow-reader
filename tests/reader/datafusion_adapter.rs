@@ -485,7 +485,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     assert_eq!(parquet.metadata().num_row_groups(), ROW_GROUPS);
 
     let execution_options = DeltaReaderExecutionOptions::new()
-        .with_parquet_full_file_read_threshold(Some(usize::MAX))?;
+        .with_parquet_full_file_read_threshold_bytes(Some(usize::MAX))?;
     let options = DeltaDataFusionScanOptions {
         execution_options,
         target_partitions: Some(TARGET_PARTITIONS),
@@ -1358,7 +1358,7 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
 }
 
 #[tokio::test]
-async fn direct_metadata_hint_preserves_rows_and_request_fallback() -> TestResult {
+async fn direct_metadata_size_hint_bytes_preserves_rows_and_request_fallback() -> TestResult {
     let fixture =
         RealParquetDeltaTable::new_with_two_large_files("provider-parquet-metadata-hint", 20_000)?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
@@ -1371,7 +1371,7 @@ async fn direct_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
         let context =
             SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
         let execution_options =
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint(hint)?;
+            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint_bytes(hint)?;
         register_delta_table(
             &context,
             "orders",
