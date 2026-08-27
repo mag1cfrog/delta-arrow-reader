@@ -86,7 +86,7 @@ struct ParquetFileObject {
 
 struct PhysicalParquetStream {
     stream: ParquetRecordBatchStream<ParquetObjectReader>,
-    schema_match: SchemaMatch,
+    schema_alignment: ParquetSchemaAlignment,
     include_original_row_index: bool,
 }
 
@@ -114,7 +114,7 @@ struct LogicalFileReadRequest {
 }
 
 #[derive(Clone)]
-struct SchemaMatch {
+struct ParquetSchemaAlignment {
     target_schema: SchemaRef,
     projected_roots: Vec<usize>,
     target_column_plans: Vec<TargetColumnPlan>,
@@ -312,11 +312,11 @@ impl DirectParquetReader {
                     reason: "parquet_read_setup_failed",
                 })?
         };
-        let schema_match =
-            build_schema_match(builder.parquet_schema(), builder.schema(), target_schema)
+        let schema_alignment =
+            build_schema_alignment(builder.parquet_schema(), builder.schema(), target_schema)
                 .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
         let projection =
-            ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
+            ProjectionMask::roots(builder.parquet_schema(), schema_alignment.projected_roots());
         let row_groups = pruned_row_groups(
             builder.metadata(),
             file_size,
@@ -337,7 +337,7 @@ impl DirectParquetReader {
             self.row_filter(
                 predicate,
                 kernel_schemas,
-                &schema_match,
+                &schema_alignment,
                 builder.parquet_schema(),
             )
         });
@@ -360,7 +360,7 @@ impl DirectParquetReader {
 
         Ok(PhysicalParquetStream {
             stream,
-            schema_match,
+            schema_alignment,
             include_original_row_index,
         })
     }
@@ -425,16 +425,16 @@ impl DirectParquetReader {
         &self,
         predicate: &DeltaKernelPredicate,
         kernel_schemas: &KernelScanSchemas,
-        schema_match: &SchemaMatch,
+        schema_alignment: &ParquetSchemaAlignment,
         parquet_schema: &SchemaDescriptor,
     ) -> RowFilter {
-        let projection = ProjectionMask::roots(parquet_schema, schema_match.projected_roots());
+        let projection = ProjectionMask::roots(parquet_schema, schema_alignment.projected_roots());
         let engine_context = Arc::clone(&self.engine_context);
         let predicate = predicate.clone();
         let kernel_schemas = kernel_schemas.clone();
-        let schema_match = schema_match.clone();
+        let schema_alignment = schema_alignment.clone();
         let predicate = ArrowPredicateFn::new(projection, move |batch| {
-            let batch = schema_match
+            let batch = schema_alignment
                 .reshape_batch_to_target_schema(batch)
                 .map_err(|error| arrow::error::ArrowError::ComputeError(error.to_string()))?;
             engine_context
@@ -661,8 +661,9 @@ impl PhysicalParquetStream {
         } else {
             None
         };
-        let batch = if self.include_original_row_index || self.schema_match.needs_batch_reshape {
-            self.schema_match
+        let batch = if self.include_original_row_index || self.schema_alignment.needs_batch_reshape
+        {
+            self.schema_alignment
                 .reshape_batch_to_target_schema(batch)
                 .map_err(|error| data_file_error("parquet_batch_reshape_failed", error))?
         } else {
@@ -731,7 +732,7 @@ fn cancelled_error() -> DeltaReaderError {
     .build()
 }
 
-impl SchemaMatch {
+impl ParquetSchemaAlignment {
     fn projected_roots(&self) -> impl Iterator<Item = usize> + '_ {
         self.projected_roots.iter().copied()
     }
@@ -762,11 +763,11 @@ impl SchemaMatch {
     }
 }
 
-fn build_schema_match(
+fn build_schema_alignment(
     parquet_schema: &SchemaDescriptor,
     parquet_arrow_schema: &SchemaRef,
     target_schema: SchemaRef,
-) -> Result<SchemaMatch, delta_kernel::Error> {
+) -> Result<ParquetSchemaAlignment, delta_kernel::Error> {
     let root_matches = target_schema
         .fields()
         .iter()
@@ -830,7 +831,7 @@ fn build_schema_match(
             },
         );
 
-    Ok(SchemaMatch {
+    Ok(ParquetSchemaAlignment {
         target_schema,
         projected_roots,
         target_column_plans,
@@ -2340,17 +2341,20 @@ mod tests {
         writer.write(&batch)?;
         writer.close()?;
         let builder = ParquetRecordBatchReaderBuilder::try_new(fs::File::open(file_path)?)?;
-        let schema_match =
-            super::build_schema_match(builder.parquet_schema(), builder.schema(), target_schema)?;
+        let schema_alignment = super::build_schema_alignment(
+            builder.parquet_schema(),
+            builder.schema(),
+            target_schema,
+        )?;
         let projection =
-            ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
+            ProjectionMask::roots(builder.parquet_schema(), schema_alignment.projected_roots());
         let projected = builder
             .with_projection(projection)
             .build()?
             .next()
             .transpose()?
             .ok_or("expected one projected Parquet batch")?;
-        Ok(schema_match.reshape_batch_to_target_schema(projected)?)
+        Ok(schema_alignment.reshape_batch_to_target_schema(projected)?)
     }
 
     #[tokio::test]
@@ -4257,7 +4261,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_casts_top_level_timestamp_leaf()
+    fn direct_parquet_schema_alignment_casts_top_level_timestamp_leaf()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_schema = Arc::new(Schema::new(vec![timestamp_us_utc_field("event_ts", true)]));
         let file_schema = Arc::new(Schema::new(vec![Field::new(
@@ -4364,8 +4368,8 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_casts_list_struct_leaf() -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn direct_parquet_schema_alignment_casts_list_struct_leaf()
+    -> Result<(), Box<dyn std::error::Error>> {
         let target_element = Field::new(
             "element",
             DataType::Struct(
@@ -4459,7 +4463,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_list_primitive_leaf_cast()
+    fn direct_parquet_schema_alignment_rejects_list_primitive_leaf_cast()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_schema = Arc::new(Schema::new(vec![
             Field::new(
@@ -4504,7 +4508,8 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_casts_map_key_leaf() -> Result<(), Box<dyn std::error::Error>> {
+    fn direct_parquet_schema_alignment_casts_map_key_leaf() -> Result<(), Box<dyn std::error::Error>>
+    {
         let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
             Field::new("key", DataType::Int64, false),
@@ -4572,7 +4577,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_recurses_by_nested_field_id_before_names()
+    fn direct_parquet_schema_alignment_recurses_by_nested_field_id_before_names()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_profile_fields = vec![
             Field::new("first_name", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -4634,7 +4639,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_list_struct_elements_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_list_struct_elements_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_address_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -4721,7 +4726,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_recurses_by_local_nested_name_fallback()
+    fn direct_parquet_schema_alignment_recurses_by_local_nested_name_fallback()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
@@ -4781,7 +4786,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_null_fills_missing_nullable_nested_child()
+    fn direct_parquet_schema_alignment_null_fills_missing_nullable_nested_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
@@ -4828,7 +4833,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_null_fills_missing_nullable_list_struct_child()
+    fn direct_parquet_schema_alignment_null_fills_missing_nullable_list_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_address_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -4895,7 +4900,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_missing_non_nullable_list_struct_child()
+    fn direct_parquet_schema_alignment_rejects_missing_non_nullable_list_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_address_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -4948,7 +4953,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_map_key_struct_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_map_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5060,7 +5065,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_null_fills_missing_nullable_map_key_struct_child()
+    fn direct_parquet_schema_alignment_null_fills_missing_nullable_map_key_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_key_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5138,7 +5143,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_missing_non_nullable_map_key_struct_child()
+    fn direct_parquet_schema_alignment_rejects_missing_non_nullable_map_key_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_key_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5198,7 +5203,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_map_list_key_struct_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_map_list_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_element_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5327,7 +5332,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_nested_map_key_struct_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_nested_map_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_inner_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5463,7 +5468,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_map_key_and_value_structs_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_map_key_and_value_structs_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5617,7 +5622,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_map_value_struct_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_map_value_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_value_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5728,7 +5733,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_null_fills_missing_nullable_map_value_struct_child()
+    fn direct_parquet_schema_alignment_null_fills_missing_nullable_map_value_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_value_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5806,7 +5811,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_missing_non_nullable_map_value_struct_child()
+    fn direct_parquet_schema_alignment_rejects_missing_non_nullable_map_value_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_value_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5869,7 +5874,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_missing_non_nullable_nested_child()
+    fn direct_parquet_schema_alignment_rejects_missing_non_nullable_nested_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let target_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
