@@ -36,7 +36,6 @@ pub(crate) struct FilterPlan {
     pub(crate) exact_row_predicate: Option<DeltaPredicate>,
     pub(crate) requires_statistics: bool,
     pub(crate) referenced_columns: Vec<String>,
-    pub(crate) has_unresolved_predicate: bool,
 }
 
 pub(crate) struct ProjectionPlan {
@@ -256,9 +255,6 @@ pub(crate) fn plan_datafusion_filters(
             referenced_columns.push(column.clone());
         }
     }
-    let has_unresolved_predicate = decisions
-        .iter()
-        .any(|decision| decision.pushdown != TableProviderFilterPushDown::Exact);
     let exact = decisions
         .iter()
         .filter(|decision| decision.pushdown == TableProviderFilterPushDown::Exact)
@@ -282,7 +278,6 @@ pub(crate) fn plan_datafusion_filters(
         exact_row_predicate,
         requires_statistics,
         referenced_columns,
-        has_unresolved_predicate,
     }
 }
 
@@ -1290,14 +1285,12 @@ mod tests {
             Some(DeltaPredicate::And(vec![expected.clone(), expected]))
         );
         assert!(plan.filters.exact_row_predicate.is_none());
-        assert!(plan.filters.has_unresolved_predicate);
 
         let empty = plan_scan(&schema, &HashSet::new(), None, &[], false);
         assert!(empty.filters.decisions.is_empty());
         assert!(empty.filters.pruning_predicate.is_none());
         assert!(empty.filters.exact_row_predicate.is_none());
         assert!(empty.filters.referenced_columns.is_empty());
-        assert!(!empty.filters.has_unresolved_predicate);
     }
 
     #[test]
@@ -1429,7 +1422,6 @@ mod tests {
                 filters[index]
             );
         }
-        assert!(!plan.filters.has_unresolved_predicate);
         assert!(plan.filters.exact_row_predicate.is_none());
         assert!(!plan.filters.requires_statistics);
         assert_eq!(
@@ -1538,7 +1530,6 @@ mod tests {
                 filters[index]
             );
         }
-        assert!(inexact.filters.has_unresolved_predicate);
         assert!(inexact.filters.requires_statistics);
 
         let exact = plan_scan(&schema, &HashSet::new(), None, &refs, true);
@@ -1549,7 +1540,6 @@ mod tests {
         );
         assert!(exact.filters.exact_row_predicate.is_some());
         assert!(exact.filters.requires_statistics);
-        assert!(!exact.filters.has_unresolved_predicate);
     }
 
     #[test]
@@ -1631,7 +1621,6 @@ mod tests {
             ["i32".to_owned(), "i64".to_owned(), "text".to_owned()]
         );
         assert!(plan.projection.hidden_columns.is_empty());
-        assert!(plan.filters.has_unresolved_predicate);
         assert!(plan.filters.requires_statistics);
     }
 
