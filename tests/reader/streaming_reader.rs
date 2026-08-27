@@ -303,6 +303,45 @@ fn local_end_to_end_example_reads_without_sql() -> TestResult {
 }
 
 #[test]
+fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("eager-scan-metadata")?;
+        let eager = DeltaTableBuilder::new(fixture.uri())
+            .load_table_with_eager_scan_metadata()
+            .await?;
+        let lazy = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let low_ids = DeltaPredicate::Compare {
+            column: "id".into(),
+            op: DeltaComparison::LtEq,
+            value: DeltaScalar::Int32(4),
+        };
+        let high_ids = DeltaPredicate::Compare {
+            column: "id".into(),
+            op: DeltaComparison::Gt,
+            value: DeltaScalar::Int32(4),
+        };
+
+        let (expected_low, _) =
+            collect_scan(lazy.scan().with_predicate(low_ids.clone()).build().await?).await?;
+        let (expected_high, _) =
+            collect_scan(lazy.scan().with_predicate(high_ids.clone()).build().await?).await?;
+
+        fs::rename(fixture.0.join("_delta_log"), fixture.0.join("disabled-log"))?;
+
+        let (actual_low, low_metrics) =
+            collect_scan(eager.scan().with_predicate(low_ids).build().await?).await?;
+        let (actual_high, high_metrics) =
+            collect_scan(eager.scan().with_predicate(high_ids).build().await?).await?;
+
+        assert_eq!(sorted_ids(&actual_low), sorted_ids(&expected_low));
+        assert_eq!(sorted_ids(&actual_high), sorted_ids(&expected_high));
+        assert_eq!(low_metrics.snapshot().files_planned, 1);
+        assert_eq!(high_metrics.snapshot().files_planned, 1);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
 fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
     let fixture = TestTable::unsupported("unsupported")?;
     let runtime = runtime()?;

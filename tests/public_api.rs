@@ -210,6 +210,10 @@ fn streaming_reader_contract_is_public() {
         .with_snapshot_selection(DeltaSnapshotSelection::Version(1))
         .with_execution_options(DeltaScanExecutionOptions::new());
     assert_future::<Result<DeltaTable, DeltaReaderError>>(builder.load_table());
+    let eager_builder = DeltaTableBuilder::new("file:///tmp/table");
+    assert_future::<Result<DeltaTable, DeltaReaderError>>(
+        eager_builder.load_table_with_eager_scan_metadata(),
+    );
     let snapshot_builder = DeltaTableBuilder::new("file:///tmp/table");
     assert_future::<Result<DeltaTableSnapshot, DeltaReaderError>>(snapshot_builder.load_snapshot());
 

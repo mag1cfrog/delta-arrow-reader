@@ -164,11 +164,15 @@ pub(crate) fn plan_unpartitioned_scan(
             "Delta scan metadata expansion"
         )
         .entered();
-        scan.collect_file_metadata(snapshot.engine_context())
-            .boxed()
-            .context(ScanPlanningSnafu {
-                reason: "kernel_scan_metadata_failed",
-            })?
+        scan.collect_file_metadata(
+            snapshot.engine_context(),
+            snapshot.version(),
+            snapshot.eager_scan_metadata(),
+        )
+        .boxed()
+        .context(ScanPlanningSnafu {
+            reason: "kernel_scan_metadata_failed",
+        })?
     };
     let estimated_input_rows = checked_sum(
         metadata.files.iter().map(|file| file.estimated_rows),
