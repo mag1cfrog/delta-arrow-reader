@@ -5,7 +5,7 @@ use std::{error::Error as _, future::Future};
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use delta_arrow_reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaProtocolInfo, DeltaReaderError,
-    DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScalar, DeltaScan, DeltaScanBuilder,
+    DeltaReaderPhase, DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaScanExecutionOptions,
     DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection, DeltaStorageOptions,
     DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
     diagnostics::partition_target::{
@@ -55,7 +55,7 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
         DeltaSnapshotSelection::Version(3)
     );
 
-    let options = DeltaReaderExecutionOptions::new()
+    let options = DeltaScanExecutionOptions::new()
         .with_reader_backend(ParquetReaderBackend::DeltaKernel)
         .with_max_concurrent_file_reads_per_scan(Some(6))?
         .with_max_concurrent_file_reads_per_partition(3)?
@@ -66,7 +66,7 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
 
     assert_eq!(options.reader_backend(), ParquetReaderBackend::DeltaKernel);
 
-    let error = DeltaReaderExecutionOptions::new()
+    let error = DeltaScanExecutionOptions::new()
         .with_output_buffer_batches_per_partition(0)
         .expect_err("zero output capacity must fail");
     assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
@@ -205,7 +205,7 @@ fn streaming_reader_contract_is_public() {
     let builder = DeltaTableBuilder::new("file:///tmp/table")
         .with_storage_options(DeltaStorageOptions::new())
         .with_snapshot_selection(DeltaSnapshotSelection::Version(1))
-        .with_execution_options(DeltaReaderExecutionOptions::new());
+        .with_execution_options(DeltaScanExecutionOptions::new());
     assert_future::<Result<DeltaTable, DeltaReaderError>>(builder.load_table());
     let snapshot_builder = DeltaTableBuilder::new("file:///tmp/table");
     assert_future::<Result<DeltaTableSnapshot, DeltaReaderError>>(snapshot_builder.load_snapshot());
@@ -247,7 +247,7 @@ fn streaming_reader_contract_is_public() {
     fn configure_scan<'a>(
         builder: DeltaScanBuilder<'a>,
         predicate: DeltaPredicate,
-        options: DeltaReaderExecutionOptions,
+        options: DeltaScanExecutionOptions,
     ) -> Result<DeltaScanBuilder<'a>, DeltaReaderError> {
         Ok(builder
             .with_projection(["id"])

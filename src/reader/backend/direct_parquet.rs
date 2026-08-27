@@ -37,7 +37,7 @@ use self::{
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
 
 use crate::{
-    DeltaReaderError, DeltaReaderExecutionOptions, DeltaScanMetrics,
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics,
     delta::kernel::{
         DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
         KernelScanSchemas,
@@ -58,7 +58,7 @@ use crate::{
 struct DirectParquetFileReader {
     engine_context: Arc<DeltaKernelEngineContext>,
     store: Arc<dyn ObjectStore>,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
     metrics: DeltaScanMetrics,
 }
 
@@ -178,7 +178,7 @@ struct DirectParquetRootMatch {
 impl DirectParquetFileReader {
     fn new(
         engine_context: Arc<DeltaKernelEngineContext>,
-        execution_options: DeltaReaderExecutionOptions,
+        execution_options: DeltaScanExecutionOptions,
         metrics: DeltaScanMetrics,
     ) -> Self {
         let store = Arc::new(MeteredParquetObjectStore::new(
@@ -1488,7 +1488,7 @@ mod tests {
     };
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
-        DeltaReaderError, DeltaReaderExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection,
+        DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection,
         DeltaStorageOptions, ParquetReaderBackend,
         delta::kernel::{
             DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
@@ -1775,7 +1775,7 @@ mod tests {
 
     fn reader(
         root: &TestDir,
-        options: DeltaReaderExecutionOptions,
+        options: DeltaScanExecutionOptions,
         metrics: DeltaScanMetrics,
     ) -> Result<DirectParquetFileReader, Box<dyn std::error::Error>> {
         let table_url = url::Url::from_directory_path(root.path())
@@ -2050,7 +2050,7 @@ mod tests {
             &DeltaStorageOptions::new(),
             selection,
         )?;
-        let options = DeltaReaderExecutionOptions::new()
+        let options = DeltaScanExecutionOptions::new()
             .with_parquet_full_file_read_threshold_bytes(full_file_read_threshold_bytes)?
             .with_parquet_metadata_size_hint_bytes(metadata_size_hint_bytes)?
             .with_reader_backend(backend);
@@ -2090,7 +2090,7 @@ mod tests {
             &["region".to_owned()],
             Some(DeltaKernelPredicate::from_test_predicate(predicate)),
             true,
-            DeltaReaderExecutionOptions::new().with_reader_backend(backend),
+            DeltaScanExecutionOptions::new().with_reader_backend(backend),
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
                 caller_target_partitions: None,
@@ -2113,7 +2113,7 @@ mod tests {
             &[],
             None,
             false,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
                 caller_target_partitions: None,
@@ -2229,7 +2229,7 @@ mod tests {
         let parquet_bytes = parquet_bytes()?;
         let file_size = u64::try_from(parquet_bytes.len())?;
         let metrics = metrics();
-        let mut reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics.clone())?;
+        let mut reader = reader(&root, DeltaScanExecutionOptions::new(), metrics.clone())?;
         let mut task = task("part.parquet", Some(file_size))?;
         task.parquet_byte_range = Some(0..file_size);
         let object = reader.resolve_parquet_object(&task)?;
@@ -2273,7 +2273,7 @@ mod tests {
     }
 
     fn one_file_limiter(
-        options: DeltaReaderExecutionOptions,
+        options: DeltaScanExecutionOptions,
     ) -> Result<Arc<ScanReadLimiter>, DeltaReaderError> {
         let options = options
             .with_prefetch_files_per_partition(1)
@@ -2407,7 +2407,7 @@ mod tests {
         let root = TestDir::new("direct-object-resolution")?;
         fs::write(root.path().join("part.parquet"), b"data")?;
         let metrics = metrics();
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics.clone())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics.clone())?;
 
         let object = reader
             .parquet_object_for_task(&task("part.parquet", Some(4))?)
@@ -2446,7 +2446,7 @@ mod tests {
         let store = engine_context.object_store();
         let reader = DirectParquetFileReader::new(
             engine_context,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             metrics(),
         );
         let bytes = parquet_bytes()?;
@@ -2484,7 +2484,7 @@ mod tests {
         let file_size = u64::try_from(bytes.len())?;
         let mut task = task("secret.parquet", Some(file_size))?;
         task.parquet_byte_range = Some(0..file_size + 1);
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, true),
@@ -2697,7 +2697,7 @@ mod tests {
             let root = TestDir::new(name)?;
             fs::write(root.path().join("part.parquet"), bytes)?;
             let metrics = metrics();
-            let options = DeltaReaderExecutionOptions::new()
+            let options = DeltaScanExecutionOptions::new()
                 .with_parquet_full_file_read_threshold_bytes(threshold)?;
             let reader = reader(&root, options, metrics.clone())?;
             let mut task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
@@ -2742,7 +2742,7 @@ mod tests {
         let metrics = metrics();
         let reader = reader(
             &root,
-            DeltaReaderExecutionOptions::new()
+            DeltaScanExecutionOptions::new()
                 .with_parquet_full_file_read_threshold_bytes(Some(bytes.len()))?,
             metrics.clone(),
         )?;
@@ -2816,7 +2816,7 @@ mod tests {
         let root = TestDir::new("direct-projected-stream")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let provider_schema = Arc::new(Schema::new(vec![Field::new("name", DataType::Utf8, true)]));
         let mut stream = reader
@@ -2856,7 +2856,7 @@ mod tests {
         let root = TestDir::new("direct-projection-shapes")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
 
         for (schema, names, columns) in [
@@ -2910,9 +2910,9 @@ mod tests {
         let mut snapshots = Vec::new();
 
         for options in [
-            DeltaReaderExecutionOptions::new(),
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint_bytes(None)?,
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint_bytes(Some(9))?,
+            DeltaScanExecutionOptions::new(),
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(None)?,
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(Some(9))?,
         ] {
             let metrics = metrics();
             let reader = reader(&root, options, metrics.clone())?;
@@ -2970,7 +2970,7 @@ mod tests {
                 Expression::Column(ColumnName::new(["id"])),
                 Expression::Literal(Scalar::String("not-an-integer".to_owned())),
             ));
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
 
         for (path, file_size, predicate, expected) in [
             (
@@ -3064,7 +3064,7 @@ mod tests {
             Expression::Column(ColumnName::new(["amount"])),
             Expression::Literal(Scalar::decimal(0, 10, 2)?),
         ));
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
             .open_parquet_stream(&task, schema, None, Some(&predicate), None, false)
@@ -3742,7 +3742,7 @@ mod tests {
                 &[],
                 None,
                 false,
-                DeltaReaderExecutionOptions::new().with_reader_backend(backend),
+                DeltaScanExecutionOptions::new().with_reader_backend(backend),
                 DeltaScanPartitionTargetOptions {
                     explicit_target_partitions: Some(1),
                     caller_target_partitions: None,
@@ -4072,7 +4072,7 @@ mod tests {
         let corrupt_metrics = metrics();
         let corrupt_reader = reader(
             &corrupt_root,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             corrupt_metrics.clone(),
         )?;
         let corrupt_task = task("secret.parquet", Some(11))?;
@@ -4106,7 +4106,7 @@ mod tests {
         let missing_metrics = metrics();
         let missing_reader = reader(
             &missing_root,
-            DeltaReaderExecutionOptions::new()
+            DeltaScanExecutionOptions::new()
                 .with_parquet_full_file_read_threshold_bytes(Some(64))?,
             missing_metrics.clone(),
         )?;
@@ -6007,7 +6007,7 @@ mod tests {
             field_with_id("name", DataType::Utf8, true, 2),
             Field::new("added", DataType::Utf8, true),
         ]));
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
             .open_parquet_stream(&task, provider_schema, None, None, None, false)
@@ -6054,7 +6054,7 @@ mod tests {
             ]))],
         )?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let timestamp_schema = Arc::new(Schema::new(vec![Field::new(
             "event_ts",

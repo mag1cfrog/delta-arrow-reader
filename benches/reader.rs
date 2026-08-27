@@ -17,7 +17,7 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaReaderExecutionOptions, DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend,
+    DeltaScanExecutionOptions, DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend,
     datafusion::{ScanMetricsSnapshot, ScanOptions, collect_scan_metrics, register_table},
 };
 use delta_kernel::actions::deletion_vector::{DeletionVectorDescriptor, DeletionVectorStorageType};
@@ -1305,7 +1305,7 @@ async fn run_once(
     target_partitions: usize,
 ) -> Result<Measurement, Box<dyn Error>> {
     let context = SessionContext::new();
-    let execution_options = DeltaReaderExecutionOptions::new()
+    let execution_options = DeltaScanExecutionOptions::new()
         .with_reader_backend(config.backend)
         .with_max_concurrent_file_reads_per_scan(Some(target_partitions.saturating_mul(3).max(1)))?
         .with_max_concurrent_file_reads_per_partition(3)?

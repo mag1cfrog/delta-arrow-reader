@@ -20,7 +20,7 @@ use super::{
     },
 };
 use crate::{
-    DeltaReaderError, DeltaReaderExecutionOptions, DeltaScanMetrics,
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics,
     delta::{
         kernel::{
             DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
@@ -57,7 +57,7 @@ pub(crate) struct DeltaScanPlan {
     pub(crate) estimated_bytes: Option<u64>,
     pub(crate) estimated_rows: Option<u64>,
     pub(crate) physical_predicate: Option<DeltaKernelPredicate>,
-    pub(crate) execution_options: DeltaReaderExecutionOptions,
+    pub(crate) execution_options: DeltaScanExecutionOptions,
     pub(crate) metrics: DeltaScanMetrics,
 }
 
@@ -75,7 +75,7 @@ pub(crate) struct DeltaUnpartitionedScanPlan {
     pub(crate) estimated_bytes: Option<u64>,
     pub(crate) estimated_rows: Option<u64>,
     pub(crate) physical_predicate: Option<DeltaKernelPredicate>,
-    pub(crate) execution_options: DeltaReaderExecutionOptions,
+    pub(crate) execution_options: DeltaScanExecutionOptions,
 }
 
 #[allow(dead_code)]
@@ -108,7 +108,7 @@ pub(crate) fn plan_scan(
     hidden_columns: &[String],
     kernel_predicate: Option<DeltaKernelPredicate>,
     include_stats: bool,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
     partition_target_options: DeltaScanPartitionTargetOptions,
 ) -> Result<DeltaScanPlan, DeltaReaderError> {
     let partition_target_diagnostic = local_partition_target_diagnostic(partition_target_options)?;
@@ -152,7 +152,7 @@ pub(crate) fn plan_unpartitioned_scan(
     hidden_columns: &[String],
     kernel_predicate: Option<DeltaKernelPredicate>,
     include_stats: bool,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
 ) -> Result<DeltaUnpartitionedScanPlan, DeltaReaderError> {
     build_unpartitioned_scan_plan(
         snapshot,
@@ -170,7 +170,7 @@ fn build_unpartitioned_scan_plan(
     hidden_columns: &[String],
     kernel_predicate: Option<DeltaKernelPredicate>,
     include_stats: bool,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
 ) -> Result<DeltaUnpartitionedScanPlan, DeltaReaderError> {
     let logical_projection =
         logical_projection(snapshot.schema().as_ref(), projection, hidden_columns)?;
@@ -564,8 +564,8 @@ mod tests {
 
         use super::{DeltaLogTable, PROTOCOL_JSON, plan_scan, planned_tasks};
         use crate::{
-            DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderExecutionOptions,
-            DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection, DeltaStorageOptions,
+            DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderPhase, DeltaScalar,
+            DeltaScanExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
             delta::{
                 kernel::{DeltaKernelPredicate, delta_predicate_to_kernel_pruning},
                 snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
@@ -636,7 +636,7 @@ mod tests {
                     &[],
                     predicate,
                     false,
-                    DeltaReaderExecutionOptions::default(),
+                    DeltaScanExecutionOptions::default(),
                 )?;
                 let mut paths = planned_tasks(&plan)
                     .map(|task| task.path.clone())
@@ -2445,7 +2445,7 @@ mod tests {
 
         use super::{DeltaLogTable, PROTOCOL_JSON, plan_scan, planned_tasks};
         use crate::{
-            DeltaComparison, DeltaPredicate, DeltaReaderExecutionOptions, DeltaScalar,
+            DeltaComparison, DeltaPredicate, DeltaScalar, DeltaScanExecutionOptions,
             DeltaSnapshotSelection, DeltaStorageOptions,
             delta::{
                 kernel::delta_predicate_to_kernel_pruning,
@@ -2498,7 +2498,7 @@ mod tests {
                     &[],
                     Some(kernel_predicate),
                     true,
-                    DeltaReaderExecutionOptions::default(),
+                    DeltaScanExecutionOptions::default(),
                 )?;
                 let mut paths = planned_tasks(&plan)
                     .map(|task| task.path.clone())
@@ -4595,7 +4595,7 @@ mod tests {
         hidden_columns: &[String],
         kernel_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
         include_stats: bool,
-        execution_options: crate::DeltaReaderExecutionOptions,
+        execution_options: crate::DeltaScanExecutionOptions,
     ) -> Result<DeltaScanPlan, crate::DeltaReaderError> {
         super::plan_scan(
             snapshot,
@@ -4683,7 +4683,7 @@ mod tests {
     fn file_task_planning_exhausts_empty_single_and_multi_batch_scans()
     -> Result<(), Box<dyn std::error::Error>> {
         let (_empty_table, empty_snapshot) = loaded_snapshot("empty-files")?;
-        let execution_options = crate::DeltaReaderExecutionOptions::default();
+        let execution_options = crate::DeltaScanExecutionOptions::default();
         let empty = plan_scan(&empty_snapshot, None, &[], None, true, execution_options)?;
         assert!(empty.partitions.is_empty());
         assert_eq!(empty.estimated_bytes, Some(0));
@@ -5495,7 +5495,7 @@ mod tests {
             add("part-1.parquet", 10, Some(1)),
         ];
         let (_table, snapshot) = loaded_snapshot_with_adds("scan-execution", &adds)?;
-        let execution_options = crate::DeltaReaderExecutionOptions::new()
+        let execution_options = crate::DeltaScanExecutionOptions::new()
             .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
@@ -5583,7 +5583,7 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let adds = [add("part.parquet", 10, Some(1))];
         let (_table, snapshot) = loaded_snapshot_with_adds("concurrent-executions", &adds)?;
-        let execution_options = crate::DeltaReaderExecutionOptions::new()
+        let execution_options = crate::DeltaScanExecutionOptions::new()
             .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?;

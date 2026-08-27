@@ -9,9 +9,9 @@ use arrow::{
     util::display::array_value_to_string,
 };
 use delta_arrow_reader::{
-    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReaderError,
-    DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScalar, DeltaScanMetrics,
-    DeltaScanMetricsSnapshot, DeltaTableBuilder, ParquetReaderBackend,
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderPhase,
+    DeltaScalar, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot,
+    DeltaTableBuilder, ParquetReaderBackend,
 };
 use futures_util::{StreamExt, TryStreamExt};
 use parquet::file::{reader::FileReader, serialized_reader::SerializedFileReader};
@@ -490,8 +490,8 @@ fn runtime() -> TestResult<tokio::runtime::Runtime> {
         .build()?)
 }
 
-fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExecutionOptions> {
-    Ok(DeltaReaderExecutionOptions::new()
+fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaScanExecutionOptions> {
+    Ok(DeltaScanExecutionOptions::new()
         .with_prefetch_files_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(capacity)?
         .with_max_concurrent_file_reads_per_scan(Some(capacity))?
@@ -532,7 +532,7 @@ fn projection(names: &[&str]) -> Option<Vec<String>> {
 
 async fn direct_stream(
     fixture: &RealParquetDeltaTable,
-    options: DeltaReaderExecutionOptions,
+    options: DeltaScanExecutionOptions,
 ) -> TestResult<DeltaBatchStream> {
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .with_execution_options(options)
@@ -554,7 +554,7 @@ async fn scan_fixture(
     projection: Option<Vec<String>>,
     predicate: Option<DeltaPredicate>,
 ) -> TestResult<ScanAttempt> {
-    let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend);
+    let options = DeltaScanExecutionOptions::new().with_reader_backend(backend);
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .with_execution_options(options)
         .load_table()

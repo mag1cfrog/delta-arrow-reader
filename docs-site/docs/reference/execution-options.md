@@ -6,7 +6,7 @@ them, see [scan planning](../scan-planning.md) and
 
 ## Reader execution options
 
-`DeltaReaderExecutionOptions` applies to both the streaming API and DataFusion.
+`DeltaScanExecutionOptions` applies to both the streaming API and DataFusion.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ adapter.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `execution_options` | `DeltaReaderExecutionOptions::default()` | Reader settings used by each provider scan. |
+| `execution_options` | `DeltaScanExecutionOptions::default()` | Reader settings used by each provider scan. |
 | `target_partitions` | `None` | Explicit scan partition target. `None` uses the automatic policy. |
 | `intra_file_repartitioning` | `WhenBelowTarget` | Allows ranged file tasks only when whole-file planning falls short of the target. Use `Always` to allow them at any partition count. |
 | `use_arrow_view_types` | `true` | Decode string and binary data-file columns as Arrow view arrays. |

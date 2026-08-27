@@ -21,7 +21,7 @@ use tracing::Instrument;
 
 use super::planning::{DeltaScanFileTask, DeltaScanPlan};
 use crate::{
-    DeltaReaderError, DeltaReaderExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
     error::{CancelledSnafu, InvalidConfigurationSnafu},
 };
 
@@ -191,7 +191,7 @@ impl DeltaScanExecution {
 
 impl ScanReadLimiter {
     pub(crate) fn new(
-        options: DeltaReaderExecutionOptions,
+        options: DeltaScanExecutionOptions,
         target_partitions: usize,
         partition_count: usize,
     ) -> Arc<Self> {
@@ -391,7 +391,7 @@ impl PartitionStream {
     pub(crate) fn new<Task>(
         file_tasks: Vec<Task>,
         partition_limiter: PartitionReadLimiter,
-        options: DeltaReaderExecutionOptions,
+        options: DeltaScanExecutionOptions,
         admission: FileAdmissionFn<Task>,
         executor: FileExecutor<Task, FileBatchStream>,
         metrics: DeltaScanMetrics,
@@ -745,7 +745,7 @@ mod tests {
     };
 
     use crate::{
-        DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScanMetrics, ParquetReaderBackend,
+        DeltaReaderPhase, DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
         error::InvalidConfigurationSnafu, reader::metrics::DeltaScanMetricsConfig,
     };
 
@@ -757,8 +757,8 @@ mod tests {
     fn options(
         scan_capacity: usize,
         partition_capacity: usize,
-    ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        DeltaReaderExecutionOptions::new()
+    ) -> Result<DeltaScanExecutionOptions, crate::DeltaReaderError> {
+        DeltaScanExecutionOptions::new()
             .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(partition_capacity)?
             .with_max_concurrent_file_reads_per_scan(Some(scan_capacity))
@@ -779,8 +779,8 @@ mod tests {
     fn stream_options(
         output_buffer_batches: usize,
         prefetch_files: usize,
-    ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        DeltaReaderExecutionOptions::new()
+    ) -> Result<DeltaScanExecutionOptions, crate::DeltaReaderError> {
+        DeltaScanExecutionOptions::new()
             .with_prefetch_files_per_partition(prefetch_files)
             .with_output_buffer_batches_per_partition(output_buffer_batches)
     }
@@ -896,7 +896,7 @@ mod tests {
     #[tokio::test]
     async fn scan_capacity_and_partition_index_use_fixed_plan_inputs()
     -> Result<(), Box<dyn std::error::Error>> {
-        let limiter = ScanReadLimiter::new(DeltaReaderExecutionOptions::new(), 2, 1);
+        let limiter = ScanReadLimiter::new(DeltaScanExecutionOptions::new(), 2, 1);
         assert_eq!(limiter.scan_capacity, 6);
         assert_eq!(limiter.partition_capacity, 3);
 

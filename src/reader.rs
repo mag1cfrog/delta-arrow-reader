@@ -15,7 +15,7 @@ pub(crate) mod transform;
 
 pub use metrics::{DeltaScanMetrics, DeltaScanMetricsSnapshot};
 pub use options::{
-    DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions, ParquetReaderBackend,
+    DeltaScanExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions, ParquetReaderBackend,
 };
 pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 
@@ -93,7 +93,7 @@ pub struct DeltaTableBuilder {
     table_uri: String,
     storage_options: DeltaStorageOptions,
     snapshot_selection: DeltaSnapshotSelection,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTableBuilder {
@@ -103,7 +103,7 @@ impl DeltaTableBuilder {
             table_uri: table_uri.into(),
             storage_options: DeltaStorageOptions::new(),
             snapshot_selection: DeltaSnapshotSelection::Latest,
-            execution_options: DeltaReaderExecutionOptions::new(),
+            execution_options: DeltaScanExecutionOptions::new(),
         }
     }
 
@@ -120,7 +120,7 @@ impl DeltaTableBuilder {
     }
 
     /// Replaces the default execution settings used by scans of this table.
-    pub const fn with_execution_options(mut self, value: DeltaReaderExecutionOptions) -> Self {
+    pub const fn with_execution_options(mut self, value: DeltaScanExecutionOptions) -> Self {
         self.execution_options = value;
         self
     }
@@ -165,13 +165,13 @@ impl fmt::Debug for DeltaTableBuilder {
 /// Loaded Delta snapshot metadata awaiting logical Arrow schema conversion.
 pub struct DeltaTableSnapshot {
     snapshot: StagedDeltaTableSnapshot,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTableSnapshot {
     fn new(
         snapshot: StagedDeltaTableSnapshot,
-        execution_options: DeltaReaderExecutionOptions,
+        execution_options: DeltaScanExecutionOptions,
     ) -> Self {
         Self {
             snapshot,
@@ -224,13 +224,13 @@ impl fmt::Debug for DeltaTableSnapshot {
 pub struct DeltaTable {
     snapshot: Arc<LoadedDeltaTableSnapshot>,
     version: u64,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTable {
     fn new(
         snapshot: LoadedDeltaTableSnapshot,
-        execution_options: DeltaReaderExecutionOptions,
+        execution_options: DeltaScanExecutionOptions,
     ) -> Self {
         let version = snapshot.version();
         Self {
@@ -306,7 +306,7 @@ pub struct DeltaScanBuilder<'table> {
     predicate: Option<DeltaPredicate>,
     limit: Option<usize>,
     target_partitions: Option<usize>,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
 }
 
 impl<'table> DeltaScanBuilder<'table> {
@@ -344,7 +344,7 @@ impl<'table> DeltaScanBuilder<'table> {
     }
 
     /// Replaces the execution settings for this scan.
-    pub const fn with_execution_options(mut self, value: DeltaReaderExecutionOptions) -> Self {
+    pub const fn with_execution_options(mut self, value: DeltaScanExecutionOptions) -> Self {
         self.execution_options = value;
         self
     }
@@ -794,7 +794,7 @@ mod tests {
         trace_planning_failed, trace_planning_started,
     };
     use crate::{
-        DeltaReaderExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
+        DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
         error::InvalidConfigurationSnafu,
         reader::{
             metrics::DeltaScanMetricsConfig,
@@ -872,8 +872,8 @@ mod tests {
             .value(0)
     }
 
-    fn execution_options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        DeltaReaderExecutionOptions::new()
+    fn execution_options() -> Result<DeltaScanExecutionOptions, crate::DeltaReaderError> {
+        DeltaScanExecutionOptions::new()
             .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(2))?

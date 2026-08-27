@@ -34,7 +34,7 @@ pub enum ParquetReaderBackend {
 
 /// Bounded execution settings for one Delta scan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DeltaReaderExecutionOptions {
+pub struct DeltaScanExecutionOptions {
     reader_backend: ParquetReaderBackend,
     max_concurrent_file_reads_per_scan: Option<usize>,
     max_concurrent_file_reads_per_partition: usize,
@@ -44,7 +44,7 @@ pub struct DeltaReaderExecutionOptions {
     parquet_full_file_read_threshold_bytes: Option<usize>,
 }
 
-impl DeltaReaderExecutionOptions {
+impl DeltaScanExecutionOptions {
     /// Returns the baseline execution settings.
     pub const fn new() -> Self {
         Self {
@@ -177,7 +177,7 @@ impl DeltaReaderExecutionOptions {
     }
 }
 
-impl Default for DeltaReaderExecutionOptions {
+impl Default for DeltaScanExecutionOptions {
     fn default() -> Self {
         Self::new()
     }
@@ -205,13 +205,13 @@ mod tests {
     use crate::DeltaReaderPhase;
 
     use super::{
-        DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
+        DeltaScanExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
         ParquetReaderBackend,
     };
 
     #[test]
     fn public_defaults_match_the_frozen_baseline() {
-        let options = DeltaReaderExecutionOptions::new();
+        let options = DeltaScanExecutionOptions::new();
 
         assert_eq!(
             DeltaSnapshotSelection::default(),
@@ -221,7 +221,7 @@ mod tests {
             ParquetReaderBackend::default(),
             ParquetReaderBackend::Direct
         );
-        assert_eq!(DeltaReaderExecutionOptions::default(), options);
+        assert_eq!(DeltaScanExecutionOptions::default(), options);
         assert_eq!(options.reader_backend(), ParquetReaderBackend::Direct);
         assert_eq!(options.max_concurrent_file_reads_per_scan(), None);
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 3);
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn builders_set_every_public_option() -> Result<(), Box<dyn std::error::Error>> {
-        let options = DeltaReaderExecutionOptions::new()
+        let options = DeltaScanExecutionOptions::new()
             .with_reader_backend(ParquetReaderBackend::DeltaKernel)
             .with_max_concurrent_file_reads_per_scan(Some(8))?
             .with_max_concurrent_file_reads_per_partition(4)?
@@ -260,11 +260,11 @@ mod tests {
     #[test]
     fn invalid_bounds_return_redacted_configuration_errors() {
         let invalid = [
-            DeltaReaderExecutionOptions::new().with_max_concurrent_file_reads_per_scan(Some(0)),
-            DeltaReaderExecutionOptions::new().with_max_concurrent_file_reads_per_partition(0),
-            DeltaReaderExecutionOptions::new().with_output_buffer_batches_per_partition(0),
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint_bytes(Some(0)),
-            DeltaReaderExecutionOptions::new().with_parquet_full_file_read_threshold_bytes(Some(0)),
+            DeltaScanExecutionOptions::new().with_max_concurrent_file_reads_per_scan(Some(0)),
+            DeltaScanExecutionOptions::new().with_max_concurrent_file_reads_per_partition(0),
+            DeltaScanExecutionOptions::new().with_output_buffer_batches_per_partition(0),
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(Some(0)),
+            DeltaScanExecutionOptions::new().with_parquet_full_file_read_threshold_bytes(Some(0)),
         ];
 
         for result in invalid {
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn independent_bounds_preserve_the_frozen_reader_behavior()
     -> Result<(), Box<dyn std::error::Error>> {
-        let options = DeltaReaderExecutionOptions::new()
+        let options = DeltaScanExecutionOptions::new()
             .with_max_concurrent_file_reads_per_scan(Some(2))?
             .with_prefetch_files_per_partition(4);
 
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn scan_capacity_resolves_once_from_the_fixed_partition_target()
     -> Result<(), Box<dyn std::error::Error>> {
-        let defaults = DeltaReaderExecutionOptions::new();
+        let defaults = DeltaScanExecutionOptions::new();
         assert_eq!(defaults.resolved_max_concurrent_file_reads_per_scan(4), 12);
         assert_eq!(
             defaults.resolved_max_concurrent_file_reads_per_scan(usize::MAX),

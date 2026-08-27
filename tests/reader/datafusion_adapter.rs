@@ -27,7 +27,7 @@ use datafusion::{
     prelude::{SessionConfig, SessionContext},
 };
 use delta_arrow_reader::{
-    DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaTableBuilder,
+    DeltaReaderError, DeltaReaderPhase, DeltaScanExecutionOptions, DeltaTableBuilder,
     ParquetReaderBackend,
     datafusion::{
         DeltaTableProvider, IntraFileRepartitioning, ScanOptions, collect_scan_metrics,
@@ -479,7 +479,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     )?)?;
     assert_eq!(parquet.metadata().num_row_groups(), ROW_GROUPS);
 
-    let execution_options = DeltaReaderExecutionOptions::new()
+    let execution_options = DeltaScanExecutionOptions::new()
         .with_parquet_full_file_read_threshold_bytes(Some(usize::MAX))?;
     let options = ScanOptions {
         execution_options,
@@ -703,7 +703,7 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
     let defaults = ScanOptions::default();
     assert_eq!(
         defaults.execution_options,
-        DeltaReaderExecutionOptions::default()
+        DeltaScanExecutionOptions::default()
     );
     assert_eq!(defaults.target_partitions, None);
     assert!(defaults.use_arrow_view_types);
@@ -1007,7 +1007,7 @@ async fn direct_exact_and_kernel_residual_execution_return_the_same_rows() -> Te
         ("kernel_orders", ParquetReaderBackend::DeltaKernel),
     ] {
         let context = SessionContext::new();
-        let execution_options = DeltaReaderExecutionOptions::new().with_reader_backend(backend);
+        let execution_options = DeltaScanExecutionOptions::new().with_reader_backend(backend);
         let provider = DeltaTableProvider::try_new(
             table.clone(),
             ScanOptions {
@@ -1323,7 +1323,7 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
         .await?;
-    let execution_options = DeltaReaderExecutionOptions::new()
+    let execution_options = DeltaScanExecutionOptions::new()
         .with_prefetch_files_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(1)?
         .with_max_concurrent_file_reads_per_scan(Some(1))?
@@ -1378,7 +1378,7 @@ async fn direct_metadata_size_hint_bytes_preserves_rows_and_request_fallback() -
         let context =
             SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
         let execution_options =
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint_bytes(hint)?;
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(hint)?;
         register_table(
             &context,
             "orders",
@@ -1495,7 +1495,7 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
         .load_table()
         .await?;
     let execution_options =
-        DeltaReaderExecutionOptions::new().with_reader_backend(ParquetReaderBackend::DeltaKernel);
+        DeltaScanExecutionOptions::new().with_reader_backend(ParquetReaderBackend::DeltaKernel);
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
     register_table(
         &context,

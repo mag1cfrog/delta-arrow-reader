@@ -25,10 +25,9 @@ pub mod diagnostics {
     }
 }
 pub use reader::{
-    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReaderExecutionOptions, DeltaScalar,
-    DeltaScan, DeltaScanBuilder, DeltaScanMetrics, DeltaScanMetricsSnapshot,
-    DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot,
-    ParquetReaderBackend,
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaScalar, DeltaScan, DeltaScanBuilder,
+    DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection,
+    DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
 };
 /// The crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

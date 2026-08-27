@@ -227,12 +227,12 @@ mod tests {
 
     use super::spawn_blocking_file_stream;
     use crate::{
-        DeltaReaderExecutionOptions, ParquetReaderBackend,
+        DeltaScanExecutionOptions, ParquetReaderBackend,
         reader::scheduling::{ScanCancellation, ScanReadLimiter},
     };
 
-    fn options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        Ok(DeltaReaderExecutionOptions::new()
+    fn options() -> Result<DeltaScanExecutionOptions, crate::DeltaReaderError> {
+        Ok(DeltaScanExecutionOptions::new()
             .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?

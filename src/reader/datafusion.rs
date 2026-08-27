@@ -28,7 +28,7 @@ use self::{
 };
 
 use crate::{
-    DeltaReaderError, DeltaReaderExecutionOptions, DeltaTable, ParquetReaderBackend,
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
     delta::kernel::delta_predicate_to_kernel_pruning,
     reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
     reader::transform::schema_with_view_types,
@@ -40,7 +40,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
 #[derive(Debug, Clone)]
 pub struct ScanOptions {
     /// Reader execution settings used by each provider scan.
-    pub execution_options: DeltaReaderExecutionOptions,
+    pub execution_options: DeltaScanExecutionOptions,
     /// Optional explicit scan partition target.
     pub target_partitions: Option<usize>,
     /// Controls when DataFusion may split direct Parquet reads into ranged scan tasks.
@@ -52,7 +52,7 @@ pub struct ScanOptions {
 impl Default for ScanOptions {
     fn default() -> Self {
         Self {
-            execution_options: DeltaReaderExecutionOptions::default(),
+            execution_options: DeltaScanExecutionOptions::default(),
             target_partitions: None,
             intra_file_repartitioning: IntraFileRepartitioning::default(),
             use_arrow_view_types: true,

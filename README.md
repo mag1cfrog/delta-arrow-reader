@@ -134,13 +134,13 @@ still control whether repartitioning runs.
 The streaming API and both data-file reader backends are always available.
 `ParquetReaderBackend::Direct` is the default. Advanced callers can select
 `ParquetReaderBackend::DeltaKernel` with
-`DeltaReaderExecutionOptions::with_reader_backend`.
+`DeltaScanExecutionOptions::with_reader_backend`.
 
 ## Runtime, errors, and metrics
 
 - The caller supplies the Tokio runtime and drives returned streams.
 - Execution limits, buffering, Parquet metadata prefetch, and optional
-  full-file reads are configured through `DeltaReaderExecutionOptions`.
+  full-file reads are configured through `DeltaScanExecutionOptions`.
 - DataFusion scan metrics report whether the provider requested view arrays.
 - `DeltaReaderError::phase` and `DeltaReaderError::code` return stable,
   redacted categories. Dependency failures remain available through the

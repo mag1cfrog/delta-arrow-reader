@@ -846,7 +846,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        DeltaReaderExecutionOptions, DeltaTable, DeltaTableBuilder,
+        DeltaScanExecutionOptions, DeltaTable, DeltaTableBuilder,
         delta::kernel::delta_predicate_to_kernel_pruning,
         reader::datafusion::planning::{DataFusionFilterCapabilities, plan_datafusion_scan},
         reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
@@ -996,7 +996,7 @@ mod tests {
         projection: Option<&[usize]>,
         filters: &[datafusion::logical_expr::Expr],
         target_partitions: usize,
-        execution_options: DeltaReaderExecutionOptions,
+        execution_options: DeltaScanExecutionOptions,
         registration_name: Option<String>,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaReaderError> {
         build_plan_with_repartitioning(
@@ -1015,7 +1015,7 @@ mod tests {
         projection: Option<&[usize]>,
         filters: &[datafusion::logical_expr::Expr],
         target_partitions: usize,
-        execution_options: DeltaReaderExecutionOptions,
+        execution_options: DeltaScanExecutionOptions,
         registration_name: Option<String>,
         intra_file_repartitioning: IntraFileRepartitioning,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaReaderError> {
@@ -1353,7 +1353,7 @@ mod tests {
             None,
             &[],
             4,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
             IntraFileRepartitioning::Always,
         )?;
@@ -1389,14 +1389,8 @@ mod tests {
             expected_bytes
         );
 
-        let explicit_one = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
+        let explicit_one =
+            build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
         assert!(explicit_one.repartitioned(4, &config)?.is_none());
 
         {
@@ -1405,7 +1399,7 @@ mod tests {
                 None,
                 &[],
                 4,
-                DeltaReaderExecutionOptions::new()
+                DeltaScanExecutionOptions::new()
                     .with_reader_backend(ParquetReaderBackend::DeltaKernel),
                 None,
                 IntraFileRepartitioning::Always,
@@ -1449,7 +1443,7 @@ mod tests {
             Some(&[1, 0]),
             &[logical_filter],
             2,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
 
@@ -1491,7 +1485,7 @@ mod tests {
             Some(&[1]),
             &[col("id").gt(lit(1_i32))],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         let hidden_batches = datafusion::physical_plan::collect(
@@ -1515,7 +1509,7 @@ mod tests {
             None,
             &[col("region").eq(lit("west"))],
             2,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         let partition_batches = datafusion::physical_plan::collect(
@@ -1537,7 +1531,7 @@ mod tests {
             Some(&[]),
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         let empty_batches = datafusion::physical_plan::collect(
@@ -1564,7 +1558,7 @@ mod tests {
             None,
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         assert_eq!(
@@ -1599,14 +1593,7 @@ mod tests {
     async fn dynamic_filter_hook_prunes_before_file_start_and_counts_once() -> TestResult {
         let fixture = TestTable::partitioned("dynamic")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let plan = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
+        let plan = build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
         let dynamic = dynamic_filter("region", 1);
         let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic.clone();
         let rejected: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic_filter("id", 0);
@@ -1657,14 +1644,7 @@ mod tests {
     async fn physical_pushdown_preserves_dynamic_filters_across_plan_rebuild() -> TestResult {
         let fixture = TestTable::partitioned("dynamic-plan-rebuild")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let plan = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
+        let plan = build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
         let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> =
             dynamic_filter("region", 1);
         let pushed = plan.handle_child_pushdown_result(
@@ -1698,7 +1678,7 @@ mod tests {
     async fn late_dynamic_filter_keeps_admitted_file_and_prunes_the_next() -> TestResult {
         let fixture = TestTable::late_dynamic("late-dynamic")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let options = DeltaReaderExecutionOptions::new()
+        let options = DeltaScanExecutionOptions::new()
             .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
@@ -1745,7 +1725,7 @@ mod tests {
             None,
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             Some("first".to_owned()),
         )?;
         let second = build_plan(
@@ -1753,7 +1733,7 @@ mod tests {
             None,
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             Some("second".to_owned()),
         )?;
         let dynamic = dynamic_filter("region", 1);
@@ -1836,14 +1816,7 @@ mod tests {
 
         let fixture = TestTable::partitioned("dynamic-counters")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let plan = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
+        let plan = build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
         let metrics = collect_scan_metrics(plan.as_ref())
             .pop()
             .ok_or("missing metrics")?;
@@ -1931,14 +1904,7 @@ mod tests {
 
         let fixture = TestTable::partitioned("dynamic-metrics-concurrency")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let plan = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
+        let plan = build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
         let metrics = collect_scan_metrics(plan.as_ref())
             .pop()
             .ok_or("missing metrics")?;
@@ -1993,7 +1959,7 @@ mod tests {
             None,
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         let result = datafusion::physical_plan::collect(
@@ -2011,7 +1977,7 @@ mod tests {
 
         let fixture = TestTable::partitioned("drop")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let options = DeltaReaderExecutionOptions::new()
+        let options = DeltaScanExecutionOptions::new()
             .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
@@ -2046,7 +2012,7 @@ mod tests {
             ParquetReaderBackend::Direct,
             ParquetReaderBackend::DeltaKernel,
         ] {
-            let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend);
+            let options = DeltaScanExecutionOptions::new().with_reader_backend(backend);
             let plan = build_plan(&table, Some(&[1, 0]), &[], 2, options, None)?;
             let mut batches =
                 datafusion::physical_plan::collect(plan, SessionContext::new().task_ctx()).await?;
@@ -2081,8 +2047,8 @@ mod tests {
         }
         assert_eq!(outputs[0], outputs[1]);
 
-        let kernel_options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel);
+        let kernel_options =
+            DeltaScanExecutionOptions::new().with_reader_backend(ParquetReaderBackend::DeltaKernel);
         let inexact = build_plan(
             &table,
             None,

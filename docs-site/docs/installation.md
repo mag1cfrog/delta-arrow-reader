@@ -41,7 +41,7 @@ only optional feature adds the DataFusion integration.
 | `datafusion` | No | Register Delta tables with DataFusion and expose execution metrics. |
 
 The direct Parquet backend is selected by default. Rust callers can choose the
-Delta Kernel backend through `DeltaReaderExecutionOptions` without changing
+Delta Kernel backend through `DeltaScanExecutionOptions` without changing
 Cargo features.
 
 Both APIs run on your application's Tokio runtime. Delta Arrow Reader does not
