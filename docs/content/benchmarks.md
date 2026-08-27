@@ -15,6 +15,12 @@ The table below shows how long each reader took to load the Delta snapshot and
 stream the full result. Process startup and Python import time are not included.
 Each value is the median after one warmup run.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-light.svg">
+  <img alt="Wall-time comparison across five Delta readers and four workloads" src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-light.svg">
+</picture>
+
 | Workload | Delta Arrow Reader | delta-rs | DuckDB | Polars | Daft |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Mixed-column projection | 0.873 s | 1.143 s | 12.246 s | 3.152 s | Unsupported |
@@ -33,8 +39,20 @@ took 2.239-4.902 seconds. Because those ranges overlap, we do not treat the
 difference between their medians as conclusive. The Delta Arrow Reader range
 did not overlap the Polars or Daft range on that workload.
 
-Speed is only part of the picture. The next table shows median CPU time and
-median peak memory use:
+Speed is only part of the picture. The charts and table below show median CPU
+time and median peak memory use:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-cpu-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-cpu-light.svg">
+  <img alt="CPU-time comparison across five Delta readers and four workloads" src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-cpu-light.svg">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-memory-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-memory-light.svg">
+  <img alt="Peak-memory comparison across five Delta readers and four workloads" src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-memory-light.svg">
+</picture>
 
 | Workload | Delta Arrow Reader | delta-rs | DuckDB | Polars | Daft |
 | --- | ---: | ---: | ---: | ---: | ---: |
