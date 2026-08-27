@@ -484,7 +484,6 @@ mod tests {
                 .iter()
                 .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
                 .collect::<BTreeMap<_, _>>(),
-            stats: None,
             deletion_vector: DeletionVectorMetadata::default(),
             transform: KernelPhysicalToLogicalTransform::default(),
         }

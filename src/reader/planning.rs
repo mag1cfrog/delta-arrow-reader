@@ -482,8 +482,6 @@ pub(crate) struct DeltaScanFileTask {
     pub(crate) parquet_byte_range: Option<Range<u64>>,
     /// Estimated input rows, available only for whole-file tasks with statistics.
     pub(crate) estimated_input_rows: Option<u64>,
-    /// Delta file statistics used by planning and pruning.
-    pub(crate) stats: Option<DeltaScanFileStats>,
     /// Data-file modification time from the Delta add action.
     pub(crate) modification_time_ms: Option<i64>,
     /// Logical partition-column values from the Delta add action.
@@ -492,14 +490,6 @@ pub(crate) struct DeltaScanFileTask {
     pub(crate) deletion_vector: DeletionVectorMetadata,
     /// Physical-to-logical expression applied after reading the Parquet data.
     pub(crate) transform: KernelPhysicalToLogicalTransform,
-}
-
-/// Row-count statistics retained from a Delta add action.
-#[allow(dead_code)]
-#[derive(Clone)]
-pub(crate) struct DeltaScanFileStats {
-    /// Number of physical rows in the complete data file.
-    pub(crate) num_records: u64,
 }
 
 #[allow(dead_code)]
@@ -519,16 +509,11 @@ impl DeltaScanFileTask {
                 reason: "negative_file_size",
             })?;
 
-        let stats = file
-            .estimated_rows
-            .map(|num_records| DeltaScanFileStats { num_records });
-
         Ok(Self {
             path: file.path,
             file_size: Some(file_size),
             parquet_byte_range: None,
-            estimated_input_rows: stats.as_ref().map(|stats| stats.num_records),
-            stats,
+            estimated_input_rows: file.estimated_rows,
             modification_time_ms: file.modification_time_ms,
             partition_values: file.partition_values,
             deletion_vector: DeletionVectorMetadata::from_kernel(file.deletion_vector),
@@ -4321,9 +4306,8 @@ mod tests {
     use futures_util::{FutureExt, StreamExt, stream};
 
     use super::{
-        DeltaScanFileStats, DeltaScanFileTask, DeltaScanPartition, DeltaScanPlan,
-        DeltaUnpartitionedScanPlan, KernelPhysicalToLogicalTransform, build_kernel_scan,
-        checked_sum, group_scan_file_tasks,
+        DeltaScanFileTask, DeltaScanPartition, DeltaScanPlan, DeltaUnpartitionedScanPlan,
+        KernelPhysicalToLogicalTransform, build_kernel_scan, checked_sum, group_scan_file_tasks,
     };
     use crate::{
         DeltaComparison, DeltaPredicate, DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection,
@@ -4518,7 +4502,6 @@ mod tests {
         let mut task = task(kernel_file(path))?;
         task.file_size = estimated_input_bytes;
         task.estimated_input_rows = estimated_input_rows;
-        task.stats = estimated_input_rows.map(|num_records| DeltaScanFileStats { num_records });
         Ok(task)
     }
 
@@ -4601,7 +4584,6 @@ mod tests {
         assert_eq!(task.path, "part-00000.parquet");
         assert_eq!(task.file_size, Some(123));
         assert_eq!(task.estimated_input_rows, Some(7));
-        assert_eq!(task.stats.as_ref().map(|stats| stats.num_records), Some(7));
         assert_eq!(task.modification_time_ms, Some(1_587_968_586_000));
         assert_eq!(
             task.partition_values.into_iter().collect::<Vec<_>>(),
@@ -4627,7 +4609,6 @@ mod tests {
 
         assert_eq!(task.file_size, Some(0));
         assert_eq!(task.estimated_input_rows, None);
-        assert!(task.stats.is_none());
         assert!(!task.deletion_vector.is_present());
         assert!(!task.transform.is_required());
 
@@ -4862,10 +4843,6 @@ mod tests {
             .find(|task| task.path == "id-dv-possible.parquet")
             .ok_or("expected surviving DV task")?;
         assert_eq!(possible.estimated_input_rows, Some(12));
-        assert_eq!(
-            possible.stats.as_ref().map(|stats| stats.num_records),
-            Some(12)
-        );
         assert!(possible.deletion_vector.is_present());
         let missing_stats = plan
             .file_tasks
@@ -4873,7 +4850,6 @@ mod tests {
             .find(|task| task.path == "id-dv-missing-stats.parquet")
             .ok_or("expected surviving missing-stats DV task")?;
         assert_eq!(missing_stats.estimated_input_rows, None);
-        assert!(missing_stats.stats.is_none());
         assert!(missing_stats.deletion_vector.is_present());
         let plain = plan
             .file_tasks
@@ -6010,7 +5986,7 @@ mod tests {
             .next()
             .ok_or("expected one selected task")?;
         assert_eq!(task.path, "west.parquet");
-        assert_eq!(task.stats.as_ref().map(|stats| stats.num_records), Some(2));
+        assert_eq!(task.estimated_input_rows, Some(2));
         assert_eq!(
             task.partition_values.get("region").map(String::as_str),
             Some("us-west")
