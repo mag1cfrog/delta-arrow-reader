@@ -51,7 +51,7 @@ use futures_util::{StreamExt, stream};
 use super::{
     dynamic_filters::{DynamicFilterOutcome, DynamicFilterPlan, RetainedDynamicFilter},
     dynamic_partition_pruning::{
-        DeltaDynamicPartitionKeepReason, DeltaDynamicPartitionPruningDecision,
+        DynamicPartitionKeepReason, DynamicPartitionPruningDecision,
         evaluate_dynamic_partition_filter,
     },
     planning::DataFusionScanPlan,
@@ -731,11 +731,11 @@ fn dynamic_admission(
         for filter in filters.iter() {
             metrics.record_dynamic_partition_filter_check();
             match evaluate_dynamic_partition_filter(filter, task) {
-                DeltaDynamicPartitionPruningDecision::Prune(_) => {
+                DynamicPartitionPruningDecision::Prune(_) => {
                     metrics.record_dynamic_partition_task_pruned();
                     return Ok(FileAdmission::Skip);
                 }
-                DeltaDynamicPartitionPruningDecision::Keep(reason) => {
+                DynamicPartitionPruningDecision::Keep(reason) => {
                     unusable_metadata |= is_unusable_metadata(reason);
                     unevaluable_filter |= is_unevaluable_filter(reason);
                 }
@@ -752,22 +752,22 @@ fn dynamic_admission(
     })
 }
 
-fn is_unusable_metadata(reason: DeltaDynamicPartitionKeepReason) -> bool {
+fn is_unusable_metadata(reason: DynamicPartitionKeepReason) -> bool {
     matches!(
         reason,
-        DeltaDynamicPartitionKeepReason::PartitionMetadataInvalid
-            | DeltaDynamicPartitionKeepReason::PartitionValueMissing
-            | DeltaDynamicPartitionKeepReason::PartitionValueUnparseable
+        DynamicPartitionKeepReason::PartitionMetadataInvalid
+            | DynamicPartitionKeepReason::PartitionValueMissing
+            | DynamicPartitionKeepReason::PartitionValueUnparseable
     )
 }
 
-fn is_unevaluable_filter(reason: DeltaDynamicPartitionKeepReason) -> bool {
+fn is_unevaluable_filter(reason: DynamicPartitionKeepReason) -> bool {
     matches!(
         reason,
-        DeltaDynamicPartitionKeepReason::SnapshotUnavailable
-            | DeltaDynamicPartitionKeepReason::UnsupportedPartitionType
-            | DeltaDynamicPartitionKeepReason::EvaluationFailed
-            | DeltaDynamicPartitionKeepReason::NonBooleanResult
+        DynamicPartitionKeepReason::SnapshotUnavailable
+            | DynamicPartitionKeepReason::UnsupportedPartitionType
+            | DynamicPartitionKeepReason::EvaluationFailed
+            | DynamicPartitionKeepReason::NonBooleanResult
     )
 }
 

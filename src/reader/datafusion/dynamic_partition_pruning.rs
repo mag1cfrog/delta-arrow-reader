@@ -24,23 +24,23 @@ use crate::reader::planning::DeltaScanFileTask;
 
 /// Conservative pruning decision for one retained dynamic filter and file task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DeltaDynamicPartitionPruningDecision {
+pub(crate) enum DynamicPartitionPruningDecision {
     /// The dynamic snapshot evaluated to boolean false for this partition row.
-    Prune(DeltaDynamicPartitionPruneReason),
+    Prune(DynamicPartitionPruneReason),
     /// The file task must remain because pruning was not proven.
-    Keep(DeltaDynamicPartitionKeepReason),
+    Keep(DynamicPartitionKeepReason),
 }
 
 /// Reason a file task can be removed before data-file scheduling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DeltaDynamicPartitionPruneReason {
+pub(crate) enum DynamicPartitionPruneReason {
     /// DataFusion evaluated the dynamic snapshot to false for the partition row.
     FilterRejectedPartition,
 }
 
 /// Reason a file task must remain after dynamic partition evaluation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DeltaDynamicPartitionKeepReason {
+pub(crate) enum DynamicPartitionKeepReason {
     /// The snapshot evaluated to true for this partition row.
     FilterAllowedPartition,
     /// The dynamic filter is still at DataFusion's literal-true placeholder.
@@ -73,17 +73,17 @@ pub(crate) enum DeltaDynamicPartitionKeepReason {
 pub(crate) fn evaluate_dynamic_partition_filter(
     filter: &RetainedDynamicFilter,
     task: &DeltaScanFileTask,
-) -> DeltaDynamicPartitionPruningDecision {
+) -> DynamicPartitionPruningDecision {
     let snapshot = match filter.physical_expr.snapshot() {
         Ok(Some(snapshot)) => snapshot,
         Ok(None) => {
-            return DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::SnapshotUnavailable,
+            return DynamicPartitionPruningDecision::Keep(
+                DynamicPartitionKeepReason::SnapshotUnavailable,
             );
         }
         Err(_) => {
-            return DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::EvaluationFailed,
+            return DynamicPartitionPruningDecision::Keep(
+                DynamicPartitionKeepReason::EvaluationFailed,
             );
         }
     };
@@ -91,14 +91,14 @@ pub(crate) fn evaluate_dynamic_partition_filter(
 
     let batch = match materialize_partition_batch(filter, task) {
         Ok(batch) => batch,
-        Err(reason) => return DeltaDynamicPartitionPruningDecision::Keep(reason),
+        Err(reason) => return DynamicPartitionPruningDecision::Keep(reason),
     };
 
     match snapshot.evaluate(&batch) {
         Ok(value) => boolean_decision(value, is_literal_true_placeholder),
-        Err(_) => DeltaDynamicPartitionPruningDecision::Keep(
-            DeltaDynamicPartitionKeepReason::EvaluationFailed,
-        ),
+        Err(_) => {
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::EvaluationFailed)
+        }
     }
 }
 
@@ -116,7 +116,7 @@ pub(crate) fn evaluate_dynamic_partition_filter(
 fn materialize_partition_batch(
     filter: &RetainedDynamicFilter,
     task: &DeltaScanFileTask,
-) -> Result<RecordBatch, DeltaDynamicPartitionKeepReason> {
+) -> Result<RecordBatch, DynamicPartitionKeepReason> {
     // Start with a full-width provider batch so physical column indexes in the
     // snapshot remain valid. Unreferenced data columns are intentionally null
     // and should never affect evaluation for a retained partition-only filter.
@@ -131,14 +131,14 @@ fn materialize_partition_batch(
         // Revalidate the retained index/name pair before reading metadata. This
         // keeps a stale retained filter from silently using the wrong field.
         let Some(field) = filter.provider_schema.fields().get(partition_column.index) else {
-            return Err(DeltaDynamicPartitionKeepReason::PartitionMetadataInvalid);
+            return Err(DynamicPartitionKeepReason::PartitionMetadataInvalid);
         };
         if field.name() != &partition_column.name {
-            return Err(DeltaDynamicPartitionKeepReason::PartitionMetadataInvalid);
+            return Err(DynamicPartitionKeepReason::PartitionMetadataInvalid);
         }
 
         let Some(raw_value) = task.partition_values.get(&partition_column.name) else {
-            return Err(DeltaDynamicPartitionKeepReason::PartitionValueMissing);
+            return Err(DynamicPartitionKeepReason::PartitionValueMissing);
         };
         // Delta stores partition values as protocol strings in file metadata.
         // Parse them back to Arrow scalar values using the provider field type
@@ -146,11 +146,11 @@ fn materialize_partition_batch(
         let scalar = parse_partition_scalar(field, raw_value)?;
         columns[partition_column.index] = scalar
             .to_array_of_size(1)
-            .map_err(|_| DeltaDynamicPartitionKeepReason::EvaluationFailed)?;
+            .map_err(|_| DynamicPartitionKeepReason::EvaluationFailed)?;
     }
 
     RecordBatch::try_new(nullable_schema(&filter.provider_schema), columns)
-        .map_err(|_| DeltaDynamicPartitionKeepReason::EvaluationFailed)
+        .map_err(|_| DynamicPartitionKeepReason::EvaluationFailed)
 }
 
 /// Returns a schema shape suitable for a synthetic metadata row.
@@ -180,21 +180,21 @@ fn nullable_schema(schema: &SchemaRef) -> SchemaRef {
 fn parse_partition_scalar(
     field: &Field,
     raw_value: &str,
-) -> Result<ScalarValue, DeltaDynamicPartitionKeepReason> {
+) -> Result<ScalarValue, DynamicPartitionKeepReason> {
     let Some(primitive_type) = arrow_partition_type_to_kernel_primitive(field.data_type()) else {
-        return Err(DeltaDynamicPartitionKeepReason::UnsupportedPartitionType);
+        return Err(DynamicPartitionKeepReason::UnsupportedPartitionType);
     };
     let scalar = primitive_type
         .parse_scalar(raw_value)
-        .map_err(|_| DeltaDynamicPartitionKeepReason::PartitionValueUnparseable)?;
+        .map_err(|_| DynamicPartitionKeepReason::PartitionValueUnparseable)?;
 
     kernel_partition_scalar_to_datafusion_scalar(scalar, field.data_type()).map_err(|err| match err
     {
         PartitionScalarAdapterError::UnsupportedArrowType => {
-            DeltaDynamicPartitionKeepReason::UnsupportedPartitionType
+            DynamicPartitionKeepReason::UnsupportedPartitionType
         }
         PartitionScalarAdapterError::UnsupportedScalarValue => {
-            DeltaDynamicPartitionKeepReason::PartitionValueUnparseable
+            DynamicPartitionKeepReason::PartitionValueUnparseable
         }
     })
 }
@@ -331,33 +331,31 @@ fn kernel_partition_scalar_to_datafusion_scalar(
 fn boolean_decision(
     value: ColumnarValue,
     is_literal_true_placeholder: bool,
-) -> DeltaDynamicPartitionPruningDecision {
+) -> DynamicPartitionPruningDecision {
     match value {
         // DataFusion dynamic filters start as literal true before their
         // producer publishes a real predicate. Treat that placeholder as a
         // distinct keep reason so later diagnostics can separate "not ready"
         // from "real predicate allowed this partition".
         ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))) if is_literal_true_placeholder => {
-            DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::SnapshotPlaceholder,
-            )
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::SnapshotPlaceholder)
         }
         ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))) => {
-            DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::FilterAllowedPartition,
+            DynamicPartitionPruningDecision::Keep(
+                DynamicPartitionKeepReason::FilterAllowedPartition,
             )
         }
         ColumnarValue::Scalar(ScalarValue::Boolean(Some(false))) => {
-            DeltaDynamicPartitionPruningDecision::Prune(
-                DeltaDynamicPartitionPruneReason::FilterRejectedPartition,
+            DynamicPartitionPruningDecision::Prune(
+                DynamicPartitionPruneReason::FilterRejectedPartition,
             )
         }
         ColumnarValue::Scalar(ScalarValue::Boolean(None) | ScalarValue::Null) => {
-            DeltaDynamicPartitionPruningDecision::Keep(DeltaDynamicPartitionKeepReason::NullResult)
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::NullResult)
         }
-        ColumnarValue::Scalar(_) => DeltaDynamicPartitionPruningDecision::Keep(
-            DeltaDynamicPartitionKeepReason::NonBooleanResult,
-        ),
+        ColumnarValue::Scalar(_) => {
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::NonBooleanResult)
+        }
         ColumnarValue::Array(array) => boolean_array_decision(array.as_ref()),
     }
 }
@@ -367,30 +365,20 @@ fn boolean_decision(
 /// The synthetic batch has exactly one row, so any array result must be a
 /// one-element boolean array. Other array shapes indicate an expression or
 /// evaluator mismatch and cannot be used to prune.
-fn boolean_array_decision(array: &dyn Array) -> DeltaDynamicPartitionPruningDecision {
+fn boolean_array_decision(array: &dyn Array) -> DynamicPartitionPruningDecision {
     let Some(boolean_array) = array.as_any().downcast_ref::<BooleanArray>() else {
-        return DeltaDynamicPartitionPruningDecision::Keep(
-            DeltaDynamicPartitionKeepReason::NonBooleanResult,
-        );
+        return DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::NonBooleanResult);
     };
     if boolean_array.len() != 1 {
-        return DeltaDynamicPartitionPruningDecision::Keep(
-            DeltaDynamicPartitionKeepReason::NonBooleanResult,
-        );
+        return DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::NonBooleanResult);
     }
     if boolean_array.is_null(0) {
-        return DeltaDynamicPartitionPruningDecision::Keep(
-            DeltaDynamicPartitionKeepReason::NullResult,
-        );
+        return DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::NullResult);
     }
     if boolean_array.value(0) {
-        DeltaDynamicPartitionPruningDecision::Keep(
-            DeltaDynamicPartitionKeepReason::FilterAllowedPartition,
-        )
+        DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::FilterAllowedPartition)
     } else {
-        DeltaDynamicPartitionPruningDecision::Prune(
-            DeltaDynamicPartitionPruneReason::FilterRejectedPartition,
-        )
+        DynamicPartitionPruningDecision::Prune(DynamicPartitionPruneReason::FilterRejectedPartition)
     }
 }
 
@@ -473,7 +461,7 @@ mod tests {
     fn string_function_snapshot_decision(
         snapshot: Expr,
         region: &str,
-    ) -> Result<DeltaDynamicPartitionPruningDecision, String> {
+    ) -> Result<DynamicPartitionPruningDecision, String> {
         let (dynamic, retained) = retained_filter(vec![column("region", 1)])?;
         dynamic
             .update(lower_logical_snapshot(snapshot)?)
@@ -647,8 +635,8 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Prune(
-                DeltaDynamicPartitionPruneReason::FilterRejectedPartition
+            DynamicPartitionPruningDecision::Prune(
+                DynamicPartitionPruneReason::FilterRejectedPartition
             )
         );
         Ok(())
@@ -670,8 +658,8 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::FilterAllowedPartition
+            DynamicPartitionPruningDecision::Keep(
+                DynamicPartitionKeepReason::FilterAllowedPartition
             )
         );
         Ok(())
@@ -684,48 +672,48 @@ mod tests {
                 "starts_with match",
                 starts_with(logical_col("region"), logical_lit("us-")),
                 "us-west",
-                DeltaDynamicPartitionPruningDecision::Keep(
-                    DeltaDynamicPartitionKeepReason::FilterAllowedPartition,
+                DynamicPartitionPruningDecision::Keep(
+                    DynamicPartitionKeepReason::FilterAllowedPartition,
                 ),
             ),
             (
                 "starts_with miss",
                 starts_with(logical_col("region"), logical_lit("us-")),
                 "eu-west",
-                DeltaDynamicPartitionPruningDecision::Prune(
-                    DeltaDynamicPartitionPruneReason::FilterRejectedPartition,
+                DynamicPartitionPruningDecision::Prune(
+                    DynamicPartitionPruneReason::FilterRejectedPartition,
                 ),
             ),
             (
                 "ends_with match",
                 ends_with(logical_col("region"), logical_lit("-west")),
                 "us-west",
-                DeltaDynamicPartitionPruningDecision::Keep(
-                    DeltaDynamicPartitionKeepReason::FilterAllowedPartition,
+                DynamicPartitionPruningDecision::Keep(
+                    DynamicPartitionKeepReason::FilterAllowedPartition,
                 ),
             ),
             (
                 "ends_with miss",
                 ends_with(logical_col("region"), logical_lit("-west")),
                 "us-east",
-                DeltaDynamicPartitionPruningDecision::Prune(
-                    DeltaDynamicPartitionPruneReason::FilterRejectedPartition,
+                DynamicPartitionPruningDecision::Prune(
+                    DynamicPartitionPruneReason::FilterRejectedPartition,
                 ),
             ),
             (
                 "contains match",
                 contains(logical_col("region"), logical_lit("west")),
                 "us-west",
-                DeltaDynamicPartitionPruningDecision::Keep(
-                    DeltaDynamicPartitionKeepReason::FilterAllowedPartition,
+                DynamicPartitionPruningDecision::Keep(
+                    DynamicPartitionKeepReason::FilterAllowedPartition,
                 ),
             ),
             (
                 "contains miss",
                 contains(logical_col("region"), logical_lit("west")),
                 "us-east",
-                DeltaDynamicPartitionPruningDecision::Prune(
-                    DeltaDynamicPartitionPruneReason::FilterRejectedPartition,
+                DynamicPartitionPruningDecision::Prune(
+                    DynamicPartitionPruneReason::FilterRejectedPartition,
                 ),
             ),
         ] {
@@ -755,8 +743,8 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Prune(
-                DeltaDynamicPartitionPruneReason::FilterRejectedPartition
+            DynamicPartitionPruningDecision::Prune(
+                DynamicPartitionPruneReason::FilterRejectedPartition
             )
         );
         Ok(())
@@ -791,8 +779,8 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Prune(
-                DeltaDynamicPartitionPruneReason::FilterRejectedPartition
+            DynamicPartitionPruningDecision::Prune(
+                DynamicPartitionPruneReason::FilterRejectedPartition
             )
         );
         Ok(())
@@ -807,9 +795,7 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::SnapshotPlaceholder
-            )
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::SnapshotPlaceholder)
         );
         Ok(())
     }
@@ -824,8 +810,8 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Prune(
-                DeltaDynamicPartitionPruneReason::FilterRejectedPartition
+            DynamicPartitionPruningDecision::Prune(
+                DynamicPartitionPruneReason::FilterRejectedPartition
             )
         );
         Ok(())
@@ -846,8 +832,8 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::PartitionValueMissing
+            DynamicPartitionPruningDecision::Keep(
+                DynamicPartitionKeepReason::PartitionValueMissing
             )
         );
         Ok(())
@@ -869,8 +855,8 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::PartitionValueUnparseable
+            DynamicPartitionPruningDecision::Keep(
+                DynamicPartitionKeepReason::PartitionValueUnparseable
             )
         );
         Ok(())
@@ -891,7 +877,7 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Keep(DeltaDynamicPartitionKeepReason::NullResult)
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::NullResult)
         );
         Ok(())
     }
@@ -906,9 +892,7 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::NonBooleanResult
-            )
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::NonBooleanResult)
         );
         Ok(())
     }
@@ -925,9 +909,7 @@ mod tests {
 
         assert_eq!(
             decision,
-            DeltaDynamicPartitionPruningDecision::Keep(
-                DeltaDynamicPartitionKeepReason::EvaluationFailed
-            )
+            DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::EvaluationFailed)
         );
         Ok(())
     }
