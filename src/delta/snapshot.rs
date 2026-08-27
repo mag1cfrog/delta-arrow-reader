@@ -28,13 +28,13 @@ pub(crate) struct LoadedDeltaTableSnapshot {
     engine_context: Arc<DeltaKernelEngineContext>,
 }
 
-pub(crate) struct StagedDeltaTableSnapshot {
+pub(crate) struct KernelTableSnapshot {
     snapshot: KernelSnapshot,
     protocol: DeltaProtocol,
     engine_context: Arc<DeltaKernelEngineContext>,
 }
 
-impl StagedDeltaTableSnapshot {
+impl KernelTableSnapshot {
     pub(crate) fn table_url(&self) -> &str {
         self.engine_context.table_url().as_str()
     }
@@ -106,7 +106,7 @@ pub(crate) fn load_delta_table_snapshot_blocking(
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
     let result = stage_delta_table_snapshot(table_location, storage_options, selection)
-        .and_then(StagedDeltaTableSnapshot::into_loaded);
+        .and_then(KernelTableSnapshot::into_loaded);
 
     match &result {
         Ok(snapshot) => trace_snapshot_load_completed(selection_kind, snapshot),
@@ -115,17 +115,17 @@ pub(crate) fn load_delta_table_snapshot_blocking(
     result
 }
 
-pub(crate) fn load_staged_delta_table_snapshot_blocking(
+pub(crate) fn load_kernel_table_snapshot_blocking(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
     let result = stage_delta_table_snapshot(table_location, storage_options, selection);
 
     match &result {
-        Ok(snapshot) => trace_staged_snapshot_load_completed(selection_kind, snapshot),
+        Ok(snapshot) => trace_kernel_snapshot_load_completed(selection_kind, snapshot),
         Err(error) => trace_snapshot_load_failed(selection_kind, error),
     }
     result
@@ -135,7 +135,7 @@ fn stage_delta_table_snapshot(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let table_url = normalize_table_location(table_location)?;
     let s3_auth_mode_hint = s3_auth_mode_hint_for_source(&table_url, storage_options);
     let engine_context = DeltaKernelEngineContext::build(table_url, storage_options)
@@ -156,7 +156,7 @@ fn stage_delta_table_snapshot(
         })?;
     let protocol = DeltaProtocol::from_snapshot(&snapshot);
 
-    Ok(StagedDeltaTableSnapshot {
+    Ok(KernelTableSnapshot {
         snapshot,
         protocol,
         engine_context,
@@ -192,14 +192,14 @@ pub(crate) async fn load_delta_table_snapshot_async(
     }
 }
 
-pub(crate) async fn load_staged_delta_table_snapshot_async(
+pub(crate) async fn load_kernel_table_snapshot_async(
     table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let result = tokio::task::spawn_blocking(move || {
-        load_staged_delta_table_snapshot_blocking(&table_location, &storage_options, selection)
+        load_kernel_table_snapshot_blocking(&table_location, &storage_options, selection)
     })
     .await
     .boxed()
@@ -241,10 +241,7 @@ fn trace_snapshot_load_completed(selection: &'static str, snapshot: &LoadedDelta
     );
 }
 
-fn trace_staged_snapshot_load_completed(
-    selection: &'static str,
-    snapshot: &StagedDeltaTableSnapshot,
-) {
+fn trace_kernel_snapshot_load_completed(selection: &'static str, snapshot: &KernelTableSnapshot) {
     tracing::debug!(
         target: TRACING_TARGET,
         event = SNAPSHOT_LOAD_COMPLETED_EVENT,
@@ -400,7 +397,7 @@ mod tests {
 
     use super::{
         S3AuthModeHint, TRACING_TARGET, load_delta_table_snapshot_async,
-        load_delta_table_snapshot_blocking, load_staged_delta_table_snapshot_blocking,
+        load_delta_table_snapshot_blocking, load_kernel_table_snapshot_blocking,
         s3_auth_mode_hint_for_source, snapshot_load_failed_reason,
     };
     use crate::{
@@ -667,23 +664,23 @@ mod tests {
     }
 
     #[test]
-    fn staged_load_exposes_metadata_before_schema_conversion()
+    fn kernel_snapshot_load_exposes_metadata_before_schema_conversion()
     -> Result<(), Box<dyn std::error::Error>> {
         let table = DeltaLogTable::new_with_protocol_and_metadata(
-            "staged-schema-failure",
+            "kernel-schema-failure",
             PROTOCOL_JSON,
             INVALID_ARROW_SCHEMA_METADATA_JSON,
         )?;
-        let staged = load_staged_delta_table_snapshot_blocking(
+        let kernel_snapshot = load_kernel_table_snapshot_blocking(
             &table.0.to_string_lossy(),
             &DeltaStorageOptions::new(),
             DeltaSnapshotSelection::Latest,
         )?;
 
-        assert_eq!(staged.version(), 1);
-        assert_eq!(staged.protocol().min_reader_version(), 1);
-        assert!(staged.table_url().starts_with("file://"));
-        let error = match staged.into_loaded() {
+        assert_eq!(kernel_snapshot.version(), 1);
+        assert_eq!(kernel_snapshot.protocol().min_reader_version(), 1);
+        assert!(kernel_snapshot.table_url().starts_with("file://"));
+        let error = match kernel_snapshot.into_loaded() {
             Ok(_) => panic!("invalid nested column metadata must fail schema conversion"),
             Err(error) => error,
         };

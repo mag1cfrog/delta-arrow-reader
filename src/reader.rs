@@ -46,8 +46,8 @@ use crate::{
         kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
         protocol::validate_protocol,
         snapshot::{
-            LoadedDeltaTableSnapshot, StagedDeltaTableSnapshot, load_delta_table_snapshot_async,
-            load_staged_delta_table_snapshot_async,
+            KernelTableSnapshot, LoadedDeltaTableSnapshot, load_delta_table_snapshot_async,
+            load_kernel_table_snapshot_async,
         },
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
@@ -146,7 +146,7 @@ impl DeltaTableBuilder {
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        let snapshot = load_staged_delta_table_snapshot_async(
+        let snapshot = load_kernel_table_snapshot_async(
             self.table_location,
             self.storage_options,
             self.snapshot_selection,
@@ -170,15 +170,12 @@ impl fmt::Debug for DeltaTableBuilder {
 
 /// Loaded Delta snapshot metadata awaiting logical Arrow schema conversion.
 pub struct DeltaTableSnapshot {
-    snapshot: StagedDeltaTableSnapshot,
+    snapshot: KernelTableSnapshot,
     execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTableSnapshot {
-    fn new(
-        snapshot: StagedDeltaTableSnapshot,
-        execution_options: DeltaScanExecutionOptions,
-    ) -> Self {
+    fn new(snapshot: KernelTableSnapshot, execution_options: DeltaScanExecutionOptions) -> Self {
         Self {
             snapshot,
             execution_options,
