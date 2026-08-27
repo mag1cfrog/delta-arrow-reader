@@ -70,6 +70,27 @@ impl TestTable {
         Ok(table)
     }
 
+    fn malformed_add(name: &str, invalid_size: &str) -> TestResult<Self> {
+        let table = Self::empty(name)?;
+        table.write_log(
+            0,
+            &[
+                protocol(1),
+                metadata(),
+                json!({
+                    "add": {
+                        "path": "secret.parquet",
+                        "partitionValues": {},
+                        "size": invalid_size,
+                        "modificationTime": 1587968586000_i64,
+                        "dataChange": true
+                    }
+                }),
+            ],
+        )?;
+        Ok(table)
+    }
+
     fn empty(name: &str) -> TestResult<Self> {
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let path = Path::new("target")
@@ -363,6 +384,34 @@ fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
         Err(error) => error,
     };
     assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+    Ok(())
+}
+
+#[test]
+fn eager_metadata_failure_returns_no_table_and_redacts_the_source() -> TestResult {
+    const INVALID_SIZE: &str = "secret-not-a-file-size";
+    let fixture = TestTable::malformed_add("eager-failure", INVALID_SIZE)?;
+    let runtime = runtime()?;
+
+    let lazy = runtime.block_on(DeltaTableBuilder::new(fixture.uri()).load_table())?;
+    assert_eq!(lazy.version(), 0);
+    let error = match runtime
+        .block_on(DeltaTableBuilder::new(fixture.uri()).load_table_with_eager_scan_metadata())
+    {
+        Ok(_) => return Err("malformed eager metadata should not return a table".into()),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.code(), "scan_planning");
+    assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
+    assert!(
+        error
+            .to_string()
+            .contains("eager_scan_metadata_materialization_failed")
+    );
+    assert!(error.source().is_some());
+    assert!(!error.to_string().contains(INVALID_SIZE));
+    assert!(!format!("{error:?}").contains(INVALID_SIZE));
     Ok(())
 }
 

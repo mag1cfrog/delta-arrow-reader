@@ -4339,6 +4339,11 @@ mod tests {
             )?;
             Ok(Self(path))
         }
+
+        fn disable_delta_log(&self) -> Result<(), Box<dyn std::error::Error>> {
+            fs::rename(self.0.join("_delta_log"), self.0.join("disabled-log"))?;
+            Ok(())
+        }
     }
 
     impl Drop for DeltaLogTable {
@@ -4732,6 +4737,116 @@ mod tests {
         assert_eq!(plan.estimated_input_bytes, Some(60));
         assert_eq!(plan.estimated_input_rows, Some(6));
         assert!(Arc::ptr_eq(&plan.engine_context, snapshot.engine_context()));
+        Ok(())
+    }
+
+    #[test]
+    fn eager_metadata_keeps_only_active_files_after_log_reconciliation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let table = DeltaLogTable::new_with_metadata_and_adds(
+            "eager-active-files",
+            METADATA_JSON,
+            &[
+                add("removed.parquet", 10, Some(1)),
+                add("active.parquet", 20, Some(2)),
+            ],
+        )?;
+        fs::write(
+            table.0.join("_delta_log/00000000000000000001.json"),
+            format!(
+                "{}\n",
+                serde_json::json!({
+                    "remove": {
+                        "path": "removed.parquet",
+                        "deletionTimestamp": 1_587_968_586_001_i64,
+                        "dataChange": true
+                    }
+                })
+            ),
+        )?;
+        let snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &DeltaStorageOptions::new(),
+            DeltaSnapshotSelection::Latest,
+        )?
+        .with_eager_scan_metadata()?;
+        table.disable_delta_log()?;
+
+        let plan =
+            super::plan_unpartitioned_scan(&snapshot, None, &[], None, true, Default::default())?;
+
+        assert_eq!(
+            unpartitioned_tasks(&plan)
+                .map(|task| task.path.as_str())
+                .collect::<Vec<_>>(),
+            ["active.parquet"]
+        );
+        assert_eq!(plan.estimated_input_rows, Some(2));
+        Ok(())
+    }
+
+    #[test]
+    fn eager_metadata_represents_an_empty_table_without_reopening_the_log()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (table, snapshot) = loaded_snapshot("eager-empty-table")?;
+        let snapshot = snapshot.with_eager_scan_metadata()?;
+        table.disable_delta_log()?;
+
+        let plan =
+            super::plan_unpartitioned_scan(&snapshot, None, &[], None, true, Default::default())?;
+
+        assert!(snapshot.eager_scan_metadata().is_some());
+        assert!(
+            snapshot
+                .eager_scan_metadata()
+                .unwrap_or_default()
+                .is_empty()
+        );
+        assert!(plan.file_tasks.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn eager_metadata_preserves_partition_pruning_without_the_log()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let table = DeltaLogTable::new_with_metadata_and_adds(
+            "eager-partition-pruning",
+            PARTITIONED_METADATA_JSON,
+            &[
+                add_with_partition("west.parquet", 10, 2, "west"),
+                add_with_partition("east.parquet", 10, 2, "east"),
+            ],
+        )?;
+        let snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &DeltaStorageOptions::new(),
+            DeltaSnapshotSelection::Latest,
+        )?
+        .with_eager_scan_metadata()?;
+        table.disable_delta_log()?;
+        let predicate = DeltaPredicate::Compare {
+            column: "region".to_owned(),
+            op: DeltaComparison::Eq,
+            value: DeltaScalar::Utf8("west".to_owned()),
+        };
+        let kernel_predicate = kernel_pruning_predicate(&predicate).ok_or("expected predicate")?;
+
+        let plan = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(kernel_predicate),
+            false,
+            Default::default(),
+        )?;
+
+        assert_eq!(
+            unpartitioned_tasks(&plan)
+                .map(|task| task.path.as_str())
+                .collect::<Vec<_>>(),
+            ["west.parquet"]
+        );
+        assert_eq!(plan.add_actions_excluded_during_planning, Some(1));
         Ok(())
     }
 
