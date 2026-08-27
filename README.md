@@ -70,27 +70,28 @@ println!("tasks={}", metrics.snapshot().file_tasks_completed);
 
 ## Register a DataFusion table
 
-The `datafusion` feature exposes `DeltaTableProvider`, `register_delta_table`,
-and DataFusion execution metrics. Registration loads no data files; reads begin
-when DataFusion executes a query.
+The `datafusion` feature exposes the `datafusion` module with its table provider,
+registration helper, scan options, and execution metrics. Registration loads no
+data files; reads begin when DataFusion executes a query.
 
 ```rust,no_run
 # #[cfg(feature = "datafusion")]
 # async fn query() -> Result<(), Box<dyn std::error::Error>> {
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaDataFusionScanOptions, DeltaTableBuilder, register_delta_table,
+    DeltaTableBuilder,
+    datafusion::{ScanOptions, register_table},
 };
 
 let context = SessionContext::new();
 let table = DeltaTableBuilder::new("/tmp/example-delta-table")
     .load_table()
     .await?;
-register_delta_table(
+register_table(
     &context,
     "orders",
     table,
-    DeltaDataFusionScanOptions::default(),
+    ScanOptions::default(),
 )?;
 
 let batches = context.sql("SELECT * FROM orders").await?.collect().await?;
@@ -109,9 +110,9 @@ disable view types without changing partition dictionary encoding:
 ```rust
 # #[cfg(feature = "datafusion")]
 # fn configure() {
-# use delta_arrow_reader::DeltaDataFusionScanOptions;
-let scan_options = DeltaDataFusionScanOptions {
-    use_view_types: false,
+# use delta_arrow_reader::datafusion::ScanOptions;
+let scan_options = ScanOptions {
+    use_arrow_view_types: false,
     ..Default::default()
 };
 # let _ = scan_options;
@@ -120,7 +121,7 @@ let scan_options = DeltaDataFusionScanOptions {
 
 Whole-file planning normally avoids extra ranged reads once it fills the scan
 partition target. For skewed direct Parquet scans, opt in to DataFusion
-rebalancing with `DeltaFileRepartitioning::Rebalance`.
+rebalancing with `datafusion::IntraFileRepartitioning::Rebalance`.
 DataFusion's `repartition_file_scans` and `repartition_file_min_size` settings
 still control whether repartitioning runs.
 

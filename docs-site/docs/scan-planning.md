@@ -16,7 +16,7 @@ groups, and an empty scan produces none.
 You can set the target explicitly:
 
 - The direct API uses `DeltaScanBuilder::with_target_partitions`.
-- The DataFusion adapter uses `DeltaDataFusionScanOptions::target_partitions`.
+- The DataFusion adapter uses `datafusion::ScanOptions::target_partitions`.
 
 An explicit target must be greater than zero. It wins over the automatic target
 and its resource caps.
@@ -62,8 +62,8 @@ optional step that can divide files more finely.
 ## Split files with DataFusion
 
 Intra-file repartitioning is available only for direct Parquet scans through the
-DataFusion adapter. `DeltaFileRepartitioning` controls when the reader offers
-its whole-file groups to DataFusion:
+DataFusion adapter. `datafusion::IntraFileRepartitioning` controls when the
+reader offers its whole-file groups to DataFusion:
 
 - `FillMissingParallelism`, the default, does so only when whole-file planning
   produced fewer groups than the target.

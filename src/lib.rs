@@ -5,6 +5,9 @@ mod delta;
 mod error;
 mod reader;
 
+#[cfg(feature = "datafusion")]
+pub use reader::datafusion;
+
 pub use delta::DeltaProtocolInfo;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
 #[doc(hidden)]
@@ -20,13 +23,6 @@ pub use reader::{
     DeltaReaderExecutionOptions, DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection,
     DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
 };
-#[cfg(feature = "datafusion")]
-pub use reader::{
-    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, DeltaDataFusionScanOptions,
-    DeltaFileRepartitioning, DeltaTableProvider, RegisteredDeltaTable,
-    collect_delta_datafusion_metrics, register_delta_table,
-};
-
 /// The crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

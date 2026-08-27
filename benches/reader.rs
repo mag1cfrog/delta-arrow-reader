@@ -17,9 +17,8 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaDataFusionMetricsSnapshot, DeltaDataFusionScanOptions, DeltaReaderExecutionOptions,
-    DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend, collect_delta_datafusion_metrics,
-    register_delta_table,
+    DeltaReaderExecutionOptions, DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend,
+    datafusion::{MetricsSnapshot, ScanOptions, collect_metrics, register_table},
 };
 use delta_kernel::actions::deletion_vector::{DeletionVectorDescriptor, DeletionVectorStorageType};
 use delta_kernel::actions::deletion_vector_writer::{
@@ -216,7 +215,7 @@ struct Measurement {
     process_peak_rss_bytes: Option<u64>,
     process_peak_rss_delta_bytes: Option<u64>,
     batch_latency_micros: Vec<u64>,
-    metrics: Vec<DeltaDataFusionMetricsSnapshot>,
+    metrics: Vec<MetricsSnapshot>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1321,15 +1320,15 @@ async fn run_once(
         .with_execution_options(execution_options)
         .load_table()
         .await?;
-    register_delta_table(
+    register_table(
         &context,
         "orders",
         table,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             execution_options,
             target_partitions: Some(target_partitions),
             intra_file_repartitioning: Default::default(),
-            use_view_types: true,
+            use_arrow_view_types: true,
         },
     )?;
 
@@ -1374,7 +1373,7 @@ async fn run_once(
         .into());
     }
     let peak_rss = process_peak_rss_bytes();
-    let metrics = collect_delta_datafusion_metrics(metrics_plan.as_ref())
+    let metrics = collect_metrics(metrics_plan.as_ref())
         .into_iter()
         .map(|metrics| metrics.snapshot())
         .collect::<Vec<_>>();
@@ -1499,7 +1498,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             50,
         )
     };
-    let dynamic = |select: fn(&DeltaDataFusionMetricsSnapshot) -> u64| {
+    let dynamic = |select: fn(&MetricsSnapshot) -> u64| {
         percentile(
             &snapshots
                 .iter()

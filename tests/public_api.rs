@@ -281,14 +281,13 @@ fn direct_reader_contract_is_public() {
 #[cfg(feature = "datafusion")]
 #[test]
 fn datafusion_metrics_contract_is_public() {
-    use delta_arrow_reader::{
-        DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, collect_delta_datafusion_metrics,
-    };
+    use delta_arrow_reader::datafusion::{Metrics, MetricsSnapshot, collect_metrics};
 
     fn assert_clone<T: Clone>() {}
     fn assert_snapshot_traits<T: std::fmt::Debug + Clone + PartialEq + Eq>() {}
-    fn inspect(snapshot: DeltaDataFusionMetricsSnapshot) {
+    fn inspect(snapshot: MetricsSnapshot) {
         let _: DeltaReadMetricsSnapshot = snapshot.reader;
+        let _: bool = snapshot.use_arrow_view_types;
         let _: Option<u64> = snapshot.output_batch_size;
         let _: u64 = snapshot.dynamic_partition_tasks_pruned;
         let _: u64 = snapshot.dynamic_partition_tasks_kept;
@@ -300,51 +299,49 @@ fn datafusion_metrics_contract_is_public() {
         let _: u64 = snapshot.dynamic_partition_tasks_kept_unsupported_expression;
     }
 
-    assert_clone::<DeltaDataFusionMetrics>();
-    assert_snapshot_traits::<DeltaDataFusionMetricsSnapshot>();
-    let source_name: for<'a> fn(&'a DeltaDataFusionMetrics) -> Option<&'a str> =
-        DeltaDataFusionMetrics::source_name;
-    let snapshot: fn(&DeltaDataFusionMetrics) -> DeltaDataFusionMetricsSnapshot =
-        DeltaDataFusionMetrics::snapshot;
-    let same_instance: fn(&DeltaDataFusionMetrics, &DeltaDataFusionMetrics) -> bool =
-        DeltaDataFusionMetrics::same_instance;
-    let collect: fn(&dyn datafusion::physical_plan::ExecutionPlan) -> Vec<DeltaDataFusionMetrics> =
-        collect_delta_datafusion_metrics;
-    let _ = (source_name, snapshot, same_instance, collect, inspect);
+    assert_clone::<Metrics>();
+    assert_snapshot_traits::<MetricsSnapshot>();
+    let registration_name: for<'a> fn(&'a Metrics) -> Option<&'a str> = Metrics::registration_name;
+    let snapshot: fn(&Metrics) -> MetricsSnapshot = Metrics::snapshot;
+    let same_instance: fn(&Metrics, &Metrics) -> bool = Metrics::same_instance;
+    let collect: fn(&dyn datafusion::physical_plan::ExecutionPlan) -> Vec<Metrics> =
+        collect_metrics;
+    let _ = (registration_name, snapshot, same_instance, collect, inspect);
 }
 
 #[cfg(feature = "datafusion")]
 #[test]
 fn datafusion_provider_contract_is_public() {
     use delta_arrow_reader::{
-        DeltaDataFusionScanOptions, DeltaFileRepartitioning, DeltaReaderError, DeltaTable,
-        DeltaTableProvider, RegisteredDeltaTable, register_delta_table,
+        DeltaReaderError, DeltaTable,
+        datafusion::{
+            DeltaTableProvider, IntraFileRepartitioning, RegisteredTable, ScanOptions,
+            register_table,
+        },
     };
 
     fn assert_clone<T: Clone>() {}
     fn assert_debug_clone<T: std::fmt::Debug + Clone>() {}
     fn assert_result_traits<T: std::fmt::Debug + Clone + PartialEq + Eq>() {}
 
-    assert_debug_clone::<DeltaDataFusionScanOptions>();
-    assert!(DeltaDataFusionScanOptions::default().use_view_types);
-    assert_result_traits::<DeltaFileRepartitioning>();
+    assert_debug_clone::<ScanOptions>();
+    assert!(ScanOptions::default().use_arrow_view_types);
+    assert_result_traits::<IntraFileRepartitioning>();
     assert_eq!(
-        DeltaDataFusionScanOptions::default().intra_file_repartitioning,
-        DeltaFileRepartitioning::FillMissingParallelism
+        ScanOptions::default().intra_file_repartitioning,
+        IntraFileRepartitioning::FillMissingParallelism
     );
     assert_clone::<DeltaTableProvider>();
-    assert_result_traits::<RegisteredDeltaTable>();
-    let construct: fn(
-        DeltaTable,
-        DeltaDataFusionScanOptions,
-    ) -> Result<DeltaTableProvider, DeltaReaderError> = DeltaTableProvider::try_new;
+    assert_result_traits::<RegisteredTable>();
+    let construct: fn(DeltaTable, ScanOptions) -> Result<DeltaTableProvider, DeltaReaderError> =
+        DeltaTableProvider::try_new;
     fn register(
         context: &datafusion::execution::context::SessionContext,
         name: String,
         table: DeltaTable,
-        options: DeltaDataFusionScanOptions,
-    ) -> Result<RegisteredDeltaTable, DeltaReaderError> {
-        register_delta_table(context, name, table, options)
+        options: ScanOptions,
+    ) -> Result<RegisteredTable, DeltaReaderError> {
+        register_table(context, name, table, options)
     }
     let _ = (construct, register);
 }

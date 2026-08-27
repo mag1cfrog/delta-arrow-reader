@@ -41,13 +41,13 @@ calls happen behind the Kernel reader boundary.
 
 ## DataFusion metrics
 
-`DeltaDataFusionMetricsSnapshot` contains the reader snapshot above and adds
+`datafusion::MetricsSnapshot` contains the reader snapshot above and adds
 provider-specific fields.
 
 | Field | Meaning |
 | --- | --- |
 | `reader` | Core `DeltaReadMetricsSnapshot` for this physical scan. |
-| `use_view_types` | Whether the provider requested Arrow view arrays for string and binary data columns. |
+| `use_arrow_view_types` | Whether the provider requested Arrow view arrays for string and binary data columns. |
 | `output_batch_size` | DataFusion task batch size observed during execution, when known. |
 | `dynamic_partition_tasks_pruned` | Whole-file or ranged tasks skipped by a dynamic partition filter before admission. |
 | `dynamic_partition_tasks_kept` | Tasks kept after consulting dynamic partition filters. |
@@ -58,7 +58,7 @@ provider-specific fields.
 | `dynamic_partition_tasks_kept_missing_metadata` | Tasks kept because partition metadata was missing, invalid, or could not be parsed. |
 | `dynamic_partition_tasks_kept_unsupported_expression` | Tasks kept because an expression was unavailable, unsupported, or failed. |
 
-`collect_delta_datafusion_metrics` walks a physical plan in depth-first order
+`datafusion::collect_metrics` walks a physical plan in depth-first order
 and returns each distinct Delta scan metric handle once.
 
 ## Parquet I/O boundaries
