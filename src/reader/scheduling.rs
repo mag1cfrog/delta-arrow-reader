@@ -92,7 +92,7 @@ type FileSetups = FuturesOrdered<ScheduledFile<FileBatchStream>>;
 type ReadyFiles = VecDeque<Result<FileBatchStream, DeltaReaderError>>;
 
 struct PartitionStart {
-    output_capacity: usize,
+    output_buffer_batches: usize,
     start: StartPartition,
 }
 
@@ -400,7 +400,7 @@ impl PartitionStream {
     where
         Task: Send + 'static,
     {
-        let output_capacity = options.output_buffer_batches_per_partition();
+        let output_buffer_batches = options.output_buffer_batches_per_partition();
         let prefetch_files = match options.reader_backend() {
             ParquetReaderBackend::Direct => options.prefetch_files_per_partition(),
             ParquetReaderBackend::DeltaKernel => 0,
@@ -433,7 +433,7 @@ impl PartitionStream {
 
         Self {
             state: PartitionStreamState::NotStarted(Some(PartitionStart {
-                output_capacity,
+                output_buffer_batches,
                 start,
             })),
             cancellation,
@@ -450,7 +450,7 @@ impl PartitionStream {
             self.done = true;
             return;
         };
-        let (output, receiver) = mpsc::channel(start.output_capacity);
+        let (output, receiver) = mpsc::channel(start.output_buffer_batches);
         self.state = PartitionStreamState::Running {
             receiver,
             task: (start.start)(output),
@@ -777,12 +777,12 @@ mod tests {
     }
 
     fn stream_options(
-        output_capacity: usize,
+        output_buffer_batches: usize,
         prefetch_files: usize,
     ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
             .with_prefetch_files_per_partition(prefetch_files)
-            .with_output_buffer_batches_per_partition(output_capacity)
+            .with_output_buffer_batches_per_partition(output_buffer_batches)
     }
 
     fn batch(ids: Vec<i32>) -> Result<RecordBatch, Box<dyn std::error::Error>> {

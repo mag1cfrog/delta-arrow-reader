@@ -37,7 +37,7 @@ pub(crate) fn delta_kernel_file_executor(
     plan: &Arc<DeltaScanPlan>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let plan = Arc::clone(plan);
-    let output_capacity = plan.execution_options.output_buffer_batches_per_partition();
+    let output_buffer_batches = plan.execution_options.output_buffer_batches_per_partition();
 
     Arc::new(move |task, permit, cancellation| {
         let plan = Arc::clone(&plan);
@@ -49,7 +49,7 @@ pub(crate) fn delta_kernel_file_executor(
                 .fail();
             }
             Ok(spawn_blocking_file_stream(
-                output_capacity,
+                output_buffer_batches,
                 permit,
                 cancellation,
                 move |output, cancellation| read_file(plan.as_ref(), task, output, &cancellation),
@@ -167,14 +167,14 @@ fn read_file(
 }
 
 fn spawn_blocking_file_stream(
-    output_capacity: usize,
+    output_buffer_batches: usize,
     permit: FileReadPermit,
     cancellation: ScanCancellation,
     producer: impl FnOnce(mpsc::Sender<RecordBatch>, ScanCancellation) -> Result<(), DeltaReaderError>
     + Send
     + 'static,
 ) -> FileBatchStream {
-    let (output, receiver) = mpsc::channel(output_capacity);
+    let (output, receiver) = mpsc::channel(output_buffer_batches);
     let task = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         producer(output, cancellation)
