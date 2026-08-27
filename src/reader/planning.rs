@@ -366,7 +366,10 @@ fn group_by_estimated_bytes(
         partition_loads.push(Reverse((partition_bytes, partition_index)));
     }
 
-    Ok(partition_tasks.into_iter().map(build_partition).collect())
+    Ok(partition_tasks
+        .into_iter()
+        .map(|file_tasks| DeltaScanPartition { file_tasks })
+        .collect())
 }
 
 fn group_by_file_count(
@@ -386,15 +389,12 @@ fn group_by_file_count(
             return partition_planning_error("file_count_grouping_exhausted_tasks");
         }
         remaining_files -= take_count;
-        partitions.push(build_partition(partition_tasks));
+        partitions.push(DeltaScanPartition {
+            file_tasks: partition_tasks,
+        });
     }
 
     Ok(partitions)
-}
-
-/// Builds a scan partition from file tasks.
-pub(crate) fn build_partition(file_tasks: Vec<DeltaScanFileTask>) -> DeltaScanPartition {
-    DeltaScanPartition { file_tasks }
 }
 
 fn checked_sum(

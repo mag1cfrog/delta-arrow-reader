@@ -67,7 +67,7 @@ use crate::{
     reader::{
         delta_kernel_executor,
         metrics::saturating_fetch_add,
-        planning::{DeltaScanFileTask, DeltaScanPartition, DeltaScanPlan, build_partition},
+        planning::{DeltaScanFileTask, DeltaScanPartition, DeltaScanPlan},
         scheduling::{
             DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, ScanReadLimiter,
         },
@@ -510,7 +510,7 @@ fn partitions_from_file_groups(
             .into_iter()
             .map(task_from_partitioned_file)
             .collect::<DataFusionResult<Vec<_>>>()?;
-        partitions.push(build_partition(tasks));
+        partitions.push(DeltaScanPartition { file_tasks: tasks });
     }
     Ok(partitions)
 }
@@ -1109,6 +1109,10 @@ mod tests {
         }
     }
 
+    fn partition(file_tasks: Vec<DeltaScanFileTask>) -> DeltaScanPartition {
+        DeltaScanPartition { file_tasks }
+    }
+
     fn partition_estimated_bytes(partition: &DeltaScanPartition) -> Option<u64> {
         partition
             .file_tasks
@@ -1137,7 +1141,7 @@ mod tests {
 
     #[test]
     fn file_repartitioning_balances_ranges_without_losing_file_identity() -> TestResult {
-        let input = vec![build_partition(vec![
+        let input = vec![partition(vec![
             sized_file_task("large.parquet", Some(100)),
             sized_file_task("small.parquet", Some(20)),
         ])];
@@ -1191,7 +1195,7 @@ mod tests {
         let mut task = sized_file_task("partial.parquet", Some(100));
         task.parquet_byte_range = Some(20..80);
         let partitions = repartition_file_tasks(
-            &[build_partition(vec![task])],
+            &[partition(vec![task])],
             3,
             1,
             IntraFileRepartitioning::default(),
@@ -1219,10 +1223,10 @@ mod tests {
     #[test]
     fn file_repartitioning_policy_controls_full_whole_file_plans() -> TestResult {
         let input = vec![
-            build_partition(vec![sized_file_task("huge.parquet", Some(1_000))]),
-            build_partition(vec![sized_file_task("small-0.parquet", Some(10))]),
-            build_partition(vec![sized_file_task("small-1.parquet", Some(10))]),
-            build_partition(vec![sized_file_task("small-2.parquet", Some(10))]),
+            partition(vec![sized_file_task("huge.parquet", Some(1_000))]),
+            partition(vec![sized_file_task("small-0.parquet", Some(10))]),
+            partition(vec![sized_file_task("small-1.parquet", Some(10))]),
+            partition(vec![sized_file_task("small-2.parquet", Some(10))]),
         ];
 
         assert!(
@@ -1259,20 +1263,14 @@ mod tests {
 
     #[test]
     fn file_repartitioning_refuses_unsupported_inputs_and_rejects_invalid_ranges() -> TestResult {
-        let input = vec![build_partition(vec![sized_file_task(
-            "known.parquet",
-            Some(120),
-        )])];
+        let input = vec![partition(vec![sized_file_task("known.parquet", Some(120))])];
 
         assert!(
             repartition_file_tasks(&input, 4, 121, IntraFileRepartitioning::default())?.is_none()
         );
         assert!(
             repartition_file_tasks(
-                &[build_partition(vec![sized_file_task(
-                    "unknown.parquet",
-                    None,
-                )])],
+                &[partition(vec![sized_file_task("unknown.parquet", None)])],
                 4,
                 1,
                 IntraFileRepartitioning::default(),
@@ -1281,10 +1279,7 @@ mod tests {
         );
         assert!(
             repartition_file_tasks(
-                &[build_partition(vec![sized_file_task(
-                    "empty.parquet",
-                    Some(0),
-                )])],
+                &[partition(vec![sized_file_task("empty.parquet", Some(0))])],
                 4,
                 1,
                 IntraFileRepartitioning::default(),
@@ -1298,7 +1293,7 @@ mod tests {
             invalid.parquet_byte_range = Some(range);
             assert!(
                 repartition_file_tasks(
-                    &[build_partition(vec![invalid])],
+                    &[partition(vec![invalid])],
                     4,
                     1,
                     IntraFileRepartitioning::default(),
@@ -1310,7 +1305,7 @@ mod tests {
         let oversized = u64::try_from(i64::MAX)? + 1;
         assert!(
             repartition_file_tasks(
-                &[build_partition(vec![sized_file_task(
+                &[partition(vec![sized_file_task(
                     "oversized.parquet",
                     Some(oversized),
                 )])],
