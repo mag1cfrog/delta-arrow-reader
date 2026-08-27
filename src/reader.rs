@@ -535,7 +535,7 @@ impl DeltaBatchStream {
         Arc::clone(&self.schema)
     }
 
-    /// Returns a lightweight shared handle to point-in-time scan metrics.
+    /// Returns a lightweight shared handle to live scan metrics.
     pub fn metrics(&self) -> DeltaScanMetrics {
         self.metrics.clone()
     }
