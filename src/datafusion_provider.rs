@@ -20,10 +20,10 @@ use crate::{
         DataFusionFilterCapabilities, plan_datafusion_filters, plan_datafusion_scan,
     },
     delta::kernel::delta_predicate_to_kernel_pruning,
-    planning::{
+    reader::planning::{
         DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan, validate_backend_available,
     },
-    transform::schema_with_view_types,
+    reader::transform::schema_with_view_types,
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";

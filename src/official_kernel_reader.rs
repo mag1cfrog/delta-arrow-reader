@@ -12,9 +12,11 @@ use crate::{
     DeltaReaderError,
     deletion_vector::load_deletion_vector_selection_blocking,
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
-    planning::{DeltaScanFileTask, DeltaScanPlan},
+    reader::{
+        planning::{DeltaScanFileTask, DeltaScanPlan},
+        transform::align_batch_to_logical_schema,
+    },
     scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
-    transform::align_batch_to_logical_schema,
 };
 
 struct OfficialKernelFileStreamState {

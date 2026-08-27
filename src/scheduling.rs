@@ -22,7 +22,7 @@ use tracing::Instrument;
 use crate::{
     DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions,
     error::{CancelledSnafu, InvalidConfigurationSnafu},
-    planning::{DeltaScanFileTask, DeltaScanPlan},
+    reader::planning::{DeltaScanFileTask, DeltaScanPlan},
 };
 
 pub(crate) struct ScanReadLimiter {

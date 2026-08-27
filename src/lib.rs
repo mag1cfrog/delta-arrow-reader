@@ -27,12 +27,10 @@ mod native_async_row_group_pruning;
 #[allow(dead_code)]
 mod official_kernel_reader;
 mod partition_target;
-mod planning;
 mod predicate;
 mod reader;
 #[allow(dead_code)]
 mod scheduling;
-mod transform;
 
 #[cfg(feature = "datafusion")]
 pub use datafusion_execution::{

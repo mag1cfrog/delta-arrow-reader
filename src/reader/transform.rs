@@ -9,10 +9,10 @@ use arrow::{
 };
 use snafu::ResultExt;
 
+use super::planning::{DeltaScanFileTask, DeltaScanPlan};
 use crate::{
     DeltaReaderError,
     error::{DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
-    planning::{DeltaScanFileTask, DeltaScanPlan},
 };
 
 pub(crate) fn align_batch_to_logical_schema(

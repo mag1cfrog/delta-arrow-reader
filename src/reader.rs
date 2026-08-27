@@ -2,6 +2,8 @@
 
 pub(crate) mod metrics;
 mod options;
+pub(crate) mod planning;
+pub(crate) mod transform;
 
 pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
 pub use options::{
@@ -20,6 +22,10 @@ use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use futures_util::Stream;
 use snafu::ResultExt;
 
+use self::planning::{
+    DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan, validate_backend_available,
+};
+
 use crate::{
     DeltaPredicate, DeltaProtocolInfo, DeltaReaderError,
     delta::{
@@ -32,9 +38,6 @@ use crate::{
         },
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
-    planning::{
-        DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan, validate_backend_available,
-    },
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
         DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
@@ -672,7 +675,7 @@ pub(crate) fn native_async_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size: Option<usize>,
     row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
-) -> Result<FileExecutor<crate::planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
+) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
     Ok(crate::native_async_reader::native_async_file_executor(
         plan,
         output_batch_size,
@@ -685,7 +688,7 @@ pub(crate) fn native_async_executor(
     _plan: &Arc<DeltaScanPlan>,
     _output_batch_size: Option<usize>,
     _row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
-) -> Result<FileExecutor<crate::planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
+) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
     crate::error::UnsupportedBackendSnafu {
         reason: "native_async_feature_disabled",
     }
@@ -695,14 +698,14 @@ pub(crate) fn native_async_executor(
 #[cfg(feature = "official-kernel")]
 pub(crate) fn official_kernel_executor(
     plan: &Arc<DeltaScanPlan>,
-) -> Result<FileExecutor<crate::planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
+) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
     Ok(crate::official_kernel_reader::official_kernel_file_executor(plan))
 }
 
 #[cfg(not(feature = "official-kernel"))]
 pub(crate) fn official_kernel_executor(
     _plan: &Arc<DeltaScanPlan>,
-) -> Result<FileExecutor<crate::planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
+) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
     crate::error::UnsupportedBackendSnafu {
         reason: "official_kernel_feature_disabled",
     }

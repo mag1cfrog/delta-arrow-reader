@@ -40,9 +40,11 @@ use crate::{
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     metered_object_store::MeteredParquetObjectStore,
     native_async_row_group_pruning::native_async_pruned_row_groups,
-    planning::{DeltaScanFileTask, DeltaScanPlan},
+    reader::planning::{DeltaScanFileTask, DeltaScanPlan},
+    reader::transform::{
+        align_batch_to_logical_schema, schema_uses_view_types, schema_with_view_types,
+    },
     scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
-    transform::{align_batch_to_logical_schema, schema_uses_view_types, schema_with_view_types},
 };
 
 struct NativeAsyncFileReader {
@@ -1482,8 +1484,10 @@ mod tests {
         },
         delta::snapshot::load_delta_table_snapshot_blocking,
         metered_object_store::MeteredParquetObjectStore,
-        planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
-        reader::metrics::DeltaReadMetricsConfig,
+        reader::{
+            metrics::DeltaReadMetricsConfig,
+            planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
+        },
         scheduling::{
             DeltaScanExecution, FileAdmission, FileReadPermit, ScanCancellation, ScanReadLimiter,
         },
@@ -1987,7 +1991,7 @@ mod tests {
     fn pipeline_plan(
         root: &TestDir,
         full_file_threshold: Option<usize>,
-    ) -> Result<Arc<crate::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         pipeline_plan_for_backend(
             root,
             full_file_threshold,
@@ -2003,7 +2007,7 @@ mod tests {
         metadata_size_hint: Option<usize>,
         backend: DeltaReaderBackend,
         with_predicate: bool,
-    ) -> Result<Arc<crate::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         pipeline_plan_for_backend_at(
             root,
             full_file_threshold,
@@ -2024,7 +2028,7 @@ mod tests {
         with_predicate: bool,
         selection: DeltaSnapshotSelection,
         target_partitions: usize,
-    ) -> Result<Arc<crate::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         let snapshot = load_delta_table_snapshot_blocking(
             &root.path().to_string_lossy(),
             &DeltaStorageOptions::new(),
@@ -2059,7 +2063,7 @@ mod tests {
         root: &TestDir,
         backend: DeltaReaderBackend,
         predicate: Predicate,
-    ) -> Result<Arc<crate::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         let snapshot = load_delta_table_snapshot_blocking(
             &root.path().to_string_lossy(),
             &DeltaStorageOptions::new(),
@@ -2082,7 +2086,7 @@ mod tests {
     fn non_dv_plan(
         root: &TestDir,
         projection: Option<&[String]>,
-    ) -> Result<Arc<crate::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         let snapshot = load_delta_table_snapshot_blocking(
             &root.path().to_string_lossy(),
             &DeltaStorageOptions::new(),
@@ -2103,13 +2107,13 @@ mod tests {
     }
 
     async fn execute_pipeline_plan(
-        plan: Arc<crate::planning::DeltaScanPlan>,
+        plan: Arc<crate::reader::planning::DeltaScanPlan>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         execute_pipeline_plan_with_row_predicate(plan, None).await
     }
 
     async fn execute_pipeline_plan_with_row_predicate(
-        plan: Arc<crate::planning::DeltaScanPlan>,
+        plan: Arc<crate::reader::planning::DeltaScanPlan>,
         row_predicate: Option<DeltaKernelPredicate>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         let execution = DeltaScanExecution::new(Arc::clone(&plan));
@@ -2130,7 +2134,7 @@ mod tests {
 
     #[cfg(feature = "official-kernel")]
     async fn execute_official_plan(
-        plan: Arc<crate::planning::DeltaScanPlan>,
+        plan: Arc<crate::reader::planning::DeltaScanPlan>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         let execution = DeltaScanExecution::new(Arc::clone(&plan));
         let executor = official_kernel_file_executor(&plan);
@@ -2164,7 +2168,7 @@ mod tests {
     }
 
     async fn gated_file_reader(
-        plan: &Arc<crate::planning::DeltaScanPlan>,
+        plan: &Arc<crate::reader::planning::DeltaScanPlan>,
         parquet_bytes: &[u8],
         gate_request: GateRequest,
     ) -> Result<
@@ -2236,7 +2240,7 @@ mod tests {
     }
 
     fn file_read_request(
-        plan: &Arc<crate::planning::DeltaScanPlan>,
+        plan: &Arc<crate::reader::planning::DeltaScanPlan>,
         task: DeltaScanFileTask,
         permit: FileReadPermit,
         cancellation: ScanCancellation,

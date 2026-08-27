@@ -66,8 +66,11 @@ use crate::{
     },
     datafusion_planning::DataFusionScanPlanning,
     delta::kernel::DeltaKernelPredicate,
-    planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
-    reader::{metrics::saturating_fetch_add, official_kernel_executor},
+    reader::{
+        metrics::saturating_fetch_add,
+        official_kernel_executor,
+        planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
+    },
     scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
 };
 
@@ -861,7 +864,7 @@ mod tests {
         DeltaReaderExecutionOptions, DeltaTable, DeltaTableBuilder,
         datafusion_planning::{DataFusionFilterCapabilities, plan_datafusion_scan},
         delta::kernel::delta_predicate_to_kernel_pruning,
-        planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
+        reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
     };
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
