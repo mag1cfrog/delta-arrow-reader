@@ -4,15 +4,8 @@
   <strong>Delta Lake in. Arrow batches out. No Spark required.</strong>
 </h3>
 
-<p align="center">
-  Stream Arrow batches directly.<br/>
-  Query with DataFusion when you want SQL.
-</p>
-
-Delta Arrow Reader is a read-only Rust library that reads Delta Lake tables as
-Apache Arrow record batches. Use the batch stream directly, or register a table
-with DataFusion and query it with SQL. Batches arrive as your application
-requests them, so a scan does not collect the whole result in memory.
+Delta Arrow Reader is a read-only Rust library that streams Delta Lake data as
+Arrow batches, with optional SQL through DataFusion.
 
 <p align="center">
   <a href="https://docs.rs/delta-arrow-reader"><img alt="Rust API" src="https://docs.rs/delta-arrow-reader/badge.svg"></a>
@@ -24,12 +17,55 @@ For guided examples and design details, see the
 
 ## When to use it
 
-Delta Arrow Reader is a good fit when:
+Delta Arrow Reader fits Rust services, command-line tools, and data pipelines
+that read Delta Lake tables. It is especially useful when:
 
-- You need to read Delta Lake tables from a Rust application.
-- You want to process Arrow batches without loading the full result first.
-- You want to query a Delta table through DataFusion.
-- You want your application to own its Tokio runtime and control read concurrency.
+- You need to read a large table without holding all of it in memory.
+- You want to process each batch as soon as it arrives.
+- Your application already works with Arrow data.
+- You want to run SQL through DataFusion.
+
+## Why not...
+
+Most alternatives solve a much bigger problem than reading a Delta table. Their
+Delta path pays for that extra weight.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-light.svg">
+  <img alt="Wall-time comparison across five Delta readers and four workloads" src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-light.svg" width="1000">
+</picture>
+
+### Spark or Trino
+
+Spark is Delta Lake's home ground, and Trino is a proven distributed engine.
+They fit naturally when a cluster is already part of the system. A small,
+single-node read service would still carry their JVM, full query runtime, and
+operational machinery. Running either one just to stream Arrow batches is
+bringing a distributed system to do a library's job.
+
+### The "read everything" engines
+
+DuckDB, Polars, and Daft promise one engine for many formats. Delta Lake becomes
+another compatibility box to check, and the jack-of-all-trades tradeoff showed
+clearly in our benchmarks. DuckDB took 5.8-14.6 times as long as Delta Arrow
+Reader, and Polars took 1.7-20 times as long. Of our four workloads, Daft could
+run only the text projection; it took 2.1 times as long and rejected the
+deletion-vector tables. All three also used more memory in every comparable
+run. See the
+[benchmark setup and complete results](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/).
+
+### delta-rs
+
+delta-rs is the closest alternative and covers the full Delta lifecycle,
+including writes. Delta Arrow Reader concentrates on asynchronous reads,
+bounded memory, Arrow streaming, and efficient deletion vectors. Across the two
+projection workloads, it ranged from roughly even with delta-rs to finishing
+24% sooner. **On deletion-vector tables, delta-rs took three times as long to
+return one live row and seven times as long to scan the full table.**
+
+Databricks now
+[recommends deletion vectors for most tables and is rolling out automatic enablement for new tables](https://docs.databricks.com/aws/en/admin/workspace-settings/deletion-vectors).
 
 ## Install
 
