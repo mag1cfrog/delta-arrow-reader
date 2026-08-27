@@ -238,6 +238,7 @@ impl ScanReadLimiter {
 }
 
 impl PartitionReadLimiter {
+    #[cfg(test)]
     pub(crate) async fn acquire(&self) -> Result<FileReadPermit, DeltaReaderError> {
         let partition = Arc::clone(&self.limiter.partition_permits[self.partition])
             .acquire_owned()
