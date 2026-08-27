@@ -329,7 +329,7 @@ fn datafusion_provider_contract_is_public() {
     assert_result_traits::<IntraFileRepartitioning>();
     assert_eq!(
         ScanOptions::default().intra_file_repartitioning,
-        IntraFileRepartitioning::FillMissingParallelism
+        IntraFileRepartitioning::WhenBelowTarget
     );
     assert_clone::<DeltaTableProvider>();
     assert_result_traits::<RegisteredTable>();

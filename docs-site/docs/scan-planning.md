@@ -65,9 +65,9 @@ Intra-file repartitioning is available only for direct Parquet scans through the
 DataFusion adapter. `datafusion::IntraFileRepartitioning` controls when the
 reader offers its whole-file groups to DataFusion:
 
-- `FillMissingParallelism`, the default, does so only when whole-file planning
+- `WhenBelowTarget`, the default, does so only when whole-file planning
   produced fewer groups than the target.
-- `Rebalance` also allows DataFusion to reconsider a plan that already reached
+- `Always` also allows DataFusion to reconsider a plan that already reached
   the target. This can help when a few large files make the groups uneven, but
   it may introduce more ranged reads.
 

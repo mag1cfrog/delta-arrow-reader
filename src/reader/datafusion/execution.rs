@@ -5,9 +5,9 @@
 //! Scan planning first balances whole Delta data files across the resolved
 //! partition target. By default, DataFusion's `FileGroupPartitioner` only
 //! receives those groups when they do not fill the target. The provider can
-//! instead opt in to rebalancing a full plan. In either mode, the partitioner
-//! flattens the groups, divides their total bytes across the target, and
-//! returns new groups containing whole files or byte ranges. Its
+//! instead allow repartitioning at any partition count. In either mode, the
+//! partitioner flattens the groups, divides their total bytes across the target,
+//! and returns new groups containing whole files or byte ranges. Its
 //! `repartition_file_min_size` setting is the minimum total input size needed
 //! to attempt this operation, not the size of each generated range.
 //!
@@ -78,18 +78,18 @@ use crate::{
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum IntraFileRepartitioning {
-    /// Split files only when whole-file planning produced fewer partitions than the target.
+    /// Allow splitting only below the target partition count.
     #[default]
-    FillMissingParallelism,
-    /// Let DataFusion rebalance file groups even when they already fill the target.
-    Rebalance,
+    WhenBelowTarget,
+    /// Allow splitting at any partition count.
+    Always,
 }
 
 impl IntraFileRepartitioning {
     fn allows_repartitioning(self, current_partitions: usize, target_partitions: usize) -> bool {
         match self {
-            Self::FillMissingParallelism => current_partitions < target_partitions,
-            Self::Rebalance => true,
+            Self::WhenBelowTarget => current_partitions < target_partitions,
+            Self::Always => true,
         }
     }
 }
@@ -1218,15 +1218,10 @@ mod tests {
         ];
 
         assert!(
-            repartition_file_tasks(
-                &input,
-                4,
-                1,
-                IntraFileRepartitioning::FillMissingParallelism,
-            )?
-            .is_none()
+            repartition_file_tasks(&input, 4, 1, IntraFileRepartitioning::WhenBelowTarget)?
+                .is_none()
         );
-        let rebalanced = repartition_file_tasks(&input, 4, 1, IntraFileRepartitioning::Rebalance)?
+        let rebalanced = repartition_file_tasks(&input, 4, 1, IntraFileRepartitioning::Always)?
             .ok_or("full plan was not rebalanced")?;
         assert_eq!(
             rebalanced
@@ -1242,9 +1237,9 @@ mod tests {
                 .any(|task| task.parquet_byte_range.is_some())
         );
         assert!(
-            repartition_file_tasks(&input, 4, 1_031, IntraFileRepartitioning::Rebalance)?.is_none()
+            repartition_file_tasks(&input, 4, 1_031, IntraFileRepartitioning::Always)?.is_none()
         );
-        assert!(repartition_file_tasks(&[], 4, 1, IntraFileRepartitioning::Rebalance)?.is_none());
+        assert!(repartition_file_tasks(&[], 4, 1, IntraFileRepartitioning::Always)?.is_none());
         assert!(
             input
                 .iter()
@@ -1363,7 +1358,7 @@ mod tests {
             4,
             DeltaReaderExecutionOptions::new(),
             None,
-            IntraFileRepartitioning::Rebalance,
+            IntraFileRepartitioning::Always,
         )?;
         let expected_bytes = collect_metrics(plan.as_ref())[0]
             .snapshot()
@@ -1413,7 +1408,7 @@ mod tests {
                 DeltaReaderExecutionOptions::new()
                     .with_reader_backend(ParquetReaderBackend::DeltaKernel),
                 None,
-                IntraFileRepartitioning::Rebalance,
+                IntraFileRepartitioning::Always,
             )?;
             assert!(kernel.repartitioned(4, &config)?.is_none());
         }

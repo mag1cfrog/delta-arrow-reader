@@ -38,7 +38,7 @@ adapter.
 | --- | --- | --- |
 | `execution_options` | `DeltaReaderExecutionOptions::default()` | Reader settings used by each provider scan. |
 | `target_partitions` | `None` | Explicit scan partition target. `None` uses the automatic policy. |
-| `intra_file_repartitioning` | `FillMissingParallelism` | Allows ranged file tasks only when whole-file planning falls short of the target. Use `Rebalance` to allow them even after the target is met. |
+| `intra_file_repartitioning` | `WhenBelowTarget` | Allows ranged file tasks only when whole-file planning falls short of the target. Use `Always` to allow them at any partition count. |
 | `use_arrow_view_types` | `true` | Decode string and binary data-file columns as Arrow view arrays. |
 
 String and binary partition columns remain dictionary encoded. Turning off

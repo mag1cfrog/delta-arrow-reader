@@ -287,10 +287,10 @@ async fn intra_file_repartitioning_policy_controls_full_plan_rebalancing() -> Te
     for (name, policy, expected_tasks) in [
         (
             "default_orders",
-            IntraFileRepartitioning::FillMissingParallelism,
+            IntraFileRepartitioning::WhenBelowTarget,
             2,
         ),
-        ("rebalanced_orders", IntraFileRepartitioning::Rebalance, 3),
+        ("rebalanced_orders", IntraFileRepartitioning::Always, 3),
     ] {
         let context = SessionContext::new_with_config(
             SessionConfig::new()
@@ -480,7 +480,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     let options = ScanOptions {
         execution_options,
         target_partitions: Some(TARGET_PARTITIONS),
-        intra_file_repartitioning: IntraFileRepartitioning::Rebalance,
+        intra_file_repartitioning: IntraFileRepartitioning::Always,
         ..Default::default()
     };
     let context = SessionContext::new_with_config(
@@ -705,7 +705,7 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
     assert!(defaults.use_arrow_view_types);
     assert_eq!(
         defaults.intra_file_repartitioning,
-        IntraFileRepartitioning::FillMissingParallelism
+        IntraFileRepartitioning::WhenBelowTarget
     );
 
     let provider = DeltaTableProvider::try_new(table.clone(), defaults)?;

@@ -120,8 +120,8 @@ let scan_options = ScanOptions {
 ```
 
 Whole-file planning normally avoids extra ranged reads once it fills the scan
-partition target. For skewed direct Parquet scans, opt in to DataFusion
-rebalancing with `datafusion::IntraFileRepartitioning::Rebalance`.
+partition target. For skewed direct Parquet scans, allow repartitioning at any
+partition count with `datafusion::IntraFileRepartitioning::Always`.
 DataFusion's `repartition_file_scans` and `repartition_file_min_size` settings
 still control whether repartitioning runs.
 
