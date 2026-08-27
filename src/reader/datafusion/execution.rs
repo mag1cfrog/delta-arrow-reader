@@ -11,9 +11,9 @@
 //! `repartition_file_min_size` setting is the minimum total input size needed
 //! to attempt this operation, not the size of each generated range.
 //!
-//! Each returned range is stored on its `DeltaScanFileTask`. During
-//! NativeAsync execution, the range containing a Parquet row group's first
-//! column chunk's page offset owns that complete row group. Range ownership and
+//! Each returned range is stored on its `DeltaScanFileTask`. During direct
+//! Parquet execution, the range containing a row group's first column chunk
+//! page offset owns that complete row group. Range ownership and
 //! footer-statistics pruning are intersected before the selected row groups
 //! are passed to the Parquet reader, so a byte boundary never splits a row
 //! group.
@@ -59,25 +59,22 @@ use super::{
     planning::DataFusionScanPlanning,
 };
 
-#[cfg(feature = "native-async")]
-use crate::reader::backend::native_async::{
-    NativeAsyncParquetMetadataCache, native_async_file_executor,
-    native_async_file_executor_with_metadata_cache,
+use crate::reader::backend::direct_parquet::{
+    DirectParquetMetadataCache, direct_parquet_file_executor,
+    direct_parquet_file_executor_with_metadata_cache,
 };
-#[cfg(not(feature = "native-async"))]
-use crate::reader::native_async_executor;
 use crate::{
-    DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend, DeltaReaderError,
+    DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderError, ParquetReaderBackend,
     delta::kernel::DeltaKernelPredicate,
     reader::{
+        delta_kernel_executor,
         metrics::saturating_fetch_add,
-        official_kernel_executor,
         planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
         scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
     },
 };
 
-/// Controls when DataFusion may split NativeAsync Parquet files into ranged scan tasks.
+/// Controls when DataFusion may split direct Parquet reads into ranged scan tasks.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DeltaFileRepartitioning {
@@ -333,8 +330,7 @@ struct DeltaDataFusionExec {
     dynamic_filters: Arc<[DeltaRetainedDynamicFilter]>,
     intra_file_repartitioning: DeltaFileRepartitioning,
     intra_file_repartitioning_applied: bool,
-    #[cfg(feature = "native-async")]
-    parquet_metadata_cache: Option<Arc<NativeAsyncParquetMetadataCache>>,
+    parquet_metadata_cache: Option<Arc<DirectParquetMetadataCache>>,
 }
 
 impl DeltaDataFusionExec {
@@ -369,7 +365,6 @@ impl DeltaDataFusionExec {
             dynamic_filters: Arc::from([]),
             intra_file_repartitioning,
             intra_file_repartitioning_applied: false,
-            #[cfg(feature = "native-async")]
             parquet_metadata_cache: None,
         }
     }
@@ -400,8 +395,7 @@ impl DeltaDataFusionExec {
             properties: scan_properties(&self.schema, partition_count),
             limiter,
             intra_file_repartitioning_applied: true,
-            #[cfg(feature = "native-async")]
-            parquet_metadata_cache: Some(Arc::new(NativeAsyncParquetMetadataCache::default())),
+            parquet_metadata_cache: Some(Arc::new(DirectParquetMetadataCache::default())),
             ..self.clone()
         })
     }
@@ -600,7 +594,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
         if self.intra_file_repartitioning_applied
-            || self.plan.execution_options.reader_backend() != DeltaReaderBackend::NativeAsync
+            || self.plan.execution_options.reader_backend() != ParquetReaderBackend::DirectParquet
         {
             return Ok(None);
         }
@@ -631,35 +625,21 @@ impl ExecutionPlan for DeltaDataFusionExec {
         self.metrics.record_output_batch_size(output_batch_size);
         let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
         let executor = match self.plan.execution_options.reader_backend() {
-            DeltaReaderBackend::NativeAsync => {
-                #[cfg(feature = "native-async")]
-                {
-                    match &self.parquet_metadata_cache {
-                        Some(cache) => native_async_file_executor_with_metadata_cache(
-                            &self.plan,
-                            Some(output_batch_size),
-                            self.row_predicate.clone(),
-                            Arc::clone(cache),
-                        ),
-                        None => native_async_file_executor(
-                            &self.plan,
-                            Some(output_batch_size),
-                            self.row_predicate.clone(),
-                        ),
-                    }
-                }
-                #[cfg(not(feature = "native-async"))]
-                {
-                    native_async_executor(
-                        &self.plan,
-                        Some(output_batch_size),
-                        self.row_predicate.clone(),
-                    )
-                    .map_err(datafusion_error)?
-                }
-            }
-            DeltaReaderBackend::OfficialKernel => {
-                official_kernel_executor(&self.plan).map_err(datafusion_error)?
+            ParquetReaderBackend::DirectParquet => match &self.parquet_metadata_cache {
+                Some(cache) => direct_parquet_file_executor_with_metadata_cache(
+                    &self.plan,
+                    Some(output_batch_size),
+                    self.row_predicate.clone(),
+                    Arc::clone(cache),
+                ),
+                None => direct_parquet_file_executor(
+                    &self.plan,
+                    Some(output_batch_size),
+                    self.row_predicate.clone(),
+                ),
+            },
+            ParquetReaderBackend::DeltaKernel => {
+                delta_kernel_executor(&self.plan).map_err(datafusion_error)?
             }
         };
         let stream = DeltaScanExecution::with_shared_limiter(
@@ -823,7 +803,7 @@ fn adapter_error(reason: &'static str) -> DataFusionError {
     })
 }
 
-#[cfg(all(test, feature = "native-async"))]
+#[cfg(test)]
 mod tests {
     use std::{
         collections::HashSet,
@@ -834,14 +814,12 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    #[cfg(feature = "official-kernel")]
     use arrow::array::StringArray;
     use arrow::{
         array::Int32Array,
         datatypes::{DataType, Field, Schema},
         record_batch::RecordBatch,
     };
-    #[cfg(feature = "official-kernel")]
     use datafusion::physical_plan::filter::FilterExec;
     use datafusion::{
         common::config::ConfigOptions,
@@ -1050,7 +1028,7 @@ mod tests {
             &filter_refs,
             DataFusionFilterCapabilities {
                 exact_predicate_evaluation: execution_options.reader_backend()
-                    == DeltaReaderBackend::NativeAsync,
+                    == ParquetReaderBackend::DirectParquet,
             },
         )?;
         let physical_projection = planning.projection.physical_projection.clone();
@@ -1367,7 +1345,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn native_repartitioning_reads_each_row_once_and_preserves_byte_accounting() -> TestResult
+    async fn direct_repartitioning_reads_each_row_once_and_preserves_byte_accounting() -> TestResult
     {
         let fixture = TestTable::partitioned("file-repartitioning")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -1388,7 +1366,7 @@ mod tests {
         config.optimizer.repartition_file_min_size = 1;
         let repartitioned = plan
             .repartitioned(4, &config)?
-            .ok_or("native scan was not repartitioned")?;
+            .ok_or("direct scan was not repartitioned")?;
         assert!(repartitioned.repartitioned(4, &config)?.is_none());
 
         assert_eq!(
@@ -1422,19 +1400,18 @@ mod tests {
         )?;
         assert!(explicit_one.repartitioned(4, &config)?.is_none());
 
-        #[cfg(feature = "official-kernel")]
         {
-            let official = build_plan_with_repartitioning(
+            let kernel = build_plan_with_repartitioning(
                 &table,
                 None,
                 &[],
                 4,
                 DeltaReaderExecutionOptions::new()
-                    .with_reader_backend(DeltaReaderBackend::OfficialKernel)?,
+                    .with_reader_backend(ParquetReaderBackend::DeltaKernel)?,
                 None,
                 DeltaFileRepartitioning::Rebalance,
             )?;
-            assert!(official.repartitioned(4, &config)?.is_none());
+            assert!(kernel.repartitioned(4, &config)?.is_none());
         }
 
         Ok(())
@@ -1463,7 +1440,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native-async")]
     async fn properties_projection_partitions_metrics_and_reexecution_match_provider_behavior()
     -> TestResult {
         let fixture = TestTable::partitioned("properties")?;
@@ -1621,7 +1597,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native-async")]
     async fn dynamic_filter_hook_prunes_before_file_start_and_counts_once() -> TestResult {
         let fixture = TestTable::partitioned("dynamic")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -1680,7 +1655,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native-async")]
     async fn physical_pushdown_preserves_dynamic_filters_across_plan_rebuild() -> TestResult {
         let fixture = TestTable::partitioned("dynamic-plan-rebuild")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -1722,12 +1696,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native-async")]
     async fn late_dynamic_filter_keeps_admitted_file_and_prunes_the_next() -> TestResult {
         let fixture = TestTable::late_dynamic("late-dynamic")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
@@ -1765,7 +1738,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native-async")]
     async fn hook_is_post_only_empty_safe_and_collector_is_ordered_and_distinct() -> TestResult {
         let fixture = TestTable::partitioned("collector")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -1856,7 +1828,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native-async")]
     async fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
         use crate::{
             delta::kernel::KernelPhysicalToLogicalTransform,
@@ -1955,7 +1926,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native-async")]
     async fn dynamic_metrics_updates_are_thread_safe() -> TestResult {
         const THREADS: usize = 4;
         const ITERATIONS: usize = 100;
@@ -2011,7 +1981,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "native-async")]
     async fn execution_error_and_stream_drop_preserve_partial_metrics() -> TestResult {
         let missing_fixture = TestTable::missing("error")?;
         let missing_table = DeltaTableBuilder::new(missing_fixture.uri())
@@ -2041,7 +2010,7 @@ mod tests {
         let fixture = TestTable::partitioned("drop")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
@@ -2067,14 +2036,13 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(all(feature = "native-async", feature = "official-kernel"))]
     async fn reader_backends_produce_the_same_logical_rows() -> TestResult {
         let fixture = TestTable::partitioned("backends")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let mut outputs = Vec::new();
         for backend in [
-            DeltaReaderBackend::NativeAsync,
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::DeltaKernel,
         ] {
             let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
             let plan = build_plan(&table, Some(&[1, 0]), &[], 2, options, None)?;
@@ -2111,14 +2079,14 @@ mod tests {
         }
         assert_eq!(outputs[0], outputs[1]);
 
-        let official_options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
+        let kernel_options = DeltaReaderExecutionOptions::new()
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
         let inexact = build_plan(
             &table,
             None,
             &[col("id").gt(lit(1_i32))],
             1,
-            official_options,
+            kernel_options,
             None,
         )?;
         let unfiltered = datafusion::physical_plan::collect(

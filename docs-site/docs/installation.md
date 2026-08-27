@@ -31,19 +31,18 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 You can now continue to the [DataFusion quickstart](datafusion.md).
 
-## Optional features
+## Optional feature
 
-Most applications can keep the default features. Change them only when you
-need DataFusion or want to select the other reader backend.
+The direct API and both data-file reader backends are always available. The
+only optional feature adds the DataFusion integration.
 
 | Feature | Default | Purpose |
 | --- | --- | --- |
-| `native-async` | Yes | Read Parquet files asynchronously and report data-file I/O metrics. |
-| `official-kernel` | No | Use the official Delta Kernel data-file reader backend. |
 | `datafusion` | No | Register Delta tables with DataFusion and expose execution metrics. |
 
-A scan needs at least one reader backend. Unless you turn off the default
-features, the reader uses `native-async`.
+The direct Parquet backend is selected by default. Rust callers can choose the
+Delta Kernel backend through `DeltaReaderExecutionOptions` without changing
+Cargo features.
 
 Both APIs run on your application's Tokio runtime. Delta Arrow Reader does not
 create a separate runtime.

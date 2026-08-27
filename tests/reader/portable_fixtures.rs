@@ -2,30 +2,24 @@
 
 use std::{error::Error, path::Path};
 
-#[cfg(feature = "native-async")]
 use std::{fs, fs::File, sync::Arc};
 
-#[cfg(feature = "native-async")]
 use arrow::{
     array::Int32Array, compute::concat_batches, datatypes::SchemaRef, record_batch::RecordBatch,
     util::display::array_value_to_string,
 };
-#[cfg(feature = "native-async")]
 use delta_arrow_reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReadMetrics, DeltaReadMetricsSnapshot,
-    DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase,
-    DeltaScalar, DeltaTableBuilder,
+    DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScalar,
+    DeltaTableBuilder, ParquetReaderBackend,
 };
-#[cfg(feature = "native-async")]
 use futures_util::{StreamExt, TryStreamExt};
-#[cfg(feature = "native-async")]
 use parquet::file::{reader::FileReader, serialized_reader::SerializedFileReader};
 
 use super::support::RealParquetDeltaTable;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 struct BackendParityCase {
     name: &'static str,
     fixture: RealParquetDeltaTable,
@@ -34,17 +28,13 @@ struct BackendParityCase {
     expected_deleted_rows: Option<u64>,
 }
 
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const COLUMN_MAPPING_ROWS: &[&str] = &["alice\t1", "bob\t2", "\t3"];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const PARTITION_ROWS: &[&str] = &["us-west\t1", "us-west\t2", "us-west\t3"];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const SUPPORTED_TYPE_ROWS: &[&str] = &[
     "1\talice\ttrue\t616c706861\t2024-01-01\t2024-01-01T00:00:00Z\t123.45\t1.25\t10.5\t{level: 1, label: low}\t[10, 20]",
     "2\tbob\tfalse\t62657461\t2024-01-02\t2024-01-02T00:00:00Z\t-67.89\t-2.5\t-20.25\t{level: 2, label: high}\t[30]",
     "3\t\t\t\t\t\t\t\t\t{level: , label: }\t",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const TIMESTAMP_ROWS: &[&str] = &[
     "1\talice\t2024-01-01T00:00:00Z",
     "2\tbob\t2024-01-02T00:00:00Z",
@@ -53,7 +43,6 @@ const TIMESTAMP_ROWS: &[&str] = &[
     "5\tdylan\t2024-01-04T00:00:00Z",
     "6\t\t",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const NESTED_TIMESTAMP_ROWS: &[&str] = &[
     "1\t{event_ts: 2024-01-01T00:00:00Z}",
     "2\t{event_ts: 2024-01-02T00:00:00Z}",
@@ -62,94 +51,76 @@ const NESTED_TIMESTAMP_ROWS: &[&str] = &[
     "5\t{event_ts: 2024-01-04T00:00:00Z}",
     "6\t{event_ts: }",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const NESTED_ROWS: &[&str] = &[
     "{age: 34, first_name: alice}\t1",
     "{age: 41, first_name: bob}\t2",
     "{age: , first_name: }\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const NESTED_MAPPING_ROWS: &[&str] = &[
     "{first_name: alice, age: 34}\talice\t1",
     "{first_name: bob, age: 41}\tbob\t2",
     "{first_name: , age: }\t\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const PROJECTED_NESTED_MAPPING_ROWS: &[&str] = &[
     "{first_name: alice, age: 34}",
     "{first_name: bob, age: 41}",
     "{first_name: , age: }",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const ARRAY_ROWS: &[&str] = &[
     "[{zip: 94110, city: san francisco}, {zip: 10001, city: new york}]\t1",
     "\t2",
     "[{zip: , city: phoenix}]\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MISSING_ARRAY_ROWS: &[&str] = &[
     "[{zip: 94110, city: san francisco, country: }, {zip: 10001, city: new york, country: }]\t1",
     "\t2",
     "[{zip: , city: phoenix, country: }]\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const ARRAY_MAPPING_ROWS: &[&str] = &[
     "[{city: san francisco, zip: 94110}, {city: new york, zip: 10001}]\talice\t1",
     "\tbob\t2",
     "[{city: phoenix, zip: }]\t\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MAP_ROWS: &[&str] = &[
     "{home: {zip: 94110, city: san francisco}, work: {zip: 10001, city: new york}}\t1",
     "{}\t2",
     "{mailing: {zip: , city: phoenix}}\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MISSING_MAP_ROWS: &[&str] = &[
     "{home: {zip: 94110, city: san francisco, country: }, work: {zip: 10001, city: new york, country: }}\t1",
     "{}\t2",
     "{mailing: {zip: , city: phoenix, country: }}\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MAP_KEY_CAST_ROWS: &[&str] = &["{10: home, 20: work}\t1", "{}\t2", "{30: mailing}\t3"];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MAP_MAPPING_ROWS: &[&str] = &[
     "{home: {city: san francisco, zip: 94110}, work: {city: new york, zip: 10001}}\talice\t1",
     "{}\tbob\t2",
     "{mailing: {city: phoenix, zip: }}\t\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MAP_KEY_VALUE_MAPPING_ROWS: &[&str] = &[
     "{{city: san francisco, zip: 94110}: {label: home, score: 7}, {city: new york, zip: 10001}: {label: work, score: 8}}\talice\t1",
     "{}\tbob\t2",
     "{{city: phoenix, zip: }: {label: mailing, score: 9}}\t\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MAP_LIST_KEY_ROWS: &[&str] = &[
     "{[{zip: 94110, city: san francisco}, {zip: 10001, city: new york}]: home, []: work}\t1",
     "{}\t2",
     "{[{zip: , city: phoenix}]: mailing}\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const NESTED_MAP_KEY_ROWS: &[&str] = &[
     "{{{zip: 94110, city: san francisco}: 7, {zip: 10001, city: new york}: 8}: home, {}: work}\t1",
     "{}\t2",
     "{{{zip: , city: phoenix}: 9}: mailing}\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MISSING_NESTED_ROWS: &[&str] = &[
     "{age: 34, first_name: alice, loyalty_tier: }\t1",
     "{age: 41, first_name: bob, loyalty_tier: }\t2",
     "{age: , first_name: , loyalty_tier: }\t3",
 ];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const MISSING_COLUMN_ROWS: &[&str] = &["1\talice\t", "2\tbob\t", "3\t\t"];
-#[cfg(feature = "native-async")]
 const DEFAULT_ROWS: &[&str] = &["1\talice", "2\tbob", "3\t"];
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 const DELETION_VECTOR_ROWS: &[&str] = &["1\talice", "3\t"];
 
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 fn backend_parity_cases() -> TestResult<Vec<BackendParityCase>> {
     let case =
         |name, fixture, projection, expected_rows, expected_deleted_rows| BackendParityCase {
@@ -500,7 +471,6 @@ fn every_frozen_real_parquet_fixture_is_portable() -> TestResult {
     Ok(())
 }
 
-#[cfg(feature = "native-async")]
 enum ScanAttempt {
     Success {
         batch: RecordBatch,
@@ -514,24 +484,21 @@ enum ScanAttempt {
     },
 }
 
-#[cfg(feature = "native-async")]
 fn runtime() -> TestResult<tokio::runtime::Runtime> {
     Ok(tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?)
 }
 
-#[cfg(feature = "native-async")]
-fn native_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExecutionOptions> {
+fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExecutionOptions> {
     Ok(DeltaReaderExecutionOptions::new()
-        .with_native_async_prefetch_file_count_per_partition(0)?
+        .with_prefetch_file_count_per_partition(0)?
         .with_max_concurrent_file_reads_per_partition(capacity)?
         .with_max_concurrent_file_reads_per_scan(Some(capacity))?
         .with_output_buffer_capacity_per_partition(1)?
-        .with_native_async_prefetch_file_count_per_partition(prefetch)?)
+        .with_prefetch_file_count_per_partition(prefetch)?)
 }
 
-#[cfg(feature = "native-async")]
 async fn wait_for_delivered_batch_metrics(metrics: &DeltaReadMetrics) {
     for _ in 0..1000 {
         if metrics.snapshot().batches_produced > 0 {
@@ -541,7 +508,6 @@ async fn wait_for_delivered_batch_metrics(metrics: &DeltaReadMetrics) {
     }
 }
 
-#[cfg(feature = "native-async")]
 fn missing_data_file_fixture(
     name: &str,
     advertised_size: u64,
@@ -560,13 +526,11 @@ fn missing_data_file_fixture(
     Ok(fixture)
 }
 
-#[cfg(feature = "native-async")]
 fn projection(names: &[&str]) -> Option<Vec<String>> {
     Some(names.iter().map(|name| (*name).to_owned()).collect())
 }
 
-#[cfg(feature = "native-async")]
-async fn native_stream(
+async fn direct_stream(
     fixture: &RealParquetDeltaTable,
     options: DeltaReaderExecutionOptions,
 ) -> TestResult<DeltaBatchStream> {
@@ -584,10 +548,9 @@ async fn native_stream(
     Ok(scan.execute().await?)
 }
 
-#[cfg(feature = "native-async")]
 async fn scan_fixture(
     fixture: &RealParquetDeltaTable,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     projection: Option<Vec<String>>,
     predicate: Option<DeltaPredicate>,
 ) -> TestResult<ScanAttempt> {
@@ -633,7 +596,6 @@ async fn scan_fixture(
     }
 }
 
-#[cfg(feature = "native-async")]
 fn batch_ids(batch: &RecordBatch) -> TestResult<Vec<i32>> {
     let index = batch.schema().index_of("id")?;
     let ids = batch
@@ -644,7 +606,6 @@ fn batch_ids(batch: &RecordBatch) -> TestResult<Vec<i32>> {
     Ok(ids.values().to_vec())
 }
 
-#[cfg(feature = "native-async")]
 fn batch_rows_ordered_by_id(batch: &RecordBatch) -> TestResult<Vec<String>> {
     let mut rows = (0..batch.num_rows()).collect::<Vec<_>>();
     if let Ok(id_index) = batch.schema().index_of("id") {
@@ -669,10 +630,9 @@ fn batch_rows_ordered_by_id(batch: &RecordBatch) -> TestResult<Vec<String>> {
         .collect()
 }
 
-#[cfg(feature = "native-async")]
 fn assert_success(
     case_name: &str,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     attempt: ScanAttempt,
     expected_ids: &[i32],
 ) -> TestResult<(RecordBatch, DeltaReadMetricsSnapshot, usize)> {
@@ -709,7 +669,6 @@ fn assert_success(
     Ok((batch, metrics, batch_count))
 }
 
-#[cfg(feature = "native-async")]
 fn assert_missing_required(
     case_name: &str,
     expected_path: &str,
@@ -746,7 +705,7 @@ fn assert_missing_required(
         source_display.contains("is missing from the Parquet file"),
         "{case_name}: {source_display}"
     );
-    assert_eq!(metrics.reader_backend, DeltaReaderBackend::NativeAsync);
+    assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
     assert_eq!(metrics.files_started, 1, "{case_name}");
     assert_eq!(metrics.files_completed, 0, "{case_name}");
     assert_eq!(metrics.batches_produced, 0, "{case_name}");
@@ -754,9 +713,8 @@ fn assert_missing_required(
     Ok(())
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
+fn direct_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
     struct Case {
         name: &'static str,
         fixture: RealParquetDeltaTable,
@@ -769,7 +727,7 @@ fn native_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
             Case {
                 name: "missing required array struct field",
                 fixture: RealParquetDeltaTable::new_with_missing_non_nullable_array_struct_field(
-                    "direct-native-missing-required-array",
+                    "direct-missing-required-array",
                 )?,
                 path: "addresses.element.required_country",
                 projection: &["addresses", "id"],
@@ -778,7 +736,7 @@ fn native_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
                 name: "missing required map value struct field",
                 fixture:
                     RealParquetDeltaTable::new_with_missing_non_nullable_map_value_struct_field(
-                        "direct-native-missing-required-map-value",
+                        "direct-missing-required-map-value",
                     )?,
                 path: "attributes.value.required_country",
                 projection: &["attributes", "id"],
@@ -786,7 +744,7 @@ fn native_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
             Case {
                 name: "missing required nested struct field",
                 fixture: RealParquetDeltaTable::new_with_missing_non_nullable_nested_struct_field(
-                    "direct-native-missing-required-nested",
+                    "direct-missing-required-nested",
                 )?,
                 path: "profile.required_code",
                 projection: &["profile", "id"],
@@ -794,7 +752,7 @@ fn native_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
             Case {
                 name: "missing required column",
                 fixture: RealParquetDeltaTable::new_with_missing_non_nullable_column(
-                    "direct-native-missing-required-column",
+                    "direct-missing-required-column",
                 )?,
                 path: "required_code",
                 projection: &["id", "customer_name", "required_code"],
@@ -804,7 +762,7 @@ fn native_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
         for case in cases {
             let attempt = scan_fixture(
                 &case.fixture,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 projection(case.projection),
                 None,
             )
@@ -815,12 +773,10 @@ fn native_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult {
+fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult {
     runtime()?.block_on(async {
-        let fixture =
-            RealParquetDeltaTable::new_with_deletion_vector("direct-native-dv-predicate", &[1])?;
+        let fixture = RealParquetDeltaTable::new_with_deletion_vector("direct-dv-predicate", &[1])?;
 
         for (name, value, expected, rows_produced, rows_deleted) in [
             ("only deleted row", 2, Vec::new(), 0, 1),
@@ -833,10 +789,10 @@ fn native_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
             };
             let (_, metrics, _) = assert_success(
                 name,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 scan_fixture(
                     &fixture,
-                    DeltaReaderBackend::NativeAsync,
+                    ParquetReaderBackend::DirectParquet,
                     Some(vec!["id".to_owned()]),
                     Some(predicate),
                 )
@@ -853,7 +809,7 @@ fn native_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
 
         let no_rows = scan_fixture(
             &fixture,
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             Some(vec!["id".to_owned()]),
             Some(DeltaPredicate::Compare {
                 column: "id".into(),
@@ -873,13 +829,11 @@ fn native_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_partial_pruning_predicate_remains_residual_only() -> TestResult {
+fn direct_partial_pruning_predicate_remains_residual_only() -> TestResult {
     runtime()?.block_on(async {
-        let fixture = RealParquetDeltaTable::new_with_supported_types(
-            "direct-native-partial-pruning-predicate",
-        )?;
+        let fixture =
+            RealParquetDeltaTable::new_with_supported_types("direct-partial-pruning-predicate")?;
         let predicate = DeltaPredicate::And(vec![
             DeltaPredicate::Compare {
                 column: "id".into(),
@@ -894,10 +848,10 @@ fn native_partial_pruning_predicate_remains_residual_only() -> TestResult {
         ]);
         let (_, metrics, _) = assert_success(
             "partial pruning predicate",
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             scan_fixture(
                 &fixture,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 Some(vec!["id".to_owned()]),
                 Some(predicate),
             )
@@ -910,9 +864,8 @@ fn native_partial_pruning_predicate_remains_residual_only() -> TestResult {
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestResult {
+fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestResult {
     struct Case {
         name: &'static str,
         fixture: RealParquetDeltaTable,
@@ -930,7 +883,7 @@ fn native_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
             Case {
                 name: "multiple batches",
                 fixture: RealParquetDeltaTable::new_with_rows_and_deletion_vector(
-                    "direct-native-dv-multiple-batches",
+                    "direct-dv-multiple-batches",
                     9_000,
                     &[8_191, 8_192, 8_999],
                 )?,
@@ -945,7 +898,7 @@ fn native_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
             Case {
                 name: "multiple row groups",
                 fixture: RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
-                    "direct-native-dv-row-groups",
+                    "direct-dv-row-groups",
                     3_000,
                     &[2_999, 3_000, 5_999],
                 )?,
@@ -960,7 +913,7 @@ fn native_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
             Case {
                 name: "sparse indexes",
                 fixture: RealParquetDeltaTable::new_with_rows_and_deletion_vector(
-                    "direct-native-dv-sparse",
+                    "direct-dv-sparse",
                     40_000,
                     &[0, 19_999, 39_999],
                 )?,
@@ -975,7 +928,7 @@ fn native_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
             Case {
                 name: "all rows live",
                 fixture: RealParquetDeltaTable::new_with_deletion_vector(
-                    "direct-native-dv-all-live",
+                    "direct-dv-all-live",
                     &[],
                 )?,
                 rows: 3,
@@ -989,7 +942,7 @@ fn native_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
             Case {
                 name: "all rows deleted",
                 fixture: RealParquetDeltaTable::new_with_deletion_vector(
-                    "direct-native-dv-all-deleted",
+                    "direct-dv-all-deleted",
                     &[0, 1, 2],
                 )?,
                 rows: 3,
@@ -1015,10 +968,10 @@ fn native_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
                 .collect::<Vec<_>>();
             let (batch, metrics, batch_count) = assert_success(
                 case.name,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 scan_fixture(
                     &case.fixture,
-                    DeltaReaderBackend::NativeAsync,
+                    ParquetReaderBackend::DirectParquet,
                     projection(case.projection),
                     None,
                 )
@@ -1066,44 +1019,37 @@ fn native_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
                 assert_eq!(metrics.batches_produced, u64::try_from(batch_count)?);
             }
 
-            #[cfg(feature = "official-kernel")]
             if case.compare_official {
-                let (official, _, _) = assert_success(
+                let (kernel, _, _) = assert_success(
                     case.name,
-                    DeltaReaderBackend::OfficialKernel,
+                    ParquetReaderBackend::DeltaKernel,
                     scan_fixture(
                         &case.fixture,
-                        DeltaReaderBackend::OfficialKernel,
+                        ParquetReaderBackend::DeltaKernel,
                         projection(case.projection),
                         None,
                     )
                     .await?,
                     &expected,
                 )?;
-                assert_eq!(official, batch, "{}", case.name);
+                assert_eq!(kernel, batch, "{}", case.name);
             }
-
-            #[cfg(not(feature = "official-kernel"))]
-            let _ = case.compare_official;
         }
         Ok::<_, Box<dyn Error>>(())
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult {
+fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult {
     const RELATIVE_DV_FILE: &str = "deletion_vector_61d16c75-6994-46b7-a15b-8b538852e50e.bin";
 
     runtime()?.block_on(async {
-        let fixture = RealParquetDeltaTable::new_with_deletion_vector(
-            "direct-native-dv-payload-error",
-            &[1],
-        )?;
+        let fixture =
+            RealParquetDeltaTable::new_with_deletion_vector("direct-dv-payload-error", &[1])?;
         fs::remove_file(fixture.path().join(RELATIVE_DV_FILE))?;
         let ScanAttempt::Failure { error, metrics } = scan_fixture(
             &fixture,
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             projection(&["id"]),
             None,
         )
@@ -1120,7 +1066,7 @@ fn native_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
             "{display}"
         );
         assert!(!display.contains(RELATIVE_DV_FILE));
-        assert_eq!(metrics.reader_backend, DeltaReaderBackend::NativeAsync);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.files_started, 1);
         assert_eq!(metrics.files_completed, 0);
         assert_eq!(metrics.batches_produced, 0);
@@ -1134,21 +1080,20 @@ fn native_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_preserves_frozen_file_and_batch_order() -> TestResult {
+fn direct_preserves_frozen_file_and_batch_order() -> TestResult {
     runtime()?.block_on(async {
         let cases = [
             (
                 "two files",
-                RealParquetDeltaTable::new_with_two_files("direct-native-file-order")?,
+                RealParquetDeltaTable::new_with_two_files("direct-file-order")?,
                 (1..=4).collect::<Vec<_>>(),
                 2,
                 false,
             ),
             (
                 "multiple batches",
-                RealParquetDeltaTable::new_with_rows("direct-native-multiple-batch-order", 9_000)?,
+                RealParquetDeltaTable::new_with_rows("direct-multiple-batch-order", 9_000)?,
                 (1..=9_000).collect::<Vec<_>>(),
                 1,
                 true,
@@ -1158,10 +1103,10 @@ fn native_preserves_frozen_file_and_batch_order() -> TestResult {
         for (name, fixture, expected, expected_files, require_multiple_batches) in cases {
             let (batch, metrics, batch_count) = assert_success(
                 name,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 scan_fixture(
                     &fixture,
-                    DeltaReaderBackend::NativeAsync,
+                    ParquetReaderBackend::DirectParquet,
                     projection(&["id"]),
                     None,
                 )
@@ -1186,14 +1131,13 @@ fn native_preserves_frozen_file_and_batch_order() -> TestResult {
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_missing_file_preserves_read_error_and_metrics() -> TestResult {
+fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
     runtime()?.block_on(async {
-        let fixture = missing_data_file_fixture("direct-native-missing-file", 123)?;
+        let fixture = missing_data_file_fixture("direct-missing-file", 123)?;
         let relative_path = fixture.data_file_path().to_owned();
 
-        let mut stream = native_stream(&fixture, native_options(1, 0)?).await?;
+        let mut stream = direct_stream(&fixture, direct_options(1, 0)?).await?;
         let metrics = stream.metrics();
         let error = stream
             .next()
@@ -1214,7 +1158,7 @@ fn native_missing_file_preserves_read_error_and_metrics() -> TestResult {
         let metrics = metrics.snapshot();
         assert_eq!(metrics.files_started, 1);
         assert_eq!(metrics.files_completed, 0);
-        assert_eq!(metrics.reader_backend, DeltaReaderBackend::NativeAsync);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.parquet_data_file_opened_bytes, Some(123));
         assert!(
             metrics
@@ -1229,15 +1173,12 @@ fn native_missing_file_preserves_read_error_and_metrics() -> TestResult {
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_stream_drop_stops_future_file_scheduling() -> TestResult {
+fn direct_stream_drop_stops_future_file_scheduling() -> TestResult {
     runtime()?.block_on(async {
-        let fixture = RealParquetDeltaTable::new_with_two_large_files(
-            "direct-native-drop-scheduling",
-            20_000,
-        )?;
-        let mut stream = native_stream(&fixture, native_options(1, 0)?).await?;
+        let fixture =
+            RealParquetDeltaTable::new_with_two_large_files("direct-drop-scheduling", 20_000)?;
+        let mut stream = direct_stream(&fixture, direct_options(1, 0)?).await?;
         let metrics = stream.metrics();
         let first = stream.next().await.ok_or("expected first batch")??;
 
@@ -1246,7 +1187,7 @@ fn native_stream_drop_stops_future_file_scheduling() -> TestResult {
         wait_for_delivered_batch_metrics(&metrics).await;
 
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, DeltaReaderBackend::NativeAsync);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.scan_partitions_started, 1);
         assert_eq!(metrics.scan_partitions_completed, 0);
         assert_eq!(metrics.files_started, 1);
@@ -1257,16 +1198,15 @@ fn native_stream_drop_stops_future_file_scheduling() -> TestResult {
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult {
+fn direct_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult {
     runtime()?.block_on(async {
         let fixture = RealParquetDeltaTable::new_with_rows_and_deletion_vector(
-            "direct-native-dv-drop-partial-progress",
+            "direct-dv-drop-partial-progress",
             20_000,
             &[0, 8_191, 8_192, 19_999],
         )?;
-        let mut stream = native_stream(&fixture, native_options(1, 0)?).await?;
+        let mut stream = direct_stream(&fixture, direct_options(1, 0)?).await?;
         let metrics = stream.metrics();
         let first = stream.next().await.ok_or("expected first batch")??;
         let first_ids = batch_ids(&first)?;
@@ -1278,7 +1218,7 @@ fn native_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult 
         wait_for_delivered_batch_metrics(&metrics).await;
 
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, DeltaReaderBackend::NativeAsync);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.scan_partitions_started, 1);
         assert_eq!(metrics.scan_partitions_completed, 0);
         assert_eq!(metrics.files_started, 1);
@@ -1294,15 +1234,14 @@ fn native_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult 
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_backpressure_bounds_future_file_scheduling() -> TestResult {
+fn direct_backpressure_bounds_future_file_scheduling() -> TestResult {
     runtime()?.block_on(async {
         let fixture = RealParquetDeltaTable::new_with_two_large_files(
-            "direct-native-backpressure-scheduling",
+            "direct-backpressure-scheduling",
             20_000,
         )?;
-        let mut stream = native_stream(&fixture, native_options(1, 0)?).await?;
+        let mut stream = direct_stream(&fixture, direct_options(1, 0)?).await?;
         let metrics = stream.metrics();
         let first = stream.next().await.ok_or("expected first batch")??;
         let mut ids = batch_ids(&first)?;
@@ -1318,7 +1257,7 @@ fn native_backpressure_bounds_future_file_scheduling() -> TestResult {
         }
         assert_eq!(ids, (1..=40_000).collect::<Vec<_>>());
         let complete = metrics.snapshot();
-        assert_eq!(complete.reader_backend, DeltaReaderBackend::NativeAsync);
+        assert_eq!(complete.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(complete.scan_partitions_completed, 1);
         assert_eq!(complete.files_started, 2);
         assert_eq!(complete.files_completed, 2);
@@ -1327,15 +1266,14 @@ fn native_backpressure_bounds_future_file_scheduling() -> TestResult {
     })
 }
 
-#[cfg(feature = "native-async")]
 #[test]
-fn native_prefetch_preserves_file_order_and_completes() -> TestResult {
+fn direct_prefetch_preserves_file_order_and_completes() -> TestResult {
     runtime()?.block_on(async {
         let fixture =
-            RealParquetDeltaTable::new_with_two_large_files("direct-native-prefetch-order", 9_000)?;
-        let options = native_options(2, 1)?;
-        assert_eq!(options.native_async_prefetch_file_count_per_partition(), 1);
-        let stream = native_stream(&fixture, options).await?;
+            RealParquetDeltaTable::new_with_two_large_files("direct-prefetch-order", 9_000)?;
+        let options = direct_options(2, 1)?;
+        assert_eq!(options.prefetch_file_count_per_partition(), 1);
+        let stream = direct_stream(&fixture, options).await?;
         let metrics = stream.metrics();
         let batches = stream.try_collect::<Vec<_>>().await?;
         let mut ids = Vec::new();
@@ -1345,7 +1283,7 @@ fn native_prefetch_preserves_file_order_and_completes() -> TestResult {
 
         assert_eq!(ids, (1..=18_000).collect::<Vec<_>>());
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, DeltaReaderBackend::NativeAsync);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.scan_partitions_completed, 1);
         assert_eq!(metrics.files_started, 2);
         assert_eq!(metrics.files_completed, 2);
@@ -1358,12 +1296,11 @@ fn native_prefetch_preserves_file_order_and_completes() -> TestResult {
     })
 }
 
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 fn assert_parity_success(
     case_name: &str,
     projected_columns: &[&str],
     expected_rows: &[&str],
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     attempt: ScanAttempt,
 ) -> TestResult<(RecordBatch, DeltaReadMetricsSnapshot)> {
     let ScanAttempt::Success {
@@ -1407,50 +1344,49 @@ fn assert_parity_success(
     Ok((batch, metrics))
 }
 
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 #[test]
-fn official_kernel_matches_native_for_frozen_cases() -> TestResult {
+fn delta_kernel_matches_direct_for_frozen_cases() -> TestResult {
     runtime()?.block_on(async {
         let cases = backend_parity_cases()?;
         assert_eq!(cases.len(), 24);
 
         for case in cases {
-            let native = scan_fixture(
+            let direct = scan_fixture(
                 &case.fixture,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 projection(case.projection),
                 None,
             )
             .await?;
-            let official = scan_fixture(
+            let kernel = scan_fixture(
                 &case.fixture,
-                DeltaReaderBackend::OfficialKernel,
+                ParquetReaderBackend::DeltaKernel,
                 projection(case.projection),
                 None,
             )
             .await?;
-            let (native, native_metrics) = assert_parity_success(
+            let (direct, direct_metrics) = assert_parity_success(
                 case.name,
                 case.projection,
                 case.expected_rows,
-                DeltaReaderBackend::NativeAsync,
-                native,
+                ParquetReaderBackend::DirectParquet,
+                direct,
             )?;
-            let (official, _) = assert_parity_success(
+            let (kernel, _) = assert_parity_success(
                 case.name,
                 case.projection,
                 case.expected_rows,
-                DeltaReaderBackend::OfficialKernel,
-                official,
+                ParquetReaderBackend::DeltaKernel,
+                kernel,
             )?;
 
-            assert_eq!(official, native, "{}", case.name);
+            assert_eq!(kernel, direct, "{}", case.name);
             if let Some(deleted_rows) = case.expected_deleted_rows {
-                assert_eq!(native_metrics.deletion_vector_payloads_loaded, 1);
-                assert_eq!(native_metrics.deletion_vectors_applied, 1);
-                assert_eq!(native_metrics.deletion_vector_rows_deleted, deleted_rows);
-                assert_eq!(native_metrics.deletion_vector_failures, 0);
-                assert_eq!(native_metrics.deletion_vector_rejections, 0);
+                assert_eq!(direct_metrics.deletion_vector_payloads_loaded, 1);
+                assert_eq!(direct_metrics.deletion_vectors_applied, 1);
+                assert_eq!(direct_metrics.deletion_vector_rows_deleted, deleted_rows);
+                assert_eq!(direct_metrics.deletion_vector_failures, 0);
+                assert_eq!(direct_metrics.deletion_vector_rejections, 0);
             }
         }
 

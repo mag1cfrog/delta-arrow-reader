@@ -478,8 +478,8 @@ mod tests {
         load_deletion_vector_selection,
     };
     use crate::{
-        DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderPhase,
-        DeltaSnapshotSelection, DeltaStorageOptions,
+        DeltaReadMetrics, DeltaReaderError, DeltaReaderPhase, DeltaSnapshotSelection,
+        DeltaStorageOptions, ParquetReaderBackend,
         delta::{
             kernel::{is_kernel_error, preserve_deletion_vector},
             snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
@@ -776,7 +776,7 @@ mod tests {
     fn metrics() -> DeltaReadMetrics {
         DeltaReadMetrics::new(DeltaReadMetricsConfig {
             snapshot_version: 7,
-            reader_backend: DeltaReaderBackend::NativeAsync,
+            reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 1,
             files_planned: 1,

@@ -23,13 +23,10 @@ exclude = [
 [[bench]]
 name = "reader"
 harness = false
-required-features = ["datafusion", "native-async", "official-kernel"]
+required-features = ["datafusion"]
 test = false
 
 [features]
-default = ["native-async"]
-native-async = []
-official-kernel = []
 datafusion = ["dep:datafusion"]
 
 [package.metadata.docs.rs]

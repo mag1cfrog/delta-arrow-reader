@@ -168,27 +168,6 @@ pub(crate) fn plan_unpartitioned_scan(
     )
 }
 
-pub(crate) fn validate_backend_available(
-    execution_options: DeltaReaderExecutionOptions,
-) -> Result<(), DeltaReaderError> {
-    #[cfg(not(feature = "native-async"))]
-    if execution_options.reader_backend() == crate::DeltaReaderBackend::NativeAsync {
-        return crate::error::UnsupportedBackendSnafu {
-            reason: "native_async_feature_disabled",
-        }
-        .fail();
-    }
-    #[cfg(not(feature = "official-kernel"))]
-    if execution_options.reader_backend() == crate::DeltaReaderBackend::OfficialKernel {
-        return crate::error::UnsupportedBackendSnafu {
-            reason: "official_kernel_feature_disabled",
-        }
-        .fail();
-    }
-    let _ = execution_options;
-    Ok(())
-}
-
 fn build_unpartitioned_scan_plan(
     snapshot: &LoadedDeltaTableSnapshot,
     projection: Option<&[String]>,
@@ -4712,19 +4691,16 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let (_empty_table, empty_snapshot) = loaded_snapshot("empty-files")?;
         let execution_options = crate::DeltaReaderExecutionOptions::default();
-        #[cfg(feature = "official-kernel")]
-        let execution_options =
-            execution_options.with_reader_backend(crate::DeltaReaderBackend::OfficialKernel)?;
-        let expected_backend = execution_options.reader_backend();
-        let expected_parquet_metric =
-            (expected_backend == crate::DeltaReaderBackend::NativeAsync).then_some(0);
         let empty = plan_scan(&empty_snapshot, None, &[], None, true, execution_options)?;
         assert!(empty.partitions.is_empty());
         assert_eq!(empty.estimated_bytes, Some(0));
         assert_eq!(empty.estimated_rows, Some(0));
         let empty_metrics = empty.metrics.snapshot();
         assert_eq!(empty_metrics.snapshot_version, empty.snapshot_version);
-        assert_eq!(empty_metrics.reader_backend, expected_backend);
+        assert_eq!(
+            empty_metrics.reader_backend,
+            crate::ParquetReaderBackend::DirectParquet
+        );
         assert_eq!(empty_metrics.scan_metadata_exhausted, Some(true));
         assert_eq!(empty_metrics.scan_partitions_planned, 0);
         assert_eq!(empty_metrics.files_planned, 0);
@@ -4747,20 +4723,11 @@ mod tests {
         assert_eq!(empty_metrics.deletion_vector_rejections, 0);
         assert_eq!(
             empty_metrics.parquet_data_file_range_get_operations,
-            expected_parquet_metric
+            Some(0)
         );
-        assert_eq!(
-            empty_metrics.parquet_data_file_full_get_operations,
-            expected_parquet_metric
-        );
-        assert_eq!(
-            empty_metrics.parquet_data_file_bytes_received,
-            expected_parquet_metric
-        );
-        assert_eq!(
-            empty_metrics.parquet_data_file_opened_bytes,
-            expected_parquet_metric
-        );
+        assert_eq!(empty_metrics.parquet_data_file_full_get_operations, Some(0));
+        assert_eq!(empty_metrics.parquet_data_file_bytes_received, Some(0));
+        assert_eq!(empty_metrics.parquet_data_file_opened_bytes, Some(0));
 
         let single_add = [add("single.parquet", 0, None)];
         let (_single_table, single_snapshot) =
@@ -5505,7 +5472,7 @@ mod tests {
         assert_eq!(metrics.snapshot_version, snapshot.version());
         assert_eq!(
             metrics.reader_backend,
-            crate::DeltaReaderBackend::NativeAsync
+            crate::ParquetReaderBackend::DirectParquet
         );
         assert_eq!(metrics.scan_metadata_exhausted, Some(true));
         assert_eq!(metrics.scan_partitions_planned, 2);
@@ -5543,7 +5510,7 @@ mod tests {
         ];
         let (_table, snapshot) = loaded_snapshot_with_adds("scan-execution", &adds)?;
         let execution_options = crate::DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(2)?;
@@ -5631,7 +5598,7 @@ mod tests {
         let adds = [add("part.parquet", 10, Some(1))];
         let (_table, snapshot) = loaded_snapshot_with_adds("concurrent-executions", &adds)?;
         let execution_options = crate::DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?;
         let plan = Arc::new(super::plan_scan(

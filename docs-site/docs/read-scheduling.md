@@ -21,15 +21,16 @@ that cannot get both permits waits without opening the data file.
 
 ## Prefetch the next files
 
-NativeAsync can prepare a small number of future file streams while the current
-one is being consumed. The default prefetch depth is two per partition. A value
-of zero waits until the current file is drained before starting the next one.
+The direct Parquet reader can prepare a small number of future file streams
+while the current one is being consumed. The default prefetch depth is two per
+partition. A value of zero waits until the current file is drained before
+starting the next one.
 
 Prefetching preserves task order within each partition. Prepared streams still
 hold read permits, so they count against both concurrency limits.
 
-OfficialKernel does not prefetch future files. Within each partition, its
-synchronous iterator reads one admitted file at a time through a bounded
+The Delta Kernel reader does not prefetch future files. Within each partition,
+its synchronous iterator reads one admitted file at a time through a bounded
 blocking handoff. Several partitions can still run at once.
 
 ## Apply dynamic partition pruning
@@ -50,13 +51,13 @@ rows that might match.
 
 ## Choose between ranged and full-file reads
 
-NativeAsync normally asks the object store for the Parquet footer and the data
+The direct Parquet reader normally asks the object store for the footer and data
 ranges needed by the query. This is useful for narrow projections, especially
 when the file is large.
 
 For small files that are read broadly, several remote range requests can cost
 more than one full request. Setting `parquet_full_file_read_threshold` allows
-NativeAsync to fetch an eligible whole-file task once and serve its later range
+the reader to fetch an eligible whole-file task once and serve its later range
 reads from an in-memory copy. Tasks created by intra-file repartitioning keep
 using remote range requests even when the physical file is below the threshold.
 
@@ -75,7 +76,7 @@ Each execution partition sends batches through a bounded output channel. Its
 default capacity is one batch. When the caller stops polling, producers wait
 instead of filling an unbounded queue.
 
-Within a partition, batches stay in task order even when NativeAsync has
+Within a partition, batches stay in task order even when the direct reader has
 prefetched later files. DataFusion may still execute several partitions at the
 same time.
 
@@ -85,7 +86,7 @@ Dropping the output stream tells the scheduler to stop admitting new tasks and
 releases queued streams and permits. Errors follow the same bounded path and
 prevent unrelated later work from being drained.
 
-Asynchronous reads stop at cancellation boundaries. Synchronous OfficialKernel
+Asynchronous reads stop at cancellation boundaries. Synchronous Delta Kernel
 work that has already entered a dependency call may continue until its next
 safe handoff, but it cannot start a later file after cancellation.
 

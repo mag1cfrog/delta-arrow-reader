@@ -17,8 +17,8 @@ pub use reader::partition_target::{
 };
 pub use reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReadMetrics, DeltaReadMetricsSnapshot,
-    DeltaReaderBackend, DeltaReaderExecutionOptions, DeltaScalar, DeltaScan, DeltaScanBuilder,
-    DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot,
+    DeltaReaderExecutionOptions, DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection,
+    DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
 };
 #[cfg(feature = "datafusion")]
 pub use reader::{

@@ -155,15 +155,6 @@ pub enum DeltaReaderError {
         /// Fixed redacted reason category.
         reason: &'static str,
     },
-    /// The requested reader backend is unavailable.
-    #[non_exhaustive]
-    #[snafu(display(
-        "delta reader error: phase=configuration error=unsupported_backend reason={reason}"
-    ))]
-    UnsupportedBackend {
-        /// Fixed redacted reason category.
-        reason: &'static str,
-    },
     /// A Delta data file could not be read.
     #[non_exhaustive]
     #[snafu(display(
@@ -236,7 +227,6 @@ impl DeltaReaderError {
             Self::UnsupportedPredicate { .. } => "unsupported_predicate",
             Self::ScanPlanning { .. } => "scan_planning",
             Self::ScanPartitionPlanning { .. } => "scan_partition_planning",
-            Self::UnsupportedBackend { .. } => "unsupported_backend",
             Self::DataFileRead { .. } => "data_file_read",
             Self::DeletionVectorRead { .. } => "deletion_vector_read",
             Self::PhysicalToLogicalTransform { .. } => "physical_to_logical_transform",
@@ -259,7 +249,6 @@ impl DeltaReaderError {
             | Self::UnsupportedPredicate { .. }
             | Self::ScanPlanning { .. }
             | Self::ScanPartitionPlanning { .. } => DeltaReaderPhase::ScanPlanning,
-            Self::UnsupportedBackend { .. } => DeltaReaderPhase::Configuration,
             Self::Cancelled { .. } => DeltaReaderPhase::Execution,
             Self::DataFileRead { .. } => DeltaReaderPhase::DataFileRead,
             Self::DeletionVectorRead { .. } => DeltaReaderPhase::DeletionVector,
@@ -389,14 +378,6 @@ mod tests {
                 },
                 "scan_partition_planning",
                 DeltaReaderPhase::ScanPlanning,
-                false,
-            ),
-            (
-                DeltaReaderError::UnsupportedBackend {
-                    reason: "unsupported_backend",
-                },
-                "unsupported_backend",
-                DeltaReaderPhase::Configuration,
                 false,
             ),
             (

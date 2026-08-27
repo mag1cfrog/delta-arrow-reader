@@ -17,9 +17,9 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaDataFusionMetricsSnapshot, DeltaDataFusionScanOptions, DeltaReaderBackend,
-    DeltaReaderExecutionOptions, DeltaStorageOptions, DeltaTableBuilder,
-    collect_delta_datafusion_metrics, register_delta_table,
+    DeltaDataFusionMetricsSnapshot, DeltaDataFusionScanOptions, DeltaReaderExecutionOptions,
+    DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend, collect_delta_datafusion_metrics,
+    register_delta_table,
 };
 use delta_kernel::actions::deletion_vector::{DeletionVectorDescriptor, DeletionVectorStorageType};
 use delta_kernel::actions::deletion_vector_writer::{
@@ -30,7 +30,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 22;
+const BENCHMARK_SCHEMA_VERSION: u32 = 23;
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
@@ -66,7 +66,7 @@ const CSV_HEADER: [&str; 80] = [
     "max_concurrent_file_reads_per_scan",
     "max_concurrent_file_reads_per_partition",
     "output_buffer_capacity_per_partition",
-    "native_async_prefetch_file_count_per_partition",
+    "prefetch_file_count_per_partition",
     "repetitions",
     "file_count",
     "row_count",
@@ -139,7 +139,7 @@ struct Config {
     storage: StorageProfile,
     workload: Workload,
     query: Query,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     repetitions: usize,
     metadata_hint: Option<usize>,
     full_read_threshold: Option<usize>,
@@ -304,7 +304,7 @@ impl Config {
             storage: StorageProfile::local(),
             workload: Workload::FewLarger,
             query: Query::FullRows,
-            backend: DeltaReaderBackend::NativeAsync,
+            backend: ParquetReaderBackend::DirectParquet,
             repetitions: DEFAULT_REPETITIONS,
             metadata_hint: Some(65_536),
             full_read_threshold: None,
@@ -338,8 +338,8 @@ impl Config {
                         .replace('-', "_")
                         .as_str()
                     {
-                        "native_async" => DeltaReaderBackend::NativeAsync,
-                        "official_kernel" => DeltaReaderBackend::OfficialKernel,
+                        "direct_parquet" => ParquetReaderBackend::DirectParquet,
+                        "delta_kernel" => ParquetReaderBackend::DeltaKernel,
                         other => return Err(invalid(format!("unknown backend: {other}")).into()),
                     }
                 }
@@ -393,56 +393,56 @@ impl Config {
             (
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync | DeltaReaderBackend::OfficialKernel,
+                ParquetReaderBackend::DirectParquet | ParquetReaderBackend::DeltaKernel,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::ProjectId,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::ManySmall,
                 Query::ProjectId,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 "local",
                 None | Some(8),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 "local",
                 Some(65_536),
                 Some(1_000 | 1_000_000),
             ) | (
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
-                DeltaReaderBackend::NativeAsync | DeltaReaderBackend::OfficialKernel,
+                ParquetReaderBackend::DirectParquet | ParquetReaderBackend::DeltaKernel,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 "s3_throttled",
                 Some(65_536),
                 None,
@@ -1313,7 +1313,7 @@ async fn run_once(
         .with_max_concurrent_file_reads_per_scan(Some(target_partitions.saturating_mul(3).max(1)))?
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_capacity_per_partition(1)?
-        .with_native_async_prefetch_file_count_per_partition(2)?
+        .with_prefetch_file_count_per_partition(2)?
         .with_parquet_metadata_size_hint(config.metadata_hint)?
         .with_parquet_full_file_read_threshold(config.full_read_threshold)?;
     let table = DeltaTableBuilder::new(&fixture.table_uri)
@@ -1708,10 +1708,10 @@ fn csv_row(
     row
 }
 
-fn backend_name(backend: DeltaReaderBackend) -> &'static str {
+fn backend_name(backend: ParquetReaderBackend) -> &'static str {
     match backend {
-        DeltaReaderBackend::NativeAsync => "native_async",
-        DeltaReaderBackend::OfficialKernel => "official_kernel",
+        ParquetReaderBackend::DirectParquet => "direct_parquet",
+        ParquetReaderBackend::DeltaKernel => "delta_kernel",
     }
 }
 
@@ -1787,7 +1787,7 @@ mod tests {
     fn config(
         workload: Workload,
         query: Query,
-        backend: DeltaReaderBackend,
+        backend: ParquetReaderBackend,
         storage: StorageProfile,
         metadata_hint: Option<usize>,
         full_read_threshold: Option<usize>,
@@ -1815,7 +1815,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 Some(65_536),
                 None,
@@ -1823,7 +1823,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::ProjectId,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 Some(65_536),
                 None,
@@ -1831,7 +1831,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::OfficialKernel,
+                ParquetReaderBackend::DeltaKernel,
                 local,
                 Some(65_536),
                 None,
@@ -1839,7 +1839,7 @@ mod tests {
             config(
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 Some(65_536),
                 None,
@@ -1847,7 +1847,7 @@ mod tests {
             config(
                 Workload::ManySmall,
                 Query::ProjectId,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 Some(65_536),
                 None,
@@ -1855,7 +1855,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 None,
                 None,
@@ -1863,7 +1863,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 Some(8),
                 None,
@@ -1871,7 +1871,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 Some(65_536),
                 Some(1_000_000),
@@ -1879,7 +1879,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 Some(65_536),
                 Some(1_000),
@@ -1887,7 +1887,7 @@ mod tests {
             config(
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 local,
                 Some(65_536),
                 None,
@@ -1895,7 +1895,7 @@ mod tests {
             config(
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
-                DeltaReaderBackend::OfficialKernel,
+                ParquetReaderBackend::DeltaKernel,
                 local,
                 Some(65_536),
                 None,
@@ -1903,7 +1903,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 throttled,
                 Some(65_536),
                 None,
@@ -1916,7 +1916,7 @@ mod tests {
         let outside = config(
             Workload::ManySmall,
             Query::ProjectId,
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             local,
             Some(65_536),
             None,
@@ -1940,7 +1940,7 @@ mod tests {
                 "--provider-exec-query",
                 "full_rows",
                 "--provider-exec-backend",
-                "native_async",
+                "direct_parquet",
                 "--provider-exec-scheduling-profile",
                 "prefetch_2_ap_target_scan_3x",
                 "--provider-exec-parquet-metadata-size-hint",
@@ -1961,7 +1961,10 @@ mod tests {
         assert_eq!(parsed.storage.name, "local");
         assert_eq!(parsed.workload.name(), "provider_few_larger_files");
         assert_eq!(parsed.query.name(), "full_rows");
-        assert!(matches!(parsed.backend, DeltaReaderBackend::NativeAsync));
+        assert!(matches!(
+            parsed.backend,
+            ParquetReaderBackend::DirectParquet
+        ));
         assert_eq!(parsed.repetitions, 5);
         assert_eq!(parsed.metadata_hint, Some(65_536));
         assert_eq!(parsed.full_read_threshold, None);
@@ -1974,7 +1977,10 @@ mod tests {
         assert_eq!(defaults.storage.name, "local");
         assert_eq!(defaults.workload.name(), "provider_few_larger_files");
         assert_eq!(defaults.query.name(), "full_rows");
-        assert!(matches!(defaults.backend, DeltaReaderBackend::NativeAsync));
+        assert!(matches!(
+            defaults.backend,
+            ParquetReaderBackend::DirectParquet
+        ));
         assert_eq!(defaults.repetitions, DEFAULT_REPETITIONS);
         assert_eq!(defaults.metadata_hint, Some(65_536));
         assert_eq!(defaults.full_read_threshold, None);
@@ -2045,7 +2051,7 @@ mod tests {
             let unequal_config = config(
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 StorageProfile::local(),
                 Some(65_536),
                 None,
@@ -2063,7 +2069,7 @@ mod tests {
             let http_config = config(
                 Workload::FewLarger,
                 Query::FullRows,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 StorageProfile::throttled(),
                 Some(65_536),
                 None,
@@ -2114,7 +2120,7 @@ mod tests {
             let config = config(
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
-                DeltaReaderBackend::OfficialKernel,
+                ParquetReaderBackend::DeltaKernel,
                 StorageProfile::local(),
                 Some(65_536),
                 None,
@@ -2126,7 +2132,7 @@ mod tests {
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "22");
+            assert_eq!(row[0], "23");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);
@@ -2136,7 +2142,7 @@ mod tests {
             assert_eq!(row[7], "provider_few_larger_files_sparse_dv");
             assert_eq!(row[8], "local");
             assert_eq!(row[9], "project_id");
-            assert_eq!(row[10], "official_kernel");
+            assert_eq!(row[10], "delta_kernel");
             assert_eq!(row[11], "prefetch_2_ap_target_scan_3x");
             assert_eq!(&row[12..17], ["4", "12", "3", "1", "2"]);
             assert_eq!(row[17], "1");

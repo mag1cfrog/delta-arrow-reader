@@ -1,4 +1,4 @@
-//! NativeAsync Parquet data-file reader.
+//! Direct asynchronous Parquet data-file reader.
 
 mod metered_object_store;
 mod row_group_pruning;
@@ -31,7 +31,7 @@ use tokio::sync::OnceCell;
 
 use self::{
     metered_object_store::MeteredParquetObjectStore,
-    row_group_pruning::native_async_pruned_row_groups,
+    row_group_pruning::direct_parquet_pruned_row_groups,
 };
 
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
@@ -55,7 +55,7 @@ use crate::{
     },
 };
 
-struct NativeAsyncFileReader {
+struct DirectParquetFileReader {
     engine_context: Arc<DeltaKernelEngineContext>,
     store: Arc<dyn ObjectStore>,
     execution_options: DeltaReaderExecutionOptions,
@@ -64,14 +64,14 @@ struct NativeAsyncFileReader {
 
 /// Parquet footer metadata shared by ranged tasks within one physical scan.
 #[derive(Default)]
-pub(crate) struct NativeAsyncParquetMetadataCache {
+pub(crate) struct DirectParquetMetadataCache {
     /// In-flight or completed footer loads keyed by file path and planned size.
     entries: Mutex<HashMap<(Path, u64), Arc<ParquetMetadataCell>>>,
 }
 
 type ParquetMetadataCell = OnceCell<Arc<ParquetMetaData>>;
 
-impl NativeAsyncParquetMetadataCache {
+impl DirectParquetMetadataCache {
     fn entry(&self, path: &Path, file_size: u64) -> Arc<ParquetMetadataCell> {
         Arc::clone(
             self.entries
@@ -83,20 +83,20 @@ impl NativeAsyncParquetMetadataCache {
     }
 }
 
-struct NativeAsyncParquetObject {
+struct DirectParquetObject {
     store: Arc<dyn ObjectStore>,
     path: Path,
     file_size: u64,
 }
 
-struct NativeAsyncParquetStream {
+struct DirectParquetStream {
     stream: ParquetRecordBatchStream<ParquetObjectReader>,
-    schema_match: NativeAsyncSchemaMatch,
+    schema_match: DirectParquetSchemaMatch,
     include_original_row_index: bool,
 }
 
-struct NativeAsyncFileReadStream {
-    parquet: NativeAsyncParquetStream,
+struct DirectParquetFileReadStream {
+    parquet: DirectParquetStream,
     engine_context: Arc<DeltaKernelEngineContext>,
     kernel_schemas: KernelScanSchemas,
     logical_schema: SchemaRef,
@@ -107,7 +107,7 @@ struct NativeAsyncFileReadStream {
     _permit: FileReadPermit,
 }
 
-struct NativeAsyncFileReadRequest {
+struct DirectParquetFileReadRequest {
     task: DeltaScanFileTask,
     physical_schema: SchemaRef,
     logical_schema: SchemaRef,
@@ -120,62 +120,62 @@ struct NativeAsyncFileReadRequest {
 }
 
 #[derive(Clone)]
-struct NativeAsyncSchemaMatch {
+struct DirectParquetSchemaMatch {
     provider_schema: SchemaRef,
     projected_roots: Vec<usize>,
-    provider_columns: Vec<NativeAsyncProviderColumn>,
+    provider_columns: Vec<DirectParquetProviderColumn>,
     needs_batch_reshape: bool,
 }
 
 #[derive(Clone)]
-enum NativeAsyncProviderColumn {
+enum DirectParquetProviderColumn {
     ProjectedStreamColumn {
         stream_index: usize,
-        field_plan: NativeAsyncFieldPlan,
+        field_plan: DirectParquetFieldPlan,
     },
     Null,
 }
 
 #[derive(Clone)]
-enum NativeAsyncFieldPlan {
+enum DirectParquetFieldPlan {
     Identity,
     Cast {
         target_type: DataType,
     },
     Struct {
-        children: Vec<NativeAsyncStructChild>,
+        children: Vec<DirectParquetStructChild>,
     },
     List {
-        element_plan: Box<NativeAsyncFieldPlan>,
+        element_plan: Box<DirectParquetFieldPlan>,
     },
     Map {
-        key_plan: Box<NativeAsyncFieldPlan>,
-        value_plan: Box<NativeAsyncFieldPlan>,
+        key_plan: Box<DirectParquetFieldPlan>,
+        value_plan: Box<DirectParquetFieldPlan>,
     },
 }
 
-impl NativeAsyncFieldPlan {
+impl DirectParquetFieldPlan {
     fn is_identity(&self) -> bool {
         matches!(self, Self::Identity)
     }
 }
 
 #[derive(Clone)]
-enum NativeAsyncStructChild {
+enum DirectParquetStructChild {
     ProjectedChild {
         child_index: usize,
-        field_plan: NativeAsyncFieldPlan,
+        field_plan: DirectParquetFieldPlan,
     },
     Null,
 }
 
 #[derive(Clone)]
-struct NativeAsyncRootMatch {
+struct DirectParquetRootMatch {
     parquet_root_index: usize,
-    field_plan: NativeAsyncFieldPlan,
+    field_plan: DirectParquetFieldPlan,
 }
 
-impl NativeAsyncFileReader {
+impl DirectParquetFileReader {
     fn new(
         engine_context: Arc<DeltaKernelEngineContext>,
         execution_options: DeltaReaderExecutionOptions,
@@ -195,7 +195,7 @@ impl NativeAsyncFileReader {
 
     async fn load_split_parquet_metadata(
         &self,
-        metadata_cache: Option<&NativeAsyncParquetMetadataCache>,
+        metadata_cache: Option<&DirectParquetMetadataCache>,
         path: &Path,
         file_size: u64,
         reader: &mut ParquetObjectReader,
@@ -217,7 +217,7 @@ impl NativeAsyncFileReader {
     async fn parquet_object_for_task(
         &self,
         task: &DeltaScanFileTask,
-    ) -> Result<NativeAsyncParquetObject, DeltaReaderError> {
+    ) -> Result<DirectParquetObject, DeltaReaderError> {
         let object = self.resolve_parquet_object(task)?;
         if task.parquet_byte_range.is_some() {
             return Ok(object);
@@ -225,6 +225,7 @@ impl NativeAsyncFileReader {
         self.buffer_small_parquet_object(object).await
     }
 
+    #[cfg(test)]
     async fn open_parquet_stream(
         &self,
         task: &DeltaScanFileTask,
@@ -233,7 +234,7 @@ impl NativeAsyncFileReader {
         physical_predicate: Option<&DeltaKernelPredicate>,
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
-    ) -> Result<NativeAsyncParquetStream, DeltaReaderError> {
+    ) -> Result<DirectParquetStream, DeltaReaderError> {
         self.open_parquet_stream_with_metadata_cache(
             task,
             provider_schema,
@@ -255,8 +256,8 @@ impl NativeAsyncFileReader {
         physical_predicate: Option<&DeltaKernelPredicate>,
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
-        metadata_cache: Option<&NativeAsyncParquetMetadataCache>,
-    ) -> Result<NativeAsyncParquetStream, DeltaReaderError> {
+        metadata_cache: Option<&DirectParquetMetadataCache>,
+    ) -> Result<DirectParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
         let file_size = object.file_size;
         let path = object.path;
@@ -265,7 +266,7 @@ impl NativeAsyncFileReader {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
         };
-        let reader_options = native_async_arrow_reader_options(include_original_row_index)
+        let reader_options = direct_parquet_arrow_reader_options(include_original_row_index)
             .boxed()
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
@@ -317,7 +318,7 @@ impl NativeAsyncFileReader {
                     reason: "parquet_read_setup_failed",
                 })?
         };
-        let schema_match = build_native_async_schema_match(
+        let schema_match = build_direct_parquet_schema_match(
             builder.parquet_schema(),
             builder.schema(),
             provider_schema,
@@ -325,7 +326,7 @@ impl NativeAsyncFileReader {
         .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
         let projection =
             ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
-        let row_groups = native_async_pruned_row_groups(
+        let row_groups = direct_parquet_pruned_row_groups(
             builder.metadata(),
             file_size,
             task.parquet_byte_range.as_ref(),
@@ -342,7 +343,7 @@ impl NativeAsyncFileReader {
             None => builder,
         };
         let row_filter = row_predicate.map(|(predicate, kernel_schemas)| {
-            self.native_async_row_filter(
+            self.direct_parquet_row_filter(
                 predicate,
                 kernel_schemas,
                 &schema_match,
@@ -366,7 +367,7 @@ impl NativeAsyncFileReader {
                 reason: "parquet_read_setup_failed",
             })?;
 
-        Ok(NativeAsyncParquetStream {
+        Ok(DirectParquetStream {
             stream,
             schema_match,
             include_original_row_index,
@@ -375,17 +376,17 @@ impl NativeAsyncFileReader {
 
     async fn open_logical_file_stream(
         self: &Arc<Self>,
-        request: NativeAsyncFileReadRequest,
-    ) -> Result<NativeAsyncFileReadStream, DeltaReaderError> {
+        request: DirectParquetFileReadRequest,
+    ) -> Result<DirectParquetFileReadStream, DeltaReaderError> {
         self.open_logical_file_stream_with_metadata_cache(request, None)
             .await
     }
 
     async fn open_logical_file_stream_with_metadata_cache(
         self: &Arc<Self>,
-        request: NativeAsyncFileReadRequest,
-        metadata_cache: Option<&NativeAsyncParquetMetadataCache>,
-    ) -> Result<NativeAsyncFileReadStream, DeltaReaderError> {
+        request: DirectParquetFileReadRequest,
+        metadata_cache: Option<&DirectParquetMetadataCache>,
+    ) -> Result<DirectParquetFileReadStream, DeltaReaderError> {
         let include_original_row_index = request.task.deletion_vector.is_present();
         let parquet = tokio::select! {
             biased;
@@ -416,7 +417,7 @@ impl NativeAsyncFileReader {
             return Err(cancelled_error());
         }
 
-        Ok(NativeAsyncFileReadStream {
+        Ok(DirectParquetFileReadStream {
             parquet,
             engine_context: Arc::clone(&self.engine_context),
             kernel_schemas: request.kernel_schemas,
@@ -429,11 +430,11 @@ impl NativeAsyncFileReader {
         })
     }
 
-    fn native_async_row_filter(
+    fn direct_parquet_row_filter(
         &self,
         predicate: &DeltaKernelPredicate,
         kernel_schemas: &KernelScanSchemas,
-        schema_match: &NativeAsyncSchemaMatch,
+        schema_match: &DirectParquetSchemaMatch,
         parquet_schema: &SchemaDescriptor,
     ) -> RowFilter {
         let projection = ProjectionMask::roots(parquet_schema, schema_match.projected_roots());
@@ -456,7 +457,7 @@ impl NativeAsyncFileReader {
     fn resolve_parquet_object(
         &self,
         task: &DeltaScanFileTask,
-    ) -> Result<NativeAsyncParquetObject, DeltaReaderError> {
+    ) -> Result<DirectParquetObject, DeltaReaderError> {
         let location = self
             .engine_context
             .table_url()
@@ -473,11 +474,11 @@ impl NativeAsyncFileReader {
         let file_size = task.file_size.ok_or_else(|| {
             data_file_error(
                 "data_file_size_missing",
-                delta_kernel::Error::generic("file size is required for NativeAsync reads"),
+                delta_kernel::Error::generic("file size is required for direct Parquet reads"),
             )
         })?;
 
-        Ok(NativeAsyncParquetObject {
+        Ok(DirectParquetObject {
             store: Arc::clone(&self.store),
             path,
             file_size,
@@ -486,8 +487,8 @@ impl NativeAsyncFileReader {
 
     async fn buffer_small_parquet_object(
         &self,
-        mut object: NativeAsyncParquetObject,
-    ) -> Result<NativeAsyncParquetObject, DeltaReaderError> {
+        mut object: DirectParquetObject,
+    ) -> Result<DirectParquetObject, DeltaReaderError> {
         let should_buffer = self
             .execution_options
             .parquet_full_file_read_threshold()
@@ -548,17 +549,17 @@ fn metadata_with_view_types(
     })
 }
 
-pub(crate) fn native_async_file_executor(
+pub(crate) fn direct_parquet_file_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
-    let reader = Arc::new(NativeAsyncFileReader::new(
+    let reader = Arc::new(DirectParquetFileReader::new(
         Arc::clone(&plan.engine_context),
         plan.execution_options,
         plan.metrics.clone(),
     ));
-    native_async_file_executor_from_reader::<false>(
+    direct_parquet_file_executor_from_reader::<false>(
         plan,
         output_batch_size,
         row_predicate,
@@ -567,17 +568,18 @@ pub(crate) fn native_async_file_executor(
     )
 }
 
-pub(crate) fn native_async_file_executor_with_metadata_cache(
+#[cfg(feature = "datafusion")]
+pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
-    metadata_cache: Arc<NativeAsyncParquetMetadataCache>,
+    metadata_cache: Arc<DirectParquetMetadataCache>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
-    native_async_file_executor_from_reader::<true>(
+    direct_parquet_file_executor_from_reader::<true>(
         plan,
         output_batch_size,
         row_predicate,
-        Arc::new(NativeAsyncFileReader::new(
+        Arc::new(DirectParquetFileReader::new(
             Arc::clone(&plan.engine_context),
             plan.execution_options,
             plan.metrics.clone(),
@@ -586,12 +588,12 @@ pub(crate) fn native_async_file_executor_with_metadata_cache(
     )
 }
 
-fn native_async_file_executor_from_reader<const SHARED_METADATA: bool>(
+fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
-    reader: Arc<NativeAsyncFileReader>,
-    metadata_cache: Option<Arc<NativeAsyncParquetMetadataCache>>,
+    reader: Arc<DirectParquetFileReader>,
+    metadata_cache: Option<Arc<DirectParquetMetadataCache>>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let physical_schema = Arc::clone(&plan.physical_schema);
     let logical_schema = Arc::clone(&plan.logical_schema);
@@ -610,7 +612,7 @@ fn native_async_file_executor_from_reader<const SHARED_METADATA: bool>(
         let row_predicate = row_predicate.clone();
         let metadata_cache = metadata_cache.clone();
         Box::pin(async move {
-            let request = NativeAsyncFileReadRequest {
+            let request = DirectParquetFileReadRequest {
                 task,
                 physical_schema,
                 logical_schema,
@@ -641,7 +643,8 @@ fn native_async_file_executor_from_reader<const SHARED_METADATA: bool>(
     })
 }
 
-impl NativeAsyncParquetStream {
+impl DirectParquetStream {
+    #[cfg(test)]
     async fn next_batch(&mut self) -> Result<Option<RecordBatch>, DeltaReaderError> {
         self.next_batch_with_original_row_indexes()
             .await
@@ -690,7 +693,7 @@ impl NativeAsyncParquetStream {
     }
 }
 
-impl NativeAsyncFileReadStream {
+impl DirectParquetFileReadStream {
     async fn next_batch(&mut self) -> Result<Option<RecordBatch>, DeltaReaderError> {
         let next = tokio::select! {
             biased;
@@ -721,7 +724,7 @@ impl NativeAsyncFileReadStream {
         let logical_batch = align_batch_to_logical_schema(
             logical_batch,
             &self.logical_schema,
-            "NativeAsync output does not match the planned logical schema",
+            "Direct Parquet output does not match the planned logical schema",
         )?;
         let logical_batch = match self.deletion_vector.as_mut() {
             Some(deletion_vector) => deletion_vector
@@ -732,7 +735,7 @@ impl NativeAsyncFileReadStream {
     }
 }
 
-fn native_async_arrow_reader_options(
+fn direct_parquet_arrow_reader_options(
     include_original_row_index: bool,
 ) -> parquet::errors::Result<ArrowReaderOptions> {
     if !include_original_row_index {
@@ -752,7 +755,7 @@ fn cancelled_error() -> DeltaReaderError {
     .build()
 }
 
-impl NativeAsyncSchemaMatch {
+impl DirectParquetSchemaMatch {
     fn projected_roots(&self) -> impl Iterator<Item = usize> + '_ {
         self.projected_roots.iter().copied()
     }
@@ -766,7 +769,7 @@ impl NativeAsyncSchemaMatch {
             .iter()
             .zip(self.provider_schema.fields())
             .map(|(column, field)| match column {
-                NativeAsyncProviderColumn::ProjectedStreamColumn {
+                DirectParquetProviderColumn::ProjectedStreamColumn {
                     stream_index,
                     field_plan,
                 } => reshape_array_to_provider_field(
@@ -774,7 +777,7 @@ impl NativeAsyncSchemaMatch {
                     field,
                     field_plan,
                 ),
-                NativeAsyncProviderColumn::Null => {
+                DirectParquetProviderColumn::Null => {
                     Ok(new_null_array(field.data_type(), batch.num_rows()))
                 }
             })
@@ -785,11 +788,11 @@ impl NativeAsyncSchemaMatch {
     }
 }
 
-fn build_native_async_schema_match(
+fn build_direct_parquet_schema_match(
     parquet_schema: &SchemaDescriptor,
     parquet_arrow_schema: &SchemaRef,
     provider_schema: SchemaRef,
-) -> Result<NativeAsyncSchemaMatch, delta_kernel::Error> {
+) -> Result<DirectParquetSchemaMatch, delta_kernel::Error> {
     let root_matches = provider_schema
         .fields()
         .iter()
@@ -819,7 +822,7 @@ fn build_native_async_schema_match(
                 .iter()
                 .position(|root| *root == root_match.parquet_root_index)
                 .map(
-                    |stream_index| NativeAsyncProviderColumn::ProjectedStreamColumn {
+                    |stream_index| DirectParquetProviderColumn::ProjectedStreamColumn {
                         stream_index,
                         field_plan: root_match.field_plan.clone(),
                     },
@@ -827,7 +830,7 @@ fn build_native_async_schema_match(
                 .ok_or_else(|| {
                     delta_kernel::Error::generic("matched Parquet root was not projected")
                 }),
-            None if provider_field.is_nullable() => Ok(NativeAsyncProviderColumn::Null),
+            None if provider_field.is_nullable() => Ok(DirectParquetProviderColumn::Null),
             None => Err(delta_kernel::Error::generic(format!(
                 "non-nullable provider field '{}' is missing from the Parquet file",
                 provider_field.name()
@@ -839,7 +842,7 @@ fn build_native_async_schema_match(
         .zip(provider_schema.fields())
         .enumerate()
         .any(|(provider_index, (column, provider_field))| match column {
-            NativeAsyncProviderColumn::ProjectedStreamColumn {
+            DirectParquetProviderColumn::ProjectedStreamColumn {
                 stream_index,
                 field_plan,
             } => {
@@ -850,10 +853,10 @@ fn build_native_async_schema_match(
                         .and_then(|root| parquet_arrow_schema.fields().get(*root))
                         .is_none_or(|file_field| file_field.name() != provider_field.name())
             }
-            NativeAsyncProviderColumn::Null => true,
+            DirectParquetProviderColumn::Null => true,
         });
 
-    Ok(NativeAsyncSchemaMatch {
+    Ok(DirectParquetSchemaMatch {
         provider_schema,
         projected_roots,
         provider_columns,
@@ -865,7 +868,7 @@ fn match_provider_field_to_parquet_root(
     provider_field: &Field,
     parquet_roots: &[TypePtr],
     parquet_arrow_schema: &SchemaRef,
-) -> Result<Option<NativeAsyncRootMatch>, delta_kernel::Error> {
+) -> Result<Option<DirectParquetRootMatch>, delta_kernel::Error> {
     if let Some(field_id) = arrow_field_id(provider_field)? {
         let matches = parquet_roots
             .iter()
@@ -874,7 +877,7 @@ fn match_provider_field_to_parquet_root(
             .collect::<Vec<_>>();
         match matches.as_slice() {
             [index] => {
-                return Ok(Some(NativeAsyncRootMatch {
+                return Ok(Some(DirectParquetRootMatch {
                     parquet_root_index: *index,
                     field_plan: build_matched_field_plan(
                         provider_field,
@@ -902,7 +905,7 @@ fn match_provider_field_to_parquet_root(
         return Ok(None);
     };
 
-    Ok(Some(NativeAsyncRootMatch {
+    Ok(Some(DirectParquetRootMatch {
         parquet_root_index: index,
         field_plan: build_matched_field_plan(
             provider_field,
@@ -918,7 +921,7 @@ fn build_matched_field_plan(
     file_field: &Field,
     parquet_field: &parquet::schema::types::Type,
     path: &str,
-) -> Result<NativeAsyncFieldPlan, delta_kernel::Error> {
+) -> Result<DirectParquetFieldPlan, delta_kernel::Error> {
     match (provider_field.data_type(), file_field.data_type()) {
         (DataType::Struct(provider_fields), DataType::Struct(file_fields)) => {
             build_matched_struct_field_plan(
@@ -950,10 +953,10 @@ fn build_matched_field_plan(
                 path,
             )
         }
-        _ => native_async_leaf_cast_plan(provider_field.data_type(), file_field.data_type())
+        _ => direct_parquet_leaf_cast_plan(provider_field.data_type(), file_field.data_type())
             .map(|target_type| match target_type {
-                Some(target_type) => NativeAsyncFieldPlan::Cast { target_type },
-                None => NativeAsyncFieldPlan::Identity,
+                Some(target_type) => DirectParquetFieldPlan::Cast { target_type },
+                None => DirectParquetFieldPlan::Identity,
             })
             .map_err(|()| {
                 incompatible_parquet_type(path, provider_field.data_type(), file_field.data_type())
@@ -968,7 +971,7 @@ fn build_matched_map_field_plan(
     file_entries: &Arc<Field>,
     parquet_field: &parquet::schema::types::Type,
     path: &str,
-) -> Result<NativeAsyncFieldPlan, delta_kernel::Error> {
+) -> Result<DirectParquetFieldPlan, delta_kernel::Error> {
     let (provider_key, provider_value) = map_entry_fields(provider_entries, path)?;
     let (file_key, file_value) = map_entry_fields(file_entries, path)?;
     let key_plan = build_matched_field_plan(
@@ -988,12 +991,12 @@ fn build_matched_map_field_plan(
         || !key_plan.is_identity()
         || !value_plan.is_identity()
     {
-        Ok(NativeAsyncFieldPlan::Map {
+        Ok(DirectParquetFieldPlan::Map {
             key_plan: Box::new(key_plan),
             value_plan: Box::new(value_plan),
         })
     } else {
-        Ok(NativeAsyncFieldPlan::Identity)
+        Ok(DirectParquetFieldPlan::Identity)
     }
 }
 
@@ -1057,7 +1060,7 @@ fn build_matched_list_field_plan(
     file_element: &Arc<Field>,
     parquet_field: &parquet::schema::types::Type,
     path: &str,
-) -> Result<NativeAsyncFieldPlan, delta_kernel::Error> {
+) -> Result<DirectParquetFieldPlan, delta_kernel::Error> {
     let element_path = format!("{path}.element");
     let element_plan = build_matched_field_plan(
         provider_element,
@@ -1065,7 +1068,7 @@ fn build_matched_list_field_plan(
         parquet_list_element_field(parquet_field, path)?,
         &element_path,
     )?;
-    if matches!(element_plan, NativeAsyncFieldPlan::Cast { .. }) {
+    if matches!(element_plan, DirectParquetFieldPlan::Cast { .. }) {
         return Err(incompatible_parquet_type(
             &element_path,
             provider_element.data_type(),
@@ -1073,11 +1076,11 @@ fn build_matched_list_field_plan(
         ));
     }
     if file_field.data_type() != provider_field.data_type() || !element_plan.is_identity() {
-        Ok(NativeAsyncFieldPlan::List {
+        Ok(DirectParquetFieldPlan::List {
             element_plan: Box::new(element_plan),
         })
     } else {
-        Ok(NativeAsyncFieldPlan::Identity)
+        Ok(DirectParquetFieldPlan::Identity)
     }
 }
 
@@ -1112,7 +1115,7 @@ fn build_matched_struct_field_plan(
     file_fields: &Fields,
     parquet_field: &parquet::schema::types::Type,
     path: &str,
-) -> Result<NativeAsyncFieldPlan, delta_kernel::Error> {
+) -> Result<DirectParquetFieldPlan, delta_kernel::Error> {
     let parquet_children = parquet_field.get_fields();
     if parquet_children.len() != file_fields.len() {
         return Err(delta_kernel::Error::generic(format!(
@@ -1133,7 +1136,7 @@ fn build_matched_struct_field_plan(
     let needs_reshape = file_field.data_type() != provider_field.data_type()
         || children.iter().zip(provider_fields.iter()).enumerate().any(
             |(provider_index, (child, provider_child))| match child {
-                NativeAsyncStructChild::ProjectedChild {
+                DirectParquetStructChild::ProjectedChild {
                     child_index,
                     field_plan,
                 } => {
@@ -1143,13 +1146,13 @@ fn build_matched_struct_field_plan(
                             .get(*child_index)
                             .is_none_or(|file_child| file_child.name() != provider_child.name())
                 }
-                NativeAsyncStructChild::Null => true,
+                DirectParquetStructChild::Null => true,
             },
         );
     if needs_reshape {
-        Ok(NativeAsyncFieldPlan::Struct { children })
+        Ok(DirectParquetFieldPlan::Struct { children })
     } else {
-        Ok(NativeAsyncFieldPlan::Identity)
+        Ok(DirectParquetFieldPlan::Identity)
     }
 }
 
@@ -1158,7 +1161,7 @@ fn match_provider_struct_child(
     file_fields: &Fields,
     parquet_children: &[TypePtr],
     path: &str,
-) -> Result<NativeAsyncStructChild, delta_kernel::Error> {
+) -> Result<DirectParquetStructChild, delta_kernel::Error> {
     if let Some(field_id) = arrow_field_id(provider_child)? {
         let matches = parquet_children
             .iter()
@@ -1174,7 +1177,7 @@ fn match_provider_struct_child(
                         "provider field '{path}' matched Parquet field id {field_id} without Arrow metadata"
                     ))
                 })?;
-                return Ok(NativeAsyncStructChild::ProjectedChild {
+                return Ok(DirectParquetStructChild::ProjectedChild {
                     child_index: *index,
                     field_plan: build_matched_field_plan(
                         provider_child,
@@ -1198,14 +1201,14 @@ fn match_provider_struct_child(
         .find(|(_, file_child)| file_child.name() == provider_child.name())
     else {
         return if provider_child.is_nullable() {
-            Ok(NativeAsyncStructChild::Null)
+            Ok(DirectParquetStructChild::Null)
         } else {
             Err(delta_kernel::Error::generic(format!(
                 "non-nullable provider field '{path}' is missing from the Parquet file"
             )))
         };
     };
-    Ok(NativeAsyncStructChild::ProjectedChild {
+    Ok(DirectParquetStructChild::ProjectedChild {
         child_index: index,
         field_plan: build_matched_field_plan(
             provider_child,
@@ -1226,7 +1229,7 @@ fn incompatible_parquet_type(
     ))
 }
 
-fn native_async_leaf_cast_plan(
+fn direct_parquet_leaf_cast_plan(
     provider_type: &DataType,
     file_type: &DataType,
 ) -> Result<Option<DataType>, ()> {
@@ -1242,7 +1245,7 @@ fn native_async_leaf_cast_plan(
         (Int32, Int64 | Float64) => Ok(Some(provider_type.clone())),
         (Float32, Float64) => Ok(Some(provider_type.clone())),
         (source_type, Decimal128(precision, scale))
-            if native_async_can_upcast_to_decimal(source_type, *precision, *scale) =>
+            if direct_parquet_can_upcast_to_decimal(source_type, *precision, *scale) =>
         {
             Ok(Some(provider_type.clone()))
         }
@@ -1255,7 +1258,7 @@ fn native_async_leaf_cast_plan(
     }
 }
 
-fn native_async_can_upcast_to_decimal(
+fn direct_parquet_can_upcast_to_decimal(
     source_type: &DataType,
     target_precision: u8,
     target_scale: i8,
@@ -1298,14 +1301,14 @@ fn parquet_field_id(parquet_field: &TypePtr) -> Option<i32> {
 fn reshape_array_to_provider_field(
     array: ArrayRef,
     provider_field: &Field,
-    field_plan: &NativeAsyncFieldPlan,
+    field_plan: &DirectParquetFieldPlan,
 ) -> Result<ArrayRef, delta_kernel::Error> {
     match field_plan {
-        NativeAsyncFieldPlan::Identity => Ok(array),
-        NativeAsyncFieldPlan::Cast { target_type } => {
+        DirectParquetFieldPlan::Identity => Ok(array),
+        DirectParquetFieldPlan::Cast { target_type } => {
             cast(array.as_ref(), target_type).map_err(delta_kernel::Error::from)
         }
-        NativeAsyncFieldPlan::Struct { children } => {
+        DirectParquetFieldPlan::Struct { children } => {
             let DataType::Struct(provider_fields) = provider_field.data_type() else {
                 return Err(delta_kernel::Error::generic(format!(
                     "provider field '{}' expected struct reshape plan but has type {}",
@@ -1327,7 +1330,7 @@ fn reshape_array_to_provider_field(
                 .iter()
                 .zip(provider_fields.iter())
                 .map(|(child, provider_child)| match child {
-                    NativeAsyncStructChild::ProjectedChild {
+                    DirectParquetStructChild::ProjectedChild {
                         child_index,
                         field_plan,
                     } => reshape_array_to_provider_field(
@@ -1335,7 +1338,7 @@ fn reshape_array_to_provider_field(
                         provider_child,
                         field_plan,
                     ),
-                    NativeAsyncStructChild::Null => Ok(new_null_array(
+                    DirectParquetStructChild::Null => Ok(new_null_array(
                         provider_child.data_type(),
                         struct_array.len(),
                     )),
@@ -1347,7 +1350,7 @@ fn reshape_array_to_provider_field(
                 struct_array.nulls().cloned(),
             )))
         }
-        NativeAsyncFieldPlan::List { element_plan } => {
+        DirectParquetFieldPlan::List { element_plan } => {
             let DataType::List(provider_element) = provider_field.data_type() else {
                 return Err(delta_kernel::Error::generic(format!(
                     "provider field '{}' expected list reshape plan but has type {}",
@@ -1376,7 +1379,7 @@ fn reshape_array_to_provider_field(
             .map(|array| Arc::new(array) as ArrayRef)
             .map_err(delta_kernel::Error::from)
         }
-        NativeAsyncFieldPlan::Map {
+        DirectParquetFieldPlan::Map {
             key_plan,
             value_plan,
         } => {
@@ -1478,21 +1481,20 @@ mod tests {
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
-        NativeAsyncFileReadRequest, NativeAsyncFileReader, NativeAsyncParquetMetadataCache,
-        data_file_error, native_async_file_executor,
+        DirectParquetFileReadRequest, DirectParquetFileReader, DirectParquetMetadataCache,
+        data_file_error, direct_parquet_file_executor,
     };
-    #[cfg(feature = "official-kernel")]
-    use crate::reader::backend::official_kernel::official_kernel_file_executor;
+    use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
-        DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions,
-        DeltaSnapshotSelection, DeltaStorageOptions,
+        DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions, DeltaSnapshotSelection,
+        DeltaStorageOptions, ParquetReaderBackend,
         delta::kernel::{
             DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
             KernelScanFileMetadata,
         },
         delta::snapshot::load_delta_table_snapshot_blocking,
         reader::{
-            backend::native_async::metered_object_store::MeteredParquetObjectStore,
+            backend::direct_parquet::metered_object_store::MeteredParquetObjectStore,
             metrics::DeltaReadMetricsConfig,
             planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
             scheduling::{
@@ -1760,7 +1762,7 @@ mod tests {
     fn metrics() -> DeltaReadMetrics {
         DeltaReadMetrics::new(DeltaReadMetricsConfig {
             snapshot_version: 1,
-            reader_backend: DeltaReaderBackend::NativeAsync,
+            reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 1,
             files_planned: 1,
@@ -1774,14 +1776,18 @@ mod tests {
         root: &TestDir,
         options: DeltaReaderExecutionOptions,
         metrics: DeltaReadMetrics,
-    ) -> Result<NativeAsyncFileReader, Box<dyn std::error::Error>> {
+    ) -> Result<DirectParquetFileReader, Box<dyn std::error::Error>> {
         let table_url = url::Url::from_directory_path(root.path())
             .map_err(|()| "temporary table path cannot become a file URL")?;
         let engine_context = Arc::new(DeltaKernelEngineContext::build(
             table_url,
             &DeltaStorageOptions::default(),
         )?);
-        Ok(NativeAsyncFileReader::new(engine_context, options, metrics))
+        Ok(DirectParquetFileReader::new(
+            engine_context,
+            options,
+            metrics,
+        ))
     }
 
     fn task(path: &str, file_size: Option<u64>) -> Result<DeltaScanFileTask, DeltaReaderError> {
@@ -1918,7 +1924,7 @@ mod tests {
         });
         let metadata = serde_json::json!({
             "metaData": {
-                "id": "native-async-pipeline-test",
+                "id": "direct-parquet-pipeline-test",
                 "format": {"provider": "parquet", "options": {}},
                 "schemaString": schema.to_string(),
                 "partitionColumns": ["region"],
@@ -2005,7 +2011,7 @@ mod tests {
             root,
             full_file_threshold,
             Some(64 * 1024),
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             true,
         )
     }
@@ -2014,7 +2020,7 @@ mod tests {
         root: &TestDir,
         full_file_threshold: Option<usize>,
         metadata_size_hint: Option<usize>,
-        backend: DeltaReaderBackend,
+        backend: ParquetReaderBackend,
         with_predicate: bool,
     ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         pipeline_plan_for_backend_at(
@@ -2033,7 +2039,7 @@ mod tests {
         root: &TestDir,
         full_file_threshold: Option<usize>,
         metadata_size_hint: Option<usize>,
-        backend: DeltaReaderBackend,
+        backend: ParquetReaderBackend,
         with_predicate: bool,
         selection: DeltaSnapshotSelection,
         target_partitions: usize,
@@ -2067,10 +2073,9 @@ mod tests {
         )?))
     }
 
-    #[cfg(feature = "official-kernel")]
     fn predicate_pipeline_plan_for_backend(
         root: &TestDir,
-        backend: DeltaReaderBackend,
+        backend: ParquetReaderBackend,
         predicate: Predicate,
     ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         let snapshot = load_delta_table_snapshot_blocking(
@@ -2126,7 +2131,7 @@ mod tests {
         row_predicate: Option<DeltaKernelPredicate>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         let execution = DeltaScanExecution::new(Arc::clone(&plan));
-        let executor = native_async_file_executor(&plan, Some(2), row_predicate);
+        let executor = direct_parquet_file_executor(&plan, Some(2), row_predicate);
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
             let mut stream = execution.partition_stream(
@@ -2141,12 +2146,11 @@ mod tests {
         Ok(batches)
     }
 
-    #[cfg(feature = "official-kernel")]
-    async fn execute_official_plan(
+    async fn execute_kernel_plan(
         plan: Arc<crate::reader::planning::DeltaScanPlan>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         let execution = DeltaScanExecution::new(Arc::clone(&plan));
-        let executor = official_kernel_file_executor(&plan);
+        let executor = delta_kernel_file_executor(&plan);
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
             let mut stream = execution.partition_stream(
@@ -2182,14 +2186,14 @@ mod tests {
         gate_request: GateRequest,
     ) -> Result<
         (
-            Arc<NativeAsyncFileReader>,
+            Arc<DirectParquetFileReader>,
             Arc<GatedObjectStore>,
             DeltaScanFileTask,
         ),
         Box<dyn std::error::Error>,
     > {
         let task = plan.partitions[0].file_tasks[0].clone();
-        let mut reader = NativeAsyncFileReader::new(
+        let mut reader = DirectParquetFileReader::new(
             Arc::clone(&plan.engine_context),
             plan.execution_options,
             plan.metrics.clone(),
@@ -2212,11 +2216,11 @@ mod tests {
         gate_request: GateRequest,
     ) -> Result<
         (
-            Arc<NativeAsyncFileReader>,
+            Arc<DirectParquetFileReader>,
             Arc<GatedObjectStore>,
             DeltaScanFileTask,
             Arc<Schema>,
-            Arc<NativeAsyncParquetMetadataCache>,
+            Arc<DirectParquetMetadataCache>,
         ),
         Box<dyn std::error::Error>,
     > {
@@ -2244,7 +2248,7 @@ mod tests {
             gated,
             task,
             schema,
-            Arc::new(NativeAsyncParquetMetadataCache::default()),
+            Arc::new(DirectParquetMetadataCache::default()),
         ))
     }
 
@@ -2253,8 +2257,8 @@ mod tests {
         task: DeltaScanFileTask,
         permit: FileReadPermit,
         cancellation: ScanCancellation,
-    ) -> NativeAsyncFileReadRequest {
-        NativeAsyncFileReadRequest {
+    ) -> DirectParquetFileReadRequest {
+        DirectParquetFileReadRequest {
             task,
             physical_schema: Arc::clone(&plan.physical_schema),
             logical_schema: Arc::clone(&plan.logical_schema),
@@ -2271,7 +2275,7 @@ mod tests {
         options: DeltaReaderExecutionOptions,
     ) -> Result<Arc<ScanReadLimiter>, DeltaReaderError> {
         let options = options
-            .with_native_async_prefetch_file_count_per_partition(1)?
+            .with_prefetch_file_count_per_partition(1)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?;
         Ok(ScanReadLimiter::new(options, 1, 1))
@@ -2380,7 +2384,7 @@ mod tests {
         writer.write(&batch)?;
         writer.close()?;
         let builder = ParquetRecordBatchReaderBuilder::try_new(fs::File::open(file_path)?)?;
-        let schema_match = super::build_native_async_schema_match(
+        let schema_match = super::build_direct_parquet_schema_match(
             builder.parquet_schema(),
             builder.schema(),
             provider_schema,
@@ -2399,7 +2403,7 @@ mod tests {
     #[tokio::test]
     async fn resolves_table_relative_paths_and_requires_file_size()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-object-resolution")?;
+        let root = TestDir::new("direct-object-resolution")?;
         fs::write(root.path().join("part.parquet"), b"data")?;
         let metrics = metrics();
         let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics.clone())?;
@@ -2439,7 +2443,7 @@ mod tests {
             &DeltaStorageOptions::default(),
         )?);
         let store = engine_context.object_store();
-        let reader = NativeAsyncFileReader::new(
+        let reader = DirectParquetFileReader::new(
             engine_context,
             DeltaReaderExecutionOptions::new(),
             metrics(),
@@ -2473,7 +2477,7 @@ mod tests {
     #[tokio::test]
     async fn regression_invalid_parquet_range_is_redacted_at_the_reader_boundary()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-invalid-parquet-range")?;
+        let root = TestDir::new("direct-invalid-parquet-range")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("secret.parquet"), &bytes)?;
         let file_size = u64::try_from(bytes.len())?;
@@ -2504,7 +2508,7 @@ mod tests {
     async fn split_tasks_share_one_concurrent_parquet_metadata_load()
     -> Result<(), Box<dyn std::error::Error>> {
         let (reader, gated, mut first_task, schema, metadata_cache) = gated_split_metadata_reader(
-            "native-split-metadata-single-flight",
+            "direct-split-metadata-single-flight",
             GateRequest::Range(1),
         )
         .await?;
@@ -2567,7 +2571,7 @@ mod tests {
     #[tokio::test]
     async fn failed_split_metadata_load_can_be_retried() -> Result<(), Box<dyn std::error::Error>> {
         let (reader, gated, task, schema, metadata_cache) = gated_split_metadata_reader(
-            "native-split-metadata-retry",
+            "direct-split-metadata-retry",
             GateRequest::Range(usize::MAX),
         )
         .await?;
@@ -2616,7 +2620,7 @@ mod tests {
     async fn cancelled_split_metadata_load_wakes_a_retrying_task()
     -> Result<(), Box<dyn std::error::Error>> {
         let (reader, gated, task, schema, metadata_cache) = gated_split_metadata_reader(
-            "native-split-metadata-cancellation",
+            "direct-split-metadata-cancellation",
             GateRequest::Range(1),
         )
         .await?;
@@ -2731,7 +2735,7 @@ mod tests {
     #[tokio::test]
     async fn buffered_store_is_owned_only_by_its_file_object()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-file-local-buffer")?;
+        let root = TestDir::new("direct-file-local-buffer")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
         let metrics = metrics();
@@ -2762,7 +2766,7 @@ mod tests {
     #[tokio::test]
     async fn buffered_file_stream_holds_exactly_one_admission_permit_until_drop()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-buffer-permit-bound")?;
+        let root = TestDir::new("direct-buffer-permit-bound")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_with_properties(
             schema,
@@ -2773,7 +2777,7 @@ mod tests {
         )?;
         write_partitioned_dv_table(&root, &parquet_bytes)?;
         let plan = pipeline_plan(&root, Some(parquet_bytes.len()))?;
-        let reader = Arc::new(NativeAsyncFileReader::new(
+        let reader = Arc::new(DirectParquetFileReader::new(
             Arc::clone(&plan.engine_context),
             plan.execution_options,
             plan.metrics.clone(),
@@ -2808,7 +2812,7 @@ mod tests {
     #[tokio::test]
     async fn opens_projected_parquet_stream_with_configured_batch_size()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-projected-stream")?;
+        let root = TestDir::new("direct-projected-stream")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
         let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
@@ -2848,7 +2852,7 @@ mod tests {
     #[tokio::test]
     async fn reads_full_ordered_and_empty_physical_projections()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-projection-shapes")?;
+        let root = TestDir::new("direct-projection-shapes")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
         let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
@@ -2898,7 +2902,7 @@ mod tests {
     #[tokio::test]
     async fn footer_hint_controls_metadata_request_count_and_bytes()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-footer-hint")?;
+        let root = TestDir::new("direct-footer-hint")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
         let file_size = u64::try_from(bytes.len())?;
@@ -2941,7 +2945,7 @@ mod tests {
     #[tokio::test]
     async fn row_group_pruning_is_conservative_and_preserves_rows_when_disabled()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-row-group-pruning")?;
+        let root = TestDir::new("direct-row-group-pruning")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let columns = || vec![Arc::new(Int32Array::from(vec![1, 2, 3, 4, 5, 6])) as ArrayRef];
         let properties = WriterProperties::builder()
@@ -3039,7 +3043,7 @@ mod tests {
     #[tokio::test]
     async fn row_group_pruning_preserves_negative_fixed_len_decimal_stats()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-row-group-negative-decimal")?;
+        let root = TestDir::new("direct-row-group-negative-decimal")?;
         let schema = Arc::new(Schema::new(vec![Field::new(
             "amount",
             DataType::Decimal128(10, 2),
@@ -3079,7 +3083,7 @@ mod tests {
     #[tokio::test]
     async fn scheduler_pipeline_applies_transform_then_dv_and_preserves_hidden_columns()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-scheduler-pipeline")?;
+        let root = TestDir::new("direct-scheduler-pipeline")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let properties = WriterProperties::builder()
             .set_max_row_group_row_count(Some(3))
@@ -3168,7 +3172,7 @@ mod tests {
     #[tokio::test]
     async fn row_predicate_filters_before_scheduler_metrics_and_deletion_vector()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-row-predicate-dv")?;
+        let root = TestDir::new("direct-row-predicate-dv")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_with_properties(
             schema,
@@ -3191,7 +3195,7 @@ mod tests {
                 &root,
                 None,
                 Some(64 * 1024),
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 false,
             )?;
             let metrics = plan.metrics.clone();
@@ -3221,11 +3225,10 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_matches_native_for_transform_relative_dv_and_controls()
+    async fn delta_kernel_matches_direct_for_transform_relative_dv_and_controls()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("official-native-relative-dv-parity")?;
+        let root = TestDir::new("kernel-direct-relative-dv-parity")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_with_properties(
             schema,
@@ -3236,32 +3239,27 @@ mod tests {
         )?;
         write_partitioned_dv_table(&root, &parquet_bytes)?;
 
-        let native_plan = pipeline_plan_for_backend(
+        let direct_plan = pipeline_plan_for_backend(
             &root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             false,
         )?;
-        let native = execute_pipeline_plan(native_plan).await?;
-        let official_default_plan = pipeline_plan_for_backend(
-            &root,
-            None,
-            None,
-            DeltaReaderBackend::OfficialKernel,
-            false,
-        )?;
-        let official_default_metrics = official_default_plan.metrics.clone();
-        let official_default = execute_official_plan(official_default_plan).await?;
-        let official_tuned_plan = pipeline_plan_for_backend(
+        let direct = execute_pipeline_plan(direct_plan).await?;
+        let kernel_default_plan =
+            pipeline_plan_for_backend(&root, None, None, ParquetReaderBackend::DeltaKernel, false)?;
+        let kernel_default_metrics = kernel_default_plan.metrics.clone();
+        let kernel_default = execute_kernel_plan(kernel_default_plan).await?;
+        let kernel_tuned_plan = pipeline_plan_for_backend(
             &root,
             Some(parquet_bytes.len()),
             Some(1),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
         )?;
-        let official_tuned_metrics = official_tuned_plan.metrics.clone();
-        let official_tuned = execute_official_plan(official_tuned_plan).await?;
+        let kernel_tuned_metrics = kernel_tuned_plan.metrics.clone();
+        let kernel_tuned = execute_kernel_plan(kernel_tuned_plan).await?;
 
         let rows = |batches: &[RecordBatch]| -> Result<Vec<(i32, String)>, &'static str> {
             let mut rows = Vec::new();
@@ -3290,25 +3288,25 @@ mod tests {
             (4, "west".to_owned()),
             (6, "west".to_owned()),
         ];
-        assert_eq!(rows(&native)?, expected);
-        assert_eq!(rows(&official_default)?, expected);
-        assert_eq!(rows(&official_tuned)?, expected);
+        assert_eq!(rows(&direct)?, expected);
+        assert_eq!(rows(&kernel_default)?, expected);
+        assert_eq!(rows(&kernel_tuned)?, expected);
         assert!(
-            native
+            direct
                 .iter()
-                .chain(official_default.iter())
-                .chain(official_tuned.iter())
+                .chain(kernel_default.iter())
+                .chain(kernel_tuned.iter())
                 .all(|batch| batch.schema().fields()[0].name() == "id"
                     && batch.schema().fields()[1].name() == "region")
         );
-        let expected_batches = u64::try_from(official_default.len())?;
-        assert_eq!(official_tuned.len(), official_default.len());
+        let expected_batches = u64::try_from(kernel_default.len())?;
+        assert_eq!(kernel_tuned.len(), kernel_default.len());
 
         for metrics in [
-            official_default_metrics.snapshot(),
-            official_tuned_metrics.snapshot(),
+            kernel_default_metrics.snapshot(),
+            kernel_tuned_metrics.snapshot(),
         ] {
-            assert_eq!(metrics.reader_backend, DeltaReaderBackend::OfficialKernel);
+            assert_eq!(metrics.reader_backend, ParquetReaderBackend::DeltaKernel);
             assert_eq!(metrics.scan_partitions_started, 1);
             assert_eq!(metrics.scan_partitions_completed, 1);
             assert_eq!(metrics.files_started, 1);
@@ -3326,11 +3324,10 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_dv_predicate_fallback_preserves_rows_for_residual_filtering()
+    async fn delta_kernel_dv_predicate_fallback_preserves_rows_for_residual_filtering()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("official-dv-predicate-fallback")?;
+        let root = TestDir::new("kernel-dv-predicate-fallback")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_with_properties(
             schema,
@@ -3341,19 +3338,19 @@ mod tests {
         )?;
         write_partitioned_dv_table(&root, &parquet_bytes)?;
 
-        let native = execute_pipeline_plan(pipeline_plan_for_backend(
+        let direct = execute_pipeline_plan(pipeline_plan_for_backend(
             &root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             true,
         )?)
         .await?;
-        let official = execute_official_plan(pipeline_plan_for_backend(
+        let kernel = execute_kernel_plan(pipeline_plan_for_backend(
             &root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             true,
         )?)
         .await?;
@@ -3371,26 +3368,25 @@ mod tests {
                 .collect::<Result<Vec<_>, _>>()
                 .map(|ids| ids.into_iter().flatten().collect())
         };
-        let native_ids = ids(&native)?;
-        let official_ids = ids(&official)?;
+        let direct_ids = ids(&direct)?;
+        let kernel_ids = ids(&kernel)?;
 
-        assert_eq!(native_ids, [4, 6]);
-        assert_eq!(official_ids, [1, 2, 3, 4, 6]);
+        assert_eq!(direct_ids, [4, 6]);
+        assert_eq!(kernel_ids, [1, 2, 3, 4, 6]);
         assert_eq!(
-            official_ids
+            kernel_ids
                 .into_iter()
                 .filter(|id| *id > 3)
                 .collect::<Vec<_>>(),
-            native_ids
+            direct_ids
         );
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_matches_native_for_snapshots_projection_and_non_dv_predicate()
+    async fn delta_kernel_matches_direct_for_snapshots_projection_and_non_dv_predicate()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("official-native-snapshot-predicate-parity")?;
+        let root = TestDir::new("kernel-direct-snapshot-predicate-parity")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_with_properties(
             schema,
@@ -3405,33 +3401,33 @@ mod tests {
             DeltaSnapshotSelection::Latest,
             DeltaSnapshotSelection::Version(0),
         ] {
-            let native = execute_pipeline_plan(pipeline_plan_for_backend_at(
+            let direct = execute_pipeline_plan(pipeline_plan_for_backend_at(
                 &root,
                 None,
                 Some(64 * 1024),
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 true,
                 selection,
                 1,
             )?)
             .await?;
-            let official = execute_official_plan(pipeline_plan_for_backend_at(
+            let kernel = execute_kernel_plan(pipeline_plan_for_backend_at(
                 &root,
                 Some(parquet_bytes.len()),
                 Some(1),
-                DeltaReaderBackend::OfficialKernel,
+                ParquetReaderBackend::DeltaKernel,
                 true,
                 selection,
                 1,
             )?)
             .await?;
 
-            assert_eq!(int32_ids(&native)?, [4, 5, 6]);
-            assert_eq!(int32_ids(&official)?, [4, 5, 6]);
+            assert_eq!(int32_ids(&direct)?, [4, 5, 6]);
+            assert_eq!(int32_ids(&kernel)?, [4, 5, 6]);
             assert!(
-                native
+                direct
                     .iter()
-                    .chain(official.iter())
+                    .chain(kernel.iter())
                     .all(|batch| batch.schema().field(0).name() == "id"
                         && batch.schema().field(1).name() == "region")
             );
@@ -3439,11 +3435,10 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_matches_native_for_partition_statistics_and_zero_file_predicates()
+    async fn delta_kernel_matches_direct_for_partition_statistics_and_zero_file_predicates()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("official-native-pruning-parity")?;
+        let root = TestDir::new("kernel-direct-pruning-parity")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let west = parquet_bytes_for(
             Arc::clone(&schema),
@@ -3481,17 +3476,17 @@ mod tests {
         ];
 
         for (predicate, expected, expected_files) in cases {
-            let native_plan = predicate_pipeline_plan_for_backend(
+            let direct_plan = predicate_pipeline_plan_for_backend(
                 &root,
-                DeltaReaderBackend::NativeAsync,
+                ParquetReaderBackend::DirectParquet,
                 predicate.clone(),
             )?;
-            let official_plan = predicate_pipeline_plan_for_backend(
+            let kernel_plan = predicate_pipeline_plan_for_backend(
                 &root,
-                DeltaReaderBackend::OfficialKernel,
+                ParquetReaderBackend::DeltaKernel,
                 predicate,
             )?;
-            for plan in [&native_plan, &official_plan] {
+            for plan in [&direct_plan, &kernel_plan] {
                 assert_eq!(
                     plan.partitions
                         .iter()
@@ -3500,37 +3495,36 @@ mod tests {
                     expected_files
                 );
             }
-            let native = execute_pipeline_plan(native_plan).await?;
-            let official = execute_official_plan(official_plan).await?;
-            assert_eq!(int32_ids(&native)?, expected);
-            assert_eq!(int32_ids(&official)?, expected);
+            let direct = execute_pipeline_plan(direct_plan).await?;
+            let kernel = execute_kernel_plan(kernel_plan).await?;
+            assert_eq!(int32_ids(&direct)?, expected);
+            assert_eq!(int32_ids(&kernel)?, expected);
         }
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_matches_native_for_inline_deletion_vectors()
+    async fn delta_kernel_matches_direct_for_inline_deletion_vectors()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("official-native-inline-dv-parity")?;
+        let root = TestDir::new("kernel-direct-inline-dv-parity")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes =
             parquet_bytes_for(schema, vec![Arc::new(Int32Array::from_iter_values(1..=30))])?;
         write_partitioned_inline_dv_table(&root, &parquet_bytes)?;
 
-        let native = execute_pipeline_plan(pipeline_plan_for_backend(
+        let direct = execute_pipeline_plan(pipeline_plan_for_backend(
             &root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             false,
         )?)
         .await?;
-        let official = execute_official_plan(pipeline_plan_for_backend(
+        let kernel = execute_kernel_plan(pipeline_plan_for_backend(
             &root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
         )?)
         .await?;
@@ -3538,16 +3532,15 @@ mod tests {
             .filter(|id| ![4, 5, 8, 12, 19, 30].contains(id))
             .collect::<Vec<_>>();
 
-        assert_eq!(int32_ids(&native)?, expected);
-        assert_eq!(int32_ids(&official)?, expected);
+        assert_eq!(int32_ids(&direct)?, expected);
+        assert_eq!(int32_ids(&kernel)?, expected);
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_matches_native_for_empty_and_multiple_partitions()
+    async fn delta_kernel_matches_direct_for_empty_and_multiple_partitions()
     -> Result<(), Box<dyn std::error::Error>> {
-        let empty_root = TestDir::new("official-native-empty-parity")?;
+        let empty_root = TestDir::new("kernel-direct-empty-parity")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let empty_bytes = parquet_bytes_for(
             Arc::clone(&schema),
@@ -3555,33 +3548,33 @@ mod tests {
         )?;
         write_partitioned_non_dv_table(&empty_root, &empty_bytes)?;
         remove_all_data_files_from_log(&empty_root)?;
-        let native_empty_plan = pipeline_plan_for_backend_at(
+        let direct_empty_plan = pipeline_plan_for_backend_at(
             &empty_root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             false,
             DeltaSnapshotSelection::Latest,
             2,
         )?;
-        let official_empty_plan = pipeline_plan_for_backend_at(
+        let kernel_empty_plan = pipeline_plan_for_backend_at(
             &empty_root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
             DeltaSnapshotSelection::Latest,
             2,
         )?;
-        assert!(native_empty_plan.partitions.is_empty());
-        assert!(official_empty_plan.partitions.is_empty());
-        let official_empty_metrics = official_empty_plan.metrics.clone();
-        assert!(execute_pipeline_plan(native_empty_plan).await?.is_empty());
-        assert!(execute_official_plan(official_empty_plan).await?.is_empty());
-        assert_eq!(official_empty_metrics.snapshot().scan_partitions_started, 0);
-        assert_eq!(official_empty_metrics.snapshot().files_started, 0);
+        assert!(direct_empty_plan.partitions.is_empty());
+        assert!(kernel_empty_plan.partitions.is_empty());
+        let kernel_empty_metrics = kernel_empty_plan.metrics.clone();
+        assert!(execute_pipeline_plan(direct_empty_plan).await?.is_empty());
+        assert!(execute_kernel_plan(kernel_empty_plan).await?.is_empty());
+        assert_eq!(kernel_empty_metrics.snapshot().scan_partitions_started, 0);
+        assert_eq!(kernel_empty_metrics.snapshot().files_started, 0);
 
-        let root = TestDir::new("official-native-multi-partition-parity")?;
+        let root = TestDir::new("kernel-direct-multi-partition-parity")?;
         let west = parquet_bytes_for(
             Arc::clone(&schema),
             vec![Arc::new(Int32Array::from_iter_values(1..=6))],
@@ -3589,50 +3582,50 @@ mod tests {
         let east = parquet_bytes_for(schema, vec![Arc::new(Int32Array::from_iter_values(7..=12))])?;
         write_partitioned_non_dv_table(&root, &west)?;
         add_second_partition_file(&root, &east)?;
-        let native_plan = pipeline_plan_for_backend_at(
+        let direct_plan = pipeline_plan_for_backend_at(
             &root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::NativeAsync,
+            ParquetReaderBackend::DirectParquet,
             false,
             DeltaSnapshotSelection::Latest,
             2,
         )?;
-        let official_first_plan = pipeline_plan_for_backend_at(
+        let kernel_first_plan = pipeline_plan_for_backend_at(
             &root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
             DeltaSnapshotSelection::Latest,
             2,
         )?;
-        let official_second_plan = pipeline_plan_for_backend_at(
+        let kernel_second_plan = pipeline_plan_for_backend_at(
             &root,
             Some(east.len()),
             Some(1),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
             DeltaSnapshotSelection::Latest,
             2,
         )?;
-        assert_eq!(native_plan.partitions.len(), 2);
-        assert_eq!(official_first_plan.partitions.len(), 2);
-        assert_eq!(official_second_plan.partitions.len(), 2);
+        assert_eq!(direct_plan.partitions.len(), 2);
+        assert_eq!(kernel_first_plan.partitions.len(), 2);
+        assert_eq!(kernel_second_plan.partitions.len(), 2);
 
-        let official_first_metrics = official_first_plan.metrics.clone();
-        let official_second_metrics = official_second_plan.metrics.clone();
-        let native = execute_pipeline_plan(native_plan).await?;
-        let (official_first, official_second) = tokio::try_join!(
-            execute_official_plan(official_first_plan),
-            execute_official_plan(official_second_plan)
+        let kernel_first_metrics = kernel_first_plan.metrics.clone();
+        let kernel_second_metrics = kernel_second_plan.metrics.clone();
+        let direct = execute_pipeline_plan(direct_plan).await?;
+        let (kernel_first, kernel_second) = tokio::try_join!(
+            execute_kernel_plan(kernel_first_plan),
+            execute_kernel_plan(kernel_second_plan)
         )?;
-        assert_eq!(int32_ids(&native)?, int32_ids(&official_first)?);
-        assert_eq!(int32_ids(&official_first)?, int32_ids(&official_second)?);
-        assert_eq!(int32_ids(&official_first)?.len(), 12);
+        assert_eq!(int32_ids(&direct)?, int32_ids(&kernel_first)?);
+        assert_eq!(int32_ids(&kernel_first)?, int32_ids(&kernel_second)?);
+        assert_eq!(int32_ids(&kernel_first)?.len(), 12);
         for metrics in [
-            official_first_metrics.snapshot(),
-            official_second_metrics.snapshot(),
+            kernel_first_metrics.snapshot(),
+            kernel_second_metrics.snapshot(),
         ] {
             assert_eq!(metrics.scan_partitions_started, 2);
             assert_eq!(metrics.scan_partitions_completed, 2);
@@ -3643,11 +3636,10 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_partition_drop_before_first_poll_starts_no_work()
+    async fn delta_kernel_partition_drop_before_first_poll_starts_no_work()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("official-drop-before-poll")?;
+        let root = TestDir::new("kernel-drop-before-poll")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes =
             parquet_bytes_for(schema, vec![Arc::new(Int32Array::from(vec![1, 2, 3]))])?;
@@ -3656,14 +3648,14 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
         )?;
         let execution = DeltaScanExecution::new(Arc::clone(&plan));
         let stream = execution.partition_stream(
             0,
             Arc::new(|_| Ok(FileAdmission::Admit)),
-            official_kernel_file_executor(&plan),
+            delta_kernel_file_executor(&plan),
         )?;
 
         drop(stream);
@@ -3676,11 +3668,10 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_matches_native_for_column_mapping_transform()
+    async fn delta_kernel_matches_direct_for_column_mapping_transform()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("official-native-column-mapping-parity")?;
+        let root = TestDir::new("kernel-direct-column-mapping-parity")?;
         let field = Field::new("phys_id", DataType::Int32, false).with_metadata(HashMap::from([(
             PARQUET_FIELD_ID_META_KEY.to_owned(),
             "1".to_owned(),
@@ -3714,7 +3705,7 @@ mod tests {
         });
         let metadata = serde_json::json!({
             "metaData": {
-                "id": "official-native-column-mapping-parity",
+                "id": "kernel-direct-column-mapping-parity",
                 "format": {"provider": "parquet", "options": {}},
                 "schemaString": schema.to_string(),
                 "partitionColumns": [],
@@ -3758,23 +3749,22 @@ mod tests {
             )
             .map(Arc::new)
         };
-        let native = execute_pipeline_plan(plan(DeltaReaderBackend::NativeAsync)?).await?;
-        let official = execute_official_plan(plan(DeltaReaderBackend::OfficialKernel)?).await?;
+        let direct = execute_pipeline_plan(plan(ParquetReaderBackend::DirectParquet)?).await?;
+        let kernel = execute_kernel_plan(plan(ParquetReaderBackend::DeltaKernel)?).await?;
 
-        assert_eq!(int32_ids(&native)?, [1, 2, 3]);
-        assert_eq!(int32_ids(&official)?, [1, 2, 3]);
+        assert_eq!(int32_ids(&direct)?, [1, 2, 3]);
+        assert_eq!(int32_ids(&kernel)?, [1, 2, 3]);
         assert!(
-            native
+            direct
                 .iter()
-                .chain(official.iter())
+                .chain(kernel.iter())
                 .all(|batch| batch.schema().field(0).name() == "id")
         );
         Ok(())
     }
 
-    #[cfg(feature = "official-kernel")]
     #[tokio::test]
-    async fn official_kernel_reports_redacted_file_dv_transform_and_schema_failures()
+    async fn delta_kernel_reports_redacted_file_dv_transform_and_schema_failures()
     -> Result<(), Box<dyn std::error::Error>> {
         let assert_failed_metrics = |metrics: &crate::DeltaReadMetricsSnapshot,
                                      deletion_vector_failures| {
@@ -3796,13 +3786,13 @@ mod tests {
             vec![Arc::new(Int32Array::from(vec![1, 2, 3]))],
         )?;
 
-        let metadata_root = TestDir::new("official-metadata-failure")?;
+        let metadata_root = TestDir::new("kernel-metadata-failure")?;
         write_partitioned_non_dv_table(&metadata_root, &parquet_bytes)?;
         let mut metadata_plan = pipeline_plan_for_backend(
             &metadata_root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
         )?;
         Arc::get_mut(&mut metadata_plan)
@@ -3811,7 +3801,7 @@ mod tests {
             .file_tasks[0]
             .file_size = None;
         let metadata_metrics = metadata_plan.metrics.clone();
-        let error = execute_official_plan(metadata_plan)
+        let error = execute_kernel_plan(metadata_plan)
             .await
             .expect_err("missing size must fail");
         assert_eq!(error.as_str(), "data_file_read");
@@ -3822,13 +3812,13 @@ mod tests {
                 .contains(metadata_root.path().to_string_lossy().as_ref())
         );
 
-        let parquet_root = TestDir::new("official-parquet-failure")?;
+        let parquet_root = TestDir::new("kernel-parquet-failure")?;
         write_partitioned_non_dv_table(&parquet_root, &parquet_bytes)?;
         let parquet_plan = pipeline_plan_for_backend(
             &parquet_root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
         )?;
         let parquet_metrics = parquet_plan.metrics.clone();
@@ -3836,37 +3826,37 @@ mod tests {
             parquet_root.path().join("part.parquet"),
             vec![0; parquet_bytes.len()],
         )?;
-        let error = execute_official_plan(parquet_plan)
+        let error = execute_kernel_plan(parquet_plan)
             .await
             .expect_err("corrupt Parquet must fail");
         assert_eq!(error.as_str(), "data_file_read");
         assert_failed_metrics(&parquet_metrics.snapshot(), 0);
         assert!(!error.to_string().contains("part.parquet"));
 
-        let dv_root = TestDir::new("official-dv-failure")?;
+        let dv_root = TestDir::new("kernel-dv-failure")?;
         write_partitioned_dv_table(&dv_root, &parquet_bytes)?;
         let dv_plan = pipeline_plan_for_backend(
             &dv_root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
         )?;
         let dv_metrics = dv_plan.metrics.clone();
         fs::remove_file(dv_root.path().join(DV_FILE))?;
-        let error = execute_official_plan(dv_plan)
+        let error = execute_kernel_plan(dv_plan)
             .await
             .expect_err("missing DV must fail");
         assert_eq!(error.as_str(), "deletion_vector_read");
         assert_failed_metrics(&dv_metrics.snapshot(), 1);
 
-        let transform_root = TestDir::new("official-transform-failure")?;
+        let transform_root = TestDir::new("kernel-transform-failure")?;
         write_partitioned_non_dv_table(&transform_root, &parquet_bytes)?;
         let mut transform_plan = pipeline_plan_for_backend(
             &transform_root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
         )?;
         Arc::get_mut(&mut transform_plan)
@@ -3877,27 +3867,27 @@ mod tests {
             Expression::Column(ColumnName::new(["sensitive_missing_column"])),
         );
         let transform_metrics = transform_plan.metrics.clone();
-        let error = execute_official_plan(transform_plan)
+        let error = execute_kernel_plan(transform_plan)
             .await
             .expect_err("invalid transform must fail");
         assert_eq!(error.as_str(), "physical_to_logical_transform");
         assert_failed_metrics(&transform_metrics.snapshot(), 0);
         assert!(!error.to_string().contains("sensitive_missing_column"));
 
-        let schema_root = TestDir::new("official-schema-failure")?;
+        let schema_root = TestDir::new("kernel-schema-failure")?;
         write_partitioned_non_dv_table(&schema_root, &parquet_bytes)?;
         let mut schema_plan = pipeline_plan_for_backend(
             &schema_root,
             None,
             Some(64 * 1024),
-            DeltaReaderBackend::OfficialKernel,
+            ParquetReaderBackend::DeltaKernel,
             false,
         )?;
         Arc::get_mut(&mut schema_plan)
             .ok_or("expected unique schema plan")?
             .logical_schema = Arc::new(Schema::empty());
         let schema_metrics = schema_plan.metrics.clone();
-        let error = execute_official_plan(schema_plan)
+        let error = execute_kernel_plan(schema_plan)
             .await
             .expect_err("wrong logical schema must fail");
         assert_eq!(
@@ -3911,7 +3901,7 @@ mod tests {
     #[tokio::test]
     async fn scheduler_reads_full_and_projected_non_dv_logical_files()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-non-dv-logical-read")?;
+        let root = TestDir::new("direct-non-dv-logical-read")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes =
             parquet_bytes_for(schema, vec![Arc::new(Int32Array::from(vec![1, 2, 3]))])?;
@@ -3979,7 +3969,7 @@ mod tests {
             ("metadata", None, GateRequest::Range(1)),
             ("full-get", Some(usize::MAX), GateRequest::FullGet),
         ] {
-            let root = TestDir::new(&format!("native-cancel-{name}"))?;
+            let root = TestDir::new(&format!("direct-cancel-{name}"))?;
             let parquet_bytes = parquet_bytes()?;
             write_partitioned_dv_table(&root, &parquet_bytes)?;
             let plan = pipeline_plan(&root, threshold)?;
@@ -4025,7 +4015,7 @@ mod tests {
     #[tokio::test]
     async fn cancellation_drops_batch_range_read_and_releases_permit()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-cancel-batch")?;
+        let root = TestDir::new("direct-cancel-batch")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_with_properties(
             schema,
@@ -4076,7 +4066,7 @@ mod tests {
     #[tokio::test]
     async fn reports_redacted_setup_full_get_and_batch_read_errors()
     -> Result<(), Box<dyn std::error::Error>> {
-        let corrupt_root = TestDir::new("native-corrupt-setup")?;
+        let corrupt_root = TestDir::new("direct-corrupt-setup")?;
         fs::write(corrupt_root.path().join("secret.parquet"), b"not parquet")?;
         let corrupt_metrics = metrics();
         let corrupt_reader = reader(
@@ -4111,7 +4101,7 @@ mod tests {
             Some(1)
         );
 
-        let missing_root = TestDir::new("native-missing-full-get")?;
+        let missing_root = TestDir::new("direct-missing-full-get")?;
         let missing_metrics = metrics();
         let missing_reader = reader(
             &missing_root,
@@ -4137,7 +4127,7 @@ mod tests {
             Some(1)
         );
 
-        let range_root = TestDir::new("native-batch-range-error")?;
+        let range_root = TestDir::new("direct-batch-range-error")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_with_properties(
             schema,
@@ -4209,7 +4199,7 @@ mod tests {
     #[tokio::test]
     async fn logical_pipeline_reports_dv_transform_and_schema_errors()
     -> Result<(), Box<dyn std::error::Error>> {
-        let dv_root = TestDir::new("native-dv-error")?;
+        let dv_root = TestDir::new("direct-dv-error")?;
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_with_properties(
             schema,
@@ -4234,7 +4224,7 @@ mod tests {
             Some(u64::try_from(parquet_bytes.len())?)
         );
 
-        let transform_root = TestDir::new("native-transform-errors")?;
+        let transform_root = TestDir::new("direct-transform-errors")?;
         write_partitioned_dv_table(&transform_root, &parquet_bytes)?;
         let plan = pipeline_plan(&transform_root, None)?;
         let (reader, _gated, task) =
@@ -4278,19 +4268,19 @@ mod tests {
     }
 
     #[test]
-    fn native_async_leaf_cast_plan_matches_timestamp_compatibility()
+    fn direct_parquet_leaf_cast_plan_matches_timestamp_compatibility()
     -> Result<(), Box<dyn std::error::Error>> {
         let target = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
 
         assert_eq!(
-            super::native_async_leaf_cast_plan(
+            super::direct_parquet_leaf_cast_plan(
                 &target,
                 &DataType::Timestamp(TimeUnit::Nanosecond, None)
             ),
             Ok(Some(target.clone()))
         );
         assert_eq!(
-            super::native_async_leaf_cast_plan(
+            super::direct_parquet_leaf_cast_plan(
                 &target,
                 &DataType::Timestamp(TimeUnit::Nanosecond, Some("UTC".into()))
             ),
@@ -4301,10 +4291,10 @@ mod tests {
     }
 
     #[test]
-    fn native_async_leaf_cast_plan_rejects_incompatible_primitive_types()
+    fn direct_parquet_leaf_cast_plan_rejects_incompatible_primitive_types()
     -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(
-            super::native_async_leaf_cast_plan(&DataType::Int32, &DataType::Utf8),
+            super::direct_parquet_leaf_cast_plan(&DataType::Int32, &DataType::Utf8),
             Err(())
         );
 
@@ -4312,7 +4302,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_casts_top_level_timestamp_leaf()
+    fn direct_parquet_schema_match_casts_top_level_timestamp_leaf()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_schema = Arc::new(Schema::new(vec![timestamp_us_utc_field("event_ts", true)]));
         let file_schema = Arc::new(Schema::new(vec![Field::new(
@@ -4343,7 +4333,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_reshape_casts_top_level_timestamp_leaf()
+    fn direct_parquet_reshape_casts_top_level_timestamp_leaf()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_field = timestamp_us_utc_field("event_ts", true);
         let array = Arc::new(TimestampNanosecondArray::from(vec![
@@ -4354,7 +4344,7 @@ mod tests {
         let reshaped = super::reshape_array_to_provider_field(
             array,
             &provider_field,
-            &super::NativeAsyncFieldPlan::Cast {
+            &super::DirectParquetFieldPlan::Cast {
                 target_type: provider_field.data_type().clone(),
             },
         )?;
@@ -4371,7 +4361,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_reshape_casts_nested_struct_timestamp_leaf()
+    fn direct_parquet_reshape_casts_nested_struct_timestamp_leaf()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_child = timestamp_us_utc_field("event_ts", true);
         let provider_field = struct_field("payload", vec![provider_child.clone()], true);
@@ -4391,10 +4381,10 @@ mod tests {
         let reshaped = super::reshape_array_to_provider_field(
             array,
             &provider_field,
-            &super::NativeAsyncFieldPlan::Struct {
-                children: vec![super::NativeAsyncStructChild::ProjectedChild {
+            &super::DirectParquetFieldPlan::Struct {
+                children: vec![super::DirectParquetStructChild::ProjectedChild {
                     child_index: 0,
-                    field_plan: super::NativeAsyncFieldPlan::Cast {
+                    field_plan: super::DirectParquetFieldPlan::Cast {
                         target_type: provider_child.data_type().clone(),
                     },
                 }],
@@ -4419,7 +4409,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_casts_list_struct_leaf() -> Result<(), Box<dyn std::error::Error>>
+    fn direct_parquet_schema_match_casts_list_struct_leaf() -> Result<(), Box<dyn std::error::Error>>
     {
         let provider_element = Field::new(
             "element",
@@ -4514,7 +4504,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_rejects_list_primitive_leaf_cast()
+    fn direct_parquet_schema_match_rejects_list_primitive_leaf_cast()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_schema = Arc::new(Schema::new(vec![
             Field::new(
@@ -4559,7 +4549,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_casts_map_key_leaf() -> Result<(), Box<dyn std::error::Error>> {
+    fn direct_parquet_schema_match_casts_map_key_leaf() -> Result<(), Box<dyn std::error::Error>> {
         let provider_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
             Field::new("key", DataType::Int64, false),
@@ -4627,7 +4617,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_recurses_by_nested_field_id_before_names()
+    fn direct_parquet_schema_match_recurses_by_nested_field_id_before_names()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_profile_fields = vec![
             Field::new("first_name", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -4689,7 +4679,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_reshapes_list_struct_elements_by_field_id()
+    fn direct_parquet_schema_match_reshapes_list_struct_elements_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_address_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -4779,7 +4769,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_recurses_by_local_nested_name_fallback()
+    fn direct_parquet_schema_match_recurses_by_local_nested_name_fallback()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
@@ -4839,7 +4829,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_null_fills_missing_nullable_nested_child()
+    fn direct_parquet_schema_match_null_fills_missing_nullable_nested_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
@@ -4886,7 +4876,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_null_fills_missing_nullable_list_struct_child()
+    fn direct_parquet_schema_match_null_fills_missing_nullable_list_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_address_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -4956,7 +4946,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_rejects_missing_non_nullable_list_struct_child()
+    fn direct_parquet_schema_match_rejects_missing_non_nullable_list_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_address_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5012,7 +5002,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_reshapes_map_key_struct_by_field_id()
+    fn direct_parquet_schema_match_reshapes_map_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5124,7 +5114,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_null_fills_missing_nullable_map_key_struct_child()
+    fn direct_parquet_schema_match_null_fills_missing_nullable_map_key_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_key_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5202,7 +5192,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_rejects_missing_non_nullable_map_key_struct_child()
+    fn direct_parquet_schema_match_rejects_missing_non_nullable_map_key_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_key_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5262,7 +5252,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_reshapes_map_list_key_struct_by_field_id()
+    fn direct_parquet_schema_match_reshapes_map_list_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_element_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5394,7 +5384,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_reshapes_nested_map_key_struct_by_field_id()
+    fn direct_parquet_schema_match_reshapes_nested_map_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_inner_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5530,7 +5520,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_reshapes_map_key_and_value_structs_by_field_id()
+    fn direct_parquet_schema_match_reshapes_map_key_and_value_structs_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5688,7 +5678,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_reshapes_map_value_struct_by_field_id()
+    fn direct_parquet_schema_match_reshapes_map_value_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_value_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
@@ -5803,7 +5793,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_null_fills_missing_nullable_map_value_struct_child()
+    fn direct_parquet_schema_match_null_fills_missing_nullable_map_value_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_value_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5885,7 +5875,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_rejects_missing_non_nullable_map_value_struct_child()
+    fn direct_parquet_schema_match_rejects_missing_non_nullable_map_value_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_value_fields = vec![
             Field::new("zip", DataType::Int32, true),
@@ -5952,7 +5942,7 @@ mod tests {
     }
 
     #[test]
-    fn native_async_schema_match_rejects_missing_non_nullable_nested_child()
+    fn direct_parquet_schema_match_rejects_missing_non_nullable_nested_child()
     -> Result<(), Box<dyn std::error::Error>> {
         let provider_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
@@ -5997,7 +5987,7 @@ mod tests {
     #[tokio::test]
     async fn matches_top_level_fields_by_id_reorders_casts_and_null_fills()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-top-level-schema-match")?;
+        let root = TestDir::new("direct-top-level-schema-match")?;
         let file_schema = Arc::new(Schema::new(vec![
             field_with_id("stale_name", DataType::Utf8, true, 2),
             field_with_id("stale_id", DataType::Int32, false, 1),
@@ -6048,7 +6038,7 @@ mod tests {
     #[tokio::test]
     async fn casts_top_level_timestamp_and_rejects_incompatible_or_missing_required_fields()
     -> Result<(), Box<dyn std::error::Error>> {
-        let root = TestDir::new("native-top-level-casts")?;
+        let root = TestDir::new("direct-top-level-casts")?;
         let file_schema = Arc::new(Schema::new(vec![Field::new(
             "event_ts",
             DataType::Timestamp(TimeUnit::Nanosecond, None),
