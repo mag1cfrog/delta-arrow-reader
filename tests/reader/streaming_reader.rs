@@ -1,4 +1,4 @@
-//! Integration tests for direct reader backends.
+//! Integration tests for the streaming reader and its Parquet backends.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
@@ -73,7 +73,7 @@ impl TestTable {
     fn empty(name: &str) -> TestResult<Self> {
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let path = Path::new("target")
-            .join("delta-arrow-reader-direct-tests")
+            .join("delta-arrow-reader-streaming-tests")
             .join(format!("{}-{name}-{nonce}", std::process::id()));
         fs::create_dir_all(path.join("_delta_log"))?;
         Ok(Self(path))
@@ -161,7 +161,7 @@ fn metadata() -> Value {
     });
     json!({
         "metaData": {
-            "id": "delta-arrow-reader-direct-test",
+            "id": "delta-arrow-reader-streaming-test",
             "format": {"provider": "parquet", "options": {}},
             "schemaString": schema.to_string(),
             "partitionColumns": [],
@@ -659,9 +659,9 @@ fn delta_kernel_matches_direct_results() -> TestResult {
 }
 
 #[test]
-fn delta_kernel_reads_through_the_direct_surface() -> TestResult {
+fn delta_kernel_reads_through_the_streaming_surface() -> TestResult {
     runtime()?.block_on(async {
-        let fixture = TestTable::two_versions("kernel-direct")?;
+        let fixture = TestTable::two_versions("kernel-streaming")?;
         let options = DeltaReaderExecutionOptions::new()
             .with_reader_backend(ParquetReaderBackend::DeltaKernel);
         let table = DeltaTableBuilder::new(fixture.uri())

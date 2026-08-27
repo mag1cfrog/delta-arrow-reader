@@ -1,6 +1,6 @@
 # Architecture
 
-Whether you use the direct API or DataFusion, Delta Arrow Reader follows the
+Whether you use the streaming API or DataFusion, Delta Arrow Reader follows the
 same path from a Delta Lake table to Apache Arrow record batches.
 
 ## From a table to Arrow batches
@@ -19,9 +19,9 @@ At a high level, the reader does three things:
 Once loaded, a `DeltaTable` always points to the same snapshot. To read a newer
 snapshot, load the table again.
 
-## Direct API
+## Streaming API
 
-With the direct API, these stages appear as a table, a single-use scan, and a
+With the streaming API, these stages appear as a table, a single-use scan, and a
 batch stream. The reader applies the predicate, removes any columns that were
 needed only for filtering, and stops at the requested row limit. Metrics remain
 available after the stream finishes or is dropped.

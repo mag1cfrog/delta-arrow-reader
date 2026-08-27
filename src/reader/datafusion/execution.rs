@@ -1365,7 +1365,7 @@ mod tests {
         config.optimizer.repartition_file_min_size = 1;
         let repartitioned = plan
             .repartitioned(4, &config)?
-            .ok_or("direct scan was not repartitioned")?;
+            .ok_or("Direct backend scan was not repartitioned")?;
         assert!(repartitioned.repartitioned(4, &config)?.is_none());
 
         assert_eq!(

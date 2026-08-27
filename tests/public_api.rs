@@ -184,7 +184,7 @@ fn exact_predicate_model_is_public() {
 }
 
 #[test]
-fn direct_reader_contract_is_public() {
+fn streaming_reader_contract_is_public() {
     fn assert_send<T: Send>() {}
     fn assert_send_sync<T: Send + Sync>() {}
     fn assert_clone<T: Clone>() {}

@@ -299,7 +299,7 @@ impl fmt::Debug for DeltaTable {
     }
 }
 
-/// Configures one single-use direct Delta scan.
+/// Configures one single-use streaming Delta scan.
 pub struct DeltaScanBuilder<'table> {
     table: &'table DeltaTable,
     projection: Option<Vec<String>>,
@@ -415,7 +415,7 @@ impl<'table> DeltaScanBuilder<'table> {
     }
 }
 
-/// One immutable, single-use direct Delta scan plan.
+/// One immutable, single-use streaming Delta scan plan.
 ///
 /// A scan cannot be cloned or converted into a stream twice.
 ///

@@ -1,11 +1,11 @@
-# Read a Table Directly
+# Read a Table as a Stream
 
 In this quickstart, you will load a Delta table and read up to 100 rows from two
 columns. The rows arrive as Arrow record batches.
 
 ## Before you start
 
-Add the [direct reader dependencies](installation.md#direct-reader). You will
+Add the [streaming reader dependencies](installation.md#streaming-reader). You will
 also need the path to a Delta table that your application can read.
 
 ## Run the scan

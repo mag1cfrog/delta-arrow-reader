@@ -28,7 +28,7 @@ nav:
   - Start here:
       - Overview: index.md
       - Installation: installation.md
-      - Direct reader quickstart: direct-reader.md
+      - Streaming reader quickstart: streaming-reader.md
       - DataFusion quickstart: datafusion.md
   - How it works:
       - Architecture: architecture.md

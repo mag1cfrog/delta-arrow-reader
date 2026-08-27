@@ -15,7 +15,7 @@ groups, and an empty scan produces none.
 
 You can set the target explicitly:
 
-- The direct API uses `DeltaScanBuilder::with_target_partitions`.
+- The streaming API uses `DeltaScanBuilder::with_target_partitions`.
 - The DataFusion adapter uses `datafusion::ScanOptions::target_partitions`.
 
 An explicit target must be greater than zero. It wins over the automatic target
@@ -56,7 +56,7 @@ The reader first plans with whole files:
 The reader creates no more groups than the target or the number of files. It
 does not add empty groups.
 
-This whole-file plan is the final plan for the direct API. DataFusion has one
+This whole-file plan is the final plan for the streaming API. DataFusion has one
 optional step that can divide files more finely.
 
 ## Split files with DataFusion

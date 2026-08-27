@@ -1,7 +1,7 @@
 # delta-arrow-reader
 
 `delta-arrow-reader` is a read-only Delta Lake reader for Apache Arrow record
-batches. It provides a direct pull-driven stream API and an optional DataFusion
+batches. It provides a pull-driven streaming API and an optional DataFusion
 table provider. The caller owns the Tokio runtime, and scans do not collect the
 whole result in memory.
 
@@ -32,7 +32,7 @@ delta-arrow-reader = { version = "0.3.0", features = ["datafusion"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-## Read a table directly
+## Read a table as a stream
 
 Use `load_table` from asynchronous code. The returned stream exposes live scan
 metrics and yields batches as the caller requests them.
@@ -101,8 +101,8 @@ println!("batches={}", batches.len());
 ```
 
 The DataFusion provider uses Arrow view arrays for string and binary data-file
-columns and dictionary arrays for string and binary partition columns. Direct
-reader scans retain the Delta table's ordinary Arrow schema.
+columns and dictionary arrays for string and binary partition columns. Streaming
+scans retain the Delta table's ordinary Arrow schema.
 
 For transformation-heavy queries that benefit from ordinary Arrow arrays,
 disable view types without changing partition dictionary encoding:
@@ -131,7 +131,7 @@ still control whether repartitioning runs.
 | --- | --- | --- |
 | `datafusion` | No | DataFusion provider, registration, filtering, execution, and metrics. |
 
-The direct API and both data-file reader backends are always available.
+The streaming API and both data-file reader backends are always available.
 `ParquetReaderBackend::Direct` is the default. Advanced callers can select
 `ParquetReaderBackend::DeltaKernel` with
 `DeltaReaderExecutionOptions::with_reader_backend`.

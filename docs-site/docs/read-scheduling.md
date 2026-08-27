@@ -77,7 +77,7 @@ Each execution partition sends batches through a bounded output channel. Its
 default capacity is one batch. When the caller stops polling, producers wait
 instead of filling an unbounded queue.
 
-Within a partition, batches stay in task order even when the direct reader has
+Within a partition, batches stay in task order even when the `Direct` backend has
 prefetched later files. DataFusion may still execute several partitions at the
 same time.
 

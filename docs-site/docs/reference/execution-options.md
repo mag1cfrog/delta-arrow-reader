@@ -6,7 +6,7 @@ them, see [scan planning](../scan-planning.md) and
 
 ## Reader execution options
 
-`DeltaReaderExecutionOptions` applies to both the direct API and DataFusion.
+`DeltaReaderExecutionOptions` applies to both the streaming API and DataFusion.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -15,8 +15,8 @@ them, see [scan planning](../scan-planning.md) and
 | `max_concurrent_file_reads_per_partition` | `3` | Active-read cap for one execution partition. |
 | `output_buffer_batches_per_partition` | `1` | Batches held between a partition producer and its consumer. |
 | `prefetch_files_per_partition` | `2` | Future direct Parquet file streams prepared per partition. `0` is fully lazy. |
-| `parquet_metadata_size_hint_bytes` | `Some(65_536)` | Parquet footer bytes prefetched by the direct reader. `None` disables the hint. |
-| `parquet_full_file_read_threshold_bytes` | `None` | Largest file the direct reader may fetch once and buffer for local range reads. `None` disables full-file buffering. |
+| `parquet_metadata_size_hint_bytes` | `Some(65_536)` | Parquet footer bytes prefetched by the `Direct` backend. `None` disables the hint. |
+| `parquet_full_file_read_threshold_bytes` | `None` | Largest file the `Direct` backend may fetch once and buffer for local range reads. `None` disables full-file buffering. |
 
 The concurrency limits, output capacity, and enabled byte-size values must be
 greater than zero. Prefetch depth may be zero.
@@ -26,7 +26,7 @@ the Parquet reader safely requests more data. A hint at least as large as the
 file can fetch the whole object while loading metadata.
 
 The `DeltaKernel` backend uses the same concurrency and output limits. The
-direct-reader prefetch, metadata hint, and full-file threshold do not change
+`Direct` backend prefetch, metadata hint, and full-file threshold do not change
 its data-file reader.
 
 ## DataFusion scan options

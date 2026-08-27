@@ -3,9 +3,9 @@
 Delta Arrow Reader requires Rust 1.94 or newer. The dependencies you need
 depend on whether you want an Arrow stream or a DataFusion table.
 
-## Direct reader
+## Streaming reader
 
-For a direct Arrow stream, add the reader, Tokio, and the futures utilities used
+For streaming Arrow batches, add the reader, Tokio, and the futures utilities used
 by the quickstart:
 
 ```toml
@@ -15,7 +15,7 @@ futures-util = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-You can now continue to the [direct reader quickstart](direct-reader.md).
+You can now continue to the [streaming reader quickstart](streaming-reader.md).
 
 ## DataFusion adapter
 
@@ -33,7 +33,7 @@ You can now continue to the [DataFusion quickstart](datafusion.md).
 
 ## Optional feature
 
-The direct API and both data-file reader backends are always available. The
+The streaming API and both data-file reader backends are always available. The
 only optional feature adds the DataFusion integration.
 
 | Feature | Default | Purpose |
