@@ -88,8 +88,8 @@ pub(crate) struct FileScheduler<Task, Output> {
 
 type BatchResult = Result<RecordBatch, DeltaReaderError>;
 type StartPartition = Box<dyn FnOnce(mpsc::Sender<BatchResult>) -> JoinHandle<()> + Send>;
-type FileSetups = FuturesOrdered<ScheduledFileFuture<FileBatchStream>>;
-type ReadyFiles = VecDeque<Result<FileBatchStream, DeltaReaderError>>;
+type PendingFileStreams = FuturesOrdered<ScheduledFileFuture<FileBatchStream>>;
+type ReadyFileStreams = VecDeque<Result<FileBatchStream, DeltaReaderError>>;
 
 struct PartitionStart {
     output_buffer_batches: usize,
@@ -595,8 +595,8 @@ enum DrainFile {
 
 async fn take_next_file<Task>(
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
-    in_flight: &mut FileSetups,
-    ready: &mut ReadyFiles,
+    in_flight: &mut PendingFileStreams,
+    ready: &mut ReadyFileStreams,
     prefetch_files: usize,
     cancellation: &ScanCancellation,
 ) -> NextFile
@@ -635,8 +635,8 @@ async fn drain_current_file<Task>(
     output: &mpsc::Sender<BatchResult>,
     file: &mut FileBatchStream,
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
-    in_flight: &mut FileSetups,
-    ready: &mut ReadyFiles,
+    in_flight: &mut PendingFileStreams,
+    ready: &mut ReadyFileStreams,
     prefetch_files: usize,
     metrics: &DeltaScanMetrics,
     cancellation: &ScanCancellation,
@@ -696,7 +696,7 @@ where
 
 fn refill_file_setups<Task>(
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
-    in_flight: &mut FileSetups,
+    in_flight: &mut PendingFileStreams,
     ready_count: usize,
     target_file_count: usize,
 ) where
