@@ -25,7 +25,7 @@ usable after its batch stream finishes or is dropped.
 | `deletion_vectors_applied` | Deletion-vector masks applied. |
 | `deletion_vector_rows_deleted` | Rows removed by those masks. |
 | `deletion_vector_failures` | Deletion-vector read or masking failures. |
-| `deletion_vector_rejections` | Deletion-vector reads rejected by safety checks. |
+| `deletion_vector_coordinate_rejections` | Deletion-vector coordinate operations rejected by safety checks. |
 | `parquet_data_file_range_get_operations` | Direct Parquet data-file GET operations with a range. |
 | `parquet_data_file_full_get_operations` | Direct Parquet data-file GET operations without a range. |
 | `parquet_data_file_bytes_received` | Bytes delivered successfully through the `Direct` backend's object store. |

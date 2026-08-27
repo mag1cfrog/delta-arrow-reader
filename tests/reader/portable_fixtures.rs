@@ -807,7 +807,7 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
             assert_eq!(metrics.deletion_vectors_applied, 1, "{name}");
             assert_eq!(metrics.deletion_vector_rows_deleted, rows_deleted, "{name}");
             assert_eq!(metrics.deletion_vector_failures, 0, "{name}");
-            assert_eq!(metrics.deletion_vector_rejections, 0, "{name}");
+            assert_eq!(metrics.deletion_vector_coordinate_rejections, 0, "{name}");
         }
 
         let no_rows = scan_fixture(
@@ -827,7 +827,7 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
         assert!(batch_ids(&batch)?.is_empty());
         assert_eq!(metrics.scheduler_rows_emitted, 0);
         assert_eq!(metrics.deletion_vector_failures, 0);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1008,7 +1008,11 @@ fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
                 case.name
             );
             assert_eq!(metrics.deletion_vector_failures, 0, "{}", case.name);
-            assert_eq!(metrics.deletion_vector_rejections, 0, "{}", case.name);
+            assert_eq!(
+                metrics.deletion_vector_coordinate_rejections, 0,
+                "{}",
+                case.name
+            );
             if let Some(expected_batch_rows) = case.expected_batch_rows {
                 assert_eq!(
                     batch_rows_ordered_by_id(&batch)?,
@@ -1081,7 +1085,7 @@ fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
         assert_eq!(metrics.deletion_vectors_applied, 0);
         assert_eq!(metrics.deletion_vector_rows_deleted, 0);
         assert_eq!(metrics.deletion_vector_failures, 1);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1238,7 +1242,7 @@ fn direct_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult 
         assert_eq!(metrics.deletion_vectors_applied, 1);
         assert!((1..=3).contains(&metrics.deletion_vector_rows_deleted));
         assert_eq!(metrics.deletion_vector_failures, 0);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1395,7 +1399,7 @@ fn delta_kernel_matches_direct_for_frozen_cases() -> TestResult {
                 assert_eq!(direct_metrics.deletion_vectors_applied, 1);
                 assert_eq!(direct_metrics.deletion_vector_rows_deleted, deleted_rows);
                 assert_eq!(direct_metrics.deletion_vector_failures, 0);
-                assert_eq!(direct_metrics.deletion_vector_rejections, 0);
+                assert_eq!(direct_metrics.deletion_vector_coordinate_rejections, 0);
             }
         }
 

@@ -4684,7 +4684,7 @@ mod tests {
         assert_eq!(empty_metrics.deletion_vectors_applied, 0);
         assert_eq!(empty_metrics.deletion_vector_rows_deleted, 0);
         assert_eq!(empty_metrics.deletion_vector_failures, 0);
-        assert_eq!(empty_metrics.deletion_vector_rejections, 0);
+        assert_eq!(empty_metrics.deletion_vector_coordinate_rejections, 0);
         assert_eq!(
             empty_metrics.parquet_data_file_range_get_operations,
             Some(0)
@@ -5448,7 +5448,7 @@ mod tests {
         assert_eq!(metrics.deletion_vectors_applied, 0);
         assert_eq!(metrics.deletion_vector_rows_deleted, 0);
         assert_eq!(metrics.deletion_vector_failures, 0);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         assert_eq!(metrics.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(metrics.parquet_data_file_bytes_received, Some(0));

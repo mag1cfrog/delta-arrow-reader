@@ -417,7 +417,7 @@ impl DeletionVectorMasker {
     }
 
     fn reject<T>(&self, reason: &'static str, detail: &'static str) -> Result<T, DeltaReaderError> {
-        self.metrics.record_deletion_vector_rejection();
+        self.metrics.record_deletion_vector_coordinate_rejection();
         Err(rejection_error(reason, detail))
     }
 }
@@ -652,7 +652,7 @@ mod tests {
         let metrics = inline_metrics.snapshot();
         assert_eq!(metrics.deletion_vector_payloads_loaded, 2);
         assert_eq!(metrics.deletion_vector_failures, 0);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         assert!(Arc::ptr_eq(&engine_context, snapshot.engine_context()));
         Ok(())
     }
@@ -730,7 +730,7 @@ mod tests {
         let metrics = metrics.snapshot();
         assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
         assert_eq!(metrics.deletion_vector_failures, 1);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         Ok(())
     }
 
@@ -771,7 +771,7 @@ mod tests {
             let metrics = metrics.snapshot();
             assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
             assert_eq!(metrics.deletion_vector_failures, 1);
-            assert_eq!(metrics.deletion_vector_rejections, 0);
+            assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
             assert_eq!(metrics.parquet_data_file_range_get_operations, Some(0));
             assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
         }
@@ -836,7 +836,7 @@ mod tests {
             [true, false, true, false, true]
         );
         masker.finish()?;
-        assert_eq!(metrics.snapshot().deletion_vector_rejections, 0);
+        assert_eq!(metrics.snapshot().deletion_vector_coordinate_rejections, 0);
         Ok(())
     }
 
@@ -907,7 +907,7 @@ mod tests {
 
         masker.finish_original_row_indexes()?;
 
-        assert_eq!(metrics.snapshot().deletion_vector_rejections, 0);
+        assert_eq!(metrics.snapshot().deletion_vector_coordinate_rejections, 0);
         Ok(())
     }
 
@@ -983,7 +983,7 @@ mod tests {
         assert_eq!(snapshot.deletion_vectors_applied, 1);
         assert_eq!(snapshot.deletion_vector_rows_deleted, 2);
         assert_eq!(snapshot.deletion_vector_failures, 0);
-        assert_eq!(snapshot.deletion_vector_rejections, 0);
+        assert_eq!(snapshot.deletion_vector_coordinate_rejections, 0);
         Ok(())
     }
 
@@ -999,7 +999,7 @@ mod tests {
         assert_eq!(snapshot.deletion_vectors_applied, 1);
         assert_eq!(snapshot.deletion_vector_rows_deleted, 1);
         assert_eq!(snapshot.deletion_vector_failures, 0);
-        assert_eq!(snapshot.deletion_vector_rejections, 0);
+        assert_eq!(snapshot.deletion_vector_coordinate_rejections, 0);
         Ok(())
     }
 
@@ -1035,7 +1035,7 @@ mod tests {
         let snapshot = mismatch_metrics.snapshot();
         assert_eq!(snapshot.deletion_vectors_applied, 0);
         assert_eq!(snapshot.deletion_vector_failures, 0);
-        assert_eq!(snapshot.deletion_vector_rejections, 1);
+        assert_eq!(snapshot.deletion_vector_coordinate_rejections, 1);
 
         let missing_metrics = metrics();
         let mut masker = DeletionVectorMasker::try_new(vec![1], missing_metrics.clone())?;
@@ -1045,7 +1045,7 @@ mod tests {
         let snapshot = missing_metrics.snapshot();
         assert_eq!(snapshot.deletion_vectors_applied, 0);
         assert_eq!(snapshot.deletion_vector_failures, 0);
-        assert_eq!(snapshot.deletion_vector_rejections, 1);
+        assert_eq!(snapshot.deletion_vector_coordinate_rejections, 1);
         Ok(())
     }
 
@@ -1083,7 +1083,10 @@ mod tests {
             ("payload", payload_metrics.snapshot(), 1, 0),
         ] {
             assert_eq!(snapshot.deletion_vector_failures, failures, "{name}");
-            assert_eq!(snapshot.deletion_vector_rejections, rejections, "{name}");
+            assert_eq!(
+                snapshot.deletion_vector_coordinate_rejections, rejections,
+                "{name}"
+            );
             assert_eq!(failures + rejections, 1, "{name}");
         }
         Ok(())

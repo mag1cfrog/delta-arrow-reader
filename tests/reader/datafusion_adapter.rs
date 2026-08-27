@@ -399,7 +399,7 @@ async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates
     assert_eq!(metrics.deletion_vectors_applied, 2);
     assert_eq!(metrics.deletion_vector_rows_deleted, 3);
     assert_eq!(metrics.deletion_vector_failures, 0);
-    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
     Ok(())
 }
 
@@ -551,7 +551,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
         u64::try_from(deleted_rows.len())? * executions
     );
     assert_eq!(metrics.deletion_vector_failures, 0);
-    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
     assert_eq!(
         metrics.estimated_parquet_task_bytes_admitted,
         Some(fixture.data_file_size() * executions)
@@ -653,7 +653,7 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
     );
     assert_eq!(metrics.deletion_vectors_applied, 0);
     assert_eq!(metrics.deletion_vector_rows_deleted, 0);
-    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
     Ok(())
 }
 
@@ -1165,7 +1165,10 @@ async fn dynamic_join_kept_file_still_applies_deletion_vector() -> TestResult {
     assert_eq!(metrics.reader_metrics.deletion_vectors_applied, 1);
     assert_eq!(metrics.reader_metrics.deletion_vector_rows_deleted, 1);
     assert_eq!(metrics.reader_metrics.deletion_vector_failures, 0);
-    assert_eq!(metrics.reader_metrics.deletion_vector_rejections, 0);
+    assert_eq!(
+        metrics.reader_metrics.deletion_vector_coordinate_rejections,
+        0
+    );
     Ok(())
 }
 
@@ -1282,7 +1285,7 @@ async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult 
     assert_eq!(metrics.deletion_vectors_applied, 0);
     assert_eq!(metrics.deletion_vector_rows_deleted, 0);
     assert_eq!(metrics.deletion_vector_failures, 0);
-    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
     Ok(())
 }
 

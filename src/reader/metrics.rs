@@ -47,8 +47,8 @@ pub struct DeltaScanMetricsSnapshot {
     pub deletion_vector_rows_deleted: u64,
     /// Deletion-vector read or masking failures.
     pub deletion_vector_failures: u64,
-    /// Deletion-vector reads rejected by safety checks.
-    pub deletion_vector_rejections: u64,
+    /// Deletion-vector coordinate operations rejected by safety checks.
+    pub deletion_vector_coordinate_rejections: u64,
     /// Direct Parquet ranged GET operations, or `None` for another backend.
     pub parquet_data_file_range_get_operations: Option<u64>,
     /// Direct Parquet full GET operations, or `None` for another backend.
@@ -91,7 +91,7 @@ struct DeltaScanMetricsInner {
     deletion_vectors_applied: AtomicU64,
     deletion_vector_rows_deleted: AtomicU64,
     deletion_vector_failures: AtomicU64,
-    deletion_vector_rejections: AtomicU64,
+    deletion_vector_coordinate_rejections: AtomicU64,
     parquet_data_file_range_get_operations: AtomicU64,
     parquet_data_file_full_get_operations: AtomicU64,
     parquet_data_file_bytes_received: AtomicU64,
@@ -133,7 +133,7 @@ impl DeltaScanMetrics {
                 deletion_vectors_applied: AtomicU64::new(0),
                 deletion_vector_rows_deleted: AtomicU64::new(0),
                 deletion_vector_failures: AtomicU64::new(0),
-                deletion_vector_rejections: AtomicU64::new(0),
+                deletion_vector_coordinate_rejections: AtomicU64::new(0),
                 parquet_data_file_range_get_operations: AtomicU64::new(0),
                 parquet_data_file_full_get_operations: AtomicU64::new(0),
                 parquet_data_file_bytes_received: AtomicU64::new(0),
@@ -163,7 +163,9 @@ impl DeltaScanMetrics {
             deletion_vectors_applied: load(&inner.deletion_vectors_applied),
             deletion_vector_rows_deleted: load(&inner.deletion_vector_rows_deleted),
             deletion_vector_failures: load(&inner.deletion_vector_failures),
-            deletion_vector_rejections: load(&inner.deletion_vector_rejections),
+            deletion_vector_coordinate_rejections: load(
+                &inner.deletion_vector_coordinate_rejections,
+            ),
             parquet_data_file_range_get_operations: self
                 .parquet_metric(&inner.parquet_data_file_range_get_operations),
             parquet_data_file_full_get_operations: self
@@ -242,8 +244,8 @@ impl DeltaScanMetrics {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn record_deletion_vector_rejection(&self) {
-        saturating_fetch_add(&self.inner.deletion_vector_rejections, 1);
+    pub(crate) fn record_deletion_vector_coordinate_rejection(&self) {
+        saturating_fetch_add(&self.inner.deletion_vector_coordinate_rejections, 1);
     }
 
     pub(crate) fn record_parquet_data_file_range_get_operation(&self) {
@@ -320,7 +322,7 @@ mod tests {
         assert_eq!(direct.deletion_vectors_applied, 0);
         assert_eq!(direct.deletion_vector_rows_deleted, 0);
         assert_eq!(direct.deletion_vector_failures, 0);
-        assert_eq!(direct.deletion_vector_rejections, 0);
+        assert_eq!(direct.deletion_vector_coordinate_rejections, 0);
         assert_eq!(direct.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(direct.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(direct.parquet_data_file_bytes_received, Some(0));
@@ -356,7 +358,7 @@ mod tests {
             &metrics.inner.deletion_vectors_applied,
             &metrics.inner.deletion_vector_rows_deleted,
             &metrics.inner.deletion_vector_failures,
-            &metrics.inner.deletion_vector_rejections,
+            &metrics.inner.deletion_vector_coordinate_rejections,
             &metrics.inner.parquet_data_file_range_get_operations,
             &metrics.inner.parquet_data_file_full_get_operations,
             &metrics.inner.parquet_data_file_bytes_received,
@@ -378,7 +380,7 @@ mod tests {
         assert_eq!(snapshot.deletion_vectors_applied, 8);
         assert_eq!(snapshot.deletion_vector_rows_deleted, 9);
         assert_eq!(snapshot.deletion_vector_failures, 10);
-        assert_eq!(snapshot.deletion_vector_rejections, 11);
+        assert_eq!(snapshot.deletion_vector_coordinate_rejections, 11);
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(12));
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(13));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(14));

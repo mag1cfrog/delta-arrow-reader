@@ -29,7 +29,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 29;
+const BENCHMARK_SCHEMA_VERSION: u32 = 30;
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
@@ -96,7 +96,7 @@ const CSV_HEADER: [&str; 79] = [
     "provider_stats_deletion_vectors_applied_p50",
     "provider_stats_deletion_vector_rows_deleted_p50",
     "provider_stats_deletion_vector_failures_p50",
-    "provider_stats_deletion_vector_rejections_p50",
+    "provider_stats_deletion_vector_coordinate_rejections_p50",
     "produced_rows",
     "produced_batches",
     "process_peak_rss_bytes",
@@ -266,7 +266,7 @@ struct ReadSummary {
     deletion_vectors_applied: u64,
     deletion_vector_rows_deleted: u64,
     deletion_vector_failures: u64,
-    deletion_vector_rejections: u64,
+    deletion_vector_coordinate_rejections: u64,
     range_gets: Option<u64>,
     full_gets: Option<u64>,
     bytes_received: Option<u64>,
@@ -1578,7 +1578,9 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         deletion_vectors_applied: counter(|reader| reader.deletion_vectors_applied),
         deletion_vector_rows_deleted: counter(|reader| reader.deletion_vector_rows_deleted),
         deletion_vector_failures: counter(|reader| reader.deletion_vector_failures),
-        deletion_vector_rejections: counter(|reader| reader.deletion_vector_rejections),
+        deletion_vector_coordinate_rejections: counter(|reader| {
+            reader.deletion_vector_coordinate_rejections
+        }),
         range_gets: optional(|reader| reader.parquet_data_file_range_get_operations),
         full_gets: optional(|reader| reader.parquet_data_file_full_get_operations),
         bytes_received: optional(|reader| reader.parquet_data_file_bytes_received),
@@ -1647,7 +1649,7 @@ fn csv_row(
         read.deletion_vectors_applied.to_string(),
         read.deletion_vector_rows_deleted.to_string(),
         read.deletion_vector_failures.to_string(),
-        read.deletion_vector_rejections.to_string(),
+        read.deletion_vector_coordinate_rejections.to_string(),
         summary.produced_rows.to_string(),
         summary.produced_batches.to_string(),
         optional(summary.peak_rss),
@@ -2105,7 +2107,7 @@ mod tests {
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "29");
+            assert_eq!(row[0], "30");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);

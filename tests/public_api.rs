@@ -26,6 +26,7 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
         let _: u64 = snapshot.file_tasks_completed;
         let _: u64 = snapshot.scheduler_batches_emitted;
         let _: u64 = snapshot.scheduler_rows_emitted;
+        let _: u64 = snapshot.deletion_vector_coordinate_rejections;
         let _: Option<u64> = snapshot.estimated_parquet_task_bytes_admitted;
     }
     let _ = snapshot;
