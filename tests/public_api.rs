@@ -326,6 +326,10 @@ fn datafusion_provider_contract_is_public() {
     );
     assert_clone::<DeltaTableProvider>();
     assert_result_traits::<RegisteredTable>();
+    fn inspect_registration(registration: RegisteredTable) {
+        let _: String = registration.name;
+        let _: u64 = registration.snapshot_version;
+    }
     let construct: fn(DeltaTable, ScanOptions) -> Result<DeltaTableProvider, DeltaReaderError> =
         DeltaTableProvider::try_new;
     fn register(
@@ -336,5 +340,5 @@ fn datafusion_provider_contract_is_public() {
     ) -> Result<RegisteredTable, DeltaReaderError> {
         register_table(context, name, table, options)
     }
-    let _ = (construct, register);
+    let _ = (construct, register, inspect_registration);
 }

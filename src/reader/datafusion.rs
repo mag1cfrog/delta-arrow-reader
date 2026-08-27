@@ -366,7 +366,7 @@ pub struct RegisteredTable {
     /// Caller-supplied DataFusion table name.
     pub name: String,
     /// Loaded Delta snapshot version.
-    pub version: u64,
+    pub snapshot_version: u64,
 }
 
 /// Registers one loaded Delta table in a DataFusion session.
@@ -403,7 +403,7 @@ pub fn register_table(
     options: ScanOptions,
 ) -> Result<RegisteredTable, DeltaReaderError> {
     let name = name.into();
-    let version = table.version();
+    let snapshot_version = table.version();
     let backend = options.execution_options.reader_backend();
     let result = (|| {
         validate_registration_name(&name)?;
@@ -415,14 +415,17 @@ pub fn register_table(
                 reason: "table_registration_failed",
                 source: Box::new(source),
             })?;
-        Ok(RegisteredTable { name, version })
+        Ok(RegisteredTable {
+            name,
+            snapshot_version,
+        })
     })();
     match result {
         Ok(registered) => {
             tracing::debug!(
                 target: TRACING_TARGET,
                 event = "provider_registration.registered",
-                snapshot_version = version,
+                snapshot_version,
                 partition_count = tracing::field::Empty,
                 backend = ?backend,
                 outcome = "registered"
@@ -430,7 +433,12 @@ pub fn register_table(
             Ok(registered)
         }
         Err(error) => {
-            trace_failure("provider_registration.failed", version, backend, &error);
+            trace_failure(
+                "provider_registration.failed",
+                snapshot_version,
+                backend,
+                &error,
+            );
             Err(error)
         }
     }

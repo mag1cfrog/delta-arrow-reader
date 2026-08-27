@@ -864,7 +864,7 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
         },
     )?;
     assert_eq!(registered.name, "Orders");
-    assert_eq!(registered.version, table.version());
+    assert_eq!(registered.snapshot_version, table.version());
     let registered_provider = context.table_provider("orders").await?;
     assert!(!format!("{registered_provider:?}").contains("Orders"));
     let duplicate = register_table(&context, "orders", table, ScanOptions::default())
