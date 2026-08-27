@@ -108,7 +108,7 @@ impl DeltaTableProvider {
         }
         table.validate_protocol()?;
         let partition_columns = table.partition_columns().iter().cloned().collect();
-        let schema = datafusion_schema(
+        let schema = build_provider_schema(
             &table.schema(),
             &partition_columns,
             options.use_arrow_view_types,
@@ -139,7 +139,7 @@ impl DeltaTableProvider {
             .cloned()
             .collect::<HashSet<_>>();
         let filter_refs = filters.iter().collect::<Vec<_>>();
-        let mut planning = plan_datafusion_scan(
+        let mut datafusion_plan = plan_datafusion_scan(
             &self.table.schema(),
             &partition_columns,
             projection,
@@ -149,7 +149,7 @@ impl DeltaTableProvider {
                     == ParquetReaderBackend::Direct,
             },
         )?;
-        if planning
+        if datafusion_plan
             .filters
             .decisions
             .iter()
@@ -159,9 +159,9 @@ impl DeltaTableProvider {
                 reason: "datafusion_scan_contains_unsupported_filter",
             });
         }
-        let scan_projection = planning.projection.scan_projection.clone();
-        let hidden_columns = planning.projection.hidden_columns.clone();
-        let pruning_predicate = planning
+        let scan_projection = datafusion_plan.projection.scan_projection.clone();
+        let hidden_columns = datafusion_plan.projection.hidden_columns.clone();
+        let pruning_predicate = datafusion_plan
             .filters
             .pruning_predicate
             .as_ref()
@@ -173,7 +173,7 @@ impl DeltaTableProvider {
                 )
             })
             .transpose()?;
-        let exact_row_predicate = planning
+        let exact_row_predicate = datafusion_plan
             .filters
             .exact_row_predicate
             .as_ref()
@@ -191,39 +191,39 @@ impl DeltaTableProvider {
             &hidden_columns,
             exact_row_predicate,
         )?;
-        let mut core = plan_scan(
+        let mut reader_plan = plan_scan(
             self.table.snapshot(),
             scan_projection.as_deref(),
             &hidden_columns,
             pruning_predicate,
-            planning.filters.requires_statistics,
+            datafusion_plan.filters.requires_statistics,
             self.options.execution_options,
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: self.options.target_partitions,
                 datafusion_target_partitions: Some(state.config().target_partitions()),
             },
         )?;
-        core.logical_schema = datafusion_schema(
-            &core.logical_schema,
+        reader_plan.logical_schema = build_provider_schema(
+            &reader_plan.logical_schema,
             &partition_columns,
             self.options.use_arrow_view_types,
         );
-        core.physical_schema = datafusion_schema(
-            &core.physical_schema,
+        reader_plan.physical_schema = build_provider_schema(
+            &reader_plan.physical_schema,
             &partition_columns,
             self.options.use_arrow_view_types,
         );
-        core.projected_schema = datafusion_schema(
-            &core.projected_schema,
+        reader_plan.projected_schema = build_provider_schema(
+            &reader_plan.projected_schema,
             &partition_columns,
             self.options.use_arrow_view_types,
         );
-        planning.projection.output_schema = datafusion_schema(
-            &planning.projection.output_schema,
+        datafusion_plan.projection.output_schema = build_provider_schema(
+            &datafusion_plan.projection.output_schema,
             &partition_columns,
             self.options.use_arrow_view_types,
         );
-        let partition_count = core.partitions.len();
+        let partition_count = reader_plan.partitions.len();
         let plan = {
             let _setup = tracing::debug_span!(
                 target: "delta_arrow_reader::profile",
@@ -231,8 +231,8 @@ impl DeltaTableProvider {
             )
             .entered();
             create_datafusion_execution_plan(
-                core,
-                planning,
+                reader_plan,
+                datafusion_plan,
                 exact_row_predicate,
                 self.registration_name.clone(),
                 self.options.use_arrow_view_types,
@@ -243,7 +243,7 @@ impl DeltaTableProvider {
     }
 }
 
-fn datafusion_schema(
+fn build_provider_schema(
     schema: &Schema,
     partition_columns: &HashSet<String>,
     use_arrow_view_types: bool,
@@ -343,7 +343,7 @@ impl TableProvider for DeltaTableProvider {
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        let planning = plan_datafusion_filters(
+        let datafusion_plan = plan_datafusion_filters(
             &self.table.schema(),
             &partition_columns,
             filters,
@@ -352,7 +352,7 @@ impl TableProvider for DeltaTableProvider {
                     == ParquetReaderBackend::Direct,
             },
         );
-        Ok(planning
+        Ok(datafusion_plan
             .decisions
             .iter()
             .map(|decision| decision.pushdown.clone())
@@ -574,7 +574,7 @@ mod tests {
 
     use arrow::datatypes::{DataType, Field, Schema};
 
-    use super::{datafusion_schema, validate_registration_name};
+    use super::{build_provider_schema, validate_registration_name};
 
     #[test]
     fn registration_names_preserve_the_frozen_unquoted_identifier_boundary() {
@@ -617,7 +617,7 @@ mod tests {
         );
         let partitions = HashSet::from(["region".to_owned(), "partition_payload".to_owned()]);
 
-        let mapped = datafusion_schema(&schema, &partitions, true);
+        let mapped = build_provider_schema(&schema, &partitions, true);
 
         assert_eq!(
             mapped.as_ref(),
@@ -644,7 +644,7 @@ mod tests {
             )
         );
 
-        let standard = datafusion_schema(&schema, &partitions, false);
+        let standard = build_provider_schema(&schema, &partitions, false);
         assert_eq!(standard.field(0).data_type(), &DataType::Utf8);
         assert_eq!(standard.field(1).data_type(), &DataType::Binary);
         assert_eq!(

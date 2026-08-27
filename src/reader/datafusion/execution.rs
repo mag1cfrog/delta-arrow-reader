@@ -303,16 +303,16 @@ pub fn collect_scan_metrics(plan: &dyn ExecutionPlan) -> Vec<ScanMetrics> {
 
 #[allow(dead_code)]
 pub(crate) fn create_datafusion_execution_plan(
-    plan: DeltaScanPlan,
-    planning: DataFusionScanPlan,
+    reader_plan: DeltaScanPlan,
+    datafusion_plan: DataFusionScanPlan,
     exact_row_predicate: Option<DeltaKernelPredicate>,
     registration_name: Option<String>,
     use_arrow_view_types: bool,
     intra_file_repartitioning: IntraFileRepartitioning,
 ) -> Arc<dyn ExecutionPlan> {
     Arc::new(DeltaDataFusionExec::new(
-        plan,
-        planning,
+        reader_plan,
+        datafusion_plan,
         exact_row_predicate,
         registration_name,
         use_arrow_view_types,
@@ -322,7 +322,7 @@ pub(crate) fn create_datafusion_execution_plan(
 
 #[derive(Clone)]
 struct DeltaDataFusionExec {
-    plan: Arc<DeltaScanPlan>,
+    reader_plan: Arc<DeltaScanPlan>,
     schema: SchemaRef,
     output_projection: Option<Arc<[usize]>>,
     exact_row_predicate: Option<DeltaKernelPredicate>,
@@ -338,29 +338,29 @@ struct DeltaDataFusionExec {
 impl DeltaDataFusionExec {
     #[allow(dead_code)]
     fn new(
-        plan: DeltaScanPlan,
-        planning: DataFusionScanPlan,
+        reader_plan: DeltaScanPlan,
+        datafusion_plan: DataFusionScanPlan,
         exact_row_predicate: Option<DeltaKernelPredicate>,
         registration_name: Option<String>,
         use_arrow_view_types: bool,
         intra_file_repartitioning: IntraFileRepartitioning,
     ) -> Self {
-        let schema = planning.projection.output_schema;
-        let output_projection = planning.projection.output_projection.map(Arc::from);
-        let properties = scan_properties(&schema, plan.partitions.len());
+        let schema = datafusion_plan.projection.output_schema;
+        let output_projection = datafusion_plan.projection.output_projection.map(Arc::from);
+        let properties = scan_properties(&schema, reader_plan.partitions.len());
         let metrics = ScanMetrics::new(
             registration_name,
-            plan.metrics.clone(),
+            reader_plan.metrics.clone(),
             use_arrow_view_types,
         );
         let limiter = ScanReadLimiter::new(
-            plan.execution_options,
-            plan.partition_target_diagnostic.target_partitions,
-            plan.partitions.len(),
+            reader_plan.execution_options,
+            reader_plan.partition_target_diagnostic.target_partitions,
+            reader_plan.partitions.len(),
         );
 
         Self {
-            plan: Arc::new(plan),
+            reader_plan: Arc::new(reader_plan),
             schema,
             output_projection,
             exact_row_predicate,
@@ -389,14 +389,19 @@ impl DeltaDataFusionExec {
         partitions: Vec<DeltaScanPartition>,
     ) -> Arc<dyn ExecutionPlan> {
         let partition_count = partitions.len();
-        let mut plan = (*self.plan).clone();
-        plan.partitions = partitions;
-        plan.metrics.record_scan_partitions_planned(partition_count);
-        let target_partitions = plan.partition_target_diagnostic.target_partitions;
-        let limiter =
-            ScanReadLimiter::new(plan.execution_options, target_partitions, partition_count);
+        let mut reader_plan = (*self.reader_plan).clone();
+        reader_plan.partitions = partitions;
+        reader_plan
+            .metrics
+            .record_scan_partitions_planned(partition_count);
+        let target_partitions = reader_plan.partition_target_diagnostic.target_partitions;
+        let limiter = ScanReadLimiter::new(
+            reader_plan.execution_options,
+            target_partitions,
+            partition_count,
+        );
         Arc::new(Self {
-            plan: Arc::new(plan),
+            reader_plan: Arc::new(reader_plan),
             properties: scan_properties(&self.schema, partition_count),
             limiter,
             intra_file_repartitioning_applied: true,
@@ -542,8 +547,8 @@ impl fmt::Debug for DeltaDataFusionExec {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("DeltaDataFusionExec")
-            .field("snapshot_version", &self.plan.snapshot_version)
-            .field("partition_count", &self.plan.partitions.len())
+            .field("snapshot_version", &self.reader_plan.snapshot_version)
+            .field("partition_count", &self.reader_plan.partitions.len())
             .field("dynamic_filter_count", &self.dynamic_filters.len())
             .finish_non_exhaustive()
     }
@@ -559,8 +564,8 @@ impl DisplayAs for DeltaDataFusionExec {
             DisplayFormatType::Default | DisplayFormatType::Verbose => write!(
                 formatter,
                 "DeltaDataFusionExec: snapshot_version={}, partitions={}",
-                self.plan.snapshot_version,
-                self.plan.partitions.len()
+                self.reader_plan.snapshot_version,
+                self.reader_plan.partitions.len()
             ),
             DisplayFormatType::TreeRender => write!(formatter, "DeltaDataFusionExec"),
         }
@@ -599,14 +604,17 @@ impl ExecutionPlan for DeltaDataFusionExec {
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
         if self.intra_file_repartitioning_applied
-            || self.plan.execution_options.parquet_backend() != ParquetReaderBackend::Direct
+            || self.reader_plan.execution_options.parquet_backend() != ParquetReaderBackend::Direct
         {
             return Ok(None);
         }
         // Scan planning already applied the provider override and resource caps.
-        let target_partitions = self.plan.partition_target_diagnostic.target_partitions;
+        let target_partitions = self
+            .reader_plan
+            .partition_target_diagnostic
+            .target_partitions;
         let Some(partitions) = repartition_file_tasks(
-            &self.plan.partitions,
+            &self.reader_plan.partitions,
             target_partitions,
             config.optimizer.repartition_file_min_size,
             self.intra_file_repartitioning,
@@ -622,7 +630,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> DataFusionResult<SendableRecordBatchStream> {
-        if partition >= self.plan.partitions.len() {
+        if partition >= self.reader_plan.partitions.len() {
             return Err(adapter_error("scan_partition_index_out_of_range"));
         }
 
@@ -630,24 +638,24 @@ impl ExecutionPlan for DeltaDataFusionExec {
         self.metrics
             .record_configured_batch_size_rows(configured_batch_size_rows);
         let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
-        let executor = match self.plan.execution_options.parquet_backend() {
+        let executor = match self.reader_plan.execution_options.parquet_backend() {
             ParquetReaderBackend::Direct => match &self.parquet_metadata_cache {
                 Some(cache) => direct_parquet_file_executor_with_metadata_cache(
-                    &self.plan,
+                    &self.reader_plan,
                     Some(configured_batch_size_rows),
                     self.exact_row_predicate.clone(),
                     Arc::clone(cache),
                 ),
                 None => direct_parquet_file_executor(
-                    &self.plan,
+                    &self.reader_plan,
                     Some(configured_batch_size_rows),
                     self.exact_row_predicate.clone(),
                 ),
             },
-            ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
+            ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.reader_plan),
         };
         let stream = DeltaScanScheduler::with_shared_limiter(
-            Arc::clone(&self.plan),
+            Arc::clone(&self.reader_plan),
             Arc::clone(&self.limiter),
         )
         .partition_stream(partition, admission, executor)
@@ -692,7 +700,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
         let dynamic_filter_plan = DynamicFilterPlan::from_filters(
             &parent_filters,
             &self.schema,
-            &self.plan.partition_columns,
+            &self.reader_plan.partition_columns,
         );
         let accepted = dynamic_filter_plan.accepted_filters.len();
         self.metrics
@@ -1027,7 +1035,7 @@ mod tests {
             .cloned()
             .collect::<HashSet<_>>();
         let filter_refs = filters.iter().collect::<Vec<_>>();
-        let planning = plan_datafusion_scan(
+        let datafusion_plan = plan_datafusion_scan(
             &table.schema(),
             &partition_columns,
             projection,
@@ -1037,14 +1045,14 @@ mod tests {
                     == ParquetReaderBackend::Direct,
             },
         )?;
-        let scan_projection = planning.projection.scan_projection.clone();
-        let hidden_columns = planning.projection.hidden_columns.clone();
-        let pruning_predicate = planning
+        let scan_projection = datafusion_plan.projection.scan_projection.clone();
+        let hidden_columns = datafusion_plan.projection.hidden_columns.clone();
+        let pruning_predicate = datafusion_plan
             .filters
             .pruning_predicate
             .as_ref()
             .and_then(delta_predicate_to_kernel_pruning);
-        let exact_row_predicate = match planning.filters.exact_row_predicate.as_ref() {
+        let exact_row_predicate = match datafusion_plan.filters.exact_row_predicate.as_ref() {
             Some(predicate) => Some(delta_predicate_to_kernel_pruning(predicate).ok_or(
                 DeltaReaderError::UnsupportedPredicate {
                     reason: "exact_row_predicate_not_kernel_safe",
@@ -1058,8 +1066,8 @@ mod tests {
             &hidden_columns,
             exact_row_predicate,
         )?;
-        let include_stats = planning.filters.requires_statistics;
-        let core = plan_scan(
+        let include_stats = datafusion_plan.filters.requires_statistics;
+        let reader_plan = plan_scan(
             table.snapshot(),
             scan_projection.as_deref(),
             &hidden_columns,
@@ -1072,8 +1080,8 @@ mod tests {
             },
         )?;
         Ok(create_datafusion_execution_plan(
-            core,
-            planning,
+            reader_plan,
+            datafusion_plan,
             exact_row_predicate,
             registration_name,
             true,
