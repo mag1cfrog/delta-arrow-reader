@@ -37,6 +37,7 @@ use crate::{
 const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
 
 /// DataFusion-specific scan settings for one provider.
+#[must_use = "scan options do nothing unless passed to a provider"]
 #[derive(Debug, Clone)]
 pub struct ScanOptions {
     /// Reader execution settings used by each provider scan.
