@@ -732,7 +732,7 @@ fn dynamic_partition_admission_policy(
         for filter in filters.iter() {
             metrics.record_dynamic_partition_filter_check();
             match evaluate_dynamic_partition_filter(filter, task) {
-                DynamicPartitionPruningDecision::Prune(_) => {
+                DynamicPartitionPruningDecision::Prune => {
                     metrics.record_dynamic_partition_task_pruned();
                     return Ok(FileAdmissionDecision::Skip);
                 }

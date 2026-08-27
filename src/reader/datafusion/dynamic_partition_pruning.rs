@@ -26,16 +26,9 @@ use crate::reader::planning::DeltaScanFileTask;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DynamicPartitionPruningDecision {
     /// The dynamic snapshot evaluated to boolean false for this partition row.
-    Prune(DynamicPartitionPruneReason),
+    Prune,
     /// The file task must remain because pruning was not proven.
     Keep(DynamicPartitionKeepReason),
-}
-
-/// Reason a file task can be removed before data-file scheduling.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DynamicPartitionPruneReason {
-    /// DataFusion evaluated the dynamic snapshot to false for the partition row.
-    FilterRejectedPartition,
 }
 
 /// Reason a file task must remain after dynamic partition evaluation.
@@ -346,9 +339,7 @@ fn boolean_decision(
             )
         }
         ColumnarValue::Scalar(ScalarValue::Boolean(Some(false))) => {
-            DynamicPartitionPruningDecision::Prune(
-                DynamicPartitionPruneReason::FilterRejectedPartition,
-            )
+            DynamicPartitionPruningDecision::Prune
         }
         ColumnarValue::Scalar(ScalarValue::Boolean(None) | ScalarValue::Null) => {
             DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::NullResult)
@@ -378,7 +369,7 @@ fn boolean_array_decision(array: &dyn Array) -> DynamicPartitionPruningDecision 
     if boolean_array.value(0) {
         DynamicPartitionPruningDecision::Keep(DynamicPartitionKeepReason::FilterAllowedPartition)
     } else {
-        DynamicPartitionPruningDecision::Prune(DynamicPartitionPruneReason::FilterRejectedPartition)
+        DynamicPartitionPruningDecision::Prune
     }
 }
 
@@ -631,12 +622,7 @@ mod tests {
         let decision =
             evaluate_dynamic_partition_filter(&retained, &file_task(&[("region", "us-east")]));
 
-        assert_eq!(
-            decision,
-            DynamicPartitionPruningDecision::Prune(
-                DynamicPartitionPruneReason::FilterRejectedPartition
-            )
-        );
+        assert_eq!(decision, DynamicPartitionPruningDecision::Prune);
         Ok(())
     }
 
@@ -678,9 +664,7 @@ mod tests {
                 "starts_with miss",
                 starts_with(logical_col("region"), logical_lit("us-")),
                 "eu-west",
-                DynamicPartitionPruningDecision::Prune(
-                    DynamicPartitionPruneReason::FilterRejectedPartition,
-                ),
+                DynamicPartitionPruningDecision::Prune,
             ),
             (
                 "ends_with match",
@@ -694,9 +678,7 @@ mod tests {
                 "ends_with miss",
                 ends_with(logical_col("region"), logical_lit("-west")),
                 "us-east",
-                DynamicPartitionPruningDecision::Prune(
-                    DynamicPartitionPruneReason::FilterRejectedPartition,
-                ),
+                DynamicPartitionPruningDecision::Prune,
             ),
             (
                 "contains match",
@@ -710,9 +692,7 @@ mod tests {
                 "contains miss",
                 contains(logical_col("region"), logical_lit("west")),
                 "us-east",
-                DynamicPartitionPruningDecision::Prune(
-                    DynamicPartitionPruneReason::FilterRejectedPartition,
-                ),
+                DynamicPartitionPruningDecision::Prune,
             ),
         ] {
             assert_eq!(
@@ -739,12 +719,7 @@ mod tests {
         let decision =
             evaluate_dynamic_partition_filter(&retained, &file_task(&[("region", "us-east")]));
 
-        assert_eq!(
-            decision,
-            DynamicPartitionPruningDecision::Prune(
-                DynamicPartitionPruneReason::FilterRejectedPartition
-            )
-        );
+        assert_eq!(decision, DynamicPartitionPruningDecision::Prune);
         Ok(())
     }
 
@@ -775,12 +750,7 @@ mod tests {
             &file_task(&[("region", "us-west"), ("event_year", "2025")]),
         );
 
-        assert_eq!(
-            decision,
-            DynamicPartitionPruningDecision::Prune(
-                DynamicPartitionPruneReason::FilterRejectedPartition
-            )
-        );
+        assert_eq!(decision, DynamicPartitionPruningDecision::Prune);
         Ok(())
     }
 
@@ -806,12 +776,7 @@ mod tests {
         let decision =
             evaluate_dynamic_partition_filter(&retained, &file_task(&[("region", "us-west")]));
 
-        assert_eq!(
-            decision,
-            DynamicPartitionPruningDecision::Prune(
-                DynamicPartitionPruneReason::FilterRejectedPartition
-            )
-        );
+        assert_eq!(decision, DynamicPartitionPruningDecision::Prune);
         Ok(())
     }
 
