@@ -28,7 +28,6 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
     }
     let _ = snapshot;
     let _ = inspect_reader_metrics;
-    let snapshot_version: fn(&DeltaProtocolInfo) -> u64 = DeltaProtocolInfo::snapshot_version;
     let min_reader_version: fn(&DeltaProtocolInfo) -> i32 = DeltaProtocolInfo::min_reader_version;
     let min_writer_version: fn(&DeltaProtocolInfo) -> i32 = DeltaProtocolInfo::min_writer_version;
     let reader_features: for<'a> fn(&'a DeltaProtocolInfo) -> &'a [String] =
@@ -38,7 +37,6 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
     let first_unsupported_reader_feature: for<'a> fn(&'a DeltaProtocolInfo) -> Option<&'a str> =
         DeltaProtocolInfo::first_unsupported_reader_feature;
     let _ = (
-        snapshot_version,
         min_reader_version,
         min_writer_version,
         reader_features,

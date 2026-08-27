@@ -19,7 +19,6 @@ const SUPPORTED_READER_FEATURES: &[&str] = &[
 /// Protocol metadata captured from one immutable Delta snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeltaProtocolInfo {
-    snapshot_version: u64,
     min_reader_version: i32,
     min_writer_version: i32,
     reader_features: Vec<String>,
@@ -28,7 +27,6 @@ pub struct DeltaProtocolInfo {
 
 impl DeltaProtocolInfo {
     pub(crate) fn from_snapshot(snapshot: &KernelSnapshot) -> Self {
-        let version = snapshot.version();
         let DeltaKernelProtocol {
             min_reader_version,
             min_writer_version,
@@ -37,17 +35,11 @@ impl DeltaProtocolInfo {
         } = snapshot_protocol_report(snapshot);
 
         Self {
-            snapshot_version: version,
             min_reader_version,
             min_writer_version,
             reader_features,
             writer_features,
         }
-    }
-
-    /// Returns the loaded snapshot version.
-    pub const fn snapshot_version(&self) -> u64 {
-        self.snapshot_version
     }
 
     /// Returns the minimum Delta reader protocol version.
@@ -160,7 +152,6 @@ mod tests {
         let loaded = table.load()?;
         let protocol = loaded.protocol_info();
 
-        assert_eq!(protocol.snapshot_version(), 0);
         assert_eq!(protocol.min_reader_version(), 3);
         assert_eq!(protocol.min_writer_version(), 7);
         assert_eq!(
@@ -272,7 +263,6 @@ mod tests {
         assert_eq!(load_error.phase(), DeltaReaderPhase::Snapshot);
 
         let protocol = DeltaProtocolInfo {
-            snapshot_version: 0,
             min_reader_version: 4,
             min_writer_version: 7,
             reader_features: Vec::new(),
