@@ -170,6 +170,10 @@ pub(crate) fn plan_unpartitioned_scan(
                 reason: "kernel_scan_metadata_failed",
             })?
     };
+    let estimated_input_rows = checked_sum(
+        metadata.files.iter().map(|file| file.estimated_rows),
+        "scan_estimated_rows_overflow",
+    );
     let file_tasks = metadata
         .files
         .into_iter()
@@ -179,10 +183,7 @@ pub(crate) fn plan_unpartitioned_scan(
         file_tasks.iter().map(|task| task.file_size),
         "scan_estimated_bytes_overflow",
     )?;
-    let estimated_input_rows = checked_sum(
-        file_tasks.iter().map(|task| task.estimated_input_rows),
-        "scan_estimated_rows_overflow",
-    )?;
+    let estimated_input_rows = estimated_input_rows?;
     let logical_schema = scan.logical_schema();
     let physical_predicate = scan.physical_predicate();
     let projected_schema = match projection {
@@ -300,10 +301,6 @@ fn logical_projection(
 pub(crate) struct DeltaScanPartition {
     /// Whole-file or ranged Parquet reads assigned to this partition.
     pub(crate) file_tasks: Vec<DeltaScanFileTask>,
-    /// Total bytes to read when every task has a known size.
-    pub(crate) estimated_input_bytes: Option<u64>,
-    /// Total input rows when every task has a valid whole-file estimate.
-    pub(crate) estimated_input_rows: Option<u64>,
 }
 
 #[allow(dead_code)]
@@ -369,7 +366,7 @@ fn group_by_estimated_bytes(
         partition_loads.push(Reverse((partition_bytes, partition_index)));
     }
 
-    partition_tasks.into_iter().map(build_partition).collect()
+    Ok(partition_tasks.into_iter().map(build_partition).collect())
 }
 
 fn group_by_file_count(
@@ -389,31 +386,15 @@ fn group_by_file_count(
             return partition_planning_error("file_count_grouping_exhausted_tasks");
         }
         remaining_files -= take_count;
-        partitions.push(build_partition(partition_tasks)?);
+        partitions.push(build_partition(partition_tasks));
     }
 
     Ok(partitions)
 }
 
-/// Builds a scan partition and its aggregate size and row estimates.
-pub(crate) fn build_partition(
-    file_tasks: Vec<DeltaScanFileTask>,
-) -> Result<DeltaScanPartition, DeltaReaderError> {
-    let estimated_input_bytes = checked_sum(
-        file_tasks
-            .iter()
-            .map(DeltaScanFileTask::estimated_scan_bytes),
-        "partition_estimated_bytes_overflow",
-    )?;
-    let estimated_input_rows = checked_sum(
-        file_tasks.iter().map(|task| task.estimated_input_rows),
-        "partition_estimated_rows_overflow",
-    )?;
-    Ok(DeltaScanPartition {
-        file_tasks,
-        estimated_input_bytes,
-        estimated_input_rows,
-    })
+/// Builds a scan partition from file tasks.
+pub(crate) fn build_partition(file_tasks: Vec<DeltaScanFileTask>) -> DeltaScanPartition {
+    DeltaScanPartition { file_tasks }
 }
 
 fn checked_sum(
@@ -474,8 +455,6 @@ pub(crate) struct DeltaScanFileTask {
     pub(crate) file_size: Option<u64>,
     /// Byte range assigned by intra-file repartitioning, or `None` for the whole file.
     pub(crate) parquet_byte_range: Option<Range<u64>>,
-    /// Estimated input rows, available only for whole-file tasks with statistics.
-    pub(crate) estimated_input_rows: Option<u64>,
     /// Data-file modification time from the Delta add action.
     pub(crate) modification_time_ms: Option<i64>,
     /// Logical partition-column values from the Delta add action.
@@ -507,7 +486,6 @@ impl DeltaScanFileTask {
             path: file.path,
             file_size: Some(file_size),
             parquet_byte_range: None,
-            estimated_input_rows: file.estimated_rows,
             modification_time_ms: file.modification_time_ms,
             partition_values: file.partition_values,
             deletion_vector: DeletionVectorMetadata::from_kernel(file.deletion_vector),
@@ -4491,12 +4469,18 @@ mod tests {
     fn grouping_task(
         path: &str,
         estimated_input_bytes: Option<u64>,
-        estimated_input_rows: Option<u64>,
     ) -> Result<DeltaScanFileTask, crate::DeltaReaderError> {
         let mut task = task(kernel_file(path))?;
         task.file_size = estimated_input_bytes;
-        task.estimated_input_rows = estimated_input_rows;
         Ok(task)
+    }
+
+    fn partition_estimated_bytes(partition: &DeltaScanPartition) -> Option<u64> {
+        partition
+            .file_tasks
+            .iter()
+            .map(DeltaScanFileTask::estimated_scan_bytes)
+            .sum()
     }
 
     fn partition_paths(partitions: &[DeltaScanPartition]) -> Vec<Vec<&str>> {
@@ -4577,7 +4561,6 @@ mod tests {
 
         assert_eq!(task.path, "part-00000.parquet");
         assert_eq!(task.file_size, Some(123));
-        assert_eq!(task.estimated_input_rows, Some(7));
         assert_eq!(task.modification_time_ms, Some(1_587_968_586_000));
         assert_eq!(
             task.partition_values.into_iter().collect::<Vec<_>>(),
@@ -4594,7 +4577,7 @@ mod tests {
     }
 
     #[test]
-    fn file_task_preserves_zero_and_missing_estimates() -> Result<(), Box<dyn std::error::Error>> {
+    fn file_task_preserves_zero_file_size() -> Result<(), Box<dyn std::error::Error>> {
         let mut file = kernel_file("empty.parquet");
         file.size = 0;
         file.stats = None;
@@ -4602,7 +4585,6 @@ mod tests {
         let task = task(file)?;
 
         assert_eq!(task.file_size, Some(0));
-        assert_eq!(task.estimated_input_rows, None);
         assert!(!task.deletion_vector.is_present());
         assert!(!task.transform.is_required());
 
@@ -4699,16 +4681,11 @@ mod tests {
         let first = planned_tasks(&many)
             .find(|task| task.path == "part-0000.parquet")
             .ok_or("expected first task")?;
-        let second = planned_tasks(&many)
-            .find(|task| task.path == "part-0001.parquet")
-            .ok_or("expected second task")?;
         let last = planned_tasks(&many)
             .find(|task| task.path == "part-1000.parquet")
             .ok_or("expected last task")?;
         assert_eq!(first.file_size, Some(0));
-        assert_eq!(second.estimated_input_rows, None);
         assert_eq!(last.file_size, Some(1_000));
-        assert_eq!(last.estimated_input_rows, Some(1_000));
         let many_metrics = many.metrics.snapshot();
         assert_eq!(many_metrics.add_actions_excluded_during_planning, Some(0));
         assert_eq!(many_metrics.estimated_input_bytes, Some(500_500));
@@ -4755,7 +4732,7 @@ mod tests {
     }
 
     #[test]
-    fn statistics_pruning_preserves_surviving_row_counts_and_deletion_vectors()
+    fn statistics_pruning_preserves_surviving_files_and_deletion_vectors()
     -> Result<(), Box<dyn std::error::Error>> {
         let adds = [
             dv_add_action(
@@ -4833,14 +4810,12 @@ mod tests {
             .iter()
             .find(|task| task.path == "id-dv-possible.parquet")
             .ok_or("expected surviving DV task")?;
-        assert_eq!(possible.estimated_input_rows, Some(12));
         assert!(possible.deletion_vector.is_present());
         let missing_stats = plan
             .file_tasks
             .iter()
             .find(|task| task.path == "id-dv-missing-stats.parquet")
             .ok_or("expected surviving missing-stats DV task")?;
-        assert_eq!(missing_stats.estimated_input_rows, None);
         assert!(missing_stats.deletion_vector.is_present());
         let plain = plan
             .file_tasks
@@ -5034,9 +5009,9 @@ mod tests {
     fn oversized_known_size_file_stays_whole() -> Result<(), Box<dyn std::error::Error>> {
         let partitions = group_scan_file_tasks(
             vec![
-                grouping_task("huge.parquet", Some(1_000), Some(100))?,
-                grouping_task("small-0.parquet", Some(10), Some(1))?,
-                grouping_task("small-1.parquet", Some(10), Some(1))?,
+                grouping_task("huge.parquet", Some(1_000))?,
+                grouping_task("small-0.parquet", Some(10))?,
+                grouping_task("small-1.parquet", Some(10))?,
             ],
             2,
         )?;
@@ -5048,8 +5023,8 @@ mod tests {
                 vec!["small-0.parquet", "small-1.parquet"]
             ]
         );
-        assert_eq!(partitions[0].estimated_input_bytes, Some(1_000));
-        assert_eq!(partitions[1].estimated_input_bytes, Some(20));
+        assert_eq!(partition_estimated_bytes(&partitions[0]), Some(1_000));
+        assert_eq!(partition_estimated_bytes(&partitions[1]), Some(20));
         Ok(())
     }
 
@@ -5057,10 +5032,10 @@ mod tests {
     fn known_size_files_group_by_estimated_bytes() -> Result<(), Box<dyn std::error::Error>> {
         let partitions = group_scan_file_tasks(
             vec![
-                grouping_task("large.parquet", Some(90), Some(9))?,
-                grouping_task("small-1.parquet", Some(10), Some(1))?,
-                grouping_task("small-2.parquet", Some(10), Some(1))?,
-                grouping_task("small-3.parquet", Some(10), Some(1))?,
+                grouping_task("large.parquet", Some(90))?,
+                grouping_task("small-1.parquet", Some(10))?,
+                grouping_task("small-2.parquet", Some(10))?,
+                grouping_task("small-3.parquet", Some(10))?,
             ],
             2,
         )?;
@@ -5075,16 +5050,9 @@ mod tests {
         assert_eq!(
             partitions
                 .iter()
-                .map(|partition| partition.estimated_input_bytes)
+                .map(partition_estimated_bytes)
                 .collect::<Vec<_>>(),
             vec![Some(90), Some(30)]
-        );
-        assert_eq!(
-            partitions
-                .iter()
-                .map(|partition| partition.estimated_input_rows)
-                .collect::<Vec<_>>(),
-            vec![Some(9), Some(3)]
         );
         Ok(())
     }
@@ -5095,10 +5063,10 @@ mod tests {
         fn grouped_paths() -> Result<Vec<Vec<String>>, crate::DeltaReaderError> {
             group_scan_file_tasks(
                 vec![
-                    grouping_task("part-0.parquet", Some(6), Some(1))?,
-                    grouping_task("part-1.parquet", Some(6), Some(1))?,
-                    grouping_task("part-2.parquet", Some(4), Some(1))?,
-                    grouping_task("part-3.parquet", Some(4), Some(1))?,
+                    grouping_task("part-0.parquet", Some(6))?,
+                    grouping_task("part-1.parquet", Some(6))?,
+                    grouping_task("part-2.parquet", Some(4))?,
+                    grouping_task("part-3.parquet", Some(4))?,
                 ],
                 2,
             )
@@ -5130,12 +5098,12 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let partitions = group_scan_file_tasks(
             vec![
-                grouping_task("part-0.parquet", Some(6), Some(1))?,
-                grouping_task("part-1.parquet", Some(6), Some(1))?,
-                grouping_task("part-2.parquet", Some(6), Some(1))?,
-                grouping_task("part-3.parquet", Some(6), Some(1))?,
-                grouping_task("part-4.parquet", Some(4), Some(1))?,
-                grouping_task("part-5.parquet", Some(4), Some(1))?,
+                grouping_task("part-0.parquet", Some(6))?,
+                grouping_task("part-1.parquet", Some(6))?,
+                grouping_task("part-2.parquet", Some(6))?,
+                grouping_task("part-3.parquet", Some(6))?,
+                grouping_task("part-4.parquet", Some(4))?,
+                grouping_task("part-5.parquet", Some(4))?,
             ],
             2,
         )?;
@@ -5143,7 +5111,7 @@ mod tests {
         assert_eq!(
             partitions
                 .iter()
-                .map(|partition| partition.estimated_input_bytes)
+                .map(partition_estimated_bytes)
                 .collect::<Vec<_>>(),
             vec![Some(16), Some(16)]
         );
@@ -5154,9 +5122,9 @@ mod tests {
     fn mixed_zero_byte_files_keep_partitions_non_empty() -> Result<(), Box<dyn std::error::Error>> {
         let partitions = group_scan_file_tasks(
             vec![
-                grouping_task("non-zero.parquet", Some(10), Some(1))?,
-                grouping_task("zero-0.parquet", Some(0), Some(0))?,
-                grouping_task("zero-1.parquet", Some(0), Some(0))?,
+                grouping_task("non-zero.parquet", Some(10))?,
+                grouping_task("zero-0.parquet", Some(0))?,
+                grouping_task("zero-1.parquet", Some(0))?,
             ],
             3,
         )?;
@@ -5182,8 +5150,8 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let partitions = group_scan_file_tasks(
             vec![
-                grouping_task("part-0.parquet", Some(10), Some(1))?,
-                grouping_task("part-1.parquet", Some(10), Some(1))?,
+                grouping_task("part-0.parquet", Some(10))?,
+                grouping_task("part-1.parquet", Some(10))?,
             ],
             8,
         )?;
@@ -5201,11 +5169,11 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let partitions = group_scan_file_tasks(
             vec![
-                grouping_task("part-0.parquet", None, Some(1))?,
-                grouping_task("part-1.parquet", Some(10), Some(1))?,
-                grouping_task("part-2.parquet", Some(10), Some(1))?,
-                grouping_task("part-3.parquet", Some(10), Some(1))?,
-                grouping_task("part-4.parquet", Some(10), Some(1))?,
+                grouping_task("part-0.parquet", None)?,
+                grouping_task("part-1.parquet", Some(10))?,
+                grouping_task("part-2.parquet", Some(10))?,
+                grouping_task("part-3.parquet", Some(10))?,
+                grouping_task("part-4.parquet", Some(10))?,
             ],
             2,
         )?;
@@ -5217,8 +5185,8 @@ mod tests {
                 vec!["part-3.parquet", "part-4.parquet"]
             ]
         );
-        assert_eq!(partitions[0].estimated_input_bytes, None);
-        assert_eq!(partitions[1].estimated_input_bytes, Some(20));
+        assert_eq!(partition_estimated_bytes(&partitions[0]), None);
+        assert_eq!(partition_estimated_bytes(&partitions[1]), Some(20));
         Ok(())
     }
 
@@ -5227,8 +5195,8 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let partitions = group_scan_file_tasks(
             vec![
-                grouping_task("zero-0.parquet", Some(0), Some(0))?,
-                grouping_task("zero-1.parquet", Some(0), Some(0))?,
+                grouping_task("zero-0.parquet", Some(0))?,
+                grouping_task("zero-1.parquet", Some(0))?,
             ],
             4,
         )?;
@@ -5237,10 +5205,8 @@ mod tests {
             partition_paths(&partitions),
             vec![vec!["zero-0.parquet"], vec!["zero-1.parquet"]]
         );
-        assert_eq!(partitions[0].estimated_input_bytes, Some(0));
-        assert_eq!(partitions[1].estimated_input_bytes, Some(0));
-        assert_eq!(partitions[0].estimated_input_rows, Some(0));
-        assert_eq!(partitions[1].estimated_input_rows, Some(0));
+        assert_eq!(partition_estimated_bytes(&partitions[0]), Some(0));
+        assert_eq!(partition_estimated_bytes(&partitions[1]), Some(0));
         Ok(())
     }
 
@@ -5249,10 +5215,10 @@ mod tests {
         for target in [1, 4, 8] {
             let partitions = group_scan_file_tasks(
                 vec![
-                    grouping_task("part-0.parquet", Some(10), Some(1))?,
-                    grouping_task("part-1.parquet", Some(10), Some(1))?,
-                    grouping_task("part-2.parquet", Some(10), Some(1))?,
-                    grouping_task("part-3.parquet", Some(10), Some(1))?,
+                    grouping_task("part-0.parquet", Some(10))?,
+                    grouping_task("part-1.parquet", Some(10))?,
+                    grouping_task("part-2.parquet", Some(10))?,
+                    grouping_task("part-3.parquet", Some(10))?,
                 ],
                 target,
             )?;
@@ -5301,7 +5267,6 @@ mod tests {
 
         assert_eq!(grouped.path, "part-with-delta-metadata.parquet");
         assert_eq!(grouped.file_size, Some(123));
-        assert_eq!(grouped.estimated_input_rows, Some(7));
         assert_eq!(
             grouped.partition_values.get("region").map(String::as_str),
             Some("us-west")
@@ -5312,27 +5277,12 @@ mod tests {
     }
 
     #[test]
-    fn unknown_rows_keep_partition_row_estimates_unknown() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let partitions = group_scan_file_tasks(
-            vec![
-                grouping_task("part-0.parquet", Some(10), None)?,
-                grouping_task("part-1.parquet", Some(10), Some(1))?,
-            ],
-            1,
-        )?;
-
-        assert_eq!(partitions[0].estimated_input_rows, None);
-        Ok(())
-    }
-
-    #[test]
-    fn grouping_reports_estimate_overflow_without_disclosing_paths()
+    fn grouping_reports_byte_estimate_overflow_without_disclosing_paths()
     -> Result<(), Box<dyn std::error::Error>> {
         let byte_error = group_scan_file_tasks(
             vec![
-                grouping_task("secret-byte.parquet", Some(u64::MAX), Some(1))?,
-                grouping_task("other.parquet", Some(1), Some(1))?,
+                grouping_task("secret-byte.parquet", Some(u64::MAX))?,
+                grouping_task("other.parquet", Some(1))?,
             ],
             1,
         )
@@ -5342,17 +5292,6 @@ mod tests {
         assert_eq!(byte_error.phase(), DeltaReaderPhase::ScanPlanning);
         assert!(!byte_error.to_string().contains("secret-byte"));
 
-        let row_error = group_scan_file_tasks(
-            vec![
-                grouping_task("secret-row.parquet", Some(1), Some(u64::MAX))?,
-                grouping_task("other.parquet", Some(1), Some(1))?,
-            ],
-            1,
-        )
-        .err()
-        .ok_or("row overflow must fail")?;
-        assert_eq!(row_error.code(), "scan_partition_planning");
-        assert!(!row_error.to_string().contains("secret-row"));
         Ok(())
     }
 
@@ -5976,7 +5915,6 @@ mod tests {
             .next()
             .ok_or("expected one selected task")?;
         assert_eq!(task.path, "west.parquet");
-        assert_eq!(task.estimated_input_rows, Some(2));
         assert_eq!(
             task.partition_values.get("region").map(String::as_str),
             Some("us-west")

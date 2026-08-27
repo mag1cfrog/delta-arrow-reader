@@ -478,7 +478,6 @@ mod tests {
             path: "part-000.parquet".to_owned(),
             file_size: None,
             parquet_byte_range: None,
-            estimated_input_rows: None,
             modification_time_ms: None,
             partition_values: partition_values
                 .iter()

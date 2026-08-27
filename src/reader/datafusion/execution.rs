@@ -513,7 +513,7 @@ fn partitions_from_file_groups(
             .into_iter()
             .map(task_from_partitioned_file)
             .collect::<DataFusionResult<Vec<_>>>()?;
-        partitions.push(build_partition(tasks).map_err(datafusion_error)?);
+        partitions.push(build_partition(tasks));
     }
     Ok(partitions)
 }
@@ -535,11 +535,6 @@ fn task_from_partitioned_file(file: PartitionedFile) -> DataFusionResult<DeltaSc
         return Err(adapter_error("scan_file_range_invalid"));
     }
     task.parquet_byte_range = (start != 0 || end != file_size).then_some(start..end);
-    if task.parquet_byte_range.is_some() {
-        // A range covers an unknown subset of the file's rows, so the original
-        // whole-file estimate is no longer valid for partition accounting.
-        task.estimated_input_rows = None;
-    }
     Ok(task)
 }
 
@@ -1110,12 +1105,19 @@ mod tests {
             path: path.to_owned(),
             file_size: size,
             parquet_byte_range: None,
-            estimated_input_rows: size,
             modification_time_ms: None,
             partition_values: Default::default(),
             deletion_vector: DeletionVectorMetadata::default(),
             transform: KernelPhysicalToLogicalTransform::default(),
         }
+    }
+
+    fn partition_estimated_bytes(partition: &DeltaScanPartition) -> Option<u64> {
+        partition
+            .file_tasks
+            .iter()
+            .map(DeltaScanFileTask::estimated_scan_bytes)
+            .sum()
     }
 
     #[allow(clippy::expect_used)]
@@ -1141,14 +1143,14 @@ mod tests {
         let input = vec![build_partition(vec![
             sized_file_task("large.parquet", Some(100)),
             sized_file_task("small.parquet", Some(20)),
-        ])?];
+        ])];
         let partitions = repartition_file_tasks(&input, 4, 1, IntraFileRepartitioning::default())?
             .ok_or("not repartitioned")?;
 
         assert_eq!(
             partitions
                 .iter()
-                .map(|partition| partition.estimated_input_bytes)
+                .map(partition_estimated_bytes)
                 .collect::<Vec<_>>(),
             vec![Some(30); 4]
         );
@@ -1172,9 +1174,6 @@ mod tests {
             );
             if task.path == "small.parquet" {
                 assert!(task.parquet_byte_range.is_none());
-                assert_eq!(task.estimated_input_rows, Some(20));
-            } else {
-                assert_eq!(task.estimated_input_rows, None);
             }
         }
         assert_eq!(
@@ -1194,9 +1193,8 @@ mod tests {
     fn file_repartitioning_never_escapes_an_existing_range() -> TestResult {
         let mut task = sized_file_task("partial.parquet", Some(100));
         task.parquet_byte_range = Some(20..80);
-        task.estimated_input_rows = None;
         let partitions = repartition_file_tasks(
-            &[build_partition(vec![task])?],
+            &[build_partition(vec![task])],
             3,
             1,
             IntraFileRepartitioning::default(),
@@ -1215,7 +1213,7 @@ mod tests {
             partitions
                 .iter()
                 .flat_map(|partition| &partition.file_tasks)
-                .all(|task| task.file_size == Some(100) && task.estimated_input_rows.is_none())
+                .all(|task| task.file_size == Some(100))
         );
 
         Ok(())
@@ -1224,10 +1222,10 @@ mod tests {
     #[test]
     fn file_repartitioning_policy_controls_full_whole_file_plans() -> TestResult {
         let input = vec![
-            build_partition(vec![sized_file_task("huge.parquet", Some(1_000))])?,
-            build_partition(vec![sized_file_task("small-0.parquet", Some(10))])?,
-            build_partition(vec![sized_file_task("small-1.parquet", Some(10))])?,
-            build_partition(vec![sized_file_task("small-2.parquet", Some(10))])?,
+            build_partition(vec![sized_file_task("huge.parquet", Some(1_000))]),
+            build_partition(vec![sized_file_task("small-0.parquet", Some(10))]),
+            build_partition(vec![sized_file_task("small-1.parquet", Some(10))]),
+            build_partition(vec![sized_file_task("small-2.parquet", Some(10))]),
         ];
 
         assert!(
@@ -1239,7 +1237,7 @@ mod tests {
         assert_eq!(
             rebalanced
                 .iter()
-                .map(|partition| partition.estimated_input_bytes)
+                .map(partition_estimated_bytes)
                 .collect::<Vec<_>>(),
             [Some(258), Some(258), Some(258), Some(256)]
         );
@@ -1267,7 +1265,7 @@ mod tests {
         let input = vec![build_partition(vec![sized_file_task(
             "known.parquet",
             Some(120),
-        )])?];
+        )])];
 
         assert!(
             repartition_file_tasks(&input, 4, 121, IntraFileRepartitioning::default())?.is_none()
@@ -1277,7 +1275,7 @@ mod tests {
                 &[build_partition(vec![sized_file_task(
                     "unknown.parquet",
                     None,
-                )])?],
+                )])],
                 4,
                 1,
                 IntraFileRepartitioning::default(),
@@ -1289,7 +1287,7 @@ mod tests {
                 &[build_partition(vec![sized_file_task(
                     "empty.parquet",
                     Some(0),
-                )])?],
+                )])],
                 4,
                 1,
                 IntraFileRepartitioning::default(),
@@ -1303,7 +1301,7 @@ mod tests {
             invalid.parquet_byte_range = Some(range);
             assert!(
                 repartition_file_tasks(
-                    &[build_partition(vec![invalid])?],
+                    &[build_partition(vec![invalid])],
                     4,
                     1,
                     IntraFileRepartitioning::default(),
@@ -1318,7 +1316,7 @@ mod tests {
                 &[build_partition(vec![sized_file_task(
                     "oversized.parquet",
                     Some(oversized),
-                )])?],
+                )])],
                 2,
                 1,
                 IntraFileRepartitioning::default(),
@@ -1859,7 +1857,6 @@ mod tests {
             path: "missing-partition.parquet".to_owned(),
             file_size: None,
             parquet_byte_range: None,
-            estimated_input_rows: None,
             modification_time_ms: None,
             partition_values: Default::default(),
             deletion_vector: DeletionVectorMetadata::default(),
