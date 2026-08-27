@@ -114,7 +114,7 @@ struct DirectParquetFileReadRequest {
     kernel_schemas: KernelScanSchemas,
     physical_predicate: Option<DeltaKernelPredicate>,
     row_predicate: Option<DeltaKernelPredicate>,
-    output_batch_size: Option<usize>,
+    output_batch_size_rows: Option<usize>,
     permit: FileReadPermit,
     cancellation: ScanCancellation,
 }
@@ -230,7 +230,7 @@ impl DirectParquetFileReader {
         &self,
         task: &DeltaScanFileTask,
         provider_schema: SchemaRef,
-        output_batch_size: Option<usize>,
+        output_batch_size_rows: Option<usize>,
         physical_predicate: Option<&DeltaKernelPredicate>,
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
@@ -238,7 +238,7 @@ impl DirectParquetFileReader {
         self.open_parquet_stream_with_metadata_cache(
             task,
             provider_schema,
-            output_batch_size,
+            output_batch_size_rows,
             physical_predicate,
             row_predicate,
             include_original_row_index,
@@ -252,7 +252,7 @@ impl DirectParquetFileReader {
         &self,
         task: &DeltaScanFileTask,
         provider_schema: SchemaRef,
-        output_batch_size: Option<usize>,
+        output_batch_size_rows: Option<usize>,
         physical_predicate: Option<&DeltaKernelPredicate>,
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
@@ -354,7 +354,7 @@ impl DirectParquetFileReader {
             Some(row_filter) => builder.with_row_filter(row_filter),
             None => builder,
         };
-        let builder = match output_batch_size {
+        let builder = match output_batch_size_rows {
             Some(batch_size) => builder.with_batch_size(batch_size),
             None => builder,
         };
@@ -394,7 +394,7 @@ impl DirectParquetFileReader {
             result = self.open_parquet_stream_with_metadata_cache(
                 &request.task,
                 request.physical_schema,
-                request.output_batch_size,
+                request.output_batch_size_rows,
                 request.physical_predicate.as_ref(),
                 request
                     .row_predicate
@@ -551,7 +551,7 @@ fn metadata_with_view_types(
 
 pub(crate) fn direct_parquet_file_executor(
     plan: &Arc<DeltaScanPlan>,
-    output_batch_size: Option<usize>,
+    output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let reader = Arc::new(DirectParquetFileReader::new(
@@ -561,7 +561,7 @@ pub(crate) fn direct_parquet_file_executor(
     ));
     direct_parquet_file_executor_from_reader::<false>(
         plan,
-        output_batch_size,
+        output_batch_size_rows,
         row_predicate,
         reader,
         None,
@@ -571,13 +571,13 @@ pub(crate) fn direct_parquet_file_executor(
 #[cfg(feature = "datafusion")]
 pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
     plan: &Arc<DeltaScanPlan>,
-    output_batch_size: Option<usize>,
+    output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
     metadata_cache: Arc<DirectParquetMetadataCache>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     direct_parquet_file_executor_from_reader::<true>(
         plan,
-        output_batch_size,
+        output_batch_size_rows,
         row_predicate,
         Arc::new(DirectParquetFileReader::new(
             Arc::clone(&plan.engine_context),
@@ -590,7 +590,7 @@ pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
 
 fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
     plan: &Arc<DeltaScanPlan>,
-    output_batch_size: Option<usize>,
+    output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
     reader: Arc<DirectParquetFileReader>,
     metadata_cache: Option<Arc<DirectParquetMetadataCache>>,
@@ -621,7 +621,7 @@ fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
                 kernel_schemas,
                 physical_predicate,
                 row_predicate,
-                output_batch_size,
+                output_batch_size_rows,
                 permit,
                 cancellation,
             };
@@ -2266,7 +2266,7 @@ mod tests {
             kernel_schemas: plan.kernel_schemas.clone(),
             physical_predicate: plan.physical_predicate.clone(),
             row_predicate: None,
-            output_batch_size: Some(2),
+            output_batch_size_rows: Some(2),
             permit,
             cancellation,
         }

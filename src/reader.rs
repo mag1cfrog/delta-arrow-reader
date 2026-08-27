@@ -642,10 +642,14 @@ impl Drop for DeltaBatchStream {
 
 pub(crate) fn direct_parquet_executor(
     plan: &Arc<DeltaScanPlan>,
-    output_batch_size: Option<usize>,
+    output_batch_size_rows: Option<usize>,
     row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
 ) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
-    backend::direct_parquet::direct_parquet_file_executor(plan, output_batch_size, row_predicate)
+    backend::direct_parquet::direct_parquet_file_executor(
+        plan,
+        output_batch_size_rows,
+        row_predicate,
+    )
 }
 
 pub(crate) fn delta_kernel_executor(
