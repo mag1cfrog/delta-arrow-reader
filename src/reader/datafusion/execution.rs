@@ -1489,7 +1489,7 @@ mod tests {
         assert_eq!(metrics.output_batch_size, Some(1));
         assert_eq!(metrics.reader_metrics.scan_partitions_started, 4);
         assert_eq!(metrics.reader_metrics.file_tasks_completed, 4);
-        assert_eq!(metrics.reader_metrics.rows_produced, 6);
+        assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 6);
 
         let hidden = build_plan(
             &table,

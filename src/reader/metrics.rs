@@ -34,10 +34,10 @@ pub struct DeltaReadMetricsSnapshot {
     pub file_tasks_started: u64,
     /// Data-file tasks that completed normally, including independently read file ranges.
     pub file_tasks_completed: u64,
-    /// Backend-logical record batches handed to the scheduler.
-    pub batches_produced: u64,
-    /// Backend-logical rows handed to the scheduler.
-    pub rows_produced: u64,
+    /// Batches emitted by the scheduler before final stream operations.
+    pub scheduler_batches_emitted: u64,
+    /// Rows emitted by the scheduler before final stream operations.
+    pub scheduler_rows_emitted: u64,
     /// Deletion-vector payloads loaded.
     pub deletion_vector_payloads_loaded: u64,
     /// Deletion-vector masks applied.
@@ -77,8 +77,8 @@ struct DeltaReadMetricsInner {
     scan_partitions_completed: AtomicU64,
     file_tasks_started: AtomicU64,
     file_tasks_completed: AtomicU64,
-    batches_produced: AtomicU64,
-    rows_produced: AtomicU64,
+    scheduler_batches_emitted: AtomicU64,
+    scheduler_rows_emitted: AtomicU64,
     deletion_vector_payloads_loaded: AtomicU64,
     deletion_vectors_applied: AtomicU64,
     deletion_vector_rows_deleted: AtomicU64,
@@ -121,8 +121,8 @@ impl DeltaReadMetrics {
                 scan_partitions_completed: AtomicU64::new(0),
                 file_tasks_started: AtomicU64::new(0),
                 file_tasks_completed: AtomicU64::new(0),
-                batches_produced: AtomicU64::new(0),
-                rows_produced: AtomicU64::new(0),
+                scheduler_batches_emitted: AtomicU64::new(0),
+                scheduler_rows_emitted: AtomicU64::new(0),
                 deletion_vector_payloads_loaded: AtomicU64::new(0),
                 deletion_vectors_applied: AtomicU64::new(0),
                 deletion_vector_rows_deleted: AtomicU64::new(0),
@@ -152,8 +152,8 @@ impl DeltaReadMetrics {
             scan_partitions_completed: load(&inner.scan_partitions_completed),
             file_tasks_started: load(&inner.file_tasks_started),
             file_tasks_completed: load(&inner.file_tasks_completed),
-            batches_produced: load(&inner.batches_produced),
-            rows_produced: load(&inner.rows_produced),
+            scheduler_batches_emitted: load(&inner.scheduler_batches_emitted),
+            scheduler_rows_emitted: load(&inner.scheduler_rows_emitted),
             deletion_vector_payloads_loaded: load(&inner.deletion_vector_payloads_loaded),
             deletion_vectors_applied: load(&inner.deletion_vectors_applied),
             deletion_vector_rows_deleted: load(&inner.deletion_vector_rows_deleted),
@@ -204,9 +204,12 @@ impl DeltaReadMetrics {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn record_batch_produced(&self, rows: usize) {
-        saturating_fetch_add(&self.inner.batches_produced, 1);
-        saturating_fetch_add(&self.inner.rows_produced, usize_to_u64_saturating(rows));
+    pub(crate) fn record_scheduler_batch_emitted(&self, rows: usize) {
+        saturating_fetch_add(&self.inner.scheduler_batches_emitted, 1);
+        saturating_fetch_add(
+            &self.inner.scheduler_rows_emitted,
+            usize_to_u64_saturating(rows),
+        );
     }
 
     #[allow(dead_code)]
@@ -307,8 +310,8 @@ mod tests {
         assert_eq!(direct.scan_partitions_completed, 0);
         assert_eq!(direct.file_tasks_started, 0);
         assert_eq!(direct.file_tasks_completed, 0);
-        assert_eq!(direct.batches_produced, 0);
-        assert_eq!(direct.rows_produced, 0);
+        assert_eq!(direct.scheduler_batches_emitted, 0);
+        assert_eq!(direct.scheduler_rows_emitted, 0);
         assert_eq!(direct.deletion_vector_payloads_loaded, 0);
         assert_eq!(direct.deletion_vectors_applied, 0);
         assert_eq!(direct.deletion_vector_rows_deleted, 0);
@@ -335,8 +338,8 @@ mod tests {
             &metrics.inner.scan_partitions_completed,
             &metrics.inner.file_tasks_started,
             &metrics.inner.file_tasks_completed,
-            &metrics.inner.batches_produced,
-            &metrics.inner.rows_produced,
+            &metrics.inner.scheduler_batches_emitted,
+            &metrics.inner.scheduler_rows_emitted,
             &metrics.inner.deletion_vector_payloads_loaded,
             &metrics.inner.deletion_vectors_applied,
             &metrics.inner.deletion_vector_rows_deleted,
@@ -357,8 +360,8 @@ mod tests {
         assert_eq!(snapshot.scan_partitions_completed, 2);
         assert_eq!(snapshot.file_tasks_started, 3);
         assert_eq!(snapshot.file_tasks_completed, 4);
-        assert_eq!(snapshot.batches_produced, 5);
-        assert_eq!(snapshot.rows_produced, 6);
+        assert_eq!(snapshot.scheduler_batches_emitted, 5);
+        assert_eq!(snapshot.scheduler_rows_emitted, 6);
         assert_eq!(snapshot.deletion_vector_payloads_loaded, 7);
         assert_eq!(snapshot.deletion_vectors_applied, 8);
         assert_eq!(snapshot.deletion_vector_rows_deleted, 9);

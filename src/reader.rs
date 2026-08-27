@@ -994,7 +994,7 @@ mod tests {
 
     async fn wait_for_batches(metrics: &DeltaReadMetrics, expected: u64) {
         timeout(Duration::from_secs(5), async {
-            while metrics.snapshot().batches_produced < expected {
+            while metrics.snapshot().scheduler_batches_emitted < expected {
                 tokio::task::yield_now().await;
             }
         })
@@ -1059,7 +1059,7 @@ mod tests {
         for _ in 0..32 {
             tokio::task::yield_now().await;
         }
-        assert_eq!(metrics.snapshot().batches_produced, 2);
+        assert_eq!(metrics.snapshot().scheduler_batches_emitted, 2);
         assert_eq!(limiter.active_file_reads(), 2);
 
         first_partition_gate.notify_one();
@@ -1070,7 +1070,7 @@ mod tests {
             ids.push(batch_id(&batch?));
         }
         assert_eq!(ids, [2, 10, 20]);
-        assert_eq!(metrics.snapshot().batches_produced, 4);
+        assert_eq!(metrics.snapshot().scheduler_batches_emitted, 4);
         assert_eq!(metrics.snapshot().scan_partitions_completed, 2);
         assert_eq!(limiter.active_file_reads(), 0);
         Ok(())
@@ -1100,7 +1100,7 @@ mod tests {
             }
         })
         .await?;
-        assert_eq!(metrics.snapshot().batches_produced, 2);
+        assert_eq!(metrics.snapshot().scheduler_batches_emitted, 2);
         assert_eq!(metrics.snapshot().scan_partitions_completed, 0);
         Ok(())
     }

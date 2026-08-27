@@ -349,7 +349,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert_eq!(full_ids.len(), 8);
         assert_eq!(full_metrics.snapshot().files_planned, 2);
         assert_eq!(full_metrics.snapshot().file_tasks_completed, 2);
-        assert_eq!(full_metrics.snapshot().rows_produced, 8);
+        assert_eq!(full_metrics.snapshot().scheduler_rows_emitted, 8);
 
         let (repeat_batches, _) =
             collect_scan(table.scan().with_target_partitions(2)?.build().await?).await?;
@@ -451,7 +451,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
             .await?;
         let (signed_zero_batches, signed_zero_metrics) = collect_scan(signed_zero).await?;
         assert_eq!(ids(&signed_zero_batches), [1]);
-        assert_eq!(signed_zero_metrics.snapshot().rows_produced, 8);
+        assert_eq!(signed_zero_metrics.snapshot().scheduler_rows_emitted, 8);
 
         for limit in [1, 3, 5, 8, 20] {
             let (batches, _) = collect_scan(
@@ -473,7 +473,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert!(zero_batches.is_empty());
         let zero_snapshot = zero_metrics.snapshot();
         assert_eq!(zero_snapshot.file_tasks_started, 0);
-        assert_eq!(zero_snapshot.batches_produced, 0);
+        assert_eq!(zero_snapshot.scheduler_batches_emitted, 0);
 
         let early_options = DeltaReaderExecutionOptions::new()
             .with_prefetch_file_count_per_partition(0)
@@ -493,8 +493,8 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert_eq!(early_snapshot.files_planned, 2);
         assert_eq!(early_snapshot.file_tasks_started, 1);
         assert_eq!(early_snapshot.file_tasks_completed, 0);
-        assert_eq!(early_snapshot.batches_produced, 1);
-        assert_eq!(early_snapshot.rows_produced, 2);
+        assert_eq!(early_snapshot.scheduler_batches_emitted, 1);
+        assert_eq!(early_snapshot.scheduler_rows_emitted, 2);
         tokio::task::yield_now().await;
         let after_yield = early_metrics.snapshot();
         assert_eq!(
@@ -502,10 +502,13 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
             early_snapshot.file_tasks_started
         );
         assert_eq!(
-            after_yield.batches_produced,
-            early_snapshot.batches_produced
+            after_yield.scheduler_batches_emitted,
+            early_snapshot.scheduler_batches_emitted
         );
-        assert_eq!(after_yield.rows_produced, early_snapshot.rows_produced);
+        assert_eq!(
+            after_yield.scheduler_rows_emitted,
+            early_snapshot.scheduler_rows_emitted
+        );
 
         let error = match table.scan().with_target_partitions(0) {
             Ok(_) => panic!("zero partition target was accepted"),
@@ -547,7 +550,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
         tokio::task::yield_now().await;
         let snapshot = partial_metrics.snapshot();
         assert!(snapshot.file_tasks_started >= 1);
-        assert!(snapshot.rows_produced >= u64::try_from(first.num_rows())?);
+        assert!(snapshot.scheduler_rows_emitted >= u64::try_from(first.num_rows())?);
 
         let missing = TestTable::missing_data_file("error")?;
         let table = DeltaTableBuilder::new(missing.uri()).load_table().await?;
@@ -636,8 +639,8 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         let (kernel_residual, kernel_residual_metrics) = collect_scan(kernel_residual).await?;
         assert_eq!(sorted_ids(&direct_residual), [1]);
         assert_eq!(sorted_ids(&kernel_residual), sorted_ids(&direct_residual));
-        assert_eq!(direct_residual_metrics.snapshot().rows_produced, 8);
-        assert_eq!(kernel_residual_metrics.snapshot().rows_produced, 8);
+        assert_eq!(direct_residual_metrics.snapshot().scheduler_rows_emitted, 8);
+        assert_eq!(kernel_residual_metrics.snapshot().scheduler_rows_emitted, 8);
 
         let per_scan_override = direct
             .scan()

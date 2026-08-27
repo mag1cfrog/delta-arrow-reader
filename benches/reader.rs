@@ -91,8 +91,8 @@ const CSV_HEADER: [&str; 80] = [
     "provider_stats_dynamic_filter_snapshot_attempts_p50",
     "provider_stats_dynamic_partition_tasks_kept_missing_metadata_p50",
     "provider_stats_dynamic_partition_tasks_kept_unsupported_expression_p50",
-    "provider_stats_batches_produced_p50",
-    "provider_stats_rows_produced_p50",
+    "provider_stats_scheduler_batches_emitted_p50",
+    "provider_stats_scheduler_rows_emitted_p50",
     "provider_stats_deletion_vector_payloads_loaded_p50",
     "provider_stats_deletion_vectors_applied_p50",
     "provider_stats_deletion_vector_rows_deleted_p50",
@@ -262,8 +262,8 @@ struct ReadSummary {
     dynamic_filter_snapshot_attempts: u64,
     dynamic_partition_tasks_kept_missing_metadata: u64,
     dynamic_partition_tasks_kept_unsupported_expression: u64,
-    batches_produced: u64,
-    rows_produced: u64,
+    scheduler_batches_emitted: u64,
+    scheduler_rows_emitted: u64,
     deletion_vector_payloads_loaded: u64,
     deletion_vectors_applied: u64,
     deletion_vector_rows_deleted: u64,
@@ -1580,8 +1580,8 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         dynamic_partition_tasks_kept_unsupported_expression: dynamic(|snapshot| {
             snapshot.dynamic_partition_tasks_kept_unsupported_expression
         }),
-        batches_produced: counter(|reader| reader.batches_produced),
-        rows_produced: counter(|reader| reader.rows_produced),
+        scheduler_batches_emitted: counter(|reader| reader.scheduler_batches_emitted),
+        scheduler_rows_emitted: counter(|reader| reader.scheduler_rows_emitted),
         deletion_vector_payloads_loaded: counter(|reader| reader.deletion_vector_payloads_loaded),
         deletion_vectors_applied: counter(|reader| reader.deletion_vectors_applied),
         deletion_vector_rows_deleted: counter(|reader| reader.deletion_vector_rows_deleted),
@@ -1667,8 +1667,8 @@ fn csv_row(
             .to_string(),
         read.dynamic_partition_tasks_kept_unsupported_expression
             .to_string(),
-        read.batches_produced.to_string(),
-        read.rows_produced.to_string(),
+        read.scheduler_batches_emitted.to_string(),
+        read.scheduler_rows_emitted.to_string(),
         read.deletion_vector_payloads_loaded.to_string(),
         read.deletion_vectors_applied.to_string(),
         read.deletion_vector_rows_deleted.to_string(),
@@ -2087,7 +2087,7 @@ mod tests {
             )?;
             let http_measurement = run_once(&http_config, &http, 4).await?;
             let reader = &http_measurement.metrics[0].reader_metrics;
-            assert_eq!(reader.rows_produced, 32_768);
+            assert_eq!(reader.scheduler_rows_emitted, 32_768);
             assert_eq!(reader.parquet_data_file_range_get_operations, Some(8));
             Ok::<_, Box<dyn Error>>(())
         })

@@ -501,7 +501,7 @@ fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExe
 
 async fn wait_for_delivered_batch_metrics(metrics: &DeltaReadMetrics) {
     for _ in 0..1000 {
-        if metrics.snapshot().batches_produced > 0 {
+        if metrics.snapshot().scheduler_batches_emitted > 0 {
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
@@ -708,8 +708,8 @@ fn assert_missing_required(
     assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
     assert_eq!(metrics.file_tasks_started, 1, "{case_name}");
     assert_eq!(metrics.file_tasks_completed, 0, "{case_name}");
-    assert_eq!(metrics.batches_produced, 0, "{case_name}");
-    assert_eq!(metrics.rows_produced, 0, "{case_name}");
+    assert_eq!(metrics.scheduler_batches_emitted, 0, "{case_name}");
+    assert_eq!(metrics.scheduler_rows_emitted, 0, "{case_name}");
     Ok(())
 }
 
@@ -778,7 +778,7 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
     runtime()?.block_on(async {
         let fixture = RealParquetDeltaTable::new_with_deletion_vector("direct-dv-predicate", &[1])?;
 
-        for (name, value, expected, rows_produced, rows_deleted) in [
+        for (name, value, expected, scheduler_rows_emitted, rows_deleted) in [
             ("only deleted row", 2, Vec::new(), 0, 1),
             ("live row", 1, vec![1], 1, 0),
         ] {
@@ -799,7 +799,10 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
                 .await?,
                 &expected,
             )?;
-            assert_eq!(metrics.rows_produced, rows_produced, "{name}");
+            assert_eq!(
+                metrics.scheduler_rows_emitted, scheduler_rows_emitted,
+                "{name}"
+            );
             assert_eq!(metrics.deletion_vector_payloads_loaded, 1, "{name}");
             assert_eq!(metrics.deletion_vectors_applied, 1, "{name}");
             assert_eq!(metrics.deletion_vector_rows_deleted, rows_deleted, "{name}");
@@ -822,7 +825,7 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
             return Err("predicate selecting no rows unexpectedly failed".into());
         };
         assert!(batch_ids(&batch)?.is_empty());
-        assert_eq!(metrics.rows_produced, 0);
+        assert_eq!(metrics.scheduler_rows_emitted, 0);
         assert_eq!(metrics.deletion_vector_failures, 0);
         assert_eq!(metrics.deletion_vector_rejections, 0);
         Ok::<_, Box<dyn Error>>(())
@@ -859,7 +862,7 @@ fn direct_partial_pruning_predicate_remains_residual_only() -> TestResult {
             &[2],
         )?;
 
-        assert_eq!(metrics.rows_produced, 3);
+        assert_eq!(metrics.scheduler_rows_emitted, 3);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -991,7 +994,7 @@ fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
                 case.name
             );
             assert_eq!(
-                metrics.rows_produced,
+                metrics.scheduler_rows_emitted,
                 u64::try_from(expected.len())?,
                 "{}",
                 case.name
@@ -1016,7 +1019,10 @@ fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
             }
             if case.require_multiple_batches {
                 assert!(batch_count > 1, "{}", case.name);
-                assert_eq!(metrics.batches_produced, u64::try_from(batch_count)?);
+                assert_eq!(
+                    metrics.scheduler_batches_emitted,
+                    u64::try_from(batch_count)?
+                );
             }
 
             if case.compare_official {
@@ -1069,8 +1075,8 @@ fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
         assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.file_tasks_started, 1);
         assert_eq!(metrics.file_tasks_completed, 0);
-        assert_eq!(metrics.batches_produced, 0);
-        assert_eq!(metrics.rows_produced, 0);
+        assert_eq!(metrics.scheduler_batches_emitted, 0);
+        assert_eq!(metrics.scheduler_rows_emitted, 0);
         assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
         assert_eq!(metrics.deletion_vectors_applied, 0);
         assert_eq!(metrics.deletion_vector_rows_deleted, 0);
@@ -1118,13 +1124,16 @@ fn direct_preserves_frozen_file_and_batch_order() -> TestResult {
             assert_eq!(metrics.file_tasks_started, expected_files, "{name}");
             assert_eq!(metrics.file_tasks_completed, expected_files, "{name}");
             assert_eq!(
-                metrics.rows_produced,
+                metrics.scheduler_rows_emitted,
                 u64::try_from(expected.len())?,
                 "{name}"
             );
             if require_multiple_batches {
                 assert!(batch_count > 1, "{name}");
-                assert_eq!(metrics.batches_produced, u64::try_from(batch_count)?);
+                assert_eq!(
+                    metrics.scheduler_batches_emitted,
+                    u64::try_from(batch_count)?
+                );
             }
         }
         Ok::<_, Box<dyn Error>>(())
@@ -1167,8 +1176,8 @@ fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
         );
         assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(metrics.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(metrics.batches_produced, 0);
-        assert_eq!(metrics.rows_produced, 0);
+        assert_eq!(metrics.scheduler_batches_emitted, 0);
+        assert_eq!(metrics.scheduler_rows_emitted, 0);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1192,8 +1201,8 @@ fn direct_stream_drop_stops_future_file_scheduling() -> TestResult {
         assert_eq!(metrics.scan_partitions_completed, 0);
         assert_eq!(metrics.file_tasks_started, 1);
         assert_eq!(metrics.file_tasks_completed, 0);
-        assert!((1..=2).contains(&metrics.batches_produced));
-        assert!((1..=16_384).contains(&metrics.rows_produced));
+        assert!((1..=2).contains(&metrics.scheduler_batches_emitted));
+        assert!((1..=16_384).contains(&metrics.scheduler_rows_emitted));
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1223,8 +1232,8 @@ fn direct_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult 
         assert_eq!(metrics.scan_partitions_completed, 0);
         assert_eq!(metrics.file_tasks_started, 1);
         assert_eq!(metrics.file_tasks_completed, 0);
-        assert!((1..=2).contains(&metrics.batches_produced));
-        assert!((1..=16_384).contains(&metrics.rows_produced));
+        assert!((1..=2).contains(&metrics.scheduler_batches_emitted));
+        assert!((1..=16_384).contains(&metrics.scheduler_rows_emitted));
         assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
         assert_eq!(metrics.deletion_vectors_applied, 1);
         assert!((1..=3).contains(&metrics.deletion_vector_rows_deleted));
@@ -1261,7 +1270,7 @@ fn direct_backpressure_bounds_future_file_scheduling() -> TestResult {
         assert_eq!(complete.scan_partitions_completed, 1);
         assert_eq!(complete.file_tasks_started, 2);
         assert_eq!(complete.file_tasks_completed, 2);
-        assert_eq!(complete.rows_produced, 40_000);
+        assert_eq!(complete.scheduler_rows_emitted, 40_000);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1291,7 +1300,7 @@ fn direct_prefetch_preserves_file_order_and_completes() -> TestResult {
             metrics.parquet_task_bytes_admitted,
             metrics.estimated_input_bytes
         );
-        assert_eq!(metrics.rows_produced, 18_000);
+        assert_eq!(metrics.scheduler_rows_emitted, 18_000);
         Ok::<_, Box<dyn Error>>(())
     })
 }

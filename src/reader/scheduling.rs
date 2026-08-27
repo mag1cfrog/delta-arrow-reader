@@ -674,7 +674,7 @@ where
             cancellation.cancel();
             return DrainFile::Cancelled;
         };
-        metrics.record_batch_produced(rows);
+        metrics.record_scheduler_batch_emitted(rows);
         permit.send(Ok(batch));
     }
 }
@@ -1205,8 +1205,8 @@ mod tests {
         assert_eq!(snapshot.scan_partitions_completed, 1);
         assert_eq!(snapshot.file_tasks_started, 2);
         assert_eq!(snapshot.file_tasks_completed, 2);
-        assert_eq!(snapshot.batches_produced, 3);
-        assert_eq!(snapshot.rows_produced, 4);
+        assert_eq!(snapshot.scheduler_batches_emitted, 3);
+        assert_eq!(snapshot.scheduler_rows_emitted, 4);
         Ok(())
     }
 
@@ -1395,8 +1395,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.file_tasks_started, 2);
         assert_eq!(snapshot.file_tasks_completed, 1);
-        assert_eq!(snapshot.batches_produced, 2);
-        assert_eq!(snapshot.rows_produced, 2);
+        assert_eq!(snapshot.scheduler_batches_emitted, 2);
+        assert_eq!(snapshot.scheduler_rows_emitted, 2);
         Ok(())
     }
 
@@ -1420,14 +1420,14 @@ mod tests {
         let first = stream.next().await.ok_or("expected first batch")??;
         assert_eq!(batch_ids(&first)?, vec![1]);
         for _ in 0..100 {
-            if metrics.snapshot().batches_produced == 2 {
+            if metrics.snapshot().scheduler_batches_emitted == 2 {
                 break;
             }
             tokio::task::yield_now().await;
         }
         let before_drop = metrics.snapshot();
-        assert_eq!(before_drop.batches_produced, 2);
-        assert_eq!(before_drop.rows_produced, 2);
+        assert_eq!(before_drop.scheduler_batches_emitted, 2);
+        assert_eq!(before_drop.scheduler_rows_emitted, 2);
         assert_eq!(before_drop.file_tasks_started, 1);
         assert_eq!(before_drop.file_tasks_completed, 0);
         assert_eq!(limiter.active_file_reads(), 1);
@@ -1445,8 +1445,8 @@ mod tests {
         assert_eq!(after_drop.scan_partitions_completed, 0);
         assert_eq!(after_drop.file_tasks_started, 1);
         assert_eq!(after_drop.file_tasks_completed, 0);
-        assert_eq!(after_drop.batches_produced, 2);
-        assert_eq!(after_drop.rows_produced, 2);
+        assert_eq!(after_drop.scheduler_batches_emitted, 2);
+        assert_eq!(after_drop.scheduler_rows_emitted, 2);
         Ok(())
     }
 
@@ -1493,8 +1493,8 @@ mod tests {
         assert_eq!(snapshot.scan_partitions_completed, 0);
         assert_eq!(snapshot.file_tasks_started, 1);
         assert_eq!(snapshot.file_tasks_completed, 0);
-        assert_eq!(snapshot.batches_produced, 0);
-        assert_eq!(snapshot.rows_produced, 0);
+        assert_eq!(snapshot.scheduler_batches_emitted, 0);
+        assert_eq!(snapshot.scheduler_rows_emitted, 0);
         Ok(())
     }
 

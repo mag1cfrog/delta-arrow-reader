@@ -20,8 +20,8 @@ usable after its batch stream finishes or is dropped.
 | `scan_partitions_completed` | Execution partitions that reached normal completion. |
 | `file_tasks_started` | Whole-file or ranged tasks that started. |
 | `file_tasks_completed` | Whole-file or ranged tasks that reached normal completion. |
-| `batches_produced` | Logical batches emitted by the scheduler. |
-| `rows_produced` | Logical rows emitted by the scheduler. |
+| `scheduler_batches_emitted` | Batches emitted by the scheduler before final stream filtering, projection, and limits. |
+| `scheduler_rows_emitted` | Rows emitted by the scheduler before final stream filtering, projection, and limits. |
 | `deletion_vector_payloads_loaded` | Deletion-vector payloads loaded. |
 | `deletion_vectors_applied` | Deletion-vector masks applied. |
 | `deletion_vector_rows_deleted` | Rows removed by those masks. |

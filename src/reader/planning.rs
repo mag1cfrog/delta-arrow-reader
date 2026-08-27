@@ -4712,8 +4712,8 @@ mod tests {
         assert_eq!(empty_metrics.scan_partitions_completed, 0);
         assert_eq!(empty_metrics.file_tasks_started, 0);
         assert_eq!(empty_metrics.file_tasks_completed, 0);
-        assert_eq!(empty_metrics.batches_produced, 0);
-        assert_eq!(empty_metrics.rows_produced, 0);
+        assert_eq!(empty_metrics.scheduler_batches_emitted, 0);
+        assert_eq!(empty_metrics.scheduler_rows_emitted, 0);
         assert_eq!(empty_metrics.deletion_vector_payloads_loaded, 0);
         assert_eq!(empty_metrics.deletion_vectors_applied, 0);
         assert_eq!(empty_metrics.deletion_vector_rows_deleted, 0);
@@ -5482,8 +5482,8 @@ mod tests {
         assert_eq!(metrics.scan_partitions_completed, 0);
         assert_eq!(metrics.file_tasks_started, 0);
         assert_eq!(metrics.file_tasks_completed, 0);
-        assert_eq!(metrics.batches_produced, 0);
-        assert_eq!(metrics.rows_produced, 0);
+        assert_eq!(metrics.scheduler_batches_emitted, 0);
+        assert_eq!(metrics.scheduler_rows_emitted, 0);
         assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
         assert_eq!(metrics.deletion_vectors_applied, 0);
         assert_eq!(metrics.deletion_vector_rows_deleted, 0);
@@ -5585,8 +5585,8 @@ mod tests {
         assert_eq!(metrics.scan_partitions_completed, 3);
         assert_eq!(metrics.file_tasks_started, 3);
         assert_eq!(metrics.file_tasks_completed, 3);
-        assert_eq!(metrics.batches_produced, 3);
-        assert_eq!(metrics.rows_produced, 0);
+        assert_eq!(metrics.scheduler_batches_emitted, 3);
+        assert_eq!(metrics.scheduler_rows_emitted, 0);
         Ok(())
     }
 

@@ -3219,7 +3219,7 @@ mod tests {
 
             assert_eq!(ids, expected_ids);
             let metrics = metrics.snapshot();
-            assert_eq!(metrics.rows_produced, u64::try_from(ids.len())?);
+            assert_eq!(metrics.scheduler_rows_emitted, u64::try_from(ids.len())?);
             assert_eq!(metrics.deletion_vector_rows_deleted, expected_deleted);
         }
         Ok(())
@@ -3311,8 +3311,8 @@ mod tests {
             assert_eq!(metrics.scan_partitions_completed, 1);
             assert_eq!(metrics.file_tasks_started, 1);
             assert_eq!(metrics.file_tasks_completed, 1);
-            assert_eq!(metrics.batches_produced, expected_batches);
-            assert_eq!(metrics.rows_produced, 5);
+            assert_eq!(metrics.scheduler_batches_emitted, expected_batches);
+            assert_eq!(metrics.scheduler_rows_emitted, 5);
             assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
             assert_eq!(metrics.deletion_vectors_applied, 1);
             assert_eq!(metrics.deletion_vector_rows_deleted, 1);
@@ -3631,7 +3631,7 @@ mod tests {
             assert_eq!(metrics.scan_partitions_completed, 2);
             assert_eq!(metrics.file_tasks_started, 2);
             assert_eq!(metrics.file_tasks_completed, 2);
-            assert_eq!(metrics.rows_produced, 12);
+            assert_eq!(metrics.scheduler_rows_emitted, 12);
         }
         Ok(())
     }
@@ -3772,8 +3772,8 @@ mod tests {
             assert_eq!(metrics.scan_partitions_completed, 0);
             assert_eq!(metrics.file_tasks_started, 1);
             assert_eq!(metrics.file_tasks_completed, 0);
-            assert_eq!(metrics.batches_produced, 0);
-            assert_eq!(metrics.rows_produced, 0);
+            assert_eq!(metrics.scheduler_batches_emitted, 0);
+            assert_eq!(metrics.scheduler_rows_emitted, 0);
             assert_eq!(metrics.deletion_vector_failures, deletion_vector_failures);
             assert_eq!(metrics.parquet_data_file_range_get_operations, None);
             assert_eq!(metrics.parquet_data_file_full_get_operations, None);

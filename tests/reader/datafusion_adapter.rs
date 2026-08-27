@@ -534,7 +534,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     assert_eq!(metrics.file_tasks_started, expected_tasks);
     assert_eq!(metrics.file_tasks_completed, expected_tasks);
     assert_eq!(
-        metrics.rows_produced,
+        metrics.scheduler_rows_emitted,
         u64::try_from(expected.len())? * executions
     );
     assert!(
@@ -642,8 +642,8 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
     let metrics = metrics[0].snapshot().reader_metrics;
     assert!(metrics.file_tasks_started > 0);
     assert_eq!(metrics.file_tasks_completed, 0);
-    assert_eq!(metrics.batches_produced, 0);
-    assert_eq!(metrics.rows_produced, 0);
+    assert_eq!(metrics.scheduler_batches_emitted, 0);
+    assert_eq!(metrics.scheduler_rows_emitted, 0);
     assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
     assert!(
         (1..=metrics.file_tasks_started).contains(&metrics.deletion_vector_failures),
@@ -914,7 +914,13 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
     let first_batches = collect_plan(&context, first).await?;
     assert_eq!(ids(&first_batches), [2, 3]);
     assert_eq!(regions(&first_batches), ["west", "east"]);
-    assert_eq!(first_handles[0].snapshot().reader_metrics.rows_produced, 3);
+    assert_eq!(
+        first_handles[0]
+            .snapshot()
+            .reader_metrics
+            .scheduler_rows_emitted,
+        3
+    );
 
     let second = context
         .sql("SELECT id FROM orders WHERE region = 'west' ORDER BY id")
@@ -939,8 +945,20 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
         Some(2)
     );
     assert_eq!(ids(&collect_plan(&context, second).await?), [1, 2]);
-    assert_eq!(first_handles[0].snapshot().reader_metrics.rows_produced, 3);
-    assert_eq!(second_handles[0].snapshot().reader_metrics.rows_produced, 2);
+    assert_eq!(
+        first_handles[0]
+            .snapshot()
+            .reader_metrics
+            .scheduler_rows_emitted,
+        3
+    );
+    assert_eq!(
+        second_handles[0]
+            .snapshot()
+            .reader_metrics
+            .scheduler_rows_emitted,
+        2
+    );
 
     assert_eq!(
         ids(&context
@@ -1261,8 +1279,8 @@ async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult 
     assert_eq!(metrics.scan_partitions_completed, 0);
     assert_eq!(metrics.file_tasks_started, 0);
     assert_eq!(metrics.file_tasks_completed, 0);
-    assert_eq!(metrics.batches_produced, 0);
-    assert_eq!(metrics.rows_produced, 0);
+    assert_eq!(metrics.scheduler_batches_emitted, 0);
+    assert_eq!(metrics.scheduler_rows_emitted, 0);
     assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
     assert_eq!(metrics.deletion_vectors_applied, 0);
     assert_eq!(metrics.deletion_vector_rows_deleted, 0);
@@ -1303,8 +1321,8 @@ async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestRe
     let metrics = metrics[0].snapshot();
     assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
     assert_eq!(metrics.reader_metrics.file_tasks_completed, 0);
-    assert_eq!(metrics.reader_metrics.batches_produced, 0);
-    assert_eq!(metrics.reader_metrics.rows_produced, 0);
+    assert_eq!(metrics.reader_metrics.scheduler_batches_emitted, 0);
+    assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 0);
     Ok(())
 }
 
@@ -1340,7 +1358,12 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
     drop(stream);
 
     for _ in 0..1000 {
-        if metrics[0].snapshot().reader_metrics.batches_produced > 0 {
+        if metrics[0]
+            .snapshot()
+            .reader_metrics
+            .scheduler_batches_emitted
+            > 0
+        {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
@@ -1350,8 +1373,8 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
     assert_eq!(metrics.reader_metrics.scan_partitions_completed, 0);
     assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
     assert_eq!(metrics.reader_metrics.file_tasks_completed, 0);
-    assert!((1..=2).contains(&metrics.reader_metrics.batches_produced));
-    assert!((1..=16_384).contains(&metrics.reader_metrics.rows_produced));
+    assert!((1..=2).contains(&metrics.reader_metrics.scheduler_batches_emitted));
+    assert!((1..=16_384).contains(&metrics.reader_metrics.scheduler_rows_emitted));
     Ok(())
 }
 
@@ -1463,7 +1486,7 @@ async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
     assert_eq!(metrics.reader_metrics.files_planned, 2);
     assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
     assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
-    assert_eq!(metrics.reader_metrics.rows_produced, 2);
+    assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 2);
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
     assert_eq!(metrics.dynamic_filters_unsupported, 0);
@@ -1530,7 +1553,10 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
         .downcast_ref::<StringViewArray>()
         .ok_or("Delta Kernel did not preserve the DataFusion view schema")?;
     assert_eq!(names.iter().collect::<Vec<_>>(), [Some("bob")]);
-    assert_eq!(metrics[0].snapshot().reader_metrics.rows_produced, 3);
+    assert_eq!(
+        metrics[0].snapshot().reader_metrics.scheduler_rows_emitted,
+        3
+    );
 
     register_table(
         &context,
