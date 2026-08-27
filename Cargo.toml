@@ -16,9 +16,8 @@ exclude = [
     ".gitignore",
     "benches/reader.rs",
     "tests/benchmark_harness.rs",
-    "tests/datafusion_provider.rs",
-    "tests/portable_fixtures.rs",
-    "tests/support/**",
+    "tests/reader.rs",
+    "tests/reader/**",
 ]
 
 [[bench]]
@@ -41,6 +40,7 @@ missing_docs = "deny"
 
 [lints.clippy]
 expect_used = "deny"
+mod_module_files = "deny"
 panic = "deny"
 unwrap_used = "deny"
 
