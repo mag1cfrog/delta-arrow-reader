@@ -118,12 +118,12 @@ struct LogicalFileReadRequest {
 struct SchemaMatch {
     target_schema: SchemaRef,
     projected_roots: Vec<usize>,
-    target_columns: Vec<TargetColumn>,
+    target_column_plans: Vec<TargetColumnPlan>,
     needs_batch_reshape: bool,
 }
 
 #[derive(Clone)]
-enum TargetColumn {
+enum TargetColumnPlan {
     ProjectedStreamColumn {
         stream_index: usize,
         field_plan: FieldPlan,
@@ -138,7 +138,7 @@ enum FieldPlan {
         target_type: DataType,
     },
     Struct {
-        children: Vec<StructChild>,
+        child_plans: Vec<StructChildPlan>,
     },
     List {
         element_plan: Box<FieldPlan>,
@@ -156,7 +156,7 @@ impl FieldPlan {
 }
 
 #[derive(Clone)]
-enum StructChild {
+enum StructChildPlan {
     ProjectedChild {
         child_index: usize,
         field_plan: FieldPlan,
@@ -753,11 +753,11 @@ impl SchemaMatch {
         batch: RecordBatch,
     ) -> Result<RecordBatch, delta_kernel::Error> {
         let columns = self
-            .target_columns
+            .target_column_plans
             .iter()
             .zip(self.target_schema.fields())
-            .map(|(column, field)| match column {
-                TargetColumn::ProjectedStreamColumn {
+            .map(|(column_plan, field)| match column_plan {
+                TargetColumnPlan::ProjectedStreamColumn {
                     stream_index,
                     field_plan,
                 } => reshape_array_to_target_field(
@@ -765,7 +765,7 @@ impl SchemaMatch {
                     field,
                     field_plan,
                 ),
-                TargetColumn::Null => Ok(new_null_array(field.data_type(), batch.num_rows())),
+                TargetColumnPlan::Null => Ok(new_null_array(field.data_type(), batch.num_rows())),
             })
             .collect::<Result<Vec<ArrayRef>, _>>()?;
 
@@ -800,50 +800,52 @@ fn build_schema_match(
         .collect::<Vec<_>>();
     projected_roots.sort_unstable();
     projected_roots.dedup();
-    let target_columns = root_matches
+    let target_column_plans = root_matches
         .iter()
         .zip(target_schema.fields())
         .map(|(root_match, target_field)| match root_match {
             Some(root_match) => projected_roots
                 .iter()
                 .position(|root| *root == root_match.parquet_root_index)
-                .map(|stream_index| TargetColumn::ProjectedStreamColumn {
+                .map(|stream_index| TargetColumnPlan::ProjectedStreamColumn {
                     stream_index,
                     field_plan: root_match.field_plan.clone(),
                 })
                 .ok_or_else(|| {
                     delta_kernel::Error::generic("matched Parquet root was not projected")
                 }),
-            None if target_field.is_nullable() => Ok(TargetColumn::Null),
+            None if target_field.is_nullable() => Ok(TargetColumnPlan::Null),
             None => Err(delta_kernel::Error::generic(format!(
                 "non-nullable target field '{}' is missing from the Parquet file",
                 target_field.name()
             ))),
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let needs_batch_reshape = target_columns
+    let needs_batch_reshape = target_column_plans
         .iter()
         .zip(target_schema.fields())
         .enumerate()
-        .any(|(target_index, (column, target_field))| match column {
-            TargetColumn::ProjectedStreamColumn {
-                stream_index,
-                field_plan,
-            } => {
-                *stream_index != target_index
-                    || !field_plan.is_identity()
-                    || projected_roots
-                        .get(*stream_index)
-                        .and_then(|root| parquet_arrow_schema.fields().get(*root))
-                        .is_none_or(|file_field| file_field.name() != target_field.name())
-            }
-            TargetColumn::Null => true,
-        });
+        .any(
+            |(target_index, (column_plan, target_field))| match column_plan {
+                TargetColumnPlan::ProjectedStreamColumn {
+                    stream_index,
+                    field_plan,
+                } => {
+                    *stream_index != target_index
+                        || !field_plan.is_identity()
+                        || projected_roots
+                            .get(*stream_index)
+                            .and_then(|root| parquet_arrow_schema.fields().get(*root))
+                            .is_none_or(|file_field| file_field.name() != target_field.name())
+                }
+                TargetColumnPlan::Null => true,
+            },
+        );
 
     Ok(SchemaMatch {
         target_schema,
         projected_roots,
-        target_columns,
+        target_column_plans,
         needs_batch_reshape,
     })
 }
@@ -1106,7 +1108,7 @@ fn build_matched_struct_field_plan(
             "target field '{path}' expected Parquet struct field metadata to match Arrow child count"
         )));
     }
-    let children = target_fields
+    let child_plans = target_fields
         .iter()
         .map(|target_child| {
             match_target_struct_child(
@@ -1118,23 +1120,27 @@ fn build_matched_struct_field_plan(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let needs_reshape = file_field.data_type() != target_field.data_type()
-        || children.iter().zip(target_fields.iter()).enumerate().any(
-            |(target_index, (child, target_child))| match child {
-                StructChild::ProjectedChild {
-                    child_index,
-                    field_plan,
-                } => {
-                    *child_index != target_index
-                        || !field_plan.is_identity()
-                        || file_fields
-                            .get(*child_index)
-                            .is_none_or(|file_child| file_child.name() != target_child.name())
-                }
-                StructChild::Null => true,
-            },
-        );
+        || child_plans
+            .iter()
+            .zip(target_fields.iter())
+            .enumerate()
+            .any(
+                |(target_index, (child_plan, target_child))| match child_plan {
+                    StructChildPlan::ProjectedChild {
+                        child_index,
+                        field_plan,
+                    } => {
+                        *child_index != target_index
+                            || !field_plan.is_identity()
+                            || file_fields
+                                .get(*child_index)
+                                .is_none_or(|file_child| file_child.name() != target_child.name())
+                    }
+                    StructChildPlan::Null => true,
+                },
+            );
     if needs_reshape {
-        Ok(FieldPlan::Struct { children })
+        Ok(FieldPlan::Struct { child_plans })
     } else {
         Ok(FieldPlan::Identity)
     }
@@ -1145,7 +1151,7 @@ fn match_target_struct_child(
     file_fields: &Fields,
     parquet_children: &[TypePtr],
     path: &str,
-) -> Result<StructChild, delta_kernel::Error> {
+) -> Result<StructChildPlan, delta_kernel::Error> {
     if let Some(field_id) = arrow_field_id(target_child)? {
         let matches = parquet_children
             .iter()
@@ -1161,7 +1167,7 @@ fn match_target_struct_child(
                         "target field '{path}' matched Parquet field id {field_id} without Arrow metadata"
                     ))
                 })?;
-                return Ok(StructChild::ProjectedChild {
+                return Ok(StructChildPlan::ProjectedChild {
                     child_index: *index,
                     field_plan: build_matched_field_plan(
                         target_child,
@@ -1185,14 +1191,14 @@ fn match_target_struct_child(
         .find(|(_, file_child)| file_child.name() == target_child.name())
     else {
         return if target_child.is_nullable() {
-            Ok(StructChild::Null)
+            Ok(StructChildPlan::Null)
         } else {
             Err(delta_kernel::Error::generic(format!(
                 "non-nullable target field '{path}' is missing from the Parquet file"
             )))
         };
     };
-    Ok(StructChild::ProjectedChild {
+    Ok(StructChildPlan::ProjectedChild {
         child_index: index,
         field_plan: build_matched_field_plan(
             target_child,
@@ -1285,7 +1291,7 @@ fn reshape_array_to_target_field(
         FieldPlan::Cast { target_type } => {
             cast(array.as_ref(), target_type).map_err(delta_kernel::Error::from)
         }
-        FieldPlan::Struct { children } => {
+        FieldPlan::Struct { child_plans } => {
             let DataType::Struct(target_fields) = target_field.data_type() else {
                 return Err(delta_kernel::Error::generic(format!(
                     "target field '{}' expected struct reshape plan but has type {}",
@@ -1303,11 +1309,11 @@ fn reshape_array_to_target_field(
                         array.data_type()
                     ))
                 })?;
-            let columns = children
+            let columns = child_plans
                 .iter()
                 .zip(target_fields.iter())
-                .map(|(child, target_child)| match child {
-                    StructChild::ProjectedChild {
+                .map(|(child_plan, target_child)| match child_plan {
+                    StructChildPlan::ProjectedChild {
                         child_index,
                         field_plan,
                     } => reshape_array_to_target_field(
@@ -1315,7 +1321,7 @@ fn reshape_array_to_target_field(
                         target_child,
                         field_plan,
                     ),
-                    StructChild::Null => {
+                    StructChildPlan::Null => {
                         Ok(new_null_array(target_child.data_type(), struct_array.len()))
                     }
                 })
@@ -4342,7 +4348,7 @@ mod tests {
             array,
             &target_field,
             &super::FieldPlan::Struct {
-                children: vec![super::StructChild::ProjectedChild {
+                child_plans: vec![super::StructChildPlan::ProjectedChild {
                     child_index: 0,
                     field_plan: super::FieldPlan::Cast {
                         target_type: target_child.data_type().clone(),
