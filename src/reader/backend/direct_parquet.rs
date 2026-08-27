@@ -55,6 +55,7 @@ struct DirectParquetReader {
     store: Arc<dyn ObjectStore>,
     execution_options: DeltaScanExecutionOptions,
     metrics: DeltaScanMetrics,
+    metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 }
 
 /// Parquet footer metadata shared by ranged tasks within one physical scan.
@@ -184,18 +185,24 @@ impl DirectParquetReader {
             store,
             execution_options,
             metrics,
+            metadata_cache: None,
         }
+    }
+
+    #[cfg(any(feature = "datafusion", test))]
+    fn with_metadata_cache(mut self, metadata_cache: Arc<RangedParquetMetadataCache>) -> Self {
+        self.metadata_cache = Some(metadata_cache);
+        self
     }
 
     async fn load_ranged_parquet_metadata(
         &self,
-        metadata_cache: Option<&RangedParquetMetadataCache>,
         path: &Path,
         file_size: u64,
         reader: &mut ParquetObjectReader,
         options: &ArrowReaderOptions,
     ) -> Result<Arc<ParquetMetaData>, DeltaReaderError> {
-        let metadata = match metadata_cache {
+        let metadata = match self.metadata_cache.as_deref() {
             Some(cache) => cache
                 .entry(path, file_size)
                 .get_or_try_init(|| reader.get_metadata(Some(options)))
@@ -219,7 +226,7 @@ impl DirectParquetReader {
         self.buffer_small_parquet_object(object).await
     }
 
-    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
     async fn open_physical_parquet_stream(
         &self,
         task: &DeltaScanFileTask,
@@ -228,29 +235,6 @@ impl DirectParquetReader {
         physical_predicate: Option<&DeltaKernelPredicate>,
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
-    ) -> Result<PhysicalParquetStream, DeltaReaderError> {
-        self.open_physical_parquet_stream_with_metadata_cache(
-            task,
-            target_schema,
-            output_batch_size_rows,
-            physical_predicate,
-            row_predicate,
-            include_original_row_index,
-            None,
-        )
-        .await
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn open_physical_parquet_stream_with_metadata_cache(
-        &self,
-        task: &DeltaScanFileTask,
-        target_schema: SchemaRef,
-        output_batch_size_rows: Option<usize>,
-        physical_predicate: Option<&DeltaKernelPredicate>,
-        row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
-        include_original_row_index: bool,
-        metadata_cache: Option<&RangedParquetMetadataCache>,
     ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
         let file_size = object.file_size;
@@ -269,13 +253,7 @@ impl DirectParquetReader {
             // Ranged tasks need explicit footer metadata to select row groups.
             // Sharing it avoids one footer read for every range of the same file.
             let metadata = self
-                .load_ranged_parquet_metadata(
-                    metadata_cache,
-                    &path,
-                    file_size,
-                    &mut reader,
-                    &reader_options,
-                )
+                .load_ranged_parquet_metadata(&path, file_size, &mut reader, &reader_options)
                 .await?;
             let metadata = ArrowReaderMetadata::try_new(metadata, reader_options.clone())
                 .boxed()
@@ -365,25 +343,15 @@ impl DirectParquetReader {
         })
     }
 
-    #[cfg(test)]
     async fn open_logical_file_stream(
         self: &Arc<Self>,
         request: LogicalFileReadRequest,
-    ) -> Result<LogicalDataFileStream, DeltaReaderError> {
-        self.open_logical_file_stream_with_metadata_cache(request, None)
-            .await
-    }
-
-    async fn open_logical_file_stream_with_metadata_cache(
-        self: &Arc<Self>,
-        request: LogicalFileReadRequest,
-        metadata_cache: Option<&RangedParquetMetadataCache>,
     ) -> Result<LogicalDataFileStream, DeltaReaderError> {
         let include_original_row_index = request.task.deletion_vector.is_present();
         let physical_stream = tokio::select! {
             biased;
             () = request.cancellation.cancelled() => return Err(cancelled_error()),
-            result = self.open_physical_parquet_stream_with_metadata_cache(
+            result = self.open_physical_parquet_stream(
                 &request.task,
                 request.physical_schema,
                 request.output_batch_size_rows,
@@ -393,7 +361,6 @@ impl DirectParquetReader {
                     .as_ref()
                     .map(|predicate| (predicate, &request.kernel_schemas)),
                 include_original_row_index,
-                metadata_cache,
             ) => result?,
         };
         if request.cancellation.is_cancelled() {
@@ -550,7 +517,7 @@ pub(crate) fn direct_parquet_file_executor(
         plan.execution_options,
         plan.metrics.clone(),
     ));
-    file_executor_from_reader(plan, output_batch_size_rows, row_predicate, reader, None)
+    file_executor_from_reader(plan, output_batch_size_rows, row_predicate, reader)
 }
 
 #[cfg(feature = "datafusion")]
@@ -564,12 +531,14 @@ pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
         plan,
         output_batch_size_rows,
         row_predicate,
-        Arc::new(DirectParquetReader::new(
-            Arc::clone(&plan.engine_context),
-            plan.execution_options,
-            plan.metrics.clone(),
-        )),
-        Some(metadata_cache),
+        Arc::new(
+            DirectParquetReader::new(
+                Arc::clone(&plan.engine_context),
+                plan.execution_options,
+                plan.metrics.clone(),
+            )
+            .with_metadata_cache(metadata_cache),
+        ),
     )
 }
 
@@ -578,7 +547,6 @@ fn file_executor_from_reader(
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
     reader: Arc<DirectParquetReader>,
-    metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let physical_schema = Arc::clone(&plan.physical_schema);
     let logical_schema = Arc::clone(&plan.logical_schema);
@@ -597,7 +565,6 @@ fn file_executor_from_reader(
         let kernel_schemas = kernel_schemas.clone();
         let physical_predicate = physical_predicate.clone();
         let row_predicate = row_predicate.clone();
-        let metadata_cache = metadata_cache.clone();
         Box::pin(async move {
             let request = LogicalFileReadRequest {
                 task,
@@ -610,9 +577,7 @@ fn file_executor_from_reader(
                 permit,
                 cancellation,
             };
-            let file = reader
-                .open_logical_file_stream_with_metadata_cache(request, metadata_cache.as_deref())
-                .await?;
+            let file = reader.open_logical_file_stream(request).await?;
             let batches = stream::try_unfold(file, |mut file| async move {
                 file.next_batch()
                     .await
@@ -2177,7 +2142,6 @@ mod tests {
             Arc<GatedObjectStore>,
             DeltaScanFileTask,
             Arc<Schema>,
-            Arc<RangedParquetMetadataCache>,
         ),
         Box<dyn std::error::Error>,
     > {
@@ -2200,13 +2164,8 @@ mod tests {
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, true),
         ]));
-        Ok((
-            Arc::new(reader),
-            gated,
-            task,
-            schema,
-            Arc::new(RangedParquetMetadataCache::default()),
-        ))
+        reader = reader.with_metadata_cache(Arc::new(RangedParquetMetadataCache::default()));
+        Ok((Arc::new(reader), gated, task, schema))
     }
 
     fn file_read_request(
@@ -2461,7 +2420,7 @@ mod tests {
     #[tokio::test]
     async fn ranged_tasks_share_one_concurrent_parquet_metadata_load()
     -> Result<(), Box<dyn std::error::Error>> {
-        let (reader, gated, mut first_task, schema, metadata_cache) = gated_ranged_metadata_reader(
+        let (reader, gated, mut first_task, schema) = gated_ranged_metadata_reader(
             "direct-ranged-metadata-single-flight",
             GateRequest::Range(1),
         )
@@ -2475,18 +2434,9 @@ mod tests {
 
         let first_reader = Arc::clone(&reader);
         let first_schema = Arc::clone(&schema);
-        let first_cache = Arc::clone(&metadata_cache);
         let first = tokio::spawn(async move {
             first_reader
-                .open_physical_parquet_stream_with_metadata_cache(
-                    &first_task,
-                    first_schema,
-                    None,
-                    None,
-                    None,
-                    false,
-                    Some(first_cache.as_ref()),
-                )
+                .open_physical_parquet_stream(&first_task, first_schema, None, None, None, false)
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
@@ -2494,15 +2444,7 @@ mod tests {
         let second_reader = Arc::clone(&reader);
         let second = tokio::spawn(async move {
             second_reader
-                .open_physical_parquet_stream_with_metadata_cache(
-                    &second_task,
-                    schema,
-                    None,
-                    None,
-                    None,
-                    false,
-                    Some(metadata_cache.as_ref()),
-                )
+                .open_physical_parquet_stream(&second_task, schema, None, None, None, false)
                 .await
         });
         tokio::task::yield_now().await;
@@ -2525,7 +2467,7 @@ mod tests {
     #[tokio::test]
     async fn failed_ranged_metadata_load_can_be_retried() -> Result<(), Box<dyn std::error::Error>>
     {
-        let (reader, gated, task, schema, metadata_cache) = gated_ranged_metadata_reader(
+        let (reader, gated, task, schema) = gated_ranged_metadata_reader(
             "direct-ranged-metadata-retry",
             GateRequest::Range(usize::MAX),
         )
@@ -2533,15 +2475,7 @@ mod tests {
         gated.fail_next_range();
 
         let error = match reader
-            .open_physical_parquet_stream_with_metadata_cache(
-                &task,
-                Arc::clone(&schema),
-                None,
-                None,
-                None,
-                false,
-                Some(metadata_cache.as_ref()),
-            )
+            .open_physical_parquet_stream(&task, Arc::clone(&schema), None, None, None, false)
             .await
         {
             Ok(_) => return Err("injected metadata failure must fail the first split task".into()),
@@ -2549,15 +2483,7 @@ mod tests {
         };
         assert_eq!(error.code(), "data_file_read");
         reader
-            .open_physical_parquet_stream_with_metadata_cache(
-                &task,
-                schema,
-                None,
-                None,
-                None,
-                false,
-                Some(metadata_cache.as_ref()),
-            )
+            .open_physical_parquet_stream(&task, schema, None, None, None, false)
             .await?;
 
         assert_eq!(gated.range_calls.load(Ordering::Acquire), 2);
@@ -2574,7 +2500,7 @@ mod tests {
     #[tokio::test]
     async fn cancelled_ranged_metadata_load_wakes_a_retrying_task()
     -> Result<(), Box<dyn std::error::Error>> {
-        let (reader, gated, task, schema, metadata_cache) = gated_ranged_metadata_reader(
+        let (reader, gated, task, schema) = gated_ranged_metadata_reader(
             "direct-ranged-metadata-cancellation",
             GateRequest::Range(1),
         )
@@ -2583,18 +2509,9 @@ mod tests {
         let first_reader = Arc::clone(&reader);
         let first_task = task.clone();
         let first_schema = Arc::clone(&schema);
-        let first_cache = Arc::clone(&metadata_cache);
         let first = tokio::spawn(async move {
             first_reader
-                .open_physical_parquet_stream_with_metadata_cache(
-                    &first_task,
-                    first_schema,
-                    None,
-                    None,
-                    None,
-                    false,
-                    Some(first_cache.as_ref()),
-                )
+                .open_physical_parquet_stream(&first_task, first_schema, None, None, None, false)
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
@@ -2610,15 +2527,7 @@ mod tests {
         let second_reader = Arc::clone(&reader);
         let second = tokio::spawn(async move {
             second_reader
-                .open_physical_parquet_stream_with_metadata_cache(
-                    &task,
-                    schema,
-                    None,
-                    None,
-                    None,
-                    false,
-                    Some(metadata_cache.as_ref()),
-                )
+                .open_physical_parquet_stream(&task, schema, None, None, None, false)
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
