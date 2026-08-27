@@ -12,7 +12,7 @@ use crate::{
     DeltaReaderError,
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     reader::{
-        deletion_vector::load_deletion_vector_selection_blocking,
+        deletion_vector::load_deletion_vector_masker_blocking,
         planning::{DeltaScanFileTask, DeltaScanPlan},
         scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
         transform::align_batch_to_logical_schema,
@@ -82,7 +82,7 @@ fn read_file(
             .as_ref()
             .map(|predicate| predicate.as_ref().clone())
     };
-    let mut deletion_vector = load_deletion_vector_selection_blocking(
+    let mut deletion_vector = load_deletion_vector_masker_blocking(
         plan.engine_context.as_ref(),
         deletion_vector,
         &plan.metrics,

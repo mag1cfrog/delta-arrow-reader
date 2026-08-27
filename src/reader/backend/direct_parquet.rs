@@ -41,9 +41,7 @@ use crate::{
     },
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     reader::{
-        deletion_vector::{
-            DeletionVectorSelection, load_deletion_vector_selection_from_engine_context,
-        },
+        deletion_vector::{DeletionVectorMasker, load_deletion_vector_masker},
         planning::{DeltaScanFileTask, DeltaScanPlan},
         scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
         transform::{
@@ -98,7 +96,7 @@ struct LogicalDataFileStream {
     kernel_schemas: KernelScanSchemas,
     logical_schema: SchemaRef,
     transform: KernelPhysicalToLogicalTransform,
-    deletion_vector: Option<DeletionVectorSelection>,
+    deletion_vector: Option<DeletionVectorMasker>,
     uses_original_row_indexes: bool,
     cancellation: ScanCancellation,
     _permit: FileReadPermit,
@@ -401,8 +399,8 @@ impl DirectParquetReader {
         if request.cancellation.is_cancelled() {
             return Err(cancelled_error());
         }
-        let deletion_vector = load_deletion_vector_selection_from_engine_context(
-            Arc::clone(&self.engine_context),
+        let deletion_vector = load_deletion_vector_masker(
+            &self.engine_context,
             request.task.deletion_vector.clone(),
             &self.metrics,
         )

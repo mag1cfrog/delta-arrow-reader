@@ -11,10 +11,7 @@ use snafu::{IntoError, ResultExt};
 
 use crate::{
     DeltaReaderError, DeltaScanMetrics,
-    delta::{
-        kernel::{DeltaKernelEngineContext, KernelDeletionVectorHandle},
-        snapshot::ArrowTableSnapshot,
-    },
+    delta::kernel::{DeltaKernelEngineContext, KernelDeletionVectorHandle},
     error::DeletionVectorReadSnafu,
 };
 
@@ -63,25 +60,11 @@ impl DeletionVectorMetadata {
 }
 
 #[allow(dead_code)]
-pub(crate) async fn load_deletion_vector_selection(
-    snapshot: &ArrowTableSnapshot,
+pub(crate) async fn load_deletion_vector_masker(
+    engine_context: &Arc<DeltaKernelEngineContext>,
     metadata: DeletionVectorMetadata,
     metrics: &DeltaScanMetrics,
-) -> Result<Option<DeletionVectorSelection>, DeltaReaderError> {
-    load_deletion_vector_selection_from_engine_context(
-        Arc::clone(snapshot.engine_context()),
-        metadata,
-        metrics,
-    )
-    .await
-}
-
-#[allow(dead_code)]
-pub(crate) async fn load_deletion_vector_selection_from_engine_context(
-    engine_context: Arc<DeltaKernelEngineContext>,
-    metadata: DeletionVectorMetadata,
-    metrics: &DeltaScanMetrics,
-) -> Result<Option<DeletionVectorSelection>, DeltaReaderError> {
+) -> Result<Option<DeletionVectorMasker>, DeltaReaderError> {
     let Some(handle) = metadata.handle.clone() else {
         return Ok(None);
     };
@@ -91,6 +74,7 @@ pub(crate) async fn load_deletion_vector_selection_from_engine_context(
     let rows = match cached_rows.as_ref().and_then(Weak::upgrade) {
         Some(rows) => rows,
         None => {
+            let engine_context = Arc::clone(engine_context);
             let metrics_for_task = metrics.clone();
             let rows = match tokio::task::spawn_blocking(move || {
                 load_deletion_vector_row_indexes(
@@ -111,23 +95,23 @@ pub(crate) async fn load_deletion_vector_selection_from_engine_context(
             rows
         }
     };
-    Ok(Some(DeletionVectorSelection::from_shared(
+    Ok(Some(DeletionVectorMasker::from_shared(
         rows,
         metrics.clone(),
     )))
 }
 
 #[allow(dead_code)]
-pub(crate) fn load_deletion_vector_selection_blocking(
+pub(crate) fn load_deletion_vector_masker_blocking(
     engine_context: &DeltaKernelEngineContext,
     metadata: DeletionVectorMetadata,
     metrics: &DeltaScanMetrics,
-) -> Result<Option<DeletionVectorSelection>, DeltaReaderError> {
+) -> Result<Option<DeletionVectorMasker>, DeltaReaderError> {
     let Some(handle) = metadata.handle else {
         return Ok(None);
     };
     let row_indexes = load_deletion_vector_row_indexes(engine_context, &handle, metrics)?;
-    Ok(Some(DeletionVectorSelection::from_shared(
+    Ok(Some(DeletionVectorMasker::from_shared(
         row_indexes,
         metrics.clone(),
     )))
@@ -154,7 +138,7 @@ fn load_deletion_vector_row_indexes(
 }
 
 #[allow(dead_code)]
-pub(crate) struct DeletionVectorSelection {
+pub(crate) struct DeletionVectorMasker {
     deleted_rows: Arc<DeletionVectorRows>,
     consumed_row_count: u64,
     original_row_index_deleted_cursor: Option<usize>,
@@ -174,7 +158,7 @@ enum DeletionVectorAccessMode {
 }
 
 #[allow(dead_code)]
-impl DeletionVectorSelection {
+impl DeletionVectorMasker {
     pub(crate) fn try_new(
         deleted_row_indexes: Vec<u64>,
         metrics: DeltaScanMetrics,
@@ -411,7 +395,7 @@ impl DeletionVectorSelection {
         if self.closed {
             self.reject(
                 "invalid_deletion_vector_coordinates",
-                "deletion-vector selection is already closed",
+                "deletion-vector masker is already closed",
             )
         } else {
             Ok(())
@@ -474,8 +458,8 @@ mod tests {
     use delta_kernel::scan::state::DvInfo;
 
     use super::{
-        DeletionVectorMetadata, DeletionVectorRows, DeletionVectorSelection,
-        load_deletion_vector_selection,
+        DeletionVectorMasker, DeletionVectorMetadata, DeletionVectorRows,
+        load_deletion_vector_masker,
     };
     use crate::{
         DeltaReaderError, DeltaReaderPhase, DeltaScanMetrics, DeltaSnapshotSelection,
@@ -597,8 +581,12 @@ mod tests {
         let absent_metrics = metrics();
         let absent_metadata =
             DeletionVectorMetadata::from_kernel(preserve_deletion_vector(DvInfo::default()));
-        let absent =
-            load_deletion_vector_selection(&snapshot, absent_metadata, &absent_metrics).await?;
+        let absent = load_deletion_vector_masker(
+            snapshot.engine_context(),
+            absent_metadata,
+            &absent_metrics,
+        )
+        .await?;
         assert!(absent.is_none());
         assert_eq!(absent_metrics.snapshot().deletion_vector_payloads_loaded, 0);
 
@@ -607,22 +595,29 @@ mod tests {
         assert!(inline_metadata.is_present());
         let cached_rows = Arc::clone(&inline_metadata.cached_rows);
         let second_metadata = inline_metadata.clone();
-        let (selection, second_selection) = tokio::join!(
-            load_deletion_vector_selection(&snapshot, inline_metadata.clone(), &inline_metrics),
-            load_deletion_vector_selection(&snapshot, second_metadata, &inline_metrics)
+        let (masker, second_masker) = tokio::join!(
+            load_deletion_vector_masker(
+                snapshot.engine_context(),
+                inline_metadata.clone(),
+                &inline_metrics
+            ),
+            load_deletion_vector_masker(
+                snapshot.engine_context(),
+                second_metadata,
+                &inline_metrics
+            )
         );
-        let selection = selection?.expect("inline descriptor must produce a selection");
-        let second_selection =
-            second_selection?.expect("inline descriptor must produce a second selection");
-        for selection in [&selection, &second_selection] {
+        let masker = masker?.expect("inline descriptor must produce a masker");
+        let second_masker = second_masker?.expect("inline descriptor must produce a second masker");
+        for masker in [&masker, &second_masker] {
             assert_eq!(
-                selection.deleted_rows.indexes.as_ref(),
+                masker.deleted_rows.indexes.as_ref(),
                 INLINE_DV_DELETED_ROW_INDEXES
             );
         }
         assert!(Arc::ptr_eq(
-            &selection.deleted_rows,
-            &second_selection.deleted_rows
+            &masker.deleted_rows,
+            &second_masker.deleted_rows
         ));
         assert!(
             cached_rows
@@ -632,8 +627,8 @@ mod tests {
                 .and_then(Weak::upgrade)
                 .is_some()
         );
-        drop(selection);
-        drop(second_selection);
+        drop(masker);
+        drop(second_masker);
         assert!(
             cached_rows
                 .lock()
@@ -643,9 +638,13 @@ mod tests {
                 .is_none()
         );
 
-        let reloaded = load_deletion_vector_selection(&snapshot, inline_metadata, &inline_metrics)
-            .await?
-            .expect("released inline payload must reload");
+        let reloaded = load_deletion_vector_masker(
+            snapshot.engine_context(),
+            inline_metadata,
+            &inline_metrics,
+        )
+        .await?
+        .expect("released inline payload must reload");
         assert_eq!(
             reloaded.deleted_rows.indexes.as_ref(),
             INLINE_DV_DELETED_ROW_INDEXES
@@ -669,14 +668,14 @@ mod tests {
 
         let relative_metrics = metrics();
         let relative_metadata = write_relative_metadata(&table, [0, 9])?;
-        let selection = runtime
-            .block_on(load_deletion_vector_selection(
-                &snapshot,
+        let masker = runtime
+            .block_on(load_deletion_vector_masker(
+                snapshot.engine_context(),
                 relative_metadata,
                 &relative_metrics,
             ))?
-            .expect("relative descriptor must produce a selection");
-        assert_eq!(selection.deleted_rows.indexes.as_ref(), [0, 9]);
+            .expect("relative descriptor must produce a masker");
+        assert_eq!(masker.deleted_rows.indexes.as_ref(), [0, 9]);
         assert_eq!(
             relative_metrics.snapshot().deletion_vector_payloads_loaded,
             1
@@ -685,12 +684,12 @@ mod tests {
         let empty_metrics = metrics();
         let empty_metadata = write_relative_metadata(&table, [])?;
         let mut empty = runtime
-            .block_on(load_deletion_vector_selection(
-                &snapshot,
+            .block_on(load_deletion_vector_masker(
+                snapshot.engine_context(),
                 empty_metadata,
                 &empty_metrics,
             ))?
-            .expect("empty present descriptor must produce a selection");
+            .expect("empty present descriptor must produce a masker");
         assert!(empty.deleted_rows.indexes.is_empty());
         empty.finish()?;
         let metrics = empty_metrics.snapshot();
@@ -710,7 +709,11 @@ mod tests {
             .enable_all()
             .build()?;
         let error = runtime
-            .block_on(load_deletion_vector_selection(&snapshot, missing, &metrics))
+            .block_on(load_deletion_vector_masker(
+                snapshot.engine_context(),
+                missing,
+                &metrics,
+            ))
             .err()
             .expect("missing payload must fail");
 
@@ -754,8 +757,10 @@ mod tests {
         for metadata in [malformed, truncated] {
             let metrics = metrics();
             let error = runtime
-                .block_on(load_deletion_vector_selection(
-                    &snapshot, metadata, &metrics,
+                .block_on(load_deletion_vector_masker(
+                    snapshot.engine_context(),
+                    metadata,
+                    &metrics,
                 ))
                 .err()
                 .expect("invalid Kernel payload must fail");
@@ -785,10 +790,8 @@ mod tests {
         })
     }
 
-    fn selection(
-        deleted_row_indexes: Vec<u64>,
-    ) -> Result<DeletionVectorSelection, DeltaReaderError> {
-        DeletionVectorSelection::try_new(deleted_row_indexes, metrics())
+    fn masker(deleted_row_indexes: Vec<u64>) -> Result<DeletionVectorMasker, DeltaReaderError> {
+        DeletionVectorMasker::try_new(deleted_row_indexes, metrics())
     }
 
     fn batch(ids: &[i32]) -> RecordBatch {
@@ -825,36 +828,33 @@ mod tests {
     #[test]
     fn deleted_row_indexes_are_sorted_deduplicated_and_inverted() -> Result<(), DeltaReaderError> {
         let metrics = metrics();
-        let mut selection = DeletionVectorSelection::try_new(vec![3, 1, 3], metrics.clone())?;
+        let mut masker = DeletionVectorMasker::try_new(vec![3, 1, 3], metrics.clone())?;
 
-        assert_eq!(selection.deleted_rows.indexes.as_ref(), [1, 3]);
+        assert_eq!(masker.deleted_rows.indexes.as_ref(), [1, 3]);
         assert_eq!(
-            selection.select_original_row_indexes(&row_indexes(&[0, 1, 2, 3, 4]))?,
+            masker.select_original_row_indexes(&row_indexes(&[0, 1, 2, 3, 4]))?,
             [true, false, true, false, true]
         );
-        selection.finish()?;
+        masker.finish()?;
         assert_eq!(metrics.snapshot().deletion_vector_rejections, 0);
         Ok(())
     }
 
     #[test]
     fn ordered_mode_tracks_physical_rows_across_batches() -> Result<(), DeltaReaderError> {
-        let mut selection = selection(vec![1, 4])?;
+        let mut masker = masker(vec![1, 4])?;
 
-        assert_eq!(selection.consume_ordered_batch(2)?, [true, false]);
-        assert_eq!(selection.consume_ordered_batch(0)?, Vec::<bool>::new());
-        assert_eq!(
-            selection.consume_ordered_batch(4)?,
-            [true, true, false, true]
-        );
-        selection.finish()?;
+        assert_eq!(masker.consume_ordered_batch(2)?, [true, false]);
+        assert_eq!(masker.consume_ordered_batch(0)?, Vec::<bool>::new());
+        assert_eq!(masker.consume_ordered_batch(4)?, [true, true, false, true]);
+        masker.finish()?;
         Ok(())
     }
 
     #[test]
     fn ordered_mode_handles_none_and_all_deleted() -> Result<(), DeltaReaderError> {
-        let mut none = selection(Vec::new())?;
-        let mut all = selection(vec![0, 1, 2])?;
+        let mut none = masker(Vec::new())?;
+        let mut all = masker(vec![0, 1, 2])?;
 
         assert_eq!(none.consume_ordered_batch(3)?, [true; 3]);
         assert_eq!(all.consume_ordered_batch(3)?, [false; 3]);
@@ -866,18 +866,18 @@ mod tests {
     #[test]
     fn ordered_mode_pads_live_tail_and_rejects_unconsumed_entries_and_use_after_finish()
     -> Result<(), DeltaReaderError> {
-        let mut padded = selection(vec![1])?;
+        let mut padded = masker(vec![1])?;
         assert_eq!(
             padded.consume_ordered_batch(5)?,
             [true, false, true, true, true]
         );
         padded.finish()?;
 
-        let mut overflow = selection(Vec::new())?;
+        let mut overflow = masker(Vec::new())?;
         overflow.consumed_row_count = u64::MAX;
         assert!(overflow.consume_ordered_batch(1).is_err());
 
-        let mut underrun = selection(vec![2])?;
+        let mut underrun = masker(vec![2])?;
         underrun.consume_ordered_batch(2)?;
         assert!(underrun.finish().is_err());
         assert!(underrun.consume_ordered_batch(1).is_err());
@@ -886,26 +886,26 @@ mod tests {
 
     #[test]
     fn original_index_mode_handles_sparse_monotonic_batches() -> Result<(), DeltaReaderError> {
-        let mut selection = selection(vec![1, 4, 7])?;
+        let mut masker = masker(vec![1, 4, 7])?;
 
         assert_eq!(
-            selection.select_original_row_indexes(&row_indexes(&[0, 1, 3]))?,
+            masker.select_original_row_indexes(&row_indexes(&[0, 1, 3]))?,
             [true, false, true]
         );
         assert_eq!(
-            selection.select_original_row_indexes(&row_indexes(&[4, 8, 9]))?,
+            masker.select_original_row_indexes(&row_indexes(&[4, 8, 9]))?,
             [false, true, true]
         );
-        selection.finish()?;
+        masker.finish()?;
         Ok(())
     }
 
     #[test]
     fn original_index_mode_can_finish_without_observing_rows() -> Result<(), DeltaReaderError> {
         let metrics = metrics();
-        let mut selection = DeletionVectorSelection::try_new(vec![4], metrics.clone())?;
+        let mut masker = DeletionVectorMasker::try_new(vec![4], metrics.clone())?;
 
-        selection.finish_original_row_indexes()?;
+        masker.finish_original_row_indexes()?;
 
         assert_eq!(metrics.snapshot().deletion_vector_rejections, 0);
         Ok(())
@@ -914,33 +914,33 @@ mod tests {
     #[test]
     fn original_index_mode_falls_back_for_unsorted_and_duplicate_rows()
     -> Result<(), DeltaReaderError> {
-        let mut selection = selection(vec![1, 3])?;
+        let mut masker = masker(vec![1, 3])?;
 
         assert_eq!(
-            selection.select_original_row_indexes(&row_indexes(&[3, 1, 1, 4]))?,
+            masker.select_original_row_indexes(&row_indexes(&[3, 1, 1, 4]))?,
             [false, false, false, true]
         );
-        assert_eq!(selection.original_row_index_deleted_cursor, None);
+        assert_eq!(masker.original_row_index_deleted_cursor, None);
         assert_eq!(
-            selection.select_original_row_indexes(&row_indexes(&[1, 2]))?,
+            masker.select_original_row_indexes(&row_indexes(&[1, 2]))?,
             [false, true]
         );
-        selection.finish()?;
+        masker.finish()?;
         Ok(())
     }
 
     #[test]
     fn original_index_mode_rejects_missing_and_negative_indexes() -> Result<(), DeltaReaderError> {
         for indexes in [Int64Array::from(vec![Some(0), None]), row_indexes(&[-1])] {
-            let mut selection = selection(vec![1])?;
-            assert!(selection.select_original_row_indexes(&indexes).is_err());
+            let mut masker = masker(vec![1])?;
+            assert!(masker.select_original_row_indexes(&indexes).is_err());
         }
         Ok(())
     }
 
     #[test]
     fn coordinate_modes_cannot_be_mixed() -> Result<(), DeltaReaderError> {
-        let mut ordered = selection(vec![1])?;
+        let mut ordered = masker(vec![1])?;
         ordered.consume_ordered_batch(1)?;
         assert!(
             ordered
@@ -948,7 +948,7 @@ mod tests {
                 .is_err()
         );
 
-        let mut original = selection(vec![1])?;
+        let mut original = masker(vec![1])?;
         original.select_original_row_indexes(&row_indexes(&[0]))?;
         assert!(original.consume_ordered_batch(1).is_err());
         Ok(())
@@ -956,10 +956,10 @@ mod tests {
 
     #[test]
     fn ordered_mode_requires_no_upfront_physical_row_count() -> Result<(), DeltaReaderError> {
-        let mut selection = DeletionVectorSelection::try_new(Vec::new(), metrics())?;
-        assert_eq!(selection.consume_ordered_batch(0)?, Vec::<bool>::new());
-        assert_eq!(selection.consume_ordered_batch(3)?, [true; 3]);
-        selection.finish()?;
+        let mut masker = DeletionVectorMasker::try_new(Vec::new(), metrics())?;
+        assert_eq!(masker.consume_ordered_batch(0)?, Vec::<bool>::new());
+        assert_eq!(masker.consume_ordered_batch(3)?, [true; 3]);
+        masker.finish()?;
         Ok(())
     }
 
@@ -967,13 +967,13 @@ mod tests {
     fn ordered_masking_preserves_schema_row_order_and_exact_metrics() -> Result<(), DeltaReaderError>
     {
         let metrics = metrics();
-        let mut selection = DeletionVectorSelection::try_new(vec![1, 3], metrics.clone())?;
+        let mut masker = DeletionVectorMasker::try_new(vec![1, 3], metrics.clone())?;
         let first = batch(&[10, 11]);
         let schema = first.schema();
 
-        let first = selection.mask_ordered_batch(first)?;
-        let second = selection.mask_ordered_batch(batch(&[12, 13, 14]))?;
-        selection.finish()?;
+        let first = masker.mask_ordered_batch(first)?;
+        let second = masker.mask_ordered_batch(batch(&[12, 13, 14]))?;
+        masker.finish()?;
 
         assert_eq!(ids(&first), [10]);
         assert_eq!(ids(&second), [12, 14]);
@@ -988,12 +988,12 @@ mod tests {
     }
 
     #[test]
-    fn dropping_selection_preserves_partial_masking_metrics() -> Result<(), DeltaReaderError> {
+    fn dropping_masker_preserves_partial_masking_metrics() -> Result<(), DeltaReaderError> {
         let metrics = metrics();
-        let mut selection = DeletionVectorSelection::try_new(vec![1, 3], metrics.clone())?;
-        let masked = selection.mask_ordered_batch(batch(&[10, 11]))?;
+        let mut masker = DeletionVectorMasker::try_new(vec![1, 3], metrics.clone())?;
+        let masked = masker.mask_ordered_batch(batch(&[10, 11]))?;
         assert_eq!(ids(&masked), [10]);
-        drop(selection);
+        drop(masker);
 
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.deletion_vectors_applied, 1);
@@ -1005,19 +1005,19 @@ mod tests {
 
     #[test]
     fn masking_handles_none_all_and_sparse_original_rows() -> Result<(), DeltaReaderError> {
-        let mut none = selection(Vec::new())?;
+        let mut none = masker(Vec::new())?;
         let none_batch = none.mask_ordered_batch(batch(&[10, 11, 12]))?;
         none.finish()?;
         assert_eq!(ids(&none_batch), [10, 11, 12]);
 
-        let mut all = selection(vec![0, 1, 2])?;
+        let mut all = masker(vec![0, 1, 2])?;
         let all_batch = all.mask_ordered_batch(batch(&[10, 11, 12]))?;
         all.finish()?;
         assert_eq!(all_batch.num_rows(), 0);
         assert_eq!(all_batch.schema().field(0).name(), "id");
         assert_eq!(all_batch.schema().field(1).name(), "label");
 
-        let mut sparse = selection(vec![2])?;
+        let mut sparse = masker(vec![2])?;
         let sparse_batch = sparse
             .mask_original_row_indexes(batch(&[10, 12, 14]), Some(&row_indexes(&[0, 2, 4])))?;
         sparse.finish()?;
@@ -1028,8 +1028,8 @@ mod tests {
     #[test]
     fn coordinate_rejections_increment_only_rejection_metrics() -> Result<(), DeltaReaderError> {
         let mismatch_metrics = metrics();
-        let mut selection = DeletionVectorSelection::try_new(vec![1], mismatch_metrics.clone())?;
-        let _ = selection
+        let mut masker = DeletionVectorMasker::try_new(vec![1], mismatch_metrics.clone())?;
+        let _ = masker
             .mask_original_row_indexes(batch(&[10, 11]), Some(&row_indexes(&[0])))
             .expect_err("row-index count mismatch must fail");
         let snapshot = mismatch_metrics.snapshot();
@@ -1038,8 +1038,8 @@ mod tests {
         assert_eq!(snapshot.deletion_vector_rejections, 1);
 
         let missing_metrics = metrics();
-        let mut selection = DeletionVectorSelection::try_new(vec![1], missing_metrics.clone())?;
-        let _ = selection
+        let mut masker = DeletionVectorMasker::try_new(vec![1], missing_metrics.clone())?;
+        let _ = masker
             .mask_original_row_indexes(batch(&[10, 11]), None)
             .expect_err("missing row indexes must fail");
         let snapshot = missing_metrics.snapshot();
@@ -1052,15 +1052,13 @@ mod tests {
     #[test]
     fn terminal_errors_increment_exactly_one_failure_or_rejection()
     -> Result<(), Box<dyn std::error::Error>> {
-        let selection_metrics = metrics();
-        let mut selection = DeletionVectorSelection::try_new(vec![2], selection_metrics.clone())?;
-        let _ = selection
-            .finish()
-            .expect_err("unconsumed selection must fail");
+        let masker_metrics = metrics();
+        let mut masker = DeletionVectorMasker::try_new(vec![2], masker_metrics.clone())?;
+        let _ = masker.finish().expect_err("unconsumed masker must fail");
 
         let coordinate_metrics = metrics();
-        let mut selection = DeletionVectorSelection::try_new(vec![1], coordinate_metrics.clone())?;
-        let _ = selection
+        let mut masker = DeletionVectorMasker::try_new(vec![1], coordinate_metrics.clone())?;
+        let _ = masker
             .mask_original_row_indexes(batch(&[10]), None)
             .expect_err("missing coordinates must fail");
 
@@ -1071,8 +1069,8 @@ mod tests {
             .enable_all()
             .build()?;
         let _ = runtime
-            .block_on(load_deletion_vector_selection(
-                &snapshot,
+            .block_on(load_deletion_vector_masker(
+                snapshot.engine_context(),
                 missing_relative_metadata()?,
                 &payload_metrics,
             ))
@@ -1080,7 +1078,7 @@ mod tests {
             .expect("missing payload must fail");
 
         for (name, snapshot, failures, rejections) in [
-            ("selection", selection_metrics.snapshot(), 0, 1),
+            ("masker", masker_metrics.snapshot(), 0, 1),
             ("coordinate", coordinate_metrics.snapshot(), 0, 1),
             ("payload", payload_metrics.snapshot(), 1, 0),
         ] {
