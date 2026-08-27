@@ -34,7 +34,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 ## Read a table directly
 
-Use `load_async` from asynchronous code. The returned stream exposes live scan
+Use `load_table` from asynchronous code. The returned stream exposes live scan
 metrics and yields batches as the caller requests them.
 
 ```rust,no_run
@@ -43,7 +43,7 @@ use futures_util::TryStreamExt;
 
 # async fn read_table() -> Result<(), Box<dyn std::error::Error>> {
 let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-    .load_async()
+    .load_table()
     .await?;
 let scan = table
     .scan()
@@ -68,9 +68,6 @@ println!("files={}", metrics.snapshot().files_completed);
 # }
 ```
 
-`DeltaTableBuilder::load` is the blocking table-load alternative. Scan building
-and execution remain asynchronous.
-
 ## Register a DataFusion table
 
 The `datafusion` feature exposes `DeltaTableProvider`, `register_delta_table`,
@@ -87,7 +84,7 @@ use delta_arrow_reader::{
 
 let context = SessionContext::new();
 let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-    .load_async()
+    .load_table()
     .await?;
 register_delta_table(
     &context,

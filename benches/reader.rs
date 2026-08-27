@@ -1319,7 +1319,8 @@ async fn run_once(
     let table = DeltaTableBuilder::new(&fixture.table_uri)
         .with_storage_options(fixture.storage_options.clone())
         .with_execution_options(execution_options)
-        .load()?;
+        .load_table()
+        .await?;
     register_delta_table(
         &context,
         "orders",

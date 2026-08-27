@@ -72,8 +72,10 @@ impl Default for DeltaDataFusionScanOptions {
 ///     DeltaDataFusionScanOptions, DeltaTableBuilder, DeltaTableProvider,
 /// };
 ///
-/// # fn build_provider() -> Result<(), Box<dyn std::error::Error>> {
-/// let table = DeltaTableBuilder::new("/tmp/example-delta-table").load()?;
+/// # async fn build_provider() -> Result<(), Box<dyn std::error::Error>> {
+/// let table = DeltaTableBuilder::new("/tmp/example-delta-table")
+///     .load_table()
+///     .await?;
 /// let provider = DeltaTableProvider::try_new(
 ///     table,
 ///     DeltaDataFusionScanOptions::default(),
@@ -381,9 +383,11 @@ pub struct RegisteredDeltaTable {
 ///     DeltaDataFusionScanOptions, DeltaTableBuilder, register_delta_table,
 /// };
 ///
-/// # fn register() -> Result<(), Box<dyn std::error::Error>> {
+/// # async fn register() -> Result<(), Box<dyn std::error::Error>> {
 /// let context = SessionContext::new();
-/// let table = DeltaTableBuilder::new("/tmp/example-delta-table").load()?;
+/// let table = DeltaTableBuilder::new("/tmp/example-delta-table")
+///     .load_table()
+///     .await?;
 /// let registered = register_delta_table(
 ///     &context,
 ///     "orders",

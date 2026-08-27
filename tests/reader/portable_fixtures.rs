@@ -572,7 +572,7 @@ async fn native_stream(
 ) -> TestResult<DeltaBatchStream> {
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .with_execution_options(options)
-        .load_async()
+        .load_table()
         .await?;
     let scan = table
         .scan()
@@ -594,7 +594,7 @@ async fn scan_fixture(
     let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .with_execution_options(options)
-        .load_async()
+        .load_table()
         .await?;
     let scan = table.scan().with_target_partitions(1)?;
     let scan = match projection {

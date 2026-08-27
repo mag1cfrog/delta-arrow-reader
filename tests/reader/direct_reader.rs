@@ -252,7 +252,7 @@ fn labels(batches: &[RecordBatch]) -> Vec<Option<String>> {
 
 #[test]
 #[cfg(feature = "native-async")]
-fn table_loads_match_and_public_state_is_redacted() -> TestResult {
+fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
     let fixture = TestTable::two_versions("load")?;
     let secret_uri = fixture.uri();
     let mut storage_options = DeltaStorageOptions::new();
@@ -265,27 +265,27 @@ fn table_loads_match_and_public_state_is_redacted() -> TestResult {
     assert!(!builder_debug.contains("secret-token"));
     assert!(!builder_debug.contains("never-print-this"));
 
-    let latest = DeltaTableBuilder::new(&secret_uri).load()?;
-    let fixed = DeltaTableBuilder::new(&secret_uri)
-        .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
-        .load()?;
     let runtime = runtime()?;
-    let asynchronous = runtime.block_on(DeltaTableBuilder::new(&secret_uri).load_async())?;
-    let asynchronous_fixed = runtime.block_on(
+    let latest = runtime.block_on(DeltaTableBuilder::new(&secret_uri).load_table())?;
+    let fixed_snapshot = runtime.block_on(
         DeltaTableBuilder::new(&secret_uri)
             .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
-            .load_async(),
+            .load_snapshot(),
     )?;
+    assert_eq!(fixed_snapshot.version(), 0);
+    assert_eq!(fixed_snapshot.table_uri(), fixture.normalized_uri()?);
+    assert_eq!(
+        fixed_snapshot.protocol().snapshot_version(),
+        fixed_snapshot.version()
+    );
+    fixed_snapshot.validate_protocol()?;
+    assert!(!format!("{fixed_snapshot:?}").contains(&secret_uri));
+
+    let fixed = fixed_snapshot.into_table()?;
     let cloned = latest.clone();
 
     assert_eq!(latest.version(), 1);
     assert_eq!(fixed.version(), 0);
-    assert_eq!(asynchronous.version(), latest.version());
-    assert_eq!(asynchronous_fixed.version(), fixed.version());
-    assert_eq!(asynchronous.schema(), latest.schema());
-    assert_eq!(asynchronous_fixed.schema(), fixed.schema());
-    assert_eq!(asynchronous.protocol(), latest.protocol());
-    assert_eq!(asynchronous_fixed.protocol(), fixed.protocol());
     assert_eq!(latest.table_uri(), fixture.normalized_uri()?);
     assert!(Arc::ptr_eq(latest.schema(), cloned.schema()));
     assert_eq!(latest.protocol().snapshot_version(), latest.version());
@@ -301,7 +301,7 @@ fn local_end_to_end_example_reads_without_sql() -> TestResult {
         let fixture = TestTable::two_versions("local-example")?;
         let table = DeltaTableBuilder::new(fixture.uri())
             .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
-            .load_async()
+            .load_table()
             .await?;
         let scan = table
             .scan()
@@ -321,19 +321,20 @@ fn local_end_to_end_example_reads_without_sql() -> TestResult {
 #[cfg(feature = "native-async")]
 fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
     let fixture = TestTable::unsupported("unsupported")?;
-    let table = DeltaTableBuilder::new(fixture.uri()).load()?;
+    let runtime = runtime()?;
+    let table = runtime.block_on(DeltaTableBuilder::new(fixture.uri()).load_table())?;
 
     assert_eq!(table.version(), 0);
     assert_eq!(table.protocol().min_reader_version(), 4);
     let validation = table.validate_protocol().expect_err("protocol must fail");
     assert_eq!(validation.phase(), DeltaReaderPhase::Protocol);
-    let build = runtime()?.block_on(table.scan().build());
+    let build = runtime.block_on(table.scan().build());
     let error = match build {
         Ok(_) => panic!("unsupported protocol built a scan"),
         Err(error) => error,
     };
     assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
-    let build = runtime()?.block_on(table.scan().with_projection(vec!["missing".into()]).build());
+    let build = runtime.block_on(table.scan().with_projection(vec!["missing".into()]).build());
     let error = match build {
         Ok(_) => panic!("unsupported protocol built another scan"),
         Err(error) => error,
@@ -347,7 +348,7 @@ fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
 fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("scan")?;
-        let table = DeltaTableBuilder::new(fixture.uri()).load_async().await?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
 
         let full_scan = table.scan().with_target_partitions(2)?.build().await?;
         assert_eq!(full_scan.partition_count(), 2);
@@ -537,7 +538,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
             .with_output_buffer_capacity_per_partition(1)?;
         let table = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(options)
-            .load_async()
+            .load_table()
             .await?;
 
         let idle = table.scan().with_target_partitions(1)?.build().await?;
@@ -560,7 +561,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
         assert!(snapshot.rows_produced >= u64::try_from(first.num_rows())?);
 
         let missing = TestTable::missing_data_file("error")?;
-        let table = DeltaTableBuilder::new(missing.uri()).load_async().await?;
+        let table = DeltaTableBuilder::new(missing.uri()).load_table().await?;
         let scan = table.scan().with_target_partitions(1)?.build().await?;
         let mut stream = scan.execute().await?;
         let metrics = stream.metrics();
@@ -581,13 +582,13 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
 fn official_kernel_matches_native_direct_results() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("backend-parity")?;
-        let native = DeltaTableBuilder::new(fixture.uri()).load_async().await?;
+        let native = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let official = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(
                 DeltaReaderExecutionOptions::new()
                     .with_reader_backend(DeltaReaderBackend::OfficialKernel)?,
             )
-            .load_async()
+            .load_table()
             .await?;
         let official_options = DeltaReaderExecutionOptions::new()
             .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
@@ -676,7 +677,7 @@ fn official_kernel_reads_through_the_direct_surface() -> TestResult {
             .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
         let table = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(options)
-            .load_async()
+            .load_table()
             .await?;
         let scan = table
             .scan()

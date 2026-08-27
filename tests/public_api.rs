@@ -205,16 +205,9 @@ fn direct_reader_contract_is_public() {
         .with_storage_options(DeltaStorageOptions::new())
         .with_snapshot_selection(DeltaSnapshotSelection::Version(1))
         .with_execution_options(DeltaReaderExecutionOptions::new());
-    assert_future::<Result<DeltaTable, DeltaReaderError>>(builder.load_async());
-    let load: fn(DeltaTableBuilder) -> Result<DeltaTable, DeltaReaderError> =
-        DeltaTableBuilder::load;
-    let load_snapshot: fn(DeltaTableBuilder) -> Result<DeltaTableSnapshot, DeltaReaderError> =
-        DeltaTableBuilder::load_snapshot;
+    assert_future::<Result<DeltaTable, DeltaReaderError>>(builder.load_table());
     let snapshot_builder = DeltaTableBuilder::new("file:///tmp/table");
-    assert_future::<Result<DeltaTableSnapshot, DeltaReaderError>>(
-        snapshot_builder.load_snapshot_async(),
-    );
-    let _ = (load, load_snapshot);
+    assert_future::<Result<DeltaTableSnapshot, DeltaReaderError>>(snapshot_builder.load_snapshot());
 
     let snapshot_version: fn(&DeltaTableSnapshot) -> u64 = DeltaTableSnapshot::version;
     let snapshot_protocol: for<'a> fn(&'a DeltaTableSnapshot) -> &'a DeltaProtocolInfo =
@@ -350,23 +343,25 @@ fn datafusion_provider_contract_is_public() {
 }
 
 #[cfg(not(feature = "native-async"))]
-#[test]
-fn disabled_native_backend_fails_before_uri_access() {
+#[tokio::test]
+async fn disabled_native_backend_fails_before_uri_access() {
     let error = DeltaTableBuilder::new("this URI must never be inspected")
-        .load()
+        .load_table()
+        .await
         .expect_err("disabled default backend must fail");
     assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
     assert_eq!(error.as_str(), "unsupported_backend");
 }
 
 #[cfg(not(feature = "official-kernel"))]
-#[test]
-fn disabled_official_backend_fails_before_uri_access() -> Result<(), DeltaReaderError> {
+#[tokio::test]
+async fn disabled_official_backend_fails_before_uri_access() -> Result<(), DeltaReaderError> {
     let options = DeltaReaderExecutionOptions::new()
         .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
     let error = DeltaTableBuilder::new("this URI must never be inspected")
         .with_execution_options(options)
-        .load()
+        .load_table()
+        .await
         .expect_err("disabled official backend must fail");
     assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
     assert_eq!(error.as_str(), "unsupported_backend");

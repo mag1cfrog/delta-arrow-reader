@@ -55,8 +55,7 @@ use crate::{
         protocol::validate_protocol,
         snapshot::{
             LoadedDeltaTableSnapshot, StagedDeltaTableSnapshot, load_delta_table_snapshot_async,
-            load_delta_table_snapshot_blocking, load_staged_delta_table_snapshot_async,
-            load_staged_delta_table_snapshot_blocking,
+            load_staged_delta_table_snapshot_async,
         },
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
@@ -77,7 +76,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 ///
 /// # async fn read_table() -> Result<(), Box<dyn std::error::Error>> {
 /// let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-///     .load_async()
+///     .load_table()
 ///     .await?;
 /// let scan = table
 ///     .scan()
@@ -134,19 +133,8 @@ impl DeltaTableBuilder {
         self
     }
 
-    /// Loads the snapshot on the calling thread.
-    pub fn load(self) -> Result<DeltaTable, DeltaReaderError> {
-        validate_direct_execution_options(self.execution_options)?;
-        let snapshot = load_delta_table_snapshot_blocking(
-            &self.table_uri,
-            &self.storage_options,
-            self.snapshot_selection,
-        )?;
-        Ok(DeltaTable::new(snapshot, self.execution_options))
-    }
-
-    /// Loads the snapshot through the caller-owned Tokio runtime.
-    pub async fn load_async(self) -> Result<DeltaTable, DeltaReaderError> {
+    /// Loads a ready-to-scan table through the caller-owned Tokio runtime.
+    pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
         validate_direct_execution_options(self.execution_options)?;
         let snapshot = load_delta_table_snapshot_async(
             self.table_uri,
@@ -157,19 +145,8 @@ impl DeltaTableBuilder {
         Ok(DeltaTable::new(snapshot, self.execution_options))
     }
 
-    /// Loads snapshot metadata without converting its logical Arrow schema.
-    pub fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        validate_direct_execution_options(self.execution_options)?;
-        let snapshot = load_staged_delta_table_snapshot_blocking(
-            &self.table_uri,
-            &self.storage_options,
-            self.snapshot_selection,
-        )?;
-        Ok(DeltaTableSnapshot::new(snapshot, self.execution_options))
-    }
-
-    /// Loads snapshot metadata through the caller-owned Tokio runtime.
-    pub async fn load_snapshot_async(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
+    /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
+    pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
         validate_direct_execution_options(self.execution_options)?;
         let snapshot = load_staged_delta_table_snapshot_async(
             self.table_uri,
