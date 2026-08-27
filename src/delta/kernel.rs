@@ -2,7 +2,6 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-#[cfg(any(feature = "native-async", test))]
 use arrow::array::BooleanArray;
 use arrow::{
     array::Array as _, datatypes::SchemaRef, error::ArrowError, record_batch::RecordBatch,
@@ -86,7 +85,6 @@ pub(crate) struct KernelScanSchemas {
 }
 
 impl KernelScanSchemas {
-    #[cfg(feature = "official-kernel")]
     pub(crate) fn physical(&self) -> KernelSchemaRef {
         Arc::clone(&self.physical)
     }
@@ -419,7 +417,6 @@ impl DeltaKernelEngineContext {
         &self.table_url
     }
 
-    #[cfg(feature = "official-kernel")]
     pub(crate) fn engine(&self) -> &(dyn Engine + Send + Sync) {
         self.engine.as_ref()
     }
@@ -429,7 +426,6 @@ impl DeltaKernelEngineContext {
         Arc::clone(&self.object_store)
     }
 
-    #[cfg(any(feature = "native-async", test))]
     pub(crate) fn evaluate_predicate(
         &self,
         schemas: &KernelScanSchemas,

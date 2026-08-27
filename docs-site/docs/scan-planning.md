@@ -61,7 +61,7 @@ optional step that can divide files more finely.
 
 ## Split files with DataFusion
 
-Intra-file repartitioning is available only for NativeAsync scans through the
+Intra-file repartitioning is available only for direct Parquet scans through the
 DataFusion adapter. `DeltaFileRepartitioning` controls when the reader offers
 its whole-file groups to DataFusion:
 

@@ -29,11 +29,9 @@ use self::{
 };
 
 use crate::{
-    DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions, DeltaTable,
+    DeltaReaderError, DeltaReaderExecutionOptions, DeltaTable, ParquetReaderBackend,
     delta::kernel::delta_predicate_to_kernel_pruning,
-    reader::planning::{
-        DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan, validate_backend_available,
-    },
+    reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
     reader::transform::schema_with_view_types,
 };
 
@@ -46,7 +44,7 @@ pub struct DeltaDataFusionScanOptions {
     pub execution_options: DeltaReaderExecutionOptions,
     /// Optional explicit scan partition target.
     pub target_partitions: Option<usize>,
-    /// Controls when DataFusion may split NativeAsync Parquet files into ranged scan tasks.
+    /// Controls when DataFusion may split direct Parquet reads into ranged scan tasks.
     pub intra_file_repartitioning: DeltaFileRepartitioning,
     /// Decode string and binary data-file columns into Arrow view arrays.
     pub use_view_types: bool,
@@ -107,7 +105,6 @@ impl DeltaTableProvider {
         source_name: Option<String>,
     ) -> Result<Self, DeltaReaderError> {
         options.execution_options.validate()?;
-        validate_backend_available(options.execution_options)?;
         if options.target_partitions == Some(0) {
             return Err(DeltaReaderError::InvalidConfiguration {
                 reason: "scan_partition_target_must_be_positive",
@@ -149,7 +146,7 @@ impl DeltaTableProvider {
             &filter_refs,
             DataFusionFilterCapabilities {
                 exact_predicate_evaluation: self.options.execution_options.reader_backend()
-                    == DeltaReaderBackend::NativeAsync,
+                    == ParquetReaderBackend::DirectParquet,
             },
         )?;
         if planning
@@ -352,7 +349,7 @@ impl TableProvider for DeltaTableProvider {
             filters,
             DataFusionFilterCapabilities {
                 exact_predicate_evaluation: self.options.execution_options.reader_backend()
-                    == DeltaReaderBackend::NativeAsync,
+                    == ParquetReaderBackend::DirectParquet,
             },
         );
         Ok(planning
@@ -547,7 +544,7 @@ fn is_reserved_sql_keyword(name: &str) -> bool {
 fn trace_failure(
     event: &'static str,
     snapshot_version: u64,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     error: &DeltaReaderError,
 ) {
     tracing::debug!(

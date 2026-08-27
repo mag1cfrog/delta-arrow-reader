@@ -15,9 +15,7 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
-#[cfg(feature = "official-kernel")]
-use delta_arrow_reader::DeltaReaderBackend;
-#[cfg(feature = "native-async")]
+use delta_arrow_reader::ParquetReaderBackend;
 use delta_arrow_reader::{
     DeltaComparison, DeltaPredicate, DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection,
     DeltaStorageOptions,
@@ -25,7 +23,6 @@ use delta_arrow_reader::{
 use delta_arrow_reader::{
     DeltaReadMetrics, DeltaReaderExecutionOptions, DeltaScan, DeltaTableBuilder,
 };
-#[cfg(feature = "native-async")]
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
 use parquet::{arrow::ArrowWriter, file::properties::WriterProperties};
@@ -58,14 +55,12 @@ impl TestTable {
         Ok(table)
     }
 
-    #[cfg(feature = "native-async")]
     fn unsupported(name: &str) -> TestResult<Self> {
         let table = Self::empty(name)?;
         table.write_log(0, &[protocol(4), metadata()])?;
         Ok(table)
     }
 
-    #[cfg(feature = "native-async")]
     fn missing_data_file(name: &str) -> TestResult<Self> {
         let table = Self::empty(name)?;
         table.write_log(
@@ -88,7 +83,6 @@ impl TestTable {
         self.0.to_string_lossy().into_owned()
     }
 
-    #[cfg(feature = "native-async")]
     fn normalized_uri(&self) -> TestResult<String> {
         url::Url::from_directory_path(fs::canonicalize(&self.0)?)
             .map(|url| url.into())
@@ -226,14 +220,12 @@ fn ids(batches: &[RecordBatch]) -> Vec<i32> {
         .collect()
 }
 
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 fn sorted_ids(batches: &[RecordBatch]) -> Vec<i32> {
     let mut values = ids(batches);
     values.sort_unstable();
     values
 }
 
-#[cfg(feature = "native-async")]
 fn labels(batches: &[RecordBatch]) -> Vec<Option<String>> {
     batches
         .iter()
@@ -251,7 +243,6 @@ fn labels(batches: &[RecordBatch]) -> Vec<Option<String>> {
 }
 
 #[test]
-#[cfg(feature = "native-async")]
 fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
     let fixture = TestTable::two_versions("load")?;
     let secret_uri = fixture.uri();
@@ -295,7 +286,6 @@ fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
 }
 
 #[test]
-#[cfg(feature = "native-async")]
 fn local_end_to_end_example_reads_without_sql() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("local-example")?;
@@ -318,7 +308,6 @@ fn local_end_to_end_example_reads_without_sql() -> TestResult {
 }
 
 #[test]
-#[cfg(feature = "native-async")]
 fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
     let fixture = TestTable::unsupported("unsupported")?;
     let runtime = runtime()?;
@@ -344,7 +333,6 @@ fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
 }
 
 #[test]
-#[cfg(feature = "native-async")]
 fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("scan")?;
@@ -489,7 +477,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert_eq!(zero_snapshot.batches_produced, 0);
 
         let early_options = DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
@@ -527,12 +515,11 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
 }
 
 #[test]
-#[cfg(feature = "native-async")]
 fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("drop")?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(1)?
+            .with_prefetch_file_count_per_partition(1)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
@@ -577,54 +564,53 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
     })
 }
 
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
 #[test]
-fn official_kernel_matches_native_direct_results() -> TestResult {
+fn delta_kernel_matches_direct_results() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("backend-parity")?;
-        let native = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let official = DeltaTableBuilder::new(fixture.uri())
+        let direct = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let kernel = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(
                 DeltaReaderExecutionOptions::new()
-                    .with_reader_backend(DeltaReaderBackend::OfficialKernel)?,
+                    .with_reader_backend(ParquetReaderBackend::DeltaKernel)?,
             )
             .load_table()
             .await?;
-        let official_options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
+        let kernel_options = DeltaReaderExecutionOptions::new()
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
         let predicate = DeltaPredicate::Compare {
             column: "id".into(),
             op: DeltaComparison::GtEq,
             value: DeltaScalar::Int32(5),
         };
-        let native_scan = native
+        let direct_scan = direct
             .scan()
             .with_projection(vec!["id".into()])
             .with_predicate(predicate.clone())
             .with_target_partitions(2)?
             .build()
             .await?;
-        let official_scan = official
+        let kernel_scan = kernel
             .scan()
             .with_projection(vec!["id".into()])
             .with_predicate(predicate)
             .with_target_partitions(2)?
             .build()
             .await?;
-        let (native_batches, native_metrics) = collect_scan(native_scan).await?;
-        let (official_batches, official_metrics) = collect_scan(official_scan).await?;
+        let (direct_batches, direct_metrics) = collect_scan(direct_scan).await?;
+        let (kernel_batches, kernel_metrics) = collect_scan(kernel_scan).await?;
 
-        assert_eq!(sorted_ids(&native_batches), [5, 6, 7, 8]);
-        assert_eq!(sorted_ids(&official_batches), sorted_ids(&native_batches));
-        assert_eq!(native_metrics.snapshot().files_planned, 1);
-        assert_eq!(official_metrics.snapshot().files_planned, 1);
+        assert_eq!(sorted_ids(&direct_batches), [5, 6, 7, 8]);
+        assert_eq!(sorted_ids(&kernel_batches), sorted_ids(&direct_batches));
+        assert_eq!(direct_metrics.snapshot().files_planned, 1);
+        assert_eq!(kernel_metrics.snapshot().files_planned, 1);
         assert_eq!(
-            native_metrics.snapshot().reader_backend,
-            DeltaReaderBackend::NativeAsync
+            direct_metrics.snapshot().reader_backend,
+            ParquetReaderBackend::DirectParquet
         );
         assert_eq!(
-            official_metrics.snapshot().reader_backend,
-            DeltaReaderBackend::OfficialKernel
+            kernel_metrics.snapshot().reader_backend,
+            ParquetReaderBackend::DeltaKernel
         );
 
         let residual = DeltaPredicate::Compare {
@@ -632,49 +618,47 @@ fn official_kernel_matches_native_direct_results() -> TestResult {
             op: DeltaComparison::Eq,
             value: DeltaScalar::Float64(-0.0),
         };
-        let native_residual = native
+        let direct_residual = direct
             .scan()
             .with_projection(vec!["id".into()])
             .with_predicate(residual.clone())
             .build()
             .await?;
-        let official_residual = official
+        let kernel_residual = kernel
             .scan()
             .with_projection(vec!["id".into()])
             .with_predicate(residual)
             .build()
             .await?;
-        let (native_residual, native_residual_metrics) = collect_scan(native_residual).await?;
-        let (official_residual, official_residual_metrics) =
-            collect_scan(official_residual).await?;
-        assert_eq!(sorted_ids(&native_residual), [1]);
-        assert_eq!(sorted_ids(&official_residual), sorted_ids(&native_residual));
-        assert_eq!(native_residual_metrics.snapshot().rows_produced, 8);
-        assert_eq!(official_residual_metrics.snapshot().rows_produced, 8);
+        let (direct_residual, direct_residual_metrics) = collect_scan(direct_residual).await?;
+        let (kernel_residual, kernel_residual_metrics) = collect_scan(kernel_residual).await?;
+        assert_eq!(sorted_ids(&direct_residual), [1]);
+        assert_eq!(sorted_ids(&kernel_residual), sorted_ids(&direct_residual));
+        assert_eq!(direct_residual_metrics.snapshot().rows_produced, 8);
+        assert_eq!(kernel_residual_metrics.snapshot().rows_produced, 8);
 
-        let per_scan_override = native
+        let per_scan_override = direct
             .scan()
             .with_projection(vec!["id".into()])
-            .with_execution_options(official_options)?
+            .with_execution_options(kernel_options)?
             .build()
             .await?;
         let (override_batches, override_metrics) = collect_scan(per_scan_override).await?;
         assert_eq!(sorted_ids(&override_batches), [1, 2, 3, 4, 5, 6, 7, 8]);
         assert_eq!(
             override_metrics.snapshot().reader_backend,
-            DeltaReaderBackend::OfficialKernel
+            ParquetReaderBackend::DeltaKernel
         );
         Ok::<_, Box<dyn Error>>(())
     })
 }
 
-#[cfg(feature = "official-kernel")]
 #[test]
-fn official_kernel_reads_through_the_direct_surface() -> TestResult {
+fn delta_kernel_reads_through_the_direct_surface() -> TestResult {
     runtime()?.block_on(async {
-        let fixture = TestTable::two_versions("official-direct")?;
+        let fixture = TestTable::two_versions("kernel-direct")?;
         let options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
         let table = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(options)
             .load_table()
@@ -690,7 +674,7 @@ fn official_kernel_reads_through_the_direct_surface() -> TestResult {
         assert_eq!(ids(&batches).len(), 8);
         assert_eq!(
             metrics.snapshot().reader_backend,
-            DeltaReaderBackend::OfficialKernel
+            ParquetReaderBackend::DeltaKernel
         );
         Ok::<_, Box<dyn Error>>(())
     })

@@ -119,22 +119,21 @@ let scan_options = DeltaDataFusionScanOptions {
 ```
 
 Whole-file planning normally avoids extra ranged reads once it fills the scan
-partition target. For skewed NativeAsync scans, opt in to DataFusion
+partition target. For skewed direct Parquet scans, opt in to DataFusion
 rebalancing with `DeltaFileRepartitioning::Rebalance`.
 DataFusion's `repartition_file_scans` and `repartition_file_min_size` settings
 still control whether repartitioning runs.
 
-## Features
+## Optional feature
 
 | Feature | Default | Purpose |
 | --- | --- | --- |
-| `native-async` | Yes | Native asynchronous Parquet data-file reader and I/O metrics. |
-| `official-kernel` | No | Official Delta Kernel data-file reader backend. |
 | `datafusion` | No | DataFusion provider, registration, filtering, execution, and metrics. |
 
-At least one reader backend must be enabled to execute a scan. Select the
-backend for a scan with `DeltaReaderExecutionOptions::with_reader_backend`.
-When default features are enabled, NativeAsync is selected by default.
+The direct API and both data-file reader backends are always available.
+`ParquetReaderBackend::DirectParquet` is the default. Advanced callers can select
+`ParquetReaderBackend::DeltaKernel` with
+`DeltaReaderExecutionOptions::with_reader_backend`.
 
 ## Runtime, errors, and metrics
 
@@ -146,14 +145,14 @@ When default features are enabled, NativeAsync is selected by default.
   redacted categories. Dependency failures remain available through the
   standard error source chain.
 - `DeltaReadMetrics` is a cloneable live handle. `snapshot` returns an
-  immutable point-in-time view. NativeAsync Parquet I/O counters are `None`
-  when the OfficialKernel backend is selected.
+  immutable point-in-time view. Direct Parquet I/O counters are `None` when
+  the Delta Kernel backend is selected.
 
 ## Scope
 
 The crate supports the extracted read path: snapshot selection, protocol and
 schema loading, projections, predicates, deletion vectors, partition planning,
-bounded scheduling, NativeAsync and OfficialKernel data-file reads, and the
+bounded scheduling, direct Parquet and Delta Kernel data-file reads, and the
 optional DataFusion adapter.
 
 It does not write Delta tables, manage transactions, create a Tokio runtime,

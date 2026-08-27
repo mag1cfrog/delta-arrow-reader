@@ -21,7 +21,7 @@ pub use datafusion::{
 };
 pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
 pub use options::{
-    DeltaReaderBackend, DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
+    DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions, ParquetReaderBackend,
 };
 pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 
@@ -38,9 +38,7 @@ use futures_util::Stream;
 use snafu::ResultExt;
 
 use self::{
-    planning::{
-        DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan, validate_backend_available,
-    },
+    planning::{DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan},
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
         DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
@@ -135,7 +133,7 @@ impl DeltaTableBuilder {
 
     /// Loads a ready-to-scan table through the caller-owned Tokio runtime.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        validate_direct_execution_options(self.execution_options)?;
+        self.execution_options.validate()?;
         let snapshot = load_delta_table_snapshot_async(
             self.table_uri,
             self.storage_options,
@@ -147,7 +145,7 @@ impl DeltaTableBuilder {
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        validate_direct_execution_options(self.execution_options)?;
+        self.execution_options.validate()?;
         let snapshot = load_staged_delta_table_snapshot_async(
             self.table_uri,
             self.storage_options,
@@ -353,7 +351,7 @@ impl<'table> DeltaScanBuilder<'table> {
         mut self,
         value: DeltaReaderExecutionOptions,
     ) -> Result<Self, DeltaReaderError> {
-        validate_direct_execution_options(value)?;
+        value.validate()?;
         self.execution_options = value;
         Ok(self)
     }
@@ -361,7 +359,7 @@ impl<'table> DeltaScanBuilder<'table> {
     /// Builds one immutable single-use scan plan without reading data files.
     pub async fn build(self) -> Result<DeltaScan, DeltaReaderError> {
         self.table.validate_protocol()?;
-        validate_direct_execution_options(self.execution_options)?;
+        self.execution_options.validate()?;
         if let Some(predicate) = self.predicate.as_ref() {
             validate_predicate(predicate, self.table.schema().as_ref())?;
         }
@@ -479,14 +477,14 @@ impl DeltaScan {
             let execution = DeltaScanExecution::new(Arc::clone(&self.plan));
             let admission: FileAdmissionFn<_> = Arc::new(|_| Ok(FileAdmission::Admit));
             let executor = match backend {
-                DeltaReaderBackend::NativeAsync => native_async_executor(
+                ParquetReaderBackend::DirectParquet => direct_parquet_executor(
                     &self.plan,
                     None,
                     self.enforce_physical_predicate_rows
                         .then(|| self.plan.physical_predicate.clone())
                         .flatten(),
                 )?,
-                DeltaReaderBackend::OfficialKernel => official_kernel_executor(&self.plan)?,
+                ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan)?,
             };
             for partition in 0..partition_count {
                 partitions.push_back(execution.partition_stream(
@@ -533,7 +531,7 @@ pub struct DeltaBatchStream {
     projection: Option<Vec<usize>>,
     remaining: Option<usize>,
     snapshot_version: u64,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     partition_count: usize,
     started: bool,
     done: bool,
@@ -656,59 +654,25 @@ impl Drop for DeltaBatchStream {
     }
 }
 
-fn validate_direct_execution_options(
-    options: DeltaReaderExecutionOptions,
-) -> Result<(), DeltaReaderError> {
-    options.validate()?;
-    validate_backend_available(options)?;
-    Ok(())
-}
-
-#[cfg(feature = "native-async")]
-pub(crate) fn native_async_executor(
+pub(crate) fn direct_parquet_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size: Option<usize>,
     row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
 ) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    Ok(backend::native_async::native_async_file_executor(
+    Ok(backend::direct_parquet::direct_parquet_file_executor(
         plan,
         output_batch_size,
         row_predicate,
     ))
 }
 
-#[cfg(not(feature = "native-async"))]
-pub(crate) fn native_async_executor(
-    _plan: &Arc<DeltaScanPlan>,
-    _output_batch_size: Option<usize>,
-    _row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
-) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    crate::error::UnsupportedBackendSnafu {
-        reason: "native_async_feature_disabled",
-    }
-    .fail()
-}
-
-#[cfg(feature = "official-kernel")]
-pub(crate) fn official_kernel_executor(
+pub(crate) fn delta_kernel_executor(
     plan: &Arc<DeltaScanPlan>,
 ) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    Ok(backend::official_kernel::official_kernel_file_executor(
-        plan,
-    ))
+    Ok(backend::kernel_reader::delta_kernel_file_executor(plan))
 }
 
-#[cfg(not(feature = "official-kernel"))]
-pub(crate) fn official_kernel_executor(
-    _plan: &Arc<DeltaScanPlan>,
-) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    crate::error::UnsupportedBackendSnafu {
-        reason: "official_kernel_feature_disabled",
-    }
-    .fail()
-}
-
-fn trace_planning_started(snapshot_version: u64, backend: DeltaReaderBackend) {
+fn trace_planning_started(snapshot_version: u64, backend: ParquetReaderBackend) {
     tracing::debug!(
         target: TRACING_TARGET,
         event = "scan_planning.started",
@@ -721,7 +685,7 @@ fn trace_planning_started(snapshot_version: u64, backend: DeltaReaderBackend) {
 
 fn trace_planning_completed(
     snapshot_version: u64,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     partition_count: usize,
 ) {
     tracing::debug!(
@@ -736,7 +700,7 @@ fn trace_planning_completed(
 
 fn trace_planning_failed(
     snapshot_version: u64,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     error: &DeltaReaderError,
 ) {
     tracing::debug!(
@@ -753,7 +717,7 @@ fn trace_planning_failed(
 
 fn trace_execution_started(
     snapshot_version: u64,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     partition_count: usize,
 ) {
     tracing::debug!(
@@ -768,7 +732,7 @@ fn trace_execution_started(
 
 fn trace_execution_completed(
     snapshot_version: u64,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     partition_count: usize,
 ) {
     tracing::debug!(
@@ -783,7 +747,7 @@ fn trace_execution_completed(
 
 fn trace_execution_failed(
     snapshot_version: u64,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     partition_count: usize,
     error: &DeltaReaderError,
 ) {
@@ -801,7 +765,7 @@ fn trace_execution_failed(
 
 fn trace_execution_dropped(
     snapshot_version: u64,
-    backend: DeltaReaderBackend,
+    backend: ParquetReaderBackend,
     partition_count: usize,
 ) {
     tracing::debug!(
@@ -842,7 +806,7 @@ mod tests {
         trace_planning_failed, trace_planning_started,
     };
     use crate::{
-        DeltaReadMetrics, DeltaReaderBackend, DeltaReaderExecutionOptions,
+        DeltaReadMetrics, DeltaReaderExecutionOptions, ParquetReaderBackend,
         error::InvalidConfigurationSnafu,
         reader::{
             metrics::DeltaReadMetricsConfig,
@@ -922,7 +886,7 @@ mod tests {
 
     fn execution_options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(2))?
             .with_output_buffer_capacity_per_partition(1)
@@ -931,7 +895,7 @@ mod tests {
     fn metrics() -> DeltaReadMetrics {
         DeltaReadMetrics::new(DeltaReadMetricsConfig {
             snapshot_version: 7,
-            reader_backend: DeltaReaderBackend::NativeAsync,
+            reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 2,
             files_planned: 2,
@@ -981,7 +945,7 @@ mod tests {
             projection: None,
             remaining: None,
             snapshot_version: 7,
-            backend: DeltaReaderBackend::NativeAsync,
+            backend: ParquetReaderBackend::DirectParquet,
             partition_count: 2,
             started: false,
             done: false,
@@ -1057,13 +1021,13 @@ mod tests {
         let _ = tracing::subscriber::set_global_default(EventFields::default());
         with_default(subscriber, || {
             tracing::callsite::rebuild_interest_cache();
-            trace_planning_started(7, DeltaReaderBackend::NativeAsync);
-            trace_planning_completed(7, DeltaReaderBackend::NativeAsync, 2);
-            trace_planning_failed(7, DeltaReaderBackend::NativeAsync, &error);
-            trace_execution_started(7, DeltaReaderBackend::NativeAsync, 2);
-            trace_execution_completed(7, DeltaReaderBackend::NativeAsync, 2);
-            trace_execution_failed(7, DeltaReaderBackend::NativeAsync, 2, &error);
-            trace_execution_dropped(7, DeltaReaderBackend::NativeAsync, 2);
+            trace_planning_started(7, ParquetReaderBackend::DirectParquet);
+            trace_planning_completed(7, ParquetReaderBackend::DirectParquet, 2);
+            trace_planning_failed(7, ParquetReaderBackend::DirectParquet, &error);
+            trace_execution_started(7, ParquetReaderBackend::DirectParquet, 2);
+            trace_execution_completed(7, ParquetReaderBackend::DirectParquet, 2);
+            trace_execution_failed(7, ParquetReaderBackend::DirectParquet, 2, &error);
+            trace_execution_dropped(7, ParquetReaderBackend::DirectParquet, 2);
         });
         tracing::callsite::rebuild_interest_cache();
 

@@ -18,7 +18,7 @@ five measured repetitions. Inputs retained the frozen seed, fixture, query,
 backend, storage model, scheduling profile, Parquet controls, and schema-22
 CSV fields.
 
-The extracted invocation is:
+The current equivalent invocation is:
 
 ```bash
 cargo bench --locked -p delta-arrow-reader --bench reader --all-features -- \
@@ -26,13 +26,18 @@ cargo bench --locked -p delta-arrow-reader --bench reader --all-features -- \
   --provider-exec-storage-profile local \
   --provider-exec-workload provider_few_larger_files \
   --provider-exec-query full_rows \
-  --provider-exec-backend native_async \
+  --provider-exec-backend direct_parquet \
   --provider-exec-scheduling-profile prefetch_2_ap_target_scan_3x \
   --provider-exec-parquet-metadata-size-hint 65536 \
   --provider-exec-parquet-full-file-read-threshold disabled \
   --provider-exec-repetitions 5 \
   --output target/delta-arrow-reader-benchmark.csv
 ```
+
+The captured rows predate the backend naming cleanup and retain their original
+schema-22 `native_async` and `official_kernel` values. The current harness uses
+`direct_parquet` and `delta_kernel` and writes schema 23. The workloads and
+measurements are unchanged.
 
 Change only the workload, query, backend, storage profile, and Parquet controls
 to reproduce the other frozen cases listed below. The harness rejects cases
@@ -79,8 +84,8 @@ The focused `benchmark_harness` integration target includes the applicable
 frozen assertions for the 12-case matrix, accepted and rejected options,
 fixture shapes and fingerprints, retained-fixture ownership, unequal-file
 pruning, delayed HTTP reads, percentile and optional-value edges, Linux memory
-parsing, CSV width, deletion-vector fields, and unavailable OfficialKernel I/O
-metrics.
+parsing, CSV width, deletion-vector fields, and the Delta Kernel backend's
+unavailable Parquet I/O metrics.
 
 The remaining tests from the 71-test frozen benchmark binary stay in Delta
 Funnel because they exercise code that did not move: synthetic partition

@@ -27,17 +27,17 @@ usable after its batch stream finishes or is dropped.
 | `deletion_vector_rows_deleted` | Rows removed by those masks. |
 | `deletion_vector_failures` | Deletion-vector read or masking failures. |
 | `deletion_vector_rejections` | Deletion-vector reads rejected by safety checks. |
-| `parquet_data_file_range_get_operations` | NativeAsync data-file GET operations with a range. |
-| `parquet_data_file_full_get_operations` | NativeAsync data-file GET operations without a range. |
-| `parquet_data_file_bytes_received` | Bytes delivered successfully through the NativeAsync data-file object store. |
-| `parquet_data_file_opened_bytes` | Estimated bytes assigned to NativeAsync tasks admitted to a reader. A ranged task contributes its range length. |
+| `parquet_data_file_range_get_operations` | Direct Parquet data-file GET operations with a range. |
+| `parquet_data_file_full_get_operations` | Direct Parquet data-file GET operations without a range. |
+| `parquet_data_file_bytes_received` | Bytes delivered successfully through the direct reader's object store. |
+| `parquet_data_file_opened_bytes` | Estimated bytes assigned to direct-reader tasks. A ranged task contributes its range length. |
 
 `files_filtered_during_planning` is not an exact active-file count. Delta
 Kernel's final selection also reconciles Add and Remove actions.
 
-The four Parquet I/O fields are `Some`, including `Some(0)`, for NativeAsync.
-They are `None` for OfficialKernel because its object-store calls happen behind
-the Kernel reader boundary.
+The four Parquet I/O fields are `Some`, including `Some(0)`, for
+`DirectParquet`. They are `None` for `DeltaKernel` because its object-store
+calls happen behind the Kernel reader boundary.
 
 ## DataFusion metrics
 
@@ -63,7 +63,7 @@ and returns each distinct Delta scan metric handle once.
 
 ## Parquet I/O boundaries
 
-The I/O counters observe calls made through NativeAsync's data-file
+The I/O counters observe calls made through the direct reader's data-file
 `object_store` wrapper. They are useful for comparing scan choices, but they
 are not network billing counters.
 
@@ -75,6 +75,6 @@ are not network billing counters.
   contributes its file size, while a ranged task contributes its range length.
 
 The wrapper cannot see lower-level HTTP retries, wire compression, provider
-billing units, or object-store work hidden behind OfficialKernel. A local file
+billing units, or object-store work hidden behind `DeltaKernel`. A local file
 read may also begin before a result is delivered through the wrapper, so a
 failed or dropped local result can leave the received-byte counter at zero.

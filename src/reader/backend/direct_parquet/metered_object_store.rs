@@ -1,4 +1,4 @@
-//! Object-store metering for NativeAsync Parquet data-file reads.
+//! Object-store metering for direct Parquet data-file reads.
 
 use std::{fmt, sync::Arc};
 
@@ -182,12 +182,12 @@ mod tests {
     };
 
     use super::MeteredParquetObjectStore;
-    use crate::{DeltaReadMetrics, DeltaReaderBackend, reader::metrics::DeltaReadMetricsConfig};
+    use crate::{DeltaReadMetrics, ParquetReaderBackend, reader::metrics::DeltaReadMetricsConfig};
 
-    fn native_metrics() -> DeltaReadMetrics {
+    fn direct_metrics() -> DeltaReadMetrics {
         DeltaReadMetrics::new(DeltaReadMetricsConfig {
             snapshot_version: 1,
-            reader_backend: DeltaReaderBackend::NativeAsync,
+            reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 1,
             files_planned: 1,
@@ -210,7 +210,7 @@ mod tests {
 
     #[tokio::test]
     async fn bounded_and_unbounded_gets_record_exact_operations_and_bytes() -> Result<()> {
-        let range_metrics = native_metrics();
+        let range_metrics = direct_metrics();
         let range_store = memory_store(range_metrics.clone()).await?;
         let bytes = range_store
             .get_range(&Path::from("data.parquet"), 2..7)
@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(5));
 
-        let full_metrics = native_metrics();
+        let full_metrics = direct_metrics();
         let full_store = memory_store(full_metrics.clone()).await?;
         let bytes = full_store
             .get(&Path::from("data.parquet"))
@@ -238,7 +238,7 @@ mod tests {
 
     #[tokio::test]
     async fn head_failure_and_coalescing_match_frozen_attempt_semantics() -> Result<()> {
-        let head_metrics = native_metrics();
+        let head_metrics = direct_metrics();
         let head_store = memory_store(head_metrics.clone()).await?;
         let options = GetOptions::new().with_range(Some(1_u64..4)).with_head(true);
         let _result = head_store
@@ -249,7 +249,7 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(0));
 
-        let failure_metrics = native_metrics();
+        let failure_metrics = direct_metrics();
         let failure_store =
             MeteredParquetObjectStore::new(Arc::new(InMemory::new()), failure_metrics.clone());
         let result = failure_store
@@ -264,7 +264,7 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(0));
 
-        let coalesced_metrics = native_metrics();
+        let coalesced_metrics = direct_metrics();
         let coalesced_store = memory_store(coalesced_metrics.clone()).await?;
         let bytes = coalesced_store
             .get_ranges(&Path::from("data.parquet"), &[0..4, 8..12])
@@ -287,7 +287,7 @@ mod tests {
             .into_iter()
             .next()
             .ok_or_else(missing_chunk)?;
-        let success_metrics = native_metrics();
+        let success_metrics = direct_metrics();
         let success_store = scripted_store(
             test_get_result(
                 GetResultPayload::Stream(stream::iter(vec![Ok(first), Ok(second)]).boxed()),
@@ -305,7 +305,7 @@ mod tests {
             Some(8)
         );
 
-        let dropped_metrics = native_metrics();
+        let dropped_metrics = direct_metrics();
         let chunks = PutPayload::from_static(b"abc")
             .into_iter()
             .chain(PutPayload::from_static(b"defgh").into_iter())
@@ -334,7 +334,7 @@ mod tests {
             Some(3)
         );
 
-        let error_metrics = native_metrics();
+        let error_metrics = direct_metrics();
         let error = Error::Generic {
             store: "test",
             source: io::Error::other("payload failure").into(),
@@ -370,7 +370,7 @@ mod tests {
         let file = TemporaryTestFile::new(&vec![7_u8; 20_000])?;
         let range = 100_u64..16_500;
 
-        let dropped_metrics = native_metrics();
+        let dropped_metrics = direct_metrics();
         let dropped_store =
             scripted_store(file.get_result(range.clone())?, dropped_metrics.clone());
         let result = dropped_store
@@ -385,7 +385,7 @@ mod tests {
             Some(0)
         );
 
-        let delivered_metrics = native_metrics();
+        let delivered_metrics = direct_metrics();
         let delivered_store =
             scripted_store(file.get_result(range.clone())?, delivered_metrics.clone());
         let mut payload = delivered_store
@@ -413,7 +413,7 @@ mod tests {
 
     #[tokio::test]
     async fn delegated_operations_and_diagnostics_do_not_leak_or_meter() -> Result<()> {
-        let metrics = native_metrics();
+        let metrics = direct_metrics();
         let store = MeteredParquetObjectStore::new(Arc::new(InMemory::new()), metrics.clone());
         let first = Path::from("first.parquet");
         let second = Path::from("second.parquet");
@@ -432,7 +432,7 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_opened_bytes, Some(0));
         assert_eq!(format!("{store:?}"), "MeteredParquetObjectStore");
 
-        let redacted_metrics = native_metrics();
+        let redacted_metrics = direct_metrics();
         let redacted_store = scripted_store(
             test_get_result(GetResultPayload::Stream(stream::empty().boxed()), 0..0),
             redacted_metrics.clone(),

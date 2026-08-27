@@ -5,15 +5,15 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
-use super::options::DeltaReaderBackend;
+use super::options::ParquetReaderBackend;
 
 /// Immutable point-in-time metrics for one Delta scan.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeltaReadMetricsSnapshot {
     /// Delta snapshot version selected for the scan.
     pub snapshot_version: u64,
-    /// Data-file reader backend selected for the scan.
-    pub reader_backend: DeltaReaderBackend,
+    /// Parquet reader backend selected for the scan.
+    pub reader_backend: ParquetReaderBackend,
     /// Whether planning exhausted the Delta scan metadata iterator.
     pub scan_metadata_exhausted: Option<bool>,
     /// Final execution partitions planned for the scan, including source repartitioning.
@@ -48,13 +48,13 @@ pub struct DeltaReadMetricsSnapshot {
     pub deletion_vector_failures: u64,
     /// Deletion-vector reads rejected by safety checks.
     pub deletion_vector_rejections: u64,
-    /// NativeAsync Parquet ranged GET operations, or `None` for another backend.
+    /// Direct Parquet ranged GET operations, or `None` for another backend.
     pub parquet_data_file_range_get_operations: Option<u64>,
-    /// NativeAsync Parquet full GET operations, or `None` for another backend.
+    /// Direct Parquet full GET operations, or `None` for another backend.
     pub parquet_data_file_full_get_operations: Option<u64>,
-    /// NativeAsync Parquet payload bytes received, or `None` for another backend.
+    /// Direct Parquet payload bytes received, or `None` for another backend.
     pub parquet_data_file_bytes_received: Option<u64>,
-    /// NativeAsync Parquet file bytes opened, or `None` for another backend.
+    /// Direct Parquet file bytes opened, or `None` for another backend.
     pub parquet_data_file_opened_bytes: Option<u64>,
 }
 
@@ -66,7 +66,7 @@ pub struct DeltaReadMetrics {
 
 struct DeltaReadMetricsInner {
     snapshot_version: u64,
-    reader_backend: DeltaReaderBackend,
+    reader_backend: ParquetReaderBackend,
     scan_metadata_exhausted: Option<bool>,
     scan_partitions_planned: AtomicU64,
     files_planned: u64,
@@ -93,7 +93,7 @@ struct DeltaReadMetricsInner {
 #[allow(dead_code)]
 pub(crate) struct DeltaReadMetricsConfig {
     pub(crate) snapshot_version: u64,
-    pub(crate) reader_backend: DeltaReaderBackend,
+    pub(crate) reader_backend: ParquetReaderBackend,
     pub(crate) scan_metadata_exhausted: Option<bool>,
     pub(crate) scan_partitions_planned: usize,
     pub(crate) files_planned: usize,
@@ -172,8 +172,8 @@ impl DeltaReadMetrics {
 
     fn parquet_metric(&self, counter: &AtomicU64) -> Option<u64> {
         match self.inner.reader_backend {
-            DeltaReaderBackend::NativeAsync => Some(load(counter)),
-            DeltaReaderBackend::OfficialKernel => None,
+            ParquetReaderBackend::DirectParquet => Some(load(counter)),
+            ParquetReaderBackend::DeltaKernel => None,
         }
     }
 
@@ -238,17 +238,14 @@ impl DeltaReadMetrics {
         saturating_fetch_add(&self.inner.deletion_vector_rejections, 1);
     }
 
-    #[cfg(feature = "native-async")]
     pub(crate) fn record_parquet_data_file_range_get_operation(&self) {
         saturating_fetch_add(&self.inner.parquet_data_file_range_get_operations, 1);
     }
 
-    #[cfg(feature = "native-async")]
     pub(crate) fn record_parquet_data_file_full_get_operation(&self) {
         saturating_fetch_add(&self.inner.parquet_data_file_full_get_operations, 1);
     }
 
-    #[cfg(feature = "native-async")]
     pub(crate) fn record_parquet_data_file_bytes_received(&self, bytes: usize) {
         saturating_fetch_add(
             &self.inner.parquet_data_file_bytes_received,
@@ -256,7 +253,6 @@ impl DeltaReadMetrics {
         );
     }
 
-    #[cfg(feature = "native-async")]
     pub(crate) fn record_parquet_data_file_opened_bytes(&self, bytes: u64) {
         saturating_fetch_add(&self.inner.parquet_data_file_opened_bytes, bytes);
     }
@@ -282,9 +278,9 @@ mod tests {
     use std::{sync::atomic::Ordering, thread};
 
     use super::{DeltaReadMetrics, DeltaReadMetricsConfig, saturating_fetch_add};
-    use crate::DeltaReaderBackend;
+    use crate::ParquetReaderBackend;
 
-    fn metrics(reader_backend: DeltaReaderBackend) -> DeltaReadMetrics {
+    fn metrics(reader_backend: ParquetReaderBackend) -> DeltaReadMetrics {
         DeltaReadMetrics::new(DeltaReadMetricsConfig {
             snapshot_version: 7,
             reader_backend,
@@ -299,41 +295,41 @@ mod tests {
 
     #[test]
     fn snapshot_has_context_zeroes_and_backend_availability() {
-        let native = metrics(DeltaReaderBackend::NativeAsync).snapshot();
-        assert_eq!(native.snapshot_version, 7);
-        assert_eq!(native.reader_backend, DeltaReaderBackend::NativeAsync);
-        assert_eq!(native.scan_metadata_exhausted, Some(true));
-        assert_eq!(native.scan_partitions_planned, 3);
-        assert_eq!(native.files_planned, 5);
-        assert_eq!(native.files_filtered_during_planning, Some(2));
-        assert_eq!(native.estimated_rows, Some(99));
-        assert_eq!(native.estimated_bytes, Some(42));
-        assert_eq!(native.scan_partitions_started, 0);
-        assert_eq!(native.scan_partitions_completed, 0);
-        assert_eq!(native.files_started, 0);
-        assert_eq!(native.files_completed, 0);
-        assert_eq!(native.batches_produced, 0);
-        assert_eq!(native.rows_produced, 0);
-        assert_eq!(native.deletion_vector_payloads_loaded, 0);
-        assert_eq!(native.deletion_vectors_applied, 0);
-        assert_eq!(native.deletion_vector_rows_deleted, 0);
-        assert_eq!(native.deletion_vector_failures, 0);
-        assert_eq!(native.deletion_vector_rejections, 0);
-        assert_eq!(native.parquet_data_file_range_get_operations, Some(0));
-        assert_eq!(native.parquet_data_file_full_get_operations, Some(0));
-        assert_eq!(native.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(native.parquet_data_file_opened_bytes, Some(0));
+        let direct = metrics(ParquetReaderBackend::DirectParquet).snapshot();
+        assert_eq!(direct.snapshot_version, 7);
+        assert_eq!(direct.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(direct.scan_metadata_exhausted, Some(true));
+        assert_eq!(direct.scan_partitions_planned, 3);
+        assert_eq!(direct.files_planned, 5);
+        assert_eq!(direct.files_filtered_during_planning, Some(2));
+        assert_eq!(direct.estimated_rows, Some(99));
+        assert_eq!(direct.estimated_bytes, Some(42));
+        assert_eq!(direct.scan_partitions_started, 0);
+        assert_eq!(direct.scan_partitions_completed, 0);
+        assert_eq!(direct.files_started, 0);
+        assert_eq!(direct.files_completed, 0);
+        assert_eq!(direct.batches_produced, 0);
+        assert_eq!(direct.rows_produced, 0);
+        assert_eq!(direct.deletion_vector_payloads_loaded, 0);
+        assert_eq!(direct.deletion_vectors_applied, 0);
+        assert_eq!(direct.deletion_vector_rows_deleted, 0);
+        assert_eq!(direct.deletion_vector_failures, 0);
+        assert_eq!(direct.deletion_vector_rejections, 0);
+        assert_eq!(direct.parquet_data_file_range_get_operations, Some(0));
+        assert_eq!(direct.parquet_data_file_full_get_operations, Some(0));
+        assert_eq!(direct.parquet_data_file_bytes_received, Some(0));
+        assert_eq!(direct.parquet_data_file_opened_bytes, Some(0));
 
-        let official = metrics(DeltaReaderBackend::OfficialKernel).snapshot();
-        assert_eq!(official.parquet_data_file_range_get_operations, None);
-        assert_eq!(official.parquet_data_file_full_get_operations, None);
-        assert_eq!(official.parquet_data_file_bytes_received, None);
-        assert_eq!(official.parquet_data_file_opened_bytes, None);
+        let kernel = metrics(ParquetReaderBackend::DeltaKernel).snapshot();
+        assert_eq!(kernel.parquet_data_file_range_get_operations, None);
+        assert_eq!(kernel.parquet_data_file_full_get_operations, None);
+        assert_eq!(kernel.parquet_data_file_bytes_received, None);
+        assert_eq!(kernel.parquet_data_file_opened_bytes, None);
     }
 
     #[test]
     fn snapshot_maps_live_counters() {
-        let metrics = metrics(DeltaReaderBackend::NativeAsync);
+        let metrics = metrics(ParquetReaderBackend::DirectParquet);
         metrics.record_scan_partitions_planned(16);
         let counters = [
             &metrics.inner.scan_partitions_started,
@@ -377,7 +373,7 @@ mod tests {
 
     #[test]
     fn cloned_handles_saturate_under_concurrent_updates() -> Result<(), &'static str> {
-        let metrics = metrics(DeltaReaderBackend::NativeAsync);
+        let metrics = metrics(ParquetReaderBackend::DirectParquet);
         metrics
             .inner
             .files_started

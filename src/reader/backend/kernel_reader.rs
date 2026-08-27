@@ -1,4 +1,4 @@
-//! Official Delta Kernel compatibility data-file reader.
+//! Delta Kernel data-file reader.
 
 use std::sync::Arc;
 
@@ -19,12 +19,12 @@ use crate::{
     },
 };
 
-struct OfficialKernelFileStreamState {
+struct DeltaKernelFileStreamState {
     receiver: mpsc::Receiver<RecordBatch>,
     task: Option<JoinHandle<Result<(), DeltaReaderError>>>,
 }
 
-impl Drop for OfficialKernelFileStreamState {
+impl Drop for DeltaKernelFileStreamState {
     fn drop(&mut self) {
         self.receiver.close();
         if let Some(task) = self.task.as_ref() {
@@ -33,7 +33,7 @@ impl Drop for OfficialKernelFileStreamState {
     }
 }
 
-pub(crate) fn official_kernel_file_executor(
+pub(crate) fn delta_kernel_file_executor(
     plan: &Arc<DeltaScanPlan>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let plan = Arc::clone(plan);
@@ -96,14 +96,14 @@ fn read_file(
     let size = file_size.ok_or_else(|| {
         data_file_error(
             "data_file_size_missing",
-            delta_kernel::Error::generic("file size is required for OfficialKernel reads"),
+            delta_kernel::Error::generic("file size is required for Delta Kernel reads"),
         )
     })?;
     let modification_time_ms = modification_time_ms.ok_or_else(|| {
         data_file_error(
             "data_file_modification_time_missing",
             delta_kernel::Error::generic(
-                "file modification time is required for OfficialKernel reads",
+                "file modification time is required for Delta Kernel reads",
             ),
         )
     })?;
@@ -151,7 +151,7 @@ fn read_file(
         let batch = align_batch_to_logical_schema(
             batch,
             &plan.logical_schema,
-            "OfficialKernel output does not match the planned logical schema",
+            "Delta Kernel output does not match the planned logical schema",
         )?;
         let batch = match deletion_vector.as_mut() {
             Some(deletion_vector) => deletion_vector.mask_ordered_batch(batch)?,
@@ -181,7 +181,7 @@ fn spawn_blocking_file_stream(
         let _permit = permit;
         producer(output, cancellation)
     });
-    let state = OfficialKernelFileStreamState {
+    let state = DeltaKernelFileStreamState {
         receiver,
         task: Some(task),
     };
@@ -195,7 +195,7 @@ fn spawn_blocking_file_stream(
         let error = match result {
             Ok(Ok(())) => return None,
             Ok(Err(error)) => error,
-            Err(source) => data_file_error("official_kernel_task_failed", source),
+            Err(source) => data_file_error("delta_kernel_task_failed", source),
         };
         Some((Err(error), state))
     }))
@@ -229,16 +229,16 @@ mod tests {
 
     use super::spawn_blocking_file_stream;
     use crate::{
-        DeltaReaderBackend, DeltaReaderExecutionOptions,
+        DeltaReaderExecutionOptions, ParquetReaderBackend,
         reader::scheduling::{ScanCancellation, ScanReadLimiter},
     };
 
     fn options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_reader_backend(DeltaReaderBackend::OfficialKernel)
+            .with_reader_backend(ParquetReaderBackend::DeltaKernel)
     }
 
     fn batch(id: i32) -> Result<RecordBatch, arrow::error::ArrowError> {
@@ -407,9 +407,9 @@ mod tests {
     }
 
     #[test]
-    fn official_kernel_boundary_adds_no_runtime_or_backend_infrastructure()
+    fn delta_kernel_boundary_adds_no_runtime_or_backend_infrastructure()
     -> Result<(), Box<dyn std::error::Error>> {
-        let source = include_str!("official_kernel.rs");
+        let source = include_str!("kernel_reader.rs");
         let manifest = include_str!("../../../Cargo.toml");
         for forbidden in [
             concat!("Runtime", "::new"),

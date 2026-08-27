@@ -63,15 +63,15 @@ Delta Funnel adopted the released crate.
 | Permit/environment portions of `crates/delta-funnel/src/query_engine/datafusion/execution/environment.rs` | `crates/delta-arrow-reader/src/reader/scheduling.rs` | #481 |
 | Handoff/cancellation portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` and `planning_exec.rs` | `crates/delta-arrow-reader/src/reader/scheduling.rs` and `src/reader/planning.rs` | #481 |
 | Execution-counter portions of `crates/delta-funnel/src/query_engine/datafusion/execution/read_stats.rs` | `crates/delta-arrow-reader/src/reader/metrics.rs` and `src/reader/scheduling.rs` | #481 |
-| `crates/delta-funnel/src/query_engine/datafusion/execution/native_async_reader.rs` | `crates/delta-arrow-reader/src/reader/backend/native_async.rs` | #464 |
-| `crates/delta-funnel/src/query_engine/datafusion/execution/native_async_row_group_pruning.rs` | `crates/delta-arrow-reader/src/reader/backend/native_async/row_group_pruning.rs` | #464 |
-| `crates/delta-funnel/src/query_engine/datafusion/execution/metered_object_store.rs` | `crates/delta-arrow-reader/src/reader/backend/native_async/metered_object_store.rs` | #464 |
-| NativeAsync file-producer and default-backend portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` and `reader_backend.rs` | `crates/delta-arrow-reader/src/reader/backend/native_async.rs` and `src/reader/options.rs` | #464 |
-| NativeAsync Parquet I/O counter portions of `crates/delta-funnel/src/query_engine/datafusion/execution/read_stats.rs` | `crates/delta-arrow-reader/src/reader/backend/native_async/metered_object_store.rs`, `src/reader/metrics.rs`, and `src/reader/backend/native_async.rs` | #464 |
-| OfficialKernel data-file portions of `crates/delta-funnel/src/table_formats/delta/read.rs` | `crates/delta-arrow-reader/src/reader/backend/official_kernel.rs` and `src/delta/kernel.rs` | #465 |
-| OfficialKernel file-correctness portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` and `reader_backend.rs` | `crates/delta-arrow-reader/src/reader/backend/official_kernel.rs`, `src/reader/deletion_vector.rs`, and `src/delta/kernel.rs` | #465 |
-| OfficialKernel blocking-producer portions of `crates/delta-funnel/src/query_engine/datafusion/execution/scheduling.rs` and `planning_exec.rs` | `crates/delta-arrow-reader/src/reader/backend/official_kernel.rs` over `src/reader/scheduling.rs` | #465 |
-| OfficialKernel metric-availability portions of `crates/delta-funnel/src/query_engine/datafusion/execution/read_stats.rs` | `crates/delta-arrow-reader/src/reader/metrics.rs` | #465 |
+| `crates/delta-funnel/src/query_engine/datafusion/execution/native_async_reader.rs` | `crates/delta-arrow-reader/src/reader/backend/direct_parquet.rs` | #464 |
+| `crates/delta-funnel/src/query_engine/datafusion/execution/native_async_row_group_pruning.rs` | `crates/delta-arrow-reader/src/reader/backend/direct_parquet/row_group_pruning.rs` | #464 |
+| `crates/delta-funnel/src/query_engine/datafusion/execution/metered_object_store.rs` | `crates/delta-arrow-reader/src/reader/backend/direct_parquet/metered_object_store.rs` | #464 |
+| Direct Parquet file-producer and default-backend portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` and `reader_backend.rs` | `crates/delta-arrow-reader/src/reader/backend/direct_parquet.rs` and `src/reader/options.rs` | #464 |
+| Direct Parquet I/O counter portions of `crates/delta-funnel/src/query_engine/datafusion/execution/read_stats.rs` | `crates/delta-arrow-reader/src/reader/backend/direct_parquet/metered_object_store.rs`, `src/reader/metrics.rs`, and `src/reader/backend/direct_parquet.rs` | #464 |
+| Delta Kernel data-file portions of `crates/delta-funnel/src/table_formats/delta/read.rs` | `crates/delta-arrow-reader/src/reader/backend/kernel_reader.rs` and `src/delta/kernel.rs` | #465 |
+| Delta Kernel file-correctness portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` and `reader_backend.rs` | `crates/delta-arrow-reader/src/reader/backend/kernel_reader.rs`, `src/reader/deletion_vector.rs`, and `src/delta/kernel.rs` | #465 |
+| Delta Kernel blocking-producer portions of `crates/delta-funnel/src/query_engine/datafusion/execution/scheduling.rs` and `planning_exec.rs` | `crates/delta-arrow-reader/src/reader/backend/kernel_reader.rs` over `src/reader/scheduling.rs` | #465 |
+| Delta Kernel metric-availability portions of `crates/delta-funnel/src/query_engine/datafusion/execution/read_stats.rs` | `crates/delta-arrow-reader/src/reader/metrics.rs` | #465 |
 | Direct table-loading, scan-building, and Arrow stream composition over the extracted services | `crates/delta-arrow-reader/src/reader.rs` | #466 |
 | `crates/delta-funnel/src/query_engine/datafusion/planning/projection.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
 | `crates/delta-funnel/src/query_engine/datafusion/planning/filters.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
@@ -101,17 +101,18 @@ Delta Funnel adopted the released crate.
 - #481 ports limiter, lazy admission, ordered prefetch, bounded handoff,
   first-error, cancellation, cleanup, and execution-counter assertions into
   `src/reader/scheduling.rs` and `src/reader/planning.rs`.
-- #464 ports the NativeAsync async Parquet reader, object-store metering,
+- #464 ports the direct asynchronous Parquet reader, object-store metering,
   metadata prefetch, per-file buffering, physical projection and schema
   matching, conservative row-group pruning, original row indexes, DV and
   transform pipeline, cancellation, resource lifetime, errors, and focused
   scheduler integration assertions. Full public direct certification remains
   with #482, and DataFusion adaptation and certification remain with #483.
-- #465 ports OfficialKernel data-file reads, the bounded blocking handoff,
+- #465 ports Delta Kernel data-file reads, the bounded blocking handoff,
   projection, predicates, transforms, ordered DV masking, capability fallback,
   cancellation-safe cleanup, errors, metrics availability, and focused parity
-  assertions against NativeAsync. Full public direct certification remains with
-  #482, and DataFusion adaptation and certification remain with #483.
+  assertions against the direct Parquet reader. Full public direct certification
+  remains with #482, and DataFusion adaptation and certification remain with
+  #483.
 - #484 adapts the focused comparison, scalar, Boolean, null, and Kernel
   conversion assertions into the staged crate, then adds schema-validation,
   three-valued residual, pruning-parity, concurrency, and redaction coverage.
@@ -133,7 +134,7 @@ Delta Funnel adopted the released crate.
   direct load, projection, predicate, limit, partition merge, backend parity,
   error, drop, redaction, and retained-metrics contracts.
 - #482 carries the remaining frozen direct/backend contract through the public
-  API. It preserves the 24 frozen NativeAsync/OfficialKernel equivalence cases
+  API. It preserves the 24 frozen direct-Parquet/Delta-Kernel equivalence cases
   against static expected rows, plus four additional backend comparisons among
   the nine deletion-vector predicate/boundary/failure cases. It also preserves
   four missing-required-field failures and seven ordering/error/resource cases

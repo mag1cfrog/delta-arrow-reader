@@ -5,12 +5,12 @@ use std::{error::Error as _, future::Future};
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use delta_arrow_reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaProtocolInfo, DeltaReadMetrics,
-    DeltaReadMetricsSnapshot, DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions,
-    DeltaReaderPhase, DeltaScalar, DeltaScan, DeltaScanBuilder,
-    DeltaScanPartitionTargetDiagnosticInput, DeltaScanPartitionTargetDiagnosticOutput,
-    DeltaScanPartitionTargetDiagnosticSource, DeltaScanPartitionTargetLocalEnvironmentDiagnostic,
+    DeltaReadMetricsSnapshot, DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase,
+    DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaScanPartitionTargetDiagnosticInput,
+    DeltaScanPartitionTargetDiagnosticOutput, DeltaScanPartitionTargetDiagnosticSource,
+    DeltaScanPartitionTargetLocalEnvironmentDiagnostic,
     DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus, DeltaSnapshotSelection,
-    DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot,
+    DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
     delta_scan_partition_target_local_environment_diagnostic,
     derive_delta_scan_partition_target_diagnostic,
 };
@@ -48,15 +48,15 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
     );
 
     let options = DeltaReaderExecutionOptions::new()
-        .with_reader_backend(DeltaReaderBackend::OfficialKernel)?
+        .with_reader_backend(ParquetReaderBackend::DeltaKernel)?
         .with_max_concurrent_file_reads_per_scan(Some(6))?
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_capacity_per_partition(1)?
-        .with_native_async_prefetch_file_count_per_partition(2)?
+        .with_prefetch_file_count_per_partition(2)?
         .with_parquet_metadata_size_hint(Some(65_536))?
         .with_parquet_full_file_read_threshold(None)?;
 
-    assert_eq!(options.reader_backend(), DeltaReaderBackend::OfficialKernel);
+    assert_eq!(options.reader_backend(), ParquetReaderBackend::DeltaKernel);
     options.validate()?;
 
     let error = DeltaReaderExecutionOptions::new()
@@ -340,30 +340,4 @@ fn datafusion_provider_contract_is_public() {
         register_delta_table(context, name, table, options)
     }
     let _ = (construct, register);
-}
-
-#[cfg(not(feature = "native-async"))]
-#[tokio::test]
-async fn disabled_native_backend_fails_before_uri_access() {
-    let error = DeltaTableBuilder::new("this URI must never be inspected")
-        .load_table()
-        .await
-        .expect_err("disabled default backend must fail");
-    assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
-    assert_eq!(error.as_str(), "unsupported_backend");
-}
-
-#[cfg(not(feature = "official-kernel"))]
-#[tokio::test]
-async fn disabled_official_backend_fails_before_uri_access() -> Result<(), DeltaReaderError> {
-    let options = DeltaReaderExecutionOptions::new()
-        .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
-    let error = DeltaTableBuilder::new("this URI must never be inspected")
-        .with_execution_options(options)
-        .load_table()
-        .await
-        .expect_err("disabled official backend must fail");
-    assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
-    assert_eq!(error.as_str(), "unsupported_backend");
-    Ok(())
 }

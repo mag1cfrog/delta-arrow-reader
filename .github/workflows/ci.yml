@@ -44,18 +44,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Minimal
-            base: --no-default-features
-            official: --no-default-features --features official-kernel
+          - name: Direct API
+            features: ""
           - name: DataFusion
-            base: --no-default-features --features datafusion
-            official: --no-default-features --features datafusion,official-kernel
-          - name: Native
-            base: ""
-            official: --features official-kernel
-          - name: Native + DataFusion
-            base: --features datafusion
-            official: --all-features
+            features: --features datafusion
 
     steps:
       - uses: actions/checkout@v5
@@ -76,8 +68,7 @@ jobs:
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
-      - run: cargo test --locked ${{ matrix.base }}
-      - run: cargo test --locked ${{ matrix.official }}
+      - run: cargo test --locked ${{ matrix.features }}
 
   checks:
     name: ${{ matrix.task }}

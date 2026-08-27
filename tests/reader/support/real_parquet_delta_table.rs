@@ -401,7 +401,7 @@ impl RealParquetDeltaTable {
     }
 
     /// Creates a local Delta table covering the scalar and nested data types
-    /// the native async reader is expected to preserve without special Delta
+    /// the direct async reader is expected to preserve without special Delta
     /// metadata features.
     pub(crate) fn new_with_supported_types(name: &str) -> Result<Self, Box<dyn std::error::Error>> {
         Self::new_with_protocol_metadata_file_batches(

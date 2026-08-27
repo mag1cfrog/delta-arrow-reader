@@ -21,7 +21,7 @@ use tracing::Instrument;
 
 use super::planning::{DeltaScanFileTask, DeltaScanPlan};
 use crate::{
-    DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions,
+    DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions, ParquetReaderBackend,
     error::{CancelledSnafu, InvalidConfigurationSnafu},
 };
 
@@ -376,10 +376,8 @@ impl PartitionStream {
     {
         let output_capacity = options.output_buffer_capacity_per_partition();
         let prefetch_file_count = match options.reader_backend() {
-            DeltaReaderBackend::NativeAsync => {
-                options.native_async_prefetch_file_count_per_partition()
-            }
-            DeltaReaderBackend::OfficialKernel => 0,
+            ParquetReaderBackend::DirectParquet => options.prefetch_file_count_per_partition(),
+            ParquetReaderBackend::DeltaKernel => 0,
         };
         let measured_metrics = metrics.clone();
         let measured_executor = Arc::new(move |task, permit, cancellation| {
@@ -732,7 +730,7 @@ mod tests {
     };
 
     use crate::{
-        DeltaReadMetrics, DeltaReaderBackend, DeltaReaderExecutionOptions, DeltaReaderPhase,
+        DeltaReadMetrics, DeltaReaderExecutionOptions, DeltaReaderPhase, ParquetReaderBackend,
         error::InvalidConfigurationSnafu, reader::metrics::DeltaReadMetricsConfig,
     };
 
@@ -746,7 +744,7 @@ mod tests {
         partition_capacity: usize,
     ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(0)?
+            .with_prefetch_file_count_per_partition(0)?
             .with_max_concurrent_file_reads_per_partition(partition_capacity)?
             .with_max_concurrent_file_reads_per_scan(Some(scan_capacity))
     }
@@ -754,7 +752,7 @@ mod tests {
     fn metrics() -> DeltaReadMetrics {
         DeltaReadMetrics::new(DeltaReadMetricsConfig {
             snapshot_version: 1,
-            reader_backend: DeltaReaderBackend::NativeAsync,
+            reader_backend: ParquetReaderBackend::DirectParquet,
             scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 1,
             files_planned: 3,
@@ -769,7 +767,7 @@ mod tests {
         prefetch_file_count: usize,
     ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
-            .with_native_async_prefetch_file_count_per_partition(prefetch_file_count)?
+            .with_prefetch_file_count_per_partition(prefetch_file_count)?
             .with_output_buffer_capacity_per_partition(output_capacity)
     }
 
@@ -1755,8 +1753,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn official_kernel_disables_speculative_prefetch()
-    -> Result<(), Box<dyn std::error::Error>> {
+    async fn delta_kernel_disables_speculative_prefetch() -> Result<(), Box<dyn std::error::Error>>
+    {
         let limiter = ScanReadLimiter::new(options(2, 2)?, 1, 1);
         let calls = Arc::new(AtomicUsize::new(0));
         let cancellation = ScanCancellation::new();
@@ -1767,12 +1765,12 @@ mod tests {
                 async move { Ok(pending_file_stream(permit)) }.boxed()
             })
         };
-        let official_options =
-            stream_options(1, 1)?.with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
+        let kernel_options =
+            stream_options(1, 1)?.with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
         let mut stream = PartitionStream::new(
             vec![1, 2],
             limiter.partition(0)?,
-            official_options,
+            kernel_options,
             Arc::new(|_| Ok(FileAdmission::Admit)),
             executor,
             metrics(),
@@ -1806,7 +1804,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn official_kernel_cancellation_waits_for_the_sync_safe_boundary()
+    async fn delta_kernel_cancellation_waits_for_the_sync_safe_boundary()
     -> Result<(), Box<dyn std::error::Error>> {
         let limiter = ScanReadLimiter::new(options(1, 1)?, 1, 1);
         let calls = Arc::new(AtomicUsize::new(0));
@@ -1836,12 +1834,12 @@ mod tests {
                 .boxed()
             })
         };
-        let official_options =
-            stream_options(1, 0)?.with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
+        let kernel_options =
+            stream_options(1, 0)?.with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
         let mut stream = PartitionStream::new(
             vec![1, 2],
             limiter.partition(0)?,
-            official_options,
+            kernel_options,
             Arc::new(|_| Ok(FileAdmission::Admit)),
             executor,
             metrics(),

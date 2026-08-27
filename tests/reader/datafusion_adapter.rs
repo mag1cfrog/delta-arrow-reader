@@ -26,7 +26,7 @@ use datafusion::{
     physical_plan::{ExecutionPlan, displayable},
     prelude::{SessionConfig, SessionContext},
 };
-use delta_arrow_reader::DeltaReaderBackend;
+use delta_arrow_reader::ParquetReaderBackend;
 use delta_arrow_reader::{
     DeltaDataFusionScanOptions, DeltaFileRepartitioning, DeltaReaderError,
     DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaTableBuilder, DeltaTableProvider,
@@ -699,7 +699,6 @@ fn external_reader_error(error: &DataFusionError) -> TestResult<&DeltaReaderErro
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract() -> TestResult {
     let fixture = TestTable::partitioned("provider-contract")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -835,22 +834,6 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
     .expect_err("zero target must fail");
     assert_eq!(zero_target.phase(), DeltaReaderPhase::Configuration);
 
-    #[cfg(not(feature = "official-kernel"))]
-    {
-        let execution_options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
-        let unavailable = DeltaTableProvider::try_new(
-            table,
-            DeltaDataFusionScanOptions {
-                execution_options,
-                target_partitions: None,
-                ..Default::default()
-            },
-        )
-        .expect_err("disabled backend must fail");
-        assert_eq!(unavailable.phase(), DeltaReaderPhase::Configuration);
-    }
-
     let unsupported_fixture = TestTable::unsupported("unsupported-provider")?;
     let unsupported = DeltaTableBuilder::new(unsupported_fixture.uri())
         .load_table()
@@ -862,7 +845,6 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> TestResult {
     let fixture = TestTable::partitioned("registration")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -976,7 +958,6 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[cfg(feature = "native-async")]
 async fn caller_runtime_owns_concurrent_dataframe_execution() -> TestResult {
     let fixture = TestTable::partitioned("caller-runtime")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -997,15 +978,14 @@ async fn caller_runtime_owns_concurrent_dataframe_execution() -> TestResult {
 }
 
 #[tokio::test]
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
-async fn native_exact_and_official_residual_execution_return_the_same_rows() -> TestResult {
+async fn direct_exact_and_kernel_residual_execution_return_the_same_rows() -> TestResult {
     let fixture = TestTable::partitioned("backend-parity")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let mut outputs = Vec::new();
 
     for (name, backend) in [
-        ("native_orders", DeltaReaderBackend::NativeAsync),
-        ("official_orders", DeltaReaderBackend::OfficialKernel),
+        ("direct_orders", ParquetReaderBackend::DirectParquet),
+        ("kernel_orders", ParquetReaderBackend::DeltaKernel),
     ] {
         let context = SessionContext::new();
         let execution_options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
@@ -1022,8 +1002,8 @@ async fn native_exact_and_official_residual_execution_return_the_same_rows() -> 
         assert_eq!(
             provider.supports_filters_pushdown(&[&data_filter])?,
             [match backend {
-                DeltaReaderBackend::NativeAsync => TableProviderFilterPushDown::Exact,
-                DeltaReaderBackend::OfficialKernel => TableProviderFilterPushDown::Inexact,
+                ParquetReaderBackend::DirectParquet => TableProviderFilterPushDown::Exact,
+                ParquetReaderBackend::DeltaKernel => TableProviderFilterPushDown::Inexact,
             }]
         );
         context.register_table(name, Arc::new(provider))?;
@@ -1049,7 +1029,6 @@ async fn native_exact_and_official_residual_execution_return_the_same_rows() -> 
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn sql_join_dynamic_filter_prunes_before_file_admission() -> TestResult {
     let context = SessionContext::new_with_config(
         SessionConfig::new()
@@ -1110,7 +1089,6 @@ async fn sql_join_dynamic_filter_prunes_before_file_admission() -> TestResult {
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn dynamic_join_kept_file_still_applies_deletion_vector() -> TestResult {
     let context = SessionContext::new_with_config(
         SessionConfig::new()
@@ -1167,8 +1145,7 @@ async fn dynamic_join_kept_file_still_applies_deletion_vector() -> TestResult {
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
-async fn native_exact_filter_applies_before_deletion_vector_masking() -> TestResult {
+async fn direct_exact_filter_applies_before_deletion_vector_masking() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
         "provider-dv-predicate-pruning",
         3,
@@ -1203,7 +1180,6 @@ async fn native_exact_filter_applies_before_deletion_vector_masking() -> TestRes
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestResult {
     let fixture = RealParquetDeltaTable::new_default("provider-execution-options")?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
@@ -1249,7 +1225,6 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult {
     let fixture = TestTable::empty("provider-empty-scan")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -1287,7 +1262,6 @@ async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult 
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestResult {
     let fixture = RealParquetDeltaTable::new_default("provider-missing-file")?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
@@ -1325,14 +1299,13 @@ async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestRe
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_two_large_files("provider-stream-drop", 20_000)?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
         .await?;
     let execution_options = DeltaReaderExecutionOptions::new()
-        .with_native_async_prefetch_file_count_per_partition(0)?
+        .with_prefetch_file_count_per_partition(0)?
         .with_max_concurrent_file_reads_per_partition(1)?
         .with_max_concurrent_file_reads_per_scan(Some(1))?
         .with_output_buffer_capacity_per_partition(1)?;
@@ -1373,8 +1346,7 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
-async fn native_metadata_hint_preserves_rows_and_request_fallback() -> TestResult {
+async fn direct_metadata_hint_preserves_rows_and_request_fallback() -> TestResult {
     let fixture =
         RealParquetDeltaTable::new_with_two_large_files("provider-parquet-metadata-hint", 20_000)?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
@@ -1426,7 +1398,7 @@ async fn native_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
         requests.push(
             snapshot
                 .parquet_data_file_range_get_operations
-                .ok_or("missing NativeAsync range GET metric")?,
+                .ok_or("missing direct Parquet range GET metric")?,
         );
     }
 
@@ -1439,7 +1411,6 @@ async fn native_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
     let context = SessionContext::new_with_config(
         SessionConfig::new()
@@ -1499,14 +1470,13 @@ async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
 }
 
 #[tokio::test]
-#[cfg(all(feature = "native-async", feature = "official-kernel"))]
-async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
+async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
     let fixture = RealParquetDeltaTable::new_default("provider-residual-limit")?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
         .await?;
     let execution_options = DeltaReaderExecutionOptions::new()
-        .with_reader_backend(DeltaReaderBackend::OfficialKernel)?;
+        .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
     register_delta_table(
         &context,
@@ -1545,7 +1515,7 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
         .column(0)
         .as_any()
         .downcast_ref::<StringViewArray>()
-        .ok_or("official kernel did not preserve the DataFusion view schema")?;
+        .ok_or("Delta Kernel did not preserve the DataFusion view schema")?;
     assert_eq!(names.iter().collect::<Vec<_>>(), [Some("bob")]);
     assert_eq!(metrics[0].snapshot().reader.rows_produced, 3);
 
@@ -1572,14 +1542,13 @@ async fn optimizer_keeps_limit_above_official_kernel_residual() -> TestResult {
         .column(0)
         .as_any()
         .downcast_ref::<StringArray>()
-        .ok_or("official kernel did not preserve the standard Utf8 schema")?;
+        .ok_or("Delta Kernel did not preserve the standard Utf8 schema")?;
     assert_eq!(names.iter().collect::<Vec<_>>(), [Some("bob")]);
     Ok(())
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
-async fn native_scan_decodes_both_string_representations_with_exact_values() -> TestResult {
+async fn direct_scan_decodes_both_string_representations_with_exact_values() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_supported_types("provider-view-values")?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
@@ -1701,8 +1670,7 @@ async fn native_scan_decodes_both_string_representations_with_exact_values() -> 
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
-async fn native_scan_preserves_views_through_nested_map_reordering() -> TestResult {
+async fn direct_scan_preserves_views_through_nested_map_reordering() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_reordered_map_value_struct_fields(
         "provider-reordered-map-views",
     )?;
@@ -1766,7 +1734,6 @@ async fn native_scan_preserves_views_through_nested_map_reordering() -> TestResu
 }
 
 #[tokio::test]
-#[cfg(feature = "native-async")]
 async fn joined_delta_scans_keep_distinct_metrics_and_limit_above_join() -> TestResult {
     let fixture = RealParquetDeltaTable::new_default("provider-joined-scans")?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
