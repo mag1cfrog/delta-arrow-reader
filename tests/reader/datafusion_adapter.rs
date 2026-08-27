@@ -125,6 +125,11 @@ impl TestTable {
         )?;
         Ok(())
     }
+
+    fn disable_delta_log(&self) -> TestResult {
+        fs::rename(self.0.join("_delta_log"), self.0.join("disabled-log"))?;
+        Ok(())
+    }
 }
 
 impl Drop for TestTable {
@@ -280,6 +285,34 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
             .value(0),
         10
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn registered_eager_table_reuses_metadata_across_sql_queries_without_the_log() -> TestResult {
+    let fixture = TestTable::partitioned("eager-metadata-registration")?;
+    let table = DeltaTableBuilder::new(fixture.uri())
+        .load_table_with_eager_scan_metadata()
+        .await?;
+    let context = SessionContext::new();
+    register_table(&context, "orders", table, ScanOptions::default())?;
+    fixture.disable_delta_log()?;
+
+    for (region, expected_ids) in [("west", vec![1, 2]), ("east", vec![3, 4])] {
+        let plan = context
+            .sql(&format!(
+                "SELECT id FROM orders WHERE region = '{region}' ORDER BY id"
+            ))
+            .await?
+            .create_physical_plan()
+            .await?;
+        let metrics = collect_scan_metrics(plan.as_ref());
+        let batches = collect_plan(&context, plan).await?;
+
+        assert_eq!(ids(&batches), expected_ids);
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].snapshot().reader_metrics.files_planned, 1);
+    }
     Ok(())
 }
 
