@@ -1,8 +1,11 @@
 //! Delta scan planning and execution metrics.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    fmt,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use super::options::ParquetReaderBackend;
@@ -60,6 +63,14 @@ pub struct DeltaScanMetricsSnapshot {
 #[derive(Clone)]
 pub struct DeltaScanMetrics {
     inner: Arc<DeltaScanMetricsInner>,
+}
+
+impl fmt::Debug for DeltaScanMetrics {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DeltaScanMetrics")
+            .finish_non_exhaustive()
+    }
 }
 
 struct DeltaScanMetricsInner {
@@ -320,6 +331,14 @@ mod tests {
         assert_eq!(kernel.parquet_data_file_full_get_operations, None);
         assert_eq!(kernel.parquet_data_file_bytes_received, None);
         assert_eq!(kernel.estimated_parquet_task_bytes_admitted, None);
+    }
+
+    #[test]
+    fn debug_output_is_safe_and_redacted() {
+        assert_eq!(
+            format!("{:?}", metrics(ParquetReaderBackend::Direct)),
+            "DeltaScanMetrics { .. }"
+        );
     }
 
     #[test]

@@ -185,6 +185,7 @@ fn exact_predicate_model_is_public() {
 
 #[test]
 fn streaming_reader_contract_is_public() {
+    fn assert_debug<T: std::fmt::Debug>() {}
     fn assert_send<T: Send>() {}
     fn assert_send_sync<T: Send + Sync>() {}
     fn assert_clone<T: Clone>() {}
@@ -199,6 +200,7 @@ fn streaming_reader_contract_is_public() {
 
     assert_send_sync::<DeltaTable>();
     assert_clone::<DeltaTable>();
+    assert_debug::<DeltaScanMetrics>();
     assert_send::<DeltaBatchStream>();
     assert_batch_stream::<DeltaBatchStream>();
 
