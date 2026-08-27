@@ -159,7 +159,7 @@ impl DeltaTableProvider {
                 reason: "datafusion_scan_contains_unsupported_filter",
             });
         }
-        let physical_projection = planning.projection.physical_projection.clone();
+        let scan_projection = planning.projection.scan_projection.clone();
         let hidden_columns = planning.projection.hidden_columns.clone();
         let pruning_predicate = planning
             .filters
@@ -187,13 +187,13 @@ impl DeltaTableProvider {
             .transpose()?;
         let exact_row_predicate = plan_row_predicate(
             self.table.snapshot(),
-            physical_projection.as_deref(),
+            scan_projection.as_deref(),
             &hidden_columns,
             exact_row_predicate,
         )?;
         let mut core = plan_scan(
             self.table.snapshot(),
-            physical_projection.as_deref(),
+            scan_projection.as_deref(),
             &hidden_columns,
             pruning_predicate,
             planning.filters.requires_statistics,

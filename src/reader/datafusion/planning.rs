@@ -41,7 +41,7 @@ pub(crate) struct DataFusionFilterPlan {
 
 pub(crate) struct DataFusionProjectionPlan {
     pub(crate) output_schema: SchemaRef,
-    pub(crate) physical_projection: Option<Vec<String>>,
+    pub(crate) scan_projection: Option<Vec<String>>,
     pub(crate) hidden_columns: Vec<String>,
     pub(crate) output_projection: Option<Vec<usize>>,
 }
@@ -153,13 +153,13 @@ fn plan_projection(
         tracing::debug!(
             target: "delta_arrow_reader::datafusion",
             output_columns = schema.fields().len(),
-            physical_columns = schema.fields().len(),
+            scan_columns = schema.fields().len(),
             hidden_columns = 0,
             "planned DataFusion projection"
         );
         return Ok(DataFusionProjectionPlan {
             output_schema: Arc::clone(schema),
-            physical_projection: None,
+            scan_projection: None,
             hidden_columns: Vec::new(),
             output_projection: None,
         });
@@ -173,27 +173,27 @@ fn plan_projection(
                     reason: "arrow_projection_failed",
                 })?,
         );
-    let physical_projection = projection
+    let scan_projection = projection
         .iter()
         .map(|&index| schema.field(index).name().clone())
         .collect::<Vec<_>>();
     let output_projection = (0..projection.len()).collect::<Vec<_>>();
     let hidden_columns = filter_columns
         .iter()
-        .filter(|name| !physical_projection.contains(name))
+        .filter(|name| !scan_projection.contains(name))
         .cloned()
         .collect::<Vec<_>>();
 
     tracing::debug!(
         target: "delta_arrow_reader::datafusion",
         output_columns = projection.len(),
-        physical_columns = physical_projection.len() + hidden_columns.len(),
+        scan_columns = scan_projection.len() + hidden_columns.len(),
         hidden_columns = hidden_columns.len(),
         "planned DataFusion projection"
     );
     Ok(DataFusionProjectionPlan {
         output_schema,
-        physical_projection: Some(physical_projection),
+        scan_projection: Some(scan_projection),
         hidden_columns,
         output_projection: Some(output_projection),
     })
@@ -1178,7 +1178,7 @@ mod tests {
             ["i32", "i8"]
         );
         assert_eq!(
-            plan.projection.physical_projection.as_deref(),
+            plan.projection.scan_projection.as_deref(),
             Some(["i32".to_owned(), "i8".to_owned()].as_slice())
         );
         assert_eq!(
@@ -1192,12 +1192,12 @@ mod tests {
 
         let empty = plan_scan(&schema, &HashSet::new(), Some(&[]), &[], false);
         assert!(empty.projection.output_schema.fields().is_empty());
-        assert_eq!(empty.projection.physical_projection, Some(Vec::new()));
+        assert_eq!(empty.projection.scan_projection, Some(Vec::new()));
         assert_eq!(empty.projection.output_projection, Some(Vec::new()));
 
         let full = plan_scan(&schema, &HashSet::new(), None, &[], false);
         assert_eq!(full.projection.output_schema, schema);
-        assert!(full.projection.physical_projection.is_none());
+        assert!(full.projection.scan_projection.is_none());
         assert!(full.projection.output_projection.is_none());
     }
 
@@ -1259,7 +1259,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            plan.projection.physical_projection.as_deref(),
+            plan.projection.scan_projection.as_deref(),
             Some(["i32".to_owned()].as_slice())
         );
         assert_eq!(plan.projection.hidden_columns, ["text", "i64"]);

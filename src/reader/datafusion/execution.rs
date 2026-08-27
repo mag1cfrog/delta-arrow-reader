@@ -1035,7 +1035,7 @@ mod tests {
                     == ParquetReaderBackend::Direct,
             },
         )?;
-        let physical_projection = planning.projection.physical_projection.clone();
+        let scan_projection = planning.projection.scan_projection.clone();
         let hidden_columns = planning.projection.hidden_columns.clone();
         let pruning_predicate = planning
             .filters
@@ -1052,14 +1052,14 @@ mod tests {
         };
         let exact_row_predicate = plan_row_predicate(
             table.snapshot(),
-            physical_projection.as_deref(),
+            scan_projection.as_deref(),
             &hidden_columns,
             exact_row_predicate,
         )?;
         let include_stats = planning.filters.requires_statistics;
         let core = plan_scan(
             table.snapshot(),
-            physical_projection.as_deref(),
+            scan_projection.as_deref(),
             &hidden_columns,
             pruning_predicate,
             include_stats,
