@@ -38,7 +38,7 @@ use crate::{
 #[derive(Default)]
 pub(crate) struct DeltaScanPartitionTargetOptions {
     pub(crate) explicit_target_partitions: Option<usize>,
-    pub(crate) caller_target_partitions: Option<usize>,
+    pub(crate) datafusion_target_partitions: Option<usize>,
 }
 
 #[allow(dead_code)]
@@ -268,8 +268,8 @@ fn local_partition_target_diagnostic(
     .entered();
     let mut input = delta_scan_partition_target_local_environment_diagnostic().policy_input;
     input.explicit_target_partitions = options.explicit_target_partitions;
-    if options.caller_target_partitions.is_some() {
-        input.datafusion_target_partitions = options.caller_target_partitions;
+    if options.datafusion_target_partitions.is_some() {
+        input.datafusion_target_partitions = options.datafusion_target_partitions;
     }
     derive_delta_scan_partition_target_diagnostic(input)
 }
@@ -5417,7 +5417,7 @@ mod tests {
             Default::default(),
             super::DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(2),
-                caller_target_partitions: Some(1),
+                datafusion_target_partitions: Some(1),
             },
         )?;
 
@@ -5490,7 +5490,7 @@ mod tests {
             execution_options,
             super::DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(2),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?);
         let paths = Arc::new(Mutex::new(Vec::new()));
@@ -5577,7 +5577,7 @@ mod tests {
             execution_options,
             super::DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?);
         let calls = Arc::new(AtomicUsize::new(0));
@@ -5653,7 +5653,7 @@ mod tests {
             Default::default(),
             super::DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(0),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )
         .err()

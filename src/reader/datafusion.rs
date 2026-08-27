@@ -200,7 +200,7 @@ impl DeltaTableProvider {
             self.options.execution_options,
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: self.options.target_partitions,
-                caller_target_partitions: Some(state.config().target_partitions()),
+                datafusion_target_partitions: Some(state.config().target_partitions()),
             },
         )?;
         core.logical_schema = datafusion_schema(

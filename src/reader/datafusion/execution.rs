@@ -1066,7 +1066,7 @@ mod tests {
             execution_options,
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(target_partitions),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?;
         Ok(create_datafusion_execution_plan(

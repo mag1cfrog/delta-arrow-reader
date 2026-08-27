@@ -397,7 +397,7 @@ impl<'table> DeltaScanBuilder<'table> {
                 execution_options,
                 DeltaScanPartitionTargetOptions {
                     explicit_target_partitions: target_partitions,
-                    caller_target_partitions: None,
+                    datafusion_target_partitions: None,
                 },
             )
         })

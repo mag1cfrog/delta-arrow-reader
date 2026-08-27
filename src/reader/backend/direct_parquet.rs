@@ -2061,7 +2061,7 @@ mod tests {
             options,
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(target_partitions),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?))
     }
@@ -2085,7 +2085,7 @@ mod tests {
             DeltaScanExecutionOptions::new().with_parquet_backend(backend),
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?))
     }
@@ -2108,7 +2108,7 @@ mod tests {
             DeltaScanExecutionOptions::new(),
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?))
     }
@@ -3741,7 +3741,7 @@ mod tests {
                 DeltaScanExecutionOptions::new().with_parquet_backend(backend),
                 DeltaScanPartitionTargetOptions {
                     explicit_target_partitions: Some(1),
-                    caller_target_partitions: None,
+                    datafusion_target_partitions: None,
                 },
             )
             .map(Arc::new)
