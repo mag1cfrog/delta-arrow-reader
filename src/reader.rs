@@ -46,8 +46,8 @@ use crate::{
         kernel::{kernel_pruning_is_exact, kernel_pruning_predicate},
         protocol::validate_protocol,
         snapshot::{
-            ArrowTableSnapshot, KernelTableSnapshot, load_delta_table_snapshot_async,
-            load_kernel_table_snapshot_async,
+            ArrowTableSnapshot, KernelTableSnapshot, load_delta_table_snapshot,
+            load_kernel_table_snapshot,
         },
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
@@ -136,7 +136,7 @@ impl DeltaTableBuilder {
     ///
     /// Unsupported protocol metadata remains inspectable; scan planning validates it.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        let snapshot = load_delta_table_snapshot_async(
+        let snapshot = load_delta_table_snapshot(
             self.table_location,
             self.storage_options,
             self.snapshot_selection,
@@ -147,7 +147,7 @@ impl DeltaTableBuilder {
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        let snapshot = load_kernel_table_snapshot_async(
+        let snapshot = load_kernel_table_snapshot(
             self.table_location,
             self.storage_options,
             self.snapshot_selection,

@@ -164,7 +164,7 @@ fn build_kernel_table_snapshot(
 ///
 /// Dropping the returned future cancels result delivery. A blocking load that
 /// already started may still finish before its owned context is dropped.
-pub(crate) async fn load_delta_table_snapshot_async(
+pub(crate) async fn load_delta_table_snapshot(
     table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
@@ -188,7 +188,7 @@ pub(crate) async fn load_delta_table_snapshot_async(
     }
 }
 
-pub(crate) async fn load_kernel_table_snapshot_async(
+pub(crate) async fn load_kernel_table_snapshot(
     table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
@@ -392,7 +392,7 @@ mod tests {
     };
 
     use super::{
-        S3AuthModeHint, TRACING_TARGET, load_delta_table_snapshot_async,
+        S3AuthModeHint, TRACING_TARGET, load_delta_table_snapshot,
         load_delta_table_snapshot_blocking, load_kernel_table_snapshot_blocking,
         s3_auth_mode_hint_for_source, snapshot_load_failed_reason,
     };
@@ -1152,12 +1152,12 @@ mod tests {
             .enable_all()
             .build()?;
         let (first, second) = runtime.block_on(future::join(
-            load_delta_table_snapshot_async(
+            load_delta_table_snapshot(
                 table_uri.clone(),
                 DeltaStorageOptions::new(),
                 DeltaSnapshotSelection::Latest,
             ),
-            load_delta_table_snapshot_async(
+            load_delta_table_snapshot(
                 table_uri,
                 DeltaStorageOptions::new(),
                 DeltaSnapshotSelection::Version(0),
