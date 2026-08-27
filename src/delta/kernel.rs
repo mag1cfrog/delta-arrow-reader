@@ -32,7 +32,7 @@ use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageOptions};
 pub(crate) const TABLE_FEATURES_READER_VERSION: i32 = TABLE_FEATURES_MIN_READER_VERSION;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DeltaKernelProtocol {
+pub(crate) struct KernelProtocolMetadata {
     pub(crate) min_reader_version: i32,
     pub(crate) min_writer_version: i32,
     pub(crate) reader_features: Vec<String>,
@@ -516,10 +516,10 @@ impl KernelSnapshot {
     }
 }
 
-pub(crate) fn snapshot_protocol_report(snapshot: &KernelSnapshot) -> DeltaKernelProtocol {
+pub(crate) fn snapshot_protocol_metadata(snapshot: &KernelSnapshot) -> KernelProtocolMetadata {
     let protocol = snapshot.0.table_configuration().protocol();
 
-    DeltaKernelProtocol {
+    KernelProtocolMetadata {
         min_reader_version: protocol.min_reader_version(),
         min_writer_version: protocol.min_writer_version(),
         reader_features: feature_names(protocol.reader_features()),

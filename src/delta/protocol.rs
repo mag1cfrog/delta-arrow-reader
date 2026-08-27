@@ -1,7 +1,8 @@
 //! Delta protocol metadata and reader compatibility policy.
 
 use super::kernel::{
-    DeltaKernelProtocol, KernelSnapshot, TABLE_FEATURES_READER_VERSION, snapshot_protocol_report,
+    KernelProtocolMetadata, KernelSnapshot, TABLE_FEATURES_READER_VERSION,
+    snapshot_protocol_metadata,
 };
 use crate::{DeltaReaderError, error::UnsupportedProtocolSnafu};
 
@@ -27,12 +28,12 @@ pub struct DeltaProtocol {
 
 impl DeltaProtocol {
     pub(crate) fn from_snapshot(snapshot: &KernelSnapshot) -> Self {
-        let DeltaKernelProtocol {
+        let KernelProtocolMetadata {
             min_reader_version,
             min_writer_version,
             reader_features,
             writer_features,
-        } = snapshot_protocol_report(snapshot);
+        } = snapshot_protocol_metadata(snapshot);
 
         Self {
             min_reader_version,
