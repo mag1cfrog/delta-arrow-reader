@@ -4354,7 +4354,7 @@ mod tests {
         reader::{
             predicate::validate_predicate,
             scheduling::{
-                DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
+                DeltaScanScheduler, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
                 FileReadPermit,
             },
         },
@@ -5526,10 +5526,10 @@ mod tests {
                 async move { Ok(execution_file_stream(permit, batch)) }.boxed()
             })
         };
-        let execution = DeltaScanExecution::new(Arc::clone(&plan));
+        let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
 
         for partition in 0..plan.partitions.len() {
-            let batches = execution
+            let batches = scheduler
                 .partition_stream(partition, Arc::clone(&admission), Arc::clone(&executor))?
                 .collect::<Vec<_>>()
                 .await
@@ -5537,7 +5537,7 @@ mod tests {
                 .collect::<Result<Vec<_>, _>>()?;
             assert_eq!(batches.len(), 1);
         }
-        let invalid = match execution.partition_stream(
+        let invalid = match scheduler.partition_stream(
             plan.partitions.len(),
             Arc::clone(&admission),
             Arc::clone(&executor),
@@ -5547,14 +5547,14 @@ mod tests {
         };
         assert_eq!(invalid.code(), "invalid_configuration");
 
-        let cancelled_execution = DeltaScanExecution::new(Arc::clone(&plan));
-        drop(cancelled_execution.partition_stream(
+        let cancelled_scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
+        drop(cancelled_scheduler.partition_stream(
             0,
             Arc::clone(&admission),
             Arc::clone(&executor),
         )?);
-        let repeated_execution = DeltaScanExecution::new(Arc::clone(&plan));
-        let repeated = repeated_execution
+        let repeated_scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
+        let repeated = repeated_scheduler
             .partition_stream(0, admission, executor)?
             .collect::<Vec<_>>()
             .await
@@ -5608,11 +5608,11 @@ mod tests {
             })
         };
         let admission: FileAdmissionFn<DeltaScanFileTask> = Arc::new(|_| Ok(FileAdmission::Admit));
-        let first_execution = DeltaScanExecution::new(Arc::clone(&plan));
-        let second_execution = DeltaScanExecution::new(Arc::clone(&plan));
+        let first_scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
+        let second_scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
         let mut first =
-            first_execution.partition_stream(0, Arc::clone(&admission), Arc::clone(&executor))?;
-        let mut second = second_execution.partition_stream(0, admission, executor)?;
+            first_scheduler.partition_stream(0, Arc::clone(&admission), Arc::clone(&executor))?;
+        let mut second = second_scheduler.partition_stream(0, admission, executor)?;
         let mut first_next = Box::pin(first.next());
         poll_fn(|context| {
             assert!(matches!(first_next.as_mut().poll(context), Poll::Pending));

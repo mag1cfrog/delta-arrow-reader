@@ -1500,7 +1500,7 @@ mod tests {
             metrics::DeltaScanMetricsConfig,
             planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
             scheduling::{
-                DeltaScanExecution, FileAdmission, FileReadPermit, ScanCancellation,
+                DeltaScanScheduler, FileAdmission, FileReadPermit, ScanCancellation,
                 ScanReadLimiter,
             },
         },
@@ -2131,11 +2131,11 @@ mod tests {
         plan: Arc<crate::reader::planning::DeltaScanPlan>,
         row_predicate: Option<DeltaKernelPredicate>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
-        let execution = DeltaScanExecution::new(Arc::clone(&plan));
+        let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
         let executor = direct_parquet_file_executor(&plan, Some(2), row_predicate);
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
-            let mut stream = execution.partition_stream(
+            let mut stream = scheduler.partition_stream(
                 partition,
                 Arc::new(|_| Ok(FileAdmission::Admit)),
                 Arc::clone(&executor),
@@ -2150,11 +2150,11 @@ mod tests {
     async fn execute_kernel_plan(
         plan: Arc<crate::reader::planning::DeltaScanPlan>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
-        let execution = DeltaScanExecution::new(Arc::clone(&plan));
+        let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
         let executor = delta_kernel_file_executor(&plan);
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
-            let mut stream = execution.partition_stream(
+            let mut stream = scheduler.partition_stream(
                 partition,
                 Arc::new(|_| Ok(FileAdmission::Admit)),
                 Arc::clone(&executor),
@@ -3652,8 +3652,8 @@ mod tests {
             ParquetReaderBackend::DeltaKernel,
             false,
         )?;
-        let execution = DeltaScanExecution::new(Arc::clone(&plan));
-        let stream = execution.partition_stream(
+        let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
+        let stream = scheduler.partition_stream(
             0,
             Arc::new(|_| Ok(FileAdmission::Admit)),
             delta_kernel_file_executor(&plan),

@@ -35,7 +35,7 @@ use self::{
     planning::{DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan},
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
-        DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
+        DeltaScanScheduler, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
         PartitionStream,
     },
 };
@@ -468,7 +468,7 @@ impl DeltaScan {
         let partitions = if self.limit == Some(0) {
             VecDeque::new()
         } else {
-            let execution = DeltaScanExecution::new(Arc::clone(&self.plan));
+            let scheduler = DeltaScanScheduler::new(Arc::clone(&self.plan));
             let admission: FileAdmissionFn<_> = Arc::new(|_| Ok(FileAdmission::Admit));
             let executor = match backend {
                 ParquetReaderBackend::Direct => direct_parquet_executor(
@@ -480,7 +480,7 @@ impl DeltaScan {
                 ),
                 ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
             };
-            execution.all_partition_streams(admission, executor)
+            scheduler.partition_streams(admission, executor)
         };
 
         DeltaBatchStream {

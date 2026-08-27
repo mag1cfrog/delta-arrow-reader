@@ -112,13 +112,13 @@ pub(crate) struct PartitionStream {
     done: bool,
 }
 
-pub(crate) struct DeltaScanExecution {
+pub(crate) struct DeltaScanScheduler {
     plan: Arc<DeltaScanPlan>,
     limiter: Arc<ScanReadLimiter>,
     cancellation: ScanCancellation,
 }
 
-impl DeltaScanExecution {
+impl DeltaScanScheduler {
     pub(crate) fn new(plan: Arc<DeltaScanPlan>) -> Self {
         let limiter = ScanReadLimiter::new(
             plan.execution_options,
@@ -162,7 +162,7 @@ impl DeltaScanExecution {
         ))
     }
 
-    pub(crate) fn all_partition_streams(
+    pub(crate) fn partition_streams(
         &self,
         admission: FileAdmissionFn<DeltaScanFileTask>,
         executor: FileExecutor<DeltaScanFileTask, FileBatchStream>,

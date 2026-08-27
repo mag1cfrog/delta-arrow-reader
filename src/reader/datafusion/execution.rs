@@ -70,7 +70,7 @@ use crate::{
         delta_kernel_executor,
         metrics::saturating_fetch_add,
         planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
-        scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
+        scheduling::{DeltaScanScheduler, FileAdmission, FileAdmissionFn, ScanReadLimiter},
     },
 };
 
@@ -646,7 +646,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
             },
             ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
         };
-        let stream = DeltaScanExecution::with_shared_limiter(
+        let stream = DeltaScanScheduler::with_shared_limiter(
             Arc::clone(&self.plan),
             Arc::clone(&self.limiter),
         )
