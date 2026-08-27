@@ -188,7 +188,7 @@ impl DirectParquetReader {
         }
     }
 
-    async fn load_split_parquet_metadata(
+    async fn load_ranged_parquet_metadata(
         &self,
         metadata_cache: Option<&DirectParquetMetadataCache>,
         path: &Path,
@@ -270,7 +270,7 @@ impl DirectParquetReader {
             // Ranged tasks need explicit footer metadata to select row groups.
             // Sharing it avoids one footer read for every range of the same file.
             let metadata = self
-                .load_split_parquet_metadata(
+                .load_ranged_parquet_metadata(
                     metadata_cache,
                     &path,
                     file_size,
