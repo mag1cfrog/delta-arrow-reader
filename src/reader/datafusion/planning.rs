@@ -856,7 +856,7 @@ fn normalize_equivalent_scalars(predicate: &mut DeltaPredicate, schema: &Schema)
             }
         }
         DeltaPredicate::Not(child) => normalize_equivalent_scalars(child, schema)?,
-        DeltaPredicate::Boolean(_)
+        DeltaPredicate::Constant(_)
         | DeltaPredicate::IsNull { .. }
         | DeltaPredicate::IsNotNull { .. } => {}
     }
@@ -874,7 +874,7 @@ fn and_predicates(predicates: Vec<DeltaPredicate>) -> Option<DeltaPredicate> {
 fn translate_expr(expr: &Expr) -> Option<DeltaPredicate> {
     match unalias(expr) {
         Expr::Literal(ScalarValue::Boolean(Some(value)), _) => {
-            Some(DeltaPredicate::Boolean(*value))
+            Some(DeltaPredicate::Constant(*value))
         }
         Expr::Column(column) => Some(DeltaPredicate::Compare {
             column: column_name(column)?,
@@ -932,7 +932,7 @@ fn translate_expr(expr: &Expr) -> Option<DeltaPredicate> {
                 .map(|item| scalar_value(expr_literal(item)?))
                 .collect::<Option<Vec<_>>>()?;
             let predicate = match values.as_slice() {
-                [] => DeltaPredicate::Boolean(false),
+                [] => DeltaPredicate::Constant(false),
                 _ => DeltaPredicate::Or(
                     values
                         .into_iter()
@@ -946,7 +946,7 @@ fn translate_expr(expr: &Expr) -> Option<DeltaPredicate> {
             };
             Some(if in_list.negated {
                 match predicate {
-                    DeltaPredicate::Boolean(false) => DeltaPredicate::IsNotNull { column },
+                    DeltaPredicate::Constant(false) => DeltaPredicate::IsNotNull { column },
                     predicate => DeltaPredicate::Not(Box::new(predicate)),
                 }
             } else {
@@ -1751,7 +1751,7 @@ mod tests {
         let not_empty = col("text").in_list(Vec::new(), true);
         assert_eq!(
             exact_partition_predicate(&empty, string_schema.as_ref()),
-            Some(DeltaPredicate::Boolean(false))
+            Some(DeltaPredicate::Constant(false))
         );
         assert_eq!(
             exact_partition_predicate(&not_empty, string_schema.as_ref()),

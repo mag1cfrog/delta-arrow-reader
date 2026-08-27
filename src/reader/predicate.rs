@@ -96,7 +96,7 @@ pub enum DeltaScalar {
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeltaPredicate {
     /// Constant Boolean predicate.
-    Boolean(bool),
+    Constant(bool),
     /// Compare a column with a non-null scalar value.
     Compare {
         /// Unqualified top-level logical column name.
@@ -130,7 +130,7 @@ pub(crate) fn validate_predicate(
     schema: &Schema,
 ) -> Result<(), DeltaReaderError> {
     match predicate {
-        DeltaPredicate::Boolean(_) => Ok(()),
+        DeltaPredicate::Constant(_) => Ok(()),
         DeltaPredicate::Compare { column, value, .. } => {
             validate_scalar(column_data_type(schema, column)?, value)
         }
@@ -157,7 +157,7 @@ pub(crate) fn evaluate_predicate(
 pub(crate) fn referenced_columns(predicate: &DeltaPredicate) -> Vec<String> {
     fn visit(predicate: &DeltaPredicate, columns: &mut Vec<String>) {
         match predicate {
-            DeltaPredicate::Boolean(_) => {}
+            DeltaPredicate::Constant(_) => {}
             DeltaPredicate::Compare { column, .. }
             | DeltaPredicate::IsNull { column }
             | DeltaPredicate::IsNotNull { column } => {
@@ -184,7 +184,7 @@ fn predicate_selection(
     predicate: &DeltaPredicate,
 ) -> Result<BooleanArray, ArrowError> {
     match predicate {
-        DeltaPredicate::Boolean(value) => Ok(BooleanArray::from(vec![*value; batch.num_rows()])),
+        DeltaPredicate::Constant(value) => Ok(BooleanArray::from(vec![*value; batch.num_rows()])),
         DeltaPredicate::Compare { column, op, value } => {
             let column = batch.column(batch.schema().index_of(column)?);
             let scalar = ArrowScalar::new(scalar_array(value)?);
@@ -517,7 +517,7 @@ mod tests {
             }
         }
 
-        validate_predicate(&DeltaPredicate::Boolean(true), &schema)?;
+        validate_predicate(&DeltaPredicate::Constant(true), &schema)?;
         validate_predicate(
             &DeltaPredicate::And(vec![
                 DeltaPredicate::IsNull {
@@ -564,11 +564,11 @@ mod tests {
 
         for predicate in [
             DeltaPredicate::And(vec![
-                DeltaPredicate::Boolean(false),
+                DeltaPredicate::Constant(false),
                 compare("missing-secret", DeltaScalar::Int32(7)),
             ]),
             DeltaPredicate::Or(vec![
-                DeltaPredicate::Boolean(true),
+                DeltaPredicate::Constant(true),
                 compare("missing-secret", DeltaScalar::Int32(7)),
             ]),
         ] {
@@ -1064,7 +1064,7 @@ mod tests {
         let second_filtered = evaluate_validated(&second, &predicate)?;
         assert_eq!(second_filtered.num_rows(), 1);
 
-        let no_survivors = evaluate_validated(&batch, &DeltaPredicate::Boolean(false))?;
+        let no_survivors = evaluate_validated(&batch, &DeltaPredicate::Constant(false))?;
         assert_eq!(no_survivors.num_rows(), 0);
         assert!(Arc::ptr_eq(batch.schema_ref(), no_survivors.schema_ref()));
 

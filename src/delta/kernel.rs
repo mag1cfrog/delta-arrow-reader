@@ -279,7 +279,7 @@ fn convert_predicate(predicate: &DeltaPredicate) -> Option<ConvertedPredicate> {
     };
 
     match predicate {
-        DeltaPredicate::Boolean(value) => exact(Predicate::literal(*value)),
+        DeltaPredicate::Constant(value) => exact(Predicate::literal(*value)),
         DeltaPredicate::Compare { column, op, value } => {
             let column = Expression::Column(ColumnName::new([column.as_str()]));
             let value = Expression::Literal(convert_scalar(value)?);
@@ -661,14 +661,14 @@ mod tests {
             Some(Predicate::is_not_null(id.clone()))
         );
         assert_eq!(
-            converted(&DeltaPredicate::Not(Box::new(DeltaPredicate::Boolean(
+            converted(&DeltaPredicate::Not(Box::new(DeltaPredicate::Constant(
                 true
             )))),
             Some(Predicate::not(Predicate::literal(true)))
         );
         assert_eq!(
             converted(&DeltaPredicate::Or(vec![
-                DeltaPredicate::Boolean(false),
+                DeltaPredicate::Constant(false),
                 DeltaPredicate::IsNull {
                     column: "id".to_owned(),
                 },

@@ -161,7 +161,7 @@ fn exact_predicate_model_is_public() {
     assert_eq!(scalars, scalars.clone());
 
     let predicates = vec![
-        DeltaPredicate::Boolean(true),
+        DeltaPredicate::Constant(true),
         DeltaPredicate::Compare {
             column: "id".into(),
             op: DeltaComparison::Eq,
@@ -175,7 +175,7 @@ fn exact_predicate_model_is_public() {
         },
         DeltaPredicate::And(Vec::new()),
         DeltaPredicate::Or(Vec::new()),
-        DeltaPredicate::Not(Box::new(DeltaPredicate::Boolean(false))),
+        DeltaPredicate::Not(Box::new(DeltaPredicate::Constant(false))),
     ];
     assert_eq!(predicates, predicates.clone());
     assert!(format!("{predicates:?}").contains("Compare"));
