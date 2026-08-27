@@ -362,7 +362,7 @@ impl TableProvider for DeltaTableProvider {
 
 /// Result of registering one loaded Delta table in a DataFusion context.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegisteredTable {
+pub struct TableRegistration {
     /// Caller-supplied DataFusion table name.
     pub name: String,
     /// Loaded Delta snapshot version.
@@ -386,13 +386,13 @@ pub struct RegisteredTable {
 /// let table = DeltaTableBuilder::new("/tmp/example-delta-table")
 ///     .load_table()
 ///     .await?;
-/// let registered = register_table(
+/// let registration = register_table(
 ///     &context,
 ///     "orders",
 ///     table,
 ///     ScanOptions::default(),
 /// )?;
-/// assert_eq!(registered.name, "orders");
+/// assert_eq!(registration.name, "orders");
 /// # Ok(())
 /// # }
 /// ```
@@ -401,7 +401,7 @@ pub fn register_table(
     name: impl Into<String>,
     table: DeltaTable,
     options: ScanOptions,
-) -> Result<RegisteredTable, DeltaReaderError> {
+) -> Result<TableRegistration, DeltaReaderError> {
     let name = name.into();
     let snapshot_version = table.version();
     let backend = options.execution_options.reader_backend();
@@ -415,13 +415,13 @@ pub fn register_table(
                 reason: "table_registration_failed",
                 source: Box::new(source),
             })?;
-        Ok(RegisteredTable {
+        Ok(TableRegistration {
             name,
             snapshot_version,
         })
     })();
     match result {
-        Ok(registered) => {
+        Ok(registration) => {
             tracing::debug!(
                 target: TRACING_TARGET,
                 event = "provider_registration.registered",
@@ -430,7 +430,7 @@ pub fn register_table(
                 backend = ?backend,
                 outcome = "registered"
             );
-            Ok(registered)
+            Ok(registration)
         }
         Err(error) => {
             trace_failure(
