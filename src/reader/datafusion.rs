@@ -5,7 +5,9 @@ mod dynamic_partition_pruning;
 mod execution;
 mod planning;
 
-pub use execution::{IntraFileRepartitioning, Metrics, MetricsSnapshot, collect_metrics};
+pub use execution::{
+    IntraFileRepartitioning, ScanMetrics, ScanMetricsSnapshot, collect_scan_metrics,
+};
 
 use std::{collections::HashSet, fmt, sync::Arc};
 

@@ -273,12 +273,12 @@ fn direct_reader_contract_is_public() {
 #[cfg(feature = "datafusion")]
 #[test]
 fn datafusion_metrics_contract_is_public() {
-    use delta_arrow_reader::datafusion::{Metrics, MetricsSnapshot, collect_metrics};
+    use delta_arrow_reader::datafusion::{ScanMetrics, ScanMetricsSnapshot, collect_scan_metrics};
 
     fn assert_clone<T: Clone>() {}
     fn assert_snapshot_traits<T: std::fmt::Debug + Clone + PartialEq + Eq>() {}
-    fn inspect(snapshot: MetricsSnapshot) {
-        let _: DeltaReadMetricsSnapshot = snapshot.reader;
+    fn inspect(snapshot: ScanMetricsSnapshot) {
+        let _: DeltaReadMetricsSnapshot = snapshot.reader_metrics;
         let _: bool = snapshot.use_arrow_view_types;
         let _: Option<u64> = snapshot.output_batch_size;
         let _: u64 = snapshot.dynamic_partition_tasks_pruned;
@@ -291,13 +291,14 @@ fn datafusion_metrics_contract_is_public() {
         let _: u64 = snapshot.dynamic_partition_tasks_kept_unsupported_expression;
     }
 
-    assert_clone::<Metrics>();
-    assert_snapshot_traits::<MetricsSnapshot>();
-    let registration_name: for<'a> fn(&'a Metrics) -> Option<&'a str> = Metrics::registration_name;
-    let snapshot: fn(&Metrics) -> MetricsSnapshot = Metrics::snapshot;
-    let same_instance: fn(&Metrics, &Metrics) -> bool = Metrics::same_instance;
-    let collect: fn(&dyn datafusion::physical_plan::ExecutionPlan) -> Vec<Metrics> =
-        collect_metrics;
+    assert_clone::<ScanMetrics>();
+    assert_snapshot_traits::<ScanMetricsSnapshot>();
+    let registration_name: for<'a> fn(&'a ScanMetrics) -> Option<&'a str> =
+        ScanMetrics::registration_name;
+    let snapshot: fn(&ScanMetrics) -> ScanMetricsSnapshot = ScanMetrics::snapshot;
+    let same_instance: fn(&ScanMetrics, &ScanMetrics) -> bool = ScanMetrics::same_instance;
+    let collect: fn(&dyn datafusion::physical_plan::ExecutionPlan) -> Vec<ScanMetrics> =
+        collect_scan_metrics;
     let _ = (registration_name, snapshot, same_instance, collect, inspect);
 }
 

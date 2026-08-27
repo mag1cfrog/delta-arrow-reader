@@ -18,7 +18,7 @@ use arrow::record_batch::RecordBatch;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
     DeltaReaderExecutionOptions, DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend,
-    datafusion::{MetricsSnapshot, ScanOptions, collect_metrics, register_table},
+    datafusion::{ScanMetricsSnapshot, ScanOptions, collect_scan_metrics, register_table},
 };
 use delta_kernel::actions::deletion_vector::{DeletionVectorDescriptor, DeletionVectorStorageType};
 use delta_kernel::actions::deletion_vector_writer::{
@@ -215,7 +215,7 @@ struct Measurement {
     process_peak_rss_bytes: Option<u64>,
     process_peak_rss_delta_bytes: Option<u64>,
     batch_latency_micros: Vec<u64>,
-    metrics: Vec<MetricsSnapshot>,
+    metrics: Vec<ScanMetricsSnapshot>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1373,7 +1373,7 @@ async fn run_once(
         .into());
     }
     let peak_rss = process_peak_rss_bytes();
-    let metrics = collect_metrics(metrics_plan.as_ref())
+    let metrics = collect_scan_metrics(metrics_plan.as_ref())
         .into_iter()
         .map(|metrics| metrics.snapshot())
         .collect::<Vec<_>>();
@@ -1491,14 +1491,14 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
                 .map(|snapshots| {
                     snapshots
                         .iter()
-                        .map(|snapshot| reader(&snapshot.reader))
+                        .map(|snapshot| reader(&snapshot.reader_metrics))
                         .sum()
                 })
                 .collect::<Vec<_>>(),
             50,
         )
     };
-    let dynamic = |select: fn(&MetricsSnapshot) -> u64| {
+    let dynamic = |select: fn(&ScanMetricsSnapshot) -> u64| {
         percentile(
             &snapshots
                 .iter()
@@ -1511,7 +1511,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         optional_percentile(
             snapshots.iter().map(|snapshots| {
                 snapshots.iter().try_fold(0_u64, |sum, snapshot| {
-                    sum.checked_add(select(&snapshot.reader)?)
+                    sum.checked_add(select(&snapshot.reader_metrics)?)
                 })
             }),
             50,
@@ -1523,7 +1523,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
                 .iter()
                 .filter_map(|snapshots| {
                     snapshots.iter().try_fold(0_u64, |sum, snapshot| {
-                        sum.checked_add(select(&snapshot.reader)?)
+                        sum.checked_add(select(&snapshot.reader_metrics)?)
                     })
                 })
                 .max()
@@ -1531,7 +1531,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
     let scan_metadata_exhausted = summarize_scan_metadata(snapshots.iter().flat_map(|snapshots| {
         snapshots
             .iter()
-            .map(|snapshot| snapshot.reader.scan_metadata_exhausted)
+            .map(|snapshot| snapshot.reader_metrics.scan_metadata_exhausted)
     }));
     ReadSummary {
         scan_count: snapshots
@@ -1545,7 +1545,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             .map(|snapshots| {
                 snapshots
                     .iter()
-                    .map(|snapshot| snapshot.reader.scan_partitions_planned)
+                    .map(|snapshot| snapshot.reader_metrics.scan_partitions_planned)
                     .sum()
             })
             .max()
@@ -1555,7 +1555,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             .map(|snapshots| {
                 snapshots
                     .iter()
-                    .map(|snapshot| snapshot.reader.files_planned)
+                    .map(|snapshot| snapshot.reader_metrics.files_planned)
                     .sum()
             })
             .max()
@@ -2066,7 +2066,10 @@ mod tests {
             )?;
             let unequal_measurement = run_once(&unequal_config, &unequal, 4).await?;
             assert_eq!(unequal_measurement.produced_rows, 68_608);
-            assert_eq!(unequal_measurement.metrics[0].reader.files_planned, 32);
+            assert_eq!(
+                unequal_measurement.metrics[0].reader_metrics.files_planned,
+                32
+            );
 
             let http_config = config(
                 Workload::FewLarger,
@@ -2083,7 +2086,7 @@ mod tests {
                 false,
             )?;
             let http_measurement = run_once(&http_config, &http, 4).await?;
-            let reader = &http_measurement.metrics[0].reader;
+            let reader = &http_measurement.metrics[0].reader_metrics;
             assert_eq!(reader.rows_produced, 32_768);
             assert_eq!(reader.parquet_data_file_range_get_operations, Some(8));
             Ok::<_, Box<dyn Error>>(())

@@ -96,9 +96,9 @@ impl IntraFileRepartitioning {
 
 /// Immutable point-in-time DataFusion scan metrics.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MetricsSnapshot {
+pub struct ScanMetricsSnapshot {
     /// Core reader planning and execution metrics.
-    pub reader: DeltaReadMetricsSnapshot,
+    pub reader_metrics: DeltaReadMetricsSnapshot,
     /// Whether the provider requested Arrow view arrays for string and binary data columns.
     pub use_arrow_view_types: bool,
     /// Effective DataFusion task batch size observed at execution.
@@ -125,7 +125,7 @@ pub struct MetricsSnapshot {
 
 /// Shared live metrics for one DataFusion physical scan plan.
 #[derive(Clone)]
-pub struct Metrics {
+pub struct ScanMetrics {
     inner: Arc<MetricsInner>,
 }
 
@@ -144,7 +144,7 @@ struct MetricsInner {
     dynamic_partition_tasks_kept_unsupported_expression: AtomicU64,
 }
 
-impl Metrics {
+impl ScanMetrics {
     #[allow(dead_code)]
     fn new(
         registration_name: Option<String>,
@@ -175,10 +175,10 @@ impl Metrics {
     }
 
     /// Returns an immutable point-in-time copy of all DataFusion scan metrics.
-    pub fn snapshot(&self) -> MetricsSnapshot {
+    pub fn snapshot(&self) -> ScanMetricsSnapshot {
         let inner = self.inner.as_ref();
-        MetricsSnapshot {
-            reader: inner.reader.snapshot(),
+        ScanMetricsSnapshot {
+            reader_metrics: inner.reader.snapshot(),
             use_arrow_view_types: inner.use_arrow_view_types,
             output_batch_size: nonzero_load(&inner.output_batch_size),
             dynamic_partition_tasks_pruned: load(&inner.dynamic_partition_tasks_pruned),
@@ -258,9 +258,11 @@ impl Metrics {
     }
 }
 
-impl fmt::Debug for Metrics {
+impl fmt::Debug for ScanMetrics {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_struct("Metrics").finish_non_exhaustive()
+        formatter
+            .debug_struct("ScanMetrics")
+            .finish_non_exhaustive()
     }
 }
 
@@ -276,12 +278,12 @@ fn nonzero_load(counter: &AtomicU64) -> Option<u64> {
 }
 
 /// Collects distinct Delta DataFusion scan metrics in depth-first plan order.
-pub fn collect_metrics(plan: &dyn ExecutionPlan) -> Vec<Metrics> {
+pub fn collect_scan_metrics(plan: &dyn ExecutionPlan) -> Vec<ScanMetrics> {
     fn collect(
         plan: &dyn ExecutionPlan,
         seen_plans: &mut HashSet<usize>,
         seen_metrics: &mut HashSet<usize>,
-        metrics: &mut Vec<Metrics>,
+        metrics: &mut Vec<ScanMetrics>,
     ) {
         let plan_identity = plan as *const dyn ExecutionPlan as *const () as usize;
         if !seen_plans.insert(plan_identity) {
@@ -329,7 +331,7 @@ struct DeltaDataFusionExec {
     output_projection: Option<Arc<[usize]>>,
     row_predicate: Option<DeltaKernelPredicate>,
     properties: Arc<PlanProperties>,
-    metrics: Metrics,
+    metrics: ScanMetrics,
     limiter: Arc<ScanReadLimiter>,
     dynamic_filters: Arc<[DeltaRetainedDynamicFilter]>,
     intra_file_repartitioning: IntraFileRepartitioning,
@@ -350,7 +352,7 @@ impl DeltaDataFusionExec {
         let schema = planning.projection.output_schema;
         let output_projection = planning.projection.output_projection.map(Arc::from);
         let properties = scan_properties(&schema, plan.partitions.len());
-        let metrics = Metrics::new(
+        let metrics = ScanMetrics::new(
             registration_name,
             plan.metrics.clone(),
             use_arrow_view_types,
@@ -723,7 +725,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
 }
 
 fn dynamic_admission(
-    metrics: Metrics,
+    metrics: ScanMetrics,
     filters: Arc<[DeltaRetainedDynamicFilter]>,
 ) -> FileAdmissionFn<DeltaScanFileTask> {
     Arc::new(move |task| {
@@ -1360,9 +1362,9 @@ mod tests {
             None,
             IntraFileRepartitioning::Always,
         )?;
-        let expected_bytes = collect_metrics(plan.as_ref())[0]
+        let expected_bytes = collect_scan_metrics(plan.as_ref())[0]
             .snapshot()
-            .reader
+            .reader_metrics
             .estimated_input_bytes;
         let mut config = ConfigOptions::new();
         config.optimizer.repartition_file_min_size = 1;
@@ -1385,9 +1387,12 @@ mod tests {
         .await?);
         actual_ids.sort_unstable();
         assert_eq!(actual_ids, [1, 2, 3, 4]);
-        let metrics = collect_metrics(repartitioned.as_ref())[0].snapshot();
-        assert_eq!(metrics.reader.scan_partitions_planned, 4);
-        assert_eq!(metrics.reader.parquet_task_bytes_admitted, expected_bytes);
+        let metrics = collect_scan_metrics(repartitioned.as_ref())[0].snapshot();
+        assert_eq!(metrics.reader_metrics.scan_partitions_planned, 4);
+        assert_eq!(
+            metrics.reader_metrics.parquet_task_bytes_admitted,
+            expected_bytes
+        );
 
         let explicit_one = build_plan(
             &table,
@@ -1477,14 +1482,14 @@ mod tests {
         let mut second_ids = ids(&second);
         second_ids.sort_unstable();
         assert_eq!(second_ids, first_ids);
-        let handles = collect_metrics(plan.as_ref());
+        let handles = collect_scan_metrics(plan.as_ref());
         assert_eq!(handles.len(), 1);
         assert_eq!(handles[0].registration_name(), None);
         let metrics = handles[0].snapshot();
         assert_eq!(metrics.output_batch_size, Some(1));
-        assert_eq!(metrics.reader.scan_partitions_started, 4);
-        assert_eq!(metrics.reader.file_tasks_completed, 4);
-        assert_eq!(metrics.reader.rows_produced, 6);
+        assert_eq!(metrics.reader_metrics.scan_partitions_started, 4);
+        assert_eq!(metrics.reader_metrics.file_tasks_completed, 4);
+        assert_eq!(metrics.reader_metrics.rows_produced, 6);
 
         let hidden = build_plan(
             &table,
@@ -1525,9 +1530,9 @@ mod tests {
         .await?;
         assert_eq!(ids(&partition_batches), [1, 2]);
         assert_eq!(
-            collect_metrics(partition_filter.as_ref())[0]
+            collect_scan_metrics(partition_filter.as_ref())[0]
                 .snapshot()
-                .reader
+                .reader_metrics
                 .file_tasks_started,
             1
         );
@@ -1632,7 +1637,7 @@ mod tests {
         )
         .await?;
         assert_eq!(ids(&batches), [1, 2]);
-        let metrics = collect_metrics(updated.as_ref())
+        let metrics = collect_scan_metrics(updated.as_ref())
             .pop()
             .ok_or("missing dynamic metrics")?
             .snapshot();
@@ -1642,10 +1647,10 @@ mod tests {
         assert_eq!(metrics.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
         assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
-        assert_eq!(metrics.reader.file_tasks_started, 1);
-        assert_eq!(metrics.reader.file_tasks_completed, 1);
+        assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+        assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
         assert_eq!(
-            collect_metrics(plan.as_ref())[0]
+            collect_scan_metrics(plan.as_ref())[0]
                 .snapshot()
                 .dynamic_filters_received,
             2
@@ -1727,12 +1732,12 @@ mod tests {
         }
 
         assert_eq!(ids(&batches), [1, 2, 3]);
-        let metrics = collect_metrics(updated.as_ref())[0].snapshot();
+        let metrics = collect_scan_metrics(updated.as_ref())[0].snapshot();
         assert_eq!(metrics.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
         assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
-        assert_eq!(metrics.reader.file_tasks_started, 1);
-        assert_eq!(metrics.reader.file_tasks_completed, 1);
+        assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+        assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
         Ok(())
     }
 
@@ -1777,7 +1782,7 @@ mod tests {
             Arc::clone(&second),
             Arc::clone(&first),
         ])?;
-        let handles = collect_metrics(union.as_ref());
+        let handles = collect_scan_metrics(union.as_ref());
         assert_eq!(handles.len(), 2);
         assert_eq!(handles[0].registration_name(), Some("first"));
         assert_eq!(handles[1].registration_name(), Some("second"));
@@ -1810,7 +1815,7 @@ mod tests {
             .ok_or("expected updated scan")?;
         let shared_metrics_union: Arc<dyn ExecutionPlan> =
             UnionExec::try_new(vec![updated, Arc::clone(&first), Arc::clone(&second)])?;
-        let shared_handles = collect_metrics(shared_metrics_union.as_ref());
+        let shared_handles = collect_scan_metrics(shared_metrics_union.as_ref());
         assert_eq!(shared_handles.len(), 2);
         assert_eq!(shared_handles[0].registration_name(), Some("first"));
         assert_eq!(shared_handles[1].registration_name(), Some("second"));
@@ -1821,7 +1826,7 @@ mod tests {
         drop(union);
         drop(first);
         drop(second);
-        assert_eq!(handles[0].snapshot().reader.file_tasks_started, 0);
+        assert_eq!(handles[0].snapshot().reader_metrics.file_tasks_started, 0);
         assert_eq!(handles[0].registration_name(), Some("first"));
         Ok(())
     }
@@ -1844,7 +1849,7 @@ mod tests {
             DeltaReaderExecutionOptions::new(),
             None,
         )?;
-        let metrics = collect_metrics(plan.as_ref())
+        let metrics = collect_scan_metrics(plan.as_ref())
             .pop()
             .ok_or("missing metrics")?;
         let schema = Arc::new(Schema::new(vec![
@@ -1942,7 +1947,7 @@ mod tests {
             DeltaReaderExecutionOptions::new(),
             None,
         )?;
-        let metrics = collect_metrics(plan.as_ref())
+        let metrics = collect_scan_metrics(plan.as_ref())
             .pop()
             .ok_or("missing metrics")?;
         let mut handles = Vec::new();
@@ -2007,10 +2012,10 @@ mod tests {
         let error = result.expect_err("missing file must fail");
         assert!(matches!(&error, DataFusionError::External(_)));
         assert!(!error.to_string().contains("missing.parquet"));
-        let failed = collect_metrics(missing_plan.as_ref())
+        let failed = collect_scan_metrics(missing_plan.as_ref())
             .pop()
             .ok_or("missing failure metrics")?;
-        assert_eq!(failed.snapshot().reader.file_tasks_started, 1);
+        assert_eq!(failed.snapshot().reader_metrics.file_tasks_started, 1);
 
         let fixture = TestTable::partitioned("drop")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -2020,7 +2025,7 @@ mod tests {
             .with_max_concurrent_file_reads_per_scan(Some(1))?
             .with_output_buffer_capacity_per_partition(1)?;
         let drop_plan = build_plan(&table, None, &[], 1, options, None)?;
-        let handle = collect_metrics(drop_plan.as_ref())
+        let handle = collect_scan_metrics(drop_plan.as_ref())
             .pop()
             .ok_or("missing drop metrics")?;
         let mut stream = drop_plan.execute(0, SessionContext::new().task_ctx())?;
@@ -2030,7 +2035,7 @@ mod tests {
         let stable = handle.snapshot();
         tokio::task::yield_now().await;
         assert_eq!(handle.snapshot(), stable);
-        assert!(stable.reader.file_tasks_started >= 1);
+        assert!(stable.reader_metrics.file_tasks_started >= 1);
         let retry = datafusion::physical_plan::collect(
             Arc::clone(&drop_plan),
             SessionContext::new().task_ctx(),
