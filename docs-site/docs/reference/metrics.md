@@ -14,12 +14,12 @@ usable after its batch stream finishes or is dropped.
 | `scan_partitions_planned` | Final number of execution partitions, including DataFusion repartitioning. |
 | `files_planned` | Physical data files selected during initial whole-file planning. |
 | `files_filtered_during_planning` | Best-effort count of Add actions excluded during metadata planning, when known. |
-| `estimated_rows` | Estimated output rows when every selected file supplied a valid estimate. |
-| `estimated_bytes` | Estimated input bytes when every selected file supplied a size. |
+| `estimated_input_rows` | Estimated rows in selected input files before row predicates and deletion vectors, when every file supplied a valid estimate. |
+| `estimated_input_bytes` | Estimated bytes in selected input files when every file supplied a size. |
 | `scan_partitions_started` | Execution partitions that started. |
 | `scan_partitions_completed` | Execution partitions that reached normal completion. |
-| `files_started` | Whole-file or ranged tasks that started. |
-| `files_completed` | Whole-file or ranged tasks that reached normal completion. |
+| `file_tasks_started` | Whole-file or ranged tasks that started. |
+| `file_tasks_completed` | Whole-file or ranged tasks that reached normal completion. |
 | `batches_produced` | Logical batches emitted by the scheduler. |
 | `rows_produced` | Logical rows emitted by the scheduler. |
 | `deletion_vector_payloads_loaded` | Deletion-vector payloads loaded. |
@@ -30,7 +30,7 @@ usable after its batch stream finishes or is dropped.
 | `parquet_data_file_range_get_operations` | Direct Parquet data-file GET operations with a range. |
 | `parquet_data_file_full_get_operations` | Direct Parquet data-file GET operations without a range. |
 | `parquet_data_file_bytes_received` | Bytes delivered successfully through the direct reader's object store. |
-| `parquet_data_file_opened_bytes` | Estimated bytes assigned to direct-reader tasks. A ranged task contributes its range length. |
+| `parquet_task_bytes_admitted` | Estimated bytes admitted across direct-reader tasks. A ranged task contributes its range length. |
 
 `files_filtered_during_planning` is not an exact active-file count. Delta
 Kernel's final selection also reconciles Add and Remove actions.
@@ -49,14 +49,14 @@ provider-specific fields.
 | `reader` | Core `DeltaReadMetricsSnapshot` for this physical scan. |
 | `use_view_types` | Whether the provider requested Arrow view arrays for string and binary data columns. |
 | `output_batch_size` | DataFusion task batch size observed during execution, when known. |
-| `dynamic_partition_files_pruned` | Whole-file or ranged tasks skipped by a dynamic partition filter before admission. |
-| `dynamic_partition_files_kept` | Tasks kept after consulting dynamic partition filters. |
+| `dynamic_partition_tasks_pruned` | Whole-file or ranged tasks skipped by a dynamic partition filter before admission. |
+| `dynamic_partition_tasks_kept` | Tasks kept after consulting dynamic partition filters. |
 | `dynamic_filters_received` | Physical filters offered after optimization. |
 | `dynamic_filters_accepted` | Offered filters retained for partition pruning. |
 | `dynamic_filters_unsupported` | Offered filters rejected by the dynamic-filter policy. |
 | `dynamic_filter_snapshots` | Current dynamic expressions consulted during task admission. |
-| `dynamic_files_not_pruned_missing_metadata` | Tasks kept because partition metadata was missing, invalid, or could not be parsed. |
-| `dynamic_files_not_pruned_unsupported_expression` | Tasks kept because an expression was unavailable, unsupported, or failed. |
+| `dynamic_partition_tasks_kept_missing_metadata` | Tasks kept because partition metadata was missing, invalid, or could not be parsed. |
+| `dynamic_partition_tasks_kept_unsupported_expression` | Tasks kept because an expression was unavailable, unsupported, or failed. |
 
 `collect_delta_datafusion_metrics` walks a physical plan in depth-first order
 and returns each distinct Delta scan metric handle once.
@@ -71,7 +71,7 @@ are not network billing counters.
   to the underlying store, so failed requests still count.
 - Received bytes count successful response chunks delivered by the store. They
   can include footers, column data, coalesced gaps, and repeated reads.
-- Opened bytes add the estimated span of each admitted task. A whole-file task
+- Admitted task bytes add the estimated span of each task. A whole-file task
   contributes its file size, while a ranged task contributes its range length.
 
 The wrapper cannot see lower-level HTTP retries, wire compression, provider

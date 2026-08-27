@@ -781,8 +781,8 @@ mod tests {
             scan_partitions_planned: 1,
             files_planned: 1,
             files_filtered_during_planning: Some(0),
-            estimated_rows: None,
-            estimated_bytes: None,
+            estimated_input_rows: None,
+            estimated_input_bytes: None,
         })
     }
 

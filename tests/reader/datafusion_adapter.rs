@@ -339,7 +339,10 @@ async fn intra_file_repartitioning_policy_controls_full_plan_rebalancing() -> Te
                 .value(0),
             50_025_003
         );
-        assert_eq!(metrics[0].snapshot().reader.files_started, expected_tasks);
+        assert_eq!(
+            metrics[0].snapshot().reader.file_tasks_started,
+            expected_tasks
+        );
     }
 
     Ok(())
@@ -386,12 +389,12 @@ async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates
     assert_eq!(actual, expected);
     let metrics = metrics[0].snapshot().reader;
     assert_eq!(metrics.scan_partitions_started, 8);
-    assert_eq!(metrics.files_started, 8);
+    assert_eq!(metrics.file_tasks_started, 8);
     assert!(
-        (1..=metrics.files_started).contains(&metrics.deletion_vector_payloads_loaded),
+        (1..=metrics.file_tasks_started).contains(&metrics.deletion_vector_payloads_loaded),
         "unexpected payload load count: {} for {} tasks",
         metrics.deletion_vector_payloads_loaded,
-        metrics.files_started
+        metrics.file_tasks_started
     );
     assert_eq!(metrics.deletion_vectors_applied, 2);
     assert_eq!(metrics.deletion_vector_rows_deleted, 3);
@@ -533,8 +536,8 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     );
     assert_eq!(metrics.scan_partitions_started, expected_tasks);
     assert_eq!(metrics.scan_partitions_completed, expected_tasks);
-    assert_eq!(metrics.files_started, expected_tasks);
-    assert_eq!(metrics.files_completed, expected_tasks);
+    assert_eq!(metrics.file_tasks_started, expected_tasks);
+    assert_eq!(metrics.file_tasks_completed, expected_tasks);
     assert_eq!(
         metrics.rows_produced,
         u64::try_from(expected.len())? * executions
@@ -555,7 +558,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     assert_eq!(metrics.deletion_vector_failures, 0);
     assert_eq!(metrics.deletion_vector_rejections, 0);
     assert_eq!(
-        metrics.parquet_data_file_opened_bytes,
+        metrics.parquet_task_bytes_admitted,
         Some(fixture.data_file_size() * executions)
     );
     assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
@@ -585,7 +588,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     let control_metrics = collect_delta_datafusion_metrics(control_plan.as_ref());
     assert_eq!(ids(&collect_plan(&control, control_plan).await?), expected);
     let control_metrics = control_metrics[0].snapshot().reader;
-    assert_eq!(control_metrics.files_started, 1);
+    assert_eq!(control_metrics.file_tasks_started, 1);
     assert_eq!(control_metrics.deletion_vector_payloads_loaded, 1);
     assert_eq!(
         control_metrics.deletion_vector_rows_deleted,
@@ -642,16 +645,16 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
     );
     assert!(!display.contains(DV_FILE), "{display}");
     let metrics = metrics[0].snapshot().reader;
-    assert!(metrics.files_started > 0);
-    assert_eq!(metrics.files_completed, 0);
+    assert!(metrics.file_tasks_started > 0);
+    assert_eq!(metrics.file_tasks_completed, 0);
     assert_eq!(metrics.batches_produced, 0);
     assert_eq!(metrics.rows_produced, 0);
     assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
     assert!(
-        (1..=metrics.files_started).contains(&metrics.deletion_vector_failures),
+        (1..=metrics.file_tasks_started).contains(&metrics.deletion_vector_failures),
         "unexpected failure count: {} for {} started tasks",
         metrics.deletion_vector_failures,
-        metrics.files_started
+        metrics.file_tasks_started
     );
     assert_eq!(metrics.deletion_vectors_applied, 0);
     assert_eq!(metrics.deletion_vector_rows_deleted, 0);
@@ -909,8 +912,11 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
     let first_handles = collect_delta_datafusion_metrics(first.as_ref());
     assert_eq!(first_handles.len(), 1);
     assert_eq!(first_handles[0].source_name(), Some("Orders"));
-    assert_eq!(first_handles[0].snapshot().reader.files_started, 0);
-    assert_eq!(first_handles[0].snapshot().reader.estimated_rows, Some(4));
+    assert_eq!(first_handles[0].snapshot().reader.file_tasks_started, 0);
+    assert_eq!(
+        first_handles[0].snapshot().reader.estimated_input_rows,
+        Some(4)
+    );
     let first_batches = collect_plan(&context, first).await?;
     assert_eq!(ids(&first_batches), [2, 3]);
     assert_eq!(regions(&first_batches), ["west", "east"]);
@@ -924,8 +930,11 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
     let second_handles = collect_delta_datafusion_metrics(second.as_ref());
     assert_eq!(second_handles.len(), 1);
     assert_eq!(second_handles[0].source_name(), Some("Orders"));
-    assert_eq!(second_handles[0].snapshot().reader.files_started, 0);
-    assert_eq!(second_handles[0].snapshot().reader.estimated_rows, Some(2));
+    assert_eq!(second_handles[0].snapshot().reader.file_tasks_started, 0);
+    assert_eq!(
+        second_handles[0].snapshot().reader.estimated_input_rows,
+        Some(2)
+    );
     assert_eq!(ids(&collect_plan(&context, second).await?), [1, 2]);
     assert_eq!(first_handles[0].snapshot().reader.rows_produced, 3);
     assert_eq!(second_handles[0].snapshot().reader.rows_produced, 2);
@@ -1069,22 +1078,25 @@ async fn sql_join_dynamic_filter_prunes_before_file_admission() -> TestResult {
     assert_eq!(metrics.len(), 1);
     assert_eq!(metrics[0].source_name(), Some("orders"));
     assert_eq!(metrics[0].snapshot().reader.files_planned, 2);
-    assert_eq!(metrics[0].snapshot().reader.files_started, 0);
+    assert_eq!(metrics[0].snapshot().reader.file_tasks_started, 0);
 
     let batches = collect_plan(&context, plan).await?;
     assert_eq!(ids(&batches), [1, 2]);
     assert_eq!(regions(&batches), ["us-west", "us-west"]);
     let metrics = metrics[0].snapshot();
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 1);
+    assert_eq!(metrics.reader.file_tasks_started, 1);
+    assert_eq!(metrics.reader.file_tasks_completed, 1);
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
     assert_eq!(metrics.dynamic_filters_unsupported, 0);
     assert_eq!(metrics.dynamic_filter_snapshots, 2);
-    assert_eq!(metrics.dynamic_partition_files_pruned, 1);
-    assert_eq!(metrics.dynamic_partition_files_kept, 1);
-    assert_eq!(metrics.dynamic_files_not_pruned_missing_metadata, 0);
-    assert_eq!(metrics.dynamic_files_not_pruned_unsupported_expression, 0);
+    assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
+    assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
+    assert_eq!(metrics.dynamic_partition_tasks_kept_missing_metadata, 0);
+    assert_eq!(
+        metrics.dynamic_partition_tasks_kept_unsupported_expression,
+        0
+    );
     Ok(())
 }
 
@@ -1134,8 +1146,8 @@ async fn dynamic_join_kept_file_still_applies_deletion_vector() -> TestResult {
     let metrics = metrics[0].snapshot();
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
-    assert_eq!(metrics.dynamic_partition_files_pruned, 0);
-    assert_eq!(metrics.dynamic_partition_files_kept, 1);
+    assert_eq!(metrics.dynamic_partition_tasks_pruned, 0);
+    assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
     assert_eq!(metrics.reader.deletion_vector_payloads_loaded, 1);
     assert_eq!(metrics.reader.deletion_vectors_applied, 1);
     assert_eq!(metrics.reader.deletion_vector_rows_deleted, 1);
@@ -1219,8 +1231,8 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
     assert_eq!(metrics.output_batch_size, Some(13));
     assert_eq!(metrics.reader.scan_partitions_started, 1);
     assert_eq!(metrics.reader.scan_partitions_completed, 1);
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 1);
+    assert_eq!(metrics.reader.file_tasks_started, 1);
+    assert_eq!(metrics.reader.file_tasks_completed, 1);
     Ok(())
 }
 
@@ -1245,12 +1257,12 @@ async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult 
     let metrics = metrics[0].snapshot().reader;
     assert_eq!(metrics.scan_partitions_planned, 0);
     assert_eq!(metrics.files_planned, 0);
-    assert_eq!(metrics.estimated_rows, Some(0));
-    assert_eq!(metrics.estimated_bytes, Some(0));
+    assert_eq!(metrics.estimated_input_rows, Some(0));
+    assert_eq!(metrics.estimated_input_bytes, Some(0));
     assert_eq!(metrics.scan_partitions_started, 0);
     assert_eq!(metrics.scan_partitions_completed, 0);
-    assert_eq!(metrics.files_started, 0);
-    assert_eq!(metrics.files_completed, 0);
+    assert_eq!(metrics.file_tasks_started, 0);
+    assert_eq!(metrics.file_tasks_completed, 0);
     assert_eq!(metrics.batches_produced, 0);
     assert_eq!(metrics.rows_produced, 0);
     assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
@@ -1291,8 +1303,8 @@ async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestRe
     assert!(stream.next().await.is_none());
 
     let metrics = metrics[0].snapshot();
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 0);
+    assert_eq!(metrics.reader.file_tasks_started, 1);
+    assert_eq!(metrics.reader.file_tasks_completed, 0);
     assert_eq!(metrics.reader.batches_produced, 0);
     assert_eq!(metrics.reader.rows_produced, 0);
     Ok(())
@@ -1338,8 +1350,8 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
     let metrics = metrics[0].snapshot();
     assert_eq!(metrics.reader.scan_partitions_started, 1);
     assert_eq!(metrics.reader.scan_partitions_completed, 0);
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 0);
+    assert_eq!(metrics.reader.file_tasks_started, 1);
+    assert_eq!(metrics.reader.file_tasks_completed, 0);
     assert!((1..=2).contains(&metrics.reader.batches_produced));
     assert!((1..=16_384).contains(&metrics.reader.rows_produced));
     Ok(())
@@ -1394,7 +1406,7 @@ async fn direct_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
             .value(0);
         outputs.push((row_count, id_sum));
         let snapshot = metrics[0].snapshot().reader;
-        assert_eq!(snapshot.files_started, 2);
+        assert_eq!(snapshot.file_tasks_started, 2);
         requests.push(
             snapshot
                 .parquet_data_file_range_get_operations
@@ -1451,20 +1463,20 @@ async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
 
     let metrics = metrics[0].snapshot();
     assert_eq!(metrics.reader.files_planned, 2);
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 1);
+    assert_eq!(metrics.reader.file_tasks_started, 1);
+    assert_eq!(metrics.reader.file_tasks_completed, 1);
     assert_eq!(metrics.reader.rows_produced, 2);
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
     assert_eq!(metrics.dynamic_filters_unsupported, 0);
-    assert_eq!(metrics.dynamic_partition_files_pruned, 1);
-    assert_eq!(metrics.dynamic_partition_files_kept, 1);
+    assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
+    assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
     assert_eq!(
         metrics.reader.files_planned,
         metrics
             .reader
-            .files_started
-            .saturating_add(metrics.dynamic_partition_files_pruned)
+            .file_tasks_started
+            .saturating_add(metrics.dynamic_partition_tasks_pruned)
     );
     Ok(())
 }
@@ -1508,7 +1520,7 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
     let metrics = collect_delta_datafusion_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
     assert!(metrics[0].snapshot().use_view_types);
-    assert_eq!(metrics[0].snapshot().reader.estimated_rows, Some(3));
+    assert_eq!(metrics[0].snapshot().reader.estimated_input_rows, Some(3));
     let batches = collect_plan(&context, plan).await?;
     assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
     let names = batches[0]
@@ -1790,7 +1802,7 @@ async fn joined_delta_scans_keep_distinct_metrics_and_limit_above_join() -> Test
     assert!(
         metrics
             .iter()
-            .all(|metrics| metrics.snapshot().reader.files_started == 1)
+            .all(|metrics| metrics.snapshot().reader.file_tasks_started == 1)
     );
     Ok(())
 }

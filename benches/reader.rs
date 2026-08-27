@@ -30,7 +30,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 23;
+const BENCHMARK_SCHEMA_VERSION: u32 = 24;
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
@@ -78,20 +78,20 @@ const CSV_HEADER: [&str; 80] = [
     "provider_stats_scan_metadata_exhausted",
     "provider_stats_scan_partitions_planned",
     "provider_stats_files_planned",
-    "provider_stats_estimated_rows",
-    "provider_stats_estimated_bytes",
+    "provider_stats_estimated_input_rows",
+    "provider_stats_estimated_input_bytes",
     "provider_stats_scan_partitions_started_p50",
     "provider_stats_scan_partitions_completed_p50",
-    "provider_stats_files_started_p50",
-    "provider_stats_files_completed_p50",
-    "provider_stats_dynamic_partition_files_pruned_p50",
-    "provider_stats_dynamic_partition_files_kept_p50",
+    "provider_stats_file_tasks_started_p50",
+    "provider_stats_file_tasks_completed_p50",
+    "provider_stats_dynamic_partition_tasks_pruned_p50",
+    "provider_stats_dynamic_partition_tasks_kept_p50",
     "provider_stats_dynamic_filters_received_p50",
     "provider_stats_dynamic_filters_accepted_p50",
     "provider_stats_dynamic_filters_unsupported_p50",
     "provider_stats_dynamic_filter_snapshots_p50",
-    "provider_stats_dynamic_partition_files_not_pruned_missing_metadata_p50",
-    "provider_stats_dynamic_partition_files_not_pruned_unsupported_expression_p50",
+    "provider_stats_dynamic_partition_tasks_kept_missing_metadata_p50",
+    "provider_stats_dynamic_partition_tasks_kept_unsupported_expression_p50",
     "provider_stats_batches_produced_p50",
     "provider_stats_rows_produced_p50",
     "provider_stats_deletion_vector_payloads_loaded_p50",
@@ -128,7 +128,7 @@ const CSV_HEADER: [&str; 80] = [
     "provider_stats_parquet_data_file_range_get_operations_p50",
     "provider_stats_parquet_data_file_full_get_operations_p50",
     "provider_stats_parquet_data_file_bytes_received_p50",
-    "provider_stats_parquet_data_file_opened_bytes_p50",
+    "provider_stats_parquet_task_bytes_admitted_p50",
     "fixture_fingerprint",
 ];
 
@@ -249,20 +249,20 @@ struct ReadSummary {
     scan_metadata_exhausted: String,
     scan_partitions_planned: u64,
     files_planned: u64,
-    estimated_rows: Option<u64>,
-    estimated_bytes: Option<u64>,
+    estimated_input_rows: Option<u64>,
+    estimated_input_bytes: Option<u64>,
     scan_partitions_started: u64,
     scan_partitions_completed: u64,
-    files_started: u64,
-    files_completed: u64,
-    dynamic_partition_files_pruned: u64,
-    dynamic_partition_files_kept: u64,
+    file_tasks_started: u64,
+    file_tasks_completed: u64,
+    dynamic_partition_tasks_pruned: u64,
+    dynamic_partition_tasks_kept: u64,
     dynamic_filters_received: u64,
     dynamic_filters_accepted: u64,
     dynamic_filters_unsupported: u64,
     dynamic_filter_snapshots: u64,
-    dynamic_files_not_pruned_missing_metadata: u64,
-    dynamic_files_not_pruned_unsupported_expression: u64,
+    dynamic_partition_tasks_kept_missing_metadata: u64,
+    dynamic_partition_tasks_kept_unsupported_expression: u64,
     batches_produced: u64,
     rows_produced: u64,
     deletion_vector_payloads_loaded: u64,
@@ -273,7 +273,7 @@ struct ReadSummary {
     range_gets: Option<u64>,
     full_gets: Option<u64>,
     bytes_received: Option<u64>,
-    opened_bytes: Option<u64>,
+    task_bytes_admitted: Option<u64>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -1561,23 +1561,23 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             })
             .max()
             .unwrap_or(0),
-        estimated_rows: optional_max(|reader| reader.estimated_rows),
-        estimated_bytes: optional_max(|reader| reader.estimated_bytes),
+        estimated_input_rows: optional_max(|reader| reader.estimated_input_rows),
+        estimated_input_bytes: optional_max(|reader| reader.estimated_input_bytes),
         scan_partitions_started: counter(|reader| reader.scan_partitions_started),
         scan_partitions_completed: counter(|reader| reader.scan_partitions_completed),
-        files_started: counter(|reader| reader.files_started),
-        files_completed: counter(|reader| reader.files_completed),
-        dynamic_partition_files_pruned: dynamic(|snapshot| snapshot.dynamic_partition_files_pruned),
-        dynamic_partition_files_kept: dynamic(|snapshot| snapshot.dynamic_partition_files_kept),
+        file_tasks_started: counter(|reader| reader.file_tasks_started),
+        file_tasks_completed: counter(|reader| reader.file_tasks_completed),
+        dynamic_partition_tasks_pruned: dynamic(|snapshot| snapshot.dynamic_partition_tasks_pruned),
+        dynamic_partition_tasks_kept: dynamic(|snapshot| snapshot.dynamic_partition_tasks_kept),
         dynamic_filters_received: dynamic(|snapshot| snapshot.dynamic_filters_received),
         dynamic_filters_accepted: dynamic(|snapshot| snapshot.dynamic_filters_accepted),
         dynamic_filters_unsupported: dynamic(|snapshot| snapshot.dynamic_filters_unsupported),
         dynamic_filter_snapshots: dynamic(|snapshot| snapshot.dynamic_filter_snapshots),
-        dynamic_files_not_pruned_missing_metadata: dynamic(|snapshot| {
-            snapshot.dynamic_files_not_pruned_missing_metadata
+        dynamic_partition_tasks_kept_missing_metadata: dynamic(|snapshot| {
+            snapshot.dynamic_partition_tasks_kept_missing_metadata
         }),
-        dynamic_files_not_pruned_unsupported_expression: dynamic(|snapshot| {
-            snapshot.dynamic_files_not_pruned_unsupported_expression
+        dynamic_partition_tasks_kept_unsupported_expression: dynamic(|snapshot| {
+            snapshot.dynamic_partition_tasks_kept_unsupported_expression
         }),
         batches_produced: counter(|reader| reader.batches_produced),
         rows_produced: counter(|reader| reader.rows_produced),
@@ -1589,7 +1589,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         range_gets: optional(|reader| reader.parquet_data_file_range_get_operations),
         full_gets: optional(|reader| reader.parquet_data_file_full_get_operations),
         bytes_received: optional(|reader| reader.parquet_data_file_bytes_received),
-        opened_bytes: optional(|reader| reader.parquet_data_file_opened_bytes),
+        task_bytes_admitted: optional(|reader| reader.parquet_task_bytes_admitted),
     }
 }
 
@@ -1650,20 +1650,21 @@ fn csv_row(
         read.scan_metadata_exhausted.clone(),
         read.scan_partitions_planned.to_string(),
         read.files_planned.to_string(),
-        optional(read.estimated_rows),
-        optional(read.estimated_bytes),
+        optional(read.estimated_input_rows),
+        optional(read.estimated_input_bytes),
         read.scan_partitions_started.to_string(),
         read.scan_partitions_completed.to_string(),
-        read.files_started.to_string(),
-        read.files_completed.to_string(),
-        read.dynamic_partition_files_pruned.to_string(),
-        read.dynamic_partition_files_kept.to_string(),
+        read.file_tasks_started.to_string(),
+        read.file_tasks_completed.to_string(),
+        read.dynamic_partition_tasks_pruned.to_string(),
+        read.dynamic_partition_tasks_kept.to_string(),
         read.dynamic_filters_received.to_string(),
         read.dynamic_filters_accepted.to_string(),
         read.dynamic_filters_unsupported.to_string(),
         read.dynamic_filter_snapshots.to_string(),
-        read.dynamic_files_not_pruned_missing_metadata.to_string(),
-        read.dynamic_files_not_pruned_unsupported_expression
+        read.dynamic_partition_tasks_kept_missing_metadata
+            .to_string(),
+        read.dynamic_partition_tasks_kept_unsupported_expression
             .to_string(),
         read.batches_produced.to_string(),
         read.rows_produced.to_string(),
@@ -1701,7 +1702,7 @@ fn csv_row(
         optional(read.range_gets),
         optional(read.full_gets),
         optional(read.bytes_received),
-        optional(read.opened_bytes),
+        optional(read.task_bytes_admitted),
         fixture.fingerprint.clone(),
     ];
     assert_eq!(row.len(), CSV_HEADER.len());
@@ -2132,7 +2133,7 @@ mod tests {
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "23");
+            assert_eq!(row[0], "24");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);

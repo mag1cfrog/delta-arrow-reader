@@ -22,18 +22,18 @@ pub struct DeltaReadMetricsSnapshot {
     pub files_planned: u64,
     /// Add actions filtered during planning, when known.
     pub files_filtered_during_planning: Option<u64>,
-    /// Estimated output rows, when every selected file reported row statistics.
-    pub estimated_rows: Option<u64>,
-    /// Estimated input bytes, when every selected file reported a size.
-    pub estimated_bytes: Option<u64>,
+    /// Estimated rows in selected input files before row filtering, when known for every file.
+    pub estimated_input_rows: Option<u64>,
+    /// Estimated bytes in selected input files, when every file reported a size.
+    pub estimated_input_bytes: Option<u64>,
     /// Scan partitions whose execution started.
     pub scan_partitions_started: u64,
     /// Scan partitions that completed normally.
     pub scan_partitions_completed: u64,
     /// Data-file tasks that started, including independently read file ranges.
-    pub files_started: u64,
+    pub file_tasks_started: u64,
     /// Data-file tasks that completed normally, including independently read file ranges.
-    pub files_completed: u64,
+    pub file_tasks_completed: u64,
     /// Backend-logical record batches handed to the scheduler.
     pub batches_produced: u64,
     /// Backend-logical rows handed to the scheduler.
@@ -54,8 +54,8 @@ pub struct DeltaReadMetricsSnapshot {
     pub parquet_data_file_full_get_operations: Option<u64>,
     /// Direct Parquet payload bytes received, or `None` for another backend.
     pub parquet_data_file_bytes_received: Option<u64>,
-    /// Direct Parquet file bytes opened, or `None` for another backend.
-    pub parquet_data_file_opened_bytes: Option<u64>,
+    /// Estimated bytes admitted across direct Parquet tasks, or `None` for another backend.
+    pub parquet_task_bytes_admitted: Option<u64>,
 }
 
 /// Shared live metrics for one Delta scan.
@@ -71,12 +71,12 @@ struct DeltaReadMetricsInner {
     scan_partitions_planned: AtomicU64,
     files_planned: u64,
     files_filtered_during_planning: Option<u64>,
-    estimated_rows: Option<u64>,
-    estimated_bytes: Option<u64>,
+    estimated_input_rows: Option<u64>,
+    estimated_input_bytes: Option<u64>,
     scan_partitions_started: AtomicU64,
     scan_partitions_completed: AtomicU64,
-    files_started: AtomicU64,
-    files_completed: AtomicU64,
+    file_tasks_started: AtomicU64,
+    file_tasks_completed: AtomicU64,
     batches_produced: AtomicU64,
     rows_produced: AtomicU64,
     deletion_vector_payloads_loaded: AtomicU64,
@@ -87,7 +87,7 @@ struct DeltaReadMetricsInner {
     parquet_data_file_range_get_operations: AtomicU64,
     parquet_data_file_full_get_operations: AtomicU64,
     parquet_data_file_bytes_received: AtomicU64,
-    parquet_data_file_opened_bytes: AtomicU64,
+    parquet_task_bytes_admitted: AtomicU64,
 }
 
 #[allow(dead_code)]
@@ -98,8 +98,8 @@ pub(crate) struct DeltaReadMetricsConfig {
     pub(crate) scan_partitions_planned: usize,
     pub(crate) files_planned: usize,
     pub(crate) files_filtered_during_planning: Option<u64>,
-    pub(crate) estimated_rows: Option<u64>,
-    pub(crate) estimated_bytes: Option<u64>,
+    pub(crate) estimated_input_rows: Option<u64>,
+    pub(crate) estimated_input_bytes: Option<u64>,
 }
 
 impl DeltaReadMetrics {
@@ -115,12 +115,12 @@ impl DeltaReadMetrics {
                 )),
                 files_planned: usize_to_u64_saturating(config.files_planned),
                 files_filtered_during_planning: config.files_filtered_during_planning,
-                estimated_rows: config.estimated_rows,
-                estimated_bytes: config.estimated_bytes,
+                estimated_input_rows: config.estimated_input_rows,
+                estimated_input_bytes: config.estimated_input_bytes,
                 scan_partitions_started: AtomicU64::new(0),
                 scan_partitions_completed: AtomicU64::new(0),
-                files_started: AtomicU64::new(0),
-                files_completed: AtomicU64::new(0),
+                file_tasks_started: AtomicU64::new(0),
+                file_tasks_completed: AtomicU64::new(0),
                 batches_produced: AtomicU64::new(0),
                 rows_produced: AtomicU64::new(0),
                 deletion_vector_payloads_loaded: AtomicU64::new(0),
@@ -131,7 +131,7 @@ impl DeltaReadMetrics {
                 parquet_data_file_range_get_operations: AtomicU64::new(0),
                 parquet_data_file_full_get_operations: AtomicU64::new(0),
                 parquet_data_file_bytes_received: AtomicU64::new(0),
-                parquet_data_file_opened_bytes: AtomicU64::new(0),
+                parquet_task_bytes_admitted: AtomicU64::new(0),
             }),
         }
     }
@@ -146,12 +146,12 @@ impl DeltaReadMetrics {
             scan_partitions_planned: load(&inner.scan_partitions_planned),
             files_planned: inner.files_planned,
             files_filtered_during_planning: inner.files_filtered_during_planning,
-            estimated_rows: inner.estimated_rows,
-            estimated_bytes: inner.estimated_bytes,
+            estimated_input_rows: inner.estimated_input_rows,
+            estimated_input_bytes: inner.estimated_input_bytes,
             scan_partitions_started: load(&inner.scan_partitions_started),
             scan_partitions_completed: load(&inner.scan_partitions_completed),
-            files_started: load(&inner.files_started),
-            files_completed: load(&inner.files_completed),
+            file_tasks_started: load(&inner.file_tasks_started),
+            file_tasks_completed: load(&inner.file_tasks_completed),
             batches_produced: load(&inner.batches_produced),
             rows_produced: load(&inner.rows_produced),
             deletion_vector_payloads_loaded: load(&inner.deletion_vector_payloads_loaded),
@@ -165,8 +165,7 @@ impl DeltaReadMetrics {
                 .parquet_metric(&inner.parquet_data_file_full_get_operations),
             parquet_data_file_bytes_received: self
                 .parquet_metric(&inner.parquet_data_file_bytes_received),
-            parquet_data_file_opened_bytes: self
-                .parquet_metric(&inner.parquet_data_file_opened_bytes),
+            parquet_task_bytes_admitted: self.parquet_metric(&inner.parquet_task_bytes_admitted),
         }
     }
 
@@ -195,13 +194,13 @@ impl DeltaReadMetrics {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn record_file_started(&self) {
-        saturating_fetch_add(&self.inner.files_started, 1);
+    pub(crate) fn record_file_task_started(&self) {
+        saturating_fetch_add(&self.inner.file_tasks_started, 1);
     }
 
     #[allow(dead_code)]
-    pub(crate) fn record_file_completed(&self) {
-        saturating_fetch_add(&self.inner.files_completed, 1);
+    pub(crate) fn record_file_task_completed(&self) {
+        saturating_fetch_add(&self.inner.file_tasks_completed, 1);
     }
 
     #[allow(dead_code)]
@@ -253,8 +252,8 @@ impl DeltaReadMetrics {
         );
     }
 
-    pub(crate) fn record_parquet_data_file_opened_bytes(&self, bytes: u64) {
-        saturating_fetch_add(&self.inner.parquet_data_file_opened_bytes, bytes);
+    pub(crate) fn record_parquet_task_bytes_admitted(&self, bytes: u64) {
+        saturating_fetch_add(&self.inner.parquet_task_bytes_admitted, bytes);
     }
 }
 
@@ -288,8 +287,8 @@ mod tests {
             scan_partitions_planned: 3,
             files_planned: 5,
             files_filtered_during_planning: Some(2),
-            estimated_rows: Some(99),
-            estimated_bytes: Some(42),
+            estimated_input_rows: Some(99),
+            estimated_input_bytes: Some(42),
         })
     }
 
@@ -302,12 +301,12 @@ mod tests {
         assert_eq!(direct.scan_partitions_planned, 3);
         assert_eq!(direct.files_planned, 5);
         assert_eq!(direct.files_filtered_during_planning, Some(2));
-        assert_eq!(direct.estimated_rows, Some(99));
-        assert_eq!(direct.estimated_bytes, Some(42));
+        assert_eq!(direct.estimated_input_rows, Some(99));
+        assert_eq!(direct.estimated_input_bytes, Some(42));
         assert_eq!(direct.scan_partitions_started, 0);
         assert_eq!(direct.scan_partitions_completed, 0);
-        assert_eq!(direct.files_started, 0);
-        assert_eq!(direct.files_completed, 0);
+        assert_eq!(direct.file_tasks_started, 0);
+        assert_eq!(direct.file_tasks_completed, 0);
         assert_eq!(direct.batches_produced, 0);
         assert_eq!(direct.rows_produced, 0);
         assert_eq!(direct.deletion_vector_payloads_loaded, 0);
@@ -318,13 +317,13 @@ mod tests {
         assert_eq!(direct.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(direct.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(direct.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(direct.parquet_data_file_opened_bytes, Some(0));
+        assert_eq!(direct.parquet_task_bytes_admitted, Some(0));
 
         let kernel = metrics(ParquetReaderBackend::DeltaKernel).snapshot();
         assert_eq!(kernel.parquet_data_file_range_get_operations, None);
         assert_eq!(kernel.parquet_data_file_full_get_operations, None);
         assert_eq!(kernel.parquet_data_file_bytes_received, None);
-        assert_eq!(kernel.parquet_data_file_opened_bytes, None);
+        assert_eq!(kernel.parquet_task_bytes_admitted, None);
     }
 
     #[test]
@@ -334,8 +333,8 @@ mod tests {
         let counters = [
             &metrics.inner.scan_partitions_started,
             &metrics.inner.scan_partitions_completed,
-            &metrics.inner.files_started,
-            &metrics.inner.files_completed,
+            &metrics.inner.file_tasks_started,
+            &metrics.inner.file_tasks_completed,
             &metrics.inner.batches_produced,
             &metrics.inner.rows_produced,
             &metrics.inner.deletion_vector_payloads_loaded,
@@ -346,7 +345,7 @@ mod tests {
             &metrics.inner.parquet_data_file_range_get_operations,
             &metrics.inner.parquet_data_file_full_get_operations,
             &metrics.inner.parquet_data_file_bytes_received,
-            &metrics.inner.parquet_data_file_opened_bytes,
+            &metrics.inner.parquet_task_bytes_admitted,
         ];
         for (index, counter) in counters.into_iter().enumerate() {
             saturating_fetch_add(counter, u64::try_from(index + 1).expect("small test value"));
@@ -356,8 +355,8 @@ mod tests {
         assert_eq!(snapshot.scan_partitions_planned, 16);
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 2);
-        assert_eq!(snapshot.files_started, 3);
-        assert_eq!(snapshot.files_completed, 4);
+        assert_eq!(snapshot.file_tasks_started, 3);
+        assert_eq!(snapshot.file_tasks_completed, 4);
         assert_eq!(snapshot.batches_produced, 5);
         assert_eq!(snapshot.rows_produced, 6);
         assert_eq!(snapshot.deletion_vector_payloads_loaded, 7);
@@ -368,7 +367,7 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(12));
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(13));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(14));
-        assert_eq!(snapshot.parquet_data_file_opened_bytes, Some(15));
+        assert_eq!(snapshot.parquet_task_bytes_admitted, Some(15));
     }
 
     #[test]
@@ -376,13 +375,13 @@ mod tests {
         let metrics = metrics(ParquetReaderBackend::DirectParquet);
         metrics
             .inner
-            .files_started
+            .file_tasks_started
             .store(u64::MAX - 1, Ordering::Relaxed);
         let workers = (0..4)
             .map(|_| {
                 let metrics = metrics.clone();
                 thread::spawn(move || {
-                    saturating_fetch_add(&metrics.inner.files_started, 1);
+                    saturating_fetch_add(&metrics.inner.file_tasks_started, 1);
                 })
             })
             .collect::<Vec<_>>();
@@ -391,7 +390,7 @@ mod tests {
             worker.join().map_err(|_| "metrics worker panicked")?;
         }
 
-        assert_eq!(metrics.snapshot().files_started, u64::MAX);
+        assert_eq!(metrics.snapshot().file_tasks_started, u64::MAX);
         Ok(())
     }
 }

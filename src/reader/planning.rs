@@ -260,8 +260,8 @@ fn finalize_scan_plan(
         scan_partitions_planned: partitions.len(),
         files_planned,
         files_filtered_during_planning: unpartitioned.files_filtered_during_planning,
-        estimated_rows: unpartitioned.estimated_rows,
-        estimated_bytes: unpartitioned.estimated_bytes,
+        estimated_input_rows: unpartitioned.estimated_rows,
+        estimated_input_bytes: unpartitioned.estimated_bytes,
     });
 
     Ok(DeltaScanPlan {
@@ -4708,12 +4708,12 @@ mod tests {
             empty_metrics.files_filtered_during_planning,
             empty.files_filtered_during_planning
         );
-        assert_eq!(empty_metrics.estimated_bytes, Some(0));
-        assert_eq!(empty_metrics.estimated_rows, Some(0));
+        assert_eq!(empty_metrics.estimated_input_bytes, Some(0));
+        assert_eq!(empty_metrics.estimated_input_rows, Some(0));
         assert_eq!(empty_metrics.scan_partitions_started, 0);
         assert_eq!(empty_metrics.scan_partitions_completed, 0);
-        assert_eq!(empty_metrics.files_started, 0);
-        assert_eq!(empty_metrics.files_completed, 0);
+        assert_eq!(empty_metrics.file_tasks_started, 0);
+        assert_eq!(empty_metrics.file_tasks_completed, 0);
         assert_eq!(empty_metrics.batches_produced, 0);
         assert_eq!(empty_metrics.rows_produced, 0);
         assert_eq!(empty_metrics.deletion_vector_payloads_loaded, 0);
@@ -4727,7 +4727,7 @@ mod tests {
         );
         assert_eq!(empty_metrics.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(empty_metrics.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(empty_metrics.parquet_data_file_opened_bytes, Some(0));
+        assert_eq!(empty_metrics.parquet_task_bytes_admitted, Some(0));
 
         let single_add = [add("single.parquet", 0, None)];
         let (_single_table, single_snapshot) =
@@ -5478,12 +5478,12 @@ mod tests {
         assert_eq!(metrics.scan_partitions_planned, 2);
         assert_eq!(metrics.files_planned, 4);
         assert_eq!(metrics.files_filtered_during_planning, Some(0));
-        assert_eq!(metrics.estimated_rows, Some(10));
-        assert_eq!(metrics.estimated_bytes, Some(100));
+        assert_eq!(metrics.estimated_input_rows, Some(10));
+        assert_eq!(metrics.estimated_input_bytes, Some(100));
         assert_eq!(metrics.scan_partitions_started, 0);
         assert_eq!(metrics.scan_partitions_completed, 0);
-        assert_eq!(metrics.files_started, 0);
-        assert_eq!(metrics.files_completed, 0);
+        assert_eq!(metrics.file_tasks_started, 0);
+        assert_eq!(metrics.file_tasks_completed, 0);
         assert_eq!(metrics.batches_produced, 0);
         assert_eq!(metrics.rows_produced, 0);
         assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
@@ -5494,7 +5494,7 @@ mod tests {
         assert_eq!(metrics.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(metrics.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(metrics.parquet_data_file_opened_bytes, Some(0));
+        assert_eq!(metrics.parquet_task_bytes_admitted, Some(0));
 
         plan.metrics.record_deletion_vector_failure();
         assert_eq!(retained_metrics.snapshot().deletion_vector_failures, 1);
@@ -5585,8 +5585,8 @@ mod tests {
         let metrics = plan.metrics.snapshot();
         assert_eq!(metrics.scan_partitions_started, 3);
         assert_eq!(metrics.scan_partitions_completed, 3);
-        assert_eq!(metrics.files_started, 3);
-        assert_eq!(metrics.files_completed, 3);
+        assert_eq!(metrics.file_tasks_started, 3);
+        assert_eq!(metrics.file_tasks_completed, 3);
         assert_eq!(metrics.batches_produced, 3);
         assert_eq!(metrics.rows_produced, 0);
         Ok(())
@@ -5667,8 +5667,8 @@ mod tests {
         let metrics = plan.metrics.snapshot();
         assert_eq!(metrics.scan_partitions_started, 2);
         assert_eq!(metrics.scan_partitions_completed, 0);
-        assert_eq!(metrics.files_started, 2);
-        assert_eq!(metrics.files_completed, 0);
+        assert_eq!(metrics.file_tasks_started, 2);
+        assert_eq!(metrics.file_tasks_completed, 0);
         Ok(())
     }
 

@@ -381,7 +381,7 @@ impl PartitionStream {
         };
         let measured_metrics = metrics.clone();
         let measured_executor = Arc::new(move |task, permit, cancellation| {
-            measured_metrics.record_file_started();
+            measured_metrics.record_file_task_started();
             executor(task, permit, cancellation)
         });
         let scheduler = FileScheduler::new(
@@ -545,7 +545,7 @@ async fn run_partition<Task>(
         )
         .await
         {
-            DrainFile::Completed => metrics.record_file_completed(),
+            DrainFile::Completed => metrics.record_file_task_completed(),
             DrainFile::Cancelled => return,
             DrainFile::Error(error) => {
                 send_first_error(&output, &cancellation, error).await;
@@ -757,8 +757,8 @@ mod tests {
             scan_partitions_planned: 1,
             files_planned: 3,
             files_filtered_during_planning: None,
-            estimated_rows: Some(3),
-            estimated_bytes: Some(3),
+            estimated_input_rows: Some(3),
+            estimated_input_bytes: Some(3),
         })
     }
 
@@ -1161,8 +1161,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 1);
-        assert_eq!(snapshot.files_started, 0);
-        assert_eq!(snapshot.files_completed, 0);
+        assert_eq!(snapshot.file_tasks_started, 0);
+        assert_eq!(snapshot.file_tasks_completed, 0);
         Ok(())
     }
 
@@ -1203,8 +1203,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 1);
-        assert_eq!(snapshot.files_started, 2);
-        assert_eq!(snapshot.files_completed, 2);
+        assert_eq!(snapshot.file_tasks_started, 2);
+        assert_eq!(snapshot.file_tasks_completed, 2);
         assert_eq!(snapshot.batches_produced, 3);
         assert_eq!(snapshot.rows_produced, 4);
         Ok(())
@@ -1393,8 +1393,8 @@ mod tests {
         assert!(cancellation.is_cancelled());
         assert_eq!(limiter.active_file_reads(), 0);
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.files_started, 2);
-        assert_eq!(snapshot.files_completed, 1);
+        assert_eq!(snapshot.file_tasks_started, 2);
+        assert_eq!(snapshot.file_tasks_completed, 1);
         assert_eq!(snapshot.batches_produced, 2);
         assert_eq!(snapshot.rows_produced, 2);
         Ok(())
@@ -1428,8 +1428,8 @@ mod tests {
         let before_drop = metrics.snapshot();
         assert_eq!(before_drop.batches_produced, 2);
         assert_eq!(before_drop.rows_produced, 2);
-        assert_eq!(before_drop.files_started, 1);
-        assert_eq!(before_drop.files_completed, 0);
+        assert_eq!(before_drop.file_tasks_started, 1);
+        assert_eq!(before_drop.file_tasks_completed, 0);
         assert_eq!(limiter.active_file_reads(), 1);
 
         drop(stream);
@@ -1443,8 +1443,8 @@ mod tests {
         let after_drop = metrics.snapshot();
         assert_eq!(after_drop.scan_partitions_started, 1);
         assert_eq!(after_drop.scan_partitions_completed, 0);
-        assert_eq!(after_drop.files_started, 1);
-        assert_eq!(after_drop.files_completed, 0);
+        assert_eq!(after_drop.file_tasks_started, 1);
+        assert_eq!(after_drop.file_tasks_completed, 0);
         assert_eq!(after_drop.batches_produced, 2);
         assert_eq!(after_drop.rows_produced, 2);
         Ok(())
@@ -1491,8 +1491,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 0);
-        assert_eq!(snapshot.files_started, 1);
-        assert_eq!(snapshot.files_completed, 0);
+        assert_eq!(snapshot.file_tasks_started, 1);
+        assert_eq!(snapshot.file_tasks_completed, 0);
         assert_eq!(snapshot.batches_produced, 0);
         assert_eq!(snapshot.rows_produced, 0);
         Ok(())
@@ -1652,8 +1652,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 2);
         assert_eq!(snapshot.scan_partitions_completed, 0);
-        assert_eq!(snapshot.files_started, 2);
-        assert_eq!(snapshot.files_completed, 0);
+        assert_eq!(snapshot.file_tasks_started, 2);
+        assert_eq!(snapshot.file_tasks_completed, 0);
         Ok(())
     }
 
@@ -1747,8 +1747,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 0);
-        assert_eq!(snapshot.files_started, 2);
-        assert_eq!(snapshot.files_completed, 0);
+        assert_eq!(snapshot.file_tasks_started, 2);
+        assert_eq!(snapshot.file_tasks_completed, 0);
         Ok(())
     }
 

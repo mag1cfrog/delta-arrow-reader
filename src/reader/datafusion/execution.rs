@@ -105,10 +105,10 @@ pub struct DeltaDataFusionMetricsSnapshot {
     pub output_batch_size: Option<u64>,
     /// File tasks pruned before admission by a dynamic partition filter.
     /// A task is either a whole physical file or one independently read file range.
-    pub dynamic_partition_files_pruned: u64,
+    pub dynamic_partition_tasks_pruned: u64,
     /// File tasks kept after consulting retained dynamic partition filters.
     /// A task is either a whole physical file or one independently read file range.
-    pub dynamic_partition_files_kept: u64,
+    pub dynamic_partition_tasks_kept: u64,
     /// Physical filters offered to the post-optimization hook.
     pub dynamic_filters_received: u64,
     /// Offered filters retained for dynamic partition pruning.
@@ -118,9 +118,9 @@ pub struct DeltaDataFusionMetricsSnapshot {
     /// Current dynamic expressions consulted during file admission.
     pub dynamic_filter_snapshots: u64,
     /// Kept file tasks with missing, invalid, or unparsable partition metadata.
-    pub dynamic_files_not_pruned_missing_metadata: u64,
+    pub dynamic_partition_tasks_kept_missing_metadata: u64,
     /// Kept file tasks with unavailable, unsupported, or failed expressions.
-    pub dynamic_files_not_pruned_unsupported_expression: u64,
+    pub dynamic_partition_tasks_kept_unsupported_expression: u64,
 }
 
 /// Shared live metrics for one DataFusion physical scan plan.
@@ -134,14 +134,14 @@ struct DeltaDataFusionMetricsInner {
     reader: DeltaReadMetrics,
     use_view_types: bool,
     output_batch_size: AtomicU64,
-    dynamic_partition_files_pruned: AtomicU64,
-    dynamic_partition_files_kept: AtomicU64,
+    dynamic_partition_tasks_pruned: AtomicU64,
+    dynamic_partition_tasks_kept: AtomicU64,
     dynamic_filters_received: AtomicU64,
     dynamic_filters_accepted: AtomicU64,
     dynamic_filters_unsupported: AtomicU64,
     dynamic_filter_snapshots: AtomicU64,
-    dynamic_files_not_pruned_missing_metadata: AtomicU64,
-    dynamic_files_not_pruned_unsupported_expression: AtomicU64,
+    dynamic_partition_tasks_kept_missing_metadata: AtomicU64,
+    dynamic_partition_tasks_kept_unsupported_expression: AtomicU64,
 }
 
 impl DeltaDataFusionMetrics {
@@ -153,14 +153,14 @@ impl DeltaDataFusionMetrics {
                 reader,
                 use_view_types,
                 output_batch_size: AtomicU64::new(0),
-                dynamic_partition_files_pruned: AtomicU64::new(0),
-                dynamic_partition_files_kept: AtomicU64::new(0),
+                dynamic_partition_tasks_pruned: AtomicU64::new(0),
+                dynamic_partition_tasks_kept: AtomicU64::new(0),
                 dynamic_filters_received: AtomicU64::new(0),
                 dynamic_filters_accepted: AtomicU64::new(0),
                 dynamic_filters_unsupported: AtomicU64::new(0),
                 dynamic_filter_snapshots: AtomicU64::new(0),
-                dynamic_files_not_pruned_missing_metadata: AtomicU64::new(0),
-                dynamic_files_not_pruned_unsupported_expression: AtomicU64::new(0),
+                dynamic_partition_tasks_kept_missing_metadata: AtomicU64::new(0),
+                dynamic_partition_tasks_kept_unsupported_expression: AtomicU64::new(0),
             }),
         }
     }
@@ -177,17 +177,17 @@ impl DeltaDataFusionMetrics {
             reader: inner.reader.snapshot(),
             use_view_types: inner.use_view_types,
             output_batch_size: nonzero_load(&inner.output_batch_size),
-            dynamic_partition_files_pruned: load(&inner.dynamic_partition_files_pruned),
-            dynamic_partition_files_kept: load(&inner.dynamic_partition_files_kept),
+            dynamic_partition_tasks_pruned: load(&inner.dynamic_partition_tasks_pruned),
+            dynamic_partition_tasks_kept: load(&inner.dynamic_partition_tasks_kept),
             dynamic_filters_received: load(&inner.dynamic_filters_received),
             dynamic_filters_accepted: load(&inner.dynamic_filters_accepted),
             dynamic_filters_unsupported: load(&inner.dynamic_filters_unsupported),
             dynamic_filter_snapshots: load(&inner.dynamic_filter_snapshots),
-            dynamic_files_not_pruned_missing_metadata: load(
-                &inner.dynamic_files_not_pruned_missing_metadata,
+            dynamic_partition_tasks_kept_missing_metadata: load(
+                &inner.dynamic_partition_tasks_kept_missing_metadata,
             ),
-            dynamic_files_not_pruned_unsupported_expression: load(
-                &inner.dynamic_files_not_pruned_unsupported_expression,
+            dynamic_partition_tasks_kept_unsupported_expression: load(
+                &inner.dynamic_partition_tasks_kept_unsupported_expression,
             ),
         }
     }
@@ -204,11 +204,11 @@ impl DeltaDataFusionMetrics {
     }
 
     fn record_dynamic_partition_task_pruned(&self) {
-        saturating_fetch_add(&self.inner.dynamic_partition_files_pruned, 1);
+        saturating_fetch_add(&self.inner.dynamic_partition_tasks_pruned, 1);
     }
 
     fn record_dynamic_partition_task_kept(&self) {
-        saturating_fetch_add(&self.inner.dynamic_partition_files_kept, 1);
+        saturating_fetch_add(&self.inner.dynamic_partition_tasks_kept, 1);
     }
 
     fn record_dynamic_filters_received(&self, value: usize) {
@@ -237,12 +237,14 @@ impl DeltaDataFusionMetrics {
     }
 
     fn record_missing_metadata(&self) {
-        saturating_fetch_add(&self.inner.dynamic_files_not_pruned_missing_metadata, 1);
+        saturating_fetch_add(&self.inner.dynamic_partition_tasks_kept_missing_metadata, 1);
     }
 
     fn record_unsupported_expression(&self) {
         saturating_fetch_add(
-            &self.inner.dynamic_files_not_pruned_unsupported_expression,
+            &self
+                .inner
+                .dynamic_partition_tasks_kept_unsupported_expression,
             1,
         );
     }
@@ -1361,7 +1363,7 @@ mod tests {
         let expected_bytes = collect_delta_datafusion_metrics(plan.as_ref())[0]
             .snapshot()
             .reader
-            .estimated_bytes;
+            .estimated_input_bytes;
         let mut config = ConfigOptions::new();
         config.optimizer.repartition_file_min_size = 1;
         let repartitioned = plan
@@ -1385,10 +1387,7 @@ mod tests {
         assert_eq!(actual_ids, [1, 2, 3, 4]);
         let metrics = collect_delta_datafusion_metrics(repartitioned.as_ref())[0].snapshot();
         assert_eq!(metrics.reader.scan_partitions_planned, 4);
-        assert_eq!(
-            metrics.reader.parquet_data_file_opened_bytes,
-            expected_bytes
-        );
+        assert_eq!(metrics.reader.parquet_task_bytes_admitted, expected_bytes);
 
         let explicit_one = build_plan(
             &table,
@@ -1484,7 +1483,7 @@ mod tests {
         let metrics = handles[0].snapshot();
         assert_eq!(metrics.output_batch_size, Some(1));
         assert_eq!(metrics.reader.scan_partitions_started, 4);
-        assert_eq!(metrics.reader.files_completed, 4);
+        assert_eq!(metrics.reader.file_tasks_completed, 4);
         assert_eq!(metrics.reader.rows_produced, 6);
 
         let hidden = build_plan(
@@ -1529,7 +1528,7 @@ mod tests {
             collect_delta_datafusion_metrics(partition_filter.as_ref())[0]
                 .snapshot()
                 .reader
-                .files_started,
+                .file_tasks_started,
             1
         );
 
@@ -1641,10 +1640,10 @@ mod tests {
         assert_eq!(metrics.dynamic_filters_accepted, 1);
         assert_eq!(metrics.dynamic_filters_unsupported, 1);
         assert_eq!(metrics.dynamic_filter_snapshots, 2);
-        assert_eq!(metrics.dynamic_partition_files_pruned, 1);
-        assert_eq!(metrics.dynamic_partition_files_kept, 1);
-        assert_eq!(metrics.reader.files_started, 1);
-        assert_eq!(metrics.reader.files_completed, 1);
+        assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
+        assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
+        assert_eq!(metrics.reader.file_tasks_started, 1);
+        assert_eq!(metrics.reader.file_tasks_completed, 1);
         assert_eq!(
             collect_delta_datafusion_metrics(plan.as_ref())[0]
                 .snapshot()
@@ -1730,10 +1729,10 @@ mod tests {
         assert_eq!(ids(&batches), [1, 2, 3]);
         let metrics = collect_delta_datafusion_metrics(updated.as_ref())[0].snapshot();
         assert_eq!(metrics.dynamic_filter_snapshots, 2);
-        assert_eq!(metrics.dynamic_partition_files_kept, 1);
-        assert_eq!(metrics.dynamic_partition_files_pruned, 1);
-        assert_eq!(metrics.reader.files_started, 1);
-        assert_eq!(metrics.reader.files_completed, 1);
+        assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
+        assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
+        assert_eq!(metrics.reader.file_tasks_started, 1);
+        assert_eq!(metrics.reader.file_tasks_completed, 1);
         Ok(())
     }
 
@@ -1787,14 +1786,14 @@ mod tests {
         assert_eq!(initial.output_batch_size, None);
         assert_eq!(
             [
-                initial.dynamic_partition_files_pruned,
-                initial.dynamic_partition_files_kept,
+                initial.dynamic_partition_tasks_pruned,
+                initial.dynamic_partition_tasks_kept,
                 initial.dynamic_filters_received,
                 initial.dynamic_filters_accepted,
                 initial.dynamic_filters_unsupported,
                 initial.dynamic_filter_snapshots,
-                initial.dynamic_files_not_pruned_missing_metadata,
-                initial.dynamic_files_not_pruned_unsupported_expression,
+                initial.dynamic_partition_tasks_kept_missing_metadata,
+                initial.dynamic_partition_tasks_kept_unsupported_expression,
             ],
             [0; 8]
         );
@@ -1822,7 +1821,7 @@ mod tests {
         drop(union);
         drop(first);
         drop(second);
-        assert_eq!(handles[0].snapshot().reader.files_started, 0);
+        assert_eq!(handles[0].snapshot().reader.file_tasks_started, 0);
         assert_eq!(handles[0].source_name(), Some("first"));
         Ok(())
     }
@@ -1883,8 +1882,8 @@ mod tests {
         );
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_filter_snapshots, 2);
-        assert_eq!(snapshot.dynamic_partition_files_kept, 1);
-        assert_eq!(snapshot.dynamic_files_not_pruned_missing_metadata, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept_missing_metadata, 1);
 
         let rejecting = dynamic_filter("region", 1);
         rejecting.update(physical_lit(false))?;
@@ -1900,9 +1899,9 @@ mod tests {
         );
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_filter_snapshots, 3);
-        assert_eq!(snapshot.dynamic_partition_files_pruned, 1);
-        assert_eq!(snapshot.dynamic_partition_files_kept, 1);
-        assert_eq!(snapshot.dynamic_files_not_pruned_missing_metadata, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_pruned, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept_missing_metadata, 1);
 
         let unsupported = dynamic_filter("region", 1);
         unsupported.update(physical_lit("not boolean"))?;
@@ -1912,8 +1911,11 @@ mod tests {
         );
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_filter_snapshots, 4);
-        assert_eq!(snapshot.dynamic_partition_files_kept, 2);
-        assert_eq!(snapshot.dynamic_files_not_pruned_unsupported_expression, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept, 2);
+        assert_eq!(
+            snapshot.dynamic_partition_tasks_kept_unsupported_expression,
+            1
+        );
 
         metrics
             .inner
@@ -1966,15 +1968,18 @@ mod tests {
 
         let calls = u64::try_from(THREADS * ITERATIONS)?;
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.dynamic_partition_files_pruned, calls);
-        assert_eq!(snapshot.dynamic_partition_files_kept, calls);
+        assert_eq!(snapshot.dynamic_partition_tasks_pruned, calls);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept, calls);
         assert_eq!(snapshot.dynamic_filters_received, calls * 3);
         assert_eq!(snapshot.dynamic_filters_accepted, calls);
         assert_eq!(snapshot.dynamic_filters_unsupported, calls * 2);
         assert_eq!(snapshot.dynamic_filter_snapshots, calls);
-        assert_eq!(snapshot.dynamic_files_not_pruned_missing_metadata, calls);
         assert_eq!(
-            snapshot.dynamic_files_not_pruned_unsupported_expression,
+            snapshot.dynamic_partition_tasks_kept_missing_metadata,
+            calls
+        );
+        assert_eq!(
+            snapshot.dynamic_partition_tasks_kept_unsupported_expression,
             calls
         );
         Ok(())
@@ -2005,7 +2010,7 @@ mod tests {
         let failed = collect_delta_datafusion_metrics(missing_plan.as_ref())
             .pop()
             .ok_or("missing failure metrics")?;
-        assert_eq!(failed.snapshot().reader.files_started, 1);
+        assert_eq!(failed.snapshot().reader.file_tasks_started, 1);
 
         let fixture = TestTable::partitioned("drop")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -2025,7 +2030,7 @@ mod tests {
         let stable = handle.snapshot();
         tokio::task::yield_now().await;
         assert_eq!(handle.snapshot(), stable);
-        assert!(stable.reader.files_started >= 1);
+        assert!(stable.reader.file_tasks_started >= 1);
         let retry = datafusion::physical_plan::collect(
             Arc::clone(&drop_plan),
             SessionContext::new().task_ctx(),

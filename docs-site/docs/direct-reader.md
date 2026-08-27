@@ -74,7 +74,7 @@ while let Some(batch) = batches.try_next().await? {
     println!("rows={}", batch.num_rows());
 }
 
-println!("files={}", metrics.snapshot().files_completed);
+println!("tasks={}", metrics.snapshot().file_tasks_completed);
 ```
 
 You can still inspect the handle after the stream finishes or is dropped. If

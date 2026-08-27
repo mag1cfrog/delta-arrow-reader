@@ -602,7 +602,7 @@ fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
 
     Arc::new(move |task, permit, cancellation| {
         if let Some(bytes) = task.estimated_scan_bytes() {
-            reader.metrics.record_parquet_data_file_opened_bytes(bytes);
+            reader.metrics.record_parquet_task_bytes_admitted(bytes);
         }
         let reader = Arc::clone(&reader);
         let physical_schema = Arc::clone(&physical_schema);
@@ -1767,8 +1767,8 @@ mod tests {
             scan_partitions_planned: 1,
             files_planned: 1,
             files_filtered_during_planning: Some(0),
-            estimated_rows: Some(1),
-            estimated_bytes: Some(1),
+            estimated_input_rows: Some(1),
+            estimated_input_bytes: Some(1),
         })
     }
 
@@ -3131,10 +3131,10 @@ mod tests {
         assert_eq!(direct, buffered);
 
         let direct_metrics = direct_metrics.snapshot();
-        assert_eq!(direct_metrics.files_started, 1);
-        assert_eq!(direct_metrics.files_completed, 1);
+        assert_eq!(direct_metrics.file_tasks_started, 1);
+        assert_eq!(direct_metrics.file_tasks_completed, 1);
         assert_eq!(
-            direct_metrics.parquet_data_file_opened_bytes,
+            direct_metrics.parquet_task_bytes_admitted,
             Some(u64::try_from(parquet_bytes.len())?)
         );
         assert_eq!(direct_metrics.deletion_vector_payloads_loaded, 1);
@@ -3163,8 +3163,8 @@ mod tests {
             Some(u64::try_from(parquet_bytes.len())?)
         );
         assert_eq!(
-            buffered_metrics.parquet_data_file_opened_bytes,
-            direct_metrics.parquet_data_file_opened_bytes
+            buffered_metrics.parquet_task_bytes_admitted,
+            direct_metrics.parquet_task_bytes_admitted
         );
         Ok(())
     }
@@ -3309,8 +3309,8 @@ mod tests {
             assert_eq!(metrics.reader_backend, ParquetReaderBackend::DeltaKernel);
             assert_eq!(metrics.scan_partitions_started, 1);
             assert_eq!(metrics.scan_partitions_completed, 1);
-            assert_eq!(metrics.files_started, 1);
-            assert_eq!(metrics.files_completed, 1);
+            assert_eq!(metrics.file_tasks_started, 1);
+            assert_eq!(metrics.file_tasks_completed, 1);
             assert_eq!(metrics.batches_produced, expected_batches);
             assert_eq!(metrics.rows_produced, 5);
             assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
@@ -3319,7 +3319,7 @@ mod tests {
             assert_eq!(metrics.parquet_data_file_range_get_operations, None);
             assert_eq!(metrics.parquet_data_file_full_get_operations, None);
             assert_eq!(metrics.parquet_data_file_bytes_received, None);
-            assert_eq!(metrics.parquet_data_file_opened_bytes, None);
+            assert_eq!(metrics.parquet_task_bytes_admitted, None);
         }
         Ok(())
     }
@@ -3572,7 +3572,7 @@ mod tests {
         assert!(execute_pipeline_plan(direct_empty_plan).await?.is_empty());
         assert!(execute_kernel_plan(kernel_empty_plan).await?.is_empty());
         assert_eq!(kernel_empty_metrics.snapshot().scan_partitions_started, 0);
-        assert_eq!(kernel_empty_metrics.snapshot().files_started, 0);
+        assert_eq!(kernel_empty_metrics.snapshot().file_tasks_started, 0);
 
         let root = TestDir::new("kernel-direct-multi-partition-parity")?;
         let west = parquet_bytes_for(
@@ -3629,8 +3629,8 @@ mod tests {
         ] {
             assert_eq!(metrics.scan_partitions_started, 2);
             assert_eq!(metrics.scan_partitions_completed, 2);
-            assert_eq!(metrics.files_started, 2);
-            assert_eq!(metrics.files_completed, 2);
+            assert_eq!(metrics.file_tasks_started, 2);
+            assert_eq!(metrics.file_tasks_completed, 2);
             assert_eq!(metrics.rows_produced, 12);
         }
         Ok(())
@@ -3663,8 +3663,8 @@ mod tests {
         let metrics = plan.metrics.snapshot();
         assert_eq!(metrics.scan_partitions_started, 0);
         assert_eq!(metrics.scan_partitions_completed, 0);
-        assert_eq!(metrics.files_started, 0);
-        assert_eq!(metrics.files_completed, 0);
+        assert_eq!(metrics.file_tasks_started, 0);
+        assert_eq!(metrics.file_tasks_completed, 0);
         Ok(())
     }
 
@@ -3770,15 +3770,15 @@ mod tests {
                                      deletion_vector_failures| {
             assert_eq!(metrics.scan_partitions_started, 1);
             assert_eq!(metrics.scan_partitions_completed, 0);
-            assert_eq!(metrics.files_started, 1);
-            assert_eq!(metrics.files_completed, 0);
+            assert_eq!(metrics.file_tasks_started, 1);
+            assert_eq!(metrics.file_tasks_completed, 0);
             assert_eq!(metrics.batches_produced, 0);
             assert_eq!(metrics.rows_produced, 0);
             assert_eq!(metrics.deletion_vector_failures, deletion_vector_failures);
             assert_eq!(metrics.parquet_data_file_range_get_operations, None);
             assert_eq!(metrics.parquet_data_file_full_get_operations, None);
             assert_eq!(metrics.parquet_data_file_bytes_received, None);
-            assert_eq!(metrics.parquet_data_file_opened_bytes, None);
+            assert_eq!(metrics.parquet_task_bytes_admitted, None);
         };
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_for(
@@ -4216,11 +4216,11 @@ mod tests {
             .expect_err("missing deletion vector must fail");
         assert_eq!(error.as_str(), "deletion_vector_read");
         let dv_metrics = dv_plan.metrics.snapshot();
-        assert_eq!(dv_metrics.files_started, 1);
-        assert_eq!(dv_metrics.files_completed, 0);
+        assert_eq!(dv_metrics.file_tasks_started, 1);
+        assert_eq!(dv_metrics.file_tasks_completed, 0);
         assert_eq!(dv_metrics.deletion_vector_failures, 1);
         assert_eq!(
-            dv_metrics.parquet_data_file_opened_bytes,
+            dv_metrics.parquet_task_bytes_admitted,
             Some(u64::try_from(parquet_bytes.len())?)
         );
 

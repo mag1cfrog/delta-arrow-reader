@@ -900,8 +900,8 @@ mod tests {
             scan_partitions_planned: 2,
             files_planned: 2,
             files_filtered_during_planning: Some(0),
-            estimated_rows: Some(4),
-            estimated_bytes: Some(4),
+            estimated_input_rows: Some(4),
+            estimated_input_bytes: Some(4),
         })
     }
 

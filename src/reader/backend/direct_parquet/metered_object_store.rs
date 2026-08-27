@@ -192,8 +192,8 @@ mod tests {
             scan_partitions_planned: 1,
             files_planned: 1,
             files_filtered_during_planning: Some(0),
-            estimated_rows: Some(1),
-            estimated_bytes: Some(1),
+            estimated_input_rows: Some(1),
+            estimated_input_bytes: Some(1),
         })
     }
 
@@ -429,7 +429,7 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(snapshot.parquet_data_file_opened_bytes, Some(0));
+        assert_eq!(snapshot.parquet_task_bytes_admitted, Some(0));
         assert_eq!(format!("{store:?}"), "MeteredParquetObjectStore");
 
         let redacted_metrics = direct_metrics();

@@ -19,7 +19,15 @@ use futures_util::Stream;
 #[test]
 fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> {
     let snapshot: fn(&DeltaReadMetrics) -> DeltaReadMetricsSnapshot = DeltaReadMetrics::snapshot;
+    fn inspect_reader_metrics(snapshot: DeltaReadMetricsSnapshot) {
+        let _: Option<u64> = snapshot.estimated_input_rows;
+        let _: Option<u64> = snapshot.estimated_input_bytes;
+        let _: u64 = snapshot.file_tasks_started;
+        let _: u64 = snapshot.file_tasks_completed;
+        let _: Option<u64> = snapshot.parquet_task_bytes_admitted;
+    }
     let _ = snapshot;
+    let _ = inspect_reader_metrics;
     let snapshot_version: fn(&DeltaProtocolInfo) -> u64 = DeltaProtocolInfo::snapshot_version;
     let min_reader_version: fn(&DeltaProtocolInfo) -> i32 = DeltaProtocolInfo::min_reader_version;
     let min_writer_version: fn(&DeltaProtocolInfo) -> i32 = DeltaProtocolInfo::min_writer_version;
@@ -283,14 +291,14 @@ fn datafusion_metrics_contract_is_public() {
     fn inspect(snapshot: DeltaDataFusionMetricsSnapshot) {
         let _: DeltaReadMetricsSnapshot = snapshot.reader;
         let _: Option<u64> = snapshot.output_batch_size;
-        let _: u64 = snapshot.dynamic_partition_files_pruned;
-        let _: u64 = snapshot.dynamic_partition_files_kept;
+        let _: u64 = snapshot.dynamic_partition_tasks_pruned;
+        let _: u64 = snapshot.dynamic_partition_tasks_kept;
         let _: u64 = snapshot.dynamic_filters_received;
         let _: u64 = snapshot.dynamic_filters_accepted;
         let _: u64 = snapshot.dynamic_filters_unsupported;
         let _: u64 = snapshot.dynamic_filter_snapshots;
-        let _: u64 = snapshot.dynamic_files_not_pruned_missing_metadata;
-        let _: u64 = snapshot.dynamic_files_not_pruned_unsupported_expression;
+        let _: u64 = snapshot.dynamic_partition_tasks_kept_missing_metadata;
+        let _: u64 = snapshot.dynamic_partition_tasks_kept_unsupported_expression;
     }
 
     assert_clone::<DeltaDataFusionMetrics>();

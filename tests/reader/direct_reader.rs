@@ -353,7 +353,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         let full_ids = ids(&full_batches);
         assert_eq!(full_ids.len(), 8);
         assert_eq!(full_metrics.snapshot().files_planned, 2);
-        assert_eq!(full_metrics.snapshot().files_completed, 2);
+        assert_eq!(full_metrics.snapshot().file_tasks_completed, 2);
         assert_eq!(full_metrics.snapshot().rows_produced, 8);
 
         let (repeat_batches, _) =
@@ -473,7 +473,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         let zero_batches: Vec<RecordBatch> = stream.try_collect().await?;
         assert!(zero_batches.is_empty());
         let zero_snapshot = zero_metrics.snapshot();
-        assert_eq!(zero_snapshot.files_started, 0);
+        assert_eq!(zero_snapshot.file_tasks_started, 0);
         assert_eq!(zero_snapshot.batches_produced, 0);
 
         let early_options = DeltaReaderExecutionOptions::new()
@@ -492,13 +492,16 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         assert_eq!(ids(&early_batches), full_ids[..1]);
         let early_snapshot = early_metrics.snapshot();
         assert_eq!(early_snapshot.files_planned, 2);
-        assert_eq!(early_snapshot.files_started, 1);
-        assert_eq!(early_snapshot.files_completed, 0);
+        assert_eq!(early_snapshot.file_tasks_started, 1);
+        assert_eq!(early_snapshot.file_tasks_completed, 0);
         assert_eq!(early_snapshot.batches_produced, 1);
         assert_eq!(early_snapshot.rows_produced, 2);
         tokio::task::yield_now().await;
         let after_yield = early_metrics.snapshot();
-        assert_eq!(after_yield.files_started, early_snapshot.files_started);
+        assert_eq!(
+            after_yield.file_tasks_started,
+            early_snapshot.file_tasks_started
+        );
         assert_eq!(
             after_yield.batches_produced,
             early_snapshot.batches_produced
@@ -531,10 +534,10 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
         let idle = table.scan().with_target_partitions(1)?.build().await?;
         let idle_stream = idle.execute().await?;
         let idle_metrics = idle_stream.metrics();
-        assert_eq!(idle_metrics.snapshot().files_started, 0);
+        assert_eq!(idle_metrics.snapshot().file_tasks_started, 0);
         drop(idle_stream);
         tokio::task::yield_now().await;
-        assert_eq!(idle_metrics.snapshot().files_started, 0);
+        assert_eq!(idle_metrics.snapshot().file_tasks_started, 0);
 
         let partial = table.scan().with_target_partitions(1)?.build().await?;
         let mut partial_stream = partial.execute().await?;
@@ -544,7 +547,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
         drop(partial_stream);
         tokio::task::yield_now().await;
         let snapshot = partial_metrics.snapshot();
-        assert!(snapshot.files_started >= 1);
+        assert!(snapshot.file_tasks_started >= 1);
         assert!(snapshot.rows_produced >= u64::try_from(first.num_rows())?);
 
         let missing = TestTable::missing_data_file("error")?;
@@ -559,7 +562,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
             .expect_err("missing file must fail");
         assert_eq!(error.phase(), DeltaReaderPhase::DataFileRead);
         assert!(stream.next().await.is_none());
-        assert_eq!(metrics.snapshot().files_started, 1);
+        assert_eq!(metrics.snapshot().file_tasks_started, 1);
         Ok::<_, Box<dyn Error>>(())
     })
 }

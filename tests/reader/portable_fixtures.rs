@@ -659,9 +659,9 @@ fn assert_success(
     );
     assert_eq!(batch_ids(&batch)?, expected_ids, "{case_name}");
     assert_eq!(metrics.reader_backend, backend, "{case_name}");
-    assert!(metrics.files_started > 0, "{case_name}");
+    assert!(metrics.file_tasks_started > 0, "{case_name}");
     assert_eq!(
-        metrics.files_completed, metrics.files_started,
+        metrics.file_tasks_completed, metrics.file_tasks_started,
         "{case_name}"
     );
     assert_eq!(metrics.scan_partitions_started, 1, "{case_name}");
@@ -706,8 +706,8 @@ fn assert_missing_required(
         "{case_name}: {source_display}"
     );
     assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
-    assert_eq!(metrics.files_started, 1, "{case_name}");
-    assert_eq!(metrics.files_completed, 0, "{case_name}");
+    assert_eq!(metrics.file_tasks_started, 1, "{case_name}");
+    assert_eq!(metrics.file_tasks_completed, 0, "{case_name}");
     assert_eq!(metrics.batches_produced, 0, "{case_name}");
     assert_eq!(metrics.rows_produced, 0, "{case_name}");
     Ok(())
@@ -1067,8 +1067,8 @@ fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
         );
         assert!(!display.contains(RELATIVE_DV_FILE));
         assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
-        assert_eq!(metrics.files_started, 1);
-        assert_eq!(metrics.files_completed, 0);
+        assert_eq!(metrics.file_tasks_started, 1);
+        assert_eq!(metrics.file_tasks_completed, 0);
         assert_eq!(metrics.batches_produced, 0);
         assert_eq!(metrics.rows_produced, 0);
         assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
@@ -1115,8 +1115,8 @@ fn direct_preserves_frozen_file_and_batch_order() -> TestResult {
             )?;
 
             assert_eq!(batch_ids(&batch)?, expected, "{name}");
-            assert_eq!(metrics.files_started, expected_files, "{name}");
-            assert_eq!(metrics.files_completed, expected_files, "{name}");
+            assert_eq!(metrics.file_tasks_started, expected_files, "{name}");
+            assert_eq!(metrics.file_tasks_completed, expected_files, "{name}");
             assert_eq!(
                 metrics.rows_produced,
                 u64::try_from(expected.len())?,
@@ -1156,10 +1156,10 @@ fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
         assert!(error.source().is_some());
         assert!(stream.next().await.is_none());
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.files_started, 1);
-        assert_eq!(metrics.files_completed, 0);
+        assert_eq!(metrics.file_tasks_started, 1);
+        assert_eq!(metrics.file_tasks_completed, 0);
         assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
-        assert_eq!(metrics.parquet_data_file_opened_bytes, Some(123));
+        assert_eq!(metrics.parquet_task_bytes_admitted, Some(123));
         assert!(
             metrics
                 .parquet_data_file_range_get_operations
@@ -1190,8 +1190,8 @@ fn direct_stream_drop_stops_future_file_scheduling() -> TestResult {
         assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.scan_partitions_started, 1);
         assert_eq!(metrics.scan_partitions_completed, 0);
-        assert_eq!(metrics.files_started, 1);
-        assert_eq!(metrics.files_completed, 0);
+        assert_eq!(metrics.file_tasks_started, 1);
+        assert_eq!(metrics.file_tasks_completed, 0);
         assert!((1..=2).contains(&metrics.batches_produced));
         assert!((1..=16_384).contains(&metrics.rows_produced));
         Ok::<_, Box<dyn Error>>(())
@@ -1221,8 +1221,8 @@ fn direct_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult 
         assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.scan_partitions_started, 1);
         assert_eq!(metrics.scan_partitions_completed, 0);
-        assert_eq!(metrics.files_started, 1);
-        assert_eq!(metrics.files_completed, 0);
+        assert_eq!(metrics.file_tasks_started, 1);
+        assert_eq!(metrics.file_tasks_completed, 0);
         assert!((1..=2).contains(&metrics.batches_produced));
         assert!((1..=16_384).contains(&metrics.rows_produced));
         assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
@@ -1248,8 +1248,8 @@ fn direct_backpressure_bounds_future_file_scheduling() -> TestResult {
         let partial = metrics.snapshot();
 
         assert_eq!(ids.first().copied(), Some(1));
-        assert_eq!(partial.files_started, 1);
-        assert_eq!(partial.files_completed, 0);
+        assert_eq!(partial.file_tasks_started, 1);
+        assert_eq!(partial.file_tasks_completed, 0);
         assert_eq!(partial.scan_partitions_completed, 0);
 
         for batch in stream.try_collect::<Vec<_>>().await? {
@@ -1259,8 +1259,8 @@ fn direct_backpressure_bounds_future_file_scheduling() -> TestResult {
         let complete = metrics.snapshot();
         assert_eq!(complete.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(complete.scan_partitions_completed, 1);
-        assert_eq!(complete.files_started, 2);
-        assert_eq!(complete.files_completed, 2);
+        assert_eq!(complete.file_tasks_started, 2);
+        assert_eq!(complete.file_tasks_completed, 2);
         assert_eq!(complete.rows_produced, 40_000);
         Ok::<_, Box<dyn Error>>(())
     })
@@ -1285,11 +1285,11 @@ fn direct_prefetch_preserves_file_order_and_completes() -> TestResult {
         let metrics = metrics.snapshot();
         assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
         assert_eq!(metrics.scan_partitions_completed, 1);
-        assert_eq!(metrics.files_started, 2);
-        assert_eq!(metrics.files_completed, 2);
+        assert_eq!(metrics.file_tasks_started, 2);
+        assert_eq!(metrics.file_tasks_completed, 2);
         assert_eq!(
-            metrics.parquet_data_file_opened_bytes,
-            metrics.estimated_bytes
+            metrics.parquet_task_bytes_admitted,
+            metrics.estimated_input_bytes
         );
         assert_eq!(metrics.rows_produced, 18_000);
         Ok::<_, Box<dyn Error>>(())
@@ -1334,9 +1334,9 @@ fn assert_parity_success(
         "{case_name}"
     );
     assert_eq!(metrics.reader_backend, backend, "{case_name}");
-    assert!(metrics.files_started > 0, "{case_name}");
+    assert!(metrics.file_tasks_started > 0, "{case_name}");
     assert_eq!(
-        metrics.files_completed, metrics.files_started,
+        metrics.file_tasks_completed, metrics.file_tasks_started,
         "{case_name}"
     );
     assert_eq!(metrics.scan_partitions_started, 1, "{case_name}");
