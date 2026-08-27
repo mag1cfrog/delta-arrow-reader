@@ -654,7 +654,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
             },
             ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.reader_plan),
         };
-        let stream = DeltaScanScheduler::with_shared_limiter(
+        let stream = DeltaScanScheduler::new_with_limiter(
             Arc::clone(&self.reader_plan),
             Arc::clone(&self.limiter),
         )

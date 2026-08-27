@@ -132,7 +132,7 @@ impl DeltaScanScheduler {
         }
     }
 
-    pub(crate) fn with_shared_limiter(
+    pub(crate) fn new_with_limiter(
         plan: Arc<DeltaScanPlan>,
         limiter: Arc<ScanReadLimiter>,
     ) -> Self {
