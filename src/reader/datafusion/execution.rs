@@ -49,9 +49,7 @@ use datafusion::{
 use futures_util::{StreamExt, stream};
 
 use super::{
-    dynamic_filters::{
-        DeltaDynamicFilterOutcome, DeltaDynamicFilterPlan, DeltaRetainedDynamicFilter,
-    },
+    dynamic_filters::{DynamicFilterOutcome, DynamicFilterPlan, RetainedDynamicFilter},
     dynamic_partition_pruning::{
         DeltaDynamicPartitionKeepReason, DeltaDynamicPartitionPruningDecision,
         evaluate_dynamic_partition_filter,
@@ -329,7 +327,7 @@ struct DeltaDataFusionExec {
     properties: Arc<PlanProperties>,
     metrics: ScanMetrics,
     limiter: Arc<ScanReadLimiter>,
-    dynamic_filters: Arc<[DeltaRetainedDynamicFilter]>,
+    dynamic_filters: Arc<[RetainedDynamicFilter]>,
     intra_file_repartitioning: IntraFileRepartitioning,
     intra_file_repartitioning_applied: bool,
     parquet_metadata_cache: Option<Arc<DirectParquetMetadataCache>>,
@@ -376,7 +374,7 @@ impl DeltaDataFusionExec {
 
     fn with_dynamic_filters(
         &self,
-        dynamic_filters: Vec<DeltaRetainedDynamicFilter>,
+        dynamic_filters: Vec<RetainedDynamicFilter>,
     ) -> Arc<dyn ExecutionPlan> {
         Arc::new(Self {
             dynamic_filters: Arc::from(dynamic_filters),
@@ -689,7 +687,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
             return Ok(unsupported());
         }
 
-        let dynamic_filter_plan = DeltaDynamicFilterPlan::from_filters(
+        let dynamic_filter_plan = DynamicFilterPlan::from_filters(
             &parent_filters,
             &self.schema,
             &self.plan.partition_columns,
@@ -708,8 +706,8 @@ impl ExecutionPlan for DeltaDataFusionExec {
             .decisions
             .iter()
             .map(|decision| match decision.outcome {
-                DeltaDynamicFilterOutcome::Accepted => PushedDown::Yes,
-                DeltaDynamicFilterOutcome::Rejected => PushedDown::No,
+                DynamicFilterOutcome::Accepted => PushedDown::Yes,
+                DynamicFilterOutcome::Rejected => PushedDown::No,
             })
             .collect();
         Ok(
@@ -721,7 +719,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
 
 fn dynamic_admission(
     metrics: ScanMetrics,
-    filters: Arc<[DeltaRetainedDynamicFilter]>,
+    filters: Arc<[RetainedDynamicFilter]>,
 ) -> FileAdmissionFn<DeltaScanFileTask> {
     Arc::new(move |task| {
         if filters.is_empty() {
@@ -1812,7 +1810,7 @@ mod tests {
     async fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
         use crate::{
             delta::kernel::KernelPhysicalToLogicalTransform,
-            reader::datafusion::dynamic_filters::DeltaDynamicFilterPlan,
+            reader::datafusion::dynamic_filters::DynamicFilterPlan,
             reader::deletion_vector::DeletionVectorMetadata,
         };
 
@@ -1828,7 +1826,7 @@ mod tests {
         ]));
         let retained = |dynamic: Arc<DynamicFilterPhysicalExpr>| -> TestResult<_> {
             let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic;
-            Ok(DeltaDynamicFilterPlan::from_filters(
+            Ok(DynamicFilterPlan::from_filters(
                 std::slice::from_ref(&physical),
                 &schema,
                 &["region".to_owned()],

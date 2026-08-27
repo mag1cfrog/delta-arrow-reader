@@ -19,7 +19,7 @@ use datafusion::logical_expr::ColumnarValue;
 use datafusion::physical_expr::expressions::Literal;
 use delta_kernel::{expressions::Scalar, schema::PrimitiveType as KernelPrimitiveType};
 
-use super::dynamic_filters::DeltaRetainedDynamicFilter;
+use super::dynamic_filters::RetainedDynamicFilter;
 use crate::reader::planning::DeltaScanFileTask;
 
 /// Conservative pruning decision for one retained dynamic filter and file task.
@@ -71,7 +71,7 @@ pub(crate) enum DeltaDynamicPartitionKeepReason {
 /// receive parsed values from Delta metadata.
 #[must_use]
 pub(crate) fn evaluate_dynamic_partition_filter(
-    filter: &DeltaRetainedDynamicFilter,
+    filter: &RetainedDynamicFilter,
     task: &DeltaScanFileTask,
 ) -> DeltaDynamicPartitionPruningDecision {
     let snapshot = match filter.physical_expr.snapshot() {
@@ -114,7 +114,7 @@ pub(crate) fn evaluate_dynamic_partition_filter(
 /// The returned batch is synthetic: it is not a data-file row, only the
 /// partition metadata view for one `DeltaScanFileTask`.
 fn materialize_partition_batch(
-    filter: &DeltaRetainedDynamicFilter,
+    filter: &RetainedDynamicFilter,
     task: &DeltaScanFileTask,
 ) -> Result<RecordBatch, DeltaDynamicPartitionKeepReason> {
     // Start with a full-width provider batch so physical column indexes in the
@@ -424,7 +424,7 @@ mod tests {
     use super::*;
     use crate::{
         delta::kernel::KernelPhysicalToLogicalTransform,
-        reader::datafusion::dynamic_filters::DeltaDynamicFilterPlan,
+        reader::datafusion::dynamic_filters::DynamicFilterPlan,
         reader::deletion_vector::DeletionVectorMetadata,
     };
 
@@ -443,10 +443,10 @@ mod tests {
 
     fn retained_filter(
         children: Vec<Arc<dyn PhysicalExpr>>,
-    ) -> Result<(Arc<DynamicFilterPhysicalExpr>, DeltaRetainedDynamicFilter), String> {
+    ) -> Result<(Arc<DynamicFilterPhysicalExpr>, RetainedDynamicFilter), String> {
         let dynamic = Arc::new(DynamicFilterPhysicalExpr::new(children, lit(true)));
         let filter: Arc<dyn PhysicalExpr> = dynamic.clone();
-        let plan = DeltaDynamicFilterPlan::from_filters(
+        let plan = DynamicFilterPlan::from_filters(
             std::slice::from_ref(&filter),
             &test_schema(),
             &[
