@@ -55,7 +55,7 @@ pub struct DeltaScanMetricsSnapshot {
     /// Direct Parquet payload bytes received, or `None` for another backend.
     pub parquet_data_file_bytes_received: Option<u64>,
     /// Estimated bytes admitted across direct Parquet tasks, or `None` for another backend.
-    pub parquet_task_bytes_admitted: Option<u64>,
+    pub estimated_parquet_task_bytes_admitted: Option<u64>,
 }
 
 /// Shared live metrics for one Delta scan.
@@ -87,7 +87,7 @@ struct DeltaScanMetricsInner {
     parquet_data_file_range_get_operations: AtomicU64,
     parquet_data_file_full_get_operations: AtomicU64,
     parquet_data_file_bytes_received: AtomicU64,
-    parquet_task_bytes_admitted: AtomicU64,
+    estimated_parquet_task_bytes_admitted: AtomicU64,
 }
 
 #[allow(dead_code)]
@@ -131,7 +131,7 @@ impl DeltaScanMetrics {
                 parquet_data_file_range_get_operations: AtomicU64::new(0),
                 parquet_data_file_full_get_operations: AtomicU64::new(0),
                 parquet_data_file_bytes_received: AtomicU64::new(0),
-                parquet_task_bytes_admitted: AtomicU64::new(0),
+                estimated_parquet_task_bytes_admitted: AtomicU64::new(0),
             }),
         }
     }
@@ -165,7 +165,8 @@ impl DeltaScanMetrics {
                 .parquet_metric(&inner.parquet_data_file_full_get_operations),
             parquet_data_file_bytes_received: self
                 .parquet_metric(&inner.parquet_data_file_bytes_received),
-            parquet_task_bytes_admitted: self.parquet_metric(&inner.parquet_task_bytes_admitted),
+            estimated_parquet_task_bytes_admitted: self
+                .parquet_metric(&inner.estimated_parquet_task_bytes_admitted),
         }
     }
 
@@ -255,8 +256,8 @@ impl DeltaScanMetrics {
         );
     }
 
-    pub(crate) fn record_parquet_task_bytes_admitted(&self, bytes: u64) {
-        saturating_fetch_add(&self.inner.parquet_task_bytes_admitted, bytes);
+    pub(crate) fn record_estimated_parquet_task_bytes_admitted(&self, bytes: u64) {
+        saturating_fetch_add(&self.inner.estimated_parquet_task_bytes_admitted, bytes);
     }
 }
 
@@ -320,13 +321,13 @@ mod tests {
         assert_eq!(direct.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(direct.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(direct.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(direct.parquet_task_bytes_admitted, Some(0));
+        assert_eq!(direct.estimated_parquet_task_bytes_admitted, Some(0));
 
         let kernel = metrics(ParquetReaderBackend::DeltaKernel).snapshot();
         assert_eq!(kernel.parquet_data_file_range_get_operations, None);
         assert_eq!(kernel.parquet_data_file_full_get_operations, None);
         assert_eq!(kernel.parquet_data_file_bytes_received, None);
-        assert_eq!(kernel.parquet_task_bytes_admitted, None);
+        assert_eq!(kernel.estimated_parquet_task_bytes_admitted, None);
     }
 
     #[test]
@@ -348,7 +349,7 @@ mod tests {
             &metrics.inner.parquet_data_file_range_get_operations,
             &metrics.inner.parquet_data_file_full_get_operations,
             &metrics.inner.parquet_data_file_bytes_received,
-            &metrics.inner.parquet_task_bytes_admitted,
+            &metrics.inner.estimated_parquet_task_bytes_admitted,
         ];
         for (index, counter) in counters.into_iter().enumerate() {
             saturating_fetch_add(counter, u64::try_from(index + 1).expect("small test value"));
@@ -370,7 +371,7 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(12));
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(13));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(14));
-        assert_eq!(snapshot.parquet_task_bytes_admitted, Some(15));
+        assert_eq!(snapshot.estimated_parquet_task_bytes_admitted, Some(15));
     }
 
     #[test]

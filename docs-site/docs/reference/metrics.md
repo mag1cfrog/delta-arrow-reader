@@ -30,7 +30,7 @@ usable after its batch stream finishes or is dropped.
 | `parquet_data_file_range_get_operations` | Direct Parquet data-file GET operations with a range. |
 | `parquet_data_file_full_get_operations` | Direct Parquet data-file GET operations without a range. |
 | `parquet_data_file_bytes_received` | Bytes delivered successfully through the direct reader's object store. |
-| `parquet_task_bytes_admitted` | Estimated bytes admitted across direct-reader tasks. A ranged task contributes its range length. |
+| `estimated_parquet_task_bytes_admitted` | Estimated bytes admitted across direct-reader tasks. A ranged task contributes its range length. |
 
 `add_actions_filtered_during_planning` is not an exact active-file count. Delta
 Kernel's final selection also reconciles Add and Remove actions.

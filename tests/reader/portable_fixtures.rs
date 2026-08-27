@@ -1168,7 +1168,7 @@ fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
         assert_eq!(metrics.file_tasks_started, 1);
         assert_eq!(metrics.file_tasks_completed, 0);
         assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
-        assert_eq!(metrics.parquet_task_bytes_admitted, Some(123));
+        assert_eq!(metrics.estimated_parquet_task_bytes_admitted, Some(123));
         assert!(
             metrics
                 .parquet_data_file_range_get_operations
@@ -1297,7 +1297,7 @@ fn direct_prefetch_preserves_file_order_and_completes() -> TestResult {
         assert_eq!(metrics.file_tasks_started, 2);
         assert_eq!(metrics.file_tasks_completed, 2);
         assert_eq!(
-            metrics.parquet_task_bytes_admitted,
+            metrics.estimated_parquet_task_bytes_admitted,
             metrics.estimated_input_bytes
         );
         assert_eq!(metrics.scheduler_rows_emitted, 18_000);

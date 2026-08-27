@@ -127,7 +127,7 @@ const CSV_HEADER: [&str; 80] = [
     "provider_stats_parquet_data_file_range_get_operations_p50",
     "provider_stats_parquet_data_file_full_get_operations_p50",
     "provider_stats_parquet_data_file_bytes_received_p50",
-    "provider_stats_parquet_task_bytes_admitted_p50",
+    "provider_stats_estimated_parquet_task_bytes_admitted_p50",
     "fixture_fingerprint",
 ];
 
@@ -272,7 +272,7 @@ struct ReadSummary {
     range_gets: Option<u64>,
     full_gets: Option<u64>,
     bytes_received: Option<u64>,
-    task_bytes_admitted: Option<u64>,
+    estimated_task_bytes_admitted: Option<u64>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -1590,7 +1590,9 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         range_gets: optional(|reader| reader.parquet_data_file_range_get_operations),
         full_gets: optional(|reader| reader.parquet_data_file_full_get_operations),
         bytes_received: optional(|reader| reader.parquet_data_file_bytes_received),
-        task_bytes_admitted: optional(|reader| reader.parquet_task_bytes_admitted),
+        estimated_task_bytes_admitted: optional(|reader| {
+            reader.estimated_parquet_task_bytes_admitted
+        }),
     }
 }
 
@@ -1703,7 +1705,7 @@ fn csv_row(
         optional(read.range_gets),
         optional(read.full_gets),
         optional(read.bytes_received),
-        optional(read.task_bytes_admitted),
+        optional(read.estimated_task_bytes_admitted),
         fixture.fingerprint.clone(),
     ];
     assert_eq!(row.len(), CSV_HEADER.len());

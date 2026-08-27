@@ -553,7 +553,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     assert_eq!(metrics.deletion_vector_failures, 0);
     assert_eq!(metrics.deletion_vector_rejections, 0);
     assert_eq!(
-        metrics.parquet_task_bytes_admitted,
+        metrics.estimated_parquet_task_bytes_admitted,
         Some(fixture.data_file_size() * executions)
     );
     assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));

@@ -429,7 +429,7 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(snapshot.parquet_task_bytes_admitted, Some(0));
+        assert_eq!(snapshot.estimated_parquet_task_bytes_admitted, Some(0));
         assert_eq!(format!("{store:?}"), "MeteredParquetObjectStore");
 
         let redacted_metrics = direct_metrics();

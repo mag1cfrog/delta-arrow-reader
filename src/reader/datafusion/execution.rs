@@ -1391,7 +1391,7 @@ mod tests {
         let metrics = collect_scan_metrics(repartitioned.as_ref())[0].snapshot();
         assert_eq!(metrics.reader_metrics.scan_partitions_planned, 4);
         assert_eq!(
-            metrics.reader_metrics.parquet_task_bytes_admitted,
+            metrics.reader_metrics.estimated_parquet_task_bytes_admitted,
             expected_bytes
         );
 

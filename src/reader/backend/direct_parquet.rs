@@ -602,7 +602,9 @@ fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
 
     Arc::new(move |task, permit, cancellation| {
         if let Some(bytes) = task.estimated_scan_bytes() {
-            reader.metrics.record_parquet_task_bytes_admitted(bytes);
+            reader
+                .metrics
+                .record_estimated_parquet_task_bytes_admitted(bytes);
         }
         let reader = Arc::clone(&reader);
         let physical_schema = Arc::clone(&physical_schema);
@@ -3134,7 +3136,7 @@ mod tests {
         assert_eq!(direct_metrics.file_tasks_started, 1);
         assert_eq!(direct_metrics.file_tasks_completed, 1);
         assert_eq!(
-            direct_metrics.parquet_task_bytes_admitted,
+            direct_metrics.estimated_parquet_task_bytes_admitted,
             Some(u64::try_from(parquet_bytes.len())?)
         );
         assert_eq!(direct_metrics.deletion_vector_payloads_loaded, 1);
@@ -3163,8 +3165,8 @@ mod tests {
             Some(u64::try_from(parquet_bytes.len())?)
         );
         assert_eq!(
-            buffered_metrics.parquet_task_bytes_admitted,
-            direct_metrics.parquet_task_bytes_admitted
+            buffered_metrics.estimated_parquet_task_bytes_admitted,
+            direct_metrics.estimated_parquet_task_bytes_admitted
         );
         Ok(())
     }
@@ -3319,7 +3321,7 @@ mod tests {
             assert_eq!(metrics.parquet_data_file_range_get_operations, None);
             assert_eq!(metrics.parquet_data_file_full_get_operations, None);
             assert_eq!(metrics.parquet_data_file_bytes_received, None);
-            assert_eq!(metrics.parquet_task_bytes_admitted, None);
+            assert_eq!(metrics.estimated_parquet_task_bytes_admitted, None);
         }
         Ok(())
     }
@@ -3778,7 +3780,7 @@ mod tests {
             assert_eq!(metrics.parquet_data_file_range_get_operations, None);
             assert_eq!(metrics.parquet_data_file_full_get_operations, None);
             assert_eq!(metrics.parquet_data_file_bytes_received, None);
-            assert_eq!(metrics.parquet_task_bytes_admitted, None);
+            assert_eq!(metrics.estimated_parquet_task_bytes_admitted, None);
         };
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_for(
@@ -4221,7 +4223,7 @@ mod tests {
         assert_eq!(dv_metrics.file_tasks_completed, 0);
         assert_eq!(dv_metrics.deletion_vector_failures, 1);
         assert_eq!(
-            dv_metrics.parquet_task_bytes_admitted,
+            dv_metrics.estimated_parquet_task_bytes_admitted,
             Some(u64::try_from(parquet_bytes.len())?)
         );
 

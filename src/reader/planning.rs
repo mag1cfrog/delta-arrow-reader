@@ -4725,7 +4725,7 @@ mod tests {
         );
         assert_eq!(empty_metrics.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(empty_metrics.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(empty_metrics.parquet_task_bytes_admitted, Some(0));
+        assert_eq!(empty_metrics.estimated_parquet_task_bytes_admitted, Some(0));
 
         let single_add = [add("single.parquet", 0, None)];
         let (_single_table, single_snapshot) =
@@ -5492,7 +5492,7 @@ mod tests {
         assert_eq!(metrics.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(metrics.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(metrics.parquet_task_bytes_admitted, Some(0));
+        assert_eq!(metrics.estimated_parquet_task_bytes_admitted, Some(0));
 
         plan.metrics.record_deletion_vector_failure();
         assert_eq!(retained_metrics.snapshot().deletion_vector_failures, 1);
