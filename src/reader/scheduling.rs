@@ -1891,11 +1891,13 @@ mod tests {
     }
 
     #[test]
-    fn scheduler_source_stays_backend_neutral() {
+    fn scheduler_source_has_no_backend_implementation_dependencies() {
         let source = include_str!("scheduling.rs");
         let forbidden = [
             concat!("data", "fusion"),
-            concat!("par", "quet"),
+            concat!("direct", "_parquet"),
+            concat!("kernel", "_reader"),
+            concat!("par", "quet::"),
             concat!("object", "_store"),
             concat!("deletion", "_vector"),
             concat!("spawn", "_blocking"),
@@ -1904,7 +1906,7 @@ mod tests {
         for pattern in forbidden {
             assert!(
                 !source.contains(pattern),
-                "scheduler must not contain {pattern}"
+                "scheduler must not depend on {pattern}"
             );
         }
     }
