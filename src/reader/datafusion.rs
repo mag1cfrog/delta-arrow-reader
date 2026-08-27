@@ -146,7 +146,7 @@ impl DeltaTableProvider {
             &filter_refs,
             DataFusionFilterCapabilities {
                 exact_predicate_evaluation: self.options.execution_options.reader_backend()
-                    == ParquetReaderBackend::DirectParquet,
+                    == ParquetReaderBackend::Direct,
             },
         )?;
         if planning
@@ -349,7 +349,7 @@ impl TableProvider for DeltaTableProvider {
             filters,
             DataFusionFilterCapabilities {
                 exact_predicate_evaluation: self.options.execution_options.reader_backend()
-                    == ParquetReaderBackend::DirectParquet,
+                    == ParquetReaderBackend::Direct,
             },
         );
         Ok(planning

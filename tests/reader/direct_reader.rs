@@ -611,7 +611,7 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         assert_eq!(kernel_metrics.snapshot().files_planned, 1);
         assert_eq!(
             direct_metrics.snapshot().reader_backend,
-            ParquetReaderBackend::DirectParquet
+            ParquetReaderBackend::Direct
         );
         assert_eq!(
             kernel_metrics.snapshot().reader_backend,

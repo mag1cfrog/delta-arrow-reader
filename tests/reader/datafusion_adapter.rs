@@ -1003,7 +1003,7 @@ async fn direct_exact_and_kernel_residual_execution_return_the_same_rows() -> Te
     let mut outputs = Vec::new();
 
     for (name, backend) in [
-        ("direct_orders", ParquetReaderBackend::DirectParquet),
+        ("direct_orders", ParquetReaderBackend::Direct),
         ("kernel_orders", ParquetReaderBackend::DeltaKernel),
     ] {
         let context = SessionContext::new();
@@ -1021,7 +1021,7 @@ async fn direct_exact_and_kernel_residual_execution_return_the_same_rows() -> Te
         assert_eq!(
             provider.supports_filters_pushdown(&[&data_filter])?,
             [match backend {
-                ParquetReaderBackend::DirectParquet => TableProviderFilterPushDown::Exact,
+                ParquetReaderBackend::Direct => TableProviderFilterPushDown::Exact,
                 ParquetReaderBackend::DeltaKernel => TableProviderFilterPushDown::Inexact,
             }]
         );

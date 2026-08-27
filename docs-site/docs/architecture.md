@@ -39,7 +39,7 @@ building reports, and sending the results elsewhere.
 
 ## Reader backends
 
-The default `DirectParquet` backend reads Parquet data asynchronously through
+The default `Direct` backend reads Parquet data asynchronously through
 the same object store used to load the snapshot. The `DeltaKernel` backend
 reads data files through Delta Kernel's synchronous iterator API.
 Whichever backend you choose, the rest of the scan behaves the same.

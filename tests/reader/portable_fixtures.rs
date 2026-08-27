@@ -705,7 +705,7 @@ fn assert_missing_required(
         source_display.contains("is missing from the Parquet file"),
         "{case_name}: {source_display}"
     );
-    assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+    assert_eq!(metrics.reader_backend, ParquetReaderBackend::Direct);
     assert_eq!(metrics.file_tasks_started, 1, "{case_name}");
     assert_eq!(metrics.file_tasks_completed, 0, "{case_name}");
     assert_eq!(metrics.scheduler_batches_emitted, 0, "{case_name}");
@@ -762,7 +762,7 @@ fn direct_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
         for case in cases {
             let attempt = scan_fixture(
                 &case.fixture,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 projection(case.projection),
                 None,
             )
@@ -789,10 +789,10 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
             };
             let (_, metrics, _) = assert_success(
                 name,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 scan_fixture(
                     &fixture,
-                    ParquetReaderBackend::DirectParquet,
+                    ParquetReaderBackend::Direct,
                     Some(vec!["id".to_owned()]),
                     Some(predicate),
                 )
@@ -812,7 +812,7 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
 
         let no_rows = scan_fixture(
             &fixture,
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             Some(vec!["id".to_owned()]),
             Some(DeltaPredicate::Compare {
                 column: "id".into(),
@@ -851,10 +851,10 @@ fn direct_partial_pruning_predicate_remains_residual_only() -> TestResult {
         ]);
         let (_, metrics, _) = assert_success(
             "partial pruning predicate",
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             scan_fixture(
                 &fixture,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 Some(vec!["id".to_owned()]),
                 Some(predicate),
             )
@@ -971,10 +971,10 @@ fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
                 .collect::<Vec<_>>();
             let (batch, metrics, batch_count) = assert_success(
                 case.name,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 scan_fixture(
                     &case.fixture,
-                    ParquetReaderBackend::DirectParquet,
+                    ParquetReaderBackend::Direct,
                     projection(case.projection),
                     None,
                 )
@@ -1055,7 +1055,7 @@ fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
         fs::remove_file(fixture.path().join(RELATIVE_DV_FILE))?;
         let ScanAttempt::Failure { error, metrics } = scan_fixture(
             &fixture,
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             projection(&["id"]),
             None,
         )
@@ -1072,7 +1072,7 @@ fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
             "{display}"
         );
         assert!(!display.contains(RELATIVE_DV_FILE));
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::Direct);
         assert_eq!(metrics.file_tasks_started, 1);
         assert_eq!(metrics.file_tasks_completed, 0);
         assert_eq!(metrics.scheduler_batches_emitted, 0);
@@ -1109,10 +1109,10 @@ fn direct_preserves_frozen_file_and_batch_order() -> TestResult {
         for (name, fixture, expected, expected_files, require_multiple_batches) in cases {
             let (batch, metrics, batch_count) = assert_success(
                 name,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 scan_fixture(
                     &fixture,
-                    ParquetReaderBackend::DirectParquet,
+                    ParquetReaderBackend::Direct,
                     projection(&["id"]),
                     None,
                 )
@@ -1167,7 +1167,7 @@ fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
         let metrics = metrics.snapshot();
         assert_eq!(metrics.file_tasks_started, 1);
         assert_eq!(metrics.file_tasks_completed, 0);
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::Direct);
         assert_eq!(metrics.estimated_parquet_task_bytes_admitted, Some(123));
         assert!(
             metrics
@@ -1196,7 +1196,7 @@ fn direct_stream_drop_stops_future_file_scheduling() -> TestResult {
         wait_for_delivered_batch_metrics(&metrics).await;
 
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_started, 1);
         assert_eq!(metrics.scan_partitions_completed, 0);
         assert_eq!(metrics.file_tasks_started, 1);
@@ -1227,7 +1227,7 @@ fn direct_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult 
         wait_for_delivered_batch_metrics(&metrics).await;
 
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_started, 1);
         assert_eq!(metrics.scan_partitions_completed, 0);
         assert_eq!(metrics.file_tasks_started, 1);
@@ -1266,7 +1266,7 @@ fn direct_backpressure_bounds_future_file_scheduling() -> TestResult {
         }
         assert_eq!(ids, (1..=40_000).collect::<Vec<_>>());
         let complete = metrics.snapshot();
-        assert_eq!(complete.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(complete.reader_backend, ParquetReaderBackend::Direct);
         assert_eq!(complete.scan_partitions_completed, 1);
         assert_eq!(complete.file_tasks_started, 2);
         assert_eq!(complete.file_tasks_completed, 2);
@@ -1292,7 +1292,7 @@ fn direct_prefetch_preserves_file_order_and_completes() -> TestResult {
 
         assert_eq!(ids, (1..=18_000).collect::<Vec<_>>());
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(metrics.reader_backend, ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_completed, 1);
         assert_eq!(metrics.file_tasks_started, 2);
         assert_eq!(metrics.file_tasks_completed, 2);
@@ -1362,7 +1362,7 @@ fn delta_kernel_matches_direct_for_frozen_cases() -> TestResult {
         for case in cases {
             let direct = scan_fixture(
                 &case.fixture,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 projection(case.projection),
                 None,
             )
@@ -1378,7 +1378,7 @@ fn delta_kernel_matches_direct_for_frozen_cases() -> TestResult {
                 case.name,
                 case.projection,
                 case.expected_rows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 direct,
             )?;
             let (kernel, _) = assert_parity_success(

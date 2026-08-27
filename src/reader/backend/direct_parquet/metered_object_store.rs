@@ -187,7 +187,7 @@ mod tests {
     fn direct_metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
-            reader_backend: ParquetReaderBackend::DirectParquet,
+            reader_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 1,
             files_planned: 1,
             add_actions_filtered_during_planning: Some(0),

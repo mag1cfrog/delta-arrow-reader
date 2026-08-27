@@ -469,7 +469,7 @@ impl DeltaScan {
             let execution = DeltaScanExecution::new(Arc::clone(&self.plan));
             let admission: FileAdmissionFn<_> = Arc::new(|_| Ok(FileAdmission::Admit));
             let executor = match backend {
-                ParquetReaderBackend::DirectParquet => direct_parquet_executor(
+                ParquetReaderBackend::Direct => direct_parquet_executor(
                     &self.plan,
                     None,
                     self.enforce_physical_predicate_rows
@@ -887,7 +887,7 @@ mod tests {
     fn metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 7,
-            reader_backend: ParquetReaderBackend::DirectParquet,
+            reader_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 2,
             files_planned: 2,
             add_actions_filtered_during_planning: Some(0),
@@ -936,7 +936,7 @@ mod tests {
             projection: None,
             remaining: None,
             snapshot_version: 7,
-            backend: ParquetReaderBackend::DirectParquet,
+            backend: ParquetReaderBackend::Direct,
             partition_count: 2,
             started: false,
             done: false,
@@ -1012,13 +1012,13 @@ mod tests {
         let _ = tracing::subscriber::set_global_default(EventFields::default());
         with_default(subscriber, || {
             tracing::callsite::rebuild_interest_cache();
-            trace_planning_started(7, ParquetReaderBackend::DirectParquet);
-            trace_planning_completed(7, ParquetReaderBackend::DirectParquet, 2);
-            trace_planning_failed(7, ParquetReaderBackend::DirectParquet, &error);
-            trace_execution_started(7, ParquetReaderBackend::DirectParquet, 2);
-            trace_execution_completed(7, ParquetReaderBackend::DirectParquet, 2);
-            trace_execution_failed(7, ParquetReaderBackend::DirectParquet, 2, &error);
-            trace_execution_dropped(7, ParquetReaderBackend::DirectParquet, 2);
+            trace_planning_started(7, ParquetReaderBackend::Direct);
+            trace_planning_completed(7, ParquetReaderBackend::Direct, 2);
+            trace_planning_failed(7, ParquetReaderBackend::Direct, &error);
+            trace_execution_started(7, ParquetReaderBackend::Direct, 2);
+            trace_execution_completed(7, ParquetReaderBackend::Direct, 2);
+            trace_execution_failed(7, ParquetReaderBackend::Direct, 2, &error);
+            trace_execution_dropped(7, ParquetReaderBackend::Direct, 2);
         });
         tracing::callsite::rebuild_interest_cache();
 

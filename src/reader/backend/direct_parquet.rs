@@ -1764,7 +1764,7 @@ mod tests {
     fn metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
-            reader_backend: ParquetReaderBackend::DirectParquet,
+            reader_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 1,
             files_planned: 1,
             add_actions_filtered_during_planning: Some(0),
@@ -2012,7 +2012,7 @@ mod tests {
             root,
             full_file_read_threshold_bytes,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             true,
         )
     }
@@ -3196,7 +3196,7 @@ mod tests {
                 &root,
                 None,
                 Some(64 * 1024),
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 false,
             )?;
             let metrics = plan.metrics.clone();
@@ -3244,7 +3244,7 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             false,
         )?;
         let direct = execute_pipeline_plan(direct_plan).await?;
@@ -3343,7 +3343,7 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             true,
         )?)
         .await?;
@@ -3406,7 +3406,7 @@ mod tests {
                 &root,
                 None,
                 Some(64 * 1024),
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 true,
                 selection,
                 1,
@@ -3479,7 +3479,7 @@ mod tests {
         for (predicate, expected, expected_files) in cases {
             let direct_plan = predicate_pipeline_plan_for_backend(
                 &root,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 predicate.clone(),
             )?;
             let kernel_plan = predicate_pipeline_plan_for_backend(
@@ -3517,7 +3517,7 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             false,
         )?)
         .await?;
@@ -3553,7 +3553,7 @@ mod tests {
             &empty_root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             false,
             DeltaSnapshotSelection::Latest,
             2,
@@ -3587,7 +3587,7 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             false,
             DeltaSnapshotSelection::Latest,
             2,
@@ -3750,7 +3750,7 @@ mod tests {
             )
             .map(Arc::new)
         };
-        let direct = execute_pipeline_plan(plan(ParquetReaderBackend::DirectParquet)?).await?;
+        let direct = execute_pipeline_plan(plan(ParquetReaderBackend::Direct)?).await?;
         let kernel = execute_kernel_plan(plan(ParquetReaderBackend::DeltaKernel)?).await?;
 
         assert_eq!(int32_ids(&direct)?, [1, 2, 3]);

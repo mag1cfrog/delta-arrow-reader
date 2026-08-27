@@ -35,7 +35,7 @@ usable after its batch stream finishes or is dropped.
 Kernel's final selection also reconciles Add and Remove actions.
 
 The four Parquet I/O fields are `Some`, including `Some(0)`, for
-`DirectParquet`. They are `None` for `DeltaKernel` because its object-store
+`Direct`. They are `None` for `DeltaKernel` because its object-store
 calls happen behind the Kernel reader boundary.
 
 ## DataFusion metrics

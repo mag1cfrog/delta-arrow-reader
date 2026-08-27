@@ -376,7 +376,7 @@ impl PartitionStream {
     {
         let output_capacity = options.output_buffer_capacity_per_partition();
         let prefetch_file_count = match options.reader_backend() {
-            ParquetReaderBackend::DirectParquet => options.prefetch_file_count_per_partition(),
+            ParquetReaderBackend::Direct => options.prefetch_file_count_per_partition(),
             ParquetReaderBackend::DeltaKernel => 0,
         };
         let measured_metrics = metrics.clone();
@@ -752,7 +752,7 @@ mod tests {
     fn metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
-            reader_backend: ParquetReaderBackend::DirectParquet,
+            reader_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 1,
             files_planned: 3,
             add_actions_filtered_during_planning: None,

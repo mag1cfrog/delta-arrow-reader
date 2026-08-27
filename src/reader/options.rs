@@ -29,7 +29,7 @@ pub enum ParquetReaderBackend {
     DeltaKernel,
     /// Read data files directly through the asynchronous Parquet API.
     #[default]
-    DirectParquet,
+    Direct,
 }
 
 /// Bounded execution settings for one Delta scan.
@@ -48,7 +48,7 @@ impl DeltaReaderExecutionOptions {
     /// Returns the baseline execution settings.
     pub const fn new() -> Self {
         Self {
-            reader_backend: ParquetReaderBackend::DirectParquet,
+            reader_backend: ParquetReaderBackend::Direct,
             max_concurrent_file_reads_per_scan: None,
             max_concurrent_file_reads_per_partition:
                 DEFAULT_MAX_CONCURRENT_FILE_READS_PER_PARTITION,
@@ -219,13 +219,10 @@ mod tests {
         );
         assert_eq!(
             ParquetReaderBackend::default(),
-            ParquetReaderBackend::DirectParquet
+            ParquetReaderBackend::Direct
         );
         assert_eq!(DeltaReaderExecutionOptions::default(), options);
-        assert_eq!(
-            options.reader_backend(),
-            ParquetReaderBackend::DirectParquet
-        );
+        assert_eq!(options.reader_backend(), ParquetReaderBackend::Direct);
         assert_eq!(options.max_concurrent_file_reads_per_scan(), None);
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 3);
         assert_eq!(options.output_buffer_capacity_per_partition(), 1);

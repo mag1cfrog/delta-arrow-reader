@@ -604,7 +604,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
         if self.intra_file_repartitioning_applied
-            || self.plan.execution_options.reader_backend() != ParquetReaderBackend::DirectParquet
+            || self.plan.execution_options.reader_backend() != ParquetReaderBackend::Direct
         {
             return Ok(None);
         }
@@ -636,7 +636,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
             .record_configured_batch_size_rows(configured_batch_size_rows);
         let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
         let executor = match self.plan.execution_options.reader_backend() {
-            ParquetReaderBackend::DirectParquet => match &self.parquet_metadata_cache {
+            ParquetReaderBackend::Direct => match &self.parquet_metadata_cache {
                 Some(cache) => direct_parquet_file_executor_with_metadata_cache(
                     &self.plan,
                     Some(configured_batch_size_rows),
@@ -1039,7 +1039,7 @@ mod tests {
             &filter_refs,
             DataFusionFilterCapabilities {
                 exact_predicate_evaluation: execution_options.reader_backend()
-                    == ParquetReaderBackend::DirectParquet,
+                    == ParquetReaderBackend::Direct,
             },
         )?;
         let physical_projection = planning.projection.physical_projection.clone();
@@ -2050,7 +2050,7 @@ mod tests {
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let mut outputs = Vec::new();
         for backend in [
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             ParquetReaderBackend::DeltaKernel,
         ] {
             let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend);

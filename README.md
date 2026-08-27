@@ -132,7 +132,7 @@ still control whether repartitioning runs.
 | `datafusion` | No | DataFusion provider, registration, filtering, execution, and metrics. |
 
 The direct API and both data-file reader backends are always available.
-`ParquetReaderBackend::DirectParquet` is the default. Advanced callers can select
+`ParquetReaderBackend::Direct` is the default. Advanced callers can select
 `ParquetReaderBackend::DeltaKernel` with
 `DeltaReaderExecutionOptions::with_reader_backend`.
 

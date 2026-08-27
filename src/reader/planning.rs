@@ -4692,7 +4692,7 @@ mod tests {
         assert_eq!(empty_metrics.snapshot_version, empty.snapshot_version);
         assert_eq!(
             empty_metrics.reader_backend,
-            crate::ParquetReaderBackend::DirectParquet
+            crate::ParquetReaderBackend::Direct
         );
         assert_eq!(empty_metrics.scan_partitions_planned, 0);
         assert_eq!(empty_metrics.files_planned, 0);
@@ -5460,10 +5460,7 @@ mod tests {
         let retained_metrics = plan.metrics.clone();
         let metrics = retained_metrics.snapshot();
         assert_eq!(metrics.snapshot_version, snapshot.version());
-        assert_eq!(
-            metrics.reader_backend,
-            crate::ParquetReaderBackend::DirectParquet
-        );
+        assert_eq!(metrics.reader_backend, crate::ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_planned, 2);
         assert_eq!(metrics.files_planned, 4);
         assert_eq!(metrics.add_actions_filtered_during_planning, Some(0));

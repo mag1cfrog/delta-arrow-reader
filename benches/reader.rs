@@ -301,7 +301,7 @@ impl Config {
             storage: StorageProfile::local(),
             workload: Workload::FewLarger,
             query: Query::FullRows,
-            backend: ParquetReaderBackend::DirectParquet,
+            backend: ParquetReaderBackend::Direct,
             repetitions: DEFAULT_REPETITIONS,
             metadata_size_hint_bytes: Some(65_536),
             full_file_read_threshold_bytes: None,
@@ -335,7 +335,7 @@ impl Config {
                         .replace('-', "_")
                         .as_str()
                     {
-                        "direct_parquet" => ParquetReaderBackend::DirectParquet,
+                        "direct_parquet" => ParquetReaderBackend::Direct,
                         "delta_kernel" => ParquetReaderBackend::DeltaKernel,
                         other => return Err(invalid(format!("unknown backend: {other}")).into()),
                     }
@@ -390,56 +390,56 @@ impl Config {
             (
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet | ParquetReaderBackend::DeltaKernel,
+                ParquetReaderBackend::Direct | ParquetReaderBackend::DeltaKernel,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::ManySmall,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 None | Some(8),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 Some(65_536),
                 Some(1_000 | 1_000_000),
             ) | (
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet | ParquetReaderBackend::DeltaKernel,
+                ParquetReaderBackend::Direct | ParquetReaderBackend::DeltaKernel,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "s3_throttled",
                 Some(65_536),
                 None,
@@ -1686,7 +1686,7 @@ fn csv_row(
 
 fn backend_name(backend: ParquetReaderBackend) -> &'static str {
     match backend {
-        ParquetReaderBackend::DirectParquet => "direct_parquet",
+        ParquetReaderBackend::Direct => "direct_parquet",
         ParquetReaderBackend::DeltaKernel => "delta_kernel",
     }
 }
@@ -1791,7 +1791,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1799,7 +1799,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1815,7 +1815,7 @@ mod tests {
             config(
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1823,7 +1823,7 @@ mod tests {
             config(
                 Workload::ManySmall,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1831,7 +1831,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 None,
                 None,
@@ -1839,7 +1839,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(8),
                 None,
@@ -1847,7 +1847,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 Some(1_000_000),
@@ -1855,7 +1855,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 Some(1_000),
@@ -1863,7 +1863,7 @@ mod tests {
             config(
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1879,7 +1879,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 throttled,
                 Some(65_536),
                 None,
@@ -1937,10 +1937,7 @@ mod tests {
         assert_eq!(parsed.storage.name, "local");
         assert_eq!(parsed.workload.name(), "provider_few_larger_files");
         assert_eq!(parsed.query.name(), "full_rows");
-        assert!(matches!(
-            parsed.backend,
-            ParquetReaderBackend::DirectParquet
-        ));
+        assert!(matches!(parsed.backend, ParquetReaderBackend::Direct));
         assert_eq!(parsed.repetitions, 5);
         assert_eq!(parsed.metadata_size_hint_bytes, Some(65_536));
         assert_eq!(parsed.full_file_read_threshold_bytes, None);
@@ -1953,10 +1950,7 @@ mod tests {
         assert_eq!(defaults.storage.name, "local");
         assert_eq!(defaults.workload.name(), "provider_few_larger_files");
         assert_eq!(defaults.query.name(), "full_rows");
-        assert!(matches!(
-            defaults.backend,
-            ParquetReaderBackend::DirectParquet
-        ));
+        assert!(matches!(defaults.backend, ParquetReaderBackend::Direct));
         assert_eq!(defaults.repetitions, DEFAULT_REPETITIONS);
         assert_eq!(defaults.metadata_size_hint_bytes, Some(65_536));
         assert_eq!(defaults.full_file_read_threshold_bytes, None);
@@ -2027,7 +2021,7 @@ mod tests {
             let unequal_config = config(
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 StorageProfile::local(),
                 Some(65_536),
                 None,
@@ -2048,7 +2042,7 @@ mod tests {
             let http_config = config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 StorageProfile::throttled(),
                 Some(65_536),
                 None,

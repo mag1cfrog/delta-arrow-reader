@@ -166,7 +166,7 @@ impl DeltaScanMetrics {
 
     fn parquet_metric(&self, counter: &AtomicU64) -> Option<u64> {
         match self.inner.reader_backend {
-            ParquetReaderBackend::DirectParquet => Some(load(counter)),
+            ParquetReaderBackend::Direct => Some(load(counter)),
             ParquetReaderBackend::DeltaKernel => None,
         }
     }
@@ -291,9 +291,9 @@ mod tests {
 
     #[test]
     fn snapshot_has_context_zeroes_and_backend_availability() {
-        let direct = metrics(ParquetReaderBackend::DirectParquet).snapshot();
+        let direct = metrics(ParquetReaderBackend::Direct).snapshot();
         assert_eq!(direct.snapshot_version, 7);
-        assert_eq!(direct.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(direct.reader_backend, ParquetReaderBackend::Direct);
         assert_eq!(direct.scan_partitions_planned, 3);
         assert_eq!(direct.files_planned, 5);
         assert_eq!(direct.add_actions_filtered_during_planning, Some(2));
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn snapshot_maps_live_counters() {
-        let metrics = metrics(ParquetReaderBackend::DirectParquet);
+        let metrics = metrics(ParquetReaderBackend::Direct);
         metrics.record_scan_partitions_planned(16);
         let counters = [
             &metrics.inner.scan_partitions_started,
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn cloned_handles_saturate_under_concurrent_updates() -> Result<(), &'static str> {
-        let metrics = metrics(ParquetReaderBackend::DirectParquet);
+        let metrics = metrics(ParquetReaderBackend::Direct);
         metrics
             .inner
             .file_tasks_started
