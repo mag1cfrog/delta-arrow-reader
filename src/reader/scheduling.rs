@@ -400,7 +400,7 @@ impl PartitionStream {
     where
         Task: Send + 'static,
     {
-        let output_capacity = options.output_buffer_capacity_per_partition();
+        let output_capacity = options.output_buffer_batches_per_partition();
         let prefetch_file_count = match options.reader_backend() {
             ParquetReaderBackend::Direct => options.prefetch_file_count_per_partition(),
             ParquetReaderBackend::DeltaKernel => 0,
@@ -793,7 +793,7 @@ mod tests {
     ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
         DeltaReaderExecutionOptions::new()
             .with_prefetch_file_count_per_partition(prefetch_file_count)
-            .with_output_buffer_capacity_per_partition(output_capacity)
+            .with_output_buffer_batches_per_partition(output_capacity)
     }
 
     fn batch(ids: Vec<i32>) -> Result<RecordBatch, Box<dyn std::error::Error>> {

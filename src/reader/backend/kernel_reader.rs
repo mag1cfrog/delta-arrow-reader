@@ -37,9 +37,7 @@ pub(crate) fn delta_kernel_file_executor(
     plan: &Arc<DeltaScanPlan>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let plan = Arc::clone(plan);
-    let output_capacity = plan
-        .execution_options
-        .output_buffer_capacity_per_partition();
+    let output_capacity = plan.execution_options.output_buffer_batches_per_partition();
 
     Arc::new(move |task, permit, cancellation| {
         let plan = Arc::clone(&plan);

@@ -495,7 +495,7 @@ fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExe
         .with_prefetch_file_count_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(capacity)?
         .with_max_concurrent_file_reads_per_scan(Some(capacity))?
-        .with_output_buffer_capacity_per_partition(1)?
+        .with_output_buffer_batches_per_partition(1)?
         .with_prefetch_file_count_per_partition(prefetch))
 }
 

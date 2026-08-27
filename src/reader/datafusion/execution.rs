@@ -1707,7 +1707,7 @@ mod tests {
             .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_output_buffer_capacity_per_partition(1)?;
+            .with_output_buffer_batches_per_partition(1)?;
         let plan = build_plan(&table, None, &[], 1, options, None)?;
         let dynamic = dynamic_filter("region", 1);
         let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic.clone();
@@ -2020,7 +2020,7 @@ mod tests {
             .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_output_buffer_capacity_per_partition(1)?;
+            .with_output_buffer_batches_per_partition(1)?;
         let drop_plan = build_plan(&table, None, &[], 1, options, None)?;
         let handle = collect_scan_metrics(drop_plan.as_ref())
             .pop()

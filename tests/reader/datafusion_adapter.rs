@@ -1327,7 +1327,7 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
         .with_prefetch_file_count_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(1)?
         .with_max_concurrent_file_reads_per_scan(Some(1))?
-        .with_output_buffer_capacity_per_partition(1)?;
+        .with_output_buffer_batches_per_partition(1)?;
     let provider = DeltaTableProvider::try_new(
         table,
         ScanOptions {

@@ -5499,7 +5499,7 @@ mod tests {
             .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_output_buffer_capacity_per_partition(2)?;
+            .with_output_buffer_batches_per_partition(2)?;
         let plan = Arc::new(super::plan_scan(
             &snapshot,
             None,

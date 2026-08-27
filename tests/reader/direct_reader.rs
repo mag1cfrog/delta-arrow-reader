@@ -479,7 +479,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
             .with_prefetch_file_count_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_output_buffer_capacity_per_partition(1)?;
+            .with_output_buffer_batches_per_partition(1)?;
         let early = table
             .scan()
             .with_target_partitions(1)?
@@ -527,7 +527,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
             .with_prefetch_file_count_per_partition(1)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_output_buffer_capacity_per_partition(1)?;
+            .with_output_buffer_batches_per_partition(1)?;
         let table = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(options)
             .load_table()
