@@ -30,7 +30,7 @@ use self::{
 use crate::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
     delta::kernel::delta_predicate_to_kernel_pruning,
-    reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
+    reader::planning::{DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan},
     reader::transform::schema_with_view_types,
 };
 
@@ -185,7 +185,7 @@ impl DeltaTableProvider {
                 )
             })
             .transpose()?;
-        let exact_row_predicate = plan_row_predicate(
+        let exact_row_predicate = build_physical_row_predicate(
             self.table.snapshot(),
             scan_projection.as_deref(),
             &hidden_columns,

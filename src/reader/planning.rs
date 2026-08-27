@@ -79,7 +79,7 @@ pub(crate) struct DeltaUnpartitionedScanPlan {
 }
 
 #[allow(dead_code)]
-pub(crate) fn build_scan(
+pub(crate) fn build_kernel_scan(
     snapshot: &LoadedDeltaTableSnapshot,
     projection: Option<&[String]>,
     predicate: Option<DeltaKernelPredicate>,
@@ -124,7 +124,7 @@ pub(crate) fn plan_scan(
 }
 
 #[allow(dead_code)]
-pub(crate) fn plan_row_predicate(
+pub(crate) fn build_physical_row_predicate(
     snapshot: &LoadedDeltaTableSnapshot,
     projection: Option<&[String]>,
     hidden_columns: &[String],
@@ -134,8 +134,8 @@ pub(crate) fn plan_row_predicate(
         return Ok(None);
     };
     let projection = logical_projection(snapshot.schema().as_ref(), projection, hidden_columns)?;
-    let predicate =
-        build_scan(snapshot, projection.as_deref(), Some(predicate), false)?.physical_predicate();
+    let predicate = build_kernel_scan(snapshot, projection.as_deref(), Some(predicate), false)?
+        .physical_predicate();
     match predicate {
         Some(predicate) => Ok(Some(predicate)),
         None => UnsupportedPredicateSnafu {
@@ -174,7 +174,7 @@ fn build_unpartitioned_scan_plan(
 ) -> Result<DeltaUnpartitionedScanPlan, DeltaReaderError> {
     let logical_projection =
         logical_projection(snapshot.schema().as_ref(), projection, hidden_columns)?;
-    let scan = build_scan(
+    let scan = build_kernel_scan(
         snapshot,
         logical_projection.as_deref(),
         kernel_predicate.clone(),
@@ -4341,8 +4341,8 @@ mod tests {
 
     use super::{
         DeltaScanFileStats, DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan,
-        DeltaUnpartitionedScanPlan, KernelPhysicalToLogicalTransform, build_scan, checked_sum,
-        group_scan_file_tasks,
+        DeltaUnpartitionedScanPlan, KernelPhysicalToLogicalTransform, build_kernel_scan,
+        checked_sum, group_scan_file_tasks,
     };
     use crate::{
         DeltaComparison, DeltaPredicate, DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection,
@@ -5955,9 +5955,13 @@ mod tests {
         })
         .ok_or("expected Kernel predicate")?;
         let projection = ["id".to_owned()];
-        let predicate =
-            super::plan_row_predicate(&snapshot, Some(&projection), &[], Some(predicate))?
-                .ok_or("expected physical row predicate")?;
+        let predicate = super::build_physical_row_predicate(
+            &snapshot,
+            Some(&projection),
+            &[],
+            Some(predicate),
+        )?
+        .ok_or("expected physical row predicate")?;
         let plan = plan_scan(
             &snapshot,
             Some(&projection),
@@ -6063,7 +6067,7 @@ mod tests {
     {
         let (_table, snapshot) = loaded_snapshot("projections")?;
 
-        let full = build_scan(&snapshot, None, None, false)?;
+        let full = build_kernel_scan(&snapshot, None, None, false)?;
         assert_eq!(
             field_names(&full.logical_schema()),
             ["id", "label", "hidden"]
@@ -6074,12 +6078,12 @@ mod tests {
         );
 
         let ordered_names = ["label".to_owned(), "id".to_owned()];
-        let ordered = build_scan(&snapshot, Some(&ordered_names), None, false)?;
+        let ordered = build_kernel_scan(&snapshot, Some(&ordered_names), None, false)?;
         assert_eq!(field_names(&ordered.logical_schema()), ["label", "id"]);
         assert_eq!(field_names(&ordered.physical_schema()), ["label", "id"]);
 
         let empty_names = Vec::<String>::new();
-        let empty = build_scan(&snapshot, Some(&empty_names), None, false)?;
+        let empty = build_kernel_scan(&snapshot, Some(&empty_names), None, false)?;
         assert!(empty.logical_schema().fields().is_empty());
         assert!(empty.physical_schema().fields().is_empty());
 
@@ -6100,7 +6104,7 @@ mod tests {
             delta_predicate_to_kernel_pruning(&predicate).ok_or("expected Kernel predicate")?;
         let projection = ["label".to_owned()];
 
-        let scan = build_scan(&snapshot, Some(&projection), Some(kernel_predicate), false)?;
+        let scan = build_kernel_scan(&snapshot, Some(&projection), Some(kernel_predicate), false)?;
 
         assert_eq!(field_names(&scan.logical_schema()), ["label"]);
         assert_eq!(field_names(&scan.physical_schema()), ["label"]);
@@ -6118,7 +6122,7 @@ mod tests {
             vec!["secret-missing".to_owned()],
             vec!["id".to_owned(), "id".to_owned()],
         ] {
-            let error = match build_scan(&snapshot, Some(&projection), None, false) {
+            let error = match build_kernel_scan(&snapshot, Some(&projection), None, false) {
                 Ok(_) => return Err("invalid projection must fail".into()),
                 Err(error) => error,
             };

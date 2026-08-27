@@ -849,7 +849,9 @@ mod tests {
         DeltaScanExecutionOptions, DeltaTable, DeltaTableBuilder,
         delta::kernel::delta_predicate_to_kernel_pruning,
         reader::datafusion::planning::{DataFusionFilterCapabilities, plan_datafusion_scan},
-        reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
+        reader::planning::{
+            DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan,
+        },
     };
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -1050,7 +1052,7 @@ mod tests {
             )?),
             None => None,
         };
-        let exact_row_predicate = plan_row_predicate(
+        let exact_row_predicate = build_physical_row_predicate(
             table.snapshot(),
             scan_projection.as_deref(),
             &hidden_columns,
