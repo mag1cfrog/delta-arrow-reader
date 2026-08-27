@@ -694,7 +694,7 @@ fn assert_missing_required(
         source = current.source();
     }
     assert!(
-        source_display.contains("non-nullable provider field"),
+        source_display.contains("non-nullable target field"),
         "{case_name}: {source_display}"
     );
     assert!(
