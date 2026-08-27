@@ -465,7 +465,7 @@ mod tests {
         DeltaReaderError, DeltaReaderPhase, DeltaScanMetrics, DeltaSnapshotSelection,
         DeltaStorageOptions, ParquetReaderBackend,
         delta::{
-            kernel::{is_kernel_error, preserve_deletion_vector},
+            kernel::{deletion_vector_handle, is_kernel_error},
             snapshot::{ArrowTableSnapshot, load_delta_table_snapshot_blocking},
         },
         reader::metrics::DeltaScanMetricsConfig,
@@ -514,7 +514,7 @@ mod tests {
     }
 
     fn metadata(descriptor: DeletionVectorDescriptor) -> DeletionVectorMetadata {
-        DeletionVectorMetadata::from_kernel(preserve_deletion_vector(descriptor.into()))
+        DeletionVectorMetadata::from_kernel(deletion_vector_handle(descriptor.into()))
     }
 
     fn inline_metadata() -> Result<DeletionVectorMetadata, delta_kernel::Error> {
@@ -580,7 +580,7 @@ mod tests {
 
         let absent_metrics = metrics();
         let absent_metadata =
-            DeletionVectorMetadata::from_kernel(preserve_deletion_vector(DvInfo::default()));
+            DeletionVectorMetadata::from_kernel(deletion_vector_handle(DvInfo::default()));
         let absent = load_deletion_vector_masker(
             snapshot.engine_context(),
             absent_metadata,

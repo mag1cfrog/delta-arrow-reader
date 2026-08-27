@@ -224,7 +224,7 @@ impl DeltaKernelPredicate {
 }
 
 #[allow(dead_code)]
-pub(crate) fn preserve_deletion_vector(dv_info: DvInfo) -> Option<KernelDeletionVectorHandle> {
+pub(crate) fn deletion_vector_handle(dv_info: DvInfo) -> Option<KernelDeletionVectorHandle> {
     dv_info
         .has_vector()
         .then_some(KernelDeletionVectorHandle(dv_info))
@@ -249,7 +249,7 @@ impl KernelScanFileMetadata {
             modification_time_ms: Some(modification_time),
             estimated_rows: stats.map(|stats| stats.num_records),
             partition_values: partition_values.into_iter().collect(),
-            deletion_vector: preserve_deletion_vector(dv_info),
+            deletion_vector: deletion_vector_handle(dv_info),
             transform: KernelPhysicalToLogicalTransform(transform),
         }
     }
