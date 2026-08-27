@@ -142,7 +142,7 @@ The direct API and both data-file reader backends are always available.
 - Execution limits, buffering, Parquet metadata prefetch, and optional
   full-file reads are configured through `DeltaReaderExecutionOptions`.
 - DataFusion scan metrics report whether the provider requested view arrays.
-- `DeltaReaderError::phase` and `DeltaReaderError::as_str` return stable,
+- `DeltaReaderError::phase` and `DeltaReaderError::code` return stable,
   redacted categories. Dependency failures remain available through the
   standard error source chain.
 - `DeltaReadMetrics` is a cloneable live handle. `snapshot` returns an

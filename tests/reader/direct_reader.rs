@@ -396,7 +396,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
                 Err(error) => error,
             };
             assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
-            assert_eq!(error.as_str(), "invalid_projection");
+            assert_eq!(error.code(), "invalid_projection");
         }
 
         let hidden_predicate = DeltaPredicate::Compare {

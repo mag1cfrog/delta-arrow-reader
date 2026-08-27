@@ -891,7 +891,7 @@ mod tests {
             Err(error) => error,
         };
         assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(!error.to_string().contains('1'));
         Ok(())
     }
@@ -981,7 +981,7 @@ mod tests {
             .ok_or("expected failure")?
             .await
             .expect_err("admission must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert_eq!(executor_calls.load(Ordering::SeqCst), 0);
         assert_eq!(limiter.active_file_reads(), 0);
         assert!(!cancellation.is_cancelled());
@@ -1023,7 +1023,7 @@ mod tests {
         cancellation.cancel();
         let error = scheduled.await.expect_err("cancelled capacity must fail");
         assert_eq!(error.phase(), DeltaReaderPhase::Execution);
-        assert_eq!(error.as_str(), "cancelled");
+        assert_eq!(error.code(), "cancelled");
         assert_eq!(executor_calls.load(Ordering::SeqCst), 0);
         assert_eq!(limiter.active_file_reads(), 1);
 
@@ -1112,7 +1112,7 @@ mod tests {
             .ok_or("expected first file")?
             .await
             .expect_err("executor must fail");
-        assert_eq!(first.as_str(), "invalid_configuration");
+        assert_eq!(first.code(), "invalid_configuration");
         assert_eq!(limiter.active_file_reads(), 0);
 
         cancellation.cancel();
@@ -1121,7 +1121,7 @@ mod tests {
             .ok_or("expected later file")?
             .await
             .expect_err("later work must observe cancellation");
-        assert_eq!(later.as_str(), "cancelled");
+        assert_eq!(later.code(), "cancelled");
         assert_eq!(admission_calls.load(Ordering::SeqCst), 1);
         Ok(())
     }
@@ -1388,7 +1388,7 @@ mod tests {
             .await
             .ok_or("expected setup error")?
             .expect_err("prefetched setup must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         assert_eq!(limiter.active_file_reads(), 0);
@@ -1484,7 +1484,7 @@ mod tests {
             .await
             .ok_or("expected file error")?
             .expect_err("file stream must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         assert_eq!(limiter.active_file_reads(), 0);
@@ -1535,7 +1535,7 @@ mod tests {
             .await
             .ok_or("expected setup error")?
             .expect_err("file setup must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         assert_eq!(admission_calls.load(Ordering::SeqCst), 1);
@@ -1578,7 +1578,7 @@ mod tests {
             .await
             .ok_or("expected admission error")?
             .expect_err("admission must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         assert_eq!(admission_calls.load(Ordering::SeqCst), 1);
@@ -1636,7 +1636,7 @@ mod tests {
         for result in [results.0, results.1] {
             match result {
                 Some(Err(error)) => {
-                    assert_eq!(error.as_str(), "invalid_configuration");
+                    assert_eq!(error.code(), "invalid_configuration");
                     errors += 1;
                 }
                 None => completed += 1,
@@ -1686,7 +1686,7 @@ mod tests {
             .await?
             .ok_or("expected first data error")?
             .expect_err("first item must be the data error");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         abort.abort();
         assert!(
             timeout(Duration::from_secs(5), stream.next())

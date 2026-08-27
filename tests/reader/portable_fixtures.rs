@@ -679,7 +679,7 @@ fn assert_missing_required(
     };
 
     assert_eq!(error.phase(), DeltaReaderPhase::DataFileRead, "{case_name}");
-    assert_eq!(error.as_str(), "data_file_read", "{case_name}");
+    assert_eq!(error.code(), "data_file_read", "{case_name}");
     let display = error.to_string();
     assert!(
         display.contains("reason=parquet_schema_match_failed"),
@@ -1059,7 +1059,7 @@ fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
         };
 
         assert_eq!(error.phase(), DeltaReaderPhase::DeletionVector);
-        assert_eq!(error.as_str(), "deletion_vector_read");
+        assert_eq!(error.code(), "deletion_vector_read");
         let display = error.to_string();
         assert!(
             display.contains("reason=deletion_vector_payload_read_failed"),
@@ -1146,7 +1146,7 @@ fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
             .expect_err("missing file unexpectedly succeeded");
 
         assert_eq!(error.phase(), DeltaReaderPhase::DataFileRead);
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert!(
             error
                 .to_string()

@@ -714,7 +714,7 @@ mod tests {
             .err()
             .expect("missing payload must fail");
 
-        assert_eq!(error.as_str(), "deletion_vector_read");
+        assert_eq!(error.code(), "deletion_vector_read");
         assert_eq!(error.phase(), DeltaReaderPhase::DeletionVector);
         assert!(error.source().is_some_and(is_kernel_error));
         assert_eq!(
@@ -759,7 +759,7 @@ mod tests {
                 ))
                 .err()
                 .expect("invalid Kernel payload must fail");
-            assert_eq!(error.as_str(), "deletion_vector_read");
+            assert_eq!(error.code(), "deletion_vector_read");
             assert!(error.source().is_some_and(is_kernel_error));
             assert!(!error.to_string().contains(MALFORMED_INLINE));
             assert!(!format!("{error:?}").contains(RELATIVE_DV_ID));

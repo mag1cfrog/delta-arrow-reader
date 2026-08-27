@@ -379,7 +379,7 @@ mod tests {
             .await
             .ok_or("expected producer error")?
             .expect_err("producer must fail");
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert!(!error.to_string().contains("sensitive"));
         assert!(failed.next().await.is_none());
 
@@ -395,7 +395,7 @@ mod tests {
             .await
             .ok_or("expected panic error")?
             .expect_err("panic must reach the stream");
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert!(
             error
                 .source()

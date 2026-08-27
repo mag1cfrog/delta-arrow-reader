@@ -590,7 +590,7 @@ mod tests {
         ] {
             let error = derive_delta_scan_partition_target_diagnostic(input)
                 .expect_err("zero diagnostic input must fail");
-            assert_eq!(error.as_str(), "invalid_configuration");
+            assert_eq!(error.code(), "invalid_configuration");
             assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
         }
 

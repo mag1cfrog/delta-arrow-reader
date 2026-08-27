@@ -273,7 +273,7 @@ mod tests {
         for result in invalid {
             let error = result.expect_err("invalid execution options must fail");
             assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
-            assert_eq!(error.as_str(), "invalid_configuration");
+            assert_eq!(error.code(), "invalid_configuration");
         }
     }
 

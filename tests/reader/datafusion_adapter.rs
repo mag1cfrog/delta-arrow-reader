@@ -1274,7 +1274,7 @@ async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestRe
         .expect_err("missing file unexpectedly succeeded");
     let reader = external_reader_error(&error)?;
     assert_eq!(reader.phase(), DeltaReaderPhase::DataFileRead);
-    assert_eq!(reader.as_str(), "data_file_read");
+    assert_eq!(reader.code(), "data_file_read");
     assert!(reader.source().is_some());
     assert!(stream.next().await.is_none());
 

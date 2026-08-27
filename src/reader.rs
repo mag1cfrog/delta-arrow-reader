@@ -697,7 +697,7 @@ fn trace_planning_failed(
         backend = ?backend,
         partition_count = tracing::field::Empty,
         outcome = "failed",
-        error_variant = error.as_str(),
+        error_code = error.code(),
         error_phase = error.phase().as_str()
     );
 }
@@ -745,7 +745,7 @@ fn trace_execution_failed(
         backend = ?backend,
         partition_count,
         outcome = "failed",
-        error_variant = error.as_str(),
+        error_code = error.code(),
         error_phase = error.phase().as_str()
     );
 }
@@ -1023,7 +1023,7 @@ mod tests {
         let allowed = [
             "backend",
             "error_phase",
-            "error_variant",
+            "error_code",
             "event",
             "outcome",
             "partition_count",
@@ -1153,7 +1153,7 @@ mod tests {
             .await?
             .ok_or("error item missing")?
             .expect_err("controlled partition must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         timeout(Duration::from_secs(5), async {

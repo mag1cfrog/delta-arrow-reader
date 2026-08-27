@@ -280,7 +280,7 @@ mod tests {
         };
         let error = validate_protocol(&protocol).expect_err("future version must fail");
         assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
-        assert_eq!(error.as_str(), "unsupported_protocol");
+        assert_eq!(error.code(), "unsupported_protocol");
         Ok(())
     }
 }

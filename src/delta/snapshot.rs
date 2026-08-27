@@ -259,7 +259,7 @@ fn trace_snapshot_load_failed(selection: &'static str, error: &DeltaReaderError)
         target: TRACING_TARGET,
         event = SNAPSHOT_LOAD_FAILED_EVENT,
         selection,
-        error_variant = error.as_str(),
+        error_code = error.code(),
         error_phase = error.phase().as_str()
     );
 }
@@ -797,10 +797,7 @@ mod tests {
             events[3].fields,
             BTreeMap::from([
                 ("error_phase".to_owned(), "storage".to_owned()),
-                (
-                    "error_variant".to_owned(),
-                    "storage_initialization".to_owned(),
-                ),
+                ("error_code".to_owned(), "storage_initialization".to_owned(),),
                 ("event".to_owned(), "snapshot_load.failed".to_owned()),
                 ("selection".to_owned(), "version".to_owned()),
             ])
@@ -851,7 +848,7 @@ mod tests {
 
         assert!(matches!(error, DeltaReaderError::SnapshotLoad { .. }));
         assert_eq!(error.phase(), DeltaReaderPhase::Snapshot);
-        assert_eq!(error.as_str(), "snapshot_load");
+        assert_eq!(error.code(), "snapshot_load");
         assert!(!error.to_string().contains(&table.0.to_string_lossy()[..]));
         assert!(is_kernel_error(error.source().expect("Kernel source")));
         Ok(())

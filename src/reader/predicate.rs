@@ -419,7 +419,7 @@ mod tests {
 
     fn assert_unsupported(predicate: &DeltaPredicate, schema: &Schema) {
         let error = validate_predicate(predicate, schema).expect_err("predicate must be rejected");
-        assert_eq!(error.as_str(), "unsupported_predicate");
+        assert_eq!(error.code(), "unsupported_predicate");
         assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
     }
 
@@ -548,7 +548,7 @@ mod tests {
             let error = validate_predicate(&predicate, &schema)
                 .expect_err("invalid column must be rejected");
             let display = error.to_string();
-            assert_eq!(error.as_str(), "unsupported_predicate");
+            assert_eq!(error.code(), "unsupported_predicate");
             assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
             assert!(!display.contains("profile"));
             assert!(!display.contains("missing"));
@@ -1117,7 +1117,7 @@ mod tests {
         let error = evaluate_predicate(&batch, &hostile)
             .expect_err("unexpected evaluation failure must be mapped");
         let display = error.to_string();
-        assert_eq!(error.as_str(), "unsupported_predicate");
+        assert_eq!(error.code(), "unsupported_predicate");
         assert!(!display.contains("sensitive-column"));
         assert!(!display.contains("sensitive-literal"));
         assert!(!format!("{error:?}").contains("sensitive"));

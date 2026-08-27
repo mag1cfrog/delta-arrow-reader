@@ -70,7 +70,7 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
         .with_output_buffer_capacity_per_partition(0)
         .expect_err("zero output capacity must fail");
     assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
-    assert_eq!(error.as_str(), "invalid_configuration");
+    assert_eq!(error.code(), "invalid_configuration");
     assert!(error.source().is_none());
 
     Ok(())

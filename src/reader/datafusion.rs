@@ -553,7 +553,7 @@ fn trace_failure(
         partition_count = tracing::field::Empty,
         backend = ?backend,
         outcome = "failed",
-        error_variant = error.as_str(),
+        error_code = error.code(),
         error_phase = error.phase().as_str()
     );
 }

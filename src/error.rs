@@ -47,7 +47,7 @@ impl DeltaReaderPhase {
             Self::DeletionVector => "deletion_vector",
             Self::Transform => "transform",
             Self::Execution => "execution",
-            Self::DataFusion => "data_fusion",
+            Self::DataFusion => "datafusion",
         }
     }
 }
@@ -202,7 +202,7 @@ pub enum DeltaReaderError {
     #[cfg(feature = "datafusion")]
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=data_fusion error=data_fusion_adapter reason={reason}"
+        "delta reader error: phase=datafusion error=datafusion_adapter reason={reason}"
     ))]
     DataFusionAdapter {
         /// Fixed redacted reason category.
@@ -214,8 +214,8 @@ pub enum DeltaReaderError {
 }
 
 impl DeltaReaderError {
-    /// Returns the stable snake_case error variant name.
-    pub const fn as_str(&self) -> &'static str {
+    /// Returns the stable snake_case error code.
+    pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidConfiguration { .. } => "invalid_configuration",
             Self::InvalidTableUri { .. } => "invalid_table_uri",
@@ -232,7 +232,7 @@ impl DeltaReaderError {
             Self::PhysicalToLogicalTransform { .. } => "physical_to_logical_transform",
             Self::Cancelled { .. } => "cancelled",
             #[cfg(feature = "datafusion")]
-            Self::DataFusionAdapter { .. } => "data_fusion_adapter",
+            Self::DataFusionAdapter { .. } => "datafusion_adapter",
         }
     }
 
@@ -285,7 +285,7 @@ mod tests {
             (DeltaReaderPhase::DeletionVector, "deletion_vector"),
             (DeltaReaderPhase::Transform, "transform"),
             (DeltaReaderPhase::Execution, "execution"),
-            (DeltaReaderPhase::DataFusion, "data_fusion"),
+            (DeltaReaderPhase::DataFusion, "datafusion"),
         ];
 
         for (phase, expected) in cases {
@@ -418,12 +418,12 @@ mod tests {
             #[cfg(feature = "datafusion")]
             (
                 DeltaReaderError::DataFusionAdapter {
-                    reason: "data_fusion_adapter",
+                    reason: "datafusion_adapter",
                     source: Box::new(datafusion::common::DataFusionError::Execution(
                         "sensitive dependency detail".into(),
                     )),
                 },
-                "data_fusion_adapter",
+                "datafusion_adapter",
                 DeltaReaderPhase::DataFusion,
                 true,
             ),
@@ -431,7 +431,7 @@ mod tests {
 
         for (error, name, phase, has_source) in errors {
             assert_eq!(error.source().is_some(), has_source);
-            assert_eq!(error.as_str(), name);
+            assert_eq!(error.code(), name);
             assert_eq!(error.phase(), phase);
             let display = error.to_string();
             let debug = format!("{error:?}");
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn datafusion_source_preserves_its_boxed_type() {
         let error = DeltaReaderError::DataFusionAdapter {
-            reason: "data_fusion_adapter",
+            reason: "datafusion_adapter",
             source: Box::new(datafusion::common::DataFusionError::Execution(
                 "failure".into(),
             )),

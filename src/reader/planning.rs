@@ -785,7 +785,7 @@ mod tests {
         }
 
         fn assert_invalid_partition(error: DeltaReaderError, secret: &str) {
-            assert_eq!(error.as_str(), "scan_planning");
+            assert_eq!(error.code(), "scan_planning");
             assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
             assert!(!error.to_string().contains(secret));
             assert!(!format!("{error:?}").contains(secret));
@@ -4678,7 +4678,7 @@ mod tests {
         };
         let display = error.to_string();
 
-        assert_eq!(error.as_str(), "scan_planning");
+        assert_eq!(error.code(), "scan_planning");
         assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
         assert!(!display.contains("secret-file"));
         assert!(!format!("{error:?}").contains("secret-file"));
@@ -5006,7 +5006,7 @@ mod tests {
             Err(error) => error,
         };
 
-        assert_eq!(error.as_str(), "scan_planning");
+        assert_eq!(error.code(), "scan_planning");
         assert!(!error.to_string().contains("secret-invalid"));
 
         Ok(())
@@ -5033,7 +5033,7 @@ mod tests {
         };
 
         assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
-        assert_eq!(error.as_str(), "unsupported_protocol");
+        assert_eq!(error.code(), "unsupported_protocol");
         assert!(!error.to_string().contains("madeUpFeature"));
         assert!(!error.to_string().contains("secret-invalid.parquet"));
         Ok(())
@@ -5062,7 +5062,7 @@ mod tests {
         let display = error.to_string();
         let debug = format!("{error:?}");
 
-        assert_eq!(error.as_str(), "scan_planning");
+        assert_eq!(error.code(), "scan_planning");
         assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
         assert!(!display.contains(INVALID_VALUE));
         assert!(!display.contains("secret-invalid-partition"));
@@ -5089,7 +5089,7 @@ mod tests {
             Err(error) => error,
         };
 
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
     }
 
@@ -5407,7 +5407,7 @@ mod tests {
         )
         .err()
         .ok_or("byte overflow must fail")?;
-        assert_eq!(byte_error.as_str(), "scan_partition_planning");
+        assert_eq!(byte_error.code(), "scan_partition_planning");
         assert_eq!(byte_error.phase(), DeltaReaderPhase::ScanPlanning);
         assert!(!byte_error.to_string().contains("secret-byte"));
 
@@ -5420,7 +5420,7 @@ mod tests {
         )
         .err()
         .ok_or("row overflow must fail")?;
-        assert_eq!(row_error.as_str(), "scan_partition_planning");
+        assert_eq!(row_error.code(), "scan_partition_planning");
         assert!(!row_error.to_string().contains("secret-row"));
         Ok(())
     }
@@ -5557,7 +5557,7 @@ mod tests {
             Ok(_) => return Err("out-of-range execution partition must fail".into()),
             Err(error) => error,
         };
-        assert_eq!(invalid.as_str(), "invalid_configuration");
+        assert_eq!(invalid.code(), "invalid_configuration");
 
         let cancelled_execution = DeltaScanExecution::new(Arc::clone(&plan));
         drop(cancelled_execution.partition_stream(
@@ -5690,7 +5690,7 @@ mod tests {
         .err()
         .ok_or("zero target must fail")?;
 
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
         assert!(!error.to_string().contains("secret-invalid"));
         Ok(())
@@ -5708,7 +5708,7 @@ mod tests {
             .err()
             .ok_or("aggregate byte overflow must fail")?;
 
-        assert_eq!(error.as_str(), "scan_partition_planning");
+        assert_eq!(error.code(), "scan_partition_planning");
         assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
         assert!(!error.to_string().contains("secret-"));
         Ok(())
@@ -5822,7 +5822,7 @@ mod tests {
         let mismatch = plan
             .apply_transform(&task, RecordBatch::new_empty(Arc::new(Schema::empty())))
             .expect_err("wrong logical schema must fail");
-        assert_eq!(mismatch.as_str(), "physical_to_logical_transform");
+        assert_eq!(mismatch.code(), "physical_to_logical_transform");
         assert_eq!(mismatch.phase(), DeltaReaderPhase::Transform);
 
         task.transform =
@@ -5856,7 +5856,7 @@ mod tests {
         let error = plan
             .apply_transform(&task, batch()?)
             .expect_err("invalid transform must fail");
-        assert_eq!(error.as_str(), "physical_to_logical_transform");
+        assert_eq!(error.code(), "physical_to_logical_transform");
         assert_eq!(error.phase(), DeltaReaderPhase::Transform);
         assert!(!error.to_string().contains("secret_missing"));
         assert!(!format!("{error:?}").contains("secret_missing"));
@@ -6137,7 +6137,7 @@ mod tests {
             };
             let display = error.to_string();
 
-            assert_eq!(error.as_str(), "invalid_projection");
+            assert_eq!(error.code(), "invalid_projection");
             assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
             assert!(!display.contains("secret-missing"));
             assert!(!format!("{error:?}").contains("secret-missing"));
@@ -6156,7 +6156,7 @@ mod tests {
             Ok(_) => return Err("invalid hidden column must fail".into()),
             Err(error) => error,
         };
-        assert_eq!(error.as_str(), "invalid_projection");
+        assert_eq!(error.code(), "invalid_projection");
         assert!(!error.to_string().contains("secret-hidden"));
 
         Ok(())

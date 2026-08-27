@@ -2429,7 +2429,7 @@ mod tests {
             Ok(_) => return Err("missing size must fail".into()),
             Err(error) => error,
         };
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert!(!error.to_string().contains("secret-file"));
         Ok(())
     }
@@ -2592,7 +2592,7 @@ mod tests {
             Ok(_) => return Err("injected metadata failure must fail the first split task".into()),
             Err(error) => error,
         };
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         reader
             .open_parquet_stream_with_metadata_cache(
                 &task,
@@ -3804,7 +3804,7 @@ mod tests {
         let error = execute_kernel_plan(metadata_plan)
             .await
             .expect_err("missing size must fail");
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert_failed_metrics(&metadata_metrics.snapshot(), 0);
         assert!(
             !error
@@ -3829,7 +3829,7 @@ mod tests {
         let error = execute_kernel_plan(parquet_plan)
             .await
             .expect_err("corrupt Parquet must fail");
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert_failed_metrics(&parquet_metrics.snapshot(), 0);
         assert!(!error.to_string().contains("part.parquet"));
 
@@ -3847,7 +3847,7 @@ mod tests {
         let error = execute_kernel_plan(dv_plan)
             .await
             .expect_err("missing DV must fail");
-        assert_eq!(error.as_str(), "deletion_vector_read");
+        assert_eq!(error.code(), "deletion_vector_read");
         assert_failed_metrics(&dv_metrics.snapshot(), 1);
 
         let transform_root = TestDir::new("kernel-transform-failure")?;
@@ -3870,7 +3870,7 @@ mod tests {
         let error = execute_kernel_plan(transform_plan)
             .await
             .expect_err("invalid transform must fail");
-        assert_eq!(error.as_str(), "physical_to_logical_transform");
+        assert_eq!(error.code(), "physical_to_logical_transform");
         assert_failed_metrics(&transform_metrics.snapshot(), 0);
         assert!(!error.to_string().contains("sensitive_missing_column"));
 
@@ -3989,7 +3989,7 @@ mod tests {
                 Ok(_) => return Err(format!("{name} cancellation must fail the file read").into()),
                 Err(error) => error,
             };
-            assert_eq!(error.as_str(), "cancelled");
+            assert_eq!(error.code(), "cancelled");
             assert!(gated.was_cancelled(), "{name} request was not dropped");
             drop(
                 tokio::time::timeout(std::time::Duration::from_secs(5), partition.acquire())
@@ -4045,7 +4045,7 @@ mod tests {
             Ok(_) => return Err("batch cancellation must fail the file read".into()),
             Err(error) => error,
         };
-        assert_eq!(error.as_str(), "cancelled");
+        assert_eq!(error.code(), "cancelled");
         assert!(gated.was_cancelled());
         drop(tokio::time::timeout(std::time::Duration::from_secs(5), partition.acquire()).await??);
 
@@ -4215,7 +4215,7 @@ mod tests {
         let error = execute_pipeline_plan(Arc::clone(&dv_plan))
             .await
             .expect_err("missing deletion vector must fail");
-        assert_eq!(error.as_str(), "deletion_vector_read");
+        assert_eq!(error.code(), "deletion_vector_read");
         let dv_metrics = dv_plan.metrics.snapshot();
         assert_eq!(dv_metrics.file_tasks_started, 1);
         assert_eq!(dv_metrics.file_tasks_completed, 0);
@@ -4249,7 +4249,7 @@ mod tests {
             .next_batch()
             .await
             .expect_err("invalid transform must fail");
-        assert_eq!(error.as_str(), "physical_to_logical_transform");
+        assert_eq!(error.code(), "physical_to_logical_transform");
         assert!(!error.to_string().contains("secret_missing"));
         drop(file);
 
@@ -6092,7 +6092,7 @@ mod tests {
                 Ok(_) => return Err("unsupported schema must fail".into()),
                 Err(error) => error,
             };
-            assert_eq!(error.as_str(), "data_file_read");
+            assert_eq!(error.code(), "data_file_read");
             assert_eq!(
                 error.to_string(),
                 "delta reader error: phase=data_file_read error=data_file_read reason=parquet_schema_match_failed"

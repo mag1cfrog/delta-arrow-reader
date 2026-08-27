@@ -109,7 +109,7 @@ mod tests {
             ("s3://secret-user:secret-password@[", "invalid_table_uri"),
         ] {
             let error = normalize_delta_table_uri(table_uri).expect_err("URI should be rejected");
-            assert_eq!(error.as_str(), "invalid_table_uri");
+            assert_eq!(error.code(), "invalid_table_uri");
             assert_eq!(error.phase(), DeltaReaderPhase::TableUri);
             assert!(error.to_string().contains(expected_reason));
             assert!(!error.to_string().contains("secret"));

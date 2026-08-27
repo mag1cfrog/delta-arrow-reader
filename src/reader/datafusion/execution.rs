@@ -1591,7 +1591,7 @@ mod tests {
         let reader = source
             .downcast_ref::<DeltaReaderError>()
             .ok_or("external error was not DeltaReaderError")?;
-        assert_eq!(reader.as_str(), "data_fusion_adapter");
+        assert_eq!(reader.code(), "datafusion_adapter");
         Ok(())
     }
 
