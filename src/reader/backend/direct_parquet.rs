@@ -29,10 +29,7 @@ use parquet::schema::types::{SchemaDescriptor, TypePtr};
 use snafu::{IntoError, ResultExt};
 use tokio::sync::OnceCell;
 
-use self::{
-    metered_object_store::MeteredParquetObjectStore,
-    row_group_pruning::direct_parquet_pruned_row_groups,
-};
+use self::{metered_object_store::MeteredParquetObjectStore, row_group_pruning::pruned_row_groups};
 
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
 
@@ -266,7 +263,7 @@ impl DirectParquetReader {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
         };
-        let reader_options = direct_parquet_arrow_reader_options(include_original_row_index)
+        let reader_options = arrow_reader_options(include_original_row_index)
             .boxed()
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
@@ -318,15 +315,12 @@ impl DirectParquetReader {
                     reason: "parquet_read_setup_failed",
                 })?
         };
-        let schema_match = build_direct_parquet_schema_match(
-            builder.parquet_schema(),
-            builder.schema(),
-            provider_schema,
-        )
-        .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
+        let schema_match =
+            build_schema_match(builder.parquet_schema(), builder.schema(), provider_schema)
+                .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
         let projection =
             ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
-        let row_groups = direct_parquet_pruned_row_groups(
+        let row_groups = pruned_row_groups(
             builder.metadata(),
             file_size,
             task.parquet_byte_range.as_ref(),
@@ -343,7 +337,7 @@ impl DirectParquetReader {
             None => builder,
         };
         let row_filter = row_predicate.map(|(predicate, kernel_schemas)| {
-            self.direct_parquet_row_filter(
+            self.row_filter(
                 predicate,
                 kernel_schemas,
                 &schema_match,
@@ -430,7 +424,7 @@ impl DirectParquetReader {
         })
     }
 
-    fn direct_parquet_row_filter(
+    fn row_filter(
         &self,
         predicate: &DeltaKernelPredicate,
         kernel_schemas: &KernelScanSchemas,
@@ -559,13 +553,7 @@ pub(crate) fn direct_parquet_file_executor(
         plan.execution_options,
         plan.metrics.clone(),
     ));
-    direct_parquet_file_executor_from_reader::<false>(
-        plan,
-        output_batch_size_rows,
-        row_predicate,
-        reader,
-        None,
-    )
+    file_executor_from_reader::<false>(plan, output_batch_size_rows, row_predicate, reader, None)
 }
 
 #[cfg(feature = "datafusion")]
@@ -575,7 +563,7 @@ pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
     row_predicate: Option<DeltaKernelPredicate>,
     metadata_cache: Arc<DirectParquetMetadataCache>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
-    direct_parquet_file_executor_from_reader::<true>(
+    file_executor_from_reader::<true>(
         plan,
         output_batch_size_rows,
         row_predicate,
@@ -588,7 +576,7 @@ pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
     )
 }
 
-fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
+fn file_executor_from_reader<const SHARED_METADATA: bool>(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
@@ -737,7 +725,7 @@ impl LogicalDataFileStream {
     }
 }
 
-fn direct_parquet_arrow_reader_options(
+fn arrow_reader_options(
     include_original_row_index: bool,
 ) -> parquet::errors::Result<ArrowReaderOptions> {
     if !include_original_row_index {
@@ -788,7 +776,7 @@ impl SchemaMatch {
     }
 }
 
-fn build_direct_parquet_schema_match(
+fn build_schema_match(
     parquet_schema: &SchemaDescriptor,
     parquet_arrow_schema: &SchemaRef,
     provider_schema: SchemaRef,
@@ -951,7 +939,7 @@ fn build_matched_field_plan(
                 path,
             )
         }
-        _ => direct_parquet_leaf_cast_plan(provider_field.data_type(), file_field.data_type())
+        _ => leaf_cast_plan(provider_field.data_type(), file_field.data_type())
             .map(|target_type| match target_type {
                 Some(target_type) => FieldPlan::Cast { target_type },
                 None => FieldPlan::Identity,
@@ -1227,10 +1215,7 @@ fn incompatible_parquet_type(
     ))
 }
 
-fn direct_parquet_leaf_cast_plan(
-    provider_type: &DataType,
-    file_type: &DataType,
-) -> Result<Option<DataType>, ()> {
+fn leaf_cast_plan(provider_type: &DataType, file_type: &DataType) -> Result<Option<DataType>, ()> {
     use DataType::{Date32, Decimal128, Float32, Float64, Int8, Int16, Int32, Int64, Timestamp};
 
     if file_type.equals_datatype(provider_type) {
@@ -1243,7 +1228,7 @@ fn direct_parquet_leaf_cast_plan(
         (Int32, Int64 | Float64) => Ok(Some(provider_type.clone())),
         (Float32, Float64) => Ok(Some(provider_type.clone())),
         (source_type, Decimal128(precision, scale))
-            if direct_parquet_can_upcast_to_decimal(source_type, *precision, *scale) =>
+            if can_upcast_to_decimal(source_type, *precision, *scale) =>
         {
             Ok(Some(provider_type.clone()))
         }
@@ -1256,11 +1241,7 @@ fn direct_parquet_leaf_cast_plan(
     }
 }
 
-fn direct_parquet_can_upcast_to_decimal(
-    source_type: &DataType,
-    target_precision: u8,
-    target_scale: i8,
-) -> bool {
+fn can_upcast_to_decimal(source_type: &DataType, target_precision: u8, target_scale: i8) -> bool {
     use DataType::{Decimal128, Int8, Int16, Int32, Int64};
 
     let (source_precision, source_scale) = match source_type {
@@ -2377,11 +2358,8 @@ mod tests {
         writer.write(&batch)?;
         writer.close()?;
         let builder = ParquetRecordBatchReaderBuilder::try_new(fs::File::open(file_path)?)?;
-        let schema_match = super::build_direct_parquet_schema_match(
-            builder.parquet_schema(),
-            builder.schema(),
-            provider_schema,
-        )?;
+        let schema_match =
+            super::build_schema_match(builder.parquet_schema(), builder.schema(), provider_schema)?;
         let projection =
             ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
         let projected = builder
@@ -4266,19 +4244,15 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_leaf_cast_plan_matches_timestamp_compatibility()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn leaf_cast_plan_matches_timestamp_compatibility() -> Result<(), Box<dyn std::error::Error>> {
         let target = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
 
         assert_eq!(
-            super::direct_parquet_leaf_cast_plan(
-                &target,
-                &DataType::Timestamp(TimeUnit::Nanosecond, None)
-            ),
+            super::leaf_cast_plan(&target, &DataType::Timestamp(TimeUnit::Nanosecond, None)),
             Ok(Some(target.clone()))
         );
         assert_eq!(
-            super::direct_parquet_leaf_cast_plan(
+            super::leaf_cast_plan(
                 &target,
                 &DataType::Timestamp(TimeUnit::Nanosecond, Some("UTC".into()))
             ),
@@ -4289,10 +4263,10 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_leaf_cast_plan_rejects_incompatible_primitive_types()
+    fn leaf_cast_plan_rejects_incompatible_primitive_types()
     -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(
-            super::direct_parquet_leaf_cast_plan(&DataType::Int32, &DataType::Utf8),
+            super::leaf_cast_plan(&DataType::Int32, &DataType::Utf8),
             Err(())
         );
 
