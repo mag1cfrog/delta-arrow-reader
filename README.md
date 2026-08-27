@@ -1,7 +1,7 @@
 # delta-arrow-reader
 
 `delta-arrow-reader` is a read-only Delta Lake reader for Apache Arrow record
-batches. It provides a direct pull-driven stream API and an optional DataFusion
+batches. It provides a pull-driven streaming API and an optional DataFusion
 table provider. The caller owns the Tokio runtime, and scans do not collect the
 whole result in memory.
 
@@ -32,7 +32,7 @@ delta-arrow-reader = { version = "0.3.0", features = ["datafusion"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-## Read a table directly
+## Read a table as a stream
 
 Use `load_table` from asynchronous code. The returned stream exposes live scan
 metrics and yields batches as the caller requests them.
@@ -47,7 +47,7 @@ let table = DeltaTableBuilder::new("/tmp/example-delta-table")
     .await?;
 let scan = table
     .scan()
-    .with_projection(vec!["id".into(), "name".into()])
+    .with_projection(["id", "name"])
     .with_predicate(DeltaPredicate::Compare {
         column: "id".into(),
         op: DeltaComparison::GtEq,
@@ -56,41 +56,42 @@ let scan = table
     .with_limit(100)
     .build()
     .await?;
-let mut batches = scan.execute().await?;
+let mut batches = scan.into_stream();
 let metrics = batches.metrics();
 
 while let Some(batch) = batches.try_next().await? {
     println!("rows={}", batch.num_rows());
 }
 
-println!("files={}", metrics.snapshot().files_completed);
+println!("tasks={}", metrics.snapshot().file_tasks_completed);
 # Ok(())
 # }
 ```
 
 ## Register a DataFusion table
 
-The `datafusion` feature exposes `DeltaTableProvider`, `register_delta_table`,
-and DataFusion execution metrics. Registration loads no data files; reads begin
-when DataFusion executes a query.
+The `datafusion` feature exposes the `datafusion` module with its table provider,
+registration helper, scan options, and execution metrics. Registration loads no
+data files; reads begin when DataFusion executes a query.
 
 ```rust,no_run
 # #[cfg(feature = "datafusion")]
 # async fn query() -> Result<(), Box<dyn std::error::Error>> {
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaDataFusionScanOptions, DeltaTableBuilder, register_delta_table,
+    DeltaTableBuilder,
+    datafusion::{ScanOptions, register_table},
 };
 
 let context = SessionContext::new();
 let table = DeltaTableBuilder::new("/tmp/example-delta-table")
     .load_table()
     .await?;
-register_delta_table(
+register_table(
     &context,
     "orders",
     table,
-    DeltaDataFusionScanOptions::default(),
+    ScanOptions::default(),
 )?;
 
 let batches = context.sql("SELECT * FROM orders").await?.collect().await?;
@@ -100,8 +101,8 @@ println!("batches={}", batches.len());
 ```
 
 The DataFusion provider uses Arrow view arrays for string and binary data-file
-columns and dictionary arrays for string and binary partition columns. Direct
-reader scans retain the Delta table's ordinary Arrow schema.
+columns and dictionary arrays for string and binary partition columns. Streaming
+scans retain the Delta table's ordinary Arrow schema.
 
 For transformation-heavy queries that benefit from ordinary Arrow arrays,
 disable view types without changing partition dictionary encoding:
@@ -109,9 +110,9 @@ disable view types without changing partition dictionary encoding:
 ```rust
 # #[cfg(feature = "datafusion")]
 # fn configure() {
-# use delta_arrow_reader::DeltaDataFusionScanOptions;
-let scan_options = DeltaDataFusionScanOptions {
-    use_view_types: false,
+# use delta_arrow_reader::datafusion::ScanOptions;
+let scan_options = ScanOptions {
+    use_arrow_view_types: false,
     ..Default::default()
 };
 # let _ = scan_options;
@@ -119,8 +120,8 @@ let scan_options = DeltaDataFusionScanOptions {
 ```
 
 Whole-file planning normally avoids extra ranged reads once it fills the scan
-partition target. For skewed direct Parquet scans, opt in to DataFusion
-rebalancing with `DeltaFileRepartitioning::Rebalance`.
+partition target. For skewed direct Parquet scans, allow repartitioning at any
+partition count with `datafusion::IntraFileRepartitioning::Always`.
 DataFusion's `repartition_file_scans` and `repartition_file_min_size` settings
 still control whether repartitioning runs.
 
@@ -130,21 +131,21 @@ still control whether repartitioning runs.
 | --- | --- | --- |
 | `datafusion` | No | DataFusion provider, registration, filtering, execution, and metrics. |
 
-The direct API and both data-file reader backends are always available.
-`ParquetReaderBackend::DirectParquet` is the default. Advanced callers can select
+The streaming API and both Parquet backends are always available.
+`ParquetReaderBackend::Direct` is the default. Advanced callers can select
 `ParquetReaderBackend::DeltaKernel` with
-`DeltaReaderExecutionOptions::with_reader_backend`.
+`DeltaScanExecutionOptions::with_parquet_backend`.
 
 ## Runtime, errors, and metrics
 
 - The caller supplies the Tokio runtime and drives returned streams.
 - Execution limits, buffering, Parquet metadata prefetch, and optional
-  full-file reads are configured through `DeltaReaderExecutionOptions`.
+  full-file reads are configured through `DeltaScanExecutionOptions`.
 - DataFusion scan metrics report whether the provider requested view arrays.
-- `DeltaReaderError::phase` and `DeltaReaderError::as_str` return stable,
+- `DeltaReaderError::phase` and `DeltaReaderError::code` return stable,
   redacted categories. Dependency failures remain available through the
   standard error source chain.
-- `DeltaReadMetrics` is a cloneable live handle. `snapshot` returns an
+- `DeltaScanMetrics` is a cloneable live handle. `snapshot` returns an
   immutable point-in-time view. Direct Parquet I/O counters are `None` when
   the Delta Kernel backend is selected.
 

@@ -21,7 +21,7 @@ use tracing::Instrument;
 
 use super::planning::{DeltaScanFileTask, DeltaScanPlan};
 use crate::{
-    DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions, ParquetReaderBackend,
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
     error::{CancelledSnafu, InvalidConfigurationSnafu},
 };
 
@@ -54,13 +54,13 @@ struct ScanCancellationInner {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FileAdmission {
+pub(crate) enum FileAdmissionDecision {
     Admit,
     Skip,
 }
 
-pub(crate) type FileAdmissionFn<Task> =
-    Arc<dyn Fn(&Task) -> Result<FileAdmission, DeltaReaderError> + Send + Sync>;
+pub(crate) type FileAdmissionPolicy<Task> =
+    Arc<dyn Fn(&Task) -> Result<FileAdmissionDecision, DeltaReaderError> + Send + Sync>;
 /// Starts one admitted file while retaining its permit in the returned producer.
 /// Async producers stop at cancellation boundaries. Blocking adapters may finish
 /// their current safe handoff, but must not start later work after cancellation.
@@ -73,7 +73,7 @@ pub(crate) type FileExecutor<Task, Output> = Arc<
         + Send
         + Sync,
 >;
-pub(crate) type ScheduledFile<Output> =
+pub(crate) type ScheduledFileFuture<Output> =
     BoxFuture<'static, Result<Option<Output>, DeltaReaderError>>;
 pub(crate) type FileBatchStream =
     Pin<Box<dyn Stream<Item = Result<RecordBatch, DeltaReaderError>> + Send + 'static>>;
@@ -81,23 +81,23 @@ pub(crate) type FileBatchStream =
 pub(crate) struct FileScheduler<Task, Output> {
     file_tasks: VecDeque<Task>,
     partition_limiter: PartitionReadLimiter,
-    admission: FileAdmissionFn<Task>,
+    admission: FileAdmissionPolicy<Task>,
     executor: FileExecutor<Task, Output>,
     cancellation: ScanCancellation,
 }
 
 type BatchResult = Result<RecordBatch, DeltaReaderError>;
-type StartPartition = Box<dyn FnOnce(mpsc::Sender<BatchResult>) -> JoinHandle<()> + Send>;
-type FileSetups = FuturesOrdered<ScheduledFile<FileBatchStream>>;
-type ReadyFiles = VecDeque<Result<FileBatchStream, DeltaReaderError>>;
+type PartitionStarter = Box<dyn FnOnce(mpsc::Sender<BatchResult>) -> JoinHandle<()> + Send>;
+type PendingFileStreams = FuturesOrdered<ScheduledFileFuture<FileBatchStream>>;
+type ReadyFileStreams = VecDeque<Result<FileBatchStream, DeltaReaderError>>;
 
-struct PartitionStart {
-    output_capacity: usize,
-    start: StartPartition,
+struct PendingPartition {
+    output_buffer_batches: usize,
+    start: PartitionStarter,
 }
 
 enum PartitionStreamState {
-    NotStarted(Option<PartitionStart>),
+    NotStarted(Option<PendingPartition>),
     Running {
         receiver: mpsc::Receiver<BatchResult>,
         task: JoinHandle<()>,
@@ -109,16 +109,15 @@ enum PartitionStreamState {
 pub(crate) struct PartitionStream {
     state: PartitionStreamState,
     cancellation: ScanCancellation,
-    done: bool,
 }
 
-pub(crate) struct DeltaScanExecution {
+pub(crate) struct DeltaScanScheduler {
     plan: Arc<DeltaScanPlan>,
     limiter: Arc<ScanReadLimiter>,
     cancellation: ScanCancellation,
 }
 
-impl DeltaScanExecution {
+impl DeltaScanScheduler {
     pub(crate) fn new(plan: Arc<DeltaScanPlan>) -> Self {
         let limiter = ScanReadLimiter::new(
             plan.execution_options,
@@ -132,7 +131,7 @@ impl DeltaScanExecution {
         }
     }
 
-    pub(crate) fn with_shared_limiter(
+    pub(crate) fn new_with_limiter(
         plan: Arc<DeltaScanPlan>,
         limiter: Arc<ScanReadLimiter>,
     ) -> Self {
@@ -146,7 +145,7 @@ impl DeltaScanExecution {
     pub(crate) fn partition_stream(
         &self,
         partition: usize,
-        admission: FileAdmissionFn<DeltaScanFileTask>,
+        admission: FileAdmissionPolicy<DeltaScanFileTask>,
         executor: FileExecutor<DeltaScanFileTask, FileBatchStream>,
     ) -> Result<PartitionStream, DeltaReaderError> {
         let partition_limiter = self.limiter.partition(partition)?;
@@ -161,11 +160,37 @@ impl DeltaScanExecution {
             self.cancellation.clone(),
         ))
     }
+
+    pub(crate) fn partition_streams(
+        &self,
+        admission: FileAdmissionPolicy<DeltaScanFileTask>,
+        executor: FileExecutor<DeltaScanFileTask, FileBatchStream>,
+    ) -> VecDeque<PartitionStream> {
+        self.plan
+            .partitions
+            .iter()
+            .enumerate()
+            .map(|(partition, tasks)| {
+                PartitionStream::new(
+                    tasks.file_tasks.clone(),
+                    PartitionReadLimiter {
+                        partition,
+                        limiter: Arc::clone(&self.limiter),
+                    },
+                    self.plan.execution_options,
+                    Arc::clone(&admission),
+                    Arc::clone(&executor),
+                    self.plan.metrics.clone(),
+                    self.cancellation.clone(),
+                )
+            })
+            .collect()
+    }
 }
 
 impl ScanReadLimiter {
     pub(crate) fn new(
-        options: DeltaReaderExecutionOptions,
+        options: DeltaScanExecutionOptions,
         target_partitions: usize,
         partition_count: usize,
     ) -> Arc<Self> {
@@ -213,6 +238,7 @@ impl ScanReadLimiter {
 }
 
 impl PartitionReadLimiter {
+    #[cfg(test)]
     pub(crate) async fn acquire(&self) -> Result<FileReadPermit, DeltaReaderError> {
         let partition = Arc::clone(&self.limiter.partition_permits[self.partition])
             .acquire_owned()
@@ -317,7 +343,7 @@ where
     pub(crate) fn new(
         file_tasks: Vec<Task>,
         partition_limiter: PartitionReadLimiter,
-        admission: FileAdmissionFn<Task>,
+        admission: FileAdmissionPolicy<Task>,
         executor: FileExecutor<Task, Output>,
         cancellation: ScanCancellation,
     ) -> Self {
@@ -330,7 +356,7 @@ where
         }
     }
 
-    pub(crate) fn schedule_next(&mut self) -> Option<ScheduledFile<Output>> {
+    pub(crate) fn schedule_next(&mut self) -> Option<ScheduledFileFuture<Output>> {
         let task = self.file_tasks.pop_front()?;
         let limiter = self.partition_limiter.clone();
         let admission = Arc::clone(&self.admission);
@@ -345,8 +371,8 @@ where
                 .fail();
             }
             match admission(&task) {
-                Ok(FileAdmission::Skip) => return Ok(None),
-                Ok(FileAdmission::Admit) => {}
+                Ok(FileAdmissionDecision::Skip) => return Ok(None),
+                Ok(FileAdmissionDecision::Admit) => {}
                 Err(error) => return Err(error),
             }
 
@@ -365,23 +391,23 @@ impl PartitionStream {
     pub(crate) fn new<Task>(
         file_tasks: Vec<Task>,
         partition_limiter: PartitionReadLimiter,
-        options: DeltaReaderExecutionOptions,
-        admission: FileAdmissionFn<Task>,
+        options: DeltaScanExecutionOptions,
+        admission: FileAdmissionPolicy<Task>,
         executor: FileExecutor<Task, FileBatchStream>,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
         cancellation: ScanCancellation,
     ) -> Self
     where
         Task: Send + 'static,
     {
-        let output_capacity = options.output_buffer_capacity_per_partition();
-        let prefetch_file_count = match options.reader_backend() {
-            ParquetReaderBackend::DirectParquet => options.prefetch_file_count_per_partition(),
+        let output_buffer_batches = options.output_buffer_batches_per_partition();
+        let prefetch_files = match options.parquet_backend() {
+            ParquetReaderBackend::Direct => options.prefetch_files_per_partition(),
             ParquetReaderBackend::DeltaKernel => 0,
         };
         let measured_metrics = metrics.clone();
         let measured_executor = Arc::new(move |task, permit, cancellation| {
-            measured_metrics.record_file_started();
+            measured_metrics.record_file_task_started();
             executor(task, permit, cancellation)
         });
         let scheduler = FileScheduler::new(
@@ -400,24 +426,17 @@ impl PartitionStream {
             );
             span.follows_from(tracing::Span::current().id());
             tokio::spawn(
-                run_partition(
-                    output,
-                    scheduler,
-                    metrics,
-                    run_cancellation,
-                    prefetch_file_count,
-                )
-                .instrument(span),
+                run_partition(output, scheduler, metrics, run_cancellation, prefetch_files)
+                    .instrument(span),
             )
         });
 
         Self {
-            state: PartitionStreamState::NotStarted(Some(PartitionStart {
-                output_capacity,
+            state: PartitionStreamState::NotStarted(Some(PendingPartition {
+                output_buffer_batches,
                 start,
             })),
             cancellation,
-            done: false,
         }
     }
 
@@ -427,10 +446,9 @@ impl PartitionStream {
         };
         let Some(start) = start.take() else {
             self.state = PartitionStreamState::Done;
-            self.done = true;
             return;
         };
-        let (output, receiver) = mpsc::channel(start.output_capacity);
+        let (output, receiver) = mpsc::channel(start.output_buffer_batches);
         self.state = PartitionStreamState::Running {
             receiver,
             task: (start.start)(output),
@@ -462,12 +480,10 @@ impl Stream for PartitionStream {
                 PartitionStreamState::Finishing(task) => match Pin::new(task).poll(context) {
                     Poll::Ready(Ok(())) => {
                         self.state = PartitionStreamState::Done;
-                        self.done = true;
                         return Poll::Ready(None);
                     }
                     Poll::Ready(Err(_)) => {
                         self.state = PartitionStreamState::Done;
-                        self.done = true;
                         return Poll::Ready(self.cancellation.cancel().then(|| {
                             Err(CancelledSnafu {
                                 reason: "partition_scheduler_task_failed",
@@ -485,7 +501,7 @@ impl Stream for PartitionStream {
 
 impl Drop for PartitionStream {
     fn drop(&mut self) {
-        if self.done {
+        if matches!(&self.state, PartitionStreamState::Done) {
             return;
         }
         self.cancellation.cancel();
@@ -495,9 +511,9 @@ impl Drop for PartitionStream {
 async fn run_partition<Task>(
     output: mpsc::Sender<BatchResult>,
     mut scheduler: FileScheduler<Task, FileBatchStream>,
-    metrics: DeltaReadMetrics,
+    metrics: DeltaScanMetrics,
     cancellation: ScanCancellation,
-    prefetch_file_count: usize,
+    prefetch_files: usize,
 ) where
     Task: Send + 'static,
 {
@@ -510,28 +526,23 @@ async fn run_partition<Task>(
             &mut scheduler,
             &mut in_flight,
             &mut ready,
-            prefetch_file_count,
+            prefetch_files,
             &cancellation,
         )
         .await
         {
-            NextFile::Ready(file) => file,
-            NextFile::Exhausted => {
+            NextFileOutcome::Ready(file) => file,
+            NextFileOutcome::Exhausted => {
                 metrics.record_scan_partition_completed();
                 return;
             }
-            NextFile::Cancelled => return,
-            NextFile::Error(error) => {
+            NextFileOutcome::Cancelled => return,
+            NextFileOutcome::Error(error) => {
                 send_first_error(&output, &cancellation, error).await;
                 return;
             }
         };
-        refill_file_setups(
-            &mut scheduler,
-            &mut in_flight,
-            ready.len(),
-            prefetch_file_count,
-        );
+        refill_pending_file_streams(&mut scheduler, &mut in_flight, ready.len(), prefetch_files);
 
         match drain_current_file(
             &output,
@@ -539,15 +550,15 @@ async fn run_partition<Task>(
             &mut scheduler,
             &mut in_flight,
             &mut ready,
-            prefetch_file_count,
+            prefetch_files,
             &metrics,
             &cancellation,
         )
         .await
         {
-            DrainFile::Completed => metrics.record_file_completed(),
-            DrainFile::Cancelled => return,
-            DrainFile::Error(error) => {
+            FileDrainOutcome::Completed => metrics.record_file_task_completed(),
+            FileDrainOutcome::Cancelled => return,
+            FileDrainOutcome::Error(error) => {
                 send_first_error(&output, &cancellation, error).await;
                 return;
             }
@@ -565,14 +576,14 @@ async fn send_first_error(
     }
 }
 
-enum NextFile {
+enum NextFileOutcome {
     Ready(FileBatchStream),
     Exhausted,
     Cancelled,
     Error(DeltaReaderError),
 }
 
-enum DrainFile {
+enum FileDrainOutcome {
     Completed,
     Cancelled,
     Error(DeltaReaderError),
@@ -580,37 +591,37 @@ enum DrainFile {
 
 async fn take_next_file<Task>(
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
-    in_flight: &mut FileSetups,
-    ready: &mut ReadyFiles,
-    prefetch_file_count: usize,
+    in_flight: &mut PendingFileStreams,
+    ready: &mut ReadyFileStreams,
+    prefetch_files: usize,
     cancellation: &ScanCancellation,
-) -> NextFile
+) -> NextFileOutcome
 where
     Task: Send + 'static,
 {
     loop {
-        refill_file_setups(
+        refill_pending_file_streams(
             scheduler,
             in_flight,
             ready.len(),
-            prefetch_file_count.saturating_add(1),
+            prefetch_files.saturating_add(1),
         );
         if let Some(file) = ready.pop_front() {
             return match file {
-                Ok(file) => NextFile::Ready(file),
-                Err(error) => NextFile::Error(error),
+                Ok(file) => NextFileOutcome::Ready(file),
+                Err(error) => NextFileOutcome::Error(error),
             };
         }
         let file = tokio::select! {
             biased;
             file = in_flight.next() => file,
-            () = cancellation.cancelled() => return NextFile::Cancelled,
+            () = cancellation.cancelled() => return NextFileOutcome::Cancelled,
         };
         match file {
-            Some(Ok(Some(file))) => return NextFile::Ready(file),
+            Some(Ok(Some(file))) => return NextFileOutcome::Ready(file),
             Some(Ok(None)) => {}
-            Some(Err(error)) => return NextFile::Error(error),
-            None => return NextFile::Exhausted,
+            Some(Err(error)) => return NextFileOutcome::Error(error),
+            None => return NextFileOutcome::Exhausted,
         }
     }
 }
@@ -620,12 +631,12 @@ async fn drain_current_file<Task>(
     output: &mpsc::Sender<BatchResult>,
     file: &mut FileBatchStream,
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
-    in_flight: &mut FileSetups,
-    ready: &mut ReadyFiles,
-    prefetch_file_count: usize,
-    metrics: &DeltaReadMetrics,
+    in_flight: &mut PendingFileStreams,
+    ready: &mut ReadyFileStreams,
+    prefetch_files: usize,
+    metrics: &DeltaScanMetrics,
     cancellation: &ScanCancellation,
-) -> DrainFile
+) -> FileDrainOutcome
 where
     Task: Send + 'static,
 {
@@ -634,54 +645,54 @@ where
             tokio::select! {
                 biased;
                 batch = file.next() => Some(batch),
-                setup = in_flight.next() => {
-                    match setup {
+                pending_file = in_flight.next() => {
+                    match pending_file {
                         Some(Ok(Some(file))) => ready.push_back(Ok(file)),
                         Some(Ok(None)) | None => {}
                         Some(Err(error)) => ready.push_back(Err(error)),
                     }
-                    refill_file_setups(
+                    refill_pending_file_streams(
                         scheduler,
                         in_flight,
                         ready.len(),
-                        prefetch_file_count,
+                        prefetch_files,
                     );
                     continue;
                 }
-                () = cancellation.cancelled() => return DrainFile::Cancelled,
+                () = cancellation.cancelled() => return FileDrainOutcome::Cancelled,
             }
         } else {
             tokio::select! {
                 biased;
                 batch = file.next() => Some(batch),
-                () = cancellation.cancelled() => return DrainFile::Cancelled,
+                () = cancellation.cancelled() => return FileDrainOutcome::Cancelled,
             }
         };
         let Some(batch) = batch.flatten() else {
-            return DrainFile::Completed;
+            return FileDrainOutcome::Completed;
         };
         let batch = match batch {
             Ok(batch) => batch,
-            Err(error) => return DrainFile::Error(error),
+            Err(error) => return FileDrainOutcome::Error(error),
         };
         let rows = batch.num_rows();
         let permit = tokio::select! {
             biased;
-            () = cancellation.cancelled() => return DrainFile::Cancelled,
+            () = cancellation.cancelled() => return FileDrainOutcome::Cancelled,
             permit = output.reserve() => permit,
         };
         let Ok(permit) = permit else {
             cancellation.cancel();
-            return DrainFile::Cancelled;
+            return FileDrainOutcome::Cancelled;
         };
-        metrics.record_batch_produced(rows);
+        metrics.record_scheduler_batch_emitted(rows);
         permit.send(Ok(batch));
     }
 }
 
-fn refill_file_setups<Task>(
+fn refill_pending_file_streams<Task>(
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
-    in_flight: &mut FileSetups,
+    in_flight: &mut PendingFileStreams,
     ready_count: usize,
     target_file_count: usize,
 ) where
@@ -730,45 +741,45 @@ mod tests {
     };
 
     use crate::{
-        DeltaReadMetrics, DeltaReaderExecutionOptions, DeltaReaderPhase, ParquetReaderBackend,
-        error::InvalidConfigurationSnafu, reader::metrics::DeltaReadMetricsConfig,
+        DeltaReaderPhase, DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
+        error::InvalidConfigurationSnafu, reader::metrics::DeltaScanMetricsConfig,
     };
 
     use super::{
-        BatchResult, FileAdmission, FileBatchStream, FileExecutor, FileReadPermit, FileScheduler,
-        PartitionStream, PartitionStreamState, ScanCancellation, ScanReadLimiter, send_first_error,
+        BatchResult, FileAdmissionDecision, FileBatchStream, FileExecutor, FileReadPermit,
+        FileScheduler, PartitionStream, PartitionStreamState, ScanCancellation, ScanReadLimiter,
+        send_first_error,
     };
 
     fn options(
         scan_capacity: usize,
         partition_capacity: usize,
-    ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+    ) -> Result<DeltaScanExecutionOptions, crate::DeltaReaderError> {
+        DeltaScanExecutionOptions::new()
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(partition_capacity)?
             .with_max_concurrent_file_reads_per_scan(Some(scan_capacity))
     }
 
-    fn metrics() -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn metrics() -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
-            reader_backend: ParquetReaderBackend::DirectParquet,
-            scan_metadata_exhausted: Some(true),
+            parquet_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 1,
             files_planned: 3,
-            files_filtered_during_planning: None,
-            estimated_rows: Some(3),
-            estimated_bytes: Some(3),
+            add_actions_excluded_during_planning: None,
+            estimated_input_rows: Some(3),
+            estimated_input_bytes: Some(3),
         })
     }
 
     fn stream_options(
-        output_capacity: usize,
-        prefetch_file_count: usize,
-    ) -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(prefetch_file_count)?
-            .with_output_buffer_capacity_per_partition(output_capacity)
+        output_buffer_batches: usize,
+        prefetch_files: usize,
+    ) -> Result<DeltaScanExecutionOptions, crate::DeltaReaderError> {
+        DeltaScanExecutionOptions::new()
+            .with_prefetch_files_per_partition(prefetch_files)
+            .with_output_buffer_batches_per_partition(output_buffer_batches)
     }
 
     fn batch(ids: Vec<i32>) -> Result<RecordBatch, Box<dyn std::error::Error>> {
@@ -882,7 +893,7 @@ mod tests {
     #[tokio::test]
     async fn scan_capacity_and_partition_index_use_fixed_plan_inputs()
     -> Result<(), Box<dyn std::error::Error>> {
-        let limiter = ScanReadLimiter::new(DeltaReaderExecutionOptions::new(), 2, 1);
+        let limiter = ScanReadLimiter::new(DeltaScanExecutionOptions::new(), 2, 1);
         assert_eq!(limiter.scan_capacity, 6);
         assert_eq!(limiter.partition_capacity, 3);
 
@@ -891,7 +902,7 @@ mod tests {
             Err(error) => error,
         };
         assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(!error.to_string().contains('1'));
         Ok(())
     }
@@ -909,7 +920,7 @@ mod tests {
                 let calls = Arc::clone(&admission_calls);
                 Arc::new(move |_| {
                     calls.fetch_add(1, Ordering::SeqCst);
-                    Ok(FileAdmission::Admit)
+                    Ok(FileAdmissionDecision::Admit)
                 })
             },
             {
@@ -950,7 +961,7 @@ mod tests {
             limiter.partition(0)?,
             Arc::new(|task| {
                 if *task == 1 {
-                    Ok(FileAdmission::Skip)
+                    Ok(FileAdmissionDecision::Skip)
                 } else {
                     Err(InvalidConfigurationSnafu {
                         reason: "fake_admission_failure",
@@ -981,7 +992,7 @@ mod tests {
             .ok_or("expected failure")?
             .await
             .expect_err("admission must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert_eq!(executor_calls.load(Ordering::SeqCst), 0);
         assert_eq!(limiter.active_file_reads(), 0);
         assert!(!cancellation.is_cancelled());
@@ -999,7 +1010,7 @@ mod tests {
         let mut scheduler = FileScheduler::new(
             vec![1],
             partition,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             {
                 let calls = Arc::clone(&executor_calls);
                 Arc::new(move |task, permit, _| {
@@ -1023,7 +1034,7 @@ mod tests {
         cancellation.cancel();
         let error = scheduled.await.expect_err("cancelled capacity must fail");
         assert_eq!(error.phase(), DeltaReaderPhase::Execution);
-        assert_eq!(error.as_str(), "cancelled");
+        assert_eq!(error.code(), "cancelled");
         assert_eq!(executor_calls.load(Ordering::SeqCst), 0);
         assert_eq!(limiter.active_file_reads(), 1);
 
@@ -1043,7 +1054,7 @@ mod tests {
             vec![1],
             limiter.partition(1)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(BTreeMap::new(), Arc::clone(&executor_calls)),
             metrics(),
             cancellation.clone(),
@@ -1091,7 +1102,7 @@ mod tests {
                 let calls = Arc::clone(&admission_calls);
                 Arc::new(move |_| {
                     calls.fetch_add(1, Ordering::SeqCst);
-                    Ok(FileAdmission::Admit)
+                    Ok(FileAdmissionDecision::Admit)
                 })
             },
             Arc::new(|_, permit, _| {
@@ -1112,7 +1123,7 @@ mod tests {
             .ok_or("expected first file")?
             .await
             .expect_err("executor must fail");
-        assert_eq!(first.as_str(), "invalid_configuration");
+        assert_eq!(first.code(), "invalid_configuration");
         assert_eq!(limiter.active_file_reads(), 0);
 
         cancellation.cancel();
@@ -1121,7 +1132,7 @@ mod tests {
             .ok_or("expected later file")?
             .await
             .expect_err("later work must observe cancellation");
-        assert_eq!(later.as_str(), "cancelled");
+        assert_eq!(later.code(), "cancelled");
         assert_eq!(admission_calls.load(Ordering::SeqCst), 1);
         Ok(())
     }
@@ -1136,7 +1147,7 @@ mod tests {
             Vec::<i32>::new(),
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(BTreeMap::new(), Arc::clone(&calls)),
             metrics.clone(),
             ScanCancellation::new(),
@@ -1152,7 +1163,7 @@ mod tests {
             Vec::<i32>::new(),
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(BTreeMap::new(), calls),
             metrics.clone(),
             ScanCancellation::new(),
@@ -1161,8 +1172,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 1);
-        assert_eq!(snapshot.files_started, 0);
-        assert_eq!(snapshot.files_completed, 0);
+        assert_eq!(snapshot.file_tasks_started, 0);
+        assert_eq!(snapshot.file_tasks_completed, 0);
         Ok(())
     }
 
@@ -1179,7 +1190,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(batches, Arc::clone(&calls)),
             metrics.clone(),
             ScanCancellation::new(),
@@ -1203,10 +1214,10 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 1);
-        assert_eq!(snapshot.files_started, 2);
-        assert_eq!(snapshot.files_completed, 2);
-        assert_eq!(snapshot.batches_produced, 3);
-        assert_eq!(snapshot.rows_produced, 4);
+        assert_eq!(snapshot.file_tasks_started, 2);
+        assert_eq!(snapshot.file_tasks_completed, 2);
+        assert_eq!(snapshot.scheduler_batches_emitted, 3);
+        assert_eq!(snapshot.scheduler_rows_emitted, 4);
         Ok(())
     }
 
@@ -1240,7 +1251,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             stream_options(3, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics(),
             ScanCancellation::new(),
@@ -1301,7 +1312,7 @@ mod tests {
             vec![1, 2, 3],
             limiter.partition(0)?,
             stream_options(6, 1)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics(),
             ScanCancellation::new(),
@@ -1365,7 +1376,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             stream_options(2, 1)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics.clone(),
             cancellation.clone(),
@@ -1388,15 +1399,15 @@ mod tests {
             .await
             .ok_or("expected setup error")?
             .expect_err("prefetched setup must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         assert_eq!(limiter.active_file_reads(), 0);
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.files_started, 2);
-        assert_eq!(snapshot.files_completed, 1);
-        assert_eq!(snapshot.batches_produced, 2);
-        assert_eq!(snapshot.rows_produced, 2);
+        assert_eq!(snapshot.file_tasks_started, 2);
+        assert_eq!(snapshot.file_tasks_completed, 1);
+        assert_eq!(snapshot.scheduler_batches_emitted, 2);
+        assert_eq!(snapshot.scheduler_rows_emitted, 2);
         Ok(())
     }
 
@@ -1411,7 +1422,7 @@ mod tests {
             vec![1],
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(batches, Arc::new(AtomicUsize::new(0))),
             metrics.clone(),
             ScanCancellation::new(),
@@ -1420,16 +1431,16 @@ mod tests {
         let first = stream.next().await.ok_or("expected first batch")??;
         assert_eq!(batch_ids(&first)?, vec![1]);
         for _ in 0..100 {
-            if metrics.snapshot().batches_produced == 2 {
+            if metrics.snapshot().scheduler_batches_emitted == 2 {
                 break;
             }
             tokio::task::yield_now().await;
         }
         let before_drop = metrics.snapshot();
-        assert_eq!(before_drop.batches_produced, 2);
-        assert_eq!(before_drop.rows_produced, 2);
-        assert_eq!(before_drop.files_started, 1);
-        assert_eq!(before_drop.files_completed, 0);
+        assert_eq!(before_drop.scheduler_batches_emitted, 2);
+        assert_eq!(before_drop.scheduler_rows_emitted, 2);
+        assert_eq!(before_drop.file_tasks_started, 1);
+        assert_eq!(before_drop.file_tasks_completed, 0);
         assert_eq!(limiter.active_file_reads(), 1);
 
         drop(stream);
@@ -1443,10 +1454,10 @@ mod tests {
         let after_drop = metrics.snapshot();
         assert_eq!(after_drop.scan_partitions_started, 1);
         assert_eq!(after_drop.scan_partitions_completed, 0);
-        assert_eq!(after_drop.files_started, 1);
-        assert_eq!(after_drop.files_completed, 0);
-        assert_eq!(after_drop.batches_produced, 2);
-        assert_eq!(after_drop.rows_produced, 2);
+        assert_eq!(after_drop.file_tasks_started, 1);
+        assert_eq!(after_drop.file_tasks_completed, 0);
+        assert_eq!(after_drop.scheduler_batches_emitted, 2);
+        assert_eq!(after_drop.scheduler_rows_emitted, 2);
         Ok(())
     }
 
@@ -1473,7 +1484,7 @@ mod tests {
             vec![1],
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics.clone(),
             cancellation.clone(),
@@ -1484,17 +1495,17 @@ mod tests {
             .await
             .ok_or("expected file error")?
             .expect_err("file stream must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         assert_eq!(limiter.active_file_reads(), 0);
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 0);
-        assert_eq!(snapshot.files_started, 1);
-        assert_eq!(snapshot.files_completed, 0);
-        assert_eq!(snapshot.batches_produced, 0);
-        assert_eq!(snapshot.rows_produced, 0);
+        assert_eq!(snapshot.file_tasks_started, 1);
+        assert_eq!(snapshot.file_tasks_completed, 0);
+        assert_eq!(snapshot.scheduler_batches_emitted, 0);
+        assert_eq!(snapshot.scheduler_rows_emitted, 0);
         Ok(())
     }
 
@@ -1522,7 +1533,7 @@ mod tests {
                 let calls = Arc::clone(&admission_calls);
                 Arc::new(move |_| {
                     calls.fetch_add(1, Ordering::SeqCst);
-                    Ok(FileAdmission::Admit)
+                    Ok(FileAdmissionDecision::Admit)
                 })
             },
             executor,
@@ -1535,7 +1546,7 @@ mod tests {
             .await
             .ok_or("expected setup error")?
             .expect_err("file setup must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         assert_eq!(admission_calls.load(Ordering::SeqCst), 1);
@@ -1564,7 +1575,7 @@ mod tests {
                         }
                         .fail()
                     } else {
-                        Ok(FileAdmission::Admit)
+                        Ok(FileAdmissionDecision::Admit)
                     }
                 })
             },
@@ -1578,7 +1589,7 @@ mod tests {
             .await
             .ok_or("expected admission error")?
             .expect_err("admission must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         assert_eq!(admission_calls.load(Ordering::SeqCst), 1);
@@ -1612,7 +1623,7 @@ mod tests {
             vec![1],
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             Arc::clone(&executor),
             metrics.clone(),
             cancellation.clone(),
@@ -1621,7 +1632,7 @@ mod tests {
             vec![2],
             limiter.partition(1)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics.clone(),
             cancellation.clone(),
@@ -1636,7 +1647,7 @@ mod tests {
         for result in [results.0, results.1] {
             match result {
                 Some(Err(error)) => {
-                    assert_eq!(error.as_str(), "invalid_configuration");
+                    assert_eq!(error.code(), "invalid_configuration");
                     errors += 1;
                 }
                 None => completed += 1,
@@ -1652,8 +1663,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 2);
         assert_eq!(snapshot.scan_partitions_completed, 0);
-        assert_eq!(snapshot.files_started, 2);
-        assert_eq!(snapshot.files_completed, 0);
+        assert_eq!(snapshot.file_tasks_started, 2);
+        assert_eq!(snapshot.file_tasks_completed, 0);
         Ok(())
     }
 
@@ -1679,14 +1690,13 @@ mod tests {
         let mut stream = PartitionStream {
             state: PartitionStreamState::Running { receiver, task },
             cancellation,
-            done: false,
         };
 
         let error = timeout(Duration::from_secs(5), stream.next())
             .await?
             .ok_or("expected first data error")?
             .expect_err("first item must be the data error");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         abort.abort();
         assert!(
             timeout(Duration::from_secs(5), stream.next())
@@ -1714,7 +1724,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             stream_options(1, 1)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics.clone(),
             cancellation.clone(),
@@ -1747,8 +1757,8 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.scan_partitions_started, 1);
         assert_eq!(snapshot.scan_partitions_completed, 0);
-        assert_eq!(snapshot.files_started, 2);
-        assert_eq!(snapshot.files_completed, 0);
+        assert_eq!(snapshot.file_tasks_started, 2);
+        assert_eq!(snapshot.file_tasks_completed, 0);
         Ok(())
     }
 
@@ -1766,12 +1776,12 @@ mod tests {
             })
         };
         let kernel_options =
-            stream_options(1, 1)?.with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+            stream_options(1, 1)?.with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let mut stream = PartitionStream::new(
             vec![1, 2],
             limiter.partition(0)?,
             kernel_options,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics(),
             cancellation,
@@ -1835,12 +1845,12 @@ mod tests {
             })
         };
         let kernel_options =
-            stream_options(1, 0)?.with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+            stream_options(1, 0)?.with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let mut stream = PartitionStream::new(
             vec![1, 2],
             limiter.partition(0)?,
             kernel_options,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics(),
             cancellation.clone(),
@@ -1877,11 +1887,13 @@ mod tests {
     }
 
     #[test]
-    fn scheduler_source_stays_backend_neutral() {
+    fn scheduler_source_has_no_backend_implementation_dependencies() {
         let source = include_str!("scheduling.rs");
         let forbidden = [
             concat!("data", "fusion"),
-            concat!("par", "quet"),
+            concat!("direct", "_parquet"),
+            concat!("kernel", "_reader"),
+            concat!("par", "quet::"),
             concat!("object", "_store"),
             concat!("deletion", "_vector"),
             concat!("spawn", "_blocking"),
@@ -1890,7 +1902,7 @@ mod tests {
         for pattern in forbidden {
             assert!(
                 !source.contains(pattern),
-                "scheduler must not contain {pattern}"
+                "scheduler must not depend on {pattern}"
             );
         }
     }

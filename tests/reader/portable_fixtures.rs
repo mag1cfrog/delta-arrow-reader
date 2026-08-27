@@ -1,4 +1,4 @@
-//! Portable fixture coverage across reader backends.
+//! Portable fixture coverage across Parquet backends.
 
 use std::{error::Error, path::Path};
 
@@ -9,8 +9,8 @@ use arrow::{
     util::display::array_value_to_string,
 };
 use delta_arrow_reader::{
-    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReadMetrics, DeltaReadMetricsSnapshot,
-    DeltaReaderError, DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaScalar,
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderPhase,
+    DeltaScalar, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot,
     DeltaTableBuilder, ParquetReaderBackend,
 };
 use futures_util::{StreamExt, TryStreamExt};
@@ -476,11 +476,11 @@ enum ScanAttempt {
         batch: RecordBatch,
         batch_count: usize,
         logical_schema: SchemaRef,
-        metrics: DeltaReadMetricsSnapshot,
+        metrics: DeltaScanMetricsSnapshot,
     },
     Failure {
         error: DeltaReaderError,
-        metrics: DeltaReadMetricsSnapshot,
+        metrics: DeltaScanMetricsSnapshot,
     },
 }
 
@@ -490,18 +490,18 @@ fn runtime() -> TestResult<tokio::runtime::Runtime> {
         .build()?)
 }
 
-fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaReaderExecutionOptions> {
-    Ok(DeltaReaderExecutionOptions::new()
-        .with_prefetch_file_count_per_partition(0)?
+fn direct_options(capacity: usize, prefetch: usize) -> TestResult<DeltaScanExecutionOptions> {
+    Ok(DeltaScanExecutionOptions::new()
+        .with_prefetch_files_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(capacity)?
         .with_max_concurrent_file_reads_per_scan(Some(capacity))?
-        .with_output_buffer_capacity_per_partition(1)?
-        .with_prefetch_file_count_per_partition(prefetch)?)
+        .with_output_buffer_batches_per_partition(1)?
+        .with_prefetch_files_per_partition(prefetch))
 }
 
-async fn wait_for_delivered_batch_metrics(metrics: &DeltaReadMetrics) {
+async fn wait_for_delivered_batch_metrics(metrics: &DeltaScanMetrics) {
     for _ in 0..1000 {
-        if metrics.snapshot().batches_produced > 0 {
+        if metrics.snapshot().scheduler_batches_emitted > 0 {
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
@@ -532,7 +532,7 @@ fn projection(names: &[&str]) -> Option<Vec<String>> {
 
 async fn direct_stream(
     fixture: &RealParquetDeltaTable,
-    options: DeltaReaderExecutionOptions,
+    options: DeltaScanExecutionOptions,
 ) -> TestResult<DeltaBatchStream> {
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .with_execution_options(options)
@@ -540,12 +540,12 @@ async fn direct_stream(
         .await?;
     let scan = table
         .scan()
-        .with_projection(vec!["id".to_owned()])
+        .with_projection(["id"])
         .with_target_partitions(1)?
         .build()
         .await?;
     assert_eq!(scan.partition_count(), 1);
-    Ok(scan.execute().await?)
+    Ok(scan.into_stream())
 }
 
 async fn scan_fixture(
@@ -554,7 +554,7 @@ async fn scan_fixture(
     projection: Option<Vec<String>>,
     predicate: Option<DeltaPredicate>,
 ) -> TestResult<ScanAttempt> {
-    let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
+    let options = DeltaScanExecutionOptions::new().with_parquet_backend(backend);
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .with_execution_options(options)
         .load_table()
@@ -570,8 +570,8 @@ async fn scan_fixture(
     }
     .build()
     .await?;
-    let logical_schema = Arc::clone(scan.schema());
-    let stream = scan.execute().await?;
+    let logical_schema = scan.schema();
+    let stream = scan.into_stream();
     let metrics = stream.metrics();
 
     match stream.try_collect::<Vec<_>>().await {
@@ -635,7 +635,7 @@ fn assert_success(
     backend: ParquetReaderBackend,
     attempt: ScanAttempt,
     expected_ids: &[i32],
-) -> TestResult<(RecordBatch, DeltaReadMetricsSnapshot, usize)> {
+) -> TestResult<(RecordBatch, DeltaScanMetricsSnapshot, usize)> {
     let (batch, batch_count, logical_schema, metrics) = match attempt {
         ScanAttempt::Success {
             batch,
@@ -658,10 +658,10 @@ fn assert_success(
         "{case_name}"
     );
     assert_eq!(batch_ids(&batch)?, expected_ids, "{case_name}");
-    assert_eq!(metrics.reader_backend, backend, "{case_name}");
-    assert!(metrics.files_started > 0, "{case_name}");
+    assert_eq!(metrics.parquet_backend, backend, "{case_name}");
+    assert!(metrics.file_tasks_started > 0, "{case_name}");
     assert_eq!(
-        metrics.files_completed, metrics.files_started,
+        metrics.file_tasks_completed, metrics.file_tasks_started,
         "{case_name}"
     );
     assert_eq!(metrics.scan_partitions_started, 1, "{case_name}");
@@ -679,7 +679,7 @@ fn assert_missing_required(
     };
 
     assert_eq!(error.phase(), DeltaReaderPhase::DataFileRead, "{case_name}");
-    assert_eq!(error.as_str(), "data_file_read", "{case_name}");
+    assert_eq!(error.code(), "data_file_read", "{case_name}");
     let display = error.to_string();
     assert!(
         display.contains("reason=parquet_schema_match_failed"),
@@ -694,7 +694,7 @@ fn assert_missing_required(
         source = current.source();
     }
     assert!(
-        source_display.contains("non-nullable provider field"),
+        source_display.contains("non-nullable target field"),
         "{case_name}: {source_display}"
     );
     assert!(
@@ -705,11 +705,11 @@ fn assert_missing_required(
         source_display.contains("is missing from the Parquet file"),
         "{case_name}: {source_display}"
     );
-    assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
-    assert_eq!(metrics.files_started, 1, "{case_name}");
-    assert_eq!(metrics.files_completed, 0, "{case_name}");
-    assert_eq!(metrics.batches_produced, 0, "{case_name}");
-    assert_eq!(metrics.rows_produced, 0, "{case_name}");
+    assert_eq!(metrics.parquet_backend, ParquetReaderBackend::Direct);
+    assert_eq!(metrics.file_tasks_started, 1, "{case_name}");
+    assert_eq!(metrics.file_tasks_completed, 0, "{case_name}");
+    assert_eq!(metrics.scheduler_batches_emitted, 0, "{case_name}");
+    assert_eq!(metrics.scheduler_rows_emitted, 0, "{case_name}");
     Ok(())
 }
 
@@ -762,7 +762,7 @@ fn direct_missing_required_fields_preserve_errors_and_metrics() -> TestResult {
         for case in cases {
             let attempt = scan_fixture(
                 &case.fixture,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 projection(case.projection),
                 None,
             )
@@ -778,7 +778,7 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
     runtime()?.block_on(async {
         let fixture = RealParquetDeltaTable::new_with_deletion_vector("direct-dv-predicate", &[1])?;
 
-        for (name, value, expected, rows_produced, rows_deleted) in [
+        for (name, value, expected, scheduler_rows_emitted, rows_deleted) in [
             ("only deleted row", 2, Vec::new(), 0, 1),
             ("live row", 1, vec![1], 1, 0),
         ] {
@@ -789,27 +789,30 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
             };
             let (_, metrics, _) = assert_success(
                 name,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 scan_fixture(
                     &fixture,
-                    ParquetReaderBackend::DirectParquet,
+                    ParquetReaderBackend::Direct,
                     Some(vec!["id".to_owned()]),
                     Some(predicate),
                 )
                 .await?,
                 &expected,
             )?;
-            assert_eq!(metrics.rows_produced, rows_produced, "{name}");
+            assert_eq!(
+                metrics.scheduler_rows_emitted, scheduler_rows_emitted,
+                "{name}"
+            );
             assert_eq!(metrics.deletion_vector_payloads_loaded, 1, "{name}");
             assert_eq!(metrics.deletion_vectors_applied, 1, "{name}");
             assert_eq!(metrics.deletion_vector_rows_deleted, rows_deleted, "{name}");
             assert_eq!(metrics.deletion_vector_failures, 0, "{name}");
-            assert_eq!(metrics.deletion_vector_rejections, 0, "{name}");
+            assert_eq!(metrics.deletion_vector_coordinate_rejections, 0, "{name}");
         }
 
         let no_rows = scan_fixture(
             &fixture,
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             Some(vec!["id".to_owned()]),
             Some(DeltaPredicate::Compare {
                 column: "id".into(),
@@ -822,9 +825,9 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
             return Err("predicate selecting no rows unexpectedly failed".into());
         };
         assert!(batch_ids(&batch)?.is_empty());
-        assert_eq!(metrics.rows_produced, 0);
+        assert_eq!(metrics.scheduler_rows_emitted, 0);
         assert_eq!(metrics.deletion_vector_failures, 0);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -848,10 +851,10 @@ fn direct_partial_pruning_predicate_remains_residual_only() -> TestResult {
         ]);
         let (_, metrics, _) = assert_success(
             "partial pruning predicate",
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             scan_fixture(
                 &fixture,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 Some(vec!["id".to_owned()]),
                 Some(predicate),
             )
@@ -859,7 +862,7 @@ fn direct_partial_pruning_predicate_remains_residual_only() -> TestResult {
             &[2],
         )?;
 
-        assert_eq!(metrics.rows_produced, 3);
+        assert_eq!(metrics.scheduler_rows_emitted, 3);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -968,10 +971,10 @@ fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
                 .collect::<Vec<_>>();
             let (batch, metrics, batch_count) = assert_success(
                 case.name,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 scan_fixture(
                     &case.fixture,
-                    ParquetReaderBackend::DirectParquet,
+                    ParquetReaderBackend::Direct,
                     projection(case.projection),
                     None,
                 )
@@ -991,7 +994,7 @@ fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
                 case.name
             );
             assert_eq!(
-                metrics.rows_produced,
+                metrics.scheduler_rows_emitted,
                 u64::try_from(expected.len())?,
                 "{}",
                 case.name
@@ -1005,7 +1008,11 @@ fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
                 case.name
             );
             assert_eq!(metrics.deletion_vector_failures, 0, "{}", case.name);
-            assert_eq!(metrics.deletion_vector_rejections, 0, "{}", case.name);
+            assert_eq!(
+                metrics.deletion_vector_coordinate_rejections, 0,
+                "{}",
+                case.name
+            );
             if let Some(expected_batch_rows) = case.expected_batch_rows {
                 assert_eq!(
                     batch_rows_ordered_by_id(&batch)?,
@@ -1016,7 +1023,10 @@ fn direct_deletion_vector_boundaries_preserve_rows_schema_and_metrics() -> TestR
             }
             if case.require_multiple_batches {
                 assert!(batch_count > 1, "{}", case.name);
-                assert_eq!(metrics.batches_produced, u64::try_from(batch_count)?);
+                assert_eq!(
+                    metrics.scheduler_batches_emitted,
+                    u64::try_from(batch_count)?
+                );
             }
 
             if case.compare_official {
@@ -1049,7 +1059,7 @@ fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
         fs::remove_file(fixture.path().join(RELATIVE_DV_FILE))?;
         let ScanAttempt::Failure { error, metrics } = scan_fixture(
             &fixture,
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             projection(&["id"]),
             None,
         )
@@ -1059,23 +1069,23 @@ fn direct_deletion_vector_payload_error_is_redacted_and_metered() -> TestResult 
         };
 
         assert_eq!(error.phase(), DeltaReaderPhase::DeletionVector);
-        assert_eq!(error.as_str(), "deletion_vector_read");
+        assert_eq!(error.code(), "deletion_vector_read");
         let display = error.to_string();
         assert!(
             display.contains("reason=deletion_vector_payload_read_failed"),
             "{display}"
         );
         assert!(!display.contains(RELATIVE_DV_FILE));
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
-        assert_eq!(metrics.files_started, 1);
-        assert_eq!(metrics.files_completed, 0);
-        assert_eq!(metrics.batches_produced, 0);
-        assert_eq!(metrics.rows_produced, 0);
+        assert_eq!(metrics.parquet_backend, ParquetReaderBackend::Direct);
+        assert_eq!(metrics.file_tasks_started, 1);
+        assert_eq!(metrics.file_tasks_completed, 0);
+        assert_eq!(metrics.scheduler_batches_emitted, 0);
+        assert_eq!(metrics.scheduler_rows_emitted, 0);
         assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
         assert_eq!(metrics.deletion_vectors_applied, 0);
         assert_eq!(metrics.deletion_vector_rows_deleted, 0);
         assert_eq!(metrics.deletion_vector_failures, 1);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1103,10 +1113,10 @@ fn direct_preserves_frozen_file_and_batch_order() -> TestResult {
         for (name, fixture, expected, expected_files, require_multiple_batches) in cases {
             let (batch, metrics, batch_count) = assert_success(
                 name,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 scan_fixture(
                     &fixture,
-                    ParquetReaderBackend::DirectParquet,
+                    ParquetReaderBackend::Direct,
                     projection(&["id"]),
                     None,
                 )
@@ -1115,16 +1125,19 @@ fn direct_preserves_frozen_file_and_batch_order() -> TestResult {
             )?;
 
             assert_eq!(batch_ids(&batch)?, expected, "{name}");
-            assert_eq!(metrics.files_started, expected_files, "{name}");
-            assert_eq!(metrics.files_completed, expected_files, "{name}");
+            assert_eq!(metrics.file_tasks_started, expected_files, "{name}");
+            assert_eq!(metrics.file_tasks_completed, expected_files, "{name}");
             assert_eq!(
-                metrics.rows_produced,
+                metrics.scheduler_rows_emitted,
                 u64::try_from(expected.len())?,
                 "{name}"
             );
             if require_multiple_batches {
                 assert!(batch_count > 1, "{name}");
-                assert_eq!(metrics.batches_produced, u64::try_from(batch_count)?);
+                assert_eq!(
+                    metrics.scheduler_batches_emitted,
+                    u64::try_from(batch_count)?
+                );
             }
         }
         Ok::<_, Box<dyn Error>>(())
@@ -1146,7 +1159,7 @@ fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
             .expect_err("missing file unexpectedly succeeded");
 
         assert_eq!(error.phase(), DeltaReaderPhase::DataFileRead);
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert!(
             error
                 .to_string()
@@ -1156,10 +1169,10 @@ fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
         assert!(error.source().is_some());
         assert!(stream.next().await.is_none());
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.files_started, 1);
-        assert_eq!(metrics.files_completed, 0);
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
-        assert_eq!(metrics.parquet_data_file_opened_bytes, Some(123));
+        assert_eq!(metrics.file_tasks_started, 1);
+        assert_eq!(metrics.file_tasks_completed, 0);
+        assert_eq!(metrics.parquet_backend, ParquetReaderBackend::Direct);
+        assert_eq!(metrics.estimated_parquet_task_bytes_admitted, Some(123));
         assert!(
             metrics
                 .parquet_data_file_range_get_operations
@@ -1167,8 +1180,8 @@ fn direct_missing_file_preserves_read_error_and_metrics() -> TestResult {
         );
         assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(metrics.parquet_data_file_bytes_received, Some(0));
-        assert_eq!(metrics.batches_produced, 0);
-        assert_eq!(metrics.rows_produced, 0);
+        assert_eq!(metrics.scheduler_batches_emitted, 0);
+        assert_eq!(metrics.scheduler_rows_emitted, 0);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1187,13 +1200,13 @@ fn direct_stream_drop_stops_future_file_scheduling() -> TestResult {
         wait_for_delivered_batch_metrics(&metrics).await;
 
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(metrics.parquet_backend, ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_started, 1);
         assert_eq!(metrics.scan_partitions_completed, 0);
-        assert_eq!(metrics.files_started, 1);
-        assert_eq!(metrics.files_completed, 0);
-        assert!((1..=2).contains(&metrics.batches_produced));
-        assert!((1..=16_384).contains(&metrics.rows_produced));
+        assert_eq!(metrics.file_tasks_started, 1);
+        assert_eq!(metrics.file_tasks_completed, 0);
+        assert!((1..=2).contains(&metrics.scheduler_batches_emitted));
+        assert!((1..=16_384).contains(&metrics.scheduler_rows_emitted));
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1218,18 +1231,18 @@ fn direct_deletion_vector_stream_drop_preserves_partial_metrics() -> TestResult 
         wait_for_delivered_batch_metrics(&metrics).await;
 
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(metrics.parquet_backend, ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_started, 1);
         assert_eq!(metrics.scan_partitions_completed, 0);
-        assert_eq!(metrics.files_started, 1);
-        assert_eq!(metrics.files_completed, 0);
-        assert!((1..=2).contains(&metrics.batches_produced));
-        assert!((1..=16_384).contains(&metrics.rows_produced));
+        assert_eq!(metrics.file_tasks_started, 1);
+        assert_eq!(metrics.file_tasks_completed, 0);
+        assert!((1..=2).contains(&metrics.scheduler_batches_emitted));
+        assert!((1..=16_384).contains(&metrics.scheduler_rows_emitted));
         assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
         assert_eq!(metrics.deletion_vectors_applied, 1);
         assert!((1..=3).contains(&metrics.deletion_vector_rows_deleted));
         assert_eq!(metrics.deletion_vector_failures, 0);
-        assert_eq!(metrics.deletion_vector_rejections, 0);
+        assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1248,8 +1261,8 @@ fn direct_backpressure_bounds_future_file_scheduling() -> TestResult {
         let partial = metrics.snapshot();
 
         assert_eq!(ids.first().copied(), Some(1));
-        assert_eq!(partial.files_started, 1);
-        assert_eq!(partial.files_completed, 0);
+        assert_eq!(partial.file_tasks_started, 1);
+        assert_eq!(partial.file_tasks_completed, 0);
         assert_eq!(partial.scan_partitions_completed, 0);
 
         for batch in stream.try_collect::<Vec<_>>().await? {
@@ -1257,11 +1270,11 @@ fn direct_backpressure_bounds_future_file_scheduling() -> TestResult {
         }
         assert_eq!(ids, (1..=40_000).collect::<Vec<_>>());
         let complete = metrics.snapshot();
-        assert_eq!(complete.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(complete.parquet_backend, ParquetReaderBackend::Direct);
         assert_eq!(complete.scan_partitions_completed, 1);
-        assert_eq!(complete.files_started, 2);
-        assert_eq!(complete.files_completed, 2);
-        assert_eq!(complete.rows_produced, 40_000);
+        assert_eq!(complete.file_tasks_started, 2);
+        assert_eq!(complete.file_tasks_completed, 2);
+        assert_eq!(complete.scheduler_rows_emitted, 40_000);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1272,7 +1285,7 @@ fn direct_prefetch_preserves_file_order_and_completes() -> TestResult {
         let fixture =
             RealParquetDeltaTable::new_with_two_large_files("direct-prefetch-order", 9_000)?;
         let options = direct_options(2, 1)?;
-        assert_eq!(options.prefetch_file_count_per_partition(), 1);
+        assert_eq!(options.prefetch_files_per_partition(), 1);
         let stream = direct_stream(&fixture, options).await?;
         let metrics = stream.metrics();
         let batches = stream.try_collect::<Vec<_>>().await?;
@@ -1283,15 +1296,15 @@ fn direct_prefetch_preserves_file_order_and_completes() -> TestResult {
 
         assert_eq!(ids, (1..=18_000).collect::<Vec<_>>());
         let metrics = metrics.snapshot();
-        assert_eq!(metrics.reader_backend, ParquetReaderBackend::DirectParquet);
+        assert_eq!(metrics.parquet_backend, ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_completed, 1);
-        assert_eq!(metrics.files_started, 2);
-        assert_eq!(metrics.files_completed, 2);
+        assert_eq!(metrics.file_tasks_started, 2);
+        assert_eq!(metrics.file_tasks_completed, 2);
         assert_eq!(
-            metrics.parquet_data_file_opened_bytes,
-            metrics.estimated_bytes
+            metrics.estimated_parquet_task_bytes_admitted,
+            metrics.estimated_input_bytes
         );
-        assert_eq!(metrics.rows_produced, 18_000);
+        assert_eq!(metrics.scheduler_rows_emitted, 18_000);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -1302,7 +1315,7 @@ fn assert_parity_success(
     expected_rows: &[&str],
     backend: ParquetReaderBackend,
     attempt: ScanAttempt,
-) -> TestResult<(RecordBatch, DeltaReadMetricsSnapshot)> {
+) -> TestResult<(RecordBatch, DeltaScanMetricsSnapshot)> {
     let ScanAttempt::Success {
         batch,
         logical_schema,
@@ -1333,10 +1346,10 @@ fn assert_parity_success(
         expected_rows,
         "{case_name}"
     );
-    assert_eq!(metrics.reader_backend, backend, "{case_name}");
-    assert!(metrics.files_started > 0, "{case_name}");
+    assert_eq!(metrics.parquet_backend, backend, "{case_name}");
+    assert!(metrics.file_tasks_started > 0, "{case_name}");
     assert_eq!(
-        metrics.files_completed, metrics.files_started,
+        metrics.file_tasks_completed, metrics.file_tasks_started,
         "{case_name}"
     );
     assert_eq!(metrics.scan_partitions_started, 1, "{case_name}");
@@ -1353,7 +1366,7 @@ fn delta_kernel_matches_direct_for_frozen_cases() -> TestResult {
         for case in cases {
             let direct = scan_fixture(
                 &case.fixture,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 projection(case.projection),
                 None,
             )
@@ -1369,7 +1382,7 @@ fn delta_kernel_matches_direct_for_frozen_cases() -> TestResult {
                 case.name,
                 case.projection,
                 case.expected_rows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 direct,
             )?;
             let (kernel, _) = assert_parity_success(
@@ -1386,7 +1399,7 @@ fn delta_kernel_matches_direct_for_frozen_cases() -> TestResult {
                 assert_eq!(direct_metrics.deletion_vectors_applied, 1);
                 assert_eq!(direct_metrics.deletion_vector_rows_deleted, deleted_rows);
                 assert_eq!(direct_metrics.deletion_vector_failures, 0);
-                assert_eq!(direct_metrics.deletion_vector_rejections, 0);
+                assert_eq!(direct_metrics.deletion_vector_coordinate_rejections, 0);
             }
         }
 

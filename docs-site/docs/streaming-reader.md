@@ -1,11 +1,11 @@
-# Read a Table Directly
+# Read a Table as a Stream
 
 In this quickstart, you will load a Delta table and read up to 100 rows from two
 columns. The rows arrive as Arrow record batches.
 
 ## Before you start
 
-Add the [direct reader dependencies](installation.md#direct-reader). You will
+Add the [streaming reader dependencies](installation.md#streaming-reader). You will
 also need the path to a Delta table that your application can read.
 
 ## Run the scan
@@ -21,11 +21,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let scan = table
         .scan()
-        .with_projection(vec!["id".into(), "name".into()])
+        .with_projection(["id", "name"])
         .with_limit(100)
         .build()
         .await?;
-    let mut batches = scan.execute().await?;
+    let mut batches = scan.into_stream();
 
     while let Some(batch) = batches.try_next().await? {
         println!("rows={}", batch.num_rows());
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Loading the table and reading its rows happen at different times. `load_table`
 loads the Delta metadata, and `build` works out which files and columns the scan
-needs. The data files are not read until `execute` starts the batch stream.
+needs. The data files are not read until the returned batch stream is polled.
 
 ## Filter rows
 
@@ -67,14 +67,14 @@ If you want to see what the scan did, save its metrics handle before consuming
 the stream:
 
 ```rust
-let mut batches = scan.execute().await?;
+let mut batches = scan.into_stream();
 let metrics = batches.metrics();
 
 while let Some(batch) = batches.try_next().await? {
     println!("rows={}", batch.num_rows());
 }
 
-println!("files={}", metrics.snapshot().files_completed);
+println!("tasks={}", metrics.snapshot().file_tasks_completed);
 ```
 
 You can still inspect the handle after the stream finishes or is dropped. If

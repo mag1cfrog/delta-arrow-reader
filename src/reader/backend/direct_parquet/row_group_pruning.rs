@@ -42,7 +42,7 @@ use crate::delta::kernel::DeltaKernelPredicate;
 /// `Some(Vec::new())` means every row group was proven impossible and the
 /// parquet reader should return no rows.
 #[allow(dead_code)]
-pub(crate) fn direct_parquet_pruned_row_groups(
+pub(crate) fn pruned_row_groups(
     metadata: &ParquetMetaData,
     file_size: u64,
     byte_range: Option<&Range<u64>>,
@@ -83,7 +83,7 @@ pub(crate) fn direct_parquet_pruned_row_groups(
             }
         };
         let may_match = predicate.is_none_or(|predicate| {
-            DirectParquetRowGroupStats::new(row_group).may_contain_matching_rows(predicate.as_ref())
+            RowGroupStats::new(row_group).may_contain_matching_rows(predicate.as_ref())
         });
         if in_range && may_match {
             selected.push(ordinal);
@@ -92,12 +92,12 @@ pub(crate) fn direct_parquet_pruned_row_groups(
     Ok(Some(selected))
 }
 
-struct DirectParquetRowGroupStats<'a> {
+struct RowGroupStats<'a> {
     row_group: &'a RowGroupMetaData,
     field_indices: HashMap<ColumnName, usize>,
 }
 
-impl<'a> DirectParquetRowGroupStats<'a> {
+impl<'a> RowGroupStats<'a> {
     fn new(row_group: &'a RowGroupMetaData) -> Self {
         Self {
             row_group,
@@ -134,7 +134,7 @@ impl<'a> DirectParquetRowGroupStats<'a> {
     }
 }
 
-impl DataSkippingPredicateEvaluator for DirectParquetRowGroupStats<'_> {
+impl DataSkippingPredicateEvaluator for RowGroupStats<'_> {
     type Output = bool;
     type ColumnStat = Scalar;
 
@@ -406,19 +406,19 @@ mod tests {
         ])?;
 
         assert_eq!(
-            direct_parquet_pruned_row_groups(&metadata, 80, Some(&(0..25)), None)?,
+            pruned_row_groups(&metadata, 80, Some(&(0..25)), None)?,
             Some(vec![0])
         );
         assert_eq!(
-            direct_parquet_pruned_row_groups(&metadata, 80, Some(&(25..50)), None)?,
+            pruned_row_groups(&metadata, 80, Some(&(25..50)), None)?,
             Some(vec![1])
         );
         assert_eq!(
-            direct_parquet_pruned_row_groups(&metadata, 80, Some(&(50..65)), None)?,
+            pruned_row_groups(&metadata, 80, Some(&(50..65)), None)?,
             Some(vec![2])
         );
         assert_eq!(
-            direct_parquet_pruned_row_groups(&metadata, 80, Some(&(65..80)), None)?,
+            pruned_row_groups(&metadata, 80, Some(&(65..80)), None)?,
             Some(vec![3])
         );
 
@@ -431,11 +431,11 @@ mod tests {
         let metadata = metadata_with_row_group_offsets(&[(30, Some(20)), (40, None)])?;
 
         assert_eq!(
-            direct_parquet_pruned_row_groups(&metadata, 41, Some(&(20..40)), None)?,
+            pruned_row_groups(&metadata, 41, Some(&(20..40)), None)?,
             Some(vec![0])
         );
         assert_eq!(
-            direct_parquet_pruned_row_groups(&metadata, 41, Some(&(40..41)), None)?,
+            pruned_row_groups(&metadata, 41, Some(&(40..41)), None)?,
             Some(vec![1])
         );
 
@@ -446,13 +446,7 @@ mod tests {
     fn regression_byte_range_rejects_malformed_row_group_coordinates()
     -> Result<(), Box<dyn std::error::Error>> {
         assert!(
-            direct_parquet_pruned_row_groups(
-                &metadata_without_columns()?,
-                100,
-                Some(&(0..100)),
-                None,
-            )
-            .is_err()
+            pruned_row_groups(&metadata_without_columns()?, 100, Some(&(0..100)), None,).is_err()
         );
         for metadata in [
             metadata_with_row_group_offsets(&[(-1, None)])?,
@@ -460,19 +454,17 @@ mod tests {
             metadata_with_row_group_offsets(&[(100, None)])?,
             metadata_with_row_group_offsets(&[(101, None)])?,
         ] {
-            assert!(
-                direct_parquet_pruned_row_groups(&metadata, 100, Some(&(0..100)), None).is_err()
-            );
+            assert!(pruned_row_groups(&metadata, 100, Some(&(0..100)), None).is_err());
         }
 
         let metadata = metadata_with_row_group_offsets(&[(0, None), (99, None)])?;
         assert_eq!(
-            direct_parquet_pruned_row_groups(&metadata, 100, Some(&(0..100)), None)?,
+            pruned_row_groups(&metadata, 100, Some(&(0..100)), None)?,
             Some(vec![0, 1])
         );
         for (start, end) in [(0, 0), (0, 101), (100, 99)] {
             let range = start..end;
-            assert!(direct_parquet_pruned_row_groups(&metadata, 100, Some(&range), None).is_err());
+            assert!(pruned_row_groups(&metadata, 100, Some(&range), None).is_err());
         }
 
         Ok(())

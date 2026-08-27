@@ -29,24 +29,19 @@ use parquet::schema::types::{SchemaDescriptor, TypePtr};
 use snafu::{IntoError, ResultExt};
 use tokio::sync::OnceCell;
 
-use self::{
-    metered_object_store::MeteredParquetObjectStore,
-    row_group_pruning::direct_parquet_pruned_row_groups,
-};
+use self::{metered_object_store::MeteredParquetObjectStore, row_group_pruning::pruned_row_groups};
 
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
 
 use crate::{
-    DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions,
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics,
     delta::kernel::{
         DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
         KernelScanSchemas,
     },
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     reader::{
-        deletion_vector::{
-            DeletionVectorSelection, load_deletion_vector_selection_from_engine_context,
-        },
+        deletion_vector::{DeletionVectorMasker, load_deletion_vector_masker},
         planning::{DeltaScanFileTask, DeltaScanPlan},
         scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
         transform::{
@@ -55,23 +50,24 @@ use crate::{
     },
 };
 
-struct DirectParquetFileReader {
+struct DirectParquetReader {
     engine_context: Arc<DeltaKernelEngineContext>,
     store: Arc<dyn ObjectStore>,
-    execution_options: DeltaReaderExecutionOptions,
-    metrics: DeltaReadMetrics,
+    execution_options: DeltaScanExecutionOptions,
+    metrics: DeltaScanMetrics,
+    metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 }
 
 /// Parquet footer metadata shared by ranged tasks within one physical scan.
 #[derive(Default)]
-pub(crate) struct DirectParquetMetadataCache {
+pub(crate) struct RangedParquetMetadataCache {
     /// In-flight or completed footer loads keyed by file path and planned size.
     entries: Mutex<HashMap<(Path, u64), Arc<ParquetMetadataCell>>>,
 }
 
 type ParquetMetadataCell = OnceCell<Arc<ParquetMetaData>>;
 
-impl DirectParquetMetadataCache {
+impl RangedParquetMetadataCache {
     fn entry(&self, path: &Path, file_size: u64) -> Arc<ParquetMetadataCell> {
         Arc::clone(
             self.entries
@@ -83,103 +79,102 @@ impl DirectParquetMetadataCache {
     }
 }
 
-struct DirectParquetObject {
+struct ParquetFileObject {
     store: Arc<dyn ObjectStore>,
     path: Path,
     file_size: u64,
 }
 
-struct DirectParquetStream {
+struct PhysicalParquetStream {
     stream: ParquetRecordBatchStream<ParquetObjectReader>,
-    schema_match: DirectParquetSchemaMatch,
+    schema_alignment: ParquetSchemaAlignment,
     include_original_row_index: bool,
 }
 
-struct DirectParquetFileReadStream {
-    parquet: DirectParquetStream,
+struct LogicalDataFileStream {
+    physical_stream: PhysicalParquetStream,
     engine_context: Arc<DeltaKernelEngineContext>,
     kernel_schemas: KernelScanSchemas,
     logical_schema: SchemaRef,
     transform: KernelPhysicalToLogicalTransform,
-    deletion_vector: Option<DeletionVectorSelection>,
-    uses_original_row_indexes: bool,
+    deletion_vector: Option<DeletionVectorMasker>,
     cancellation: ScanCancellation,
     _permit: FileReadPermit,
 }
 
-struct DirectParquetFileReadRequest {
+struct LogicalDataFileReadRequest {
     task: DeltaScanFileTask,
     physical_schema: SchemaRef,
     logical_schema: SchemaRef,
     kernel_schemas: KernelScanSchemas,
     physical_predicate: Option<DeltaKernelPredicate>,
     row_predicate: Option<DeltaKernelPredicate>,
-    output_batch_size: Option<usize>,
+    output_batch_size_rows: Option<usize>,
     permit: FileReadPermit,
     cancellation: ScanCancellation,
 }
 
 #[derive(Clone)]
-struct DirectParquetSchemaMatch {
-    provider_schema: SchemaRef,
+struct ParquetSchemaAlignment {
+    target_schema: SchemaRef,
     projected_roots: Vec<usize>,
-    provider_columns: Vec<DirectParquetProviderColumn>,
+    target_column_plans: Vec<TargetColumnPlan>,
     needs_batch_reshape: bool,
 }
 
 #[derive(Clone)]
-enum DirectParquetProviderColumn {
+enum TargetColumnPlan {
     ProjectedStreamColumn {
         stream_index: usize,
-        field_plan: DirectParquetFieldPlan,
+        field_plan: FieldPlan,
     },
     Null,
 }
 
 #[derive(Clone)]
-enum DirectParquetFieldPlan {
+enum FieldPlan {
     Identity,
     Cast {
         target_type: DataType,
     },
     Struct {
-        children: Vec<DirectParquetStructChild>,
+        child_plans: Vec<StructChildPlan>,
     },
     List {
-        element_plan: Box<DirectParquetFieldPlan>,
+        element_plan: Box<FieldPlan>,
     },
     Map {
-        key_plan: Box<DirectParquetFieldPlan>,
-        value_plan: Box<DirectParquetFieldPlan>,
+        key_plan: Box<FieldPlan>,
+        value_plan: Box<FieldPlan>,
     },
 }
 
-impl DirectParquetFieldPlan {
+impl FieldPlan {
     fn is_identity(&self) -> bool {
         matches!(self, Self::Identity)
     }
 }
 
 #[derive(Clone)]
-enum DirectParquetStructChild {
+enum StructChildPlan {
     ProjectedChild {
         child_index: usize,
-        field_plan: DirectParquetFieldPlan,
+        field_plan: FieldPlan,
     },
     Null,
 }
 
 #[derive(Clone)]
-struct DirectParquetRootMatch {
+struct RootMatch {
     parquet_root_index: usize,
-    field_plan: DirectParquetFieldPlan,
+    field_plan: FieldPlan,
 }
 
-impl DirectParquetFileReader {
+impl DirectParquetReader {
     fn new(
         engine_context: Arc<DeltaKernelEngineContext>,
-        execution_options: DeltaReaderExecutionOptions,
-        metrics: DeltaReadMetrics,
+        execution_options: DeltaScanExecutionOptions,
+        metrics: DeltaScanMetrics,
     ) -> Self {
         let store = Arc::new(MeteredParquetObjectStore::new(
             engine_context.object_store(),
@@ -190,18 +185,23 @@ impl DirectParquetFileReader {
             store,
             execution_options,
             metrics,
+            metadata_cache: None,
         }
     }
 
-    async fn load_split_parquet_metadata(
+    fn with_metadata_cache(mut self, metadata_cache: Arc<RangedParquetMetadataCache>) -> Self {
+        self.metadata_cache = Some(metadata_cache);
+        self
+    }
+
+    async fn load_ranged_parquet_metadata(
         &self,
-        metadata_cache: Option<&DirectParquetMetadataCache>,
         path: &Path,
         file_size: u64,
         reader: &mut ParquetObjectReader,
         options: &ArrowReaderOptions,
     ) -> Result<Arc<ParquetMetaData>, DeltaReaderError> {
-        let metadata = match metadata_cache {
+        let metadata = match self.metadata_cache.as_deref() {
             Some(cache) => cache
                 .entry(path, file_size)
                 .get_or_try_init(|| reader.get_metadata(Some(options)))
@@ -217,7 +217,7 @@ impl DirectParquetFileReader {
     async fn parquet_object_for_task(
         &self,
         task: &DeltaScanFileTask,
-    ) -> Result<DirectParquetObject, DeltaReaderError> {
+    ) -> Result<ParquetFileObject, DeltaReaderError> {
         let object = self.resolve_parquet_object(task)?;
         if task.parquet_byte_range.is_some() {
             return Ok(object);
@@ -225,48 +225,25 @@ impl DirectParquetFileReader {
         self.buffer_small_parquet_object(object).await
     }
 
-    #[cfg(test)]
-    async fn open_parquet_stream(
-        &self,
-        task: &DeltaScanFileTask,
-        provider_schema: SchemaRef,
-        output_batch_size: Option<usize>,
-        physical_predicate: Option<&DeltaKernelPredicate>,
-        row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
-        include_original_row_index: bool,
-    ) -> Result<DirectParquetStream, DeltaReaderError> {
-        self.open_parquet_stream_with_metadata_cache(
-            task,
-            provider_schema,
-            output_batch_size,
-            physical_predicate,
-            row_predicate,
-            include_original_row_index,
-            None,
-        )
-        .await
-    }
-
     #[allow(clippy::too_many_arguments)]
-    async fn open_parquet_stream_with_metadata_cache(
+    async fn open_physical_parquet_stream(
         &self,
         task: &DeltaScanFileTask,
-        provider_schema: SchemaRef,
-        output_batch_size: Option<usize>,
+        target_schema: SchemaRef,
+        output_batch_size_rows: Option<usize>,
         physical_predicate: Option<&DeltaKernelPredicate>,
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
-        metadata_cache: Option<&DirectParquetMetadataCache>,
-    ) -> Result<DirectParquetStream, DeltaReaderError> {
+    ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
         let file_size = object.file_size;
         let path = object.path;
         let reader = ParquetObjectReader::new(object.store, path.clone()).with_file_size(file_size);
-        let mut reader = match self.execution_options.parquet_metadata_size_hint() {
+        let mut reader = match self.execution_options.parquet_metadata_size_hint_bytes() {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
         };
-        let reader_options = direct_parquet_arrow_reader_options(include_original_row_index)
+        let reader_options = arrow_reader_options(include_original_row_index)
             .boxed()
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
@@ -275,26 +252,20 @@ impl DirectParquetFileReader {
             // Ranged tasks need explicit footer metadata to select row groups.
             // Sharing it avoids one footer read for every range of the same file.
             let metadata = self
-                .load_split_parquet_metadata(
-                    metadata_cache,
-                    &path,
-                    file_size,
-                    &mut reader,
-                    &reader_options,
-                )
+                .load_ranged_parquet_metadata(&path, file_size, &mut reader, &reader_options)
                 .await?;
             let metadata = ArrowReaderMetadata::try_new(metadata, reader_options.clone())
                 .boxed()
                 .context(DataFileReadSnafu {
                     reason: "parquet_read_setup_failed",
                 })?;
-            let metadata = if schema_uses_view_types(&provider_schema) {
+            let metadata = if schema_uses_view_types(&target_schema) {
                 metadata_with_view_types(metadata, reader_options)?
             } else {
                 metadata
             };
             ParquetRecordBatchStreamBuilder::new_with_metadata(reader, metadata)
-        } else if schema_uses_view_types(&provider_schema) {
+        } else if schema_uses_view_types(&target_schema) {
             // View arrays require rewriting the Arrow schema stored in the
             // metadata before constructing the stream builder.
             let mut metadata_reader = reader.clone();
@@ -318,15 +289,12 @@ impl DirectParquetFileReader {
                     reason: "parquet_read_setup_failed",
                 })?
         };
-        let schema_match = build_direct_parquet_schema_match(
-            builder.parquet_schema(),
-            builder.schema(),
-            provider_schema,
-        )
-        .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
+        let schema_alignment =
+            build_schema_alignment(builder.parquet_schema(), builder.schema(), target_schema)
+                .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
         let projection =
-            ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
-        let row_groups = direct_parquet_pruned_row_groups(
+            ProjectionMask::roots(builder.parquet_schema(), schema_alignment.projected_roots());
+        let row_groups = pruned_row_groups(
             builder.metadata(),
             file_size,
             task.parquet_byte_range.as_ref(),
@@ -343,10 +311,10 @@ impl DirectParquetFileReader {
             None => builder,
         };
         let row_filter = row_predicate.map(|(predicate, kernel_schemas)| {
-            self.direct_parquet_row_filter(
+            self.row_filter(
                 predicate,
                 kernel_schemas,
-                &schema_match,
+                &schema_alignment,
                 builder.parquet_schema(),
             )
         });
@@ -354,7 +322,7 @@ impl DirectParquetFileReader {
             Some(row_filter) => builder.with_row_filter(row_filter),
             None => builder,
         };
-        let builder = match output_batch_size {
+        let builder = match output_batch_size_rows {
             Some(batch_size) => builder.with_batch_size(batch_size),
             None => builder,
         };
@@ -367,48 +335,38 @@ impl DirectParquetFileReader {
                 reason: "parquet_read_setup_failed",
             })?;
 
-        Ok(DirectParquetStream {
+        Ok(PhysicalParquetStream {
             stream,
-            schema_match,
+            schema_alignment,
             include_original_row_index,
         })
     }
 
-    async fn open_logical_file_stream(
+    async fn open_logical_data_file_stream(
         self: &Arc<Self>,
-        request: DirectParquetFileReadRequest,
-    ) -> Result<DirectParquetFileReadStream, DeltaReaderError> {
-        self.open_logical_file_stream_with_metadata_cache(request, None)
-            .await
-    }
-
-    async fn open_logical_file_stream_with_metadata_cache(
-        self: &Arc<Self>,
-        request: DirectParquetFileReadRequest,
-        metadata_cache: Option<&DirectParquetMetadataCache>,
-    ) -> Result<DirectParquetFileReadStream, DeltaReaderError> {
+        request: LogicalDataFileReadRequest,
+    ) -> Result<LogicalDataFileStream, DeltaReaderError> {
         let include_original_row_index = request.task.deletion_vector.is_present();
-        let parquet = tokio::select! {
+        let physical_stream = tokio::select! {
             biased;
             () = request.cancellation.cancelled() => return Err(cancelled_error()),
-            result = self.open_parquet_stream_with_metadata_cache(
+            result = self.open_physical_parquet_stream(
                 &request.task,
                 request.physical_schema,
-                request.output_batch_size,
+                request.output_batch_size_rows,
                 request.physical_predicate.as_ref(),
                 request
                     .row_predicate
                     .as_ref()
                     .map(|predicate| (predicate, &request.kernel_schemas)),
                 include_original_row_index,
-                metadata_cache,
             ) => result?,
         };
         if request.cancellation.is_cancelled() {
             return Err(cancelled_error());
         }
-        let deletion_vector = load_deletion_vector_selection_from_engine_context(
-            Arc::clone(&self.engine_context),
+        let deletion_vector = load_deletion_vector_masker(
+            &self.engine_context,
             request.task.deletion_vector.clone(),
             &self.metrics,
         )
@@ -417,34 +375,33 @@ impl DirectParquetFileReader {
             return Err(cancelled_error());
         }
 
-        Ok(DirectParquetFileReadStream {
-            parquet,
+        Ok(LogicalDataFileStream {
+            physical_stream,
             engine_context: Arc::clone(&self.engine_context),
             kernel_schemas: request.kernel_schemas,
             logical_schema: request.logical_schema,
             transform: request.task.transform,
             deletion_vector,
-            uses_original_row_indexes: include_original_row_index,
             cancellation: request.cancellation,
             _permit: request.permit,
         })
     }
 
-    fn direct_parquet_row_filter(
+    fn row_filter(
         &self,
         predicate: &DeltaKernelPredicate,
         kernel_schemas: &KernelScanSchemas,
-        schema_match: &DirectParquetSchemaMatch,
+        schema_alignment: &ParquetSchemaAlignment,
         parquet_schema: &SchemaDescriptor,
     ) -> RowFilter {
-        let projection = ProjectionMask::roots(parquet_schema, schema_match.projected_roots());
+        let projection = ProjectionMask::roots(parquet_schema, schema_alignment.projected_roots());
         let engine_context = Arc::clone(&self.engine_context);
         let predicate = predicate.clone();
         let kernel_schemas = kernel_schemas.clone();
-        let schema_match = schema_match.clone();
+        let schema_alignment = schema_alignment.clone();
         let predicate = ArrowPredicateFn::new(projection, move |batch| {
-            let batch = schema_match
-                .reshape_batch_to_provider_schema(batch)
+            let batch = schema_alignment
+                .reshape_batch_to_target_schema(batch)
                 .map_err(|error| arrow::error::ArrowError::ComputeError(error.to_string()))?;
             engine_context
                 .evaluate_predicate(&kernel_schemas, &predicate, batch)
@@ -457,7 +414,7 @@ impl DirectParquetFileReader {
     fn resolve_parquet_object(
         &self,
         task: &DeltaScanFileTask,
-    ) -> Result<DirectParquetObject, DeltaReaderError> {
+    ) -> Result<ParquetFileObject, DeltaReaderError> {
         let location = self
             .engine_context
             .table_url()
@@ -478,7 +435,7 @@ impl DirectParquetFileReader {
             )
         })?;
 
-        Ok(DirectParquetObject {
+        Ok(ParquetFileObject {
             store: Arc::clone(&self.store),
             path,
             file_size,
@@ -487,11 +444,11 @@ impl DirectParquetFileReader {
 
     async fn buffer_small_parquet_object(
         &self,
-        mut object: DirectParquetObject,
-    ) -> Result<DirectParquetObject, DeltaReaderError> {
+        mut object: ParquetFileObject,
+    ) -> Result<ParquetFileObject, DeltaReaderError> {
         let should_buffer = self
             .execution_options
-            .parquet_full_file_read_threshold()
+            .parquet_full_file_read_threshold_bytes()
             .map(|threshold| u64::try_from(threshold).unwrap_or(u64::MAX))
             .is_some_and(|threshold| object.file_size <= threshold);
         if !should_buffer {
@@ -551,50 +508,19 @@ fn metadata_with_view_types(
 
 pub(crate) fn direct_parquet_file_executor(
     plan: &Arc<DeltaScanPlan>,
-    output_batch_size: Option<usize>,
+    output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
+    metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
-    let reader = Arc::new(DirectParquetFileReader::new(
+    let reader = DirectParquetReader::new(
         Arc::clone(&plan.engine_context),
         plan.execution_options,
         plan.metrics.clone(),
-    ));
-    direct_parquet_file_executor_from_reader::<false>(
-        plan,
-        output_batch_size,
-        row_predicate,
-        reader,
-        None,
-    )
-}
-
-#[cfg(feature = "datafusion")]
-pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
-    plan: &Arc<DeltaScanPlan>,
-    output_batch_size: Option<usize>,
-    row_predicate: Option<DeltaKernelPredicate>,
-    metadata_cache: Arc<DirectParquetMetadataCache>,
-) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
-    direct_parquet_file_executor_from_reader::<true>(
-        plan,
-        output_batch_size,
-        row_predicate,
-        Arc::new(DirectParquetFileReader::new(
-            Arc::clone(&plan.engine_context),
-            plan.execution_options,
-            plan.metrics.clone(),
-        )),
-        Some(metadata_cache),
-    )
-}
-
-fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
-    plan: &Arc<DeltaScanPlan>,
-    output_batch_size: Option<usize>,
-    row_predicate: Option<DeltaKernelPredicate>,
-    reader: Arc<DirectParquetFileReader>,
-    metadata_cache: Option<Arc<DirectParquetMetadataCache>>,
-) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
+    );
+    let reader = Arc::new(match metadata_cache {
+        Some(cache) => reader.with_metadata_cache(cache),
+        None => reader,
+    });
     let physical_schema = Arc::clone(&plan.physical_schema);
     let logical_schema = Arc::clone(&plan.logical_schema);
     let kernel_schemas = plan.kernel_schemas.clone();
@@ -602,7 +528,9 @@ fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
 
     Arc::new(move |task, permit, cancellation| {
         if let Some(bytes) = task.estimated_scan_bytes() {
-            reader.metrics.record_parquet_data_file_opened_bytes(bytes);
+            reader
+                .metrics
+                .record_estimated_parquet_task_bytes_admitted(bytes);
         }
         let reader = Arc::clone(&reader);
         let physical_schema = Arc::clone(&physical_schema);
@@ -610,29 +538,19 @@ fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
         let kernel_schemas = kernel_schemas.clone();
         let physical_predicate = physical_predicate.clone();
         let row_predicate = row_predicate.clone();
-        let metadata_cache = metadata_cache.clone();
         Box::pin(async move {
-            let request = DirectParquetFileReadRequest {
+            let request = LogicalDataFileReadRequest {
                 task,
                 physical_schema,
                 logical_schema,
                 kernel_schemas,
                 physical_predicate,
                 row_predicate,
-                output_batch_size,
+                output_batch_size_rows,
                 permit,
                 cancellation,
             };
-            let file = if SHARED_METADATA {
-                reader
-                    .open_logical_file_stream_with_metadata_cache(
-                        request,
-                        metadata_cache.as_deref(),
-                    )
-                    .await?
-            } else {
-                reader.open_logical_file_stream(request).await?
-            };
+            let file = reader.open_logical_data_file_stream(request).await?;
             let batches = stream::try_unfold(file, |mut file| async move {
                 file.next_batch()
                     .await
@@ -643,7 +561,7 @@ fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
     })
 }
 
-impl DirectParquetStream {
+impl PhysicalParquetStream {
     #[cfg(test)]
     async fn next_batch(&mut self) -> Result<Option<RecordBatch>, DeltaReaderError> {
         self.next_batch_with_original_row_indexes()
@@ -681,9 +599,10 @@ impl DirectParquetStream {
         } else {
             None
         };
-        let batch = if self.include_original_row_index || self.schema_match.needs_batch_reshape {
-            self.schema_match
-                .reshape_batch_to_provider_schema(batch)
+        let batch = if self.include_original_row_index || self.schema_alignment.needs_batch_reshape
+        {
+            self.schema_alignment
+                .reshape_batch_to_target_schema(batch)
                 .map_err(|error| data_file_error("parquet_batch_reshape_failed", error))?
         } else {
             batch
@@ -693,20 +612,16 @@ impl DirectParquetStream {
     }
 }
 
-impl DirectParquetFileReadStream {
+impl LogicalDataFileStream {
     async fn next_batch(&mut self) -> Result<Option<RecordBatch>, DeltaReaderError> {
         let next = tokio::select! {
             biased;
             () = self.cancellation.cancelled() => return Err(cancelled_error()),
-            result = self.parquet.next_batch_with_original_row_indexes() => result?,
+            result = self.physical_stream.next_batch_with_original_row_indexes() => result?,
         };
         let Some((physical_batch, original_row_indexes)) = next else {
             if let Some(deletion_vector) = self.deletion_vector.as_mut() {
-                if self.uses_original_row_indexes {
-                    deletion_vector.finish_original_row_indexes()?;
-                } else {
-                    deletion_vector.finish()?;
-                }
+                deletion_vector.finish_original_row_indexes()?;
             }
             return Ok(None);
         };
@@ -735,7 +650,7 @@ impl DirectParquetFileReadStream {
     }
 }
 
-fn direct_parquet_arrow_reader_options(
+fn arrow_reader_options(
     include_original_row_index: bool,
 ) -> parquet::errors::Result<ArrowReaderOptions> {
     if !include_original_row_index {
@@ -755,50 +670,48 @@ fn cancelled_error() -> DeltaReaderError {
     .build()
 }
 
-impl DirectParquetSchemaMatch {
+impl ParquetSchemaAlignment {
     fn projected_roots(&self) -> impl Iterator<Item = usize> + '_ {
         self.projected_roots.iter().copied()
     }
 
-    fn reshape_batch_to_provider_schema(
+    fn reshape_batch_to_target_schema(
         &self,
         batch: RecordBatch,
     ) -> Result<RecordBatch, delta_kernel::Error> {
         let columns = self
-            .provider_columns
+            .target_column_plans
             .iter()
-            .zip(self.provider_schema.fields())
-            .map(|(column, field)| match column {
-                DirectParquetProviderColumn::ProjectedStreamColumn {
+            .zip(self.target_schema.fields())
+            .map(|(column_plan, field)| match column_plan {
+                TargetColumnPlan::ProjectedStreamColumn {
                     stream_index,
                     field_plan,
-                } => reshape_array_to_provider_field(
+                } => reshape_array_to_target_field(
                     Arc::clone(batch.column(*stream_index)),
                     field,
                     field_plan,
                 ),
-                DirectParquetProviderColumn::Null => {
-                    Ok(new_null_array(field.data_type(), batch.num_rows()))
-                }
+                TargetColumnPlan::Null => Ok(new_null_array(field.data_type(), batch.num_rows())),
             })
             .collect::<Result<Vec<ArrayRef>, _>>()?;
 
-        RecordBatch::try_new(Arc::clone(&self.provider_schema), columns)
+        RecordBatch::try_new(Arc::clone(&self.target_schema), columns)
             .map_err(delta_kernel::Error::from)
     }
 }
 
-fn build_direct_parquet_schema_match(
+fn build_schema_alignment(
     parquet_schema: &SchemaDescriptor,
     parquet_arrow_schema: &SchemaRef,
-    provider_schema: SchemaRef,
-) -> Result<DirectParquetSchemaMatch, delta_kernel::Error> {
-    let root_matches = provider_schema
+    target_schema: SchemaRef,
+) -> Result<ParquetSchemaAlignment, delta_kernel::Error> {
+    let root_matches = target_schema
         .fields()
         .iter()
-        .map(|provider_field| {
-            match_provider_field_to_parquet_root(
-                provider_field,
+        .map(|target_field| {
+            match_target_field_to_parquet_root(
+                target_field,
                 parquet_schema.root_schema().get_fields(),
                 parquet_arrow_schema,
             )
@@ -814,62 +727,62 @@ fn build_direct_parquet_schema_match(
         .collect::<Vec<_>>();
     projected_roots.sort_unstable();
     projected_roots.dedup();
-    let provider_columns = root_matches
+    let target_column_plans = root_matches
         .iter()
-        .zip(provider_schema.fields())
-        .map(|(root_match, provider_field)| match root_match {
+        .zip(target_schema.fields())
+        .map(|(root_match, target_field)| match root_match {
             Some(root_match) => projected_roots
                 .iter()
                 .position(|root| *root == root_match.parquet_root_index)
-                .map(
-                    |stream_index| DirectParquetProviderColumn::ProjectedStreamColumn {
-                        stream_index,
-                        field_plan: root_match.field_plan.clone(),
-                    },
-                )
+                .map(|stream_index| TargetColumnPlan::ProjectedStreamColumn {
+                    stream_index,
+                    field_plan: root_match.field_plan.clone(),
+                })
                 .ok_or_else(|| {
                     delta_kernel::Error::generic("matched Parquet root was not projected")
                 }),
-            None if provider_field.is_nullable() => Ok(DirectParquetProviderColumn::Null),
+            None if target_field.is_nullable() => Ok(TargetColumnPlan::Null),
             None => Err(delta_kernel::Error::generic(format!(
-                "non-nullable provider field '{}' is missing from the Parquet file",
-                provider_field.name()
+                "non-nullable target field '{}' is missing from the Parquet file",
+                target_field.name()
             ))),
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let needs_batch_reshape = provider_columns
+    let needs_batch_reshape = target_column_plans
         .iter()
-        .zip(provider_schema.fields())
+        .zip(target_schema.fields())
         .enumerate()
-        .any(|(provider_index, (column, provider_field))| match column {
-            DirectParquetProviderColumn::ProjectedStreamColumn {
-                stream_index,
-                field_plan,
-            } => {
-                *stream_index != provider_index
-                    || !field_plan.is_identity()
-                    || projected_roots
-                        .get(*stream_index)
-                        .and_then(|root| parquet_arrow_schema.fields().get(*root))
-                        .is_none_or(|file_field| file_field.name() != provider_field.name())
-            }
-            DirectParquetProviderColumn::Null => true,
-        });
+        .any(
+            |(target_index, (column_plan, target_field))| match column_plan {
+                TargetColumnPlan::ProjectedStreamColumn {
+                    stream_index,
+                    field_plan,
+                } => {
+                    *stream_index != target_index
+                        || !field_plan.is_identity()
+                        || projected_roots
+                            .get(*stream_index)
+                            .and_then(|root| parquet_arrow_schema.fields().get(*root))
+                            .is_none_or(|file_field| file_field.name() != target_field.name())
+                }
+                TargetColumnPlan::Null => true,
+            },
+        );
 
-    Ok(DirectParquetSchemaMatch {
-        provider_schema,
+    Ok(ParquetSchemaAlignment {
+        target_schema,
         projected_roots,
-        provider_columns,
+        target_column_plans,
         needs_batch_reshape,
     })
 }
 
-fn match_provider_field_to_parquet_root(
-    provider_field: &Field,
+fn match_target_field_to_parquet_root(
+    target_field: &Field,
     parquet_roots: &[TypePtr],
     parquet_arrow_schema: &SchemaRef,
-) -> Result<Option<DirectParquetRootMatch>, delta_kernel::Error> {
-    if let Some(field_id) = arrow_field_id(provider_field)? {
+) -> Result<Option<RootMatch>, delta_kernel::Error> {
+    if let Some(field_id) = arrow_field_id(target_field)? {
         let matches = parquet_roots
             .iter()
             .enumerate()
@@ -877,20 +790,20 @@ fn match_provider_field_to_parquet_root(
             .collect::<Vec<_>>();
         match matches.as_slice() {
             [index] => {
-                return Ok(Some(DirectParquetRootMatch {
+                return Ok(Some(RootMatch {
                     parquet_root_index: *index,
                     field_plan: build_matched_field_plan(
-                        provider_field,
+                        target_field,
                         parquet_arrow_schema.field(*index),
                         parquet_roots[*index].as_ref(),
-                        provider_field.name(),
+                        target_field.name(),
                     )?,
                 }));
             }
             [] => {}
             _ => {
                 return Err(delta_kernel::Error::generic(format!(
-                    "multiple Parquet fields matched provider field id {field_id}"
+                    "multiple Parquet fields matched target field id {field_id}"
                 )));
             }
         }
@@ -900,103 +813,103 @@ fn match_provider_field_to_parquet_root(
         .fields()
         .iter()
         .enumerate()
-        .find(|(_, file_field)| file_field.name() == provider_field.name())
+        .find(|(_, file_field)| file_field.name() == target_field.name())
     else {
         return Ok(None);
     };
 
-    Ok(Some(DirectParquetRootMatch {
+    Ok(Some(RootMatch {
         parquet_root_index: index,
         field_plan: build_matched_field_plan(
-            provider_field,
+            target_field,
             file_field,
             parquet_roots[index].as_ref(),
-            provider_field.name(),
+            target_field.name(),
         )?,
     }))
 }
 
 fn build_matched_field_plan(
-    provider_field: &Field,
+    target_field: &Field,
     file_field: &Field,
     parquet_field: &parquet::schema::types::Type,
     path: &str,
-) -> Result<DirectParquetFieldPlan, delta_kernel::Error> {
-    match (provider_field.data_type(), file_field.data_type()) {
-        (DataType::Struct(provider_fields), DataType::Struct(file_fields)) => {
+) -> Result<FieldPlan, delta_kernel::Error> {
+    match (target_field.data_type(), file_field.data_type()) {
+        (DataType::Struct(target_fields), DataType::Struct(file_fields)) => {
             build_matched_struct_field_plan(
-                provider_field,
-                provider_fields,
+                target_field,
+                target_fields,
                 file_field,
                 file_fields,
                 parquet_field,
                 path,
             )
         }
-        (DataType::List(provider_element), DataType::List(file_element)) => {
+        (DataType::List(target_element), DataType::List(file_element)) => {
             build_matched_list_field_plan(
-                provider_field,
-                provider_element,
+                target_field,
+                target_element,
                 file_field,
                 file_element,
                 parquet_field,
                 path,
             )
         }
-        (DataType::Map(provider_entries, provider_ordered), DataType::Map(file_entries, _)) => {
+        (DataType::Map(target_entries, target_ordered), DataType::Map(file_entries, _)) => {
             build_matched_map_field_plan(
-                provider_entries,
-                *provider_ordered,
+                target_entries,
+                *target_ordered,
                 file_field,
                 file_entries,
                 parquet_field,
                 path,
             )
         }
-        _ => direct_parquet_leaf_cast_plan(provider_field.data_type(), file_field.data_type())
+        _ => leaf_cast_plan(target_field.data_type(), file_field.data_type())
             .map(|target_type| match target_type {
-                Some(target_type) => DirectParquetFieldPlan::Cast { target_type },
-                None => DirectParquetFieldPlan::Identity,
+                Some(target_type) => FieldPlan::Cast { target_type },
+                None => FieldPlan::Identity,
             })
             .map_err(|()| {
-                incompatible_parquet_type(path, provider_field.data_type(), file_field.data_type())
+                incompatible_parquet_type(path, target_field.data_type(), file_field.data_type())
             }),
     }
 }
 
 fn build_matched_map_field_plan(
-    provider_entries: &Arc<Field>,
-    provider_ordered: bool,
+    target_entries: &Arc<Field>,
+    target_ordered: bool,
     file_field: &Field,
     file_entries: &Arc<Field>,
     parquet_field: &parquet::schema::types::Type,
     path: &str,
-) -> Result<DirectParquetFieldPlan, delta_kernel::Error> {
-    let (provider_key, provider_value) = map_entry_fields(provider_entries, path)?;
+) -> Result<FieldPlan, delta_kernel::Error> {
+    let (target_key, target_value) = map_entry_fields(target_entries, path)?;
     let (file_key, file_value) = map_entry_fields(file_entries, path)?;
     let key_plan = build_matched_field_plan(
-        provider_key,
+        target_key,
         file_key,
         parquet_map_entry_field(parquet_field, path, 0)?,
         &format!("{path}.key"),
     )?;
     let value_plan = build_matched_field_plan(
-        provider_value,
+        target_value,
         file_value,
         parquet_map_entry_field(parquet_field, path, 1)?,
         &format!("{path}.value"),
     )?;
-    let provider_type = DataType::Map(Arc::clone(provider_entries), provider_ordered);
-    if file_field.data_type() != &provider_type
+    let target_type = DataType::Map(Arc::clone(target_entries), target_ordered);
+    if file_field.data_type() != &target_type
         || !key_plan.is_identity()
         || !value_plan.is_identity()
     {
-        Ok(DirectParquetFieldPlan::Map {
+        Ok(FieldPlan::Map {
             key_plan: Box::new(key_plan),
             value_plan: Box::new(value_plan),
         })
     } else {
-        Ok(DirectParquetFieldPlan::Identity)
+        Ok(FieldPlan::Identity)
     }
 }
 
@@ -1006,13 +919,13 @@ fn map_entry_fields<'a>(
 ) -> Result<(&'a Field, &'a Field), delta_kernel::Error> {
     let DataType::Struct(fields) = entries.data_type() else {
         return Err(delta_kernel::Error::generic(format!(
-            "provider field '{path}' expected map entries struct but has type {}",
+            "target field '{path}' expected map entries struct but has type {}",
             entries.data_type()
         )));
     };
     if fields.len() != 2 {
         return Err(delta_kernel::Error::generic(format!(
-            "provider field '{path}' expected map entries to contain key and value fields but found {}",
+            "target field '{path}' expected map entries to contain key and value fields but found {}",
             fields.len()
         )));
     }
@@ -1027,19 +940,19 @@ fn parquet_map_entry_field<'a>(
     let parquet_children = parquet_field.get_fields();
     let Some(repeated_child) = parquet_children.first() else {
         return Err(delta_kernel::Error::generic(format!(
-            "provider field '{path}' expected Parquet map entry metadata"
+            "target field '{path}' expected Parquet map entry metadata"
         )));
     };
     if parquet_children.len() != 1 {
         return Err(delta_kernel::Error::generic(format!(
-            "provider field '{path}' expected one Parquet map entry child but found {}",
+            "target field '{path}' expected one Parquet map entry child but found {}",
             parquet_children.len()
         )));
     }
     let entry_children = repeated_child.get_fields();
     if entry_children.len() != 2 {
         return Err(delta_kernel::Error::generic(format!(
-            "provider field '{path}' expected Parquet map entry to contain two fields but found {}",
+            "target field '{path}' expected Parquet map entry to contain two fields but found {}",
             entry_children.len()
         )));
     }
@@ -1048,39 +961,39 @@ fn parquet_map_entry_field<'a>(
         .map(AsRef::as_ref)
         .ok_or_else(|| {
             delta_kernel::Error::generic(format!(
-                "provider field '{path}' expected Parquet map entry key and value fields"
+                "target field '{path}' expected Parquet map entry key and value fields"
             ))
         })
 }
 
 fn build_matched_list_field_plan(
-    provider_field: &Field,
-    provider_element: &Arc<Field>,
+    target_field: &Field,
+    target_element: &Arc<Field>,
     file_field: &Field,
     file_element: &Arc<Field>,
     parquet_field: &parquet::schema::types::Type,
     path: &str,
-) -> Result<DirectParquetFieldPlan, delta_kernel::Error> {
+) -> Result<FieldPlan, delta_kernel::Error> {
     let element_path = format!("{path}.element");
     let element_plan = build_matched_field_plan(
-        provider_element,
+        target_element,
         file_element,
         parquet_list_element_field(parquet_field, path)?,
         &element_path,
     )?;
-    if matches!(element_plan, DirectParquetFieldPlan::Cast { .. }) {
+    if matches!(element_plan, FieldPlan::Cast { .. }) {
         return Err(incompatible_parquet_type(
             &element_path,
-            provider_element.data_type(),
+            target_element.data_type(),
             file_element.data_type(),
         ));
     }
-    if file_field.data_type() != provider_field.data_type() || !element_plan.is_identity() {
-        Ok(DirectParquetFieldPlan::List {
+    if file_field.data_type() != target_field.data_type() || !element_plan.is_identity() {
+        Ok(FieldPlan::List {
             element_plan: Box::new(element_plan),
         })
     } else {
-        Ok(DirectParquetFieldPlan::Identity)
+        Ok(FieldPlan::Identity)
     }
 }
 
@@ -1091,12 +1004,12 @@ fn parquet_list_element_field<'a>(
     let parquet_children = parquet_field.get_fields();
     let Some(repeated_child) = parquet_children.first() else {
         return Err(delta_kernel::Error::generic(format!(
-            "provider field '{path}' expected Parquet list element metadata"
+            "target field '{path}' expected Parquet list element metadata"
         )));
     };
     if parquet_children.len() != 1 {
         return Err(delta_kernel::Error::generic(format!(
-            "provider field '{path}' expected one Parquet list child but found {}",
+            "target field '{path}' expected one Parquet list child but found {}",
             parquet_children.len()
         )));
     }
@@ -1109,60 +1022,64 @@ fn parquet_list_element_field<'a>(
 }
 
 fn build_matched_struct_field_plan(
-    provider_field: &Field,
-    provider_fields: &Fields,
+    target_field: &Field,
+    target_fields: &Fields,
     file_field: &Field,
     file_fields: &Fields,
     parquet_field: &parquet::schema::types::Type,
     path: &str,
-) -> Result<DirectParquetFieldPlan, delta_kernel::Error> {
+) -> Result<FieldPlan, delta_kernel::Error> {
     let parquet_children = parquet_field.get_fields();
     if parquet_children.len() != file_fields.len() {
         return Err(delta_kernel::Error::generic(format!(
-            "provider field '{path}' expected Parquet struct field metadata to match Arrow child count"
+            "target field '{path}' expected Parquet struct field metadata to match Arrow child count"
         )));
     }
-    let children = provider_fields
+    let child_plans = target_fields
         .iter()
-        .map(|provider_child| {
-            match_provider_struct_child(
-                provider_child,
+        .map(|target_child| {
+            match_target_struct_child(
+                target_child,
                 file_fields,
                 parquet_children,
-                &format!("{path}.{}", provider_child.name()),
+                &format!("{path}.{}", target_child.name()),
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let needs_reshape = file_field.data_type() != provider_field.data_type()
-        || children.iter().zip(provider_fields.iter()).enumerate().any(
-            |(provider_index, (child, provider_child))| match child {
-                DirectParquetStructChild::ProjectedChild {
-                    child_index,
-                    field_plan,
-                } => {
-                    *child_index != provider_index
-                        || !field_plan.is_identity()
-                        || file_fields
-                            .get(*child_index)
-                            .is_none_or(|file_child| file_child.name() != provider_child.name())
-                }
-                DirectParquetStructChild::Null => true,
-            },
-        );
+    let needs_reshape = file_field.data_type() != target_field.data_type()
+        || child_plans
+            .iter()
+            .zip(target_fields.iter())
+            .enumerate()
+            .any(
+                |(target_index, (child_plan, target_child))| match child_plan {
+                    StructChildPlan::ProjectedChild {
+                        child_index,
+                        field_plan,
+                    } => {
+                        *child_index != target_index
+                            || !field_plan.is_identity()
+                            || file_fields
+                                .get(*child_index)
+                                .is_none_or(|file_child| file_child.name() != target_child.name())
+                    }
+                    StructChildPlan::Null => true,
+                },
+            );
     if needs_reshape {
-        Ok(DirectParquetFieldPlan::Struct { children })
+        Ok(FieldPlan::Struct { child_plans })
     } else {
-        Ok(DirectParquetFieldPlan::Identity)
+        Ok(FieldPlan::Identity)
     }
 }
 
-fn match_provider_struct_child(
-    provider_child: &Field,
+fn match_target_struct_child(
+    target_child: &Field,
     file_fields: &Fields,
     parquet_children: &[TypePtr],
     path: &str,
-) -> Result<DirectParquetStructChild, delta_kernel::Error> {
-    if let Some(field_id) = arrow_field_id(provider_child)? {
+) -> Result<StructChildPlan, delta_kernel::Error> {
+    if let Some(field_id) = arrow_field_id(target_child)? {
         let matches = parquet_children
             .iter()
             .enumerate()
@@ -1174,13 +1091,13 @@ fn match_provider_struct_child(
             [index] => {
                 let file_child = file_fields.get(*index).ok_or_else(|| {
                     delta_kernel::Error::generic(format!(
-                        "provider field '{path}' matched Parquet field id {field_id} without Arrow metadata"
+                        "target field '{path}' matched Parquet field id {field_id} without Arrow metadata"
                     ))
                 })?;
-                return Ok(DirectParquetStructChild::ProjectedChild {
+                return Ok(StructChildPlan::ProjectedChild {
                     child_index: *index,
                     field_plan: build_matched_field_plan(
-                        provider_child,
+                        target_child,
                         file_child,
                         parquet_children[*index].as_ref(),
                         path,
@@ -1190,7 +1107,7 @@ fn match_provider_struct_child(
             [] => {}
             _ => {
                 return Err(delta_kernel::Error::generic(format!(
-                    "multiple Parquet fields matched provider field id {field_id} at '{path}'"
+                    "multiple Parquet fields matched target field id {field_id} at '{path}'"
                 )));
             }
         }
@@ -1198,20 +1115,20 @@ fn match_provider_struct_child(
     let Some((index, file_child)) = file_fields
         .iter()
         .enumerate()
-        .find(|(_, file_child)| file_child.name() == provider_child.name())
+        .find(|(_, file_child)| file_child.name() == target_child.name())
     else {
-        return if provider_child.is_nullable() {
-            Ok(DirectParquetStructChild::Null)
+        return if target_child.is_nullable() {
+            Ok(StructChildPlan::Null)
         } else {
             Err(delta_kernel::Error::generic(format!(
-                "non-nullable provider field '{path}' is missing from the Parquet file"
+                "non-nullable target field '{path}' is missing from the Parquet file"
             )))
         };
     };
-    Ok(DirectParquetStructChild::ProjectedChild {
+    Ok(StructChildPlan::ProjectedChild {
         child_index: index,
         field_plan: build_matched_field_plan(
-            provider_child,
+            target_child,
             file_child,
             parquet_children[index].as_ref(),
             path,
@@ -1221,48 +1138,41 @@ fn match_provider_struct_child(
 
 fn incompatible_parquet_type(
     path: &str,
-    provider_type: &DataType,
+    target_type: &DataType,
     file_type: &DataType,
 ) -> delta_kernel::Error {
     delta_kernel::Error::generic(format!(
-        "provider field '{path}' expected Parquet type {provider_type} but found {file_type}"
+        "target field '{path}' expected Parquet type {target_type} but found {file_type}"
     ))
 }
 
-fn direct_parquet_leaf_cast_plan(
-    provider_type: &DataType,
-    file_type: &DataType,
-) -> Result<Option<DataType>, ()> {
+fn leaf_cast_plan(target_type: &DataType, file_type: &DataType) -> Result<Option<DataType>, ()> {
     use DataType::{Date32, Decimal128, Float32, Float64, Int8, Int16, Int32, Int64, Timestamp};
 
-    if file_type.equals_datatype(provider_type) {
+    if file_type.equals_datatype(target_type) {
         return Ok(None);
     }
-    match (file_type, provider_type) {
-        (Timestamp(_, _), Timestamp(_, _)) => Ok(Some(provider_type.clone())),
-        (Int8, Int16 | Int32 | Int64 | Float64) => Ok(Some(provider_type.clone())),
-        (Int16, Int32 | Int64 | Float64) => Ok(Some(provider_type.clone())),
-        (Int32, Int64 | Float64) => Ok(Some(provider_type.clone())),
-        (Float32, Float64) => Ok(Some(provider_type.clone())),
+    match (file_type, target_type) {
+        (Timestamp(_, _), Timestamp(_, _)) => Ok(Some(target_type.clone())),
+        (Int8, Int16 | Int32 | Int64 | Float64) => Ok(Some(target_type.clone())),
+        (Int16, Int32 | Int64 | Float64) => Ok(Some(target_type.clone())),
+        (Int32, Int64 | Float64) => Ok(Some(target_type.clone())),
+        (Float32, Float64) => Ok(Some(target_type.clone())),
         (source_type, Decimal128(precision, scale))
-            if direct_parquet_can_upcast_to_decimal(source_type, *precision, *scale) =>
+            if can_upcast_to_decimal(source_type, *precision, *scale) =>
         {
-            Ok(Some(provider_type.clone()))
+            Ok(Some(target_type.clone()))
         }
-        (Date32, Timestamp(_, None)) => Ok(Some(provider_type.clone())),
-        (Int32, Date32) => Ok(Some(provider_type.clone())),
+        (Date32, Timestamp(_, None)) => Ok(Some(target_type.clone())),
+        (Int32, Date32) => Ok(Some(target_type.clone())),
         (Int64, Timestamp(arrow::datatypes::TimeUnit::Microsecond, _)) => {
-            Ok(Some(provider_type.clone()))
+            Ok(Some(target_type.clone()))
         }
         _ => Err(()),
     }
 }
 
-fn direct_parquet_can_upcast_to_decimal(
-    source_type: &DataType,
-    target_precision: u8,
-    target_scale: i8,
-) -> bool {
+fn can_upcast_to_decimal(source_type: &DataType, target_precision: u8, target_scale: i8) -> bool {
     use DataType::{Decimal128, Int8, Int16, Int32, Int64};
 
     let (source_precision, source_scale) = match source_type {
@@ -1285,7 +1195,7 @@ fn arrow_field_id(field: &Field) -> Result<Option<i32>, delta_kernel::Error> {
         .map(|field_id| {
             field_id.parse::<i32>().map_err(|error| {
                 delta_kernel::Error::generic(format!(
-                    "invalid provider field id metadata on '{}': {error}",
+                    "invalid target field id metadata on '{}': {error}",
                     field.name()
                 ))
             })
@@ -1298,22 +1208,22 @@ fn parquet_field_id(parquet_field: &TypePtr) -> Option<i32> {
     basic_info.has_id().then(|| basic_info.id())
 }
 
-fn reshape_array_to_provider_field(
+fn reshape_array_to_target_field(
     array: ArrayRef,
-    provider_field: &Field,
-    field_plan: &DirectParquetFieldPlan,
+    target_field: &Field,
+    field_plan: &FieldPlan,
 ) -> Result<ArrayRef, delta_kernel::Error> {
     match field_plan {
-        DirectParquetFieldPlan::Identity => Ok(array),
-        DirectParquetFieldPlan::Cast { target_type } => {
+        FieldPlan::Identity => Ok(array),
+        FieldPlan::Cast { target_type } => {
             cast(array.as_ref(), target_type).map_err(delta_kernel::Error::from)
         }
-        DirectParquetFieldPlan::Struct { children } => {
-            let DataType::Struct(provider_fields) = provider_field.data_type() else {
+        FieldPlan::Struct { child_plans } => {
+            let DataType::Struct(target_fields) = target_field.data_type() else {
                 return Err(delta_kernel::Error::generic(format!(
-                    "provider field '{}' expected struct reshape plan but has type {}",
-                    provider_field.name(),
-                    provider_field.data_type()
+                    "target field '{}' expected struct reshape plan but has type {}",
+                    target_field.name(),
+                    target_field.data_type()
                 )));
             };
             let struct_array = array
@@ -1321,57 +1231,56 @@ fn reshape_array_to_provider_field(
                 .downcast_ref::<StructArray>()
                 .ok_or_else(|| {
                     delta_kernel::Error::generic(format!(
-                        "provider field '{}' expected Parquet struct array but found {}",
-                        provider_field.name(),
+                        "target field '{}' expected Parquet struct array but found {}",
+                        target_field.name(),
                         array.data_type()
                     ))
                 })?;
-            let columns = children
+            let columns = child_plans
                 .iter()
-                .zip(provider_fields.iter())
-                .map(|(child, provider_child)| match child {
-                    DirectParquetStructChild::ProjectedChild {
+                .zip(target_fields.iter())
+                .map(|(child_plan, target_child)| match child_plan {
+                    StructChildPlan::ProjectedChild {
                         child_index,
                         field_plan,
-                    } => reshape_array_to_provider_field(
+                    } => reshape_array_to_target_field(
                         Arc::clone(struct_array.column(*child_index)),
-                        provider_child,
+                        target_child,
                         field_plan,
                     ),
-                    DirectParquetStructChild::Null => Ok(new_null_array(
-                        provider_child.data_type(),
-                        struct_array.len(),
-                    )),
+                    StructChildPlan::Null => {
+                        Ok(new_null_array(target_child.data_type(), struct_array.len()))
+                    }
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Arc::new(StructArray::new(
-                provider_fields.clone(),
+                target_fields.clone(),
                 columns,
                 struct_array.nulls().cloned(),
             )))
         }
-        DirectParquetFieldPlan::List { element_plan } => {
-            let DataType::List(provider_element) = provider_field.data_type() else {
+        FieldPlan::List { element_plan } => {
+            let DataType::List(target_element) = target_field.data_type() else {
                 return Err(delta_kernel::Error::generic(format!(
-                    "provider field '{}' expected list reshape plan but has type {}",
-                    provider_field.name(),
-                    provider_field.data_type()
+                    "target field '{}' expected list reshape plan but has type {}",
+                    target_field.name(),
+                    target_field.data_type()
                 )));
             };
             let list_array = array.as_any().downcast_ref::<ListArray>().ok_or_else(|| {
                 delta_kernel::Error::generic(format!(
-                    "provider field '{}' expected Parquet list array but found {}",
-                    provider_field.name(),
+                    "target field '{}' expected Parquet list array but found {}",
+                    target_field.name(),
                     array.data_type()
                 ))
             })?;
-            let values = reshape_array_to_provider_field(
+            let values = reshape_array_to_target_field(
                 Arc::clone(list_array.values()),
-                provider_element,
+                target_element,
                 element_plan,
             )?;
             ListArray::try_new(
-                Arc::clone(provider_element),
+                Arc::clone(target_element),
                 list_array.offsets().clone(),
                 values,
                 list_array.nulls().cloned(),
@@ -1379,52 +1288,43 @@ fn reshape_array_to_provider_field(
             .map(|array| Arc::new(array) as ArrayRef)
             .map_err(delta_kernel::Error::from)
         }
-        DirectParquetFieldPlan::Map {
+        FieldPlan::Map {
             key_plan,
             value_plan,
         } => {
-            let DataType::Map(provider_entries, provider_ordered) = provider_field.data_type()
-            else {
+            let DataType::Map(target_entries, target_ordered) = target_field.data_type() else {
                 return Err(delta_kernel::Error::generic(format!(
-                    "provider field '{}' expected map reshape plan but has type {}",
-                    provider_field.name(),
-                    provider_field.data_type()
+                    "target field '{}' expected map reshape plan but has type {}",
+                    target_field.name(),
+                    target_field.data_type()
                 )));
             };
             let map_array = array.as_any().downcast_ref::<MapArray>().ok_or_else(|| {
                 delta_kernel::Error::generic(format!(
-                    "provider field '{}' expected Parquet map array but found {}",
-                    provider_field.name(),
+                    "target field '{}' expected Parquet map array but found {}",
+                    target_field.name(),
                     array.data_type()
                 ))
             })?;
-            let (provider_key, provider_value) =
-                map_entry_fields(provider_entries, provider_field.name())?;
-            let keys = reshape_array_to_provider_field(
-                Arc::clone(map_array.keys()),
-                provider_key,
-                key_plan,
-            )?;
-            let values = reshape_array_to_provider_field(
+            let (target_key, target_value) = map_entry_fields(target_entries, target_field.name())?;
+            let keys =
+                reshape_array_to_target_field(Arc::clone(map_array.keys()), target_key, key_plan)?;
+            let values = reshape_array_to_target_field(
                 Arc::clone(map_array.values()),
-                provider_value,
+                target_value,
                 value_plan,
             )?;
             let entries = StructArray::new(
-                vec![
-                    Arc::new(provider_key.clone()),
-                    Arc::new(provider_value.clone()),
-                ]
-                .into(),
+                vec![Arc::new(target_key.clone()), Arc::new(target_value.clone())].into(),
                 vec![keys, values],
                 map_array.entries().nulls().cloned(),
             );
             MapArray::try_new(
-                Arc::clone(provider_entries),
+                Arc::clone(target_entries),
                 map_array.offsets().clone(),
                 entries,
                 map_array.nulls().cloned(),
-                *provider_ordered,
+                *target_ordered,
             )
             .map(|array| Arc::new(array) as ArrayRef)
             .map_err(delta_kernel::Error::from)
@@ -1481,12 +1381,12 @@ mod tests {
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
-        DirectParquetFileReadRequest, DirectParquetFileReader, DirectParquetMetadataCache,
+        DirectParquetReader, LogicalDataFileReadRequest, RangedParquetMetadataCache,
         data_file_error, direct_parquet_file_executor,
     };
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
-        DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions, DeltaSnapshotSelection,
+        DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection,
         DeltaStorageOptions, ParquetReaderBackend,
         delta::kernel::{
             DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
@@ -1495,10 +1395,10 @@ mod tests {
         delta::snapshot::load_delta_table_snapshot_blocking,
         reader::{
             backend::direct_parquet::metered_object_store::MeteredParquetObjectStore,
-            metrics::DeltaReadMetricsConfig,
+            metrics::DeltaScanMetricsConfig,
             planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
             scheduling::{
-                DeltaScanExecution, FileAdmission, FileReadPermit, ScanCancellation,
+                DeltaScanScheduler, FileAdmissionDecision, FileReadPermit, ScanCancellation,
                 ScanReadLimiter,
             },
         },
@@ -1759,35 +1659,30 @@ mod tests {
         }
     }
 
-    fn metrics() -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn metrics() -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
-            reader_backend: ParquetReaderBackend::DirectParquet,
-            scan_metadata_exhausted: Some(true),
+            parquet_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 1,
             files_planned: 1,
-            files_filtered_during_planning: Some(0),
-            estimated_rows: Some(1),
-            estimated_bytes: Some(1),
+            add_actions_excluded_during_planning: Some(0),
+            estimated_input_rows: Some(1),
+            estimated_input_bytes: Some(1),
         })
     }
 
     fn reader(
         root: &TestDir,
-        options: DeltaReaderExecutionOptions,
-        metrics: DeltaReadMetrics,
-    ) -> Result<DirectParquetFileReader, Box<dyn std::error::Error>> {
+        options: DeltaScanExecutionOptions,
+        metrics: DeltaScanMetrics,
+    ) -> Result<DirectParquetReader, Box<dyn std::error::Error>> {
         let table_url = url::Url::from_directory_path(root.path())
             .map_err(|()| "temporary table path cannot become a file URL")?;
-        let engine_context = Arc::new(DeltaKernelEngineContext::build(
+        let engine_context = Arc::new(DeltaKernelEngineContext::try_new(
             table_url,
             &DeltaStorageOptions::default(),
         )?);
-        Ok(DirectParquetFileReader::new(
-            engine_context,
-            options,
-            metrics,
-        ))
+        Ok(DirectParquetReader::new(engine_context, options, metrics))
     }
 
     fn task(path: &str, file_size: Option<u64>) -> Result<DeltaScanFileTask, DeltaReaderError> {
@@ -2005,28 +1900,28 @@ mod tests {
 
     fn pipeline_plan(
         root: &TestDir,
-        full_file_threshold: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
     ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         pipeline_plan_for_backend(
             root,
-            full_file_threshold,
+            full_file_read_threshold_bytes,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             true,
         )
     }
 
     fn pipeline_plan_for_backend(
         root: &TestDir,
-        full_file_threshold: Option<usize>,
-        metadata_size_hint: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
+        metadata_size_hint_bytes: Option<usize>,
         backend: ParquetReaderBackend,
         with_predicate: bool,
     ) -> Result<Arc<crate::reader::planning::DeltaScanPlan>, Box<dyn std::error::Error>> {
         pipeline_plan_for_backend_at(
             root,
-            full_file_threshold,
-            metadata_size_hint,
+            full_file_read_threshold_bytes,
+            metadata_size_hint_bytes,
             backend,
             with_predicate,
             DeltaSnapshotSelection::Latest,
@@ -2037,8 +1932,8 @@ mod tests {
     #[allow(clippy::too_many_arguments)]
     fn pipeline_plan_for_backend_at(
         root: &TestDir,
-        full_file_threshold: Option<usize>,
-        metadata_size_hint: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
+        metadata_size_hint_bytes: Option<usize>,
         backend: ParquetReaderBackend,
         with_predicate: bool,
         selection: DeltaSnapshotSelection,
@@ -2049,10 +1944,10 @@ mod tests {
             &DeltaStorageOptions::new(),
             selection,
         )?;
-        let options = DeltaReaderExecutionOptions::new()
-            .with_parquet_full_file_read_threshold(full_file_threshold)?
-            .with_parquet_metadata_size_hint(metadata_size_hint)?
-            .with_reader_backend(backend)?;
+        let options = DeltaScanExecutionOptions::new()
+            .with_parquet_full_file_read_threshold_bytes(full_file_read_threshold_bytes)?
+            .with_parquet_metadata_size_hint_bytes(metadata_size_hint_bytes)?
+            .with_parquet_backend(backend);
         let predicate = with_predicate.then(|| {
             DeltaKernelPredicate::from_test_predicate(Predicate::gt(
                 Expression::Column(ColumnName::new(["id"])),
@@ -2068,7 +1963,7 @@ mod tests {
             options,
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(target_partitions),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?))
     }
@@ -2089,10 +1984,10 @@ mod tests {
             &["region".to_owned()],
             Some(DeltaKernelPredicate::from_test_predicate(predicate)),
             true,
-            DeltaReaderExecutionOptions::new().with_reader_backend(backend)?,
+            DeltaScanExecutionOptions::new().with_parquet_backend(backend),
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?))
     }
@@ -2112,10 +2007,10 @@ mod tests {
             &[],
             None,
             false,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?))
     }
@@ -2130,13 +2025,13 @@ mod tests {
         plan: Arc<crate::reader::planning::DeltaScanPlan>,
         row_predicate: Option<DeltaKernelPredicate>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
-        let execution = DeltaScanExecution::new(Arc::clone(&plan));
-        let executor = direct_parquet_file_executor(&plan, Some(2), row_predicate);
+        let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
+        let executor = direct_parquet_file_executor(&plan, Some(2), row_predicate, None);
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
-            let mut stream = execution.partition_stream(
+            let mut stream = scheduler.partition_stream(
                 partition,
-                Arc::new(|_| Ok(FileAdmission::Admit)),
+                Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
                 Arc::clone(&executor),
             )?;
             while let Some(batch) = stream.next().await {
@@ -2149,13 +2044,13 @@ mod tests {
     async fn execute_kernel_plan(
         plan: Arc<crate::reader::planning::DeltaScanPlan>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
-        let execution = DeltaScanExecution::new(Arc::clone(&plan));
+        let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
         let executor = delta_kernel_file_executor(&plan);
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
-            let mut stream = execution.partition_stream(
+            let mut stream = scheduler.partition_stream(
                 partition,
-                Arc::new(|_| Ok(FileAdmission::Admit)),
+                Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
                 Arc::clone(&executor),
             )?;
             while let Some(batch) = stream.next().await {
@@ -2186,14 +2081,14 @@ mod tests {
         gate_request: GateRequest,
     ) -> Result<
         (
-            Arc<DirectParquetFileReader>,
+            Arc<DirectParquetReader>,
             Arc<GatedObjectStore>,
             DeltaScanFileTask,
         ),
         Box<dyn std::error::Error>,
     > {
         let task = plan.partitions[0].file_tasks[0].clone();
-        let mut reader = DirectParquetFileReader::new(
+        let mut reader = DirectParquetReader::new(
             Arc::clone(&plan.engine_context),
             plan.execution_options,
             plan.metrics.clone(),
@@ -2211,16 +2106,15 @@ mod tests {
         Ok((Arc::new(reader), gated, task))
     }
 
-    async fn gated_split_metadata_reader(
+    async fn gated_ranged_metadata_reader(
         name: &str,
         gate_request: GateRequest,
     ) -> Result<
         (
-            Arc<DirectParquetFileReader>,
+            Arc<DirectParquetReader>,
             Arc<GatedObjectStore>,
             DeltaScanFileTask,
             Arc<Schema>,
-            Arc<DirectParquetMetadataCache>,
         ),
         Box<dyn std::error::Error>,
     > {
@@ -2228,7 +2122,7 @@ mod tests {
         let parquet_bytes = parquet_bytes()?;
         let file_size = u64::try_from(parquet_bytes.len())?;
         let metrics = metrics();
-        let mut reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics.clone())?;
+        let mut reader = reader(&root, DeltaScanExecutionOptions::new(), metrics.clone())?;
         let mut task = task("part.parquet", Some(file_size))?;
         task.parquet_byte_range = Some(0..file_size);
         let object = reader.resolve_parquet_object(&task)?;
@@ -2243,13 +2137,8 @@ mod tests {
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, true),
         ]));
-        Ok((
-            Arc::new(reader),
-            gated,
-            task,
-            schema,
-            Arc::new(DirectParquetMetadataCache::default()),
-        ))
+        reader = reader.with_metadata_cache(Arc::new(RangedParquetMetadataCache::default()));
+        Ok((Arc::new(reader), gated, task, schema))
     }
 
     fn file_read_request(
@@ -2257,25 +2146,25 @@ mod tests {
         task: DeltaScanFileTask,
         permit: FileReadPermit,
         cancellation: ScanCancellation,
-    ) -> DirectParquetFileReadRequest {
-        DirectParquetFileReadRequest {
+    ) -> LogicalDataFileReadRequest {
+        LogicalDataFileReadRequest {
             task,
             physical_schema: Arc::clone(&plan.physical_schema),
             logical_schema: Arc::clone(&plan.logical_schema),
             kernel_schemas: plan.kernel_schemas.clone(),
             physical_predicate: plan.physical_predicate.clone(),
             row_predicate: None,
-            output_batch_size: Some(2),
+            output_batch_size_rows: Some(2),
             permit,
             cancellation,
         }
     }
 
     fn one_file_limiter(
-        options: DeltaReaderExecutionOptions,
+        options: DeltaScanExecutionOptions,
     ) -> Result<Arc<ScanReadLimiter>, DeltaReaderError> {
         let options = options
-            .with_prefetch_file_count_per_partition(1)?
+            .with_prefetch_files_per_partition(1)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?;
         Ok(ScanReadLimiter::new(options, 1, 1))
@@ -2371,11 +2260,11 @@ mod tests {
         )?))
     }
 
-    fn project_parquet_batch_to_provider_schema(
+    fn project_parquet_batch_to_target_schema(
         name: &str,
         file_schema: Arc<Schema>,
         columns: Vec<ArrayRef>,
-        provider_schema: Arc<Schema>,
+        target_schema: Arc<Schema>,
     ) -> Result<RecordBatch, Box<dyn std::error::Error>> {
         let root = TestDir::new(name)?;
         let file_path = root.path().join("part.parquet");
@@ -2384,20 +2273,20 @@ mod tests {
         writer.write(&batch)?;
         writer.close()?;
         let builder = ParquetRecordBatchReaderBuilder::try_new(fs::File::open(file_path)?)?;
-        let schema_match = super::build_direct_parquet_schema_match(
+        let schema_alignment = super::build_schema_alignment(
             builder.parquet_schema(),
             builder.schema(),
-            provider_schema,
+            target_schema,
         )?;
         let projection =
-            ProjectionMask::roots(builder.parquet_schema(), schema_match.projected_roots());
+            ProjectionMask::roots(builder.parquet_schema(), schema_alignment.projected_roots());
         let projected = builder
             .with_projection(projection)
             .build()?
             .next()
             .transpose()?
             .ok_or("expected one projected Parquet batch")?;
-        Ok(schema_match.reshape_batch_to_provider_schema(projected)?)
+        Ok(schema_alignment.reshape_batch_to_target_schema(projected)?)
     }
 
     #[tokio::test]
@@ -2406,7 +2295,7 @@ mod tests {
         let root = TestDir::new("direct-object-resolution")?;
         fs::write(root.path().join("part.parquet"), b"data")?;
         let metrics = metrics();
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics.clone())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics.clone())?;
 
         let object = reader
             .parquet_object_for_task(&task("part.parquet", Some(4))?)
@@ -2429,7 +2318,7 @@ mod tests {
             Ok(_) => return Err("missing size must fail".into()),
             Err(error) => error,
         };
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert!(!error.to_string().contains("secret-file"));
         Ok(())
     }
@@ -2438,16 +2327,13 @@ mod tests {
     async fn resolves_and_reads_remote_like_memory_object_store_path()
     -> Result<(), Box<dyn std::error::Error>> {
         let table_url = url::Url::parse("memory:///table/root/")?;
-        let engine_context = Arc::new(DeltaKernelEngineContext::build(
+        let engine_context = Arc::new(DeltaKernelEngineContext::try_new(
             table_url,
             &DeltaStorageOptions::default(),
         )?);
         let store = engine_context.object_store();
-        let reader = DirectParquetFileReader::new(
-            engine_context,
-            DeltaReaderExecutionOptions::new(),
-            metrics(),
-        );
+        let reader =
+            DirectParquetReader::new(engine_context, DeltaScanExecutionOptions::new(), metrics());
         let bytes = parquet_bytes()?;
         let task = task("part-00000.parquet", Some(u64::try_from(bytes.len())?))?;
         let object = reader.resolve_parquet_object(&task)?;
@@ -2460,7 +2346,7 @@ mod tests {
             Field::new("name", DataType::Utf8, true),
         ]));
         let mut stream = reader
-            .open_parquet_stream(&task, schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, schema, None, None, None, false)
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let ids = batch
@@ -2483,14 +2369,14 @@ mod tests {
         let file_size = u64::try_from(bytes.len())?;
         let mut task = task("secret.parquet", Some(file_size))?;
         task.parquet_byte_range = Some(0..file_size + 1);
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, true),
         ]));
 
         let error = match reader
-            .open_parquet_stream(&task, schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, schema, None, None, None, false)
             .await
         {
             Ok(_) => return Err("invalid Parquet range unexpectedly succeeded".into()),
@@ -2498,17 +2384,17 @@ mod tests {
         };
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_row_group_range_invalid"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_row_group_range_invalid"
         );
         assert!(!error.to_string().contains("secret.parquet"));
         Ok(())
     }
 
     #[tokio::test]
-    async fn split_tasks_share_one_concurrent_parquet_metadata_load()
+    async fn ranged_tasks_share_one_concurrent_parquet_metadata_load()
     -> Result<(), Box<dyn std::error::Error>> {
-        let (reader, gated, mut first_task, schema, metadata_cache) = gated_split_metadata_reader(
-            "direct-split-metadata-single-flight",
+        let (reader, gated, mut first_task, schema) = gated_ranged_metadata_reader(
+            "direct-ranged-metadata-single-flight",
             GateRequest::Range(1),
         )
         .await?;
@@ -2521,18 +2407,9 @@ mod tests {
 
         let first_reader = Arc::clone(&reader);
         let first_schema = Arc::clone(&schema);
-        let first_cache = Arc::clone(&metadata_cache);
         let first = tokio::spawn(async move {
             first_reader
-                .open_parquet_stream_with_metadata_cache(
-                    &first_task,
-                    first_schema,
-                    None,
-                    None,
-                    None,
-                    false,
-                    Some(first_cache.as_ref()),
-                )
+                .open_physical_parquet_stream(&first_task, first_schema, None, None, None, false)
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
@@ -2540,15 +2417,7 @@ mod tests {
         let second_reader = Arc::clone(&reader);
         let second = tokio::spawn(async move {
             second_reader
-                .open_parquet_stream_with_metadata_cache(
-                    &second_task,
-                    schema,
-                    None,
-                    None,
-                    None,
-                    false,
-                    Some(metadata_cache.as_ref()),
-                )
+                .open_physical_parquet_stream(&second_task, schema, None, None, None, false)
                 .await
         });
         tokio::task::yield_now().await;
@@ -2569,40 +2438,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn failed_split_metadata_load_can_be_retried() -> Result<(), Box<dyn std::error::Error>> {
-        let (reader, gated, task, schema, metadata_cache) = gated_split_metadata_reader(
-            "direct-split-metadata-retry",
+    async fn failed_ranged_metadata_load_can_be_retried() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let (reader, gated, task, schema) = gated_ranged_metadata_reader(
+            "direct-ranged-metadata-retry",
             GateRequest::Range(usize::MAX),
         )
         .await?;
         gated.fail_next_range();
 
         let error = match reader
-            .open_parquet_stream_with_metadata_cache(
-                &task,
-                Arc::clone(&schema),
-                None,
-                None,
-                None,
-                false,
-                Some(metadata_cache.as_ref()),
-            )
+            .open_physical_parquet_stream(&task, Arc::clone(&schema), None, None, None, false)
             .await
         {
             Ok(_) => return Err("injected metadata failure must fail the first split task".into()),
             Err(error) => error,
         };
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         reader
-            .open_parquet_stream_with_metadata_cache(
-                &task,
-                schema,
-                None,
-                None,
-                None,
-                false,
-                Some(metadata_cache.as_ref()),
-            )
+            .open_physical_parquet_stream(&task, schema, None, None, None, false)
             .await?;
 
         assert_eq!(gated.range_calls.load(Ordering::Acquire), 2);
@@ -2617,10 +2471,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cancelled_split_metadata_load_wakes_a_retrying_task()
+    async fn cancelled_ranged_metadata_load_wakes_a_retrying_task()
     -> Result<(), Box<dyn std::error::Error>> {
-        let (reader, gated, task, schema, metadata_cache) = gated_split_metadata_reader(
-            "direct-split-metadata-cancellation",
+        let (reader, gated, task, schema) = gated_ranged_metadata_reader(
+            "direct-ranged-metadata-cancellation",
             GateRequest::Range(1),
         )
         .await?;
@@ -2628,18 +2482,9 @@ mod tests {
         let first_reader = Arc::clone(&reader);
         let first_task = task.clone();
         let first_schema = Arc::clone(&schema);
-        let first_cache = Arc::clone(&metadata_cache);
         let first = tokio::spawn(async move {
             first_reader
-                .open_parquet_stream_with_metadata_cache(
-                    &first_task,
-                    first_schema,
-                    None,
-                    None,
-                    None,
-                    false,
-                    Some(first_cache.as_ref()),
-                )
+                .open_physical_parquet_stream(&first_task, first_schema, None, None, None, false)
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
@@ -2655,15 +2500,7 @@ mod tests {
         let second_reader = Arc::clone(&reader);
         let second = tokio::spawn(async move {
             second_reader
-                .open_parquet_stream_with_metadata_cache(
-                    &task,
-                    schema,
-                    None,
-                    None,
-                    None,
-                    false,
-                    Some(metadata_cache.as_ref()),
-                )
+                .open_physical_parquet_stream(&task, schema, None, None, None, false)
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
@@ -2696,8 +2533,8 @@ mod tests {
             let root = TestDir::new(name)?;
             fs::write(root.path().join("part.parquet"), bytes)?;
             let metrics = metrics();
-            let options = DeltaReaderExecutionOptions::new()
-                .with_parquet_full_file_read_threshold(threshold)?;
+            let options = DeltaScanExecutionOptions::new()
+                .with_parquet_full_file_read_threshold_bytes(threshold)?;
             let reader = reader(&root, options, metrics.clone())?;
             let mut task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
             task.parquet_byte_range = byte_range;
@@ -2741,8 +2578,8 @@ mod tests {
         let metrics = metrics();
         let reader = reader(
             &root,
-            DeltaReaderExecutionOptions::new()
-                .with_parquet_full_file_read_threshold(Some(bytes.len()))?,
+            DeltaScanExecutionOptions::new()
+                .with_parquet_full_file_read_threshold_bytes(Some(bytes.len()))?,
             metrics.clone(),
         )?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
@@ -2777,7 +2614,7 @@ mod tests {
         )?;
         write_partitioned_dv_table(&root, &parquet_bytes)?;
         let plan = pipeline_plan(&root, Some(parquet_bytes.len()))?;
-        let reader = Arc::new(DirectParquetFileReader::new(
+        let reader = Arc::new(DirectParquetReader::new(
             Arc::clone(&plan.engine_context),
             plan.execution_options,
             plan.metrics.clone(),
@@ -2791,7 +2628,7 @@ mod tests {
             permit,
             ScanCancellation::new(),
         );
-        let file = reader.open_logical_file_stream(request).await?;
+        let file = reader.open_logical_data_file_stream(request).await?;
 
         let mut next_permit = Box::pin(partition.acquire());
         assert!(matches!(
@@ -2815,11 +2652,11 @@ mod tests {
         let root = TestDir::new("direct-projected-stream")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
-        let provider_schema = Arc::new(Schema::new(vec![Field::new("name", DataType::Utf8, true)]));
+        let target_schema = Arc::new(Schema::new(vec![Field::new("name", DataType::Utf8, true)]));
         let mut stream = reader
-            .open_parquet_stream(&task, provider_schema, Some(2), None, None, false)
+            .open_physical_parquet_stream(&task, target_schema, Some(2), None, None, false)
             .await?;
         let mut batches = Vec::new();
         while let Some(batch) = stream.next_batch().await? {
@@ -2855,7 +2692,7 @@ mod tests {
         let root = TestDir::new("direct-projection-shapes")?;
         let bytes = parquet_bytes()?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
 
         for (schema, names, columns) in [
@@ -2878,7 +2715,7 @@ mod tests {
             (Arc::new(Schema::empty()), Vec::new(), 0),
         ] {
             let mut stream = reader
-                .open_parquet_stream(&task, schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, schema, None, None, None, false)
                 .await?;
             let mut rows = 0;
             while let Some(batch) = stream.next_batch().await? {
@@ -2909,19 +2746,19 @@ mod tests {
         let mut snapshots = Vec::new();
 
         for options in [
-            DeltaReaderExecutionOptions::new(),
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint(None)?,
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint(Some(9))?,
+            DeltaScanExecutionOptions::new(),
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(None)?,
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(Some(9))?,
         ] {
             let metrics = metrics();
             let reader = reader(&root, options, metrics.clone())?;
             let task = task("part.parquet", Some(file_size))?;
-            let provider_schema = Arc::new(Schema::new(vec![
+            let target_schema = Arc::new(Schema::new(vec![
                 Field::new("id", DataType::Int32, false),
                 Field::new("name", DataType::Utf8, true),
             ]));
             let _stream = reader
-                .open_parquet_stream(&task, provider_schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, target_schema, None, None, None, false)
                 .await?;
             snapshots.push(metrics.snapshot());
         }
@@ -2969,7 +2806,7 @@ mod tests {
                 Expression::Column(ColumnName::new(["id"])),
                 Expression::Literal(Scalar::String("not-an-integer".to_owned())),
             ));
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
 
         for (path, file_size, predicate, expected) in [
             (
@@ -2999,7 +2836,14 @@ mod tests {
         ] {
             let task = task(path, Some(u64::try_from(file_size)?))?;
             let mut stream = reader
-                .open_parquet_stream(&task, Arc::clone(&schema), None, predicate, None, false)
+                .open_physical_parquet_stream(
+                    &task,
+                    Arc::clone(&schema),
+                    None,
+                    predicate,
+                    None,
+                    false,
+                )
                 .await?;
             let mut ids = Vec::new();
             while let Some(batch) = stream.next_batch().await? {
@@ -3017,7 +2861,7 @@ mod tests {
 
         let task = task("with-stats.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
-            .open_parquet_stream(
+            .open_physical_parquet_stream(
                 &task,
                 Arc::clone(&schema),
                 None,
@@ -3063,10 +2907,10 @@ mod tests {
             Expression::Column(ColumnName::new(["amount"])),
             Expression::Literal(Scalar::decimal(0, 10, 2)?),
         ));
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
-            .open_parquet_stream(&task, schema, None, Some(&predicate), None, false)
+            .open_physical_parquet_stream(&task, schema, None, Some(&predicate), None, false)
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let amounts = batch
@@ -3131,10 +2975,10 @@ mod tests {
         assert_eq!(direct, buffered);
 
         let direct_metrics = direct_metrics.snapshot();
-        assert_eq!(direct_metrics.files_started, 1);
-        assert_eq!(direct_metrics.files_completed, 1);
+        assert_eq!(direct_metrics.file_tasks_started, 1);
+        assert_eq!(direct_metrics.file_tasks_completed, 1);
         assert_eq!(
-            direct_metrics.parquet_data_file_opened_bytes,
+            direct_metrics.estimated_parquet_task_bytes_admitted,
             Some(u64::try_from(parquet_bytes.len())?)
         );
         assert_eq!(direct_metrics.deletion_vector_payloads_loaded, 1);
@@ -3163,8 +3007,8 @@ mod tests {
             Some(u64::try_from(parquet_bytes.len())?)
         );
         assert_eq!(
-            buffered_metrics.parquet_data_file_opened_bytes,
-            direct_metrics.parquet_data_file_opened_bytes
+            buffered_metrics.estimated_parquet_task_bytes_admitted,
+            direct_metrics.estimated_parquet_task_bytes_admitted
         );
         Ok(())
     }
@@ -3195,7 +3039,7 @@ mod tests {
                 &root,
                 None,
                 Some(64 * 1024),
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 false,
             )?;
             let metrics = plan.metrics.clone();
@@ -3219,7 +3063,7 @@ mod tests {
 
             assert_eq!(ids, expected_ids);
             let metrics = metrics.snapshot();
-            assert_eq!(metrics.rows_produced, u64::try_from(ids.len())?);
+            assert_eq!(metrics.scheduler_rows_emitted, u64::try_from(ids.len())?);
             assert_eq!(metrics.deletion_vector_rows_deleted, expected_deleted);
         }
         Ok(())
@@ -3243,7 +3087,7 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             false,
         )?;
         let direct = execute_pipeline_plan(direct_plan).await?;
@@ -3306,20 +3150,20 @@ mod tests {
             kernel_default_metrics.snapshot(),
             kernel_tuned_metrics.snapshot(),
         ] {
-            assert_eq!(metrics.reader_backend, ParquetReaderBackend::DeltaKernel);
+            assert_eq!(metrics.parquet_backend, ParquetReaderBackend::DeltaKernel);
             assert_eq!(metrics.scan_partitions_started, 1);
             assert_eq!(metrics.scan_partitions_completed, 1);
-            assert_eq!(metrics.files_started, 1);
-            assert_eq!(metrics.files_completed, 1);
-            assert_eq!(metrics.batches_produced, expected_batches);
-            assert_eq!(metrics.rows_produced, 5);
+            assert_eq!(metrics.file_tasks_started, 1);
+            assert_eq!(metrics.file_tasks_completed, 1);
+            assert_eq!(metrics.scheduler_batches_emitted, expected_batches);
+            assert_eq!(metrics.scheduler_rows_emitted, 5);
             assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
             assert_eq!(metrics.deletion_vectors_applied, 1);
             assert_eq!(metrics.deletion_vector_rows_deleted, 1);
             assert_eq!(metrics.parquet_data_file_range_get_operations, None);
             assert_eq!(metrics.parquet_data_file_full_get_operations, None);
             assert_eq!(metrics.parquet_data_file_bytes_received, None);
-            assert_eq!(metrics.parquet_data_file_opened_bytes, None);
+            assert_eq!(metrics.estimated_parquet_task_bytes_admitted, None);
         }
         Ok(())
     }
@@ -3342,7 +3186,7 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             true,
         )?)
         .await?;
@@ -3405,7 +3249,7 @@ mod tests {
                 &root,
                 None,
                 Some(64 * 1024),
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 true,
                 selection,
                 1,
@@ -3478,7 +3322,7 @@ mod tests {
         for (predicate, expected, expected_files) in cases {
             let direct_plan = predicate_pipeline_plan_for_backend(
                 &root,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 predicate.clone(),
             )?;
             let kernel_plan = predicate_pipeline_plan_for_backend(
@@ -3516,7 +3360,7 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             false,
         )?)
         .await?;
@@ -3552,7 +3396,7 @@ mod tests {
             &empty_root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             false,
             DeltaSnapshotSelection::Latest,
             2,
@@ -3572,7 +3416,7 @@ mod tests {
         assert!(execute_pipeline_plan(direct_empty_plan).await?.is_empty());
         assert!(execute_kernel_plan(kernel_empty_plan).await?.is_empty());
         assert_eq!(kernel_empty_metrics.snapshot().scan_partitions_started, 0);
-        assert_eq!(kernel_empty_metrics.snapshot().files_started, 0);
+        assert_eq!(kernel_empty_metrics.snapshot().file_tasks_started, 0);
 
         let root = TestDir::new("kernel-direct-multi-partition-parity")?;
         let west = parquet_bytes_for(
@@ -3586,7 +3430,7 @@ mod tests {
             &root,
             None,
             Some(64 * 1024),
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             false,
             DeltaSnapshotSelection::Latest,
             2,
@@ -3629,9 +3473,9 @@ mod tests {
         ] {
             assert_eq!(metrics.scan_partitions_started, 2);
             assert_eq!(metrics.scan_partitions_completed, 2);
-            assert_eq!(metrics.files_started, 2);
-            assert_eq!(metrics.files_completed, 2);
-            assert_eq!(metrics.rows_produced, 12);
+            assert_eq!(metrics.file_tasks_started, 2);
+            assert_eq!(metrics.file_tasks_completed, 2);
+            assert_eq!(metrics.scheduler_rows_emitted, 12);
         }
         Ok(())
     }
@@ -3651,10 +3495,10 @@ mod tests {
             ParquetReaderBackend::DeltaKernel,
             false,
         )?;
-        let execution = DeltaScanExecution::new(Arc::clone(&plan));
-        let stream = execution.partition_stream(
+        let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
+        let stream = scheduler.partition_stream(
             0,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             delta_kernel_file_executor(&plan),
         )?;
 
@@ -3663,8 +3507,8 @@ mod tests {
         let metrics = plan.metrics.snapshot();
         assert_eq!(metrics.scan_partitions_started, 0);
         assert_eq!(metrics.scan_partitions_completed, 0);
-        assert_eq!(metrics.files_started, 0);
-        assert_eq!(metrics.files_completed, 0);
+        assert_eq!(metrics.file_tasks_started, 0);
+        assert_eq!(metrics.file_tasks_completed, 0);
         Ok(())
     }
 
@@ -3741,15 +3585,15 @@ mod tests {
                 &[],
                 None,
                 false,
-                DeltaReaderExecutionOptions::new().with_reader_backend(backend)?,
+                DeltaScanExecutionOptions::new().with_parquet_backend(backend),
                 DeltaScanPartitionTargetOptions {
                     explicit_target_partitions: Some(1),
-                    caller_target_partitions: None,
+                    datafusion_target_partitions: None,
                 },
             )
             .map(Arc::new)
         };
-        let direct = execute_pipeline_plan(plan(ParquetReaderBackend::DirectParquet)?).await?;
+        let direct = execute_pipeline_plan(plan(ParquetReaderBackend::Direct)?).await?;
         let kernel = execute_kernel_plan(plan(ParquetReaderBackend::DeltaKernel)?).await?;
 
         assert_eq!(int32_ids(&direct)?, [1, 2, 3]);
@@ -3766,19 +3610,19 @@ mod tests {
     #[tokio::test]
     async fn delta_kernel_reports_redacted_file_dv_transform_and_schema_failures()
     -> Result<(), Box<dyn std::error::Error>> {
-        let assert_failed_metrics = |metrics: &crate::DeltaReadMetricsSnapshot,
+        let assert_failed_metrics = |metrics: &crate::DeltaScanMetricsSnapshot,
                                      deletion_vector_failures| {
             assert_eq!(metrics.scan_partitions_started, 1);
             assert_eq!(metrics.scan_partitions_completed, 0);
-            assert_eq!(metrics.files_started, 1);
-            assert_eq!(metrics.files_completed, 0);
-            assert_eq!(metrics.batches_produced, 0);
-            assert_eq!(metrics.rows_produced, 0);
+            assert_eq!(metrics.file_tasks_started, 1);
+            assert_eq!(metrics.file_tasks_completed, 0);
+            assert_eq!(metrics.scheduler_batches_emitted, 0);
+            assert_eq!(metrics.scheduler_rows_emitted, 0);
             assert_eq!(metrics.deletion_vector_failures, deletion_vector_failures);
             assert_eq!(metrics.parquet_data_file_range_get_operations, None);
             assert_eq!(metrics.parquet_data_file_full_get_operations, None);
             assert_eq!(metrics.parquet_data_file_bytes_received, None);
-            assert_eq!(metrics.parquet_data_file_opened_bytes, None);
+            assert_eq!(metrics.estimated_parquet_task_bytes_admitted, None);
         };
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let parquet_bytes = parquet_bytes_for(
@@ -3804,7 +3648,7 @@ mod tests {
         let error = execute_kernel_plan(metadata_plan)
             .await
             .expect_err("missing size must fail");
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert_failed_metrics(&metadata_metrics.snapshot(), 0);
         assert!(
             !error
@@ -3829,7 +3673,7 @@ mod tests {
         let error = execute_kernel_plan(parquet_plan)
             .await
             .expect_err("corrupt Parquet must fail");
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert_failed_metrics(&parquet_metrics.snapshot(), 0);
         assert!(!error.to_string().contains("part.parquet"));
 
@@ -3847,7 +3691,7 @@ mod tests {
         let error = execute_kernel_plan(dv_plan)
             .await
             .expect_err("missing DV must fail");
-        assert_eq!(error.as_str(), "deletion_vector_read");
+        assert_eq!(error.code(), "deletion_vector_read");
         assert_failed_metrics(&dv_metrics.snapshot(), 1);
 
         let transform_root = TestDir::new("kernel-transform-failure")?;
@@ -3870,7 +3714,7 @@ mod tests {
         let error = execute_kernel_plan(transform_plan)
             .await
             .expect_err("invalid transform must fail");
-        assert_eq!(error.as_str(), "physical_to_logical_transform");
+        assert_eq!(error.code(), "physical_to_logical_transform");
         assert_failed_metrics(&transform_metrics.snapshot(), 0);
         assert!(!error.to_string().contains("sensitive_missing_column"));
 
@@ -3892,7 +3736,7 @@ mod tests {
             .expect_err("wrong logical schema must fail");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=backend_logical_schema_mismatch"
+            "delta reader error: phase=data_file_read code=data_file_read reason=backend_logical_schema_mismatch"
         );
         assert_failed_metrics(&schema_metrics.snapshot(), 0);
         Ok(())
@@ -3980,7 +3824,8 @@ mod tests {
             let permit = partition.acquire().await?;
             let cancellation = ScanCancellation::new();
             let request = file_read_request(&plan, task, permit, cancellation.clone());
-            let job = tokio::spawn(async move { reader.open_logical_file_stream(request).await });
+            let job =
+                tokio::spawn(async move { reader.open_logical_data_file_stream(request).await });
 
             tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
             assert!(cancellation.cancel());
@@ -3989,7 +3834,7 @@ mod tests {
                 Ok(_) => return Err(format!("{name} cancellation must fail the file read").into()),
                 Err(error) => error,
             };
-            assert_eq!(error.as_str(), "cancelled");
+            assert_eq!(error.code(), "cancelled");
             assert!(gated.was_cancelled(), "{name} request was not dropped");
             drop(
                 tokio::time::timeout(std::time::Duration::from_secs(5), partition.acquire())
@@ -4033,7 +3878,7 @@ mod tests {
         let permit = partition.acquire().await?;
         let cancellation = ScanCancellation::new();
         let request = file_read_request(&plan, task, permit, cancellation.clone());
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let before = plan.metrics.snapshot();
         gated.gate_next_range();
         let job = tokio::spawn(async move { file.next_batch().await });
@@ -4045,7 +3890,7 @@ mod tests {
             Ok(_) => return Err("batch cancellation must fail the file read".into()),
             Err(error) => error,
         };
-        assert_eq!(error.as_str(), "cancelled");
+        assert_eq!(error.code(), "cancelled");
         assert!(gated.was_cancelled());
         drop(tokio::time::timeout(std::time::Duration::from_secs(5), partition.acquire()).await??);
 
@@ -4071,12 +3916,12 @@ mod tests {
         let corrupt_metrics = metrics();
         let corrupt_reader = reader(
             &corrupt_root,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             corrupt_metrics.clone(),
         )?;
         let corrupt_task = task("secret.parquet", Some(11))?;
         let error = match corrupt_reader
-            .open_parquet_stream(
+            .open_physical_parquet_stream(
                 &corrupt_task,
                 Arc::new(Schema::empty()),
                 None,
@@ -4091,7 +3936,7 @@ mod tests {
         };
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_read_setup_failed"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_read_setup_failed"
         );
         assert!(!error.to_string().contains("secret.parquet"));
         assert_eq!(
@@ -4105,7 +3950,8 @@ mod tests {
         let missing_metrics = metrics();
         let missing_reader = reader(
             &missing_root,
-            DeltaReaderExecutionOptions::new().with_parquet_full_file_read_threshold(Some(64))?,
+            DeltaScanExecutionOptions::new()
+                .with_parquet_full_file_read_threshold_bytes(Some(64))?,
             missing_metrics.clone(),
         )?;
         let error = match missing_reader
@@ -4117,7 +3963,7 @@ mod tests {
         };
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_full_file_read_failed"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_full_file_read_failed"
         );
         assert!(!error.to_string().contains("secret-missing.parquet"));
         assert_eq!(
@@ -4145,7 +3991,7 @@ mod tests {
         let permit = partition.acquire().await?;
         let decode_task = task.clone();
         let request = file_read_request(&plan, task, permit, ScanCancellation::new());
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let before = plan.metrics.snapshot();
         gated.fail_next_range();
         let error = file
@@ -4154,7 +4000,7 @@ mod tests {
             .expect_err("injected batch range failure must fail");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_batch_read_failed"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_batch_read_failed"
         );
         let after = plan.metrics.snapshot();
         assert_eq!(
@@ -4171,7 +4017,7 @@ mod tests {
         let permit =
             tokio::time::timeout(std::time::Duration::from_secs(5), partition.acquire()).await??;
         let request = file_read_request(&plan, decode_task, permit, ScanCancellation::new());
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let before = plan.metrics.snapshot();
         gated.corrupt_next_range();
         let error = file
@@ -4180,7 +4026,7 @@ mod tests {
             .expect_err("corrupt Parquet data must fail decoding");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_batch_read_failed"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_batch_read_failed"
         );
         let after = plan.metrics.snapshot();
         assert_eq!(
@@ -4214,13 +4060,13 @@ mod tests {
         let error = execute_pipeline_plan(Arc::clone(&dv_plan))
             .await
             .expect_err("missing deletion vector must fail");
-        assert_eq!(error.as_str(), "deletion_vector_read");
+        assert_eq!(error.code(), "deletion_vector_read");
         let dv_metrics = dv_plan.metrics.snapshot();
-        assert_eq!(dv_metrics.files_started, 1);
-        assert_eq!(dv_metrics.files_completed, 0);
+        assert_eq!(dv_metrics.file_tasks_started, 1);
+        assert_eq!(dv_metrics.file_tasks_completed, 0);
         assert_eq!(dv_metrics.deletion_vector_failures, 1);
         assert_eq!(
-            dv_metrics.parquet_data_file_opened_bytes,
+            dv_metrics.estimated_parquet_task_bytes_admitted,
             Some(u64::try_from(parquet_bytes.len())?)
         );
 
@@ -4243,44 +4089,40 @@ mod tests {
             permit,
             ScanCancellation::new(),
         );
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let error = file
             .next_batch()
             .await
             .expect_err("invalid transform must fail");
-        assert_eq!(error.as_str(), "physical_to_logical_transform");
+        assert_eq!(error.code(), "physical_to_logical_transform");
         assert!(!error.to_string().contains("secret_missing"));
         drop(file);
 
         let permit = partition.acquire().await?;
         let mut request = file_read_request(&plan, task, permit, ScanCancellation::new());
         request.logical_schema = Arc::new(Schema::empty());
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let error = file
             .next_batch()
             .await
             .expect_err("wrong logical schema must fail");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=backend_logical_schema_mismatch"
+            "delta reader error: phase=data_file_read code=data_file_read reason=backend_logical_schema_mismatch"
         );
         Ok(())
     }
 
     #[test]
-    fn direct_parquet_leaf_cast_plan_matches_timestamp_compatibility()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn leaf_cast_plan_matches_timestamp_compatibility() -> Result<(), Box<dyn std::error::Error>> {
         let target = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
 
         assert_eq!(
-            super::direct_parquet_leaf_cast_plan(
-                &target,
-                &DataType::Timestamp(TimeUnit::Nanosecond, None)
-            ),
+            super::leaf_cast_plan(&target, &DataType::Timestamp(TimeUnit::Nanosecond, None)),
             Ok(Some(target.clone()))
         );
         assert_eq!(
-            super::direct_parquet_leaf_cast_plan(
+            super::leaf_cast_plan(
                 &target,
                 &DataType::Timestamp(TimeUnit::Nanosecond, Some("UTC".into()))
             ),
@@ -4291,10 +4133,10 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_leaf_cast_plan_rejects_incompatible_primitive_types()
+    fn leaf_cast_plan_rejects_incompatible_primitive_types()
     -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(
-            super::direct_parquet_leaf_cast_plan(&DataType::Int32, &DataType::Utf8),
+            super::leaf_cast_plan(&DataType::Int32, &DataType::Utf8),
             Err(())
         );
 
@@ -4302,22 +4144,22 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_casts_top_level_timestamp_leaf()
+    fn direct_parquet_schema_alignment_casts_top_level_timestamp_leaf()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_schema = Arc::new(Schema::new(vec![timestamp_us_utc_field("event_ts", true)]));
+        let target_schema = Arc::new(Schema::new(vec![timestamp_us_utc_field("event_ts", true)]));
         let file_schema = Arc::new(Schema::new(vec![Field::new(
             "event_ts",
             DataType::Timestamp(TimeUnit::Nanosecond, None),
             true,
         )]));
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "top-level-timestamp-leaf-cast",
             file_schema,
             vec![Arc::new(TimestampNanosecondArray::from(vec![
                 Some(1_704_067_200_000_000_000),
                 None,
             ])) as ArrayRef],
-            provider_schema,
+            target_schema,
         )?;
         let timestamps = batch
             .column(0)
@@ -4335,17 +4177,17 @@ mod tests {
     #[test]
     fn direct_parquet_reshape_casts_top_level_timestamp_leaf()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_field = timestamp_us_utc_field("event_ts", true);
+        let target_field = timestamp_us_utc_field("event_ts", true);
         let array = Arc::new(TimestampNanosecondArray::from(vec![
             Some(1_704_067_200_000_000_000),
             None,
         ])) as ArrayRef;
 
-        let reshaped = super::reshape_array_to_provider_field(
+        let reshaped = super::reshape_array_to_target_field(
             array,
-            &provider_field,
-            &super::DirectParquetFieldPlan::Cast {
-                target_type: provider_field.data_type().clone(),
+            &target_field,
+            &super::FieldPlan::Cast {
+                target_type: target_field.data_type().clone(),
             },
         )?;
         let timestamps = reshaped
@@ -4363,8 +4205,8 @@ mod tests {
     #[test]
     fn direct_parquet_reshape_casts_nested_struct_timestamp_leaf()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_child = timestamp_us_utc_field("event_ts", true);
-        let provider_field = struct_field("payload", vec![provider_child.clone()], true);
+        let target_child = timestamp_us_utc_field("event_ts", true);
+        let target_field = struct_field("payload", vec![target_child.clone()], true);
         let file_child = Field::new(
             "event_ts",
             DataType::Timestamp(TimeUnit::Nanosecond, None),
@@ -4378,14 +4220,14 @@ mod tests {
             ])) as ArrayRef],
         );
 
-        let reshaped = super::reshape_array_to_provider_field(
+        let reshaped = super::reshape_array_to_target_field(
             array,
-            &provider_field,
-            &super::DirectParquetFieldPlan::Struct {
-                children: vec![super::DirectParquetStructChild::ProjectedChild {
+            &target_field,
+            &super::FieldPlan::Struct {
+                child_plans: vec![super::StructChildPlan::ProjectedChild {
                     child_index: 0,
-                    field_plan: super::DirectParquetFieldPlan::Cast {
-                        target_type: provider_child.data_type().clone(),
+                    field_plan: super::FieldPlan::Cast {
+                        target_type: target_child.data_type().clone(),
                     },
                 }],
             },
@@ -4409,9 +4251,9 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_casts_list_struct_leaf() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let provider_element = Field::new(
+    fn direct_parquet_schema_alignment_casts_list_struct_leaf()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let target_element = Field::new(
             "element",
             DataType::Struct(
                 vec![
@@ -4422,9 +4264,9 @@ mod tests {
             ),
             true,
         );
-        let provider_schema = Arc::new(Schema::new(vec![Field::new(
+        let target_schema = Arc::new(Schema::new(vec![Field::new(
             "addresses",
-            DataType::List(Arc::new(provider_element)),
+            DataType::List(Arc::new(target_element)),
             true,
         )]));
         let file_address_fields = vec![
@@ -4463,11 +4305,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "list-struct-leaf-cast-schema-match",
             file_schema,
             vec![addresses],
-            provider_schema,
+            target_schema,
         )?;
         let addresses = batch
             .column(0)
@@ -4504,9 +4346,9 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_list_primitive_leaf_cast()
+    fn direct_parquet_schema_alignment_rejects_list_primitive_leaf_cast()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_schema = Arc::new(Schema::new(vec![
+        let target_schema = Arc::new(Schema::new(vec![
             Field::new(
                 "tags",
                 DataType::List(Arc::new(Field::new("element", DataType::Int64, true))),
@@ -4527,7 +4369,7 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let error = match project_parquet_batch_to_provider_schema(
+        let error = match project_parquet_batch_to_target_schema(
             "list-primitive-leaf-cast-schema-match",
             file_schema,
             vec![
@@ -4535,7 +4377,7 @@ mod tests {
                 Arc::new(StringArray::from(vec![Some("alice"), Some("bob"), None])) as ArrayRef,
                 tags,
             ],
-            provider_schema,
+            target_schema,
         ) {
             Ok(_) => return Err("primitive list element cast must fail".into()),
             Err(error) => error.to_string(),
@@ -4549,8 +4391,9 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_casts_map_key_leaf() -> Result<(), Box<dyn std::error::Error>> {
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+    fn direct_parquet_schema_alignment_casts_map_key_leaf() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
             Field::new("key", DataType::Int64, false),
             Field::new("value", DataType::Utf8, true),
@@ -4583,11 +4426,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "map-key-leaf-cast-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         )?;
         let attributes = batch
             .column(0)
@@ -4617,15 +4460,15 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_recurses_by_nested_field_id_before_names()
+    fn direct_parquet_schema_alignment_recurses_by_nested_field_id_before_names()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_profile_fields = vec![
+        let target_profile_fields = vec![
             Field::new("first_name", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
             Field::new("age", DataType::Int32, true).with_metadata(field_id_metadata(10)),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![struct_field(
+        let target_schema = Arc::new(Schema::new(vec![struct_field(
             "profile",
-            provider_profile_fields,
+            target_profile_fields,
             true,
         )]));
         let file_profile_fields = vec![
@@ -4646,11 +4489,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false])),
         );
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "nested-field-id-schema-match",
             file_schema,
             vec![profile],
-            provider_schema,
+            target_schema,
         )?;
         let profile = batch
             .column(0)
@@ -4679,20 +4522,17 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_list_struct_elements_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_list_struct_elements_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_address_fields = vec![
+        let target_address_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
             Field::new("zip", DataType::Int32, true).with_metadata(field_id_metadata(10)),
         ];
-        let provider_element = Field::new(
-            "item",
-            DataType::Struct(provider_address_fields.into()),
-            true,
-        );
-        let provider_schema = Arc::new(Schema::new(vec![Field::new(
+        let target_element =
+            Field::new("item", DataType::Struct(target_address_fields.into()), true);
+        let target_schema = Arc::new(Schema::new(vec![Field::new(
             "addresses",
-            DataType::List(Arc::new(provider_element)),
+            DataType::List(Arc::new(target_element)),
             true,
         )]));
         let file_address_fields = vec![
@@ -4727,11 +4567,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "list-struct-field-id-schema-match",
             file_schema,
             vec![addresses],
-            provider_schema,
+            target_schema,
         )?;
         let addresses = batch
             .column(0)
@@ -4769,15 +4609,15 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_recurses_by_local_nested_name_fallback()
+    fn direct_parquet_schema_alignment_recurses_by_local_nested_name_fallback()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_profile_fields = vec![
+        let target_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
             Field::new("first_name", DataType::Utf8, true),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![struct_field(
+        let target_schema = Arc::new(Schema::new(vec![struct_field(
             "profile",
-            provider_profile_fields,
+            target_profile_fields,
             true,
         )]));
         let file_profile_fields = vec![
@@ -4797,11 +4637,11 @@ mod tests {
             ],
         );
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "nested-name-fallback-schema-match",
             file_schema,
             vec![profile],
-            provider_schema,
+            target_schema,
         )?;
         let profile = batch
             .column(0)
@@ -4829,15 +4669,15 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_null_fills_missing_nullable_nested_child()
+    fn direct_parquet_schema_alignment_null_fills_missing_nullable_nested_child()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_profile_fields = vec![
+        let target_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
             Field::new("loyalty_tier", DataType::Utf8, true),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![struct_field(
+        let target_schema = Arc::new(Schema::new(vec![struct_field(
             "profile",
-            provider_profile_fields,
+            target_profile_fields,
             true,
         )]));
         let file_profile_fields = vec![Field::new("age", DataType::Int32, true)];
@@ -4851,11 +4691,11 @@ mod tests {
             vec![Arc::new(Int32Array::from(vec![34, 41])) as ArrayRef],
         );
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "nested-missing-nullable-schema-match",
             file_schema,
             vec![profile],
-            provider_schema,
+            target_schema,
         )?;
         let profile = batch
             .column(0)
@@ -4876,20 +4716,17 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_null_fills_missing_nullable_list_struct_child()
+    fn direct_parquet_schema_alignment_null_fills_missing_nullable_list_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_address_fields = vec![
+        let target_address_fields = vec![
             Field::new("zip", DataType::Int32, true),
             Field::new("country", DataType::Utf8, true),
         ];
-        let provider_element = Field::new(
-            "item",
-            DataType::Struct(provider_address_fields.into()),
-            true,
-        );
-        let provider_schema = Arc::new(Schema::new(vec![Field::new(
+        let target_element =
+            Field::new("item", DataType::Struct(target_address_fields.into()), true);
+        let target_schema = Arc::new(Schema::new(vec![Field::new(
             "addresses",
-            DataType::List(Arc::new(provider_element)),
+            DataType::List(Arc::new(target_element)),
             true,
         )]));
         let file_address_fields = vec![Field::new("zip", DataType::Int32, true)];
@@ -4914,11 +4751,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "list-struct-missing-nullable-schema-match",
             file_schema,
             vec![addresses],
-            provider_schema,
+            target_schema,
         )?;
         let addresses = batch
             .column(0)
@@ -4946,20 +4783,17 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_missing_non_nullable_list_struct_child()
+    fn direct_parquet_schema_alignment_rejects_missing_non_nullable_list_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_address_fields = vec![
+        let target_address_fields = vec![
             Field::new("zip", DataType::Int32, true),
             Field::new("required_country", DataType::Utf8, false),
         ];
-        let provider_element = Field::new(
-            "item",
-            DataType::Struct(provider_address_fields.into()),
-            true,
-        );
-        let provider_schema = Arc::new(Schema::new(vec![Field::new(
+        let target_element =
+            Field::new("item", DataType::Struct(target_address_fields.into()), true);
+        let target_schema = Arc::new(Schema::new(vec![Field::new(
             "addresses",
-            DataType::List(Arc::new(provider_element)),
+            DataType::List(Arc::new(target_element)),
             true,
         )]));
         let file_address_fields = vec![Field::new("zip", DataType::Int32, true)];
@@ -4978,17 +4812,17 @@ mod tests {
             vec![Arc::new(Int32Array::from(vec![94110, 10001])) as ArrayRef],
         );
         let addresses = list_array(file_element, vec![0, 2], values, None)?;
-        let error = match project_parquet_batch_to_provider_schema(
+        let error = match project_parquet_batch_to_target_schema(
             "list-struct-missing-required-schema-match",
             file_schema,
             vec![addresses],
-            provider_schema,
+            target_schema,
         ) {
             Ok(_) => return Err("missing non-nullable list struct child must fail".into()),
             Err(error) => error.to_string(),
         };
 
-        assert!(error.contains("non-nullable provider field"), "{error}");
+        assert!(error.contains("non-nullable target field"), "{error}");
         assert!(
             error.contains("addresses.element.required_country"),
             "{error}"
@@ -5002,15 +4836,15 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_map_key_struct_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_map_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_key_fields = vec![
+        let target_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
             Field::new("zip", DataType::Int32, true).with_metadata(field_id_metadata(10)),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
-            Field::new("keys", DataType::Struct(provider_key_fields.into()), false),
+            Field::new("keys", DataType::Struct(target_key_fields.into()), false),
             Field::new("values", DataType::Utf8, true),
             true,
         )]));
@@ -5065,11 +4899,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "map-key-struct-field-id-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         )?;
         let attributes = batch
             .column(0)
@@ -5114,15 +4948,15 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_null_fills_missing_nullable_map_key_struct_child()
+    fn direct_parquet_schema_alignment_null_fills_missing_nullable_map_key_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_key_fields = vec![
+        let target_key_fields = vec![
             Field::new("zip", DataType::Int32, true),
             Field::new("country", DataType::Utf8, true),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
-            Field::new("keys", DataType::Struct(provider_key_fields.into()), false),
+            Field::new("keys", DataType::Struct(target_key_fields.into()), false),
             Field::new("values", DataType::Utf8, true),
             true,
         )]));
@@ -5160,11 +4994,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "map-key-struct-missing-nullable-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         )?;
         let attributes = batch
             .column(0)
@@ -5192,15 +5026,15 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_missing_non_nullable_map_key_struct_child()
+    fn direct_parquet_schema_alignment_rejects_missing_non_nullable_map_key_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_key_fields = vec![
+        let target_key_fields = vec![
             Field::new("zip", DataType::Int32, true),
             Field::new("required_country", DataType::Utf8, false),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
-            Field::new("keys", DataType::Struct(provider_key_fields.into()), false),
+            Field::new("keys", DataType::Struct(target_key_fields.into()), false),
             Field::new("values", DataType::Utf8, true),
             true,
         )]));
@@ -5231,17 +5065,17 @@ mod tests {
             Arc::new(StringArray::from(vec![Some("home"), Some("work")])) as ArrayRef,
             None,
         )?;
-        let error = match project_parquet_batch_to_provider_schema(
+        let error = match project_parquet_batch_to_target_schema(
             "map-key-struct-missing-required-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         ) {
             Ok(_) => return Err("missing non-nullable map key struct child must fail".into()),
             Err(error) => error.to_string(),
         };
 
-        assert!(error.contains("non-nullable provider field"), "{error}");
+        assert!(error.contains("non-nullable target field"), "{error}");
         assert!(error.contains("attributes.key.required_country"), "{error}");
         assert!(
             error.contains("is missing from the Parquet file"),
@@ -5252,20 +5086,17 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_map_list_key_struct_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_map_list_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_element_fields = vec![
+        let target_element_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
             Field::new("zip", DataType::Int32, true).with_metadata(field_id_metadata(10)),
         ];
-        let provider_element = Field::new(
-            "item",
-            DataType::Struct(provider_element_fields.into()),
-            true,
-        );
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_element =
+            Field::new("item", DataType::Struct(target_element_fields.into()), true);
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
-            Field::new("keys", DataType::List(Arc::new(provider_element)), false),
+            Field::new("keys", DataType::List(Arc::new(target_element)), false),
             Field::new("values", DataType::Utf8, true),
             true,
         )]));
@@ -5329,11 +5160,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "map-list-key-struct-field-id-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         )?;
         let attributes = batch
             .column(0)
@@ -5384,26 +5215,26 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_nested_map_key_struct_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_nested_map_key_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_inner_key_fields = vec![
+        let target_inner_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
             Field::new("zip", DataType::Int32, true).with_metadata(field_id_metadata(10)),
         ];
-        let provider_inner_key = Field::new(
+        let target_inner_key = Field::new(
             "keys",
-            DataType::Struct(provider_inner_key_fields.into()),
+            DataType::Struct(target_inner_key_fields.into()),
             false,
         );
-        let provider_outer_key = map_field(
+        let target_outer_key = map_field(
             "keys",
-            provider_inner_key,
+            target_inner_key,
             Field::new("values", DataType::Int32, true),
             false,
         );
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
-            provider_outer_key,
+            target_outer_key,
             Field::new("values", DataType::Utf8, true),
             true,
         )]));
@@ -5460,11 +5291,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "nested-map-key-struct-field-id-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         )?;
         let attributes = batch
             .column(0)
@@ -5520,24 +5351,20 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_map_key_and_value_structs_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_map_key_and_value_structs_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_key_fields = vec![
+        let target_key_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
             Field::new("zip", DataType::Int32, true).with_metadata(field_id_metadata(10)),
         ];
-        let provider_value_fields = vec![
+        let target_value_fields = vec![
             Field::new("label", DataType::Utf8, true).with_metadata(field_id_metadata(21)),
             Field::new("score", DataType::Int32, true).with_metadata(field_id_metadata(20)),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
-            Field::new("keys", DataType::Struct(provider_key_fields.into()), false),
-            Field::new(
-                "values",
-                DataType::Struct(provider_value_fields.into()),
-                true,
-            ),
+            Field::new("keys", DataType::Struct(target_key_fields.into()), false),
+            Field::new("values", DataType::Struct(target_value_fields.into()), true),
             true,
         )]));
         let file_key_fields = vec![
@@ -5617,11 +5444,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "map-key-and-value-struct-field-id-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         )?;
         let attributes = batch
             .column(0)
@@ -5678,20 +5505,16 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_reshapes_map_value_struct_by_field_id()
+    fn direct_parquet_schema_alignment_reshapes_map_value_struct_by_field_id()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_value_fields = vec![
+        let target_value_fields = vec![
             Field::new("city", DataType::Utf8, true).with_metadata(field_id_metadata(11)),
             Field::new("zip", DataType::Int32, true).with_metadata(field_id_metadata(10)),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
             Field::new("keys", DataType::Utf8, false),
-            Field::new(
-                "values",
-                DataType::Struct(provider_value_fields.into()),
-                true,
-            ),
+            Field::new("values", DataType::Struct(target_value_fields.into()), true),
             true,
         )]));
         let file_value_fields = vec![
@@ -5744,11 +5567,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "map-value-struct-field-id-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         )?;
         let attributes = batch
             .column(0)
@@ -5793,20 +5616,16 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_null_fills_missing_nullable_map_value_struct_child()
+    fn direct_parquet_schema_alignment_null_fills_missing_nullable_map_value_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_value_fields = vec![
+        let target_value_fields = vec![
             Field::new("zip", DataType::Int32, true),
             Field::new("country", DataType::Utf8, true),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
             Field::new("keys", DataType::Utf8, false),
-            Field::new(
-                "values",
-                DataType::Struct(provider_value_fields.into()),
-                true,
-            ),
+            Field::new("values", DataType::Struct(target_value_fields.into()), true),
             true,
         )]));
         let file_value_fields = vec![Field::new("zip", DataType::Int32, true)];
@@ -5843,11 +5662,11 @@ mod tests {
             Some(NullBuffer::from(vec![true, false, true])),
         )?;
 
-        let batch = project_parquet_batch_to_provider_schema(
+        let batch = project_parquet_batch_to_target_schema(
             "map-value-struct-missing-nullable-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         )?;
         let attributes = batch
             .column(0)
@@ -5875,20 +5694,16 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_missing_non_nullable_map_value_struct_child()
+    fn direct_parquet_schema_alignment_rejects_missing_non_nullable_map_value_struct_child()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_value_fields = vec![
+        let target_value_fields = vec![
             Field::new("zip", DataType::Int32, true),
             Field::new("required_country", DataType::Utf8, false),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![map_field(
+        let target_schema = Arc::new(Schema::new(vec![map_field(
             "attributes",
             Field::new("keys", DataType::Utf8, false),
-            Field::new(
-                "values",
-                DataType::Struct(provider_value_fields.into()),
-                true,
-            ),
+            Field::new("values", DataType::Struct(target_value_fields.into()), true),
             true,
         )]));
         let file_value_fields = vec![Field::new("zip", DataType::Int32, true)];
@@ -5918,17 +5733,17 @@ mod tests {
             values,
             None,
         )?;
-        let error = match project_parquet_batch_to_provider_schema(
+        let error = match project_parquet_batch_to_target_schema(
             "map-value-struct-missing-required-schema-match",
             file_schema,
             vec![attributes],
-            provider_schema,
+            target_schema,
         ) {
             Ok(_) => return Err("missing non-nullable map value struct child must fail".into()),
             Err(error) => error.to_string(),
         };
 
-        assert!(error.contains("non-nullable provider field"), "{error}");
+        assert!(error.contains("non-nullable target field"), "{error}");
         assert!(
             error.contains("attributes.value.required_country"),
             "{error}"
@@ -5942,15 +5757,15 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_match_rejects_missing_non_nullable_nested_child()
+    fn direct_parquet_schema_alignment_rejects_missing_non_nullable_nested_child()
     -> Result<(), Box<dyn std::error::Error>> {
-        let provider_profile_fields = vec![
+        let target_profile_fields = vec![
             Field::new("age", DataType::Int32, true),
             Field::new("required_code", DataType::Utf8, false),
         ];
-        let provider_schema = Arc::new(Schema::new(vec![struct_field(
+        let target_schema = Arc::new(Schema::new(vec![struct_field(
             "profile",
-            provider_profile_fields,
+            target_profile_fields,
             true,
         )]));
         let file_profile_fields = vec![Field::new("age", DataType::Int32, true)];
@@ -5963,18 +5778,18 @@ mod tests {
             file_profile_fields,
             vec![Arc::new(Int32Array::from(vec![34, 41])) as ArrayRef],
         );
-        let error = match project_parquet_batch_to_provider_schema(
+        let error = match project_parquet_batch_to_target_schema(
             "nested-missing-required-schema-match",
             file_schema,
             vec![profile],
-            provider_schema,
+            target_schema,
         ) {
             Ok(_) => return Err("missing nested required child must fail".into()),
             Err(error) => error,
         };
         let display = error.to_string();
 
-        assert!(display.contains("non-nullable provider field"), "{display}");
+        assert!(display.contains("non-nullable target field"), "{display}");
         assert!(display.contains("profile.required_code"), "{display}");
         assert!(
             display.contains("is missing from the Parquet file"),
@@ -6000,15 +5815,15 @@ mod tests {
             ],
         )?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
-        let provider_schema = Arc::new(Schema::new(vec![
+        let target_schema = Arc::new(Schema::new(vec![
             field_with_id("id", DataType::Int64, false, 1),
             field_with_id("name", DataType::Utf8, true, 2),
             Field::new("added", DataType::Utf8, true),
         ]));
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
-            .open_parquet_stream(&task, provider_schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, target_schema, None, None, None, false)
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
 
@@ -6052,7 +5867,7 @@ mod tests {
             ]))],
         )?;
         fs::write(root.path().join("part.parquet"), &bytes)?;
-        let reader = reader(&root, DeltaReaderExecutionOptions::new(), metrics())?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let timestamp_schema = Arc::new(Schema::new(vec![Field::new(
             "event_ts",
@@ -6060,7 +5875,7 @@ mod tests {
             true,
         )]));
         let mut stream = reader
-            .open_parquet_stream(&task, timestamp_schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, timestamp_schema, None, None, None, false)
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let timestamps = batch
@@ -6072,7 +5887,7 @@ mod tests {
         assert_eq!(timestamps.value(0), 1_704_067_200_000_000);
         assert!(timestamps.is_null(1));
 
-        for provider_schema in [
+        for target_schema in [
             Arc::new(Schema::new(vec![Field::new(
                 "event_ts",
                 DataType::Utf8,
@@ -6085,16 +5900,16 @@ mod tests {
             )])),
         ] {
             let error = match reader
-                .open_parquet_stream(&task, provider_schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, target_schema, None, None, None, false)
                 .await
             {
                 Ok(_) => return Err("unsupported schema must fail".into()),
                 Err(error) => error,
             };
-            assert_eq!(error.as_str(), "data_file_read");
+            assert_eq!(error.code(), "data_file_read");
             assert_eq!(
                 error.to_string(),
-                "delta reader error: phase=data_file_read error=data_file_read reason=parquet_schema_match_failed"
+                "delta reader error: phase=data_file_read code=data_file_read reason=parquet_schema_match_failed"
             );
         }
         Ok(())

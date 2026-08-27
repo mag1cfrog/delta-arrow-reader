@@ -56,10 +56,11 @@ ranges needed by the query. This is useful for narrow projections, especially
 when the file is large.
 
 For small files that are read broadly, several remote range requests can cost
-more than one full request. Setting `parquet_full_file_read_threshold` allows
-the reader to fetch an eligible whole-file task once and serve its later range
-reads from an in-memory copy. Tasks created by intra-file repartitioning keep
-using remote range requests even when the physical file is below the threshold.
+more than one full request. Setting
+`parquet_full_file_read_threshold_bytes` allows the reader to fetch an eligible
+whole-file task once and serve its later range reads from an in-memory copy.
+Tasks created by intra-file repartitioning keep using remote range requests even
+when the physical file is below the threshold.
 
 The buffer belongs to that one file stream and is released when the stream
 finishes or is dropped. Its compressed-byte memory cost grows with the chosen
@@ -76,7 +77,7 @@ Each execution partition sends batches through a bounded output channel. Its
 default capacity is one batch. When the caller stops polling, producers wait
 instead of filling an unbounded queue.
 
-Within a partition, batches stay in task order even when the direct reader has
+Within a partition, batches stay in task order even when the `Direct` backend has
 prefetched later files. DataFusion may still execute several partitions at the
 same time.
 

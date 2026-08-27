@@ -15,7 +15,7 @@ python -m zensical serve -f docs-site/mkdocs.yml
 ## Content structure
 
 - `Start here` teaches a Rust user how to install the crate and complete a
-  first direct or DataFusion read.
+  first streaming or DataFusion read.
 - `How it works` starts with the read path, then offers deeper pages on scan
   planning and scheduling.
 - `Performance` records public benchmark results and their limits.

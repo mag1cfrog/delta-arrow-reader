@@ -32,7 +32,7 @@ pub(crate) fn align_batch_to_logical_schema(
             .all(|(actual, expected)| {
                 actual.name() == expected.name()
                     && actual.is_nullable() == expected.is_nullable()
-                    && view_compatible(actual.data_type(), expected.data_type())
+                    && is_view_compatible(actual.data_type(), expected.data_type())
             });
     if !compatible {
         return Err(delta_kernel::Error::generic(mismatch_message))
@@ -114,7 +114,7 @@ fn data_type_uses_view_types(data_type: &DataType) -> bool {
     }
 }
 
-fn view_compatible(actual: &DataType, expected: &DataType) -> bool {
+fn is_view_compatible(actual: &DataType, expected: &DataType) -> bool {
     if actual.equals_datatype(expected) {
         return true;
     }
@@ -126,7 +126,7 @@ fn view_compatible(actual: &DataType, expected: &DataType) -> bool {
             actual.len() == expected.len()
                 && actual.iter().zip(expected).all(|(actual, expected)| {
                     actual.is_nullable() == expected.is_nullable()
-                        && view_compatible(actual.data_type(), expected.data_type())
+                        && is_view_compatible(actual.data_type(), expected.data_type())
                 })
         }
         (DataType::List(actual), DataType::List(expected))
@@ -134,12 +134,12 @@ fn view_compatible(actual: &DataType, expected: &DataType) -> bool {
         | (DataType::ListView(actual), DataType::ListView(expected))
         | (DataType::LargeListView(actual), DataType::LargeListView(expected)) => {
             actual.is_nullable() == expected.is_nullable()
-                && view_compatible(actual.data_type(), expected.data_type())
+                && is_view_compatible(actual.data_type(), expected.data_type())
         }
         (DataType::Map(actual, actual_ordered), DataType::Map(expected, expected_ordered)) => {
             actual_ordered == expected_ordered
                 && actual.is_nullable() == expected.is_nullable()
-                && view_compatible(actual.data_type(), expected.data_type())
+                && is_view_compatible(actual.data_type(), expected.data_type())
         }
         _ => false,
     }

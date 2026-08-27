@@ -1,7 +1,8 @@
 //! Delta protocol metadata and reader compatibility policy.
 
 use super::kernel::{
-    DeltaKernelProtocol, KernelSnapshot, TABLE_FEATURES_READER_VERSION, snapshot_protocol_report,
+    KernelProtocolMetadata, KernelSnapshot, TABLE_FEATURES_READER_VERSION,
+    snapshot_protocol_metadata,
 };
 use crate::{DeltaReaderError, error::UnsupportedProtocolSnafu};
 
@@ -18,36 +19,28 @@ const SUPPORTED_READER_FEATURES: &[&str] = &[
 
 /// Protocol metadata captured from one immutable Delta snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeltaProtocolInfo {
-    snapshot_version: u64,
+pub struct DeltaProtocol {
     min_reader_version: i32,
     min_writer_version: i32,
     reader_features: Vec<String>,
     writer_features: Vec<String>,
 }
 
-impl DeltaProtocolInfo {
+impl DeltaProtocol {
     pub(crate) fn from_snapshot(snapshot: &KernelSnapshot) -> Self {
-        let version = snapshot.version();
-        let DeltaKernelProtocol {
+        let KernelProtocolMetadata {
             min_reader_version,
             min_writer_version,
             reader_features,
             writer_features,
-        } = snapshot_protocol_report(snapshot);
+        } = snapshot_protocol_metadata(snapshot);
 
         Self {
-            snapshot_version: version,
             min_reader_version,
             min_writer_version,
             reader_features,
             writer_features,
         }
-    }
-
-    /// Returns the loaded snapshot version.
-    pub const fn snapshot_version(&self) -> u64 {
-        self.snapshot_version
     }
 
     /// Returns the minimum Delta reader protocol version.
@@ -80,7 +73,7 @@ impl DeltaProtocolInfo {
 }
 
 #[allow(dead_code)]
-pub(crate) fn validate_protocol(protocol: &DeltaProtocolInfo) -> Result<(), DeltaReaderError> {
+pub(crate) fn validate_protocol(protocol: &DeltaProtocol) -> Result<(), DeltaReaderError> {
     if !matches!(protocol.min_reader_version, 1 | 2)
         && protocol.min_reader_version != TABLE_FEATURES_READER_VERSION
     {
@@ -108,7 +101,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{DeltaProtocolInfo, validate_protocol};
+    use super::{DeltaProtocol, validate_protocol};
     use crate::{
         DeltaReaderError, DeltaReaderPhase, DeltaSnapshotSelection, DeltaStorageOptions,
         delta::snapshot::load_delta_table_snapshot_blocking,
@@ -133,9 +126,7 @@ mod tests {
             Ok(Self(path))
         }
 
-        fn load(
-            &self,
-        ) -> Result<crate::delta::snapshot::LoadedDeltaTableSnapshot, DeltaReaderError> {
+        fn load(&self) -> Result<crate::delta::snapshot::ArrowTableSnapshot, DeltaReaderError> {
             load_delta_table_snapshot_blocking(
                 &self.0.to_string_lossy(),
                 &DeltaStorageOptions::new(),
@@ -158,9 +149,8 @@ mod tests {
             r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz","typeWidening-preview"],"writerFeatures":["timestampNtz","typeWidening-preview"]}}"#,
         )?;
         let loaded = table.load()?;
-        let protocol = loaded.protocol_info();
+        let protocol = loaded.protocol();
 
-        assert_eq!(protocol.snapshot_version(), 0);
         assert_eq!(protocol.min_reader_version(), 3);
         assert_eq!(protocol.min_writer_version(), 7);
         assert_eq!(
@@ -182,7 +172,7 @@ mod tests {
             r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz","deletionVectors","columnMapping","v2Checkpoint","vacuumProtocolCheck","typeWidening","typeWidening-preview"],"writerFeatures":["timestampNtz","deletionVectors","columnMapping","v2Checkpoint","vacuumProtocolCheck","typeWidening","typeWidening-preview"]}}"#,
         )?;
         let loaded = table.load()?;
-        let protocol = loaded.protocol_info();
+        let protocol = loaded.protocol();
 
         assert_eq!(
             protocol.reader_features(),
@@ -219,7 +209,7 @@ mod tests {
         ] {
             let table = DeltaLogTable::new(name, protocol_json)?;
             let loaded = table.load()?;
-            let protocol = loaded.protocol_info();
+            let protocol = loaded.protocol();
 
             assert_eq!(protocol.min_reader_version(), reader_version);
             assert!(protocol.reader_features().is_empty());
@@ -237,7 +227,7 @@ mod tests {
             r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["madeUpFeature"],"writerFeatures":["madeUpFeature"]}}"#,
         )?;
         let loaded = table.load()?;
-        let protocol = loaded.protocol_info();
+        let protocol = loaded.protocol();
 
         assert_eq!(protocol.reader_features(), ["madeUpFeature"]);
         assert_eq!(
@@ -252,7 +242,7 @@ mod tests {
         assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=protocol error=unsupported_protocol reason=unsupported_reader_feature"
+            "delta reader error: phase=protocol code=unsupported_protocol reason=unsupported_reader_feature"
         );
         Ok(())
     }
@@ -271,8 +261,7 @@ mod tests {
         assert!(matches!(load_error, DeltaReaderError::SnapshotLoad { .. }));
         assert_eq!(load_error.phase(), DeltaReaderPhase::Snapshot);
 
-        let protocol = DeltaProtocolInfo {
-            snapshot_version: 0,
+        let protocol = DeltaProtocol {
             min_reader_version: 4,
             min_writer_version: 7,
             reader_features: Vec::new(),
@@ -280,7 +269,7 @@ mod tests {
         };
         let error = validate_protocol(&protocol).expect_err("future version must fail");
         assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
-        assert_eq!(error.as_str(), "unsupported_protocol");
+        assert_eq!(error.code(), "unsupported_protocol");
         Ok(())
     }
 }

@@ -19,7 +19,7 @@ or manage transactions.
 First, [install the crate](installation.md). Then choose the quickstart that
 fits your application:
 
-1. [Read a table directly](direct-reader.md) if you want to work with an Arrow
+1. [Read a table as a stream](streaming-reader.md) if you want to work with an Arrow
    batch stream.
 2. [Query a table with DataFusion](datafusion.md) if you want to use SQL.
 

@@ -12,7 +12,7 @@ use crate::{
     DeltaReaderError,
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     reader::{
-        deletion_vector::load_deletion_vector_selection_blocking,
+        deletion_vector::load_deletion_vector_masker_blocking,
         planning::{DeltaScanFileTask, DeltaScanPlan},
         scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
         transform::align_batch_to_logical_schema,
@@ -37,9 +37,7 @@ pub(crate) fn delta_kernel_file_executor(
     plan: &Arc<DeltaScanPlan>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let plan = Arc::clone(plan);
-    let output_capacity = plan
-        .execution_options
-        .output_buffer_capacity_per_partition();
+    let output_buffer_batches = plan.execution_options.output_buffer_batches_per_partition();
 
     Arc::new(move |task, permit, cancellation| {
         let plan = Arc::clone(&plan);
@@ -51,7 +49,7 @@ pub(crate) fn delta_kernel_file_executor(
                 .fail();
             }
             Ok(spawn_blocking_file_stream(
-                output_capacity,
+                output_buffer_batches,
                 permit,
                 cancellation,
                 move |output, cancellation| read_file(plan.as_ref(), task, output, &cancellation),
@@ -84,7 +82,7 @@ fn read_file(
             .as_ref()
             .map(|predicate| predicate.as_ref().clone())
     };
-    let mut deletion_vector = load_deletion_vector_selection_blocking(
+    let mut deletion_vector = load_deletion_vector_masker_blocking(
         plan.engine_context.as_ref(),
         deletion_vector,
         &plan.metrics,
@@ -169,14 +167,14 @@ fn read_file(
 }
 
 fn spawn_blocking_file_stream(
-    output_capacity: usize,
+    output_buffer_batches: usize,
     permit: FileReadPermit,
     cancellation: ScanCancellation,
     producer: impl FnOnce(mpsc::Sender<RecordBatch>, ScanCancellation) -> Result<(), DeltaReaderError>
     + Send
     + 'static,
 ) -> FileBatchStream {
-    let (output, receiver) = mpsc::channel(output_capacity);
+    let (output, receiver) = mpsc::channel(output_buffer_batches);
     let task = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         producer(output, cancellation)
@@ -229,16 +227,16 @@ mod tests {
 
     use super::spawn_blocking_file_stream;
     use crate::{
-        DeltaReaderExecutionOptions, ParquetReaderBackend,
+        DeltaScanExecutionOptions, ParquetReaderBackend,
         reader::scheduling::{ScanCancellation, ScanReadLimiter},
     };
 
-    fn options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+    fn options() -> Result<DeltaScanExecutionOptions, crate::DeltaReaderError> {
+        Ok(DeltaScanExecutionOptions::new()
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel)
+            .with_parquet_backend(ParquetReaderBackend::DeltaKernel))
     }
 
     fn batch(id: i32) -> Result<RecordBatch, arrow::error::ArrowError> {
@@ -379,7 +377,7 @@ mod tests {
             .await
             .ok_or("expected producer error")?
             .expect_err("producer must fail");
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert!(!error.to_string().contains("sensitive"));
         assert!(failed.next().await.is_none());
 
@@ -395,7 +393,7 @@ mod tests {
             .await
             .ok_or("expected panic error")?
             .expect_err("panic must reach the stream");
-        assert_eq!(error.as_str(), "data_file_read");
+        assert_eq!(error.code(), "data_file_read");
         assert!(
             error
                 .source()

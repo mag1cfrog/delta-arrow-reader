@@ -24,11 +24,11 @@ use datafusion::physical_plan::PhysicalExpr;
 /// producer updates the expression at runtime. Keeping the same `Arc` preserves
 /// the connection between DataFusion's producer and this scan consumer.
 #[derive(Clone, Debug)]
-pub(crate) struct DeltaRetainedDynamicFilter {
+pub(crate) struct RetainedDynamicFilter {
     /// Original physical filter pushed by DataFusion, including any dynamic state.
     pub(crate) physical_expr: Arc<dyn PhysicalExpr>,
     /// Provider output partition columns referenced by this filter.
-    pub(crate) partition_columns: Vec<DeltaDynamicFilterColumn>,
+    pub(crate) partition_columns: Vec<DynamicFilterColumn>,
     /// Provider logical output schema used to validate indexes during retention.
     pub(crate) provider_schema: SchemaRef,
 }
@@ -39,61 +39,30 @@ pub(crate) struct DeltaRetainedDynamicFilter {
 /// Later partition-value evaluation needs both so it can validate that the
 /// retained expression still lines up with the provider output schema.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DeltaDynamicFilterColumn {
+pub(crate) struct DynamicFilterColumn {
     /// Provider output field name.
     pub(crate) name: String,
     /// Provider output field index.
     pub(crate) index: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Classification outcome for one physical filter supplied by DataFusion.
-pub(crate) enum DeltaDynamicFilterOutcome {
+#[derive(Clone, Debug)]
+/// Retention decision for one physical filter, preserving input order.
+pub(crate) enum DynamicFilterDecision {
     /// The filter is dynamic and references only Delta partition columns.
-    Accepted,
+    Accepted(RetainedDynamicFilter),
     /// The filter is unsupported by this hook and must remain a residual concern.
     Rejected,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Conservative reason a physical filter was not retained by this hook.
-pub(crate) enum DeltaDynamicFilterRejectionReason {
-    /// The expression does not contain a `DynamicFilterPhysicalExpr`.
-    NotDynamicFilter,
-    /// The expression is dynamic but exposes no physical column references.
-    NoReferencedColumns,
-    /// The expression references provider-internal synthetic columns.
-    InternalColumn,
-    /// A physical column name or index cannot be resolved against the provider schema.
-    UnknownColumn,
-    /// The expression references only non-partition data columns.
-    DataColumn,
-    /// The expression references at least one partition column and one data column.
-    MixedPartitionAndData,
-}
-
-#[derive(Clone, Debug)]
-/// Retention decision for one physical filter, preserving input order.
-pub(crate) struct DeltaDynamicFilterDecision {
-    /// Whether this filter was retained.
-    pub(crate) outcome: DeltaDynamicFilterOutcome,
-    /// Retained filter state when `outcome` is `Accepted`.
-    pub(crate) retained_filter: Option<DeltaRetainedDynamicFilter>,
-    /// Rejection reason when `outcome` is `Rejected`.
-    #[allow(dead_code)]
-    pub(crate) rejection_reason: Option<DeltaDynamicFilterRejectionReason>,
-}
-
 #[derive(Clone, Debug, Default)]
 /// Batch classification for the filters offered to one Delta scan node.
-pub(crate) struct DeltaDynamicFilterPlan {
+pub(crate) struct DynamicFilterClassification {
     /// One decision per input filter, preserving input order for diagnostics.
-    pub(crate) decisions: Vec<DeltaDynamicFilterDecision>,
-    /// Accepted filters in input order, ready to be stored on the scan node.
-    pub(crate) accepted_filters: Vec<DeltaRetainedDynamicFilter>,
+    pub(crate) decisions: Vec<DynamicFilterDecision>,
 }
 
-impl DeltaDynamicFilterPlan {
+impl DynamicFilterClassification {
     /// Classifies DataFusion physical filters against this scan's output schema.
     ///
     /// `partition_columns` must be the Delta table partition columns retained
@@ -105,25 +74,20 @@ impl DeltaDynamicFilterPlan {
         provider_schema: &SchemaRef,
         partition_columns: &[String],
     ) -> Self {
-        let decisions = filters
-            .iter()
-            .map(|filter| classify_dynamic_filter(filter, provider_schema, partition_columns))
-            .collect::<Vec<_>>();
-        let accepted_filters = decisions
-            .iter()
-            .filter_map(|decision| decision.retained_filter.clone())
-            .collect();
-
         Self {
-            decisions,
-            accepted_filters,
+            decisions: filters
+                .iter()
+                .map(|filter| classify_dynamic_filter(filter, provider_schema, partition_columns))
+                .collect(),
         }
     }
 
-    /// Returns whether at least one offered physical filter can be retained.
-    #[must_use]
-    pub(crate) fn has_accepted_filters(&self) -> bool {
-        !self.accepted_filters.is_empty()
+    /// Returns accepted filters in input order.
+    pub(crate) fn accepted_filters(&self) -> impl Iterator<Item = &RetainedDynamicFilter> {
+        self.decisions.iter().filter_map(|decision| match decision {
+            DynamicFilterDecision::Accepted(filter) => Some(filter),
+            DynamicFilterDecision::Rejected => None,
+        })
     }
 }
 
@@ -131,20 +95,20 @@ fn classify_dynamic_filter(
     filter: &Arc<dyn PhysicalExpr>,
     provider_schema: &SchemaRef,
     partition_columns: &[String],
-) -> DeltaDynamicFilterDecision {
+) -> DynamicFilterDecision {
     if !contains_dynamic_filter(filter.as_ref()) {
-        return rejected(DeltaDynamicFilterRejectionReason::NotDynamicFilter);
+        return DynamicFilterDecision::Rejected;
     }
 
     let references = collect_column_references(filter.as_ref(), provider_schema);
     if references.has_internal_column {
-        return rejected(DeltaDynamicFilterRejectionReason::InternalColumn);
+        return DynamicFilterDecision::Rejected;
     }
     if references.has_unknown_column {
-        return rejected(DeltaDynamicFilterRejectionReason::UnknownColumn);
+        return DynamicFilterDecision::Rejected;
     }
     if references.columns.is_empty() {
-        return rejected(DeltaDynamicFilterRejectionReason::NoReferencedColumns);
+        return DynamicFilterDecision::Rejected;
     }
 
     let partition_column_set = partition_columns
@@ -167,26 +131,12 @@ fn classify_dynamic_filter(
         );
 
     match (partition_columns.is_empty(), data_column_count == 0) {
-        (false, true) => DeltaDynamicFilterDecision {
-            outcome: DeltaDynamicFilterOutcome::Accepted,
-            retained_filter: Some(DeltaRetainedDynamicFilter {
-                physical_expr: Arc::clone(filter),
-                partition_columns,
-                provider_schema: Arc::clone(provider_schema),
-            }),
-            rejection_reason: None,
-        },
-        (false, false) => rejected(DeltaDynamicFilterRejectionReason::MixedPartitionAndData),
-        (true, false) => rejected(DeltaDynamicFilterRejectionReason::DataColumn),
-        (true, true) => rejected(DeltaDynamicFilterRejectionReason::NoReferencedColumns),
-    }
-}
-
-fn rejected(reason: DeltaDynamicFilterRejectionReason) -> DeltaDynamicFilterDecision {
-    DeltaDynamicFilterDecision {
-        outcome: DeltaDynamicFilterOutcome::Rejected,
-        retained_filter: None,
-        rejection_reason: Some(reason),
+        (false, true) => DynamicFilterDecision::Accepted(RetainedDynamicFilter {
+            physical_expr: Arc::clone(filter),
+            partition_columns,
+            provider_schema: Arc::clone(provider_schema),
+        }),
+        _ => DynamicFilterDecision::Rejected,
     }
 }
 
@@ -206,7 +156,7 @@ fn contains_dynamic_filter(expr: &dyn PhysicalExpr) -> bool {
 #[derive(Default)]
 struct ColumnReferences {
     /// Resolved provider output columns, keyed for deterministic de-duplication.
-    columns: BTreeMap<(usize, String), DeltaDynamicFilterColumn>,
+    columns: BTreeMap<(usize, String), DynamicFilterColumn>,
     /// Whether any column reference targets provider-owned synthetic state.
     has_internal_column: bool,
     /// Whether any column reference fails strict provider schema validation.
@@ -263,7 +213,7 @@ fn collect_column_reference(
 
     references.columns.insert(
         (column.index(), column.name().to_owned()),
-        DeltaDynamicFilterColumn {
+        DynamicFilterColumn {
             name: column.name().to_owned(),
             index: column.index(),
         },
@@ -295,26 +245,37 @@ mod tests {
         Arc::new(DynamicFilterPhysicalExpr::new(children, lit(true)))
     }
 
-    fn plan_for(filter: Arc<dyn PhysicalExpr>) -> DeltaDynamicFilterPlan {
-        DeltaDynamicFilterPlan::from_filters(
+    fn classify(filter: Arc<dyn PhysicalExpr>) -> DynamicFilterClassification {
+        DynamicFilterClassification::from_filters(
             &[filter],
             &test_schema(),
             &["region".to_owned(), "event_date".to_owned()],
         )
     }
 
+    fn assert_rejected(classification: &DynamicFilterClassification) {
+        assert!(classification.accepted_filters().next().is_none());
+        assert!(matches!(
+            classification.decisions.first(),
+            Some(DynamicFilterDecision::Rejected)
+        ));
+    }
+
     #[test]
     fn partition_dynamic_filter_is_accepted() {
-        let plan = plan_for(dynamic_filter(vec![column("region", 2)]));
+        let classification = classify(dynamic_filter(vec![column("region", 2)]));
 
-        assert!(plan.has_accepted_filters());
+        assert!(matches!(
+            classification.decisions.first(),
+            Some(DynamicFilterDecision::Accepted(_))
+        ));
         assert_eq!(
-            plan.decisions[0].outcome,
-            DeltaDynamicFilterOutcome::Accepted
-        );
-        assert_eq!(
-            plan.accepted_filters[0].partition_columns,
-            vec![DeltaDynamicFilterColumn {
+            classification
+                .accepted_filters()
+                .next()
+                .expect("filter must be accepted")
+                .partition_columns,
+            vec![DynamicFilterColumn {
                 name: "region".to_owned(),
                 index: 2,
             }]
@@ -323,30 +284,30 @@ mod tests {
 
     #[test]
     fn no_column_dynamic_filter_is_rejected() {
-        let plan = plan_for(dynamic_filter(Vec::new()));
+        let classification = classify(dynamic_filter(Vec::new()));
 
-        assert!(!plan.has_accepted_filters());
-        assert_eq!(
-            plan.decisions[0].rejection_reason,
-            Some(DeltaDynamicFilterRejectionReason::NoReferencedColumns)
-        );
+        assert_rejected(&classification);
     }
 
     #[test]
     fn multi_partition_dynamic_filter_retains_sorted_column_mappings() {
-        let plan = plan_for(dynamic_filter(vec![
+        let classification = classify(dynamic_filter(vec![
             column("event_date", 3),
             column("region", 2),
         ]));
 
         assert_eq!(
-            plan.accepted_filters[0].partition_columns,
+            classification
+                .accepted_filters()
+                .next()
+                .expect("filter must be accepted")
+                .partition_columns,
             vec![
-                DeltaDynamicFilterColumn {
+                DynamicFilterColumn {
                     name: "region".to_owned(),
                     index: 2,
                 },
-                DeltaDynamicFilterColumn {
+                DynamicFilterColumn {
                     name: "event_date".to_owned(),
                     index: 3,
                 },
@@ -356,35 +317,23 @@ mod tests {
 
     #[test]
     fn data_column_dynamic_filter_is_rejected() {
-        let plan = plan_for(dynamic_filter(vec![column("id", 0)]));
+        let classification = classify(dynamic_filter(vec![column("id", 0)]));
 
-        assert!(!plan.has_accepted_filters());
-        assert_eq!(
-            plan.decisions[0].rejection_reason,
-            Some(DeltaDynamicFilterRejectionReason::DataColumn)
-        );
+        assert_rejected(&classification);
     }
 
     #[test]
     fn unknown_column_dynamic_filter_is_rejected() {
-        let plan = plan_for(dynamic_filter(vec![column("ghost", 99)]));
+        let classification = classify(dynamic_filter(vec![column("ghost", 99)]));
 
-        assert!(!plan.has_accepted_filters());
-        assert_eq!(
-            plan.decisions[0].rejection_reason,
-            Some(DeltaDynamicFilterRejectionReason::UnknownColumn)
-        );
+        assert_rejected(&classification);
     }
 
     #[test]
     fn mixed_partition_and_data_dynamic_filter_is_rejected() {
-        let plan = plan_for(dynamic_filter(vec![column("region", 2), column("id", 0)]));
+        let classification = classify(dynamic_filter(vec![column("region", 2), column("id", 0)]));
 
-        assert!(!plan.has_accepted_filters());
-        assert_eq!(
-            plan.decisions[0].rejection_reason,
-            Some(DeltaDynamicFilterRejectionReason::MixedPartitionAndData)
-        );
+        assert_rejected(&classification);
     }
 
     #[test]
@@ -392,13 +341,9 @@ mod tests {
         let dynamic = dynamic_filter(vec![column("region", 2)]);
         let wrapped = Arc::new(BinaryExpr::new(dynamic, Operator::And, column("id", 0)));
 
-        let plan = plan_for(wrapped);
+        let classification = classify(wrapped);
 
-        assert!(!plan.has_accepted_filters());
-        assert_eq!(
-            plan.decisions[0].rejection_reason,
-            Some(DeltaDynamicFilterRejectionReason::MixedPartitionAndData)
-        );
+        assert_rejected(&classification);
     }
 
     #[test]
@@ -409,23 +354,15 @@ mod tests {
             lit("us-west"),
         ));
 
-        let plan = plan_for(filter);
+        let classification = classify(filter);
 
-        assert!(!plan.has_accepted_filters());
-        assert_eq!(
-            plan.decisions[0].rejection_reason,
-            Some(DeltaDynamicFilterRejectionReason::NotDynamicFilter)
-        );
+        assert_rejected(&classification);
     }
 
     #[test]
     fn internal_column_dynamic_filter_is_rejected() {
-        let plan = plan_for(dynamic_filter(vec![column("__delta_funnel_row_index", 0)]));
+        let classification = classify(dynamic_filter(vec![column("__delta_funnel_row_index", 0)]));
 
-        assert!(!plan.has_accepted_filters());
-        assert_eq!(
-            plan.decisions[0].rejection_reason,
-            Some(DeltaDynamicFilterRejectionReason::InternalColumn)
-        );
+        assert_rejected(&classification);
     }
 }

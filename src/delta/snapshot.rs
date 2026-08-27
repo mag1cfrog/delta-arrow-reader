@@ -7,8 +7,8 @@ use snafu::ResultExt;
 
 use super::{
     kernel::{DeltaKernelEngineContext, KernelSnapshot, snapshot_arrow_schema},
-    protocol::DeltaProtocolInfo,
-    uri::normalize_delta_table_uri,
+    location::normalize_table_location,
+    protocol::DeltaProtocol,
 };
 use crate::{
     DeltaReaderError, DeltaSnapshotSelection, DeltaStorageOptions,
@@ -21,21 +21,21 @@ const SNAPSHOT_LOAD_COMPLETED_EVENT: &str = "snapshot_load.completed";
 const SNAPSHOT_LOAD_FAILED_EVENT: &str = "snapshot_load.failed";
 
 #[derive(Clone)]
-pub(crate) struct LoadedDeltaTableSnapshot {
+pub(crate) struct ArrowTableSnapshot {
     snapshot: KernelSnapshot,
-    protocol_info: DeltaProtocolInfo,
+    protocol: DeltaProtocol,
     schema: SchemaRef,
     engine_context: Arc<DeltaKernelEngineContext>,
 }
 
-pub(crate) struct StagedDeltaTableSnapshot {
+pub(crate) struct KernelTableSnapshot {
     snapshot: KernelSnapshot,
-    protocol_info: DeltaProtocolInfo,
+    protocol: DeltaProtocol,
     engine_context: Arc<DeltaKernelEngineContext>,
 }
 
-impl StagedDeltaTableSnapshot {
-    pub(crate) fn table_uri(&self) -> &str {
+impl KernelTableSnapshot {
+    pub(crate) fn table_url(&self) -> &str {
         self.engine_context.table_url().as_str()
     }
 
@@ -43,20 +43,20 @@ impl StagedDeltaTableSnapshot {
         self.snapshot.version()
     }
 
-    pub(crate) fn protocol_info(&self) -> &DeltaProtocolInfo {
-        &self.protocol_info
+    pub(crate) fn protocol(&self) -> &DeltaProtocol {
+        &self.protocol
     }
 
-    pub(crate) fn into_loaded(self) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
+    pub(crate) fn into_arrow_snapshot(self) -> Result<ArrowTableSnapshot, DeltaReaderError> {
         let schema =
             snapshot_arrow_schema(&self.snapshot)
                 .boxed()
                 .context(SchemaConversionSnafu {
                     reason: "schema_conversion_failed",
                 })?;
-        Ok(LoadedDeltaTableSnapshot {
+        Ok(ArrowTableSnapshot {
             snapshot: self.snapshot,
-            protocol_info: self.protocol_info,
+            protocol: self.protocol,
             schema,
             engine_context: self.engine_context,
         })
@@ -64,8 +64,8 @@ impl StagedDeltaTableSnapshot {
 }
 
 #[allow(dead_code)]
-impl LoadedDeltaTableSnapshot {
-    pub(crate) fn table_uri(&self) -> &str {
+impl ArrowTableSnapshot {
+    pub(crate) fn table_url(&self) -> &str {
         self.engine_context.table_url().as_str()
     }
 
@@ -73,16 +73,12 @@ impl LoadedDeltaTableSnapshot {
         self.snapshot.version()
     }
 
-    pub(crate) fn protocol_info(&self) -> &DeltaProtocolInfo {
-        &self.protocol_info
+    pub(crate) fn protocol(&self) -> &DeltaProtocol {
+        &self.protocol
     }
 
     pub(crate) fn schema(&self) -> SchemaRef {
         Arc::clone(&self.schema)
-    }
-
-    pub(crate) fn schema_ref(&self) -> &SchemaRef {
-        &self.schema
     }
 
     pub(crate) fn engine_context(&self) -> &Arc<DeltaKernelEngineContext> {
@@ -99,14 +95,14 @@ impl LoadedDeltaTableSnapshot {
 }
 
 pub(crate) fn load_delta_table_snapshot_blocking(
-    table_uri: &str,
+    table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = stage_delta_table_snapshot(table_uri, storage_options, selection)
-        .and_then(StagedDeltaTableSnapshot::into_loaded);
+    let result = build_kernel_table_snapshot(table_location, storage_options, selection)
+        .and_then(KernelTableSnapshot::into_arrow_snapshot);
 
     match &result {
         Ok(snapshot) => trace_snapshot_load_completed(selection_kind, snapshot),
@@ -115,30 +111,30 @@ pub(crate) fn load_delta_table_snapshot_blocking(
     result
 }
 
-pub(crate) fn load_staged_delta_table_snapshot_blocking(
-    table_uri: &str,
+pub(crate) fn load_kernel_table_snapshot_blocking(
+    table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
-    let result = stage_delta_table_snapshot(table_uri, storage_options, selection);
+    let result = build_kernel_table_snapshot(table_location, storage_options, selection);
 
     match &result {
-        Ok(snapshot) => trace_staged_snapshot_load_completed(selection_kind, snapshot),
+        Ok(snapshot) => trace_kernel_snapshot_load_completed(selection_kind, snapshot),
         Err(error) => trace_snapshot_load_failed(selection_kind, error),
     }
     result
 }
 
-fn stage_delta_table_snapshot(
-    table_uri: &str,
+fn build_kernel_table_snapshot(
+    table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
-    let table_url = normalize_delta_table_uri(table_uri)?;
-    let s3_auth_mode_hint = s3_auth_mode_hint_for_source(&table_url, storage_options);
-    let engine_context = DeltaKernelEngineContext::build(table_url, storage_options)
+) -> Result<KernelTableSnapshot, DeltaReaderError> {
+    let table_url = normalize_table_location(table_location)?;
+    let s3_auth_mode_hint = s3_auth_mode_hint_for_table(&table_url, storage_options);
+    let engine_context = DeltaKernelEngineContext::try_new(table_url, storage_options)
         .boxed()
         .context(StorageInitializationSnafu {
             reason: "storage_initialization_failed",
@@ -154,11 +150,11 @@ fn stage_delta_table_snapshot(
         .context(SnapshotLoadSnafu {
             reason: snapshot_load_failed_reason(s3_auth_mode_hint),
         })?;
-    let protocol_info = DeltaProtocolInfo::from_snapshot(&snapshot);
+    let protocol = DeltaProtocol::from_snapshot(&snapshot);
 
-    Ok(StagedDeltaTableSnapshot {
+    Ok(KernelTableSnapshot {
         snapshot,
-        protocol_info,
+        protocol,
         engine_context,
     })
 }
@@ -168,14 +164,14 @@ fn stage_delta_table_snapshot(
 ///
 /// Dropping the returned future cancels result delivery. A blocking load that
 /// already started may still finish before its owned context is dropped.
-pub(crate) async fn load_delta_table_snapshot_async(
-    table_uri: String,
+pub(crate) async fn load_delta_table_snapshot(
+    table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let result = tokio::task::spawn_blocking(move || {
-        load_delta_table_snapshot_blocking(&table_uri, &storage_options, selection)
+        load_delta_table_snapshot_blocking(&table_location, &storage_options, selection)
     })
     .await
     .boxed()
@@ -192,14 +188,14 @@ pub(crate) async fn load_delta_table_snapshot_async(
     }
 }
 
-pub(crate) async fn load_staged_delta_table_snapshot_async(
-    table_uri: String,
+pub(crate) async fn load_kernel_table_snapshot(
+    table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<StagedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let result = tokio::task::spawn_blocking(move || {
-        load_staged_delta_table_snapshot_blocking(&table_uri, &storage_options, selection)
+        load_kernel_table_snapshot_blocking(&table_location, &storage_options, selection)
     })
     .await
     .boxed()
@@ -231,26 +227,23 @@ fn trace_snapshot_load_started(selection: &'static str) {
     );
 }
 
-fn trace_snapshot_load_completed(selection: &'static str, snapshot: &LoadedDeltaTableSnapshot) {
+fn trace_snapshot_load_completed(selection: &'static str, snapshot: &ArrowTableSnapshot) {
     tracing::debug!(
         target: TRACING_TARGET,
         event = SNAPSHOT_LOAD_COMPLETED_EVENT,
         selection,
         snapshot_version = snapshot.version(),
-        protocol_reader_version = snapshot.protocol_info().min_reader_version()
+        protocol_reader_version = snapshot.protocol().min_reader_version()
     );
 }
 
-fn trace_staged_snapshot_load_completed(
-    selection: &'static str,
-    snapshot: &StagedDeltaTableSnapshot,
-) {
+fn trace_kernel_snapshot_load_completed(selection: &'static str, snapshot: &KernelTableSnapshot) {
     tracing::debug!(
         target: TRACING_TARGET,
         event = SNAPSHOT_LOAD_COMPLETED_EVENT,
         selection,
         snapshot_version = snapshot.version(),
-        protocol_reader_version = snapshot.protocol_info().min_reader_version()
+        protocol_reader_version = snapshot.protocol().min_reader_version()
     );
 }
 
@@ -259,7 +252,7 @@ fn trace_snapshot_load_failed(selection: &'static str, error: &DeltaReaderError)
         target: TRACING_TARGET,
         event = SNAPSHOT_LOAD_FAILED_EVENT,
         selection,
-        error_variant = error.as_str(),
+        error_code = error.code(),
         error_phase = error.phase().as_str()
     );
 }
@@ -273,7 +266,7 @@ pub(crate) enum S3AuthModeHint {
     OtherExplicit,
 }
 
-fn s3_auth_mode_hint_for_source(
+fn s3_auth_mode_hint_for_table(
     table_url: &url::Url,
     storage_options: &DeltaStorageOptions,
 ) -> Option<S3AuthModeHint> {
@@ -399,9 +392,9 @@ mod tests {
     };
 
     use super::{
-        S3AuthModeHint, TRACING_TARGET, load_delta_table_snapshot_async,
-        load_delta_table_snapshot_blocking, load_staged_delta_table_snapshot_blocking,
-        s3_auth_mode_hint_for_source, snapshot_load_failed_reason,
+        S3AuthModeHint, TRACING_TARGET, load_delta_table_snapshot,
+        load_delta_table_snapshot_blocking, load_kernel_table_snapshot_blocking,
+        s3_auth_mode_hint_for_table, snapshot_load_failed_reason,
     };
     use crate::{
         DeltaReaderError, DeltaReaderPhase, DeltaSnapshotSelection, DeltaStorageOptions,
@@ -581,7 +574,7 @@ mod tests {
 
         assert_eq!(latest.version(), 1);
         assert_eq!(fixed.version(), 0);
-        assert!(latest.table_uri().starts_with("file://"));
+        assert!(latest.table_url().starts_with("file://"));
         assert!(Arc::ptr_eq(
             latest.engine_context(),
             cloned.engine_context()
@@ -667,23 +660,23 @@ mod tests {
     }
 
     #[test]
-    fn staged_load_exposes_metadata_before_schema_conversion()
+    fn kernel_snapshot_load_exposes_metadata_before_schema_conversion()
     -> Result<(), Box<dyn std::error::Error>> {
         let table = DeltaLogTable::new_with_protocol_and_metadata(
-            "staged-schema-failure",
+            "kernel-schema-failure",
             PROTOCOL_JSON,
             INVALID_ARROW_SCHEMA_METADATA_JSON,
         )?;
-        let staged = load_staged_delta_table_snapshot_blocking(
+        let kernel_snapshot = load_kernel_table_snapshot_blocking(
             &table.0.to_string_lossy(),
             &DeltaStorageOptions::new(),
             DeltaSnapshotSelection::Latest,
         )?;
 
-        assert_eq!(staged.version(), 1);
-        assert_eq!(staged.protocol_info().min_reader_version(), 1);
-        assert!(staged.table_uri().starts_with("file://"));
-        let error = match staged.into_loaded() {
+        assert_eq!(kernel_snapshot.version(), 1);
+        assert_eq!(kernel_snapshot.protocol().min_reader_version(), 1);
+        assert!(kernel_snapshot.table_url().starts_with("file://"));
+        let error = match kernel_snapshot.into_arrow_snapshot() {
             Ok(_) => panic!("invalid nested column metadata must fail schema conversion"),
             Err(error) => error,
         };
@@ -797,10 +790,7 @@ mod tests {
             events[3].fields,
             BTreeMap::from([
                 ("error_phase".to_owned(), "storage".to_owned()),
-                (
-                    "error_variant".to_owned(),
-                    "storage_initialization".to_owned(),
-                ),
+                ("error_code".to_owned(), "storage_initialization".to_owned(),),
                 ("event".to_owned(), "snapshot_load.failed".to_owned()),
                 ("selection".to_owned(), "version".to_owned()),
             ])
@@ -829,7 +819,7 @@ mod tests {
         assert!(matches!(error, DeltaReaderError::SnapshotLoad { .. }));
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=snapshot error=snapshot_load reason=snapshot_load_failed"
+            "delta reader error: phase=snapshot code=snapshot_load reason=snapshot_load_failed"
         );
         assert!(is_kernel_error(error.source().expect("Kernel source")));
         Ok(())
@@ -851,7 +841,7 @@ mod tests {
 
         assert!(matches!(error, DeltaReaderError::SnapshotLoad { .. }));
         assert_eq!(error.phase(), DeltaReaderPhase::Snapshot);
-        assert_eq!(error.as_str(), "snapshot_load");
+        assert_eq!(error.code(), "snapshot_load");
         assert!(!error.to_string().contains(&table.0.to_string_lossy()[..]));
         assert!(is_kernel_error(error.source().expect("Kernel source")));
         Ok(())
@@ -937,7 +927,7 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         let table_url = url::Url::parse("s3://bucket/root")?;
         let _implicit =
-            DeltaKernelEngineContext::build(table_url.clone(), &DeltaStorageOptions::new())?;
+            DeltaKernelEngineContext::try_new(table_url.clone(), &DeltaStorageOptions::new())?;
         for (access_key, secret_key, token_key, region_key) in [
             (
                 "AWS_ACCESS_KEY_ID",
@@ -976,7 +966,7 @@ mod tests {
                 (token_key, "token"),
                 (region_key, "us-east-1"),
             ]);
-            let context = DeltaKernelEngineContext::build(table_url.clone(), &options)?;
+            let context = DeltaKernelEngineContext::try_new(table_url.clone(), &options)?;
             assert_eq!(context.table_url(), &table_url);
         }
         Ok(())
@@ -1073,7 +1063,7 @@ mod tests {
             "https://ACCOUNT_ID.r2.cloudflarestorage.com/bucket/table",
         ] {
             assert_eq!(
-                s3_auth_mode_hint_for_source(
+                s3_auth_mode_hint_for_table(
                     &url::Url::parse(table_uri)?,
                     &DeltaStorageOptions::new()
                 ),
@@ -1129,13 +1119,13 @@ mod tests {
 
         for (options, expected) in cases {
             assert_eq!(
-                s3_auth_mode_hint_for_source(&table_url, &options),
+                s3_auth_mode_hint_for_table(&table_url, &options),
                 Some(expected)
             );
         }
 
         assert_eq!(
-            s3_auth_mode_hint_for_source(
+            s3_auth_mode_hint_for_table(
                 &url::Url::parse("https://example.com/table")?,
                 &DeltaStorageOptions::new()
             ),
@@ -1162,12 +1152,12 @@ mod tests {
             .enable_all()
             .build()?;
         let (first, second) = runtime.block_on(future::join(
-            load_delta_table_snapshot_async(
+            load_delta_table_snapshot(
                 table_uri.clone(),
                 DeltaStorageOptions::new(),
                 DeltaSnapshotSelection::Latest,
             ),
-            load_delta_table_snapshot_async(
+            load_delta_table_snapshot(
                 table_uri,
                 DeltaStorageOptions::new(),
                 DeltaSnapshotSelection::Version(0),

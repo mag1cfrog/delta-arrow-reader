@@ -32,15 +32,15 @@ use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaStorageOptions};
 pub(crate) const TABLE_FEATURES_READER_VERSION: i32 = TABLE_FEATURES_MIN_READER_VERSION;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DeltaKernelProtocol {
+pub(crate) struct KernelProtocolMetadata {
     pub(crate) min_reader_version: i32,
     pub(crate) min_writer_version: i32,
     pub(crate) reader_features: Vec<String>,
     pub(crate) writer_features: Vec<String>,
 }
 
-pub(crate) fn parse_uri(table_uri: &str) -> delta_kernel::DeltaResult<Url> {
-    try_parse_uri(table_uri)
+pub(crate) fn parse_table_location(table_location: &str) -> delta_kernel::DeltaResult<Url> {
+    try_parse_uri(table_location)
 }
 
 /// One parsed table location, object store, and Kernel engine.
@@ -91,9 +91,9 @@ impl KernelScanSchemas {
 }
 
 #[allow(dead_code)]
-pub(crate) struct KernelScanMetadata {
+pub(crate) struct KernelScanFileCollection {
     pub(crate) files: Vec<KernelScanFileMetadata>,
-    pub(crate) files_filtered_during_planning: Option<u64>,
+    pub(crate) add_actions_excluded_during_planning: Option<u64>,
 }
 
 #[allow(dead_code)]
@@ -102,7 +102,7 @@ impl KernelPhysicalToLogicalTransform {
         self.0.is_some()
     }
 
-    pub(crate) fn into_inner(self) -> Option<ExpressionRef> {
+    pub(crate) fn into_expression(self) -> Option<ExpressionRef> {
         self.0
     }
 
@@ -153,41 +153,39 @@ impl KernelScan {
         self.schemas.clone()
     }
 
-    pub(crate) fn has_physical_predicate(&self) -> bool {
-        self.scan.physical_predicate().is_some()
-    }
-
     pub(crate) fn physical_predicate(&self) -> Option<DeltaKernelPredicate> {
         self.scan.physical_predicate().map(DeltaKernelPredicate)
     }
 
-    pub(crate) fn file_metadata(
+    pub(crate) fn collect_file_metadata(
         &self,
         engine_context: &DeltaKernelEngineContext,
-    ) -> delta_kernel::DeltaResult<KernelScanMetadata> {
+    ) -> delta_kernel::DeltaResult<KernelScanFileCollection> {
         fn collect(files: &mut Vec<KernelScanFileMetadata>, file: ScanFile) {
             files.push(KernelScanFileMetadata::from_scan_file(file));
         }
 
         let mut files = Vec::new();
-        let mut filtered = Some(0_u64);
+        let mut excluded_add_actions = Some(0_u64);
         let mut saw_batch = false;
         for metadata in self.scan.scan_metadata(engine_context.engine.as_ref())? {
             let metadata = metadata?;
             saw_batch = true;
-            filtered = filtered.and_then(|total| {
-                files_filtered(&metadata).and_then(|count| total.checked_add(count))
+            excluded_add_actions = excluded_add_actions.and_then(|total| {
+                excluded_add_action_count(&metadata).and_then(|count| total.checked_add(count))
             });
             files = metadata.visit_scan_files(files, collect)?;
         }
-        Ok(KernelScanMetadata {
+        Ok(KernelScanFileCollection {
             files,
-            files_filtered_during_planning: saw_batch.then_some(filtered).flatten(),
+            add_actions_excluded_during_planning: saw_batch
+                .then_some(excluded_add_actions)
+                .flatten(),
         })
     }
 }
 
-fn files_filtered(metadata: &ScanMetadata) -> Option<u64> {
+fn excluded_add_action_count(metadata: &ScanMetadata) -> Option<u64> {
     let data = metadata
         .scan_files
         .data()
@@ -211,7 +209,7 @@ impl DeltaKernelPredicate {
         &self.0
     }
 
-    pub(crate) fn into_inner(self) -> PredicateRef {
+    pub(crate) fn into_predicate(self) -> PredicateRef {
         self.0
     }
 
@@ -222,7 +220,7 @@ impl DeltaKernelPredicate {
 }
 
 #[allow(dead_code)]
-pub(crate) fn preserve_deletion_vector(dv_info: DvInfo) -> Option<KernelDeletionVectorHandle> {
+pub(crate) fn deletion_vector_handle(dv_info: DvInfo) -> Option<KernelDeletionVectorHandle> {
     dv_info
         .has_vector()
         .then_some(KernelDeletionVectorHandle(dv_info))
@@ -247,21 +245,19 @@ impl KernelScanFileMetadata {
             modification_time_ms: Some(modification_time),
             estimated_rows: stats.map(|stats| stats.num_records),
             partition_values: partition_values.into_iter().collect(),
-            deletion_vector: preserve_deletion_vector(dv_info),
+            deletion_vector: deletion_vector_handle(dv_info),
             transform: KernelPhysicalToLogicalTransform(transform),
         }
     }
 }
 
 #[allow(dead_code)]
-pub(crate) fn delta_predicate_to_kernel_pruning(
-    predicate: &DeltaPredicate,
-) -> Option<DeltaKernelPredicate> {
+pub(crate) fn kernel_pruning_predicate(predicate: &DeltaPredicate) -> Option<DeltaKernelPredicate> {
     convert_predicate(predicate)
         .map(|converted| DeltaKernelPredicate(Arc::new(converted.predicate)))
 }
 
-pub(crate) fn delta_predicate_kernel_pruning_is_exact(predicate: &DeltaPredicate) -> bool {
+pub(crate) fn kernel_pruning_is_exact(predicate: &DeltaPredicate) -> bool {
     convert_predicate(predicate).is_some_and(|converted| converted.exact)
 }
 
@@ -279,7 +275,7 @@ fn convert_predicate(predicate: &DeltaPredicate) -> Option<ConvertedPredicate> {
     };
 
     match predicate {
-        DeltaPredicate::Boolean(value) => exact(Predicate::literal(*value)),
+        DeltaPredicate::Constant(value) => exact(Predicate::literal(*value)),
         DeltaPredicate::Compare { column, op, value } => {
             let column = Expression::Column(ColumnName::new([column.as_str()]));
             let value = Expression::Literal(convert_scalar(value)?);
@@ -394,7 +390,7 @@ fn convert_scalar(scalar: &DeltaScalar) -> Option<Scalar> {
 }
 
 impl DeltaKernelEngineContext {
-    pub(crate) fn build(
+    pub(crate) fn try_new(
         table_url: Url,
         storage_options: &DeltaStorageOptions,
     ) -> delta_kernel::DeltaResult<Self> {
@@ -499,7 +495,7 @@ impl KernelSnapshot {
         let mut builder = Arc::clone(&self.0)
             .scan_builder()
             .with_schema(logical_schema)
-            .with_predicate(predicate.map(DeltaKernelPredicate::into_inner));
+            .with_predicate(predicate.map(DeltaKernelPredicate::into_predicate));
         if include_stats {
             builder = builder.with_stats(StatsOptions::all());
         }
@@ -520,10 +516,10 @@ impl KernelSnapshot {
     }
 }
 
-pub(crate) fn snapshot_protocol_report(snapshot: &KernelSnapshot) -> DeltaKernelProtocol {
+pub(crate) fn snapshot_protocol_metadata(snapshot: &KernelSnapshot) -> KernelProtocolMetadata {
     let protocol = snapshot.0.table_configuration().protocol();
 
-    DeltaKernelProtocol {
+    KernelProtocolMetadata {
         min_reader_version: protocol.min_reader_version(),
         min_writer_version: protocol.min_writer_version(),
         reader_features: feature_names(protocol.reader_features()),
@@ -586,8 +582,8 @@ mod tests {
     }
 
     fn converted(predicate: &DeltaPredicate) -> Option<Predicate> {
-        delta_predicate_to_kernel_pruning(predicate)
-            .map(|predicate| predicate.into_inner().as_ref().clone())
+        kernel_pruning_predicate(predicate)
+            .map(|predicate| predicate.into_predicate().as_ref().clone())
     }
 
     fn apply_kernel_pruning(
@@ -661,14 +657,14 @@ mod tests {
             Some(Predicate::is_not_null(id.clone()))
         );
         assert_eq!(
-            converted(&DeltaPredicate::Not(Box::new(DeltaPredicate::Boolean(
+            converted(&DeltaPredicate::Not(Box::new(DeltaPredicate::Constant(
                 true
             )))),
             Some(Predicate::not(Predicate::literal(true)))
         );
         assert_eq!(
             converted(&DeltaPredicate::Or(vec![
-                DeltaPredicate::Boolean(false),
+                DeltaPredicate::Constant(false),
                 DeltaPredicate::IsNull {
                     column: "id".to_owned(),
                 },
@@ -809,7 +805,7 @@ mod tests {
 
         for predicate in predicates {
             let without_pruning = evaluate_predicate(&batch, &predicate)?;
-            let candidates = match delta_predicate_to_kernel_pruning(&predicate) {
+            let candidates = match kernel_pruning_predicate(&predicate) {
                 Some(kernel) => apply_kernel_pruning(&batch, &kernel)?,
                 None => batch.clone(),
             };
@@ -826,9 +822,10 @@ mod tests {
         let safe = compare("id", DeltaComparison::Gt, DeltaScalar::Int32(1));
         let unsupported = compare("score", DeltaComparison::NotEq, DeltaScalar::Float64(0.0));
 
-        assert!(delta_predicate_kernel_pruning_is_exact(&safe));
-        assert!(!delta_predicate_kernel_pruning_is_exact(
-            &DeltaPredicate::And(vec![safe, unsupported])
-        ));
+        assert!(kernel_pruning_is_exact(&safe));
+        assert!(!kernel_pruning_is_exact(&DeltaPredicate::And(vec![
+            safe,
+            unsupported
+        ])));
     }
 }

@@ -20,35 +20,34 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct DataFusionFilterCapabilities {
-    pub(crate) exact_predicate_evaluation: bool,
+pub(crate) struct FilterCapabilities {
+    pub(crate) supports_exact_row_filtering: bool,
 }
 
-pub(crate) struct DataFusionFilterDecision {
-    pub(crate) predicate: Option<DeltaPredicate>,
+pub(crate) struct FilterDecision {
+    pub(crate) pruning_predicate: Option<DeltaPredicate>,
     pub(crate) pushdown: TableProviderFilterPushDown,
     pub(crate) referenced_columns: Vec<String>,
 }
 
-pub(crate) struct DataFusionFilterPlan {
-    pub(crate) decisions: Vec<DataFusionFilterDecision>,
-    pub(crate) predicate: Option<DeltaPredicate>,
-    pub(crate) row_predicate: Option<DeltaPredicate>,
+pub(crate) struct FilterPlan {
+    pub(crate) decisions: Vec<FilterDecision>,
+    pub(crate) pruning_predicate: Option<DeltaPredicate>,
+    pub(crate) exact_row_predicate: Option<DeltaPredicate>,
     pub(crate) requires_statistics: bool,
     pub(crate) referenced_columns: Vec<String>,
-    pub(crate) has_unresolved_predicate: bool,
 }
 
-pub(crate) struct DataFusionProjectionPlan {
+pub(crate) struct ProjectionPlan {
     pub(crate) output_schema: SchemaRef,
-    pub(crate) physical_projection: Option<Vec<String>>,
+    pub(crate) scan_projection: Option<Vec<String>>,
     pub(crate) hidden_columns: Vec<String>,
     pub(crate) output_projection: Option<Vec<usize>>,
 }
 
-pub(crate) struct DataFusionScanPlanning {
-    pub(crate) projection: DataFusionProjectionPlan,
-    pub(crate) filters: DataFusionFilterPlan,
+pub(crate) struct DataFusionScanPlan {
+    pub(crate) projection: ProjectionPlan,
+    pub(crate) filters: FilterPlan,
 }
 
 pub(crate) fn plan_datafusion_scan(
@@ -56,8 +55,8 @@ pub(crate) fn plan_datafusion_scan(
     partition_columns: &HashSet<String>,
     projection: Option<&[usize]>,
     filters: &[&Expr],
-    capabilities: DataFusionFilterCapabilities,
-) -> Result<DataFusionScanPlanning, DeltaReaderError> {
+    capabilities: FilterCapabilities,
+) -> Result<DataFusionScanPlan, DeltaReaderError> {
     validate_projection(schema, projection)?;
     let filter_plan = {
         let _planning = tracing::debug_span!(
@@ -76,25 +75,16 @@ pub(crate) fn plan_datafusion_scan(
         .entered();
         plan_projection(schema, projection, &filter_plan.referenced_columns)?
     };
-    Ok(DataFusionScanPlanning {
+    Ok(DataFusionScanPlan {
         projection: projection_plan,
         filters: filter_plan,
     })
 }
 
-pub(crate) fn plan_datafusion_filters(
-    schema: &SchemaRef,
-    partition_columns: &HashSet<String>,
-    filters: &[&Expr],
-    capabilities: DataFusionFilterCapabilities,
-) -> DataFusionFilterPlan {
-    plan_filters(schema, partition_columns, filters, capabilities)
-}
-
 fn validate_inexact_residual_projection(
     schema: &Schema,
     projection: Option<&[usize]>,
-    filters: &DataFusionFilterPlan,
+    filters: &FilterPlan,
 ) -> Result<(), DeltaReaderError> {
     let Some(projection) = projection else {
         return Ok(());
@@ -148,18 +138,18 @@ fn plan_projection(
     schema: &SchemaRef,
     projection: Option<&[usize]>,
     filter_columns: &[String],
-) -> Result<DataFusionProjectionPlan, DeltaReaderError> {
+) -> Result<ProjectionPlan, DeltaReaderError> {
     let Some(projection) = projection else {
         tracing::debug!(
             target: "delta_arrow_reader::datafusion",
             output_columns = schema.fields().len(),
-            physical_columns = schema.fields().len(),
+            scan_columns = schema.fields().len(),
             hidden_columns = 0,
             "planned DataFusion projection"
         );
-        return Ok(DataFusionProjectionPlan {
+        return Ok(ProjectionPlan {
             output_schema: Arc::clone(schema),
-            physical_projection: None,
+            scan_projection: None,
             hidden_columns: Vec::new(),
             output_projection: None,
         });
@@ -173,38 +163,38 @@ fn plan_projection(
                     reason: "arrow_projection_failed",
                 })?,
         );
-    let physical_projection = projection
+    let scan_projection = projection
         .iter()
         .map(|&index| schema.field(index).name().clone())
         .collect::<Vec<_>>();
     let output_projection = (0..projection.len()).collect::<Vec<_>>();
     let hidden_columns = filter_columns
         .iter()
-        .filter(|name| !physical_projection.contains(name))
+        .filter(|name| !scan_projection.contains(name))
         .cloned()
         .collect::<Vec<_>>();
 
     tracing::debug!(
         target: "delta_arrow_reader::datafusion",
         output_columns = projection.len(),
-        physical_columns = physical_projection.len() + hidden_columns.len(),
+        scan_columns = scan_projection.len() + hidden_columns.len(),
         hidden_columns = hidden_columns.len(),
         "planned DataFusion projection"
     );
-    Ok(DataFusionProjectionPlan {
+    Ok(ProjectionPlan {
         output_schema,
-        physical_projection: Some(physical_projection),
+        scan_projection: Some(scan_projection),
         hidden_columns,
         output_projection: Some(output_projection),
     })
 }
 
-fn plan_filters(
+pub(crate) fn plan_datafusion_filters(
     schema: &SchemaRef,
     partition_columns: &HashSet<String>,
     filters: &[&Expr],
-    capabilities: DataFusionFilterCapabilities,
-) -> DataFusionFilterPlan {
+    capabilities: FilterCapabilities,
+) -> FilterPlan {
     let mut requires_statistics = false;
     let decisions = filters
         .iter()
@@ -214,15 +204,15 @@ fn plan_filters(
             let Some(translation) =
                 translate_filter_for_pushdown(&filter, schema, partition_columns)
             else {
-                return DataFusionFilterDecision {
-                    predicate: None,
+                return FilterDecision {
+                    pruning_predicate: None,
                     pushdown: TableProviderFilterPushDown::Unsupported,
                     referenced_columns,
                 };
             };
             let pushdown = match translation.kind {
                 TranslatedFilterKind::Partition => TableProviderFilterPushDown::Exact,
-                TranslatedFilterKind::DataStats if capabilities.exact_predicate_evaluation => {
+                TranslatedFilterKind::DataStats if capabilities.supports_exact_row_filtering => {
                     TableProviderFilterPushDown::Exact
                 }
                 TranslatedFilterKind::DataStats | TranslatedFilterKind::MixedAnd => {
@@ -230,8 +220,8 @@ fn plan_filters(
                 }
             };
             requires_statistics |= !matches!(translation.kind, TranslatedFilterKind::Partition);
-            DataFusionFilterDecision {
-                predicate: Some(translation.predicate),
+            FilterDecision {
+                pruning_predicate: Some(translation.predicate),
                 pushdown,
                 referenced_columns: translation.referenced_columns,
             }
@@ -239,10 +229,10 @@ fn plan_filters(
         .collect::<Vec<_>>();
     let predicates = decisions
         .iter()
-        .filter_map(|decision| decision.predicate.clone())
+        .filter_map(|decision| decision.pruning_predicate.clone())
         .collect::<Vec<_>>();
-    let predicate = and_predicates(predicates);
-    let row_predicate = and_predicates(
+    let pruning_predicate = and_predicates(predicates);
+    let exact_row_predicate = and_predicates(
         decisions
             .iter()
             .filter(|decision| decision.pushdown == TableProviderFilterPushDown::Exact)
@@ -252,22 +242,19 @@ fn plan_filters(
                     .iter()
                     .all(|column| !partition_columns.contains(column))
             })
-            .filter_map(|decision| decision.predicate.clone())
+            .filter_map(|decision| decision.pruning_predicate.clone())
             .collect(),
     );
     let mut referenced_columns = Vec::new();
     for column in decisions
         .iter()
-        .filter(|decision| decision.predicate.is_some())
+        .filter(|decision| decision.pruning_predicate.is_some())
         .flat_map(|decision| &decision.referenced_columns)
     {
         if !referenced_columns.contains(column) {
             referenced_columns.push(column.clone());
         }
     }
-    let has_unresolved_predicate = decisions
-        .iter()
-        .any(|decision| decision.pushdown != TableProviderFilterPushDown::Exact);
     let exact = decisions
         .iter()
         .filter(|decision| decision.pushdown == TableProviderFilterPushDown::Exact)
@@ -285,13 +272,12 @@ fn plan_filters(
         unsupported,
         "planned DataFusion filters"
     );
-    DataFusionFilterPlan {
+    FilterPlan {
         decisions,
-        predicate,
-        row_predicate,
+        pruning_predicate,
+        exact_row_predicate,
         requires_statistics,
         referenced_columns,
-        has_unresolved_predicate,
     }
 }
 
@@ -687,10 +673,13 @@ fn partition_column_supports(
     };
     schema
         .field_with_name(&name)
-        .is_ok_and(|field| partition_type_supports(field.data_type(), family))
+        .is_ok_and(|field| supports_partition_operator_family(field.data_type(), family))
 }
 
-fn partition_type_supports(data_type: &DataType, family: PartitionOperatorFamily) -> bool {
+fn supports_partition_operator_family(
+    data_type: &DataType,
+    family: PartitionOperatorFamily,
+) -> bool {
     use PartitionOperatorFamily::{
         Between, BooleanShorthand, Equality, Membership, NullCheck, Ordering,
     };
@@ -744,8 +733,13 @@ fn is_supported_data_stats_filter(filter: &Expr, schema: &Schema) -> bool {
                     | Operator::GtEq
             ) =>
         {
-            data_stats_column_literal(&binary.left, binary.op, &binary.right, schema)
-                || data_stats_column_literal(&binary.right, binary.op, &binary.left, schema)
+            is_supported_data_stats_column_literal(&binary.left, binary.op, &binary.right, schema)
+                || is_supported_data_stats_column_literal(
+                    &binary.right,
+                    binary.op,
+                    &binary.left,
+                    schema,
+                )
         }
         Expr::IsNull(inner) | Expr::IsNotNull(inner) => data_column_type(inner, schema)
             .is_some_and(|data_type| {
@@ -768,7 +762,12 @@ fn is_supported_data_stats_filter(filter: &Expr, schema: &Schema) -> bool {
     }
 }
 
-fn data_stats_column_literal(column: &Expr, op: Operator, literal: &Expr, schema: &Schema) -> bool {
+fn is_supported_data_stats_column_literal(
+    column: &Expr,
+    op: Operator,
+    literal: &Expr,
+    schema: &Schema,
+) -> bool {
     let Some(data_type) = data_column_type(column, schema) else {
         return false;
     };
@@ -856,7 +855,7 @@ fn normalize_equivalent_scalars(predicate: &mut DeltaPredicate, schema: &Schema)
             }
         }
         DeltaPredicate::Not(child) => normalize_equivalent_scalars(child, schema)?,
-        DeltaPredicate::Boolean(_)
+        DeltaPredicate::Constant(_)
         | DeltaPredicate::IsNull { .. }
         | DeltaPredicate::IsNotNull { .. } => {}
     }
@@ -874,7 +873,7 @@ fn and_predicates(predicates: Vec<DeltaPredicate>) -> Option<DeltaPredicate> {
 fn translate_expr(expr: &Expr) -> Option<DeltaPredicate> {
     match unalias(expr) {
         Expr::Literal(ScalarValue::Boolean(Some(value)), _) => {
-            Some(DeltaPredicate::Boolean(*value))
+            Some(DeltaPredicate::Constant(*value))
         }
         Expr::Column(column) => Some(DeltaPredicate::Compare {
             column: column_name(column)?,
@@ -932,7 +931,7 @@ fn translate_expr(expr: &Expr) -> Option<DeltaPredicate> {
                 .map(|item| scalar_value(expr_literal(item)?))
                 .collect::<Option<Vec<_>>>()?;
             let predicate = match values.as_slice() {
-                [] => DeltaPredicate::Boolean(false),
+                [] => DeltaPredicate::Constant(false),
                 _ => DeltaPredicate::Or(
                     values
                         .into_iter()
@@ -946,7 +945,7 @@ fn translate_expr(expr: &Expr) -> Option<DeltaPredicate> {
             };
             Some(if in_list.negated {
                 match predicate {
-                    DeltaPredicate::Boolean(false) => DeltaPredicate::IsNotNull { column },
+                    DeltaPredicate::Constant(false) => DeltaPredicate::IsNotNull { column },
                     predicate => DeltaPredicate::Not(Box::new(predicate)),
                 }
             } else {
@@ -1142,21 +1141,21 @@ mod tests {
         partitions: &HashSet<String>,
         projection: Option<&[usize]>,
         filters: &[&Expr],
-        exact_predicate_evaluation: bool,
-    ) -> DataFusionScanPlanning {
+        supports_exact_row_filtering: bool,
+    ) -> DataFusionScanPlan {
         plan_datafusion_scan(
             schema,
             partitions,
             projection,
             filters,
-            DataFusionFilterCapabilities {
-                exact_predicate_evaluation,
+            FilterCapabilities {
+                supports_exact_row_filtering,
             },
         )
         .expect("DataFusion scan should plan")
     }
 
-    fn pushdowns(plan: &DataFusionScanPlanning) -> Vec<TableProviderFilterPushDown> {
+    fn pushdowns(plan: &DataFusionScanPlan) -> Vec<TableProviderFilterPushDown> {
         plan.filters
             .decisions
             .iter()
@@ -1178,7 +1177,7 @@ mod tests {
             ["i32", "i8"]
         );
         assert_eq!(
-            plan.projection.physical_projection.as_deref(),
+            plan.projection.scan_projection.as_deref(),
             Some(["i32".to_owned(), "i8".to_owned()].as_slice())
         );
         assert_eq!(
@@ -1192,12 +1191,12 @@ mod tests {
 
         let empty = plan_scan(&schema, &HashSet::new(), Some(&[]), &[], false);
         assert!(empty.projection.output_schema.fields().is_empty());
-        assert_eq!(empty.projection.physical_projection, Some(Vec::new()));
+        assert_eq!(empty.projection.scan_projection, Some(Vec::new()));
         assert_eq!(empty.projection.output_projection, Some(Vec::new()));
 
         let full = plan_scan(&schema, &HashSet::new(), None, &[], false);
         assert_eq!(full.projection.output_schema, schema);
-        assert!(full.projection.physical_projection.is_none());
+        assert!(full.projection.scan_projection.is_none());
         assert!(full.projection.output_projection.is_none());
     }
 
@@ -1215,7 +1214,7 @@ mod tests {
         .expect("duplicate projection should fail");
         assert_eq!(
             duplicate.to_string(),
-            "delta reader error: phase=scan_planning error=invalid_projection reason=duplicate_projection_index"
+            "delta reader error: phase=scan_planning code=invalid_projection reason=duplicate_projection_index"
         );
 
         for index in [schema.fields().len(), usize::MAX] {
@@ -1230,7 +1229,7 @@ mod tests {
             .expect("invalid projection should fail");
             assert_eq!(
                 error.to_string(),
-                "delta reader error: phase=scan_planning error=invalid_projection reason=projection_index_out_of_bounds"
+                "delta reader error: phase=scan_planning code=invalid_projection reason=projection_index_out_of_bounds"
             );
         }
     }
@@ -1259,7 +1258,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            plan.projection.physical_projection.as_deref(),
+            plan.projection.scan_projection.as_deref(),
             Some(["i32".to_owned()].as_slice())
         );
         assert_eq!(plan.projection.hidden_columns, ["text", "i64"]);
@@ -1295,18 +1294,16 @@ mod tests {
             value: DeltaScalar::Int32(1),
         };
         assert_eq!(
-            plan.filters.predicate,
+            plan.filters.pruning_predicate,
             Some(DeltaPredicate::And(vec![expected.clone(), expected]))
         );
-        assert!(plan.filters.row_predicate.is_none());
-        assert!(plan.filters.has_unresolved_predicate);
+        assert!(plan.filters.exact_row_predicate.is_none());
 
         let empty = plan_scan(&schema, &HashSet::new(), None, &[], false);
         assert!(empty.filters.decisions.is_empty());
-        assert!(empty.filters.predicate.is_none());
-        assert!(empty.filters.row_predicate.is_none());
+        assert!(empty.filters.pruning_predicate.is_none());
+        assert!(empty.filters.exact_row_predicate.is_none());
         assert!(empty.filters.referenced_columns.is_empty());
-        assert!(!empty.filters.has_unresolved_predicate);
     }
 
     #[test]
@@ -1335,7 +1332,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            plan.filters.decisions[0].predicate,
+            plan.filters.decisions[0].pruning_predicate,
             Some(DeltaPredicate::Compare {
                 column: "text".to_owned(),
                 op: DeltaComparison::Eq,
@@ -1438,14 +1435,13 @@ mod tests {
                 filters[index]
             );
         }
-        assert!(!plan.filters.has_unresolved_predicate);
-        assert!(plan.filters.row_predicate.is_none());
+        assert!(plan.filters.exact_row_predicate.is_none());
         assert!(!plan.filters.requires_statistics);
         assert_eq!(
             plan.filters
                 .decisions
                 .last()
-                .and_then(|decision| decision.predicate.clone()),
+                .and_then(|decision| decision.pruning_predicate.clone()),
             Some(DeltaPredicate::IsNotNull {
                 column: "text".to_owned(),
             })
@@ -1500,7 +1496,7 @@ mod tests {
                 .iter()
                 .all(|pushdown| *pushdown == TableProviderFilterPushDown::Unsupported)
         );
-        assert!(plan.filters.predicate.is_none());
+        assert!(plan.filters.pruning_predicate.is_none());
     }
 
     #[test]
@@ -1547,7 +1543,6 @@ mod tests {
                 filters[index]
             );
         }
-        assert!(inexact.filters.has_unresolved_predicate);
         assert!(inexact.filters.requires_statistics);
 
         let exact = plan_scan(&schema, &HashSet::new(), None, &refs, true);
@@ -1556,9 +1551,8 @@ mod tests {
                 .iter()
                 .all(|pushdown| *pushdown == TableProviderFilterPushDown::Exact)
         );
-        assert!(exact.filters.row_predicate.is_some());
+        assert!(exact.filters.exact_row_predicate.is_some());
         assert!(exact.filters.requires_statistics);
-        assert!(!exact.filters.has_unresolved_predicate);
     }
 
     #[test]
@@ -1600,7 +1594,7 @@ mod tests {
                 .iter()
                 .all(|pushdown| *pushdown == TableProviderFilterPushDown::Unsupported)
         );
-        assert!(plan.filters.predicate.is_none());
+        assert!(plan.filters.pruning_predicate.is_none());
     }
 
     #[test]
@@ -1621,7 +1615,7 @@ mod tests {
             TableProviderFilterPushDown::Inexact
         );
         assert_eq!(
-            plan.filters.decisions[0].predicate,
+            plan.filters.decisions[0].pruning_predicate,
             Some(DeltaPredicate::And(vec![
                 DeltaPredicate::Compare {
                     column: "text".to_owned(),
@@ -1640,7 +1634,6 @@ mod tests {
             ["i32".to_owned(), "i64".to_owned(), "text".to_owned()]
         );
         assert!(plan.projection.hidden_columns.is_empty());
-        assert!(plan.filters.has_unresolved_predicate);
         assert!(plan.filters.requires_statistics);
     }
 
@@ -1654,8 +1647,8 @@ mod tests {
             &partitions,
             Some(&[0]),
             &[&filter],
-            DataFusionFilterCapabilities {
-                exact_predicate_evaluation: true,
+            FilterCapabilities {
+                supports_exact_row_filtering: true,
             },
         )
         .err()
@@ -1663,7 +1656,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=scan_planning error=unsupported_predicate reason=inexact_filter_columns_not_projected"
+            "delta reader error: phase=scan_planning code=unsupported_predicate reason=inexact_filter_columns_not_projected"
         );
     }
 
@@ -1689,7 +1682,7 @@ mod tests {
                 .iter()
                 .all(|pushdown| *pushdown == TableProviderFilterPushDown::Unsupported)
         );
-        assert!(plan.filters.predicate.is_none());
+        assert!(plan.filters.pruning_predicate.is_none());
     }
 
     #[test]
@@ -1716,7 +1709,7 @@ mod tests {
         for (filter, expected) in filters.iter().zip(expected) {
             let plan = plan_scan(&schema, &partitions, None, &[filter], false);
             assert!(matches!(
-                plan.filters.decisions[0].predicate,
+                plan.filters.decisions[0].pruning_predicate,
                 Some(DeltaPredicate::Compare { op, .. }) if op == expected
             ));
         }
@@ -1751,7 +1744,7 @@ mod tests {
         let not_empty = col("text").in_list(Vec::new(), true);
         assert_eq!(
             exact_partition_predicate(&empty, string_schema.as_ref()),
-            Some(DeltaPredicate::Boolean(false))
+            Some(DeltaPredicate::Constant(false))
         );
         assert_eq!(
             exact_partition_predicate(&not_empty, string_schema.as_ref()),

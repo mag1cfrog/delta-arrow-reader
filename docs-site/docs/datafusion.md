@@ -14,7 +14,8 @@ also need the path to a Delta table that your application can read.
 ```rust
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaDataFusionScanOptions, DeltaTableBuilder, register_delta_table,
+    DeltaTableBuilder,
+    datafusion::{ScanOptions, register_table},
 };
 
 #[tokio::main]
@@ -24,11 +25,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .load_table()
         .await?;
 
-    register_delta_table(
+    register_table(
         &context,
         "orders",
         table,
-        DeltaDataFusionScanOptions::default(),
+        ScanOptions::default(),
     )?;
 
     let batches = context

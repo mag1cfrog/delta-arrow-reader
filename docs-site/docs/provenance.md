@@ -35,12 +35,12 @@ Delta Funnel adopted the released crate.
 
 | Delta Funnel source path | Staged crate path | Owning issue |
 | --- | --- | --- |
-| `crates/delta-funnel/src/table_formats/delta/uri.rs` | `crates/delta-arrow-reader/src/delta/uri.rs` | #462 |
+| `crates/delta-funnel/src/table_formats/delta/uri.rs` | `crates/delta-arrow-reader/src/delta/location.rs` | #462 |
 | `crates/delta-funnel/src/table_formats/delta/kernel.rs` | `crates/delta-arrow-reader/src/delta/kernel.rs` | #462 |
 | `crates/delta-funnel/src/table_formats/delta/snapshot.rs` | `crates/delta-arrow-reader/src/delta/snapshot.rs` | #462 |
 | `crates/delta-funnel/src/table_formats/delta/protocol.rs` | `crates/delta-arrow-reader/src/delta/protocol.rs` | #462 |
 | Source-loading portions of `crates/delta-funnel/src/table_formats/delta.rs` | `crates/delta-arrow-reader/src/delta/snapshot.rs` and `src/delta/kernel.rs` | #462 |
-| Snapshot/protocol/schema fixtures from `crates/delta-funnel/src/table_formats/delta/test_support.rs` | Crate-local tests in `src/delta/uri.rs`, `src/delta/snapshot.rs`, and `src/delta/protocol.rs` | #462 |
+| Snapshot/protocol/schema fixtures from `crates/delta-funnel/src/table_formats/delta/test_support.rs` | Crate-local tests in `src/delta/location.rs`, `src/delta/snapshot.rs`, and `src/delta/protocol.rs` | #462 |
 | `crates/delta-funnel/src/table_formats/delta/deletion_vector.rs` | `crates/delta-arrow-reader/src/reader/deletion_vector.rs` | #477 |
 | DV metadata portions of `crates/delta-funnel/src/table_formats/delta.rs` | `crates/delta-arrow-reader/src/delta/kernel.rs` and `src/reader/deletion_vector.rs` | #477 |
 | DV masking portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` | `crates/delta-arrow-reader/src/reader/deletion_vector.rs` | #477 |
@@ -72,7 +72,7 @@ Delta Funnel adopted the released crate.
 | Delta Kernel file-correctness portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` and `reader_backend.rs` | `crates/delta-arrow-reader/src/reader/backend/kernel_reader.rs`, `src/reader/deletion_vector.rs`, and `src/delta/kernel.rs` | #465 |
 | Delta Kernel blocking-producer portions of `crates/delta-funnel/src/query_engine/datafusion/execution/scheduling.rs` and `planning_exec.rs` | `crates/delta-arrow-reader/src/reader/backend/kernel_reader.rs` over `src/reader/scheduling.rs` | #465 |
 | Delta Kernel metric-availability portions of `crates/delta-funnel/src/query_engine/datafusion/execution/read_stats.rs` | `crates/delta-arrow-reader/src/reader/metrics.rs` | #465 |
-| Direct table-loading, scan-building, and Arrow stream composition over the extracted services | `crates/delta-arrow-reader/src/reader.rs` | #466 |
+| Streaming table-loading, scan-building, and Arrow stream composition over the extracted services | `crates/delta-arrow-reader/src/reader.rs` | #466 |
 | `crates/delta-funnel/src/query_engine/datafusion/planning/projection.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
 | `crates/delta-funnel/src/query_engine/datafusion/planning/filters.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
 | `crates/delta-funnel/src/query_engine/datafusion/planning/filters/analysis.rs` | `crates/delta-arrow-reader/src/reader/datafusion/planning.rs` | #467 |
@@ -89,7 +89,7 @@ Delta Funnel adopted the released crate.
 
 ## Test migration
 
-- #462 ports URI normalization, latest/fixed snapshot loading, protocol and
+- #462 ports table-location normalization, latest/fixed snapshot loading, protocol and
   schema conversion, storage construction/context reuse, redaction, and
   unsupported-protocol scan-boundary assertions into the staged crate.
 - #477 ports the focused deletion-vector metadata, payload, coordinate,
@@ -105,12 +105,12 @@ Delta Funnel adopted the released crate.
   metadata prefetch, per-file buffering, physical projection and schema
   matching, conservative row-group pruning, original row indexes, DV and
   transform pipeline, cancellation, resource lifetime, errors, and focused
-  scheduler integration assertions. Full public direct certification remains
+  scheduler integration assertions. Full public streaming-API certification remains
   with #482, and DataFusion adaptation and certification remain with #483.
 - #465 ports Delta Kernel data-file reads, the bounded blocking handoff,
   projection, predicates, transforms, ordered DV masking, capability fallback,
   cancellation-safe cleanup, errors, metrics availability, and focused parity
-  assertions against the direct Parquet reader. Full public direct certification
+  assertions against the direct Parquet reader. Full public streaming-API certification
   remains with #482, and DataFusion adaptation and certification remain with
   #483.
 - #484 adapts the focused comparison, scalar, Boolean, null, and Kernel
@@ -131,9 +131,9 @@ Delta Funnel adopted the released crate.
   DataFusion optimizer statistics stay unknown, and its advisory scan limit
   remains outside core planning.
 - #466 adds external signature and deterministic end-to-end tests for the
-  direct load, projection, predicate, limit, partition merge, backend parity,
+  streaming load, projection, predicate, limit, partition merge, backend parity,
   error, drop, redaction, and retained-metrics contracts.
-- #482 carries the remaining frozen direct/backend contract through the public
+- #482 carries the remaining frozen streaming/backend contract through the public
   API. It preserves the 24 frozen direct-Parquet/Delta-Kernel equivalence cases
   against static expected rows, plus four additional backend comparisons among
   the nine deletion-vector predicate/boundary/failure cases. It also preserves

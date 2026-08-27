@@ -6,8 +6,7 @@ mod execution;
 mod planning;
 
 pub use execution::{
-    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, DeltaFileRepartitioning,
-    collect_delta_datafusion_metrics,
+    IntraFileRepartitioning, ScanMetrics, ScanMetricsSnapshot, collect_scan_metrics,
 };
 
 use std::{collections::HashSet, fmt, sync::Arc};
@@ -25,38 +24,39 @@ use datafusion::{
 
 use self::{
     execution::create_datafusion_execution_plan,
-    planning::{DataFusionFilterCapabilities, plan_datafusion_filters, plan_datafusion_scan},
+    planning::{FilterCapabilities, plan_datafusion_filters, plan_datafusion_scan},
 };
 
 use crate::{
-    DeltaReaderError, DeltaReaderExecutionOptions, DeltaTable, ParquetReaderBackend,
-    delta::kernel::delta_predicate_to_kernel_pruning,
-    reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
+    DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
+    delta::kernel::kernel_pruning_predicate,
+    reader::planning::{DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan},
     reader::transform::schema_with_view_types,
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
 
 /// DataFusion-specific scan settings for one provider.
+#[must_use = "scan options do nothing unless passed to a provider"]
 #[derive(Debug, Clone)]
-pub struct DeltaDataFusionScanOptions {
+pub struct ScanOptions {
     /// Reader execution settings used by each provider scan.
-    pub execution_options: DeltaReaderExecutionOptions,
+    pub execution_options: DeltaScanExecutionOptions,
     /// Optional explicit scan partition target.
     pub target_partitions: Option<usize>,
     /// Controls when DataFusion may split direct Parquet reads into ranged scan tasks.
-    pub intra_file_repartitioning: DeltaFileRepartitioning,
+    pub intra_file_repartitioning: IntraFileRepartitioning,
     /// Decode string and binary data-file columns into Arrow view arrays.
-    pub use_view_types: bool,
+    pub use_arrow_view_types: bool,
 }
 
-impl Default for DeltaDataFusionScanOptions {
+impl Default for ScanOptions {
     fn default() -> Self {
         Self {
-            execution_options: DeltaReaderExecutionOptions::default(),
+            execution_options: DeltaScanExecutionOptions::default(),
             target_partitions: None,
-            intra_file_repartitioning: DeltaFileRepartitioning::default(),
-            use_view_types: true,
+            intra_file_repartitioning: IntraFileRepartitioning::default(),
+            use_arrow_view_types: true,
         }
     }
 }
@@ -67,7 +67,8 @@ impl Default for DeltaDataFusionScanOptions {
 /// use std::sync::Arc;
 /// use datafusion::prelude::SessionContext;
 /// use delta_arrow_reader::{
-///     DeltaDataFusionScanOptions, DeltaTableBuilder, DeltaTableProvider,
+///     DeltaTableBuilder,
+///     datafusion::{DeltaTableProvider, ScanOptions},
 /// };
 ///
 /// # async fn build_provider() -> Result<(), Box<dyn std::error::Error>> {
@@ -76,7 +77,7 @@ impl Default for DeltaDataFusionScanOptions {
 ///     .await?;
 /// let provider = DeltaTableProvider::try_new(
 ///     table,
-///     DeltaDataFusionScanOptions::default(),
+///     ScanOptions::default(),
 /// )?;
 /// SessionContext::new().register_table("orders", Arc::new(provider))?;
 /// # Ok(())
@@ -86,25 +87,21 @@ impl Default for DeltaDataFusionScanOptions {
 pub struct DeltaTableProvider {
     table: DeltaTable,
     schema: SchemaRef,
-    options: DeltaDataFusionScanOptions,
-    source_name: Option<String>,
+    options: ScanOptions,
+    registration_name: Option<String>,
 }
 
 impl DeltaTableProvider {
     /// Creates a provider after validating its options and table protocol.
-    pub fn try_new(
-        table: DeltaTable,
-        options: DeltaDataFusionScanOptions,
-    ) -> Result<Self, DeltaReaderError> {
-        Self::try_new_with_source_name(table, options, None)
+    pub fn try_new(table: DeltaTable, options: ScanOptions) -> Result<Self, DeltaReaderError> {
+        Self::try_new_with_registration_name(table, options, None)
     }
 
-    fn try_new_with_source_name(
+    fn try_new_with_registration_name(
         table: DeltaTable,
-        options: DeltaDataFusionScanOptions,
-        source_name: Option<String>,
+        options: ScanOptions,
+        registration_name: Option<String>,
     ) -> Result<Self, DeltaReaderError> {
-        options.execution_options.validate()?;
         if options.target_partitions == Some(0) {
             return Err(DeltaReaderError::InvalidConfiguration {
                 reason: "scan_partition_target_must_be_positive",
@@ -112,12 +109,16 @@ impl DeltaTableProvider {
         }
         table.validate_protocol()?;
         let partition_columns = table.partition_columns().iter().cloned().collect();
-        let schema = datafusion_schema(table.schema(), &partition_columns, options.use_view_types);
+        let schema = build_provider_schema(
+            &table.schema(),
+            &partition_columns,
+            options.use_arrow_view_types,
+        );
         Ok(Self {
             table,
             schema,
             options,
-            source_name,
+            registration_name,
         })
     }
 
@@ -139,17 +140,17 @@ impl DeltaTableProvider {
             .cloned()
             .collect::<HashSet<_>>();
         let filter_refs = filters.iter().collect::<Vec<_>>();
-        let mut planning = plan_datafusion_scan(
-            self.table.schema(),
+        let mut datafusion_plan = plan_datafusion_scan(
+            &self.table.schema(),
             &partition_columns,
             projection,
             &filter_refs,
-            DataFusionFilterCapabilities {
-                exact_predicate_evaluation: self.options.execution_options.reader_backend()
-                    == ParquetReaderBackend::DirectParquet,
+            FilterCapabilities {
+                supports_exact_row_filtering: self.options.execution_options.parquet_backend()
+                    == ParquetReaderBackend::Direct,
             },
         )?;
-        if planning
+        if datafusion_plan
             .filters
             .decisions
             .iter()
@@ -159,71 +160,67 @@ impl DeltaTableProvider {
                 reason: "datafusion_scan_contains_unsupported_filter",
             });
         }
-        let physical_projection = planning.projection.physical_projection.clone();
-        let hidden_columns = planning.projection.hidden_columns.clone();
-        let kernel_predicate = planning
+        let scan_projection = datafusion_plan.projection.scan_projection.clone();
+        let hidden_columns = datafusion_plan.projection.hidden_columns.clone();
+        let pruning_predicate = datafusion_plan
             .filters
-            .predicate
+            .pruning_predicate
             .as_ref()
             .map(|predicate| {
-                delta_predicate_to_kernel_pruning(predicate).ok_or(
-                    DeltaReaderError::UnsupportedPredicate {
-                        reason: "datafusion_predicate_not_kernel_safe",
-                    },
-                )
+                kernel_pruning_predicate(predicate).ok_or(DeltaReaderError::UnsupportedPredicate {
+                    reason: "datafusion_predicate_not_kernel_safe",
+                })
             })
             .transpose()?;
-        let row_predicate = planning
+        let exact_row_predicate = datafusion_plan
             .filters
-            .row_predicate
+            .exact_row_predicate
             .as_ref()
             .map(|predicate| {
-                delta_predicate_to_kernel_pruning(predicate).ok_or(
-                    DeltaReaderError::UnsupportedPredicate {
-                        reason: "exact_row_predicate_not_kernel_safe",
-                    },
-                )
+                kernel_pruning_predicate(predicate).ok_or(DeltaReaderError::UnsupportedPredicate {
+                    reason: "exact_row_predicate_not_kernel_safe",
+                })
             })
             .transpose()?;
-        let row_predicate = plan_row_predicate(
+        let exact_row_predicate = build_physical_row_predicate(
             self.table.snapshot(),
-            physical_projection.as_deref(),
+            scan_projection.as_deref(),
             &hidden_columns,
-            row_predicate,
+            exact_row_predicate,
         )?;
-        let mut core = plan_scan(
+        let mut reader_plan = plan_scan(
             self.table.snapshot(),
-            physical_projection.as_deref(),
+            scan_projection.as_deref(),
             &hidden_columns,
-            kernel_predicate,
-            planning.filters.requires_statistics,
+            pruning_predicate,
+            datafusion_plan.filters.requires_statistics,
             self.options.execution_options,
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: self.options.target_partitions,
-                caller_target_partitions: Some(state.config().target_partitions()),
+                datafusion_target_partitions: Some(state.config().target_partitions()),
             },
         )?;
-        core.logical_schema = datafusion_schema(
-            &core.logical_schema,
+        reader_plan.logical_schema = build_provider_schema(
+            &reader_plan.logical_schema,
             &partition_columns,
-            self.options.use_view_types,
+            self.options.use_arrow_view_types,
         );
-        core.physical_schema = datafusion_schema(
-            &core.physical_schema,
+        reader_plan.physical_schema = build_provider_schema(
+            &reader_plan.physical_schema,
             &partition_columns,
-            self.options.use_view_types,
+            self.options.use_arrow_view_types,
         );
-        core.projected_schema = datafusion_schema(
-            &core.projected_schema,
+        reader_plan.projected_schema = build_provider_schema(
+            &reader_plan.projected_schema,
             &partition_columns,
-            self.options.use_view_types,
+            self.options.use_arrow_view_types,
         );
-        planning.projection.output_schema = datafusion_schema(
-            &planning.projection.output_schema,
+        datafusion_plan.projection.output_schema = build_provider_schema(
+            &datafusion_plan.projection.output_schema,
             &partition_columns,
-            self.options.use_view_types,
+            self.options.use_arrow_view_types,
         );
-        let partition_count = core.partitions.len();
+        let partition_count = reader_plan.partitions.len();
         let plan = {
             let _setup = tracing::debug_span!(
                 target: "delta_arrow_reader::profile",
@@ -231,11 +228,11 @@ impl DeltaTableProvider {
             )
             .entered();
             create_datafusion_execution_plan(
-                core,
-                planning,
-                row_predicate,
-                self.source_name.clone(),
-                self.options.use_view_types,
+                reader_plan,
+                datafusion_plan,
+                exact_row_predicate,
+                self.registration_name.clone(),
+                self.options.use_arrow_view_types,
                 self.options.intra_file_repartitioning,
             )
         };
@@ -243,10 +240,10 @@ impl DeltaTableProvider {
     }
 }
 
-fn datafusion_schema(
+fn build_provider_schema(
     schema: &Schema,
     partition_columns: &HashSet<String>,
-    use_view_types: bool,
+    use_arrow_view_types: bool,
 ) -> SchemaRef {
     let view_schema = schema_with_view_types(schema);
     Arc::new(Schema::new_with_metadata(
@@ -272,7 +269,7 @@ fn datafusion_schema(
                                 logical.data_type().clone(),
                             )),
                     )
-                } else if use_view_types {
+                } else if use_arrow_view_types {
                     Arc::clone(view)
                 } else {
                     Arc::clone(logical)
@@ -316,7 +313,7 @@ impl TableProvider for DeltaTableProvider {
                     event = "provider_scan.planned",
                     snapshot_version = self.table.version(),
                     partition_count,
-                    backend = ?self.options.execution_options.reader_backend(),
+                    backend = ?self.options.execution_options.parquet_backend(),
                     outcome = "planned"
                 );
                 Ok(plan)
@@ -325,7 +322,7 @@ impl TableProvider for DeltaTableProvider {
                 trace_failure(
                     "provider_scan.failed",
                     self.table.version(),
-                    self.options.execution_options.reader_backend(),
+                    self.options.execution_options.parquet_backend(),
                     &error,
                 );
                 Err(DataFusionError::External(Box::new(error)))
@@ -343,16 +340,16 @@ impl TableProvider for DeltaTableProvider {
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        let planning = plan_datafusion_filters(
-            self.table.schema(),
+        let datafusion_plan = plan_datafusion_filters(
+            &self.table.schema(),
             &partition_columns,
             filters,
-            DataFusionFilterCapabilities {
-                exact_predicate_evaluation: self.options.execution_options.reader_backend()
-                    == ParquetReaderBackend::DirectParquet,
+            FilterCapabilities {
+                supports_exact_row_filtering: self.options.execution_options.parquet_backend()
+                    == ParquetReaderBackend::Direct,
             },
         );
-        Ok(planning
+        Ok(datafusion_plan
             .decisions
             .iter()
             .map(|decision| decision.pushdown.clone())
@@ -362,11 +359,11 @@ impl TableProvider for DeltaTableProvider {
 
 /// Result of registering one loaded Delta table in a DataFusion context.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegisteredDeltaTable {
+pub struct TableRegistration {
     /// Caller-supplied DataFusion table name.
     pub name: String,
     /// Loaded Delta snapshot version.
-    pub version: u64,
+    pub snapshot_version: u64,
 }
 
 /// Registers one loaded Delta table in a DataFusion session.
@@ -377,7 +374,8 @@ pub struct RegisteredDeltaTable {
 /// ```no_run
 /// use datafusion::prelude::SessionContext;
 /// use delta_arrow_reader::{
-///     DeltaDataFusionScanOptions, DeltaTableBuilder, register_delta_table,
+///     DeltaTableBuilder,
+///     datafusion::{ScanOptions, register_table},
 /// };
 ///
 /// # async fn register() -> Result<(), Box<dyn std::error::Error>> {
@@ -385,51 +383,59 @@ pub struct RegisteredDeltaTable {
 /// let table = DeltaTableBuilder::new("/tmp/example-delta-table")
 ///     .load_table()
 ///     .await?;
-/// let registered = register_delta_table(
+/// let registration = register_table(
 ///     &context,
 ///     "orders",
 ///     table,
-///     DeltaDataFusionScanOptions::default(),
+///     ScanOptions::default(),
 /// )?;
-/// assert_eq!(registered.name, "orders");
+/// assert_eq!(registration.name, "orders");
 /// # Ok(())
 /// # }
 /// ```
-pub fn register_delta_table(
+pub fn register_table(
     context: &SessionContext,
     name: impl Into<String>,
     table: DeltaTable,
-    options: DeltaDataFusionScanOptions,
-) -> Result<RegisteredDeltaTable, DeltaReaderError> {
+    options: ScanOptions,
+) -> Result<TableRegistration, DeltaReaderError> {
     let name = name.into();
-    let version = table.version();
-    let backend = options.execution_options.reader_backend();
+    let snapshot_version = table.version();
+    let backend = options.execution_options.parquet_backend();
     let result = (|| {
         validate_registration_name(&name)?;
         let provider =
-            DeltaTableProvider::try_new_with_source_name(table, options, Some(name.clone()))?;
+            DeltaTableProvider::try_new_with_registration_name(table, options, Some(name.clone()))?;
         context
             .register_table(name.as_str(), Arc::new(provider))
             .map_err(|source| DeltaReaderError::DataFusionAdapter {
                 reason: "table_registration_failed",
                 source: Box::new(source),
             })?;
-        Ok(RegisteredDeltaTable { name, version })
+        Ok(TableRegistration {
+            name,
+            snapshot_version,
+        })
     })();
     match result {
-        Ok(registered) => {
+        Ok(registration) => {
             tracing::debug!(
                 target: TRACING_TARGET,
                 event = "provider_registration.registered",
-                snapshot_version = version,
+                snapshot_version,
                 partition_count = tracing::field::Empty,
                 backend = ?backend,
                 outcome = "registered"
             );
-            Ok(registered)
+            Ok(registration)
         }
         Err(error) => {
-            trace_failure("provider_registration.failed", version, backend, &error);
+            trace_failure(
+                "provider_registration.failed",
+                snapshot_version,
+                backend,
+                &error,
+            );
             Err(error)
         }
     }
@@ -554,7 +560,7 @@ fn trace_failure(
         partition_count = tracing::field::Empty,
         backend = ?backend,
         outcome = "failed",
-        error_variant = error.as_str(),
+        error_code = error.code(),
         error_phase = error.phase().as_str()
     );
 }
@@ -565,7 +571,7 @@ mod tests {
 
     use arrow::datatypes::{DataType, Field, Schema};
 
-    use super::{datafusion_schema, validate_registration_name};
+    use super::{build_provider_schema, validate_registration_name};
 
     #[test]
     fn registration_names_preserve_the_frozen_unquoted_identifier_boundary() {
@@ -608,7 +614,7 @@ mod tests {
         );
         let partitions = HashSet::from(["region".to_owned(), "partition_payload".to_owned()]);
 
-        let mapped = datafusion_schema(&schema, &partitions, true);
+        let mapped = build_provider_schema(&schema, &partitions, true);
 
         assert_eq!(
             mapped.as_ref(),
@@ -635,7 +641,7 @@ mod tests {
             )
         );
 
-        let standard = datafusion_schema(&schema, &partitions, false);
+        let standard = build_provider_schema(&schema, &partitions, false);
         assert_eq!(standard.field(0).data_type(), &DataType::Utf8);
         assert_eq!(standard.field(1).data_type(), &DataType::Binary);
         assert_eq!(

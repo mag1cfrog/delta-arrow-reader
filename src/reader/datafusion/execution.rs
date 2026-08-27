@@ -5,9 +5,9 @@
 //! Scan planning first balances whole Delta data files across the resolved
 //! partition target. By default, DataFusion's `FileGroupPartitioner` only
 //! receives those groups when they do not fill the target. The provider can
-//! instead opt in to rebalancing a full plan. In either mode, the partitioner
-//! flattens the groups, divides their total bytes across the target, and
-//! returns new groups containing whole files or byte ranges. Its
+//! instead allow repartitioning at any partition count. In either mode, the
+//! partitioner flattens the groups, divides their total bytes across the target,
+//! and returns new groups containing whole files or byte ranges. Its
 //! `repartition_file_min_size` setting is the minimum total input size needed
 //! to attempt this operation, not the size of each generated range.
 //!
@@ -49,166 +49,164 @@ use datafusion::{
 use futures_util::{StreamExt, stream};
 
 use super::{
-    dynamic_filters::{
-        DeltaDynamicFilterOutcome, DeltaDynamicFilterPlan, DeltaRetainedDynamicFilter,
-    },
+    dynamic_filters::{DynamicFilterClassification, DynamicFilterDecision, RetainedDynamicFilter},
     dynamic_partition_pruning::{
-        DeltaDynamicPartitionKeepReason, DeltaDynamicPartitionPruningDecision,
+        DynamicPartitionKeepReason, DynamicPartitionPruningDecision,
         evaluate_dynamic_partition_filter,
     },
-    planning::DataFusionScanPlanning,
+    planning::DataFusionScanPlan,
 };
 
 use crate::reader::backend::direct_parquet::{
-    DirectParquetMetadataCache, direct_parquet_file_executor,
-    direct_parquet_file_executor_with_metadata_cache,
+    RangedParquetMetadataCache, direct_parquet_file_executor,
 };
 use crate::{
-    DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderError, ParquetReaderBackend,
+    DeltaReaderError, DeltaScanMetrics, DeltaScanMetricsSnapshot, ParquetReaderBackend,
     delta::kernel::DeltaKernelPredicate,
     reader::{
         delta_kernel_executor,
         metrics::saturating_fetch_add,
-        planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
-        scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
+        planning::{DeltaScanFileTask, DeltaScanPartition, DeltaScanPlan},
+        scheduling::{
+            DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, ScanReadLimiter,
+        },
     },
 };
 
 /// Controls when DataFusion may split direct Parquet reads into ranged scan tasks.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum DeltaFileRepartitioning {
-    /// Split files only when whole-file planning produced fewer partitions than the target.
+pub enum IntraFileRepartitioning {
+    /// Allow splitting only below the target partition count.
     #[default]
-    FillMissingParallelism,
-    /// Let DataFusion rebalance file groups even when they already fill the target.
-    Rebalance,
+    WhenBelowTarget,
+    /// Allow splitting at any partition count.
+    Always,
 }
 
-impl DeltaFileRepartitioning {
+impl IntraFileRepartitioning {
     fn allows_repartitioning(self, current_partitions: usize, target_partitions: usize) -> bool {
         match self {
-            Self::FillMissingParallelism => current_partitions < target_partitions,
-            Self::Rebalance => true,
+            Self::WhenBelowTarget => current_partitions < target_partitions,
+            Self::Always => true,
         }
     }
 }
 
 /// Immutable point-in-time DataFusion scan metrics.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeltaDataFusionMetricsSnapshot {
-    /// Core reader planning and execution metrics.
-    pub reader: DeltaReadMetricsSnapshot,
+pub struct ScanMetricsSnapshot {
+    /// Delta reader planning and execution metrics.
+    pub reader_metrics: DeltaScanMetricsSnapshot,
     /// Whether the provider requested Arrow view arrays for string and binary data columns.
-    pub use_view_types: bool,
-    /// Effective DataFusion task batch size observed at execution.
-    pub output_batch_size: Option<u64>,
+    pub uses_arrow_view_types: bool,
+    /// Configured DataFusion batch row target observed at execution.
+    pub configured_batch_size_rows: Option<u64>,
     /// File tasks pruned before admission by a dynamic partition filter.
     /// A task is either a whole physical file or one independently read file range.
-    pub dynamic_partition_files_pruned: u64,
+    pub dynamic_partition_tasks_pruned: u64,
     /// File tasks kept after consulting retained dynamic partition filters.
     /// A task is either a whole physical file or one independently read file range.
-    pub dynamic_partition_files_kept: u64,
+    pub dynamic_partition_tasks_kept: u64,
     /// Physical filters offered to the post-optimization hook.
     pub dynamic_filters_received: u64,
     /// Offered filters retained for dynamic partition pruning.
     pub dynamic_filters_accepted: u64,
     /// Offered filters rejected by the dynamic partition policy.
-    pub dynamic_filters_unsupported: u64,
-    /// Current dynamic expressions consulted during file admission.
-    pub dynamic_filter_snapshots: u64,
+    pub dynamic_filters_rejected: u64,
+    /// Dynamic partition filters checked against file tasks during admission.
+    pub dynamic_partition_filter_checks: u64,
     /// Kept file tasks with missing, invalid, or unparsable partition metadata.
-    pub dynamic_files_not_pruned_missing_metadata: u64,
-    /// Kept file tasks with unavailable, unsupported, or failed expressions.
-    pub dynamic_files_not_pruned_unsupported_expression: u64,
+    pub dynamic_partition_tasks_kept_unusable_metadata: u64,
+    /// Kept file tasks whose dynamic filter was unavailable or unevaluable.
+    pub dynamic_partition_tasks_kept_unevaluable_filter: u64,
 }
 
 /// Shared live metrics for one DataFusion physical scan plan.
 #[derive(Clone)]
-pub struct DeltaDataFusionMetrics {
-    inner: Arc<DeltaDataFusionMetricsInner>,
+pub struct ScanMetrics {
+    inner: Arc<MetricsInner>,
 }
 
-struct DeltaDataFusionMetricsInner {
-    source_name: Option<String>,
-    reader: DeltaReadMetrics,
-    use_view_types: bool,
-    output_batch_size: AtomicU64,
-    dynamic_partition_files_pruned: AtomicU64,
-    dynamic_partition_files_kept: AtomicU64,
+struct MetricsInner {
+    registration_name: Option<String>,
+    reader_metrics: DeltaScanMetrics,
+    uses_arrow_view_types: bool,
+    configured_batch_size_rows: AtomicU64,
+    dynamic_partition_tasks_pruned: AtomicU64,
+    dynamic_partition_tasks_kept: AtomicU64,
     dynamic_filters_received: AtomicU64,
     dynamic_filters_accepted: AtomicU64,
-    dynamic_filters_unsupported: AtomicU64,
-    dynamic_filter_snapshots: AtomicU64,
-    dynamic_files_not_pruned_missing_metadata: AtomicU64,
-    dynamic_files_not_pruned_unsupported_expression: AtomicU64,
+    dynamic_filters_rejected: AtomicU64,
+    dynamic_partition_filter_checks: AtomicU64,
+    dynamic_partition_tasks_kept_unusable_metadata: AtomicU64,
+    dynamic_partition_tasks_kept_unevaluable_filter: AtomicU64,
 }
 
-impl DeltaDataFusionMetrics {
+impl ScanMetrics {
     #[allow(dead_code)]
-    fn new(source_name: Option<String>, reader: DeltaReadMetrics, use_view_types: bool) -> Self {
+    fn new(
+        registration_name: Option<String>,
+        reader_metrics: DeltaScanMetrics,
+        use_arrow_view_types: bool,
+    ) -> Self {
         Self {
-            inner: Arc::new(DeltaDataFusionMetricsInner {
-                source_name,
-                reader,
-                use_view_types,
-                output_batch_size: AtomicU64::new(0),
-                dynamic_partition_files_pruned: AtomicU64::new(0),
-                dynamic_partition_files_kept: AtomicU64::new(0),
+            inner: Arc::new(MetricsInner {
+                registration_name,
+                reader_metrics,
+                uses_arrow_view_types: use_arrow_view_types,
+                configured_batch_size_rows: AtomicU64::new(0),
+                dynamic_partition_tasks_pruned: AtomicU64::new(0),
+                dynamic_partition_tasks_kept: AtomicU64::new(0),
                 dynamic_filters_received: AtomicU64::new(0),
                 dynamic_filters_accepted: AtomicU64::new(0),
-                dynamic_filters_unsupported: AtomicU64::new(0),
-                dynamic_filter_snapshots: AtomicU64::new(0),
-                dynamic_files_not_pruned_missing_metadata: AtomicU64::new(0),
-                dynamic_files_not_pruned_unsupported_expression: AtomicU64::new(0),
+                dynamic_filters_rejected: AtomicU64::new(0),
+                dynamic_partition_filter_checks: AtomicU64::new(0),
+                dynamic_partition_tasks_kept_unusable_metadata: AtomicU64::new(0),
+                dynamic_partition_tasks_kept_unevaluable_filter: AtomicU64::new(0),
             }),
         }
     }
 
     /// Returns the optional registration label supplied by the DataFusion provider.
-    pub fn source_name(&self) -> Option<&str> {
-        self.inner.source_name.as_deref()
+    pub fn registration_name(&self) -> Option<&str> {
+        self.inner.registration_name.as_deref()
     }
 
     /// Returns an immutable point-in-time copy of all DataFusion scan metrics.
-    pub fn snapshot(&self) -> DeltaDataFusionMetricsSnapshot {
+    pub fn snapshot(&self) -> ScanMetricsSnapshot {
         let inner = self.inner.as_ref();
-        DeltaDataFusionMetricsSnapshot {
-            reader: inner.reader.snapshot(),
-            use_view_types: inner.use_view_types,
-            output_batch_size: nonzero_load(&inner.output_batch_size),
-            dynamic_partition_files_pruned: load(&inner.dynamic_partition_files_pruned),
-            dynamic_partition_files_kept: load(&inner.dynamic_partition_files_kept),
+        ScanMetricsSnapshot {
+            reader_metrics: inner.reader_metrics.snapshot(),
+            uses_arrow_view_types: inner.uses_arrow_view_types,
+            configured_batch_size_rows: nonzero_load(&inner.configured_batch_size_rows),
+            dynamic_partition_tasks_pruned: load(&inner.dynamic_partition_tasks_pruned),
+            dynamic_partition_tasks_kept: load(&inner.dynamic_partition_tasks_kept),
             dynamic_filters_received: load(&inner.dynamic_filters_received),
             dynamic_filters_accepted: load(&inner.dynamic_filters_accepted),
-            dynamic_filters_unsupported: load(&inner.dynamic_filters_unsupported),
-            dynamic_filter_snapshots: load(&inner.dynamic_filter_snapshots),
-            dynamic_files_not_pruned_missing_metadata: load(
-                &inner.dynamic_files_not_pruned_missing_metadata,
+            dynamic_filters_rejected: load(&inner.dynamic_filters_rejected),
+            dynamic_partition_filter_checks: load(&inner.dynamic_partition_filter_checks),
+            dynamic_partition_tasks_kept_unusable_metadata: load(
+                &inner.dynamic_partition_tasks_kept_unusable_metadata,
             ),
-            dynamic_files_not_pruned_unsupported_expression: load(
-                &inner.dynamic_files_not_pruned_unsupported_expression,
+            dynamic_partition_tasks_kept_unevaluable_filter: load(
+                &inner.dynamic_partition_tasks_kept_unevaluable_filter,
             ),
         }
     }
 
-    /// Returns whether both handles refer to the same live metrics instance.
-    pub fn same_instance(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.inner, &other.inner)
-    }
-
-    fn record_output_batch_size(&self, value: usize) {
+    fn record_configured_batch_size_rows(&self, value: usize) {
         self.inner
-            .output_batch_size
+            .configured_batch_size_rows
             .store(u64::try_from(value).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
     fn record_dynamic_partition_task_pruned(&self) {
-        saturating_fetch_add(&self.inner.dynamic_partition_files_pruned, 1);
+        saturating_fetch_add(&self.inner.dynamic_partition_tasks_pruned, 1);
     }
 
     fn record_dynamic_partition_task_kept(&self) {
-        saturating_fetch_add(&self.inner.dynamic_partition_files_kept, 1);
+        saturating_fetch_add(&self.inner.dynamic_partition_tasks_kept, 1);
     }
 
     fn record_dynamic_filters_received(&self, value: usize) {
@@ -225,24 +223,27 @@ impl DeltaDataFusionMetrics {
         );
     }
 
-    fn record_dynamic_filters_unsupported(&self, value: usize) {
+    fn record_dynamic_filters_rejected(&self, value: usize) {
         saturating_fetch_add(
-            &self.inner.dynamic_filters_unsupported,
+            &self.inner.dynamic_filters_rejected,
             u64::try_from(value).unwrap_or(u64::MAX),
         );
     }
 
-    fn record_dynamic_filter_snapshot(&self) {
-        saturating_fetch_add(&self.inner.dynamic_filter_snapshots, 1);
+    fn record_dynamic_partition_filter_check(&self) {
+        saturating_fetch_add(&self.inner.dynamic_partition_filter_checks, 1);
     }
 
-    fn record_missing_metadata(&self) {
-        saturating_fetch_add(&self.inner.dynamic_files_not_pruned_missing_metadata, 1);
-    }
-
-    fn record_unsupported_expression(&self) {
+    fn record_dynamic_partition_task_kept_unusable_metadata(&self) {
         saturating_fetch_add(
-            &self.inner.dynamic_files_not_pruned_unsupported_expression,
+            &self.inner.dynamic_partition_tasks_kept_unusable_metadata,
+            1,
+        );
+    }
+
+    fn record_dynamic_partition_task_kept_unevaluable_filter(&self) {
+        saturating_fetch_add(
+            &self.inner.dynamic_partition_tasks_kept_unevaluable_filter,
             1,
         );
     }
@@ -252,10 +253,10 @@ impl DeltaDataFusionMetrics {
     }
 }
 
-impl fmt::Debug for DeltaDataFusionMetrics {
+impl fmt::Debug for ScanMetrics {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("DeltaDataFusionMetrics")
+            .debug_struct("ScanMetrics")
             .finish_non_exhaustive()
     }
 }
@@ -272,18 +273,18 @@ fn nonzero_load(counter: &AtomicU64) -> Option<u64> {
 }
 
 /// Collects distinct Delta DataFusion scan metrics in depth-first plan order.
-pub fn collect_delta_datafusion_metrics(plan: &dyn ExecutionPlan) -> Vec<DeltaDataFusionMetrics> {
+pub fn collect_scan_metrics(plan: &dyn ExecutionPlan) -> Vec<ScanMetrics> {
     fn collect(
         plan: &dyn ExecutionPlan,
         seen_plans: &mut HashSet<usize>,
         seen_metrics: &mut HashSet<usize>,
-        metrics: &mut Vec<DeltaDataFusionMetrics>,
+        metrics: &mut Vec<ScanMetrics>,
     ) {
         let plan_identity = plan as *const dyn ExecutionPlan as *const () as usize;
         if !seen_plans.insert(plan_identity) {
             return;
         }
-        if let Some(scan) = plan.downcast_ref::<DeltaDataFusionExec>() {
+        if let Some(scan) = plan.downcast_ref::<DeltaScanExec>() {
             let handle = scan.metrics.clone();
             if seen_metrics.insert(handle.identity()) {
                 metrics.push(handle);
@@ -301,77 +302,78 @@ pub fn collect_delta_datafusion_metrics(plan: &dyn ExecutionPlan) -> Vec<DeltaDa
 
 #[allow(dead_code)]
 pub(crate) fn create_datafusion_execution_plan(
-    plan: DeltaScanPlan,
-    planning: DataFusionScanPlanning,
-    row_predicate: Option<DeltaKernelPredicate>,
-    source_name: Option<String>,
-    use_view_types: bool,
-    intra_file_repartitioning: DeltaFileRepartitioning,
+    reader_plan: DeltaScanPlan,
+    datafusion_plan: DataFusionScanPlan,
+    exact_row_predicate: Option<DeltaKernelPredicate>,
+    registration_name: Option<String>,
+    use_arrow_view_types: bool,
+    intra_file_repartitioning: IntraFileRepartitioning,
 ) -> Arc<dyn ExecutionPlan> {
-    Arc::new(DeltaDataFusionExec::new(
-        plan,
-        planning,
-        row_predicate,
-        source_name,
-        use_view_types,
+    Arc::new(DeltaScanExec::new(
+        reader_plan,
+        datafusion_plan,
+        exact_row_predicate,
+        registration_name,
+        use_arrow_view_types,
         intra_file_repartitioning,
     ))
 }
 
 #[derive(Clone)]
-struct DeltaDataFusionExec {
-    plan: Arc<DeltaScanPlan>,
+struct DeltaScanExec {
+    reader_plan: Arc<DeltaScanPlan>,
     schema: SchemaRef,
     output_projection: Option<Arc<[usize]>>,
-    row_predicate: Option<DeltaKernelPredicate>,
+    exact_row_predicate: Option<DeltaKernelPredicate>,
     properties: Arc<PlanProperties>,
-    metrics: DeltaDataFusionMetrics,
+    metrics: ScanMetrics,
     limiter: Arc<ScanReadLimiter>,
-    dynamic_filters: Arc<[DeltaRetainedDynamicFilter]>,
-    intra_file_repartitioning: DeltaFileRepartitioning,
-    intra_file_repartitioning_applied: bool,
-    parquet_metadata_cache: Option<Arc<DirectParquetMetadataCache>>,
+    dynamic_filters: Arc<[RetainedDynamicFilter]>,
+    intra_file_repartitioning: IntraFileRepartitioning,
+    parquet_metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 }
 
-impl DeltaDataFusionExec {
+impl DeltaScanExec {
     #[allow(dead_code)]
     fn new(
-        plan: DeltaScanPlan,
-        planning: DataFusionScanPlanning,
-        row_predicate: Option<DeltaKernelPredicate>,
-        source_name: Option<String>,
-        use_view_types: bool,
-        intra_file_repartitioning: DeltaFileRepartitioning,
+        reader_plan: DeltaScanPlan,
+        datafusion_plan: DataFusionScanPlan,
+        exact_row_predicate: Option<DeltaKernelPredicate>,
+        registration_name: Option<String>,
+        use_arrow_view_types: bool,
+        intra_file_repartitioning: IntraFileRepartitioning,
     ) -> Self {
-        let schema = planning.projection.output_schema;
-        let output_projection = planning.projection.output_projection.map(Arc::from);
-        let properties = scan_properties(&schema, plan.partitions.len());
-        let metrics =
-            DeltaDataFusionMetrics::new(source_name, plan.metrics.clone(), use_view_types);
+        let schema = datafusion_plan.projection.output_schema;
+        let output_projection = datafusion_plan.projection.output_projection.map(Arc::from);
+        let properties = scan_properties(&schema, reader_plan.partitions.len());
+        let metrics = ScanMetrics::new(
+            registration_name,
+            reader_plan.metrics.clone(),
+            use_arrow_view_types,
+        );
         let limiter = ScanReadLimiter::new(
-            plan.execution_options,
-            plan.partition_target_diagnostic.target_partitions,
-            plan.partitions.len(),
+            reader_plan.execution_options,
+            reader_plan.partition_target_diagnostic.target_partitions,
+            reader_plan.partitions.len(),
         );
 
         Self {
-            plan: Arc::new(plan),
+            reader_plan: Arc::new(reader_plan),
             schema,
             output_projection,
-            row_predicate,
+            exact_row_predicate,
             properties,
             metrics,
             limiter,
             dynamic_filters: Arc::from([]),
             intra_file_repartitioning,
-            intra_file_repartitioning_applied: false,
             parquet_metadata_cache: None,
         }
     }
 
     fn with_dynamic_filters(
         &self,
-        dynamic_filters: Vec<DeltaRetainedDynamicFilter>,
+        dynamic_filters: Vec<RetainedDynamicFilter>,
     ) -> Arc<dyn ExecutionPlan> {
         Arc::new(Self {
             dynamic_filters: Arc::from(dynamic_filters),
@@ -381,21 +383,25 @@ impl DeltaDataFusionExec {
 
     fn with_repartitioned_partitions(
         &self,
-        partitions: Vec<DeltaScanFileTaskPartition>,
+        partitions: Vec<DeltaScanPartition>,
     ) -> Arc<dyn ExecutionPlan> {
         let partition_count = partitions.len();
-        let mut plan = (*self.plan).clone();
-        plan.partitions = partitions;
-        plan.metrics.record_scan_partitions_planned(partition_count);
-        let target_partitions = plan.partition_target_diagnostic.target_partitions;
-        let limiter =
-            ScanReadLimiter::new(plan.execution_options, target_partitions, partition_count);
+        let mut reader_plan = (*self.reader_plan).clone();
+        reader_plan.partitions = partitions;
+        reader_plan
+            .metrics
+            .record_scan_partitions_planned(partition_count);
+        let target_partitions = reader_plan.partition_target_diagnostic.target_partitions;
+        let limiter = ScanReadLimiter::new(
+            reader_plan.execution_options,
+            target_partitions,
+            partition_count,
+        );
         Arc::new(Self {
-            plan: Arc::new(plan),
+            reader_plan: Arc::new(reader_plan),
             properties: scan_properties(&self.schema, partition_count),
             limiter,
-            intra_file_repartitioning_applied: true,
-            parquet_metadata_cache: Some(Arc::new(DirectParquetMetadataCache::default())),
+            parquet_metadata_cache: Some(Arc::new(RangedParquetMetadataCache::default())),
             ..self.clone()
         })
     }
@@ -424,11 +430,11 @@ fn scan_properties(schema: &SchemaRef, partition_count: usize) -> Arc<PlanProper
 /// apply, file sizes are unavailable, or DataFusion finds no useful
 /// repartitioning.
 fn repartition_file_tasks(
-    partitions: &[DeltaScanFileTaskPartition],
+    partitions: &[DeltaScanPartition],
     target_partitions: usize,
     minimum_total_bytes: usize,
-    policy: DeltaFileRepartitioning,
-) -> DataFusionResult<Option<Vec<DeltaScanFileTaskPartition>>> {
+    policy: IntraFileRepartitioning,
+) -> DataFusionResult<Option<Vec<DeltaScanPartition>>> {
     if target_partitions == 0 {
         return Err(adapter_error("scan_partition_target_must_be_positive"));
     }
@@ -455,7 +461,7 @@ fn repartition_file_tasks(
 }
 
 fn file_groups_from_partitions(
-    partitions: &[DeltaScanFileTaskPartition],
+    partitions: &[DeltaScanPartition],
 ) -> DataFusionResult<Option<Vec<FileGroup>>> {
     let mut groups = Vec::with_capacity(partitions.len());
     for partition in partitions {
@@ -495,7 +501,7 @@ fn partitioned_file_from_task(
 
 fn partitions_from_file_groups(
     groups: Vec<FileGroup>,
-) -> DataFusionResult<Vec<DeltaScanFileTaskPartition>> {
+) -> DataFusionResult<Vec<DeltaScanPartition>> {
     let mut partitions = Vec::with_capacity(groups.len());
     for group in groups {
         let tasks = group
@@ -503,7 +509,7 @@ fn partitions_from_file_groups(
             .into_iter()
             .map(task_from_partitioned_file)
             .collect::<DataFusionResult<Vec<_>>>()?;
-        partitions.push(build_partition(tasks).map_err(datafusion_error)?);
+        partitions.push(DeltaScanPartition { file_tasks: tasks });
     }
     Ok(partitions)
 }
@@ -525,26 +531,21 @@ fn task_from_partitioned_file(file: PartitionedFile) -> DataFusionResult<DeltaSc
         return Err(adapter_error("scan_file_range_invalid"));
     }
     task.parquet_byte_range = (start != 0 || end != file_size).then_some(start..end);
-    if task.parquet_byte_range.is_some() {
-        // A range covers an unknown subset of the file's rows, so the original
-        // whole-file estimate is no longer valid for partition accounting.
-        task.estimated_rows = None;
-    }
     Ok(task)
 }
 
-impl fmt::Debug for DeltaDataFusionExec {
+impl fmt::Debug for DeltaScanExec {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("DeltaDataFusionExec")
-            .field("snapshot_version", &self.plan.snapshot_version)
-            .field("partition_count", &self.plan.partitions.len())
+            .debug_struct("DeltaScanExec")
+            .field("snapshot_version", &self.reader_plan.snapshot_version)
+            .field("partition_count", &self.reader_plan.partitions.len())
             .field("dynamic_filter_count", &self.dynamic_filters.len())
             .finish_non_exhaustive()
     }
 }
 
-impl DisplayAs for DeltaDataFusionExec {
+impl DisplayAs for DeltaScanExec {
     fn fmt_as(
         &self,
         display_type: DisplayFormatType,
@@ -553,18 +554,18 @@ impl DisplayAs for DeltaDataFusionExec {
         match display_type {
             DisplayFormatType::Default | DisplayFormatType::Verbose => write!(
                 formatter,
-                "DeltaDataFusionExec: snapshot_version={}, partitions={}",
-                self.plan.snapshot_version,
-                self.plan.partitions.len()
+                "DeltaScanExec: snapshot_version={}, partitions={}",
+                self.reader_plan.snapshot_version,
+                self.reader_plan.partitions.len()
             ),
-            DisplayFormatType::TreeRender => write!(formatter, "DeltaDataFusionExec"),
+            DisplayFormatType::TreeRender => write!(formatter, "DeltaScanExec"),
         }
     }
 }
 
-impl ExecutionPlan for DeltaDataFusionExec {
+impl ExecutionPlan for DeltaScanExec {
     fn name(&self) -> &str {
-        "DeltaDataFusionExec"
+        "DeltaScanExec"
     }
 
     fn properties(&self) -> &Arc<PlanProperties> {
@@ -583,7 +584,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
             Ok(self)
         } else {
             Err(DataFusionError::Internal(
-                "DeltaDataFusionExec does not accept child execution plans".to_owned(),
+                "DeltaScanExec does not accept child execution plans".to_owned(),
             ))
         }
     }
@@ -593,15 +594,18 @@ impl ExecutionPlan for DeltaDataFusionExec {
         _datafusion_target_partitions: usize,
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
-        if self.intra_file_repartitioning_applied
-            || self.plan.execution_options.reader_backend() != ParquetReaderBackend::DirectParquet
+        if self.parquet_metadata_cache.is_some()
+            || self.reader_plan.execution_options.parquet_backend() != ParquetReaderBackend::Direct
         {
             return Ok(None);
         }
         // Scan planning already applied the provider override and resource caps.
-        let target_partitions = self.plan.partition_target_diagnostic.target_partitions;
+        let target_partitions = self
+            .reader_plan
+            .partition_target_diagnostic
+            .target_partitions;
         let Some(partitions) = repartition_file_tasks(
-            &self.plan.partitions,
+            &self.reader_plan.partitions,
             target_partitions,
             config.optimizer.repartition_file_min_size,
             self.intra_file_repartitioning,
@@ -617,33 +621,28 @@ impl ExecutionPlan for DeltaDataFusionExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> DataFusionResult<SendableRecordBatchStream> {
-        if partition >= self.plan.partitions.len() {
+        if partition >= self.reader_plan.partitions.len() {
             return Err(adapter_error("scan_partition_index_out_of_range"));
         }
 
-        let output_batch_size = context.session_config().batch_size();
-        self.metrics.record_output_batch_size(output_batch_size);
-        let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
-        let executor = match self.plan.execution_options.reader_backend() {
-            ParquetReaderBackend::DirectParquet => match &self.parquet_metadata_cache {
-                Some(cache) => direct_parquet_file_executor_with_metadata_cache(
-                    &self.plan,
-                    Some(output_batch_size),
-                    self.row_predicate.clone(),
-                    Arc::clone(cache),
-                ),
-                None => direct_parquet_file_executor(
-                    &self.plan,
-                    Some(output_batch_size),
-                    self.row_predicate.clone(),
-                ),
-            },
-            ParquetReaderBackend::DeltaKernel => {
-                delta_kernel_executor(&self.plan).map_err(datafusion_error)?
-            }
+        let configured_batch_size_rows = context.session_config().batch_size();
+        self.metrics
+            .record_configured_batch_size_rows(configured_batch_size_rows);
+        let admission = dynamic_partition_admission_policy(
+            self.metrics.clone(),
+            Arc::clone(&self.dynamic_filters),
+        );
+        let executor = match self.reader_plan.execution_options.parquet_backend() {
+            ParquetReaderBackend::Direct => direct_parquet_file_executor(
+                &self.reader_plan,
+                Some(configured_batch_size_rows),
+                self.exact_row_predicate.clone(),
+                self.parquet_metadata_cache.clone(),
+            ),
+            ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.reader_plan),
         };
-        let stream = DeltaScanExecution::with_shared_limiter(
-            Arc::clone(&self.plan),
+        let stream = DeltaScanScheduler::new_with_limiter(
+            Arc::clone(&self.reader_plan),
             Arc::clone(&self.limiter),
         )
         .partition_stream(partition, admission, executor)
@@ -685,87 +684,91 @@ impl ExecutionPlan for DeltaDataFusionExec {
             return Ok(unsupported());
         }
 
-        let dynamic_filter_plan = DeltaDynamicFilterPlan::from_filters(
+        let classification = DynamicFilterClassification::from_filters(
             &parent_filters,
             &self.schema,
-            &self.plan.partition_columns,
+            &self.reader_plan.partition_columns,
         );
-        let accepted = dynamic_filter_plan.accepted_filters.len();
+        let accepted_filters = classification
+            .accepted_filters()
+            .cloned()
+            .collect::<Vec<_>>();
+        let accepted = accepted_filters.len();
         self.metrics
             .record_dynamic_filters_received(parent_filters.len());
         self.metrics.record_dynamic_filters_accepted(accepted);
         self.metrics
-            .record_dynamic_filters_unsupported(parent_filters.len().saturating_sub(accepted));
-        if !dynamic_filter_plan.has_accepted_filters() {
+            .record_dynamic_filters_rejected(parent_filters.len().saturating_sub(accepted));
+        if accepted_filters.is_empty() {
             return Ok(unsupported());
         }
 
-        let pushed = dynamic_filter_plan
+        let pushed = classification
             .decisions
             .iter()
-            .map(|decision| match decision.outcome {
-                DeltaDynamicFilterOutcome::Accepted => PushedDown::Yes,
-                DeltaDynamicFilterOutcome::Rejected => PushedDown::No,
+            .map(|decision| match decision {
+                DynamicFilterDecision::Accepted(_) => PushedDown::Yes,
+                DynamicFilterDecision::Rejected => PushedDown::No,
             })
             .collect();
         Ok(
             FilterPushdownPropagation::with_parent_pushdown_result(pushed)
-                .with_updated_node(self.with_dynamic_filters(dynamic_filter_plan.accepted_filters)),
+                .with_updated_node(self.with_dynamic_filters(accepted_filters)),
         )
     }
 }
 
-fn dynamic_admission(
-    metrics: DeltaDataFusionMetrics,
-    filters: Arc<[DeltaRetainedDynamicFilter]>,
-) -> FileAdmissionFn<DeltaScanFileTask> {
+fn dynamic_partition_admission_policy(
+    metrics: ScanMetrics,
+    filters: Arc<[RetainedDynamicFilter]>,
+) -> FileAdmissionPolicy<DeltaScanFileTask> {
     Arc::new(move |task| {
         if filters.is_empty() {
-            return Ok(FileAdmission::Admit);
+            return Ok(FileAdmissionDecision::Admit);
         }
 
-        let mut missing_metadata = false;
-        let mut unsupported_expression = false;
+        let mut unusable_metadata = false;
+        let mut unevaluable_filter = false;
         for filter in filters.iter() {
-            metrics.record_dynamic_filter_snapshot();
+            metrics.record_dynamic_partition_filter_check();
             match evaluate_dynamic_partition_filter(filter, task) {
-                DeltaDynamicPartitionPruningDecision::Prune(_) => {
+                DynamicPartitionPruningDecision::Prune => {
                     metrics.record_dynamic_partition_task_pruned();
-                    return Ok(FileAdmission::Skip);
+                    return Ok(FileAdmissionDecision::Skip);
                 }
-                DeltaDynamicPartitionPruningDecision::Keep(reason) => {
-                    missing_metadata |= is_missing_metadata(reason);
-                    unsupported_expression |= is_unsupported_expression(reason);
+                DynamicPartitionPruningDecision::Keep(reason) => {
+                    unusable_metadata |= is_unusable_metadata(reason);
+                    unevaluable_filter |= is_unevaluable_filter(reason);
                 }
             }
         }
-        if missing_metadata {
-            metrics.record_missing_metadata();
+        if unusable_metadata {
+            metrics.record_dynamic_partition_task_kept_unusable_metadata();
         }
-        if unsupported_expression {
-            metrics.record_unsupported_expression();
+        if unevaluable_filter {
+            metrics.record_dynamic_partition_task_kept_unevaluable_filter();
         }
         metrics.record_dynamic_partition_task_kept();
-        Ok(FileAdmission::Admit)
+        Ok(FileAdmissionDecision::Admit)
     })
 }
 
-fn is_missing_metadata(reason: DeltaDynamicPartitionKeepReason) -> bool {
+fn is_unusable_metadata(reason: DynamicPartitionKeepReason) -> bool {
     matches!(
         reason,
-        DeltaDynamicPartitionKeepReason::PartitionMetadataInvalid
-            | DeltaDynamicPartitionKeepReason::PartitionValueMissing
-            | DeltaDynamicPartitionKeepReason::PartitionValueUnparseable
+        DynamicPartitionKeepReason::PartitionMetadataInvalid
+            | DynamicPartitionKeepReason::PartitionValueMissing
+            | DynamicPartitionKeepReason::PartitionValueUnparseable
     )
 }
 
-fn is_unsupported_expression(reason: DeltaDynamicPartitionKeepReason) -> bool {
+fn is_unevaluable_filter(reason: DynamicPartitionKeepReason) -> bool {
     matches!(
         reason,
-        DeltaDynamicPartitionKeepReason::SnapshotUnavailable
-            | DeltaDynamicPartitionKeepReason::UnsupportedPartitionType
-            | DeltaDynamicPartitionKeepReason::EvaluationFailed
-            | DeltaDynamicPartitionKeepReason::NonBooleanResult
+        DynamicPartitionKeepReason::FilterUnavailable
+            | DynamicPartitionKeepReason::UnsupportedPartitionType
+            | DynamicPartitionKeepReason::EvaluationFailed
+            | DynamicPartitionKeepReason::NonBooleanResult
     )
 }
 
@@ -842,10 +845,12 @@ mod tests {
 
     use super::*;
     use crate::{
-        DeltaReaderExecutionOptions, DeltaTable, DeltaTableBuilder,
-        delta::kernel::delta_predicate_to_kernel_pruning,
-        reader::datafusion::planning::{DataFusionFilterCapabilities, plan_datafusion_scan},
-        reader::planning::{DeltaScanPartitionTargetOptions, plan_row_predicate, plan_scan},
+        DeltaScanExecutionOptions, DeltaTable, DeltaTableBuilder,
+        delta::kernel::kernel_pruning_predicate,
+        reader::datafusion::planning::{FilterCapabilities, plan_datafusion_scan},
+        reader::planning::{
+            DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan,
+        },
     };
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -992,8 +997,8 @@ mod tests {
         projection: Option<&[usize]>,
         filters: &[datafusion::logical_expr::Expr],
         target_partitions: usize,
-        execution_options: DeltaReaderExecutionOptions,
-        source_name: Option<String>,
+        execution_options: DeltaScanExecutionOptions,
+        registration_name: Option<String>,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaReaderError> {
         build_plan_with_repartitioning(
             table,
@@ -1001,8 +1006,8 @@ mod tests {
             filters,
             target_partitions,
             execution_options,
-            source_name,
-            DeltaFileRepartitioning::default(),
+            registration_name,
+            IntraFileRepartitioning::default(),
         )
     }
 
@@ -1011,9 +1016,9 @@ mod tests {
         projection: Option<&[usize]>,
         filters: &[datafusion::logical_expr::Expr],
         target_partitions: usize,
-        execution_options: DeltaReaderExecutionOptions,
-        source_name: Option<String>,
-        intra_file_repartitioning: DeltaFileRepartitioning,
+        execution_options: DeltaScanExecutionOptions,
+        registration_name: Option<String>,
+        intra_file_repartitioning: IntraFileRepartitioning,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaReaderError> {
         let partition_columns = table
             .partition_columns()
@@ -1021,55 +1026,55 @@ mod tests {
             .cloned()
             .collect::<HashSet<_>>();
         let filter_refs = filters.iter().collect::<Vec<_>>();
-        let planning = plan_datafusion_scan(
-            table.schema(),
+        let datafusion_plan = plan_datafusion_scan(
+            &table.schema(),
             &partition_columns,
             projection,
             &filter_refs,
-            DataFusionFilterCapabilities {
-                exact_predicate_evaluation: execution_options.reader_backend()
-                    == ParquetReaderBackend::DirectParquet,
+            FilterCapabilities {
+                supports_exact_row_filtering: execution_options.parquet_backend()
+                    == ParquetReaderBackend::Direct,
             },
         )?;
-        let physical_projection = planning.projection.physical_projection.clone();
-        let hidden_columns = planning.projection.hidden_columns.clone();
-        let kernel_predicate = planning
+        let scan_projection = datafusion_plan.projection.scan_projection.clone();
+        let hidden_columns = datafusion_plan.projection.hidden_columns.clone();
+        let pruning_predicate = datafusion_plan
             .filters
-            .predicate
+            .pruning_predicate
             .as_ref()
-            .and_then(delta_predicate_to_kernel_pruning);
-        let row_predicate = match planning.filters.row_predicate.as_ref() {
-            Some(predicate) => Some(delta_predicate_to_kernel_pruning(predicate).ok_or(
+            .and_then(kernel_pruning_predicate);
+        let exact_row_predicate = match datafusion_plan.filters.exact_row_predicate.as_ref() {
+            Some(predicate) => Some(kernel_pruning_predicate(predicate).ok_or(
                 DeltaReaderError::UnsupportedPredicate {
                     reason: "exact_row_predicate_not_kernel_safe",
                 },
             )?),
             None => None,
         };
-        let row_predicate = plan_row_predicate(
+        let exact_row_predicate = build_physical_row_predicate(
             table.snapshot(),
-            physical_projection.as_deref(),
+            scan_projection.as_deref(),
             &hidden_columns,
-            row_predicate,
+            exact_row_predicate,
         )?;
-        let include_stats = planning.filters.requires_statistics;
-        let core = plan_scan(
+        let include_stats = datafusion_plan.filters.requires_statistics;
+        let reader_plan = plan_scan(
             table.snapshot(),
-            physical_projection.as_deref(),
+            scan_projection.as_deref(),
             &hidden_columns,
-            kernel_predicate,
+            pruning_predicate,
             include_stats,
             execution_options,
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(target_partitions),
-                caller_target_partitions: None,
+                datafusion_target_partitions: None,
             },
         )?;
         Ok(create_datafusion_execution_plan(
-            core,
-            planning,
-            row_predicate,
-            source_name,
+            reader_plan,
+            datafusion_plan,
+            exact_row_predicate,
+            registration_name,
             true,
             intra_file_repartitioning,
         ))
@@ -1089,13 +1094,23 @@ mod tests {
             path: path.to_owned(),
             file_size: size,
             parquet_byte_range: None,
-            estimated_rows: size,
-            stats: None,
             modification_time_ms: None,
             partition_values: Default::default(),
             deletion_vector: DeletionVectorMetadata::default(),
             transform: KernelPhysicalToLogicalTransform::default(),
         }
+    }
+
+    fn partition(file_tasks: Vec<DeltaScanFileTask>) -> DeltaScanPartition {
+        DeltaScanPartition { file_tasks }
+    }
+
+    fn partition_estimated_bytes(partition: &DeltaScanPartition) -> Option<u64> {
+        partition
+            .file_tasks
+            .iter()
+            .map(DeltaScanFileTask::estimated_scan_bytes)
+            .sum()
     }
 
     #[allow(clippy::expect_used)]
@@ -1118,17 +1133,17 @@ mod tests {
 
     #[test]
     fn file_repartitioning_balances_ranges_without_losing_file_identity() -> TestResult {
-        let input = vec![build_partition(vec![
+        let input = vec![partition(vec![
             sized_file_task("large.parquet", Some(100)),
             sized_file_task("small.parquet", Some(20)),
-        ])?];
-        let partitions = repartition_file_tasks(&input, 4, 1, DeltaFileRepartitioning::default())?
+        ])];
+        let partitions = repartition_file_tasks(&input, 4, 1, IntraFileRepartitioning::default())?
             .ok_or("not repartitioned")?;
 
         assert_eq!(
             partitions
                 .iter()
-                .map(|partition| partition.estimated_bytes)
+                .map(partition_estimated_bytes)
                 .collect::<Vec<_>>(),
             vec![Some(30); 4]
         );
@@ -1152,9 +1167,6 @@ mod tests {
             );
             if task.path == "small.parquet" {
                 assert!(task.parquet_byte_range.is_none());
-                assert_eq!(task.estimated_rows, Some(20));
-            } else {
-                assert_eq!(task.estimated_rows, None);
             }
         }
         assert_eq!(
@@ -1174,12 +1186,11 @@ mod tests {
     fn file_repartitioning_never_escapes_an_existing_range() -> TestResult {
         let mut task = sized_file_task("partial.parquet", Some(100));
         task.parquet_byte_range = Some(20..80);
-        task.estimated_rows = None;
         let partitions = repartition_file_tasks(
-            &[build_partition(vec![task])?],
+            &[partition(vec![task])],
             3,
             1,
-            DeltaFileRepartitioning::default(),
+            IntraFileRepartitioning::default(),
         )?
         .ok_or("partial range was not repartitioned")?;
 
@@ -1195,7 +1206,7 @@ mod tests {
             partitions
                 .iter()
                 .flat_map(|partition| &partition.file_tasks)
-                .all(|task| task.file_size == Some(100) && task.estimated_rows.is_none())
+                .all(|task| task.file_size == Some(100))
         );
 
         Ok(())
@@ -1204,27 +1215,22 @@ mod tests {
     #[test]
     fn file_repartitioning_policy_controls_full_whole_file_plans() -> TestResult {
         let input = vec![
-            build_partition(vec![sized_file_task("huge.parquet", Some(1_000))])?,
-            build_partition(vec![sized_file_task("small-0.parquet", Some(10))])?,
-            build_partition(vec![sized_file_task("small-1.parquet", Some(10))])?,
-            build_partition(vec![sized_file_task("small-2.parquet", Some(10))])?,
+            partition(vec![sized_file_task("huge.parquet", Some(1_000))]),
+            partition(vec![sized_file_task("small-0.parquet", Some(10))]),
+            partition(vec![sized_file_task("small-1.parquet", Some(10))]),
+            partition(vec![sized_file_task("small-2.parquet", Some(10))]),
         ];
 
         assert!(
-            repartition_file_tasks(
-                &input,
-                4,
-                1,
-                DeltaFileRepartitioning::FillMissingParallelism,
-            )?
-            .is_none()
+            repartition_file_tasks(&input, 4, 1, IntraFileRepartitioning::WhenBelowTarget)?
+                .is_none()
         );
-        let rebalanced = repartition_file_tasks(&input, 4, 1, DeltaFileRepartitioning::Rebalance)?
+        let rebalanced = repartition_file_tasks(&input, 4, 1, IntraFileRepartitioning::Always)?
             .ok_or("full plan was not rebalanced")?;
         assert_eq!(
             rebalanced
                 .iter()
-                .map(|partition| partition.estimated_bytes)
+                .map(partition_estimated_bytes)
                 .collect::<Vec<_>>(),
             [Some(258), Some(258), Some(258), Some(256)]
         );
@@ -1235,9 +1241,9 @@ mod tests {
                 .any(|task| task.parquet_byte_range.is_some())
         );
         assert!(
-            repartition_file_tasks(&input, 4, 1_031, DeltaFileRepartitioning::Rebalance)?.is_none()
+            repartition_file_tasks(&input, 4, 1_031, IntraFileRepartitioning::Always)?.is_none()
         );
-        assert!(repartition_file_tasks(&[], 4, 1, DeltaFileRepartitioning::Rebalance)?.is_none());
+        assert!(repartition_file_tasks(&[], 4, 1, IntraFileRepartitioning::Always)?.is_none());
         assert!(
             input
                 .iter()
@@ -1249,49 +1255,40 @@ mod tests {
 
     #[test]
     fn file_repartitioning_refuses_unsupported_inputs_and_rejects_invalid_ranges() -> TestResult {
-        let input = vec![build_partition(vec![sized_file_task(
-            "known.parquet",
-            Some(120),
-        )])?];
+        let input = vec![partition(vec![sized_file_task("known.parquet", Some(120))])];
 
         assert!(
-            repartition_file_tasks(&input, 4, 121, DeltaFileRepartitioning::default())?.is_none()
+            repartition_file_tasks(&input, 4, 121, IntraFileRepartitioning::default())?.is_none()
         );
         assert!(
             repartition_file_tasks(
-                &[build_partition(vec![sized_file_task(
-                    "unknown.parquet",
-                    None,
-                )])?],
+                &[partition(vec![sized_file_task("unknown.parquet", None)])],
                 4,
                 1,
-                DeltaFileRepartitioning::default(),
+                IntraFileRepartitioning::default(),
             )?
             .is_none()
         );
         assert!(
             repartition_file_tasks(
-                &[build_partition(vec![sized_file_task(
-                    "empty.parquet",
-                    Some(0),
-                )])?],
+                &[partition(vec![sized_file_task("empty.parquet", Some(0))])],
                 4,
                 1,
-                DeltaFileRepartitioning::default(),
+                IntraFileRepartitioning::default(),
             )?
             .is_none()
         );
-        assert!(repartition_file_tasks(&input, 0, 1, DeltaFileRepartitioning::default()).is_err());
+        assert!(repartition_file_tasks(&input, 0, 1, IntraFileRepartitioning::default()).is_err());
 
         for range in [90..110, std::ops::Range { start: 90, end: 80 }, 90..90] {
             let mut invalid = sized_file_task("invalid.parquet", Some(100));
             invalid.parquet_byte_range = Some(range);
             assert!(
                 repartition_file_tasks(
-                    &[build_partition(vec![invalid])?],
+                    &[partition(vec![invalid])],
                     4,
                     1,
-                    DeltaFileRepartitioning::default(),
+                    IntraFileRepartitioning::default(),
                 )
                 .is_err()
             );
@@ -1300,13 +1297,13 @@ mod tests {
         let oversized = u64::try_from(i64::MAX)? + 1;
         assert!(
             repartition_file_tasks(
-                &[build_partition(vec![sized_file_task(
+                &[partition(vec![sized_file_task(
                     "oversized.parquet",
                     Some(oversized),
-                )])?],
+                )])],
                 2,
                 1,
-                DeltaFileRepartitioning::default(),
+                IntraFileRepartitioning::default(),
             )
             .is_err()
         );
@@ -1354,19 +1351,19 @@ mod tests {
             None,
             &[],
             4,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
-            DeltaFileRepartitioning::Rebalance,
+            IntraFileRepartitioning::Always,
         )?;
-        let expected_bytes = collect_delta_datafusion_metrics(plan.as_ref())[0]
+        let expected_bytes = collect_scan_metrics(plan.as_ref())[0]
             .snapshot()
-            .reader
-            .estimated_bytes;
+            .reader_metrics
+            .estimated_input_bytes;
         let mut config = ConfigOptions::new();
         config.optimizer.repartition_file_min_size = 1;
         let repartitioned = plan
             .repartitioned(4, &config)?
-            .ok_or("direct scan was not repartitioned")?;
+            .ok_or("Direct backend scan was not repartitioned")?;
         assert!(repartitioned.repartitioned(4, &config)?.is_none());
 
         assert_eq!(
@@ -1383,21 +1380,15 @@ mod tests {
         .await?);
         actual_ids.sort_unstable();
         assert_eq!(actual_ids, [1, 2, 3, 4]);
-        let metrics = collect_delta_datafusion_metrics(repartitioned.as_ref())[0].snapshot();
-        assert_eq!(metrics.reader.scan_partitions_planned, 4);
+        let metrics = collect_scan_metrics(repartitioned.as_ref())[0].snapshot();
+        assert_eq!(metrics.reader_metrics.scan_partitions_planned, 4);
         assert_eq!(
-            metrics.reader.parquet_data_file_opened_bytes,
+            metrics.reader_metrics.estimated_parquet_task_bytes_admitted,
             expected_bytes
         );
 
-        let explicit_one = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
+        let explicit_one =
+            build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
         assert!(explicit_one.repartitioned(4, &config)?.is_none());
 
         {
@@ -1406,10 +1397,10 @@ mod tests {
                 None,
                 &[],
                 4,
-                DeltaReaderExecutionOptions::new()
-                    .with_reader_backend(ParquetReaderBackend::DeltaKernel)?,
+                DeltaScanExecutionOptions::new()
+                    .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
                 None,
-                DeltaFileRepartitioning::Rebalance,
+                IntraFileRepartitioning::Always,
             )?;
             assert!(kernel.repartitioned(4, &config)?.is_none());
         }
@@ -1450,11 +1441,11 @@ mod tests {
             Some(&[1, 0]),
             &[logical_filter],
             2,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
 
-        assert_eq!(plan.name(), "DeltaDataFusionExec");
+        assert_eq!(plan.name(), "DeltaScanExec");
         assert!(plan.children().is_empty());
         assert!(plan.metrics().is_none());
         assert_eq!(plan.schema().fields().len(), 2);
@@ -1478,21 +1469,21 @@ mod tests {
         let mut second_ids = ids(&second);
         second_ids.sort_unstable();
         assert_eq!(second_ids, first_ids);
-        let handles = collect_delta_datafusion_metrics(plan.as_ref());
+        let handles = collect_scan_metrics(plan.as_ref());
         assert_eq!(handles.len(), 1);
-        assert_eq!(handles[0].source_name(), None);
+        assert_eq!(handles[0].registration_name(), None);
         let metrics = handles[0].snapshot();
-        assert_eq!(metrics.output_batch_size, Some(1));
-        assert_eq!(metrics.reader.scan_partitions_started, 4);
-        assert_eq!(metrics.reader.files_completed, 4);
-        assert_eq!(metrics.reader.rows_produced, 6);
+        assert_eq!(metrics.configured_batch_size_rows, Some(1));
+        assert_eq!(metrics.reader_metrics.scan_partitions_started, 4);
+        assert_eq!(metrics.reader_metrics.file_tasks_completed, 4);
+        assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 6);
 
         let hidden = build_plan(
             &table,
             Some(&[1]),
             &[col("id").gt(lit(1_i32))],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         let hidden_batches = datafusion::physical_plan::collect(
@@ -1516,7 +1507,7 @@ mod tests {
             None,
             &[col("region").eq(lit("west"))],
             2,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         let partition_batches = datafusion::physical_plan::collect(
@@ -1526,10 +1517,10 @@ mod tests {
         .await?;
         assert_eq!(ids(&partition_batches), [1, 2]);
         assert_eq!(
-            collect_delta_datafusion_metrics(partition_filter.as_ref())[0]
+            collect_scan_metrics(partition_filter.as_ref())[0]
                 .snapshot()
-                .reader
-                .files_started,
+                .reader_metrics
+                .file_tasks_started,
             1
         );
 
@@ -1538,7 +1529,7 @@ mod tests {
             Some(&[]),
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         let empty_batches = datafusion::physical_plan::collect(
@@ -1565,7 +1556,7 @@ mod tests {
             None,
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         assert_eq!(
@@ -1592,7 +1583,7 @@ mod tests {
         let reader = source
             .downcast_ref::<DeltaReaderError>()
             .ok_or("external error was not DeltaReaderError")?;
-        assert_eq!(reader.as_str(), "data_fusion_adapter");
+        assert_eq!(reader.code(), "datafusion_adapter");
         Ok(())
     }
 
@@ -1600,14 +1591,7 @@ mod tests {
     async fn dynamic_filter_hook_prunes_before_file_start_and_counts_once() -> TestResult {
         let fixture = TestTable::partitioned("dynamic")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let plan = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
+        let plan = build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
         let dynamic = dynamic_filter("region", 1);
         let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic.clone();
         let rejected: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic_filter("id", 0);
@@ -1633,20 +1617,20 @@ mod tests {
         )
         .await?;
         assert_eq!(ids(&batches), [1, 2]);
-        let metrics = collect_delta_datafusion_metrics(updated.as_ref())
+        let metrics = collect_scan_metrics(updated.as_ref())
             .pop()
             .ok_or("missing dynamic metrics")?
             .snapshot();
         assert_eq!(metrics.dynamic_filters_received, 2);
         assert_eq!(metrics.dynamic_filters_accepted, 1);
-        assert_eq!(metrics.dynamic_filters_unsupported, 1);
-        assert_eq!(metrics.dynamic_filter_snapshots, 2);
-        assert_eq!(metrics.dynamic_partition_files_pruned, 1);
-        assert_eq!(metrics.dynamic_partition_files_kept, 1);
-        assert_eq!(metrics.reader.files_started, 1);
-        assert_eq!(metrics.reader.files_completed, 1);
+        assert_eq!(metrics.dynamic_filters_rejected, 1);
+        assert_eq!(metrics.dynamic_partition_filter_checks, 2);
+        assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
+        assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
+        assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+        assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
         assert_eq!(
-            collect_delta_datafusion_metrics(plan.as_ref())[0]
+            collect_scan_metrics(plan.as_ref())[0]
                 .snapshot()
                 .dynamic_filters_received,
             2
@@ -1658,14 +1642,7 @@ mod tests {
     async fn physical_pushdown_preserves_dynamic_filters_across_plan_rebuild() -> TestResult {
         let fixture = TestTable::partitioned("dynamic-plan-rebuild")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let plan = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
+        let plan = build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
         let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> =
             dynamic_filter("region", 1);
         let pushed = plan.handle_child_pushdown_result(
@@ -1684,7 +1661,7 @@ mod tests {
         let display = datafusion::physical_plan::displayable(rebuilt.as_ref())
             .one_line()
             .to_string();
-        assert!(display.contains("DeltaDataFusionExec:"), "{display}");
+        assert!(display.contains("DeltaScanExec:"), "{display}");
         assert!(display.contains("partitions="), "{display}");
         assert!(!display.contains("DynamicFilter"), "{display}");
         assert!(
@@ -1699,11 +1676,11 @@ mod tests {
     async fn late_dynamic_filter_keeps_admitted_file_and_prunes_the_next() -> TestResult {
         let fixture = TestTable::late_dynamic("late-dynamic")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let options = DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+        let options = DeltaScanExecutionOptions::new()
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_output_buffer_capacity_per_partition(1)?;
+            .with_output_buffer_batches_per_partition(1)?;
         let plan = build_plan(&table, None, &[], 1, options, None)?;
         let dynamic = dynamic_filter("region", 1);
         let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic.clone();
@@ -1728,12 +1705,12 @@ mod tests {
         }
 
         assert_eq!(ids(&batches), [1, 2, 3]);
-        let metrics = collect_delta_datafusion_metrics(updated.as_ref())[0].snapshot();
-        assert_eq!(metrics.dynamic_filter_snapshots, 2);
-        assert_eq!(metrics.dynamic_partition_files_kept, 1);
-        assert_eq!(metrics.dynamic_partition_files_pruned, 1);
-        assert_eq!(metrics.reader.files_started, 1);
-        assert_eq!(metrics.reader.files_completed, 1);
+        let metrics = collect_scan_metrics(updated.as_ref())[0].snapshot();
+        assert_eq!(metrics.dynamic_partition_filter_checks, 2);
+        assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
+        assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
+        assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+        assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
         Ok(())
     }
 
@@ -1746,7 +1723,7 @@ mod tests {
             None,
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             Some("first".to_owned()),
         )?;
         let second = build_plan(
@@ -1754,7 +1731,7 @@ mod tests {
             None,
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             Some("second".to_owned()),
         )?;
         let dynamic = dynamic_filter("region", 1);
@@ -1778,23 +1755,23 @@ mod tests {
             Arc::clone(&second),
             Arc::clone(&first),
         ])?;
-        let handles = collect_delta_datafusion_metrics(union.as_ref());
+        let handles = collect_scan_metrics(union.as_ref());
         assert_eq!(handles.len(), 2);
-        assert_eq!(handles[0].source_name(), Some("first"));
-        assert_eq!(handles[1].source_name(), Some("second"));
+        assert_eq!(handles[0].registration_name(), Some("first"));
+        assert_eq!(handles[1].registration_name(), Some("second"));
         assert!(!format!("{:?}", handles[0]).contains("first"));
         let initial = handles[0].snapshot();
-        assert_eq!(initial.output_batch_size, None);
+        assert_eq!(initial.configured_batch_size_rows, None);
         assert_eq!(
             [
-                initial.dynamic_partition_files_pruned,
-                initial.dynamic_partition_files_kept,
+                initial.dynamic_partition_tasks_pruned,
+                initial.dynamic_partition_tasks_kept,
                 initial.dynamic_filters_received,
                 initial.dynamic_filters_accepted,
-                initial.dynamic_filters_unsupported,
-                initial.dynamic_filter_snapshots,
-                initial.dynamic_files_not_pruned_missing_metadata,
-                initial.dynamic_files_not_pruned_unsupported_expression,
+                initial.dynamic_filters_rejected,
+                initial.dynamic_partition_filter_checks,
+                initial.dynamic_partition_tasks_kept_unusable_metadata,
+                initial.dynamic_partition_tasks_kept_unevaluable_filter,
             ],
             [0; 8]
         );
@@ -1811,41 +1788,35 @@ mod tests {
             .ok_or("expected updated scan")?;
         let shared_metrics_union: Arc<dyn ExecutionPlan> =
             UnionExec::try_new(vec![updated, Arc::clone(&first), Arc::clone(&second)])?;
-        let shared_handles = collect_delta_datafusion_metrics(shared_metrics_union.as_ref());
+        let shared_handles = collect_scan_metrics(shared_metrics_union.as_ref());
         assert_eq!(shared_handles.len(), 2);
-        assert_eq!(shared_handles[0].source_name(), Some("first"));
-        assert_eq!(shared_handles[1].source_name(), Some("second"));
-        assert!(handles[0].same_instance(&shared_handles[0]));
-        assert!(!handles[0].same_instance(&shared_handles[1]));
+        assert_eq!(shared_handles[0].registration_name(), Some("first"));
+        assert_eq!(shared_handles[1].registration_name(), Some("second"));
+        assert_eq!(handles[0].identity(), shared_handles[0].identity());
+        assert_ne!(handles[0].identity(), shared_handles[1].identity());
 
         drop(shared_metrics_union);
         drop(union);
         drop(first);
         drop(second);
-        assert_eq!(handles[0].snapshot().reader.files_started, 0);
-        assert_eq!(handles[0].source_name(), Some("first"));
+        assert_eq!(handles[0].snapshot().reader_metrics.file_tasks_started, 0);
+        assert_eq!(handles[0].registration_name(), Some("first"));
         Ok(())
     }
 
     #[tokio::test]
-    async fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
+    async fn dynamic_partition_admission_reason_counts_are_once_per_file_and_saturating()
+    -> TestResult {
         use crate::{
             delta::kernel::KernelPhysicalToLogicalTransform,
-            reader::datafusion::dynamic_filters::DeltaDynamicFilterPlan,
+            reader::datafusion::dynamic_filters::DynamicFilterClassification,
             reader::deletion_vector::DeletionVectorMetadata,
         };
 
         let fixture = TestTable::partitioned("dynamic-counters")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let plan = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
-        let metrics = collect_delta_datafusion_metrics(plan.as_ref())
+        let plan = build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
+        let metrics = collect_scan_metrics(plan.as_ref())
             .pop()
             .ok_or("missing metrics")?;
         let schema = Arc::new(Schema::new(vec![
@@ -1854,14 +1825,14 @@ mod tests {
         ]));
         let retained = |dynamic: Arc<DynamicFilterPhysicalExpr>| -> TestResult<_> {
             let physical: Arc<dyn datafusion::physical_plan::PhysicalExpr> = dynamic;
-            Ok(DeltaDynamicFilterPlan::from_filters(
+            Ok(DynamicFilterClassification::from_filters(
                 std::slice::from_ref(&physical),
                 &schema,
                 &["region".to_owned()],
             )
-            .accepted_filters
-            .into_iter()
+            .accepted_filters()
             .next()
+            .cloned()
             .ok_or("dynamic filter was not retained")?)
         };
         let first = retained(dynamic_filter("region", 1))?;
@@ -1870,21 +1841,21 @@ mod tests {
             path: "missing-partition.parquet".to_owned(),
             file_size: None,
             parquet_byte_range: None,
-            estimated_rows: None,
-            stats: None,
             modification_time_ms: None,
             partition_values: Default::default(),
             deletion_vector: DeletionVectorMetadata::default(),
             transform: KernelPhysicalToLogicalTransform::default(),
         };
         assert_eq!(
-            dynamic_admission(metrics.clone(), Arc::from([first, second]))(&missing)?,
-            FileAdmission::Admit
+            dynamic_partition_admission_policy(metrics.clone(), Arc::from([first, second]))(
+                &missing,
+            )?,
+            FileAdmissionDecision::Admit
         );
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.dynamic_filter_snapshots, 2);
-        assert_eq!(snapshot.dynamic_partition_files_kept, 1);
-        assert_eq!(snapshot.dynamic_files_not_pruned_missing_metadata, 1);
+        assert_eq!(snapshot.dynamic_partition_filter_checks, 2);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept_unusable_metadata, 1);
 
         let rejecting = dynamic_filter("region", 1);
         rejecting.update(physical_lit(false))?;
@@ -1895,25 +1866,28 @@ mod tests {
             .partition_values
             .insert("region".to_owned(), "west".to_owned());
         assert_eq!(
-            dynamic_admission(metrics.clone(), Arc::from([first, second]))(&present)?,
-            FileAdmission::Skip
+            dynamic_partition_admission_policy(metrics.clone(), Arc::from([first, second]))(
+                &present,
+            )?,
+            FileAdmissionDecision::Skip
         );
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.dynamic_filter_snapshots, 3);
-        assert_eq!(snapshot.dynamic_partition_files_pruned, 1);
-        assert_eq!(snapshot.dynamic_partition_files_kept, 1);
-        assert_eq!(snapshot.dynamic_files_not_pruned_missing_metadata, 1);
+        assert_eq!(snapshot.dynamic_partition_filter_checks, 3);
+        assert_eq!(snapshot.dynamic_partition_tasks_pruned, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept_unusable_metadata, 1);
 
         let unsupported = dynamic_filter("region", 1);
         unsupported.update(physical_lit("not boolean"))?;
-        assert_eq!(
-            dynamic_admission(metrics.clone(), Arc::from([retained(unsupported)?]))(&present)?,
-            FileAdmission::Admit
+        let admission = dynamic_partition_admission_policy(
+            metrics.clone(),
+            Arc::from([retained(unsupported)?]),
         );
+        assert_eq!(admission(&present)?, FileAdmissionDecision::Admit);
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.dynamic_filter_snapshots, 4);
-        assert_eq!(snapshot.dynamic_partition_files_kept, 2);
-        assert_eq!(snapshot.dynamic_files_not_pruned_unsupported_expression, 1);
+        assert_eq!(snapshot.dynamic_partition_filter_checks, 4);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept, 2);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept_unevaluable_filter, 1);
 
         metrics
             .inner
@@ -1932,15 +1906,8 @@ mod tests {
 
         let fixture = TestTable::partitioned("dynamic-metrics-concurrency")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let plan = build_plan(
-            &table,
-            None,
-            &[],
-            1,
-            DeltaReaderExecutionOptions::new(),
-            None,
-        )?;
-        let metrics = collect_delta_datafusion_metrics(plan.as_ref())
+        let plan = build_plan(&table, None, &[], 1, DeltaScanExecutionOptions::new(), None)?;
+        let metrics = collect_scan_metrics(plan.as_ref())
             .pop()
             .ok_or("missing metrics")?;
         let mut handles = Vec::new();
@@ -1953,10 +1920,10 @@ mod tests {
                     metrics.record_dynamic_partition_task_kept();
                     metrics.record_dynamic_filters_received(3);
                     metrics.record_dynamic_filters_accepted(1);
-                    metrics.record_dynamic_filters_unsupported(2);
-                    metrics.record_dynamic_filter_snapshot();
-                    metrics.record_missing_metadata();
-                    metrics.record_unsupported_expression();
+                    metrics.record_dynamic_filters_rejected(2);
+                    metrics.record_dynamic_partition_filter_check();
+                    metrics.record_dynamic_partition_task_kept_unusable_metadata();
+                    metrics.record_dynamic_partition_task_kept_unevaluable_filter();
                 }
             }));
         }
@@ -1966,15 +1933,18 @@ mod tests {
 
         let calls = u64::try_from(THREADS * ITERATIONS)?;
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.dynamic_partition_files_pruned, calls);
-        assert_eq!(snapshot.dynamic_partition_files_kept, calls);
+        assert_eq!(snapshot.dynamic_partition_tasks_pruned, calls);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept, calls);
         assert_eq!(snapshot.dynamic_filters_received, calls * 3);
         assert_eq!(snapshot.dynamic_filters_accepted, calls);
-        assert_eq!(snapshot.dynamic_filters_unsupported, calls * 2);
-        assert_eq!(snapshot.dynamic_filter_snapshots, calls);
-        assert_eq!(snapshot.dynamic_files_not_pruned_missing_metadata, calls);
+        assert_eq!(snapshot.dynamic_filters_rejected, calls * 2);
+        assert_eq!(snapshot.dynamic_partition_filter_checks, calls);
         assert_eq!(
-            snapshot.dynamic_files_not_pruned_unsupported_expression,
+            snapshot.dynamic_partition_tasks_kept_unusable_metadata,
+            calls
+        );
+        assert_eq!(
+            snapshot.dynamic_partition_tasks_kept_unevaluable_filter,
             calls
         );
         Ok(())
@@ -1991,7 +1961,7 @@ mod tests {
             None,
             &[],
             1,
-            DeltaReaderExecutionOptions::new(),
+            DeltaScanExecutionOptions::new(),
             None,
         )?;
         let result = datafusion::physical_plan::collect(
@@ -2002,20 +1972,20 @@ mod tests {
         let error = result.expect_err("missing file must fail");
         assert!(matches!(&error, DataFusionError::External(_)));
         assert!(!error.to_string().contains("missing.parquet"));
-        let failed = collect_delta_datafusion_metrics(missing_plan.as_ref())
+        let failed = collect_scan_metrics(missing_plan.as_ref())
             .pop()
             .ok_or("missing failure metrics")?;
-        assert_eq!(failed.snapshot().reader.files_started, 1);
+        assert_eq!(failed.snapshot().reader_metrics.file_tasks_started, 1);
 
         let fixture = TestTable::partitioned("drop")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-        let options = DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+        let options = DeltaScanExecutionOptions::new()
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_output_buffer_capacity_per_partition(1)?;
+            .with_output_buffer_batches_per_partition(1)?;
         let drop_plan = build_plan(&table, None, &[], 1, options, None)?;
-        let handle = collect_delta_datafusion_metrics(drop_plan.as_ref())
+        let handle = collect_scan_metrics(drop_plan.as_ref())
             .pop()
             .ok_or("missing drop metrics")?;
         let mut stream = drop_plan.execute(0, SessionContext::new().task_ctx())?;
@@ -2025,7 +1995,7 @@ mod tests {
         let stable = handle.snapshot();
         tokio::task::yield_now().await;
         assert_eq!(handle.snapshot(), stable);
-        assert!(stable.reader.files_started >= 1);
+        assert!(stable.reader_metrics.file_tasks_started >= 1);
         let retry = datafusion::physical_plan::collect(
             Arc::clone(&drop_plan),
             SessionContext::new().task_ctx(),
@@ -2036,15 +2006,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reader_backends_produce_the_same_logical_rows() -> TestResult {
+    async fn parquet_backends_produce_the_same_logical_rows() -> TestResult {
         let fixture = TestTable::partitioned("backends")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let mut outputs = Vec::new();
         for backend in [
-            ParquetReaderBackend::DirectParquet,
+            ParquetReaderBackend::Direct,
             ParquetReaderBackend::DeltaKernel,
         ] {
-            let options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
+            let options = DeltaScanExecutionOptions::new().with_parquet_backend(backend);
             let plan = build_plan(&table, Some(&[1, 0]), &[], 2, options, None)?;
             let mut batches =
                 datafusion::physical_plan::collect(plan, SessionContext::new().task_ctx()).await?;
@@ -2079,8 +2049,8 @@ mod tests {
         }
         assert_eq!(outputs[0], outputs[1]);
 
-        let kernel_options = DeltaReaderExecutionOptions::new()
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+        let kernel_options = DeltaScanExecutionOptions::new()
+            .with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let inexact = build_plan(
             &table,
             None,

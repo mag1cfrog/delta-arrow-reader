@@ -15,8 +15,8 @@ groups, and an empty scan produces none.
 
 You can set the target explicitly:
 
-- The direct API uses `DeltaScanBuilder::with_target_partitions`.
-- The DataFusion adapter uses `DeltaDataFusionScanOptions::target_partitions`.
+- The streaming API uses `DeltaScanBuilder::with_target_partitions`.
+- The DataFusion adapter uses `datafusion::ScanOptions::target_partitions`.
 
 An explicit target must be greater than zero. It wins over the automatic target
 and its resource caps.
@@ -56,18 +56,18 @@ The reader first plans with whole files:
 The reader creates no more groups than the target or the number of files. It
 does not add empty groups.
 
-This whole-file plan is the final plan for the direct API. DataFusion has one
+This whole-file plan is the final plan for the streaming API. DataFusion has one
 optional step that can divide files more finely.
 
 ## Split files with DataFusion
 
 Intra-file repartitioning is available only for direct Parquet scans through the
-DataFusion adapter. `DeltaFileRepartitioning` controls when the reader offers
-its whole-file groups to DataFusion:
+DataFusion adapter. `datafusion::IntraFileRepartitioning` controls when the
+reader offers its whole-file groups to DataFusion:
 
-- `FillMissingParallelism`, the default, does so only when whole-file planning
+- `WhenBelowTarget`, the default, does so only when whole-file planning
   produced fewer groups than the target.
-- `Rebalance` also allows DataFusion to reconsider a plan that already reached
+- `Always` also allows DataFusion to reconsider a plan that already reached
   the target. This can help when a few large files make the groups uneven, but
   it may introduce more ranged reads.
 

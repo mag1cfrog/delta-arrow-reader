@@ -2,7 +2,7 @@
 
 pub(crate) mod backend;
 #[cfg(feature = "datafusion")]
-mod datafusion;
+pub mod datafusion;
 pub(crate) mod deletion_vector;
 pub(crate) mod metrics;
 mod options;
@@ -13,15 +13,9 @@ pub(crate) mod predicate;
 pub(crate) mod scheduling;
 pub(crate) mod transform;
 
-#[cfg(feature = "datafusion")]
-pub use datafusion::{
-    DeltaDataFusionMetrics, DeltaDataFusionMetricsSnapshot, DeltaDataFusionScanOptions,
-    DeltaFileRepartitioning, DeltaTableProvider, RegisteredDeltaTable,
-    collect_delta_datafusion_metrics, register_delta_table,
-};
-pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
+pub use metrics::{DeltaScanMetrics, DeltaScanMetricsSnapshot};
 pub use options::{
-    DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions, ParquetReaderBackend,
+    DeltaScanExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions, ParquetReaderBackend,
 };
 pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 
@@ -41,19 +35,19 @@ use self::{
     planning::{DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan},
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
-        DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
-        PartitionStream,
+        DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream,
+        FileExecutor, PartitionStream,
     },
 };
 
 use crate::{
-    DeltaProtocolInfo, DeltaReaderError,
+    DeltaProtocol, DeltaReaderError,
     delta::{
-        kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
+        kernel::{kernel_pruning_is_exact, kernel_pruning_predicate},
         protocol::validate_protocol,
         snapshot::{
-            LoadedDeltaTableSnapshot, StagedDeltaTableSnapshot, load_delta_table_snapshot_async,
-            load_staged_delta_table_snapshot_async,
+            ArrowTableSnapshot, KernelTableSnapshot, load_delta_table_snapshot,
+            load_kernel_table_snapshot,
         },
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
@@ -78,7 +72,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 ///     .await?;
 /// let scan = table
 ///     .scan()
-///     .with_projection(vec!["id".into(), "name".into()])
+///     .with_projection(["id", "name"])
 ///     .with_predicate(DeltaPredicate::Compare {
 ///         column: "id".into(),
 ///         op: DeltaComparison::GtEq,
@@ -87,7 +81,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 ///     .with_limit(100)
 ///     .build()
 ///     .await?;
-/// let mut batches = scan.execute().await?;
+/// let mut batches = scan.into_stream();
 ///
 /// while let Some(batch) = batches.try_next().await? {
 ///     println!("rows={}", batch.num_rows());
@@ -95,47 +89,55 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 /// # Ok(())
 /// # }
 /// ```
+#[must_use = "table builder settings do nothing unless the builder is loaded"]
 pub struct DeltaTableBuilder {
-    table_uri: String,
+    table_location: String,
     storage_options: DeltaStorageOptions,
     snapshot_selection: DeltaSnapshotSelection,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTableBuilder {
     /// Creates a builder for the latest snapshot with default execution settings.
-    pub fn new(table_uri: impl Into<String>) -> Self {
+    pub fn new(table_location: impl Into<String>) -> Self {
         Self {
-            table_uri: table_uri.into(),
+            table_location: table_location.into(),
             storage_options: DeltaStorageOptions::new(),
             snapshot_selection: DeltaSnapshotSelection::Latest,
-            execution_options: DeltaReaderExecutionOptions::new(),
+            execution_options: DeltaScanExecutionOptions::new(),
         }
     }
 
     /// Replaces the storage options forwarded during table loading.
-    pub fn with_storage_options(mut self, value: DeltaStorageOptions) -> Self {
-        self.storage_options = value;
+    pub fn with_storage_options(mut self, storage_options: DeltaStorageOptions) -> Self {
+        self.storage_options = storage_options;
         self
     }
 
     /// Selects the Delta snapshot to load.
-    pub const fn with_snapshot_selection(mut self, value: DeltaSnapshotSelection) -> Self {
-        self.snapshot_selection = value;
+    pub const fn with_snapshot_selection(
+        mut self,
+        snapshot_selection: DeltaSnapshotSelection,
+    ) -> Self {
+        self.snapshot_selection = snapshot_selection;
         self
     }
 
     /// Replaces the default execution settings used by scans of this table.
-    pub const fn with_execution_options(mut self, value: DeltaReaderExecutionOptions) -> Self {
-        self.execution_options = value;
+    pub const fn with_execution_options(
+        mut self,
+        execution_options: DeltaScanExecutionOptions,
+    ) -> Self {
+        self.execution_options = execution_options;
         self
     }
 
-    /// Loads a ready-to-scan table through the caller-owned Tokio runtime.
+    /// Loads table metadata and its logical Arrow schema through the caller-owned Tokio runtime.
+    ///
+    /// Unsupported protocol metadata remains inspectable; scan planning validates it.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        self.execution_options.validate()?;
-        let snapshot = load_delta_table_snapshot_async(
-            self.table_uri,
+        let snapshot = load_delta_table_snapshot(
+            self.table_location,
             self.storage_options,
             self.snapshot_selection,
         )
@@ -145,9 +147,8 @@ impl DeltaTableBuilder {
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
-        self.execution_options.validate()?;
-        let snapshot = load_staged_delta_table_snapshot_async(
-            self.table_uri,
+        let snapshot = load_kernel_table_snapshot(
+            self.table_location,
             self.storage_options,
             self.snapshot_selection,
         )
@@ -160,7 +161,7 @@ impl fmt::Debug for DeltaTableBuilder {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("DeltaTableBuilder")
-            .field("table_uri", &"<redacted>")
+            .field("table_location", &"<redacted>")
             .field("storage_options", &"<redacted>")
             .field("snapshot_selection", &self.snapshot_selection)
             .field("execution_options", &self.execution_options)
@@ -170,15 +171,12 @@ impl fmt::Debug for DeltaTableBuilder {
 
 /// Loaded Delta snapshot metadata awaiting logical Arrow schema conversion.
 pub struct DeltaTableSnapshot {
-    snapshot: StagedDeltaTableSnapshot,
-    execution_options: DeltaReaderExecutionOptions,
+    snapshot: KernelTableSnapshot,
+    execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTableSnapshot {
-    fn new(
-        snapshot: StagedDeltaTableSnapshot,
-        execution_options: DeltaReaderExecutionOptions,
-    ) -> Self {
+    fn new(snapshot: KernelTableSnapshot, execution_options: DeltaScanExecutionOptions) -> Self {
         Self {
             snapshot,
             execution_options,
@@ -191,15 +189,15 @@ impl DeltaTableSnapshot {
     }
 
     /// Returns the loaded Delta protocol metadata.
-    pub fn protocol(&self) -> &DeltaProtocolInfo {
-        self.snapshot.protocol_info()
+    pub fn protocol(&self) -> &DeltaProtocol {
+        self.snapshot.protocol()
     }
 
-    /// Returns the normalized table URI.
+    /// Returns the normalized table URL.
     ///
     /// This value may contain sensitive caller input. Do not log or expose it.
-    pub fn table_uri(&self) -> &str {
-        self.snapshot.table_uri()
+    pub fn table_url(&self) -> &str {
+        self.snapshot.table_url()
     }
 
     /// Validates the loaded snapshot against the supported reader protocol.
@@ -210,7 +208,7 @@ impl DeltaTableSnapshot {
     /// Converts the logical Arrow schema and finishes constructing the table.
     pub fn into_table(self) -> Result<DeltaTable, DeltaReaderError> {
         Ok(DeltaTable::new(
-            self.snapshot.into_loaded()?,
+            self.snapshot.into_arrow_snapshot()?,
             self.execution_options,
         ))
     }
@@ -228,44 +226,38 @@ impl fmt::Debug for DeltaTableSnapshot {
 /// One immutable loaded Delta table snapshot.
 #[derive(Clone)]
 pub struct DeltaTable {
-    snapshot: Arc<LoadedDeltaTableSnapshot>,
-    version: u64,
-    execution_options: DeltaReaderExecutionOptions,
+    snapshot: Arc<ArrowTableSnapshot>,
+    execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTable {
-    fn new(
-        snapshot: LoadedDeltaTableSnapshot,
-        execution_options: DeltaReaderExecutionOptions,
-    ) -> Self {
-        let version = snapshot.version();
+    fn new(snapshot: ArrowTableSnapshot, execution_options: DeltaScanExecutionOptions) -> Self {
         Self {
             snapshot: Arc::new(snapshot),
-            version,
             execution_options,
         }
     }
 
     /// Returns the loaded Delta snapshot version.
-    pub const fn version(&self) -> u64 {
-        self.version
+    pub fn version(&self) -> u64 {
+        self.snapshot.version()
     }
 
-    /// Returns the logical Arrow schema.
-    pub fn schema(&self) -> &SchemaRef {
-        self.snapshot.schema_ref()
+    /// Returns a shared handle to the logical Arrow schema.
+    pub fn schema(&self) -> SchemaRef {
+        self.snapshot.schema()
     }
 
     /// Returns the loaded Delta protocol metadata.
-    pub fn protocol(&self) -> &DeltaProtocolInfo {
-        self.snapshot.protocol_info()
+    pub fn protocol(&self) -> &DeltaProtocol {
+        self.snapshot.protocol()
     }
 
-    /// Returns the normalized table URI.
+    /// Returns the normalized table URL.
     ///
     /// This value may contain sensitive caller input. Do not log or expose it.
-    pub fn table_uri(&self) -> &str {
-        self.snapshot.table_uri()
+    pub fn table_url(&self) -> &str {
+        self.snapshot.table_url()
     }
 
     #[allow(dead_code)]
@@ -274,7 +266,7 @@ impl DeltaTable {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn snapshot(&self) -> &LoadedDeltaTableSnapshot {
+    pub(crate) fn snapshot(&self) -> &ArrowTableSnapshot {
         self.snapshot.as_ref()
     }
 
@@ -300,25 +292,29 @@ impl fmt::Debug for DeltaTable {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("DeltaTable")
-            .field("version", &self.version)
+            .field("version", &self.version())
             .finish_non_exhaustive()
     }
 }
 
-/// Configures one single-use direct Delta scan.
+/// Configures one single-use streaming Delta scan.
+#[must_use = "scan builder settings do nothing unless the scan is built"]
 pub struct DeltaScanBuilder<'table> {
     table: &'table DeltaTable,
     projection: Option<Vec<String>>,
     predicate: Option<DeltaPredicate>,
     limit: Option<usize>,
     target_partitions: Option<usize>,
-    execution_options: DeltaReaderExecutionOptions,
+    execution_options: DeltaScanExecutionOptions,
 }
 
 impl<'table> DeltaScanBuilder<'table> {
     /// Selects visible logical columns in caller order.
-    pub fn with_projection(mut self, logical_columns: Vec<String>) -> Self {
-        self.projection = Some(logical_columns);
+    pub fn with_projection(
+        mut self,
+        logical_columns: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.projection = Some(logical_columns.into_iter().map(Into::into).collect());
         self
     }
 
@@ -335,37 +331,38 @@ impl<'table> DeltaScanBuilder<'table> {
     }
 
     /// Overrides the number of planned scan partitions.
-    pub fn with_target_partitions(mut self, value: usize) -> Result<Self, DeltaReaderError> {
-        if value == 0 {
+    pub fn with_target_partitions(
+        mut self,
+        target_partitions: usize,
+    ) -> Result<Self, DeltaReaderError> {
+        if target_partitions == 0 {
             return InvalidConfigurationSnafu {
                 reason: "scan_partition_target_must_be_positive",
             }
             .fail();
         }
-        self.target_partitions = Some(value);
+        self.target_partitions = Some(target_partitions);
         Ok(self)
     }
 
     /// Replaces the execution settings for this scan.
-    pub fn with_execution_options(
+    pub const fn with_execution_options(
         mut self,
-        value: DeltaReaderExecutionOptions,
-    ) -> Result<Self, DeltaReaderError> {
-        value.validate()?;
-        self.execution_options = value;
-        Ok(self)
+        execution_options: DeltaScanExecutionOptions,
+    ) -> Self {
+        self.execution_options = execution_options;
+        self
     }
 
     /// Builds one immutable single-use scan plan without reading data files.
     pub async fn build(self) -> Result<DeltaScan, DeltaReaderError> {
         self.table.validate_protocol()?;
-        self.execution_options.validate()?;
         if let Some(predicate) = self.predicate.as_ref() {
             validate_predicate(predicate, self.table.schema().as_ref())?;
         }
 
         let snapshot_version = self.table.version();
-        let backend = self.execution_options.reader_backend();
+        let backend = self.execution_options.parquet_backend();
         trace_planning_started(snapshot_version, backend);
         let snapshot = Arc::clone(&self.table.snapshot);
         let projection = self.projection;
@@ -374,12 +371,9 @@ impl<'table> DeltaScanBuilder<'table> {
             .as_ref()
             .map(referenced_columns)
             .unwrap_or_default();
-        let enforce_physical_predicate_rows = predicate
-            .as_ref()
-            .is_some_and(delta_predicate_kernel_pruning_is_exact);
-        let kernel_predicate = predicate
-            .as_ref()
-            .and_then(delta_predicate_to_kernel_pruning);
+        let enforce_physical_predicate_rows =
+            predicate.as_ref().is_some_and(kernel_pruning_is_exact);
+        let kernel_predicate = predicate.as_ref().and_then(kernel_pruning_predicate);
         let include_stats = kernel_predicate.is_some();
         let execution_options = self.execution_options;
         let target_partitions = self.target_partitions;
@@ -393,7 +387,7 @@ impl<'table> DeltaScanBuilder<'table> {
                 execution_options,
                 DeltaScanPartitionTargetOptions {
                     explicit_target_partitions: target_partitions,
-                    caller_target_partitions: None,
+                    datafusion_target_partitions: None,
                 },
             )
         })
@@ -408,7 +402,6 @@ impl<'table> DeltaScanBuilder<'table> {
             Ok(plan) => {
                 trace_planning_completed(snapshot_version, backend, plan.partitions.len());
                 Ok(DeltaScan {
-                    partition_count: plan.partitions.len(),
                     plan: Arc::new(plan),
                     predicate,
                     limit: self.limit,
@@ -423,16 +416,16 @@ impl<'table> DeltaScanBuilder<'table> {
     }
 }
 
-/// One immutable, single-use direct Delta scan plan.
+/// One immutable, single-use streaming Delta scan plan.
 ///
-/// A scan cannot be cloned or executed twice.
+/// A scan cannot be cloned or converted into a stream twice.
 ///
 /// ```compile_fail
 /// use delta_arrow_reader::DeltaScan;
 ///
-/// async fn execute_twice(scan: DeltaScan) {
-///     let _ = scan.execute().await;
-///     let _ = scan.execute().await;
+/// fn stream_twice(scan: DeltaScan) {
+///     let _ = scan.into_stream();
+///     let _ = scan.into_stream();
 /// }
 /// ```
 ///
@@ -443,59 +436,55 @@ impl<'table> DeltaScanBuilder<'table> {
 ///     let _ = scan.clone();
 /// }
 /// ```
+#[must_use = "scans do nothing unless converted into a stream"]
 pub struct DeltaScan {
     plan: Arc<DeltaScanPlan>,
     predicate: Option<DeltaPredicate>,
     limit: Option<usize>,
-    partition_count: usize,
     enforce_physical_predicate_rows: bool,
 }
 
 impl DeltaScan {
-    /// Returns the visible logical output schema.
-    pub fn schema(&self) -> &SchemaRef {
-        &self.plan.projected_schema
+    /// Returns a shared handle to the visible logical output schema.
+    pub fn schema(&self) -> SchemaRef {
+        Arc::clone(&self.plan.projected_schema)
     }
 
     /// Returns the number of planned execution partitions.
-    pub const fn partition_count(&self) -> usize {
-        self.partition_count
+    pub fn partition_count(&self) -> usize {
+        self.plan.partitions.len()
     }
 
-    /// Creates the pull-driven direct Arrow batch stream.
-    pub async fn execute(self) -> Result<DeltaBatchStream, DeltaReaderError> {
+    /// Converts the scan into a pull-driven Arrow batch stream.
+    ///
+    /// Data-file reads begin only when the stream is polled.
+    pub fn into_stream(self) -> DeltaBatchStream {
         let metrics = self.plan.metrics.clone();
         let schema = Arc::clone(&self.plan.projected_schema);
         let partition_count = self.plan.partitions.len();
         let snapshot_version = self.plan.snapshot_version;
-        let backend = self.plan.execution_options.reader_backend();
+        let backend = self.plan.execution_options.parquet_backend();
         let projection = (self.plan.logical_schema.as_ref() != schema.as_ref())
             .then(|| (0..schema.fields().len()).collect::<Vec<_>>());
-        let mut partitions = VecDeque::new();
-
-        if self.limit != Some(0) {
-            let execution = DeltaScanExecution::new(Arc::clone(&self.plan));
-            let admission: FileAdmissionFn<_> = Arc::new(|_| Ok(FileAdmission::Admit));
+        let partitions = if self.limit == Some(0) {
+            VecDeque::new()
+        } else {
+            let scheduler = DeltaScanScheduler::new(Arc::clone(&self.plan));
+            let admission: FileAdmissionPolicy<_> = Arc::new(|_| Ok(FileAdmissionDecision::Admit));
             let executor = match backend {
-                ParquetReaderBackend::DirectParquet => direct_parquet_executor(
+                ParquetReaderBackend::Direct => direct_parquet_executor(
                     &self.plan,
                     None,
                     self.enforce_physical_predicate_rows
                         .then(|| self.plan.physical_predicate.clone())
                         .flatten(),
-                )?,
-                ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan)?,
+                ),
+                ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
             };
-            for partition in 0..partition_count {
-                partitions.push_back(execution.partition_stream(
-                    partition,
-                    Arc::clone(&admission),
-                    Arc::clone(&executor),
-                )?);
-            }
-        }
+            scheduler.partition_streams(admission, executor)
+        };
 
-        Ok(DeltaBatchStream {
+        DeltaBatchStream {
             schema,
             metrics,
             partitions,
@@ -507,7 +496,7 @@ impl DeltaScan {
             partition_count,
             started: false,
             done: false,
-        })
+        }
     }
 }
 
@@ -523,9 +512,10 @@ impl DeltaScan {
 ///     let _ = stream.collect();
 /// }
 /// ```
+#[must_use = "streams do nothing unless polled"]
 pub struct DeltaBatchStream {
     schema: SchemaRef,
-    metrics: DeltaReadMetrics,
+    metrics: DeltaScanMetrics,
     partitions: VecDeque<PartitionStream>,
     predicate: Option<DeltaPredicate>,
     projection: Option<Vec<usize>>,
@@ -538,13 +528,13 @@ pub struct DeltaBatchStream {
 }
 
 impl DeltaBatchStream {
-    /// Returns the visible logical output schema.
-    pub fn schema(&self) -> &SchemaRef {
-        &self.schema
+    /// Returns a shared handle to the visible logical output schema.
+    pub fn schema(&self) -> SchemaRef {
+        Arc::clone(&self.schema)
     }
 
-    /// Returns a lightweight shared handle to point-in-time scan metrics.
-    pub fn metrics(&self) -> DeltaReadMetrics {
+    /// Returns a lightweight shared handle to live scan metrics.
+    pub fn metrics(&self) -> DeltaScanMetrics {
         self.metrics.clone()
     }
 
@@ -656,20 +646,21 @@ impl Drop for DeltaBatchStream {
 
 pub(crate) fn direct_parquet_executor(
     plan: &Arc<DeltaScanPlan>,
-    output_batch_size: Option<usize>,
+    output_batch_size_rows: Option<usize>,
     row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
-) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    Ok(backend::direct_parquet::direct_parquet_file_executor(
+) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
+    backend::direct_parquet::direct_parquet_file_executor(
         plan,
-        output_batch_size,
+        output_batch_size_rows,
         row_predicate,
-    ))
+        None,
+    )
 }
 
 pub(crate) fn delta_kernel_executor(
     plan: &Arc<DeltaScanPlan>,
-) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    Ok(backend::kernel_reader::delta_kernel_file_executor(plan))
+) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
+    backend::kernel_reader::delta_kernel_file_executor(plan)
 }
 
 fn trace_planning_started(snapshot_version: u64, backend: ParquetReaderBackend) {
@@ -710,7 +701,7 @@ fn trace_planning_failed(
         backend = ?backend,
         partition_count = tracing::field::Empty,
         outcome = "failed",
-        error_variant = error.as_str(),
+        error_code = error.code(),
         error_phase = error.phase().as_str()
     );
 }
@@ -758,7 +749,7 @@ fn trace_execution_failed(
         backend = ?backend,
         partition_count,
         outcome = "failed",
-        error_variant = error.as_str(),
+        error_code = error.code(),
         error_phase = error.phase().as_str()
     );
 }
@@ -806,13 +797,13 @@ mod tests {
         trace_planning_failed, trace_planning_started,
     };
     use crate::{
-        DeltaReadMetrics, DeltaReaderExecutionOptions, ParquetReaderBackend,
+        DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
         error::InvalidConfigurationSnafu,
         reader::{
-            metrics::DeltaReadMetricsConfig,
+            metrics::DeltaScanMetricsConfig,
             scheduling::{
-                FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor, FileReadPermit,
-                PartitionStream, ScanCancellation, ScanReadLimiter,
+                FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream, FileExecutor,
+                FileReadPermit, PartitionStream, ScanCancellation, ScanReadLimiter,
             },
         },
     };
@@ -862,7 +853,7 @@ mod tests {
         stream: DeltaBatchStream,
         limiter: Arc<ScanReadLimiter>,
         cancellation: ScanCancellation,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
         first_partition_gate: Arc<Notify>,
     }
 
@@ -884,24 +875,23 @@ mod tests {
             .value(0)
     }
 
-    fn execution_options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {
-        DeltaReaderExecutionOptions::new()
-            .with_prefetch_file_count_per_partition(0)?
+    fn execution_options() -> Result<DeltaScanExecutionOptions, crate::DeltaReaderError> {
+        DeltaScanExecutionOptions::new()
+            .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(2))?
-            .with_output_buffer_capacity_per_partition(1)
+            .with_output_buffer_batches_per_partition(1)
     }
 
-    fn metrics() -> DeltaReadMetrics {
-        DeltaReadMetrics::new(DeltaReadMetricsConfig {
+    fn metrics() -> DeltaScanMetrics {
+        DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 7,
-            reader_backend: ParquetReaderBackend::DirectParquet,
-            scan_metadata_exhausted: Some(true),
+            parquet_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 2,
             files_planned: 2,
-            files_filtered_during_planning: Some(0),
-            estimated_rows: Some(4),
-            estimated_bytes: Some(4),
+            add_actions_excluded_during_planning: Some(0),
+            estimated_input_rows: Some(4),
+            estimated_input_bytes: Some(4),
         })
     }
 
@@ -935,7 +925,7 @@ mod tests {
 
     fn direct_stream(
         partitions: VecDeque<PartitionStream>,
-        metrics: DeltaReadMetrics,
+        metrics: DeltaScanMetrics,
     ) -> DeltaBatchStream {
         DeltaBatchStream {
             schema: schema(),
@@ -945,7 +935,7 @@ mod tests {
             projection: None,
             remaining: None,
             snapshot_version: 7,
-            backend: ParquetReaderBackend::DirectParquet,
+            backend: ParquetReaderBackend::Direct,
             partition_count: 2,
             started: false,
             done: false,
@@ -973,7 +963,8 @@ mod tests {
                 .boxed()
             })
         };
-        let admission: FileAdmissionFn<i32> = Arc::new(|_: &i32| Ok(FileAdmission::Admit));
+        let admission: FileAdmissionPolicy<i32> =
+            Arc::new(|_: &i32| Ok(FileAdmissionDecision::Admit));
         let first = PartitionStream::new(
             vec![1],
             limiter.partition(0)?,
@@ -1002,9 +993,9 @@ mod tests {
         })
     }
 
-    async fn wait_for_batches(metrics: &DeltaReadMetrics, expected: u64) {
+    async fn wait_for_batches(metrics: &DeltaScanMetrics, expected: u64) {
         timeout(Duration::from_secs(5), async {
-            while metrics.snapshot().batches_produced < expected {
+            while metrics.snapshot().scheduler_batches_emitted < expected {
                 tokio::task::yield_now().await;
             }
         })
@@ -1021,13 +1012,13 @@ mod tests {
         let _ = tracing::subscriber::set_global_default(EventFields::default());
         with_default(subscriber, || {
             tracing::callsite::rebuild_interest_cache();
-            trace_planning_started(7, ParquetReaderBackend::DirectParquet);
-            trace_planning_completed(7, ParquetReaderBackend::DirectParquet, 2);
-            trace_planning_failed(7, ParquetReaderBackend::DirectParquet, &error);
-            trace_execution_started(7, ParquetReaderBackend::DirectParquet, 2);
-            trace_execution_completed(7, ParquetReaderBackend::DirectParquet, 2);
-            trace_execution_failed(7, ParquetReaderBackend::DirectParquet, 2, &error);
-            trace_execution_dropped(7, ParquetReaderBackend::DirectParquet, 2);
+            trace_planning_started(7, ParquetReaderBackend::Direct);
+            trace_planning_completed(7, ParquetReaderBackend::Direct, 2);
+            trace_planning_failed(7, ParquetReaderBackend::Direct, &error);
+            trace_execution_started(7, ParquetReaderBackend::Direct, 2);
+            trace_execution_completed(7, ParquetReaderBackend::Direct, 2);
+            trace_execution_failed(7, ParquetReaderBackend::Direct, 2, &error);
+            trace_execution_dropped(7, ParquetReaderBackend::Direct, 2);
         });
         tracing::callsite::rebuild_interest_cache();
 
@@ -1036,7 +1027,7 @@ mod tests {
         let allowed = [
             "backend",
             "error_phase",
-            "error_variant",
+            "error_code",
             "event",
             "outcome",
             "partition_count",
@@ -1069,7 +1060,7 @@ mod tests {
         for _ in 0..32 {
             tokio::task::yield_now().await;
         }
-        assert_eq!(metrics.snapshot().batches_produced, 2);
+        assert_eq!(metrics.snapshot().scheduler_batches_emitted, 2);
         assert_eq!(limiter.active_file_reads(), 2);
 
         first_partition_gate.notify_one();
@@ -1080,7 +1071,7 @@ mod tests {
             ids.push(batch_id(&batch?));
         }
         assert_eq!(ids, [2, 10, 20]);
-        assert_eq!(metrics.snapshot().batches_produced, 4);
+        assert_eq!(metrics.snapshot().scheduler_batches_emitted, 4);
         assert_eq!(metrics.snapshot().scan_partitions_completed, 2);
         assert_eq!(limiter.active_file_reads(), 0);
         Ok(())
@@ -1110,7 +1101,7 @@ mod tests {
             }
         })
         .await?;
-        assert_eq!(metrics.snapshot().batches_produced, 2);
+        assert_eq!(metrics.snapshot().scheduler_batches_emitted, 2);
         assert_eq!(metrics.snapshot().scan_partitions_completed, 0);
         Ok(())
     }
@@ -1141,7 +1132,7 @@ mod tests {
             }
             .boxed()
         });
-        let admission = Arc::new(|_: &i32| Ok(FileAdmission::Admit));
+        let admission = Arc::new(|_: &i32| Ok(FileAdmissionDecision::Admit));
         let first = PartitionStream::new(
             vec![1],
             limiter.partition(0)?,
@@ -1166,7 +1157,7 @@ mod tests {
             .await?
             .ok_or("error item missing")?
             .expect_err("controlled partition must fail");
-        assert_eq!(error.as_str(), "invalid_configuration");
+        assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
         timeout(Duration::from_secs(5), async {

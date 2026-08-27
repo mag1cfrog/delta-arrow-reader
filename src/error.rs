@@ -8,8 +8,8 @@ use snafu::Snafu;
 pub enum DeltaReaderPhase {
     /// Reader configuration validation.
     Configuration,
-    /// Delta table URI parsing and normalization.
-    TableUri,
+    /// Delta table path or URL parsing and normalization.
+    TableLocation,
     /// Object-store initialization.
     Storage,
     /// Delta snapshot loading.
@@ -37,7 +37,7 @@ impl DeltaReaderPhase {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Configuration => "configuration",
-            Self::TableUri => "table_uri",
+            Self::TableLocation => "table_location",
             Self::Storage => "storage",
             Self::Snapshot => "snapshot",
             Self::Protocol => "protocol",
@@ -47,7 +47,7 @@ impl DeltaReaderPhase {
             Self::DeletionVector => "deletion_vector",
             Self::Transform => "transform",
             Self::Execution => "execution",
-            Self::DataFusion => "data_fusion",
+            Self::DataFusion => "datafusion",
         }
     }
 }
@@ -60,25 +60,25 @@ pub enum DeltaReaderError {
     /// Reader configuration is invalid.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=configuration error=invalid_configuration reason={reason}"
+        "delta reader error: phase=configuration code=invalid_configuration reason={reason}"
     ))]
     InvalidConfiguration {
         /// Fixed redacted reason category.
         reason: &'static str,
     },
-    /// The table URI is invalid.
+    /// The table path or URL is invalid.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=table_uri error=invalid_table_uri reason={reason}"
+        "delta reader error: phase=table_location code=invalid_table_location reason={reason}"
     ))]
-    InvalidTableUri {
+    InvalidTableLocation {
         /// Fixed redacted reason category.
         reason: &'static str,
     },
     /// Object-store initialization failed.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=storage error=storage_initialization reason={reason}"
+        "delta reader error: phase=storage code=storage_initialization reason={reason}"
     ))]
     StorageInitialization {
         /// Fixed redacted reason category.
@@ -89,7 +89,7 @@ pub enum DeltaReaderError {
     },
     /// Snapshot loading failed.
     #[non_exhaustive]
-    #[snafu(display("delta reader error: phase=snapshot error=snapshot_load reason={reason}"))]
+    #[snafu(display("delta reader error: phase=snapshot code=snapshot_load reason={reason}"))]
     SnapshotLoad {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -100,7 +100,7 @@ pub enum DeltaReaderError {
     /// The table protocol is unsupported.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=protocol error=unsupported_protocol reason={reason}"
+        "delta reader error: phase=protocol code=unsupported_protocol reason={reason}"
     ))]
     UnsupportedProtocol {
         /// Fixed redacted reason category.
@@ -108,7 +108,7 @@ pub enum DeltaReaderError {
     },
     /// Delta-to-Arrow schema conversion failed.
     #[non_exhaustive]
-    #[snafu(display("delta reader error: phase=schema error=schema_conversion reason={reason}"))]
+    #[snafu(display("delta reader error: phase=schema code=schema_conversion reason={reason}"))]
     SchemaConversion {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -119,7 +119,7 @@ pub enum DeltaReaderError {
     /// A requested projection is invalid.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=scan_planning error=invalid_projection reason={reason}"
+        "delta reader error: phase=scan_planning code=invalid_projection reason={reason}"
     ))]
     InvalidProjection {
         /// Fixed redacted reason category.
@@ -128,7 +128,7 @@ pub enum DeltaReaderError {
     /// A requested predicate is unsupported.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=scan_planning error=unsupported_predicate reason={reason}"
+        "delta reader error: phase=scan_planning code=unsupported_predicate reason={reason}"
     ))]
     UnsupportedPredicate {
         /// Fixed redacted reason category.
@@ -136,9 +136,7 @@ pub enum DeltaReaderError {
     },
     /// Delta scan planning failed.
     #[non_exhaustive]
-    #[snafu(display(
-        "delta reader error: phase=scan_planning error=scan_planning reason={reason}"
-    ))]
+    #[snafu(display("delta reader error: phase=scan_planning code=scan_planning reason={reason}"))]
     ScanPlanning {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -149,7 +147,7 @@ pub enum DeltaReaderError {
     /// Delta scan file tasks could not be grouped into partitions.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=scan_planning error=scan_partition_planning reason={reason}"
+        "delta reader error: phase=scan_planning code=scan_partition_planning reason={reason}"
     ))]
     ScanPartitionPlanning {
         /// Fixed redacted reason category.
@@ -158,7 +156,7 @@ pub enum DeltaReaderError {
     /// A Delta data file could not be read.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=data_file_read error=data_file_read reason={reason}"
+        "delta reader error: phase=data_file_read code=data_file_read reason={reason}"
     ))]
     DataFileRead {
         /// Fixed redacted reason category.
@@ -170,7 +168,7 @@ pub enum DeltaReaderError {
     /// A deletion vector could not be read.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=deletion_vector error=deletion_vector_read reason={reason}"
+        "delta reader error: phase=deletion_vector code=deletion_vector_read reason={reason}"
     ))]
     DeletionVectorRead {
         /// Fixed redacted reason category.
@@ -182,7 +180,7 @@ pub enum DeltaReaderError {
     /// A physical-to-logical transform failed.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=transform error=physical_to_logical_transform reason={reason}"
+        "delta reader error: phase=transform code=physical_to_logical_transform reason={reason}"
     ))]
     PhysicalToLogicalTransform {
         /// Fixed redacted reason category.
@@ -193,7 +191,7 @@ pub enum DeltaReaderError {
     },
     /// Reader execution was cancelled.
     #[non_exhaustive]
-    #[snafu(display("delta reader error: phase=execution error=cancelled reason={reason}"))]
+    #[snafu(display("delta reader error: phase=execution code=cancelled reason={reason}"))]
     Cancelled {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -202,7 +200,7 @@ pub enum DeltaReaderError {
     #[cfg(feature = "datafusion")]
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=data_fusion error=data_fusion_adapter reason={reason}"
+        "delta reader error: phase=datafusion code=datafusion_adapter reason={reason}"
     ))]
     DataFusionAdapter {
         /// Fixed redacted reason category.
@@ -214,11 +212,11 @@ pub enum DeltaReaderError {
 }
 
 impl DeltaReaderError {
-    /// Returns the stable snake_case error variant name.
-    pub const fn as_str(&self) -> &'static str {
+    /// Returns the stable snake_case error code.
+    pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidConfiguration { .. } => "invalid_configuration",
-            Self::InvalidTableUri { .. } => "invalid_table_uri",
+            Self::InvalidTableLocation { .. } => "invalid_table_location",
             Self::StorageInitialization { .. } => "storage_initialization",
             Self::SnapshotLoad { .. } => "snapshot_load",
             Self::UnsupportedProtocol { .. } => "unsupported_protocol",
@@ -232,7 +230,7 @@ impl DeltaReaderError {
             Self::PhysicalToLogicalTransform { .. } => "physical_to_logical_transform",
             Self::Cancelled { .. } => "cancelled",
             #[cfg(feature = "datafusion")]
-            Self::DataFusionAdapter { .. } => "data_fusion_adapter",
+            Self::DataFusionAdapter { .. } => "datafusion_adapter",
         }
     }
 
@@ -240,7 +238,7 @@ impl DeltaReaderError {
     pub const fn phase(&self) -> DeltaReaderPhase {
         match self {
             Self::InvalidConfiguration { .. } => DeltaReaderPhase::Configuration,
-            Self::InvalidTableUri { .. } => DeltaReaderPhase::TableUri,
+            Self::InvalidTableLocation { .. } => DeltaReaderPhase::TableLocation,
             Self::StorageInitialization { .. } => DeltaReaderPhase::Storage,
             Self::SnapshotLoad { .. } => DeltaReaderPhase::Snapshot,
             Self::UnsupportedProtocol { .. } => DeltaReaderPhase::Protocol,
@@ -275,7 +273,7 @@ mod tests {
     fn phase_names_are_stable() {
         let cases = [
             (DeltaReaderPhase::Configuration, "configuration"),
-            (DeltaReaderPhase::TableUri, "table_uri"),
+            (DeltaReaderPhase::TableLocation, "table_location"),
             (DeltaReaderPhase::Storage, "storage"),
             (DeltaReaderPhase::Snapshot, "snapshot"),
             (DeltaReaderPhase::Protocol, "protocol"),
@@ -285,7 +283,7 @@ mod tests {
             (DeltaReaderPhase::DeletionVector, "deletion_vector"),
             (DeltaReaderPhase::Transform, "transform"),
             (DeltaReaderPhase::Execution, "execution"),
-            (DeltaReaderPhase::DataFusion, "data_fusion"),
+            (DeltaReaderPhase::DataFusion, "datafusion"),
         ];
 
         for (phase, expected) in cases {
@@ -305,11 +303,11 @@ mod tests {
                 false,
             ),
             (
-                DeltaReaderError::InvalidTableUri {
-                    reason: "invalid_table_uri",
+                DeltaReaderError::InvalidTableLocation {
+                    reason: "invalid_table_location",
                 },
-                "invalid_table_uri",
-                DeltaReaderPhase::TableUri,
+                "invalid_table_location",
+                DeltaReaderPhase::TableLocation,
                 false,
             ),
             (
@@ -418,12 +416,12 @@ mod tests {
             #[cfg(feature = "datafusion")]
             (
                 DeltaReaderError::DataFusionAdapter {
-                    reason: "data_fusion_adapter",
+                    reason: "datafusion_adapter",
                     source: Box::new(datafusion::common::DataFusionError::Execution(
                         "sensitive dependency detail".into(),
                     )),
                 },
-                "data_fusion_adapter",
+                "datafusion_adapter",
                 DeltaReaderPhase::DataFusion,
                 true,
             ),
@@ -431,12 +429,12 @@ mod tests {
 
         for (error, name, phase, has_source) in errors {
             assert_eq!(error.source().is_some(), has_source);
-            assert_eq!(error.as_str(), name);
+            assert_eq!(error.code(), name);
             assert_eq!(error.phase(), phase);
             let display = error.to_string();
             let debug = format!("{error:?}");
             assert!(display.contains(&format!("phase={}", phase.as_str())));
-            assert!(display.contains(&format!("error={name}")));
+            assert!(display.contains(&format!("code={name}")));
             assert!(!display.contains("sensitive dependency detail"));
             assert!(!debug.contains("sensitive dependency detail"));
         }
@@ -465,7 +463,7 @@ mod tests {
     #[test]
     fn datafusion_source_preserves_its_boxed_type() {
         let error = DeltaReaderError::DataFusionAdapter {
-            reason: "data_fusion_adapter",
+            reason: "datafusion_adapter",
             source: Box::new(datafusion::common::DataFusionError::Execution(
                 "failure".into(),
             )),

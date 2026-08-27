@@ -17,9 +17,8 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaDataFusionMetricsSnapshot, DeltaDataFusionScanOptions, DeltaReaderExecutionOptions,
-    DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend, collect_delta_datafusion_metrics,
-    register_delta_table,
+    DeltaScanExecutionOptions, DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend,
+    datafusion::{ScanMetricsSnapshot, ScanOptions, collect_scan_metrics, register_table},
 };
 use delta_kernel::actions::deletion_vector::{DeletionVectorDescriptor, DeletionVectorStorageType};
 use delta_kernel::actions::deletion_vector_writer::{
@@ -30,7 +29,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 23;
+const BENCHMARK_SCHEMA_VERSION: u32 = 30;
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
@@ -49,7 +48,7 @@ const EXPECTED_FIXTURE_FINGERPRINTS: [(&str, &str); 4] = [
     ),
 ];
 
-const CSV_HEADER: [&str; 80] = [
+const CSV_HEADER: [&str; 79] = [
     "benchmark_schema_version",
     "benchmark_mode",
     "host_os",
@@ -60,13 +59,13 @@ const CSV_HEADER: [&str; 80] = [
     "workload_case",
     "provider_exec_storage_profile",
     "query_case",
-    "reader_backend",
+    "parquet_backend",
     "scheduling_mode",
     "scan_target_partitions",
     "max_concurrent_file_reads_per_scan",
     "max_concurrent_file_reads_per_partition",
-    "output_buffer_capacity_per_partition",
-    "prefetch_file_count_per_partition",
+    "output_buffer_batches_per_partition",
+    "prefetch_files_per_partition",
     "repetitions",
     "file_count",
     "row_count",
@@ -75,30 +74,29 @@ const CSV_HEADER: [&str; 80] = [
     "deletion_vector_deleted_rows",
     "deletion_vector_deleted_rows_per_file",
     "provider_stats_scan_count",
-    "provider_stats_scan_metadata_exhausted",
     "provider_stats_scan_partitions_planned",
     "provider_stats_files_planned",
-    "provider_stats_estimated_rows",
-    "provider_stats_estimated_bytes",
+    "provider_stats_estimated_input_rows",
+    "provider_stats_estimated_input_bytes",
     "provider_stats_scan_partitions_started_p50",
     "provider_stats_scan_partitions_completed_p50",
-    "provider_stats_files_started_p50",
-    "provider_stats_files_completed_p50",
-    "provider_stats_dynamic_partition_files_pruned_p50",
-    "provider_stats_dynamic_partition_files_kept_p50",
+    "provider_stats_file_tasks_started_p50",
+    "provider_stats_file_tasks_completed_p50",
+    "provider_stats_dynamic_partition_tasks_pruned_p50",
+    "provider_stats_dynamic_partition_tasks_kept_p50",
     "provider_stats_dynamic_filters_received_p50",
     "provider_stats_dynamic_filters_accepted_p50",
-    "provider_stats_dynamic_filters_unsupported_p50",
-    "provider_stats_dynamic_filter_snapshots_p50",
-    "provider_stats_dynamic_partition_files_not_pruned_missing_metadata_p50",
-    "provider_stats_dynamic_partition_files_not_pruned_unsupported_expression_p50",
-    "provider_stats_batches_produced_p50",
-    "provider_stats_rows_produced_p50",
+    "provider_stats_dynamic_filters_rejected_p50",
+    "provider_stats_dynamic_partition_filter_checks_p50",
+    "provider_stats_dynamic_partition_tasks_kept_unusable_metadata_p50",
+    "provider_stats_dynamic_partition_tasks_kept_unevaluable_filter_p50",
+    "provider_stats_scheduler_batches_emitted_p50",
+    "provider_stats_scheduler_rows_emitted_p50",
     "provider_stats_deletion_vector_payloads_loaded_p50",
     "provider_stats_deletion_vectors_applied_p50",
     "provider_stats_deletion_vector_rows_deleted_p50",
     "provider_stats_deletion_vector_failures_p50",
-    "provider_stats_deletion_vector_rejections_p50",
+    "provider_stats_deletion_vector_coordinate_rejections_p50",
     "produced_rows",
     "produced_batches",
     "process_peak_rss_bytes",
@@ -123,12 +121,12 @@ const CSV_HEADER: [&str; 80] = [
     "execution_profile_operator_count_max",
     "execution_profile_metric_count_max",
     "execution_profile_mode",
-    "parquet_metadata_size_hint",
-    "parquet_full_file_read_threshold",
+    "parquet_metadata_size_hint_bytes",
+    "parquet_full_file_read_threshold_bytes",
     "provider_stats_parquet_data_file_range_get_operations_p50",
     "provider_stats_parquet_data_file_full_get_operations_p50",
     "provider_stats_parquet_data_file_bytes_received_p50",
-    "provider_stats_parquet_data_file_opened_bytes_p50",
+    "provider_stats_estimated_parquet_task_bytes_admitted_p50",
     "fixture_fingerprint",
 ];
 
@@ -141,8 +139,8 @@ struct Config {
     query: Query,
     backend: ParquetReaderBackend,
     repetitions: usize,
-    metadata_hint: Option<usize>,
-    full_read_threshold: Option<usize>,
+    metadata_size_hint_bytes: Option<usize>,
+    full_file_read_threshold_bytes: Option<usize>,
     retain_fixture: bool,
     seed: u64,
 }
@@ -216,7 +214,7 @@ struct Measurement {
     process_peak_rss_bytes: Option<u64>,
     process_peak_rss_delta_bytes: Option<u64>,
     batch_latency_micros: Vec<u64>,
-    metrics: Vec<DeltaDataFusionMetricsSnapshot>,
+    metrics: Vec<ScanMetricsSnapshot>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -246,34 +244,33 @@ struct Summary {
 #[derive(Debug)]
 struct ReadSummary {
     scan_count: usize,
-    scan_metadata_exhausted: String,
     scan_partitions_planned: u64,
     files_planned: u64,
-    estimated_rows: Option<u64>,
-    estimated_bytes: Option<u64>,
+    estimated_input_rows: Option<u64>,
+    estimated_input_bytes: Option<u64>,
     scan_partitions_started: u64,
     scan_partitions_completed: u64,
-    files_started: u64,
-    files_completed: u64,
-    dynamic_partition_files_pruned: u64,
-    dynamic_partition_files_kept: u64,
+    file_tasks_started: u64,
+    file_tasks_completed: u64,
+    dynamic_partition_tasks_pruned: u64,
+    dynamic_partition_tasks_kept: u64,
     dynamic_filters_received: u64,
     dynamic_filters_accepted: u64,
-    dynamic_filters_unsupported: u64,
-    dynamic_filter_snapshots: u64,
-    dynamic_files_not_pruned_missing_metadata: u64,
-    dynamic_files_not_pruned_unsupported_expression: u64,
-    batches_produced: u64,
-    rows_produced: u64,
+    dynamic_filters_rejected: u64,
+    dynamic_partition_filter_checks: u64,
+    dynamic_partition_tasks_kept_unusable_metadata: u64,
+    dynamic_partition_tasks_kept_unevaluable_filter: u64,
+    scheduler_batches_emitted: u64,
+    scheduler_rows_emitted: u64,
     deletion_vector_payloads_loaded: u64,
     deletion_vectors_applied: u64,
     deletion_vector_rows_deleted: u64,
     deletion_vector_failures: u64,
-    deletion_vector_rejections: u64,
+    deletion_vector_coordinate_rejections: u64,
     range_gets: Option<u64>,
     full_gets: Option<u64>,
     bytes_received: Option<u64>,
-    opened_bytes: Option<u64>,
+    estimated_task_bytes_admitted: Option<u64>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -304,10 +301,10 @@ impl Config {
             storage: StorageProfile::local(),
             workload: Workload::FewLarger,
             query: Query::FullRows,
-            backend: ParquetReaderBackend::DirectParquet,
+            backend: ParquetReaderBackend::Direct,
             repetitions: DEFAULT_REPETITIONS,
-            metadata_hint: Some(65_536),
-            full_read_threshold: None,
+            metadata_size_hint_bytes: Some(65_536),
+            full_file_read_threshold_bytes: None,
             retain_fixture: false,
             seed: 0,
         };
@@ -338,7 +335,7 @@ impl Config {
                         .replace('-', "_")
                         .as_str()
                     {
-                        "direct_parquet" => ParquetReaderBackend::DirectParquet,
+                        "direct_parquet" => ParquetReaderBackend::Direct,
                         "delta_kernel" => ParquetReaderBackend::DeltaKernel,
                         other => return Err(invalid(format!("unknown backend: {other}")).into()),
                     }
@@ -352,12 +349,12 @@ impl Config {
                         .into());
                     }
                 }
-                "--provider-exec-parquet-metadata-size-hint" => {
-                    config.metadata_hint =
+                "--provider-exec-parquet-metadata-size-hint-bytes" => {
+                    config.metadata_size_hint_bytes =
                         parse_optional_positive(&required_arg(&mut args, &argument)?)?
                 }
-                "--provider-exec-parquet-full-file-read-threshold" => {
-                    config.full_read_threshold =
+                "--provider-exec-parquet-full-file-read-threshold-bytes" => {
+                    config.full_file_read_threshold_bytes =
                         parse_optional_positive(&required_arg(&mut args, &argument)?)?
                 }
                 "--provider-exec-repetitions" => {
@@ -385,64 +382,64 @@ impl Config {
             self.query,
             self.backend,
             self.storage.name,
-            self.metadata_hint,
-            self.full_read_threshold,
+            self.metadata_size_hint_bytes,
+            self.full_file_read_threshold_bytes,
         );
         let frozen = matches!(
             case,
             (
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet | ParquetReaderBackend::DeltaKernel,
+                ParquetReaderBackend::Direct | ParquetReaderBackend::DeltaKernel,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::ManySmall,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 None | Some(8),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "local",
                 Some(65_536),
                 Some(1_000 | 1_000_000),
             ) | (
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet | ParquetReaderBackend::DeltaKernel,
+                ParquetReaderBackend::Direct | ParquetReaderBackend::DeltaKernel,
                 "local",
                 Some(65_536),
                 None,
             ) | (
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 "s3_throttled",
                 Some(65_536),
                 None,
@@ -1308,28 +1305,28 @@ async fn run_once(
     target_partitions: usize,
 ) -> Result<Measurement, Box<dyn Error>> {
     let context = SessionContext::new();
-    let execution_options = DeltaReaderExecutionOptions::new()
-        .with_reader_backend(config.backend)?
+    let execution_options = DeltaScanExecutionOptions::new()
+        .with_parquet_backend(config.backend)
         .with_max_concurrent_file_reads_per_scan(Some(target_partitions.saturating_mul(3).max(1)))?
         .with_max_concurrent_file_reads_per_partition(3)?
-        .with_output_buffer_capacity_per_partition(1)?
-        .with_prefetch_file_count_per_partition(2)?
-        .with_parquet_metadata_size_hint(config.metadata_hint)?
-        .with_parquet_full_file_read_threshold(config.full_read_threshold)?;
+        .with_output_buffer_batches_per_partition(1)?
+        .with_prefetch_files_per_partition(2)
+        .with_parquet_metadata_size_hint_bytes(config.metadata_size_hint_bytes)?
+        .with_parquet_full_file_read_threshold_bytes(config.full_file_read_threshold_bytes)?;
     let table = DeltaTableBuilder::new(&fixture.table_uri)
         .with_storage_options(fixture.storage_options.clone())
         .with_execution_options(execution_options)
         .load_table()
         .await?;
-    register_delta_table(
+    register_table(
         &context,
         "orders",
         table,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             execution_options,
             target_partitions: Some(target_partitions),
             intra_file_repartitioning: Default::default(),
-            use_view_types: true,
+            use_arrow_view_types: true,
         },
     )?;
 
@@ -1374,14 +1371,14 @@ async fn run_once(
         .into());
     }
     let peak_rss = process_peak_rss_bytes();
-    let metrics = collect_delta_datafusion_metrics(metrics_plan.as_ref())
+    let metrics = collect_scan_metrics(metrics_plan.as_ref())
         .into_iter()
         .map(|metrics| metrics.snapshot())
         .collect::<Vec<_>>();
     if metrics.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "query plan exposed no Delta reader metrics",
+            "query plan exposed no Delta scan metrics",
         )
         .into());
     }
@@ -1485,21 +1482,21 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         .iter()
         .map(|measurement| measurement.metrics.as_slice())
         .collect::<Vec<_>>();
-    let counter = |reader: fn(&delta_arrow_reader::DeltaReadMetricsSnapshot) -> u64| {
+    let counter = |reader: fn(&delta_arrow_reader::DeltaScanMetricsSnapshot) -> u64| {
         percentile(
             &snapshots
                 .iter()
                 .map(|snapshots| {
                     snapshots
                         .iter()
-                        .map(|snapshot| reader(&snapshot.reader))
+                        .map(|snapshot| reader(&snapshot.reader_metrics))
                         .sum()
                 })
                 .collect::<Vec<_>>(),
             50,
         )
     };
-    let dynamic = |select: fn(&DeltaDataFusionMetricsSnapshot) -> u64| {
+    let dynamic = |select: fn(&ScanMetricsSnapshot) -> u64| {
         percentile(
             &snapshots
                 .iter()
@@ -1508,45 +1505,39 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             50,
         )
     };
-    let optional = |select: fn(&delta_arrow_reader::DeltaReadMetricsSnapshot) -> Option<u64>| {
+    let optional = |select: fn(&delta_arrow_reader::DeltaScanMetricsSnapshot) -> Option<u64>| {
         optional_percentile(
             snapshots.iter().map(|snapshots| {
                 snapshots.iter().try_fold(0_u64, |sum, snapshot| {
-                    sum.checked_add(select(&snapshot.reader)?)
+                    sum.checked_add(select(&snapshot.reader_metrics)?)
                 })
             }),
             50,
         )
     };
     let optional_max =
-        |select: fn(&delta_arrow_reader::DeltaReadMetricsSnapshot) -> Option<u64>| {
+        |select: fn(&delta_arrow_reader::DeltaScanMetricsSnapshot) -> Option<u64>| {
             snapshots
                 .iter()
                 .filter_map(|snapshots| {
                     snapshots.iter().try_fold(0_u64, |sum, snapshot| {
-                        sum.checked_add(select(&snapshot.reader)?)
+                        sum.checked_add(select(&snapshot.reader_metrics)?)
                     })
                 })
                 .max()
         };
-    let scan_metadata_exhausted = summarize_scan_metadata(snapshots.iter().flat_map(|snapshots| {
-        snapshots
-            .iter()
-            .map(|snapshot| snapshot.reader.scan_metadata_exhausted)
-    }));
     ReadSummary {
         scan_count: snapshots
             .iter()
             .map(|snapshots| snapshots.len())
             .max()
             .unwrap_or(0),
-        scan_metadata_exhausted,
         scan_partitions_planned: snapshots
             .iter()
             .map(|snapshots| {
                 snapshots
                     .iter()
-                    .map(|snapshot| snapshot.reader.scan_partitions_planned)
+                    .map(|snapshot| snapshot.reader_metrics.scan_partitions_planned)
                     .sum()
             })
             .max()
@@ -1556,59 +1547,46 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             .map(|snapshots| {
                 snapshots
                     .iter()
-                    .map(|snapshot| snapshot.reader.files_planned)
+                    .map(|snapshot| snapshot.reader_metrics.files_planned)
                     .sum()
             })
             .max()
             .unwrap_or(0),
-        estimated_rows: optional_max(|reader| reader.estimated_rows),
-        estimated_bytes: optional_max(|reader| reader.estimated_bytes),
+        estimated_input_rows: optional_max(|reader| reader.estimated_input_rows),
+        estimated_input_bytes: optional_max(|reader| reader.estimated_input_bytes),
         scan_partitions_started: counter(|reader| reader.scan_partitions_started),
         scan_partitions_completed: counter(|reader| reader.scan_partitions_completed),
-        files_started: counter(|reader| reader.files_started),
-        files_completed: counter(|reader| reader.files_completed),
-        dynamic_partition_files_pruned: dynamic(|snapshot| snapshot.dynamic_partition_files_pruned),
-        dynamic_partition_files_kept: dynamic(|snapshot| snapshot.dynamic_partition_files_kept),
+        file_tasks_started: counter(|reader| reader.file_tasks_started),
+        file_tasks_completed: counter(|reader| reader.file_tasks_completed),
+        dynamic_partition_tasks_pruned: dynamic(|snapshot| snapshot.dynamic_partition_tasks_pruned),
+        dynamic_partition_tasks_kept: dynamic(|snapshot| snapshot.dynamic_partition_tasks_kept),
         dynamic_filters_received: dynamic(|snapshot| snapshot.dynamic_filters_received),
         dynamic_filters_accepted: dynamic(|snapshot| snapshot.dynamic_filters_accepted),
-        dynamic_filters_unsupported: dynamic(|snapshot| snapshot.dynamic_filters_unsupported),
-        dynamic_filter_snapshots: dynamic(|snapshot| snapshot.dynamic_filter_snapshots),
-        dynamic_files_not_pruned_missing_metadata: dynamic(|snapshot| {
-            snapshot.dynamic_files_not_pruned_missing_metadata
+        dynamic_filters_rejected: dynamic(|snapshot| snapshot.dynamic_filters_rejected),
+        dynamic_partition_filter_checks: dynamic(|snapshot| {
+            snapshot.dynamic_partition_filter_checks
         }),
-        dynamic_files_not_pruned_unsupported_expression: dynamic(|snapshot| {
-            snapshot.dynamic_files_not_pruned_unsupported_expression
+        dynamic_partition_tasks_kept_unusable_metadata: dynamic(|snapshot| {
+            snapshot.dynamic_partition_tasks_kept_unusable_metadata
         }),
-        batches_produced: counter(|reader| reader.batches_produced),
-        rows_produced: counter(|reader| reader.rows_produced),
+        dynamic_partition_tasks_kept_unevaluable_filter: dynamic(|snapshot| {
+            snapshot.dynamic_partition_tasks_kept_unevaluable_filter
+        }),
+        scheduler_batches_emitted: counter(|reader| reader.scheduler_batches_emitted),
+        scheduler_rows_emitted: counter(|reader| reader.scheduler_rows_emitted),
         deletion_vector_payloads_loaded: counter(|reader| reader.deletion_vector_payloads_loaded),
         deletion_vectors_applied: counter(|reader| reader.deletion_vectors_applied),
         deletion_vector_rows_deleted: counter(|reader| reader.deletion_vector_rows_deleted),
         deletion_vector_failures: counter(|reader| reader.deletion_vector_failures),
-        deletion_vector_rejections: counter(|reader| reader.deletion_vector_rejections),
+        deletion_vector_coordinate_rejections: counter(|reader| {
+            reader.deletion_vector_coordinate_rejections
+        }),
         range_gets: optional(|reader| reader.parquet_data_file_range_get_operations),
         full_gets: optional(|reader| reader.parquet_data_file_full_get_operations),
         bytes_received: optional(|reader| reader.parquet_data_file_bytes_received),
-        opened_bytes: optional(|reader| reader.parquet_data_file_opened_bytes),
-    }
-}
-
-fn summarize_scan_metadata(values: impl IntoIterator<Item = Option<bool>>) -> String {
-    let mut true_seen = false;
-    let mut false_seen = false;
-    let mut unknown_seen = false;
-    for value in values {
-        match value {
-            Some(true) => true_seen = true,
-            Some(false) => false_seen = true,
-            None => unknown_seen = true,
-        }
-    }
-    match (true_seen, false_seen, unknown_seen) {
-        (true, false, false) => "true".to_owned(),
-        (false, true, false) => "false".to_owned(),
-        (false, false, true) | (false, false, false) => String::new(),
-        _ => "mixed".to_owned(),
+        estimated_task_bytes_admitted: optional(|reader| {
+            reader.estimated_parquet_task_bytes_admitted
+        }),
     }
 }
 
@@ -1647,31 +1625,31 @@ fn csv_row(
         fixture.deletion_vector_deleted_rows.to_string(),
         fixture.deletion_vector_deleted_rows_per_file.to_string(),
         read.scan_count.to_string(),
-        read.scan_metadata_exhausted.clone(),
         read.scan_partitions_planned.to_string(),
         read.files_planned.to_string(),
-        optional(read.estimated_rows),
-        optional(read.estimated_bytes),
+        optional(read.estimated_input_rows),
+        optional(read.estimated_input_bytes),
         read.scan_partitions_started.to_string(),
         read.scan_partitions_completed.to_string(),
-        read.files_started.to_string(),
-        read.files_completed.to_string(),
-        read.dynamic_partition_files_pruned.to_string(),
-        read.dynamic_partition_files_kept.to_string(),
+        read.file_tasks_started.to_string(),
+        read.file_tasks_completed.to_string(),
+        read.dynamic_partition_tasks_pruned.to_string(),
+        read.dynamic_partition_tasks_kept.to_string(),
         read.dynamic_filters_received.to_string(),
         read.dynamic_filters_accepted.to_string(),
-        read.dynamic_filters_unsupported.to_string(),
-        read.dynamic_filter_snapshots.to_string(),
-        read.dynamic_files_not_pruned_missing_metadata.to_string(),
-        read.dynamic_files_not_pruned_unsupported_expression
+        read.dynamic_filters_rejected.to_string(),
+        read.dynamic_partition_filter_checks.to_string(),
+        read.dynamic_partition_tasks_kept_unusable_metadata
             .to_string(),
-        read.batches_produced.to_string(),
-        read.rows_produced.to_string(),
+        read.dynamic_partition_tasks_kept_unevaluable_filter
+            .to_string(),
+        read.scheduler_batches_emitted.to_string(),
+        read.scheduler_rows_emitted.to_string(),
         read.deletion_vector_payloads_loaded.to_string(),
         read.deletion_vectors_applied.to_string(),
         read.deletion_vector_rows_deleted.to_string(),
         read.deletion_vector_failures.to_string(),
-        read.deletion_vector_rejections.to_string(),
+        read.deletion_vector_coordinate_rejections.to_string(),
         summary.produced_rows.to_string(),
         summary.produced_batches.to_string(),
         optional(summary.peak_rss),
@@ -1696,12 +1674,12 @@ fn csv_row(
         "0".to_owned(),
         "0".to_owned(),
         "disabled".to_owned(),
-        optional_usize(config.metadata_hint),
-        optional_usize(config.full_read_threshold),
+        optional_usize(config.metadata_size_hint_bytes),
+        optional_usize(config.full_file_read_threshold_bytes),
         optional(read.range_gets),
         optional(read.full_gets),
         optional(read.bytes_received),
-        optional(read.opened_bytes),
+        optional(read.estimated_task_bytes_admitted),
         fixture.fingerprint.clone(),
     ];
     assert_eq!(row.len(), CSV_HEADER.len());
@@ -1710,7 +1688,7 @@ fn csv_row(
 
 fn backend_name(backend: ParquetReaderBackend) -> &'static str {
     match backend {
-        ParquetReaderBackend::DirectParquet => "direct_parquet",
+        ParquetReaderBackend::Direct => "direct_parquet",
         ParquetReaderBackend::DeltaKernel => "delta_kernel",
     }
 }
@@ -1789,8 +1767,8 @@ mod tests {
         query: Query,
         backend: ParquetReaderBackend,
         storage: StorageProfile,
-        metadata_hint: Option<usize>,
-        full_read_threshold: Option<usize>,
+        metadata_size_hint_bytes: Option<usize>,
+        full_file_read_threshold_bytes: Option<usize>,
     ) -> Config {
         Config {
             output: None,
@@ -1800,8 +1778,8 @@ mod tests {
             query,
             backend,
             repetitions: 1,
-            metadata_hint,
-            full_read_threshold,
+            metadata_size_hint_bytes,
+            full_file_read_threshold_bytes,
             retain_fixture: false,
             seed: 0,
         }
@@ -1815,7 +1793,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1823,7 +1801,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1839,7 +1817,7 @@ mod tests {
             config(
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1847,7 +1825,7 @@ mod tests {
             config(
                 Workload::ManySmall,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1855,7 +1833,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 None,
                 None,
@@ -1863,7 +1841,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(8),
                 None,
@@ -1871,7 +1849,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 Some(1_000_000),
@@ -1879,7 +1857,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 Some(1_000),
@@ -1887,7 +1865,7 @@ mod tests {
             config(
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 local,
                 Some(65_536),
                 None,
@@ -1903,7 +1881,7 @@ mod tests {
             config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 throttled,
                 Some(65_536),
                 None,
@@ -1943,9 +1921,9 @@ mod tests {
                 "direct_parquet",
                 "--provider-exec-scheduling-profile",
                 "prefetch_2_ap_target_scan_3x",
-                "--provider-exec-parquet-metadata-size-hint",
+                "--provider-exec-parquet-metadata-size-hint-bytes",
                 "65536",
-                "--provider-exec-parquet-full-file-read-threshold",
+                "--provider-exec-parquet-full-file-read-threshold-bytes",
                 "disabled",
                 "--provider-exec-repetitions",
                 "5",
@@ -1961,13 +1939,10 @@ mod tests {
         assert_eq!(parsed.storage.name, "local");
         assert_eq!(parsed.workload.name(), "provider_few_larger_files");
         assert_eq!(parsed.query.name(), "full_rows");
-        assert!(matches!(
-            parsed.backend,
-            ParquetReaderBackend::DirectParquet
-        ));
+        assert!(matches!(parsed.backend, ParquetReaderBackend::Direct));
         assert_eq!(parsed.repetitions, 5);
-        assert_eq!(parsed.metadata_hint, Some(65_536));
-        assert_eq!(parsed.full_read_threshold, None);
+        assert_eq!(parsed.metadata_size_hint_bytes, Some(65_536));
+        assert_eq!(parsed.full_file_read_threshold_bytes, None);
         assert_eq!(parsed.temp_dir, PathBuf::from("target/frozen-fixtures"));
         assert!(parsed.retain_fixture);
         assert_eq!(parsed.output, Some(PathBuf::from("target/frozen.csv")));
@@ -1977,24 +1952,21 @@ mod tests {
         assert_eq!(defaults.storage.name, "local");
         assert_eq!(defaults.workload.name(), "provider_few_larger_files");
         assert_eq!(defaults.query.name(), "full_rows");
-        assert!(matches!(
-            defaults.backend,
-            ParquetReaderBackend::DirectParquet
-        ));
+        assert!(matches!(defaults.backend, ParquetReaderBackend::Direct));
         assert_eq!(defaults.repetitions, DEFAULT_REPETITIONS);
-        assert_eq!(defaults.metadata_hint, Some(65_536));
-        assert_eq!(defaults.full_read_threshold, None);
+        assert_eq!(defaults.metadata_size_hint_bytes, Some(65_536));
+        assert_eq!(defaults.full_file_read_threshold_bytes, None);
         assert!(!defaults.retain_fixture);
         assert_eq!(defaults.output, None);
 
         let full_read = Config::parse(
             [
-                "--provider-exec-parquet-full-file-read-threshold",
+                "--provider-exec-parquet-full-file-read-threshold-bytes",
                 "1000000",
             ]
             .map(str::to_owned),
         )?;
-        assert_eq!(full_read.full_read_threshold, Some(1_000_000));
+        assert_eq!(full_read.full_file_read_threshold_bytes, Some(1_000_000));
         assert!(Config::parse(["--provider-exec-repetitions", "0"].map(str::to_owned)).is_err());
         assert!(Config::parse(["--provider-exec-repetitions"].map(str::to_owned)).is_err());
         assert!(
@@ -2051,7 +2023,7 @@ mod tests {
             let unequal_config = config(
                 Workload::ManyUnequal,
                 Query::FilterTailIds,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 StorageProfile::local(),
                 Some(65_536),
                 None,
@@ -2064,12 +2036,15 @@ mod tests {
             )?;
             let unequal_measurement = run_once(&unequal_config, &unequal, 4).await?;
             assert_eq!(unequal_measurement.produced_rows, 68_608);
-            assert_eq!(unequal_measurement.metrics[0].reader.files_planned, 32);
+            assert_eq!(
+                unequal_measurement.metrics[0].reader_metrics.files_planned,
+                32
+            );
 
             let http_config = config(
                 Workload::FewLarger,
                 Query::FullRows,
-                ParquetReaderBackend::DirectParquet,
+                ParquetReaderBackend::Direct,
                 StorageProfile::throttled(),
                 Some(65_536),
                 None,
@@ -2081,8 +2056,8 @@ mod tests {
                 false,
             )?;
             let http_measurement = run_once(&http_config, &http, 4).await?;
-            let reader = &http_measurement.metrics[0].reader;
-            assert_eq!(reader.rows_produced, 32_768);
+            let reader = &http_measurement.metrics[0].reader_metrics;
+            assert_eq!(reader.scheduler_rows_emitted, 32_768);
             assert_eq!(reader.parquet_data_file_range_get_operations, Some(8));
             Ok::<_, Box<dyn Error>>(())
         })
@@ -2090,7 +2065,7 @@ mod tests {
 
     #[test]
     fn csv_and_helpers_preserve_frozen_edge_behavior() -> TestResult {
-        assert_eq!(CSV_HEADER.len(), 80);
+        assert_eq!(CSV_HEADER.len(), 79);
         assert_eq!(percentile(&[], 50), 0);
         assert_eq!(percentile(&[10, 20, 30, 40], 50), 20);
         assert_eq!(percentile(&[10, 20, 30, 40], 95), 40);
@@ -2132,7 +2107,7 @@ mod tests {
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "23");
+            assert_eq!(row[0], "30");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);
@@ -2153,41 +2128,40 @@ mod tests {
             assert_eq!(row[22], "12");
             assert_eq!(row[23], "3");
             assert_eq!(row[24], "1");
-            assert_eq!(row[25], "true");
-            assert_eq!(&row[26..30], ["4", "4", "32768", "819772"]);
-            assert_eq!(&row[30..34], ["4", "4", "4", "4"]);
-            assert!(row[34..42].iter().all(|value| value == "0"));
-            assert_eq!(row[42], "36");
-            assert_eq!(row[43], "32756");
-            assert_eq!(&row[44..49], ["4", "4", "12", "0", "0"]);
-            assert_eq!(row[49], "32756");
-            assert_eq!(row[50], "36");
-            assert_eq!(row[51], optional(summary.peak_rss));
-            assert_eq!(row[52], optional(summary.peak_rss_delta));
-            assert_eq!(row[53], summary.planning.p50.to_string());
-            assert_eq!(row[54], summary.planning.p95.to_string());
-            assert_eq!(row[55], summary.planning.p99.to_string());
-            assert_eq!(row[56], summary.first_batch.p50.to_string());
-            assert_eq!(row[57], summary.first_batch.p95.to_string());
-            assert_eq!(row[58], summary.first_batch.p99.to_string());
-            assert_eq!(row[59], summary.total.p50.to_string());
-            assert_eq!(row[60], summary.total.p95.to_string());
-            assert_eq!(row[61], summary.total.p99.to_string());
-            assert_eq!(row[62], summary.rows_per_second.p50.to_string());
-            assert_eq!(row[63], summary.rows_per_second.p95.to_string());
-            assert_eq!(row[64], summary.rows_per_second.p99.to_string());
-            assert_eq!(row[65], summary.batch_latency.p50.to_string());
-            assert_eq!(row[66], summary.batch_latency.p95.to_string());
-            assert_eq!(row[67], summary.batch_latency.p99.to_string());
-            assert_eq!(row[68], summary.min_total.to_string());
-            assert_eq!(row[69], summary.max_total.to_string());
+            assert_eq!(&row[25..29], ["4", "4", "32768", "819772"]);
+            assert_eq!(&row[29..33], ["4", "4", "4", "4"]);
+            assert!(row[33..41].iter().all(|value| value == "0"));
+            assert_eq!(row[41], "36");
+            assert_eq!(row[42], "32756");
+            assert_eq!(&row[43..48], ["4", "4", "12", "0", "0"]);
+            assert_eq!(row[48], "32756");
+            assert_eq!(row[49], "36");
+            assert_eq!(row[50], optional(summary.peak_rss));
+            assert_eq!(row[51], optional(summary.peak_rss_delta));
+            assert_eq!(row[52], summary.planning.p50.to_string());
+            assert_eq!(row[53], summary.planning.p95.to_string());
+            assert_eq!(row[54], summary.planning.p99.to_string());
+            assert_eq!(row[55], summary.first_batch.p50.to_string());
+            assert_eq!(row[56], summary.first_batch.p95.to_string());
+            assert_eq!(row[57], summary.first_batch.p99.to_string());
+            assert_eq!(row[58], summary.total.p50.to_string());
+            assert_eq!(row[59], summary.total.p95.to_string());
+            assert_eq!(row[60], summary.total.p99.to_string());
+            assert_eq!(row[61], summary.rows_per_second.p50.to_string());
+            assert_eq!(row[62], summary.rows_per_second.p95.to_string());
+            assert_eq!(row[63], summary.rows_per_second.p99.to_string());
+            assert_eq!(row[64], summary.batch_latency.p50.to_string());
+            assert_eq!(row[65], summary.batch_latency.p95.to_string());
+            assert_eq!(row[66], summary.batch_latency.p99.to_string());
+            assert_eq!(row[67], summary.min_total.to_string());
+            assert_eq!(row[68], summary.max_total.to_string());
+            assert_eq!(row[69], "0");
             assert_eq!(row[70], "0");
-            assert_eq!(row[71], "0");
-            assert_eq!(row[72], "disabled");
-            assert_eq!(row[73], "65536");
-            assert_eq!(row[74], "");
-            assert_eq!(&row[75..79], ["", "", "", ""]);
-            assert_eq!(row[79], "fnv1a64:e1509da31486f25a");
+            assert_eq!(row[71], "disabled");
+            assert_eq!(row[72], "65536");
+            assert_eq!(row[73], "");
+            assert_eq!(&row[74..78], ["", "", "", ""]);
+            assert_eq!(row[78], "fnv1a64:e1509da31486f25a");
             Ok::<_, Box<dyn Error>>(())
         })?;
         Ok(())

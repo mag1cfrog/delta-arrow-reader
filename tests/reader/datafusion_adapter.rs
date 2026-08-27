@@ -26,11 +26,13 @@ use datafusion::{
     physical_plan::{ExecutionPlan, displayable},
     prelude::{SessionConfig, SessionContext},
 };
-use delta_arrow_reader::ParquetReaderBackend;
 use delta_arrow_reader::{
-    DeltaDataFusionScanOptions, DeltaFileRepartitioning, DeltaReaderError,
-    DeltaReaderExecutionOptions, DeltaReaderPhase, DeltaTableBuilder, DeltaTableProvider,
-    collect_delta_datafusion_metrics, register_delta_table,
+    DeltaReaderError, DeltaReaderPhase, DeltaScanExecutionOptions, DeltaTableBuilder,
+    ParquetReaderBackend,
+    datafusion::{
+        DeltaTableProvider, IntraFileRepartitioning, ScanOptions, collect_scan_metrics,
+        register_table,
+    },
 };
 use futures_util::StreamExt;
 use parquet::{
@@ -239,12 +241,7 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
             .with_target_partitions(4)
             .with_repartition_file_min_size(1),
     );
-    register_delta_table(
-        &context,
-        "orders",
-        table,
-        DeltaDataFusionScanOptions::default(),
-    )?;
+    register_table(&context, "orders", table, ScanOptions::default())?;
 
     let plan = context
         .sql("SELECT count(*) AS row_count, sum(id) AS id_sum FROM orders")
@@ -253,13 +250,16 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
         .await?;
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(
-        display.contains("DeltaDataFusionExec: snapshot_version=0, partitions=4"),
+        display.contains("DeltaScanExec: snapshot_version=0, partitions=4"),
         "{display}"
     );
 
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
-    assert_eq!(metrics[0].snapshot().reader.scan_partitions_planned, 4);
+    assert_eq!(
+        metrics[0].snapshot().reader_metrics.scan_partitions_planned,
+        4
+    );
     let batches = collect_plan(&context, plan).await?;
     let batch = batches.first().ok_or("aggregate returned no batch")?;
     assert_eq!(
@@ -291,21 +291,21 @@ async fn intra_file_repartitioning_policy_controls_full_plan_rebalancing() -> Te
     for (name, policy, expected_tasks) in [
         (
             "default_orders",
-            DeltaFileRepartitioning::FillMissingParallelism,
+            IntraFileRepartitioning::WhenBelowTarget,
             2,
         ),
-        ("rebalanced_orders", DeltaFileRepartitioning::Rebalance, 3),
+        ("rebalanced_orders", IntraFileRepartitioning::Always, 3),
     ] {
         let context = SessionContext::new_with_config(
             SessionConfig::new()
                 .with_target_partitions(2)
                 .with_repartition_file_min_size(1),
         );
-        register_delta_table(
+        register_table(
             &context,
             name,
             table.clone(),
-            DeltaDataFusionScanOptions {
+            ScanOptions {
                 target_partitions: Some(2),
                 intra_file_repartitioning: policy,
                 ..Default::default()
@@ -318,7 +318,7 @@ async fn intra_file_repartitioning_policy_controls_full_plan_rebalancing() -> Te
             .await?
             .create_physical_plan()
             .await?;
-        let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+        let metrics = collect_scan_metrics(plan.as_ref());
         let batches = collect_plan(&context, plan).await?;
         let batch = batches.first().ok_or("aggregate returned no batch")?;
         assert_eq!(
@@ -339,7 +339,10 @@ async fn intra_file_repartitioning_policy_controls_full_plan_rebalancing() -> Te
                 .value(0),
             50_025_003
         );
-        assert_eq!(metrics[0].snapshot().reader.files_started, expected_tasks);
+        assert_eq!(
+            metrics[0].snapshot().reader_metrics.file_tasks_started,
+            expected_tasks
+        );
     }
 
     Ok(())
@@ -360,11 +363,11 @@ async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates
             .with_target_partitions(8)
             .with_repartition_file_min_size(1),
     );
-    register_delta_table(
+    register_table(
         &context,
         "orders",
         table,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(8),
             ..Default::default()
         },
@@ -378,25 +381,25 @@ async fn repartitioned_scan_preserves_predicates_and_deletion_vector_coordinates
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(display.contains("partitions=8"), "{display}");
 
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     let actual = ids(&collect_plan(&context, plan).await?);
     let expected = (2_999..=6_000)
         .filter(|id| ![3_000, 3_001, 6_000].contains(id))
         .collect::<Vec<_>>();
     assert_eq!(actual, expected);
-    let metrics = metrics[0].snapshot().reader;
+    let metrics = metrics[0].snapshot().reader_metrics;
     assert_eq!(metrics.scan_partitions_started, 8);
-    assert_eq!(metrics.files_started, 8);
+    assert_eq!(metrics.file_tasks_started, 8);
     assert!(
-        (1..=metrics.files_started).contains(&metrics.deletion_vector_payloads_loaded),
+        (1..=metrics.file_tasks_started).contains(&metrics.deletion_vector_payloads_loaded),
         "unexpected payload load count: {} for {} tasks",
         metrics.deletion_vector_payloads_loaded,
-        metrics.files_started
+        metrics.file_tasks_started
     );
     assert_eq!(metrics.deletion_vectors_applied, 2);
     assert_eq!(metrics.deletion_vector_rows_deleted, 3);
     assert_eq!(metrics.deletion_vector_failures, 0);
-    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
     Ok(())
 }
 
@@ -411,12 +414,7 @@ async fn repartitioned_scan_preserves_physical_to_logical_transforms() -> TestRe
             .with_target_partitions(2)
             .with_repartition_file_min_size(1),
     );
-    register_delta_table(
-        &context,
-        "mapped",
-        table,
-        DeltaDataFusionScanOptions::default(),
-    )?;
+    register_table(&context, "mapped", table, ScanOptions::default())?;
 
     let plan = context
         .sql("SELECT customer_name, id FROM mapped WHERE id >= 2 ORDER BY id")
@@ -481,12 +479,12 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     )?)?;
     assert_eq!(parquet.metadata().num_row_groups(), ROW_GROUPS);
 
-    let execution_options = DeltaReaderExecutionOptions::new()
-        .with_parquet_full_file_read_threshold(Some(usize::MAX))?;
-    let options = DeltaDataFusionScanOptions {
+    let execution_options = DeltaScanExecutionOptions::new()
+        .with_parquet_full_file_read_threshold_bytes(Some(usize::MAX))?;
+    let options = ScanOptions {
         execution_options,
         target_partitions: Some(TARGET_PARTITIONS),
-        intra_file_repartitioning: DeltaFileRepartitioning::Rebalance,
+        intra_file_repartitioning: IntraFileRepartitioning::Always,
         ..Default::default()
     };
     let context = SessionContext::new_with_config(
@@ -506,7 +504,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
         display.contains(&format!("partitions={TARGET_PARTITIONS}")),
         "{display}"
     );
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
 
     let (first, second) = tokio::join!(
@@ -524,7 +522,7 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
         assert_eq!(ids(&actual), expected);
     }
 
-    let metrics = metrics[0].snapshot().reader;
+    let metrics = metrics[0].snapshot().reader_metrics;
     let executions = 2_u64;
     let expected_tasks = u64::try_from(TARGET_PARTITIONS)? * executions;
     assert_eq!(
@@ -533,10 +531,10 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
     );
     assert_eq!(metrics.scan_partitions_started, expected_tasks);
     assert_eq!(metrics.scan_partitions_completed, expected_tasks);
-    assert_eq!(metrics.files_started, expected_tasks);
-    assert_eq!(metrics.files_completed, expected_tasks);
+    assert_eq!(metrics.file_tasks_started, expected_tasks);
+    assert_eq!(metrics.file_tasks_completed, expected_tasks);
     assert_eq!(
-        metrics.rows_produced,
+        metrics.scheduler_rows_emitted,
         u64::try_from(expected.len())? * executions
     );
     assert!(
@@ -553,9 +551,9 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
         u64::try_from(deleted_rows.len())? * executions
     );
     assert_eq!(metrics.deletion_vector_failures, 0);
-    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
     assert_eq!(
-        metrics.parquet_data_file_opened_bytes,
+        metrics.estimated_parquet_task_bytes_admitted,
         Some(fixture.data_file_size() * executions)
     );
     assert_eq!(metrics.parquet_data_file_full_get_operations, Some(0));
@@ -582,10 +580,10 @@ async fn large_repartitioned_dv_scan_matches_unsplit_under_concurrent_reexecutio
         control_display.contains("partitions=1"),
         "{control_display}"
     );
-    let control_metrics = collect_delta_datafusion_metrics(control_plan.as_ref());
+    let control_metrics = collect_scan_metrics(control_plan.as_ref());
     assert_eq!(ids(&collect_plan(&control, control_plan).await?), expected);
-    let control_metrics = control_metrics[0].snapshot().reader;
-    assert_eq!(control_metrics.files_started, 1);
+    let control_metrics = control_metrics[0].snapshot().reader_metrics;
+    assert_eq!(control_metrics.file_tasks_started, 1);
     assert_eq!(control_metrics.deletion_vector_payloads_loaded, 1);
     assert_eq!(
         control_metrics.deletion_vector_rows_deleted,
@@ -617,7 +615,7 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
         &context,
         "orders",
         &fixture,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(8),
             ..Default::default()
         },
@@ -630,7 +628,7 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
         .await?;
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(display.contains("partitions=8"), "{display}");
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
 
     let error = datafusion::physical_plan::collect(plan, context.task_ctx())
         .await
@@ -641,21 +639,21 @@ async fn repartitioned_scan_fails_closed_when_dv_payload_is_missing() -> TestRes
         "{display}"
     );
     assert!(!display.contains(DV_FILE), "{display}");
-    let metrics = metrics[0].snapshot().reader;
-    assert!(metrics.files_started > 0);
-    assert_eq!(metrics.files_completed, 0);
-    assert_eq!(metrics.batches_produced, 0);
-    assert_eq!(metrics.rows_produced, 0);
+    let metrics = metrics[0].snapshot().reader_metrics;
+    assert!(metrics.file_tasks_started > 0);
+    assert_eq!(metrics.file_tasks_completed, 0);
+    assert_eq!(metrics.scheduler_batches_emitted, 0);
+    assert_eq!(metrics.scheduler_rows_emitted, 0);
     assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
     assert!(
-        (1..=metrics.files_started).contains(&metrics.deletion_vector_failures),
+        (1..=metrics.file_tasks_started).contains(&metrics.deletion_vector_failures),
         "unexpected failure count: {} for {} started tasks",
         metrics.deletion_vector_failures,
-        metrics.files_started
+        metrics.file_tasks_started
     );
     assert_eq!(metrics.deletion_vectors_applied, 0);
     assert_eq!(metrics.deletion_vector_rows_deleted, 0);
-    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
     Ok(())
 }
 
@@ -663,12 +661,12 @@ async fn register_fixture(
     context: &SessionContext,
     name: &str,
     fixture: &RealParquetDeltaTable,
-    options: DeltaDataFusionScanOptions,
+    options: ScanOptions,
 ) -> TestResult {
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
         .await?;
-    register_delta_table(context, name, table, options)?;
+    register_table(context, name, table, options)?;
     Ok(())
 }
 
@@ -702,16 +700,16 @@ fn external_reader_error(error: &DataFusionError) -> TestResult<&DeltaReaderErro
 async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract() -> TestResult {
     let fixture = TestTable::partitioned("provider-contract")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
-    let defaults = DeltaDataFusionScanOptions::default();
+    let defaults = ScanOptions::default();
     assert_eq!(
         defaults.execution_options,
-        DeltaReaderExecutionOptions::default()
+        DeltaScanExecutionOptions::default()
     );
     assert_eq!(defaults.target_partitions, None);
-    assert!(defaults.use_view_types);
+    assert!(defaults.use_arrow_view_types);
     assert_eq!(
         defaults.intra_file_repartitioning,
-        DeltaFileRepartitioning::FillMissingParallelism
+        IntraFileRepartitioning::WhenBelowTarget
     );
 
     let provider = DeltaTableProvider::try_new(table.clone(), defaults)?;
@@ -762,13 +760,13 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
     let mut full_ids = ids(&collect_plan(&context, Arc::clone(&full)).await?);
     full_ids.sort_unstable();
     assert_eq!(full_ids, [1, 2, 3, 4]);
-    let metrics = collect_delta_datafusion_metrics(full.as_ref());
+    let metrics = collect_scan_metrics(full.as_ref());
     assert_eq!(metrics.len(), 1);
-    assert_eq!(metrics[0].source_name(), None);
+    assert_eq!(metrics[0].registration_name(), None);
 
     let explicit_target = DeltaTableProvider::try_new(
         table.clone(),
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(1),
             ..Default::default()
         },
@@ -826,7 +824,7 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
 
     let zero_target = DeltaTableProvider::try_new(
         table.clone(),
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(0),
             ..Default::default()
         },
@@ -851,36 +849,26 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
     let context = SessionContext::new();
 
     for invalid in ["", "1orders", "line-items", "select"] {
-        let error = register_delta_table(
-            &context,
-            invalid,
-            table.clone(),
-            DeltaDataFusionScanOptions::default(),
-        )
-        .expect_err("invalid name must fail");
+        let error = register_table(&context, invalid, table.clone(), ScanOptions::default())
+            .expect_err("invalid name must fail");
         assert_eq!(error.phase(), DeltaReaderPhase::DataFusion);
     }
 
-    let registered = register_delta_table(
+    let registered = register_table(
         &context,
         "Orders",
         table.clone(),
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(2),
             ..Default::default()
         },
     )?;
     assert_eq!(registered.name, "Orders");
-    assert_eq!(registered.version, table.version());
+    assert_eq!(registered.snapshot_version, table.version());
     let registered_provider = context.table_provider("orders").await?;
     assert!(!format!("{registered_provider:?}").contains("Orders"));
-    let duplicate = register_delta_table(
-        &context,
-        "orders",
-        table,
-        DeltaDataFusionScanOptions::default(),
-    )
-    .expect_err("duplicate registration must fail");
+    let duplicate = register_table(&context, "orders", table, ScanOptions::default())
+        .expect_err("duplicate registration must fail");
     assert_eq!(duplicate.phase(), DeltaReaderPhase::DataFusion);
     assert!(!duplicate.to_string().contains("Orders"));
     assert!(
@@ -906,29 +894,71 @@ async fn registration_sql_metrics_duplicates_and_repeated_scans_are_exact() -> T
         .await?
         .create_physical_plan()
         .await?;
-    let first_handles = collect_delta_datafusion_metrics(first.as_ref());
+    let first_handles = collect_scan_metrics(first.as_ref());
     assert_eq!(first_handles.len(), 1);
-    assert_eq!(first_handles[0].source_name(), Some("Orders"));
-    assert_eq!(first_handles[0].snapshot().reader.files_started, 0);
-    assert_eq!(first_handles[0].snapshot().reader.estimated_rows, Some(4));
+    assert_eq!(first_handles[0].registration_name(), Some("Orders"));
+    assert_eq!(
+        first_handles[0]
+            .snapshot()
+            .reader_metrics
+            .file_tasks_started,
+        0
+    );
+    assert_eq!(
+        first_handles[0]
+            .snapshot()
+            .reader_metrics
+            .estimated_input_rows,
+        Some(4)
+    );
     let first_batches = collect_plan(&context, first).await?;
     assert_eq!(ids(&first_batches), [2, 3]);
     assert_eq!(regions(&first_batches), ["west", "east"]);
-    assert_eq!(first_handles[0].snapshot().reader.rows_produced, 3);
+    assert_eq!(
+        first_handles[0]
+            .snapshot()
+            .reader_metrics
+            .scheduler_rows_emitted,
+        3
+    );
 
     let second = context
         .sql("SELECT id FROM orders WHERE region = 'west' ORDER BY id")
         .await?
         .create_physical_plan()
         .await?;
-    let second_handles = collect_delta_datafusion_metrics(second.as_ref());
+    let second_handles = collect_scan_metrics(second.as_ref());
     assert_eq!(second_handles.len(), 1);
-    assert_eq!(second_handles[0].source_name(), Some("Orders"));
-    assert_eq!(second_handles[0].snapshot().reader.files_started, 0);
-    assert_eq!(second_handles[0].snapshot().reader.estimated_rows, Some(2));
+    assert_eq!(second_handles[0].registration_name(), Some("Orders"));
+    assert_eq!(
+        second_handles[0]
+            .snapshot()
+            .reader_metrics
+            .file_tasks_started,
+        0
+    );
+    assert_eq!(
+        second_handles[0]
+            .snapshot()
+            .reader_metrics
+            .estimated_input_rows,
+        Some(2)
+    );
     assert_eq!(ids(&collect_plan(&context, second).await?), [1, 2]);
-    assert_eq!(first_handles[0].snapshot().reader.rows_produced, 3);
-    assert_eq!(second_handles[0].snapshot().reader.rows_produced, 2);
+    assert_eq!(
+        first_handles[0]
+            .snapshot()
+            .reader_metrics
+            .scheduler_rows_emitted,
+        3
+    );
+    assert_eq!(
+        second_handles[0]
+            .snapshot()
+            .reader_metrics
+            .scheduler_rows_emitted,
+        2
+    );
 
     assert_eq!(
         ids(&context
@@ -962,12 +992,7 @@ async fn caller_runtime_owns_concurrent_dataframe_execution() -> TestResult {
     let fixture = TestTable::partitioned("caller-runtime")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let context = SessionContext::new();
-    register_delta_table(
-        &context,
-        "orders",
-        table,
-        DeltaDataFusionScanOptions::default(),
-    )?;
+    register_table(&context, "orders", table, ScanOptions::default())?;
 
     let left = context.sql("SELECT id FROM orders WHERE id <= 2").await?;
     let right = context.sql("SELECT id FROM orders WHERE id > 2").await?;
@@ -984,25 +1009,25 @@ async fn direct_exact_and_kernel_residual_execution_return_the_same_rows() -> Te
     let mut outputs = Vec::new();
 
     for (name, backend) in [
-        ("direct_orders", ParquetReaderBackend::DirectParquet),
+        ("direct_orders", ParquetReaderBackend::Direct),
         ("kernel_orders", ParquetReaderBackend::DeltaKernel),
     ] {
         let context = SessionContext::new();
-        let execution_options = DeltaReaderExecutionOptions::new().with_reader_backend(backend)?;
+        let execution_options = DeltaScanExecutionOptions::new().with_parquet_backend(backend);
         let provider = DeltaTableProvider::try_new(
             table.clone(),
-            DeltaDataFusionScanOptions {
+            ScanOptions {
                 execution_options,
                 target_partitions: Some(2),
                 intra_file_repartitioning: Default::default(),
-                use_view_types: true,
+                use_arrow_view_types: true,
             },
         )?;
         let data_filter = col("id").gt(lit(1_i32));
         assert_eq!(
             provider.supports_filters_pushdown(&[&data_filter])?,
             [match backend {
-                ParquetReaderBackend::DirectParquet => TableProviderFilterPushDown::Exact,
+                ParquetReaderBackend::Direct => TableProviderFilterPushDown::Exact,
                 ParquetReaderBackend::DeltaKernel => TableProviderFilterPushDown::Inexact,
             }]
         );
@@ -1045,7 +1070,7 @@ async fn sql_join_dynamic_filter_prunes_before_file_admission() -> TestResult {
         &context,
         "orders",
         &fixture,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(1),
             ..Default::default()
         },
@@ -1063,28 +1088,28 @@ async fn sql_join_dynamic_filter_prunes_before_file_admission() -> TestResult {
         .await?;
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(display.contains("HashJoinExec"), "{display}");
-    assert!(display.contains("DeltaDataFusionExec"), "{display}");
+    assert!(display.contains("DeltaScanExec"), "{display}");
 
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
-    assert_eq!(metrics[0].source_name(), Some("orders"));
-    assert_eq!(metrics[0].snapshot().reader.files_planned, 2);
-    assert_eq!(metrics[0].snapshot().reader.files_started, 0);
+    assert_eq!(metrics[0].registration_name(), Some("orders"));
+    assert_eq!(metrics[0].snapshot().reader_metrics.files_planned, 2);
+    assert_eq!(metrics[0].snapshot().reader_metrics.file_tasks_started, 0);
 
     let batches = collect_plan(&context, plan).await?;
     assert_eq!(ids(&batches), [1, 2]);
     assert_eq!(regions(&batches), ["us-west", "us-west"]);
     let metrics = metrics[0].snapshot();
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 1);
+    assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+    assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
-    assert_eq!(metrics.dynamic_filters_unsupported, 0);
-    assert_eq!(metrics.dynamic_filter_snapshots, 2);
-    assert_eq!(metrics.dynamic_partition_files_pruned, 1);
-    assert_eq!(metrics.dynamic_partition_files_kept, 1);
-    assert_eq!(metrics.dynamic_files_not_pruned_missing_metadata, 0);
-    assert_eq!(metrics.dynamic_files_not_pruned_unsupported_expression, 0);
+    assert_eq!(metrics.dynamic_filters_rejected, 0);
+    assert_eq!(metrics.dynamic_partition_filter_checks, 2);
+    assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
+    assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
+    assert_eq!(metrics.dynamic_partition_tasks_kept_unusable_metadata, 0);
+    assert_eq!(metrics.dynamic_partition_tasks_kept_unevaluable_filter, 0);
     Ok(())
 }
 
@@ -1109,7 +1134,7 @@ async fn dynamic_join_kept_file_still_applies_deletion_vector() -> TestResult {
         &context,
         "orders",
         &fixture,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(1),
             ..Default::default()
         },
@@ -1125,7 +1150,7 @@ async fn dynamic_join_kept_file_still_applies_deletion_vector() -> TestResult {
         .await?
         .create_physical_plan()
         .await?;
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
     let batches = collect_plan(&context, plan).await?;
     assert_eq!(ids(&batches), [1, 3]);
@@ -1134,13 +1159,16 @@ async fn dynamic_join_kept_file_still_applies_deletion_vector() -> TestResult {
     let metrics = metrics[0].snapshot();
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
-    assert_eq!(metrics.dynamic_partition_files_pruned, 0);
-    assert_eq!(metrics.dynamic_partition_files_kept, 1);
-    assert_eq!(metrics.reader.deletion_vector_payloads_loaded, 1);
-    assert_eq!(metrics.reader.deletion_vectors_applied, 1);
-    assert_eq!(metrics.reader.deletion_vector_rows_deleted, 1);
-    assert_eq!(metrics.reader.deletion_vector_failures, 0);
-    assert_eq!(metrics.reader.deletion_vector_rejections, 0);
+    assert_eq!(metrics.dynamic_partition_tasks_pruned, 0);
+    assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
+    assert_eq!(metrics.reader_metrics.deletion_vector_payloads_loaded, 1);
+    assert_eq!(metrics.reader_metrics.deletion_vectors_applied, 1);
+    assert_eq!(metrics.reader_metrics.deletion_vector_rows_deleted, 1);
+    assert_eq!(metrics.reader_metrics.deletion_vector_failures, 0);
+    assert_eq!(
+        metrics.reader_metrics.deletion_vector_coordinate_rejections,
+        0
+    );
     Ok(())
 }
 
@@ -1154,7 +1182,7 @@ async fn direct_exact_filter_applies_before_deletion_vector_masking() -> TestRes
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
         .await?;
-    let provider = DeltaTableProvider::try_new(table, DeltaDataFusionScanOptions::default())?;
+    let provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
     let filter = col("id").gt(lit(3_i32));
     assert_eq!(
         provider.supports_filters_pushdown(&[&filter])?,
@@ -1170,9 +1198,9 @@ async fn direct_exact_filter_applies_before_deletion_vector_masking() -> TestRes
         .await?;
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(!display.contains("FilterExec"), "{display}");
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(ids(&collect_plan(&context, plan).await?), [4, 6]);
-    let metrics = metrics[0].snapshot().reader;
+    let metrics = metrics[0].snapshot().reader_metrics;
     assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
     assert_eq!(metrics.deletion_vectors_applied, 1);
     assert_eq!(metrics.deletion_vector_rows_deleted, 1);
@@ -1187,7 +1215,7 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
         .await?;
     let provider = DeltaTableProvider::try_new(
         table,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(1),
             ..Default::default()
         },
@@ -1198,9 +1226,9 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
             .with_batch_size(13),
     );
     let plan = provider.scan(&context.state(), None, &[], None).await?;
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
-    assert_eq!(metrics[0].snapshot().output_batch_size, None);
+    assert_eq!(metrics[0].snapshot().configured_batch_size_rows, None);
 
     let error = plan
         .execute(1, context.task_ctx())
@@ -1216,11 +1244,11 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
 
     assert_eq!(ids(&collect_plan(&context, plan).await?), [1, 2, 3]);
     let metrics = metrics[0].snapshot();
-    assert_eq!(metrics.output_batch_size, Some(13));
-    assert_eq!(metrics.reader.scan_partitions_started, 1);
-    assert_eq!(metrics.reader.scan_partitions_completed, 1);
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 1);
+    assert_eq!(metrics.configured_batch_size_rows, Some(13));
+    assert_eq!(metrics.reader_metrics.scan_partitions_started, 1);
+    assert_eq!(metrics.reader_metrics.scan_partitions_completed, 1);
+    assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+    assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
     Ok(())
 }
 
@@ -1229,7 +1257,7 @@ async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult 
     let fixture = TestTable::empty("provider-empty-scan")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(4));
-    let provider = DeltaTableProvider::try_new(table, DeltaDataFusionScanOptions::default())?;
+    let provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
     let plan = provider.scan(&context.state(), None, &[], None).await?;
     assert_eq!(plan.properties().output_partitioning().partition_count(), 0);
     assert!(
@@ -1239,25 +1267,25 @@ async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult 
             .contains("partitions=0")
     );
 
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
     assert!(collect_plan(&context, plan).await?.is_empty());
-    let metrics = metrics[0].snapshot().reader;
+    let metrics = metrics[0].snapshot().reader_metrics;
     assert_eq!(metrics.scan_partitions_planned, 0);
     assert_eq!(metrics.files_planned, 0);
-    assert_eq!(metrics.estimated_rows, Some(0));
-    assert_eq!(metrics.estimated_bytes, Some(0));
+    assert_eq!(metrics.estimated_input_rows, Some(0));
+    assert_eq!(metrics.estimated_input_bytes, Some(0));
     assert_eq!(metrics.scan_partitions_started, 0);
     assert_eq!(metrics.scan_partitions_completed, 0);
-    assert_eq!(metrics.files_started, 0);
-    assert_eq!(metrics.files_completed, 0);
-    assert_eq!(metrics.batches_produced, 0);
-    assert_eq!(metrics.rows_produced, 0);
+    assert_eq!(metrics.file_tasks_started, 0);
+    assert_eq!(metrics.file_tasks_completed, 0);
+    assert_eq!(metrics.scheduler_batches_emitted, 0);
+    assert_eq!(metrics.scheduler_rows_emitted, 0);
     assert_eq!(metrics.deletion_vector_payloads_loaded, 0);
     assert_eq!(metrics.deletion_vectors_applied, 0);
     assert_eq!(metrics.deletion_vector_rows_deleted, 0);
     assert_eq!(metrics.deletion_vector_failures, 0);
-    assert_eq!(metrics.deletion_vector_rejections, 0);
+    assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
     Ok(())
 }
 
@@ -1270,14 +1298,14 @@ async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestRe
     fs::remove_file(fixture.path().join(fixture.data_file_path()))?;
     let provider = DeltaTableProvider::try_new(
         table,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(1),
             ..Default::default()
         },
     )?;
     let context = SessionContext::new();
     let plan = provider.scan(&context.state(), None, &[], None).await?;
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     let mut stream = plan.execute(0, context.task_ctx())?;
     let error = stream
         .next()
@@ -1286,15 +1314,15 @@ async fn execution_error_preserves_reader_source_and_partial_metrics() -> TestRe
         .expect_err("missing file unexpectedly succeeded");
     let reader = external_reader_error(&error)?;
     assert_eq!(reader.phase(), DeltaReaderPhase::DataFileRead);
-    assert_eq!(reader.as_str(), "data_file_read");
+    assert_eq!(reader.code(), "data_file_read");
     assert!(reader.source().is_some());
     assert!(stream.next().await.is_none());
 
     let metrics = metrics[0].snapshot();
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 0);
-    assert_eq!(metrics.reader.batches_produced, 0);
-    assert_eq!(metrics.reader.rows_produced, 0);
+    assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+    assert_eq!(metrics.reader_metrics.file_tasks_completed, 0);
+    assert_eq!(metrics.reader_metrics.scheduler_batches_emitted, 0);
+    assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 0);
     Ok(())
 }
 
@@ -1304,18 +1332,18 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
         .await?;
-    let execution_options = DeltaReaderExecutionOptions::new()
-        .with_prefetch_file_count_per_partition(0)?
+    let execution_options = DeltaScanExecutionOptions::new()
+        .with_prefetch_files_per_partition(0)
         .with_max_concurrent_file_reads_per_partition(1)?
         .with_max_concurrent_file_reads_per_scan(Some(1))?
-        .with_output_buffer_capacity_per_partition(1)?;
+        .with_output_buffer_batches_per_partition(1)?;
     let provider = DeltaTableProvider::try_new(
         table,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             execution_options,
             target_partitions: Some(1),
             intra_file_repartitioning: Default::default(),
-            use_view_types: true,
+            use_arrow_view_types: true,
         },
     )?;
     let context = SessionContext::new();
@@ -1323,30 +1351,35 @@ async fn execution_stream_drop_preserves_bounded_partial_metrics() -> TestResult
     let plan = provider
         .scan(&context.state(), Some(&projection), &[], None)
         .await?;
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     let mut stream = plan.execute(0, context.task_ctx())?;
     let first = stream.next().await.ok_or("expected first batch")??;
     assert_eq!(ids(std::slice::from_ref(&first)).first().copied(), Some(1));
     drop(stream);
 
     for _ in 0..1000 {
-        if metrics[0].snapshot().reader.batches_produced > 0 {
+        if metrics[0]
+            .snapshot()
+            .reader_metrics
+            .scheduler_batches_emitted
+            > 0
+        {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     }
     let metrics = metrics[0].snapshot();
-    assert_eq!(metrics.reader.scan_partitions_started, 1);
-    assert_eq!(metrics.reader.scan_partitions_completed, 0);
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 0);
-    assert!((1..=2).contains(&metrics.reader.batches_produced));
-    assert!((1..=16_384).contains(&metrics.reader.rows_produced));
+    assert_eq!(metrics.reader_metrics.scan_partitions_started, 1);
+    assert_eq!(metrics.reader_metrics.scan_partitions_completed, 0);
+    assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+    assert_eq!(metrics.reader_metrics.file_tasks_completed, 0);
+    assert!((1..=2).contains(&metrics.reader_metrics.scheduler_batches_emitted));
+    assert!((1..=16_384).contains(&metrics.reader_metrics.scheduler_rows_emitted));
     Ok(())
 }
 
 #[tokio::test]
-async fn direct_metadata_hint_preserves_rows_and_request_fallback() -> TestResult {
+async fn direct_metadata_size_hint_bytes_preserves_rows_and_request_fallback() -> TestResult {
     let fixture =
         RealParquetDeltaTable::new_with_two_large_files("provider-parquet-metadata-hint", 20_000)?;
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
@@ -1359,16 +1392,16 @@ async fn direct_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
         let context =
             SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
         let execution_options =
-            DeltaReaderExecutionOptions::new().with_parquet_metadata_size_hint(hint)?;
-        register_delta_table(
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(hint)?;
+        register_table(
             &context,
             "orders",
             table.clone(),
-            DeltaDataFusionScanOptions {
+            ScanOptions {
                 execution_options,
                 target_partitions: Some(1),
                 intra_file_repartitioning: Default::default(),
-                use_view_types: true,
+                use_arrow_view_types: true,
             },
         )?;
         let plan = context
@@ -1376,7 +1409,7 @@ async fn direct_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
             .await?
             .create_physical_plan()
             .await?;
-        let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+        let metrics = collect_scan_metrics(plan.as_ref());
         let batches = collect_plan(&context, plan).await?;
         let batch = batches.first().ok_or("aggregate returned no batch")?;
         assert_eq!(batch.num_rows(), 1);
@@ -1393,8 +1426,8 @@ async fn direct_metadata_hint_preserves_rows_and_request_fallback() -> TestResul
             .ok_or("sum was not Int64")?
             .value(0);
         outputs.push((row_count, id_sum));
-        let snapshot = metrics[0].snapshot().reader;
-        assert_eq!(snapshot.files_started, 2);
+        let snapshot = metrics[0].snapshot().reader_metrics;
+        assert_eq!(snapshot.file_tasks_started, 2);
         requests.push(
             snapshot
                 .parquet_data_file_range_get_operations
@@ -1428,7 +1461,7 @@ async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
         &context,
         "orders",
         &fixture,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             target_partitions: Some(1),
             ..Default::default()
         },
@@ -1446,25 +1479,25 @@ async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
         .await?;
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(display.contains("FilterExec"), "{display}");
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(ids(&collect_plan(&context, plan).await?), [1]);
 
     let metrics = metrics[0].snapshot();
-    assert_eq!(metrics.reader.files_planned, 2);
-    assert_eq!(metrics.reader.files_started, 1);
-    assert_eq!(metrics.reader.files_completed, 1);
-    assert_eq!(metrics.reader.rows_produced, 2);
+    assert_eq!(metrics.reader_metrics.files_planned, 2);
+    assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
+    assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
+    assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 2);
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
-    assert_eq!(metrics.dynamic_filters_unsupported, 0);
-    assert_eq!(metrics.dynamic_partition_files_pruned, 1);
-    assert_eq!(metrics.dynamic_partition_files_kept, 1);
+    assert_eq!(metrics.dynamic_filters_rejected, 0);
+    assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
+    assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
     assert_eq!(
-        metrics.reader.files_planned,
+        metrics.reader_metrics.files_planned,
         metrics
-            .reader
-            .files_started
-            .saturating_add(metrics.dynamic_partition_files_pruned)
+            .reader_metrics
+            .file_tasks_started
+            .saturating_add(metrics.dynamic_partition_tasks_pruned)
     );
     Ok(())
 }
@@ -1475,18 +1508,18 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
     let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
         .load_table()
         .await?;
-    let execution_options = DeltaReaderExecutionOptions::new()
-        .with_reader_backend(ParquetReaderBackend::DeltaKernel)?;
+    let execution_options =
+        DeltaScanExecutionOptions::new().with_parquet_backend(ParquetReaderBackend::DeltaKernel);
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
-    register_delta_table(
+    register_table(
         &context,
         "orders",
         table.clone(),
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             execution_options,
             target_partitions: Some(1),
             intra_file_repartitioning: Default::default(),
-            use_view_types: true,
+            use_arrow_view_types: true,
         },
     )?;
 
@@ -1498,17 +1531,20 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(display.contains("fetch=1"), "{display}");
     assert!(display.contains("FilterExec"), "{display}");
-    assert!(display.contains("DeltaDataFusionExec"), "{display}");
+    assert!(display.contains("DeltaScanExec"), "{display}");
     let filter = display.find("FilterExec").ok_or("missing FilterExec")?;
     let scan = display
-        .find("DeltaDataFusionExec")
-        .ok_or("missing DeltaDataFusionExec")?;
+        .find("DeltaScanExec")
+        .ok_or("missing DeltaScanExec")?;
     assert!(filter < scan, "{display}");
 
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
-    assert!(metrics[0].snapshot().use_view_types);
-    assert_eq!(metrics[0].snapshot().reader.estimated_rows, Some(3));
+    assert!(metrics[0].snapshot().uses_arrow_view_types);
+    assert_eq!(
+        metrics[0].snapshot().reader_metrics.estimated_input_rows,
+        Some(3)
+    );
     let batches = collect_plan(&context, plan).await?;
     assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
     let names = batches[0]
@@ -1517,17 +1553,20 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
         .downcast_ref::<StringViewArray>()
         .ok_or("Delta Kernel did not preserve the DataFusion view schema")?;
     assert_eq!(names.iter().collect::<Vec<_>>(), [Some("bob")]);
-    assert_eq!(metrics[0].snapshot().reader.rows_produced, 3);
+    assert_eq!(
+        metrics[0].snapshot().reader_metrics.scheduler_rows_emitted,
+        3
+    );
 
-    register_delta_table(
+    register_table(
         &context,
         "orders_standard",
         table,
-        DeltaDataFusionScanOptions {
+        ScanOptions {
             execution_options,
             target_partitions: Some(1),
             intra_file_repartitioning: Default::default(),
-            use_view_types: false,
+            use_arrow_view_types: false,
         },
     )?;
     let plan = context
@@ -1535,9 +1574,9 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
         .await?
         .create_physical_plan()
         .await?;
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     let batches = collect_plan(&context, plan).await?;
-    assert!(!metrics[0].snapshot().use_view_types);
+    assert!(!metrics[0].snapshot().uses_arrow_view_types);
     let names = batches[0]
         .column(0)
         .as_any()
@@ -1554,21 +1593,16 @@ async fn direct_scan_decodes_both_string_representations_with_exact_values() -> 
         .load_table()
         .await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
-    register_delta_table(
-        &context,
-        "typed",
-        table.clone(),
-        DeltaDataFusionScanOptions::default(),
-    )?;
+    register_table(&context, "typed", table.clone(), ScanOptions::default())?;
 
     let plan = context
         .sql("SELECT customer_name, payload, attributes FROM typed")
         .await?
         .create_physical_plan()
         .await?;
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     let batches = collect_plan(&context, plan).await?;
-    assert!(metrics[0].snapshot().use_view_types);
+    assert!(metrics[0].snapshot().uses_arrow_view_types);
     assert_eq!(batches.len(), 1);
     let batch = &batches[0];
     let names = batch
@@ -1606,8 +1640,8 @@ async fn direct_scan_decodes_both_string_representations_with_exact_values() -> 
 
     let standard = DeltaTableProvider::try_new(
         table,
-        DeltaDataFusionScanOptions {
-            use_view_types: false,
+        ScanOptions {
+            use_arrow_view_types: false,
             ..Default::default()
         },
     )?;
@@ -1629,9 +1663,9 @@ async fn direct_scan_decodes_both_string_representations_with_exact_values() -> 
         .await?
         .create_physical_plan()
         .await?;
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     let batches = collect_plan(&context, plan).await?;
-    assert!(!metrics[0].snapshot().use_view_types);
+    assert!(!metrics[0].snapshot().uses_arrow_view_types);
     assert_eq!(batches.len(), 1);
     let batch = &batches[0];
     let names = batch
@@ -1678,12 +1712,7 @@ async fn direct_scan_preserves_views_through_nested_map_reordering() -> TestResu
         .load_table()
         .await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
-    register_delta_table(
-        &context,
-        "mapped",
-        table,
-        DeltaDataFusionScanOptions::default(),
-    )?;
+    register_table(&context, "mapped", table, ScanOptions::default())?;
 
     let batches = context
         .sql("SELECT attributes FROM mapped")
@@ -1740,18 +1769,8 @@ async fn joined_delta_scans_keep_distinct_metrics_and_limit_above_join() -> Test
         .load_table()
         .await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
-    register_delta_table(
-        &context,
-        "orders",
-        table.clone(),
-        DeltaDataFusionScanOptions::default(),
-    )?;
-    register_delta_table(
-        &context,
-        "customers",
-        table,
-        DeltaDataFusionScanOptions::default(),
-    )?;
+    register_table(&context, "orders", table.clone(), ScanOptions::default())?;
+    register_table(&context, "customers", table, ScanOptions::default())?;
 
     let star = context.sql("SELECT * FROM orders").await?;
     assert_eq!(star.schema().fields().len(), 2);
@@ -1778,11 +1797,11 @@ async fn joined_delta_scans_keep_distinct_metrics_and_limit_above_join() -> Test
     let display = displayable(plan.as_ref()).indent(true).to_string();
     assert!(display.contains("HashJoinExec"), "{display}");
     assert!(display.contains("fetch=1"), "{display}");
-    let metrics = collect_delta_datafusion_metrics(plan.as_ref());
+    let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 2);
     let mut names = metrics
         .iter()
-        .map(|metrics| metrics.source_name().unwrap_or_default())
+        .map(|metrics| metrics.registration_name().unwrap_or_default())
         .collect::<Vec<_>>();
     names.sort_unstable();
     assert_eq!(names, ["customers", "orders"]);
@@ -1790,7 +1809,7 @@ async fn joined_delta_scans_keep_distinct_metrics_and_limit_above_join() -> Test
     assert!(
         metrics
             .iter()
-            .all(|metrics| metrics.snapshot().reader.files_started == 1)
+            .all(|metrics| metrics.snapshot().reader_metrics.file_tasks_started == 1)
     );
     Ok(())
 }

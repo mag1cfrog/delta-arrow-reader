@@ -28,15 +28,15 @@ cargo bench --locked -p delta-arrow-reader --bench reader --all-features -- \
   --provider-exec-query full_rows \
   --provider-exec-backend direct_parquet \
   --provider-exec-scheduling-profile prefetch_2_ap_target_scan_3x \
-  --provider-exec-parquet-metadata-size-hint 65536 \
-  --provider-exec-parquet-full-file-read-threshold disabled \
+  --provider-exec-parquet-metadata-size-hint-bytes 65536 \
+  --provider-exec-parquet-full-file-read-threshold-bytes disabled \
   --provider-exec-repetitions 5 \
   --output target/delta-arrow-reader-benchmark.csv
 ```
 
 The captured rows predate the backend naming cleanup and retain their original
 schema-22 `native_async` and `official_kernel` values. The current harness uses
-`direct_parquet` and `delta_kernel` and writes schema 23. The workloads and
+`direct_parquet` and `delta_kernel` and writes schema 30. The workloads and
 measurements are unchanged.
 
 Change only the workload, query, backend, storage profile, and Parquet controls
