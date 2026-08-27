@@ -90,7 +90,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 /// # }
 /// ```
 pub struct DeltaTableBuilder {
-    table_uri: String,
+    table_location: String,
     storage_options: DeltaStorageOptions,
     snapshot_selection: DeltaSnapshotSelection,
     execution_options: DeltaScanExecutionOptions,
@@ -98,9 +98,9 @@ pub struct DeltaTableBuilder {
 
 impl DeltaTableBuilder {
     /// Creates a builder for the latest snapshot with default execution settings.
-    pub fn new(table_uri: impl Into<String>) -> Self {
+    pub fn new(table_location: impl Into<String>) -> Self {
         Self {
-            table_uri: table_uri.into(),
+            table_location: table_location.into(),
             storage_options: DeltaStorageOptions::new(),
             snapshot_selection: DeltaSnapshotSelection::Latest,
             execution_options: DeltaScanExecutionOptions::new(),
@@ -130,7 +130,7 @@ impl DeltaTableBuilder {
     /// Unsupported protocol metadata remains inspectable; scan planning validates it.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
         let snapshot = load_delta_table_snapshot_async(
-            self.table_uri,
+            self.table_location,
             self.storage_options,
             self.snapshot_selection,
         )
@@ -141,7 +141,7 @@ impl DeltaTableBuilder {
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
         let snapshot = load_staged_delta_table_snapshot_async(
-            self.table_uri,
+            self.table_location,
             self.storage_options,
             self.snapshot_selection,
         )
@@ -154,7 +154,7 @@ impl fmt::Debug for DeltaTableBuilder {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("DeltaTableBuilder")
-            .field("table_uri", &"<redacted>")
+            .field("table_location", &"<redacted>")
             .field("storage_options", &"<redacted>")
             .field("snapshot_selection", &self.snapshot_selection)
             .field("execution_options", &self.execution_options)
