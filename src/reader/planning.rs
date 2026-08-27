@@ -54,8 +54,8 @@ pub(crate) struct DeltaScanPlan {
     pub(crate) partitions: Vec<DeltaScanFileTaskPartition>,
     pub(crate) partition_target_diagnostic: DeltaScanPartitionTargetDiagnosticOutput,
     pub(crate) add_actions_filtered_during_planning: Option<u64>,
-    pub(crate) estimated_bytes: Option<u64>,
-    pub(crate) estimated_rows: Option<u64>,
+    pub(crate) estimated_input_bytes: Option<u64>,
+    pub(crate) estimated_input_rows: Option<u64>,
     pub(crate) physical_predicate: Option<DeltaKernelPredicate>,
     pub(crate) execution_options: DeltaScanExecutionOptions,
     pub(crate) metrics: DeltaScanMetrics,
@@ -72,8 +72,8 @@ pub(crate) struct DeltaUnpartitionedScanPlan {
     pub(crate) kernel_schemas: KernelScanSchemas,
     pub(crate) file_tasks: Vec<DeltaScanFileTask>,
     pub(crate) add_actions_filtered_during_planning: Option<u64>,
-    pub(crate) estimated_bytes: Option<u64>,
-    pub(crate) estimated_rows: Option<u64>,
+    pub(crate) estimated_input_bytes: Option<u64>,
+    pub(crate) estimated_input_rows: Option<u64>,
     pub(crate) physical_predicate: Option<DeltaKernelPredicate>,
     pub(crate) execution_options: DeltaScanExecutionOptions,
 }
@@ -197,12 +197,12 @@ fn build_unpartitioned_scan_plan(
         .into_iter()
         .map(DeltaScanFileTask::try_from_kernel)
         .collect::<Result<Vec<_>, _>>()?;
-    let estimated_bytes = checked_sum(
+    let estimated_input_bytes = checked_sum(
         file_tasks.iter().map(|task| task.file_size),
         "scan_estimated_bytes_overflow",
     )?;
-    let estimated_rows = checked_sum(
-        file_tasks.iter().map(|task| task.estimated_rows),
+    let estimated_input_rows = checked_sum(
+        file_tasks.iter().map(|task| task.estimated_input_rows),
         "scan_estimated_rows_overflow",
     )?;
     let logical_schema = scan.logical_schema();
@@ -225,8 +225,8 @@ fn build_unpartitioned_scan_plan(
         kernel_schemas: scan.schemas(),
         file_tasks,
         add_actions_filtered_during_planning: metadata.add_actions_filtered_during_planning,
-        estimated_bytes,
-        estimated_rows,
+        estimated_input_bytes,
+        estimated_input_rows,
         physical_predicate,
         execution_options,
     })
@@ -254,8 +254,8 @@ fn finalize_scan_plan(
         scan_partitions_planned: partitions.len(),
         files_planned,
         add_actions_filtered_during_planning: unpartitioned.add_actions_filtered_during_planning,
-        estimated_input_rows: unpartitioned.estimated_rows,
-        estimated_input_bytes: unpartitioned.estimated_bytes,
+        estimated_input_rows: unpartitioned.estimated_input_rows,
+        estimated_input_bytes: unpartitioned.estimated_input_bytes,
     });
 
     Ok(DeltaScanPlan {
@@ -269,8 +269,8 @@ fn finalize_scan_plan(
         partitions,
         partition_target_diagnostic,
         add_actions_filtered_during_planning: unpartitioned.add_actions_filtered_during_planning,
-        estimated_bytes: unpartitioned.estimated_bytes,
-        estimated_rows: unpartitioned.estimated_rows,
+        estimated_input_bytes: unpartitioned.estimated_input_bytes,
+        estimated_input_rows: unpartitioned.estimated_input_rows,
         physical_predicate: unpartitioned.physical_predicate,
         execution_options: unpartitioned.execution_options,
         metrics,
@@ -326,9 +326,9 @@ pub(crate) struct DeltaScanFileTaskPartition {
     /// Whole-file or ranged Parquet reads assigned to this partition.
     pub(crate) file_tasks: Vec<DeltaScanFileTask>,
     /// Total bytes to read when every task has a known size.
-    pub(crate) estimated_bytes: Option<u64>,
-    /// Total output rows when every task has a valid whole-file estimate.
-    pub(crate) estimated_rows: Option<u64>,
+    pub(crate) estimated_input_bytes: Option<u64>,
+    /// Total input rows when every task has a valid whole-file estimate.
+    pub(crate) estimated_input_rows: Option<u64>,
 }
 
 #[allow(dead_code)]
@@ -343,7 +343,7 @@ pub(crate) fn group_scan_file_tasks(
         .fail();
     }
 
-    let estimated_bytes = checked_sum(
+    let estimated_input_bytes = checked_sum(
         file_tasks
             .iter()
             .map(DeltaScanFileTask::estimated_scan_bytes),
@@ -352,7 +352,7 @@ pub(crate) fn group_scan_file_tasks(
     if file_tasks.is_empty() {
         return Ok(Vec::new());
     }
-    if matches!(estimated_bytes, Some(0) | None) {
+    if matches!(estimated_input_bytes, Some(0) | None) {
         group_by_file_count(file_tasks, target_partitions)
     } else {
         group_by_estimated_bytes(file_tasks, target_partitions)
@@ -424,20 +424,20 @@ fn group_by_file_count(
 pub(crate) fn build_partition(
     file_tasks: Vec<DeltaScanFileTask>,
 ) -> Result<DeltaScanFileTaskPartition, DeltaReaderError> {
-    let estimated_bytes = checked_sum(
+    let estimated_input_bytes = checked_sum(
         file_tasks
             .iter()
             .map(DeltaScanFileTask::estimated_scan_bytes),
         "partition_estimated_bytes_overflow",
     )?;
-    let estimated_rows = checked_sum(
-        file_tasks.iter().map(|task| task.estimated_rows),
+    let estimated_input_rows = checked_sum(
+        file_tasks.iter().map(|task| task.estimated_input_rows),
         "partition_estimated_rows_overflow",
     )?;
     Ok(DeltaScanFileTaskPartition {
         file_tasks,
-        estimated_bytes,
-        estimated_rows,
+        estimated_input_bytes,
+        estimated_input_rows,
     })
 }
 
@@ -499,8 +499,8 @@ pub(crate) struct DeltaScanFileTask {
     pub(crate) file_size: Option<u64>,
     /// Byte range assigned by intra-file repartitioning, or `None` for the whole file.
     pub(crate) parquet_byte_range: Option<Range<u64>>,
-    /// Expected output rows, available only for whole-file tasks with statistics.
-    pub(crate) estimated_rows: Option<u64>,
+    /// Estimated input rows, available only for whole-file tasks with statistics.
+    pub(crate) estimated_input_rows: Option<u64>,
     /// Delta file statistics used by planning and pruning.
     pub(crate) stats: Option<DeltaScanFileStats>,
     /// Data-file modification time from the Delta add action.
@@ -546,7 +546,7 @@ impl DeltaScanFileTask {
             path: file.path,
             file_size: Some(file_size),
             parquet_byte_range: None,
-            estimated_rows: stats.as_ref().map(|stats| stats.num_records),
+            estimated_input_rows: stats.as_ref().map(|stats| stats.num_records),
             stats,
             modification_time_ms: file.modification_time_ms,
             partition_values: file.partition_values,
@@ -4540,13 +4540,13 @@ mod tests {
 
     fn grouping_task(
         path: &str,
-        estimated_bytes: Option<u64>,
-        estimated_rows: Option<u64>,
+        estimated_input_bytes: Option<u64>,
+        estimated_input_rows: Option<u64>,
     ) -> Result<DeltaScanFileTask, crate::DeltaReaderError> {
         let mut task = task(kernel_file(path))?;
-        task.file_size = estimated_bytes;
-        task.estimated_rows = estimated_rows;
-        task.stats = estimated_rows.map(|num_records| DeltaScanFileStats { num_records });
+        task.file_size = estimated_input_bytes;
+        task.estimated_input_rows = estimated_input_rows;
+        task.stats = estimated_input_rows.map(|num_records| DeltaScanFileStats { num_records });
         Ok(task)
     }
 
@@ -4628,7 +4628,7 @@ mod tests {
 
         assert_eq!(task.path, "part-00000.parquet");
         assert_eq!(task.file_size, Some(123));
-        assert_eq!(task.estimated_rows, Some(7));
+        assert_eq!(task.estimated_input_rows, Some(7));
         assert_eq!(task.stats.as_ref().map(|stats| stats.num_records), Some(7));
         assert_eq!(task.modification_time_ms, Some(1_587_968_586_000));
         assert_eq!(
@@ -4654,7 +4654,7 @@ mod tests {
         let task = task(file)?;
 
         assert_eq!(task.file_size, Some(0));
-        assert_eq!(task.estimated_rows, None);
+        assert_eq!(task.estimated_input_rows, None);
         assert!(task.stats.is_none());
         assert!(!task.deletion_vector.is_present());
         assert!(!task.transform.is_required());
@@ -4686,8 +4686,8 @@ mod tests {
         let execution_options = crate::DeltaScanExecutionOptions::default();
         let empty = plan_scan(&empty_snapshot, None, &[], None, true, execution_options)?;
         assert!(empty.partitions.is_empty());
-        assert_eq!(empty.estimated_bytes, Some(0));
-        assert_eq!(empty.estimated_rows, Some(0));
+        assert_eq!(empty.estimated_input_bytes, Some(0));
+        assert_eq!(empty.estimated_input_rows, Some(0));
         let empty_metrics = empty.metrics.snapshot();
         assert_eq!(empty_metrics.snapshot_version, empty.snapshot_version);
         assert_eq!(
@@ -4729,8 +4729,8 @@ mod tests {
         assert_eq!(planned_tasks(&single).count(), 1);
         assert_eq!(single_task.path, "single.parquet");
         assert_eq!(single_task.file_size, Some(0));
-        assert_eq!(single.estimated_bytes, Some(0));
-        assert_eq!(single.estimated_rows, None);
+        assert_eq!(single.estimated_input_bytes, Some(0));
+        assert_eq!(single.estimated_input_rows, None);
 
         let adds = (0_u32..1_001)
             .map(|index| {
@@ -4763,12 +4763,12 @@ mod tests {
             .find(|task| task.path == "part-1000.parquet")
             .ok_or("expected last task")?;
         assert_eq!(first.file_size, Some(0));
-        assert_eq!(second.estimated_rows, None);
+        assert_eq!(second.estimated_input_rows, None);
         assert_eq!(last.file_size, Some(1_000));
-        assert_eq!(last.estimated_rows, Some(1_000));
+        assert_eq!(last.estimated_input_rows, Some(1_000));
         assert_eq!(many.add_actions_filtered_during_planning, Some(0));
-        assert_eq!(many.estimated_bytes, Some(500_500));
-        assert_eq!(many.estimated_rows, None);
+        assert_eq!(many.estimated_input_bytes, Some(500_500));
+        assert_eq!(many.estimated_input_rows, None);
         assert!(Arc::ptr_eq(
             &many.engine_context,
             many_snapshot.engine_context()
@@ -4804,8 +4804,8 @@ mod tests {
         );
         assert_eq!(plan.file_tasks.len(), 3);
         assert_eq!(plan.add_actions_filtered_during_planning, Some(0));
-        assert_eq!(plan.estimated_bytes, Some(60));
-        assert_eq!(plan.estimated_rows, Some(6));
+        assert_eq!(plan.estimated_input_bytes, Some(60));
+        assert_eq!(plan.estimated_input_rows, Some(6));
         assert!(Arc::ptr_eq(&plan.engine_context, snapshot.engine_context()));
         Ok(())
     }
@@ -4889,7 +4889,7 @@ mod tests {
             .iter()
             .find(|task| task.path == "id-dv-possible.parquet")
             .ok_or("expected surviving DV task")?;
-        assert_eq!(possible.estimated_rows, Some(12));
+        assert_eq!(possible.estimated_input_rows, Some(12));
         assert_eq!(
             possible.stats.as_ref().map(|stats| stats.num_records),
             Some(12)
@@ -4900,7 +4900,7 @@ mod tests {
             .iter()
             .find(|task| task.path == "id-dv-missing-stats.parquet")
             .ok_or("expected surviving missing-stats DV task")?;
-        assert_eq!(missing_stats.estimated_rows, None);
+        assert_eq!(missing_stats.estimated_input_rows, None);
         assert!(missing_stats.stats.is_none());
         assert!(missing_stats.deletion_vector.is_present());
         let plain = plan
@@ -4910,7 +4910,7 @@ mod tests {
             .ok_or("expected surviving plain task")?;
         assert!(!plain.deletion_vector.is_present());
         assert_eq!(plan.add_actions_filtered_during_planning, Some(2));
-        assert_eq!(plan.estimated_rows, None);
+        assert_eq!(plan.estimated_input_rows, None);
         Ok(())
     }
 
@@ -5109,8 +5109,8 @@ mod tests {
                 vec!["small-0.parquet", "small-1.parquet"]
             ]
         );
-        assert_eq!(partitions[0].estimated_bytes, Some(1_000));
-        assert_eq!(partitions[1].estimated_bytes, Some(20));
+        assert_eq!(partitions[0].estimated_input_bytes, Some(1_000));
+        assert_eq!(partitions[1].estimated_input_bytes, Some(20));
         Ok(())
     }
 
@@ -5136,14 +5136,14 @@ mod tests {
         assert_eq!(
             partitions
                 .iter()
-                .map(|partition| partition.estimated_bytes)
+                .map(|partition| partition.estimated_input_bytes)
                 .collect::<Vec<_>>(),
             vec![Some(90), Some(30)]
         );
         assert_eq!(
             partitions
                 .iter()
-                .map(|partition| partition.estimated_rows)
+                .map(|partition| partition.estimated_input_rows)
                 .collect::<Vec<_>>(),
             vec![Some(9), Some(3)]
         );
@@ -5204,7 +5204,7 @@ mod tests {
         assert_eq!(
             partitions
                 .iter()
-                .map(|partition| partition.estimated_bytes)
+                .map(|partition| partition.estimated_input_bytes)
                 .collect::<Vec<_>>(),
             vec![Some(16), Some(16)]
         );
@@ -5278,8 +5278,8 @@ mod tests {
                 vec!["part-3.parquet", "part-4.parquet"]
             ]
         );
-        assert_eq!(partitions[0].estimated_bytes, None);
-        assert_eq!(partitions[1].estimated_bytes, Some(20));
+        assert_eq!(partitions[0].estimated_input_bytes, None);
+        assert_eq!(partitions[1].estimated_input_bytes, Some(20));
         Ok(())
     }
 
@@ -5298,10 +5298,10 @@ mod tests {
             partition_paths(&partitions),
             vec![vec!["zero-0.parquet"], vec!["zero-1.parquet"]]
         );
-        assert_eq!(partitions[0].estimated_bytes, Some(0));
-        assert_eq!(partitions[1].estimated_bytes, Some(0));
-        assert_eq!(partitions[0].estimated_rows, Some(0));
-        assert_eq!(partitions[1].estimated_rows, Some(0));
+        assert_eq!(partitions[0].estimated_input_bytes, Some(0));
+        assert_eq!(partitions[1].estimated_input_bytes, Some(0));
+        assert_eq!(partitions[0].estimated_input_rows, Some(0));
+        assert_eq!(partitions[1].estimated_input_rows, Some(0));
         Ok(())
     }
 
@@ -5362,7 +5362,7 @@ mod tests {
 
         assert_eq!(grouped.path, "part-with-delta-metadata.parquet");
         assert_eq!(grouped.file_size, Some(123));
-        assert_eq!(grouped.estimated_rows, Some(7));
+        assert_eq!(grouped.estimated_input_rows, Some(7));
         assert_eq!(
             grouped.partition_values.get("region").map(String::as_str),
             Some("us-west")
@@ -5383,7 +5383,7 @@ mod tests {
             1,
         )?;
 
-        assert_eq!(partitions[0].estimated_rows, None);
+        assert_eq!(partitions[0].estimated_input_rows, None);
         Ok(())
     }
 
@@ -5454,8 +5454,8 @@ mod tests {
                 vec!["part-1.parquet", "part-2.parquet"]
             ]
         );
-        assert_eq!(plan.estimated_bytes, Some(100));
-        assert_eq!(plan.estimated_rows, Some(10));
+        assert_eq!(plan.estimated_input_bytes, Some(100));
+        assert_eq!(plan.estimated_input_rows, Some(10));
 
         let retained_metrics = plan.metrics.clone();
         let metrics = retained_metrics.snapshot();
@@ -5752,8 +5752,8 @@ mod tests {
         paths.sort_unstable();
         assert_eq!(paths, ["missing-stats.parquet", "possible.parquet"]);
         assert_eq!(plan.add_actions_filtered_during_planning, Some(1));
-        assert_eq!(plan.estimated_bytes, Some(50));
-        assert_eq!(plan.estimated_rows, None);
+        assert_eq!(plan.estimated_input_bytes, Some(50));
+        assert_eq!(plan.estimated_input_rows, None);
         assert!(plan.physical_predicate.is_some());
 
         let empty_projection = Vec::new();
@@ -6022,8 +6022,8 @@ mod tests {
             plan.partitions.len(),
             planned_tasks(&plan).count(),
             plan.add_actions_filtered_during_planning,
-            plan.estimated_bytes,
-            plan.estimated_rows,
+            plan.estimated_input_bytes,
+            plan.estimated_input_rows,
         );
         assert_eq!(final_state, (1, 1, Some(1), Some(20), Some(2)));
         assert!(Arc::ptr_eq(&plan.engine_context, snapshot.engine_context()));

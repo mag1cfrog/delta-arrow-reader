@@ -533,7 +533,7 @@ fn task_from_partitioned_file(file: PartitionedFile) -> DataFusionResult<DeltaSc
     if task.parquet_byte_range.is_some() {
         // A range covers an unknown subset of the file's rows, so the original
         // whole-file estimate is no longer valid for partition accounting.
-        task.estimated_rows = None;
+        task.estimated_input_rows = None;
     }
     Ok(task)
 }
@@ -1093,7 +1093,7 @@ mod tests {
             path: path.to_owned(),
             file_size: size,
             parquet_byte_range: None,
-            estimated_rows: size,
+            estimated_input_rows: size,
             stats: None,
             modification_time_ms: None,
             partition_values: Default::default(),
@@ -1132,7 +1132,7 @@ mod tests {
         assert_eq!(
             partitions
                 .iter()
-                .map(|partition| partition.estimated_bytes)
+                .map(|partition| partition.estimated_input_bytes)
                 .collect::<Vec<_>>(),
             vec![Some(30); 4]
         );
@@ -1156,9 +1156,9 @@ mod tests {
             );
             if task.path == "small.parquet" {
                 assert!(task.parquet_byte_range.is_none());
-                assert_eq!(task.estimated_rows, Some(20));
+                assert_eq!(task.estimated_input_rows, Some(20));
             } else {
-                assert_eq!(task.estimated_rows, None);
+                assert_eq!(task.estimated_input_rows, None);
             }
         }
         assert_eq!(
@@ -1178,7 +1178,7 @@ mod tests {
     fn file_repartitioning_never_escapes_an_existing_range() -> TestResult {
         let mut task = sized_file_task("partial.parquet", Some(100));
         task.parquet_byte_range = Some(20..80);
-        task.estimated_rows = None;
+        task.estimated_input_rows = None;
         let partitions = repartition_file_tasks(
             &[build_partition(vec![task])?],
             3,
@@ -1199,7 +1199,7 @@ mod tests {
             partitions
                 .iter()
                 .flat_map(|partition| &partition.file_tasks)
-                .all(|task| task.file_size == Some(100) && task.estimated_rows.is_none())
+                .all(|task| task.file_size == Some(100) && task.estimated_input_rows.is_none())
         );
 
         Ok(())
@@ -1223,7 +1223,7 @@ mod tests {
         assert_eq!(
             rebalanced
                 .iter()
-                .map(|partition| partition.estimated_bytes)
+                .map(|partition| partition.estimated_input_bytes)
                 .collect::<Vec<_>>(),
             [Some(258), Some(258), Some(258), Some(256)]
         );
@@ -1842,7 +1842,7 @@ mod tests {
             path: "missing-partition.parquet".to_owned(),
             file_size: None,
             parquet_byte_range: None,
-            estimated_rows: None,
+            estimated_input_rows: None,
             stats: None,
             modification_time_ms: None,
             partition_values: Default::default(),
