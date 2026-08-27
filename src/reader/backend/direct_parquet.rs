@@ -365,6 +365,7 @@ impl DirectParquetReader {
         })
     }
 
+    #[cfg(test)]
     async fn open_logical_file_stream(
         self: &Arc<Self>,
         request: LogicalFileReadRequest,
@@ -549,7 +550,7 @@ pub(crate) fn direct_parquet_file_executor(
         plan.execution_options,
         plan.metrics.clone(),
     ));
-    file_executor_from_reader::<false>(plan, output_batch_size_rows, row_predicate, reader, None)
+    file_executor_from_reader(plan, output_batch_size_rows, row_predicate, reader, None)
 }
 
 #[cfg(feature = "datafusion")]
@@ -559,7 +560,7 @@ pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
     row_predicate: Option<DeltaKernelPredicate>,
     metadata_cache: Arc<RangedParquetMetadataCache>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
-    file_executor_from_reader::<true>(
+    file_executor_from_reader(
         plan,
         output_batch_size_rows,
         row_predicate,
@@ -572,7 +573,7 @@ pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
     )
 }
 
-fn file_executor_from_reader<const SHARED_METADATA: bool>(
+fn file_executor_from_reader(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
@@ -609,16 +610,9 @@ fn file_executor_from_reader<const SHARED_METADATA: bool>(
                 permit,
                 cancellation,
             };
-            let file = if SHARED_METADATA {
-                reader
-                    .open_logical_file_stream_with_metadata_cache(
-                        request,
-                        metadata_cache.as_deref(),
-                    )
-                    .await?
-            } else {
-                reader.open_logical_file_stream(request).await?
-            };
+            let file = reader
+                .open_logical_file_stream_with_metadata_cache(request, metadata_cache.as_deref())
+                .await?;
             let batches = stream::try_unfold(file, |mut file| async move {
                 file.next_batch()
                     .await
