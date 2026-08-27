@@ -50,7 +50,7 @@ The larger table contains 1,151 active Parquet files and 448 MB of compressed
 data.
 
 The original schema is private, so the published
-[query shapes](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benchmarks/query_shapes.sql)
+[query shapes](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/query_shapes.sql)
 use neutral table and column names. They preserve the number and types of
 projected columns without revealing the source data.
 
@@ -74,7 +74,7 @@ keeping the full result in memory.
 For each workload, we ran every reader once to warm up the system and discarded
 those results. We then ran six measured rounds, changing the order each time so
 that every reader appeared first, second, and third twice. The exact
-[run order](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benchmarks/run_order.py)
+[run order](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/run_order.py)
 is checked in.
 
 Delta Arrow Reader and delta-rs ran in the same Rust program with DataFusion
