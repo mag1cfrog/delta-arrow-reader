@@ -54,13 +54,13 @@ struct ScanCancellationInner {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FileAdmission {
+pub(crate) enum FileAdmissionDecision {
     Admit,
     Skip,
 }
 
-pub(crate) type FileAdmissionFn<Task> =
-    Arc<dyn Fn(&Task) -> Result<FileAdmission, DeltaReaderError> + Send + Sync>;
+pub(crate) type FileAdmissionPolicy<Task> =
+    Arc<dyn Fn(&Task) -> Result<FileAdmissionDecision, DeltaReaderError> + Send + Sync>;
 /// Starts one admitted file while retaining its permit in the returned producer.
 /// Async producers stop at cancellation boundaries. Blocking adapters may finish
 /// their current safe handoff, but must not start later work after cancellation.
@@ -81,7 +81,7 @@ pub(crate) type FileBatchStream =
 pub(crate) struct FileScheduler<Task, Output> {
     file_tasks: VecDeque<Task>,
     partition_limiter: PartitionReadLimiter,
-    admission: FileAdmissionFn<Task>,
+    admission: FileAdmissionPolicy<Task>,
     executor: FileExecutor<Task, Output>,
     cancellation: ScanCancellation,
 }
@@ -146,7 +146,7 @@ impl DeltaScanScheduler {
     pub(crate) fn partition_stream(
         &self,
         partition: usize,
-        admission: FileAdmissionFn<DeltaScanFileTask>,
+        admission: FileAdmissionPolicy<DeltaScanFileTask>,
         executor: FileExecutor<DeltaScanFileTask, FileBatchStream>,
     ) -> Result<PartitionStream, DeltaReaderError> {
         let partition_limiter = self.limiter.partition(partition)?;
@@ -164,7 +164,7 @@ impl DeltaScanScheduler {
 
     pub(crate) fn partition_streams(
         &self,
-        admission: FileAdmissionFn<DeltaScanFileTask>,
+        admission: FileAdmissionPolicy<DeltaScanFileTask>,
         executor: FileExecutor<DeltaScanFileTask, FileBatchStream>,
     ) -> VecDeque<PartitionStream> {
         self.plan
@@ -343,7 +343,7 @@ where
     pub(crate) fn new(
         file_tasks: Vec<Task>,
         partition_limiter: PartitionReadLimiter,
-        admission: FileAdmissionFn<Task>,
+        admission: FileAdmissionPolicy<Task>,
         executor: FileExecutor<Task, Output>,
         cancellation: ScanCancellation,
     ) -> Self {
@@ -371,8 +371,8 @@ where
                 .fail();
             }
             match admission(&task) {
-                Ok(FileAdmission::Skip) => return Ok(None),
-                Ok(FileAdmission::Admit) => {}
+                Ok(FileAdmissionDecision::Skip) => return Ok(None),
+                Ok(FileAdmissionDecision::Admit) => {}
                 Err(error) => return Err(error),
             }
 
@@ -392,7 +392,7 @@ impl PartitionStream {
         file_tasks: Vec<Task>,
         partition_limiter: PartitionReadLimiter,
         options: DeltaScanExecutionOptions,
-        admission: FileAdmissionFn<Task>,
+        admission: FileAdmissionPolicy<Task>,
         executor: FileExecutor<Task, FileBatchStream>,
         metrics: DeltaScanMetrics,
         cancellation: ScanCancellation,
@@ -750,8 +750,9 @@ mod tests {
     };
 
     use super::{
-        BatchResult, FileAdmission, FileBatchStream, FileExecutor, FileReadPermit, FileScheduler,
-        PartitionStream, PartitionStreamState, ScanCancellation, ScanReadLimiter, send_first_error,
+        BatchResult, FileAdmissionDecision, FileBatchStream, FileExecutor, FileReadPermit,
+        FileScheduler, PartitionStream, PartitionStreamState, ScanCancellation, ScanReadLimiter,
+        send_first_error,
     };
 
     fn options(
@@ -923,7 +924,7 @@ mod tests {
                 let calls = Arc::clone(&admission_calls);
                 Arc::new(move |_| {
                     calls.fetch_add(1, Ordering::SeqCst);
-                    Ok(FileAdmission::Admit)
+                    Ok(FileAdmissionDecision::Admit)
                 })
             },
             {
@@ -964,7 +965,7 @@ mod tests {
             limiter.partition(0)?,
             Arc::new(|task| {
                 if *task == 1 {
-                    Ok(FileAdmission::Skip)
+                    Ok(FileAdmissionDecision::Skip)
                 } else {
                     Err(InvalidConfigurationSnafu {
                         reason: "fake_admission_failure",
@@ -1013,7 +1014,7 @@ mod tests {
         let mut scheduler = FileScheduler::new(
             vec![1],
             partition,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             {
                 let calls = Arc::clone(&executor_calls);
                 Arc::new(move |task, permit, _| {
@@ -1057,7 +1058,7 @@ mod tests {
             vec![1],
             limiter.partition(1)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(BTreeMap::new(), Arc::clone(&executor_calls)),
             metrics(),
             cancellation.clone(),
@@ -1105,7 +1106,7 @@ mod tests {
                 let calls = Arc::clone(&admission_calls);
                 Arc::new(move |_| {
                     calls.fetch_add(1, Ordering::SeqCst);
-                    Ok(FileAdmission::Admit)
+                    Ok(FileAdmissionDecision::Admit)
                 })
             },
             Arc::new(|_, permit, _| {
@@ -1150,7 +1151,7 @@ mod tests {
             Vec::<i32>::new(),
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(BTreeMap::new(), Arc::clone(&calls)),
             metrics.clone(),
             ScanCancellation::new(),
@@ -1166,7 +1167,7 @@ mod tests {
             Vec::<i32>::new(),
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(BTreeMap::new(), calls),
             metrics.clone(),
             ScanCancellation::new(),
@@ -1193,7 +1194,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(batches, Arc::clone(&calls)),
             metrics.clone(),
             ScanCancellation::new(),
@@ -1254,7 +1255,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             stream_options(3, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics(),
             ScanCancellation::new(),
@@ -1315,7 +1316,7 @@ mod tests {
             vec![1, 2, 3],
             limiter.partition(0)?,
             stream_options(6, 1)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics(),
             ScanCancellation::new(),
@@ -1379,7 +1380,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             stream_options(2, 1)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics.clone(),
             cancellation.clone(),
@@ -1425,7 +1426,7 @@ mod tests {
             vec![1],
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             batch_executor(batches, Arc::new(AtomicUsize::new(0))),
             metrics.clone(),
             ScanCancellation::new(),
@@ -1487,7 +1488,7 @@ mod tests {
             vec![1],
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics.clone(),
             cancellation.clone(),
@@ -1536,7 +1537,7 @@ mod tests {
                 let calls = Arc::clone(&admission_calls);
                 Arc::new(move |_| {
                     calls.fetch_add(1, Ordering::SeqCst);
-                    Ok(FileAdmission::Admit)
+                    Ok(FileAdmissionDecision::Admit)
                 })
             },
             executor,
@@ -1578,7 +1579,7 @@ mod tests {
                         }
                         .fail()
                     } else {
-                        Ok(FileAdmission::Admit)
+                        Ok(FileAdmissionDecision::Admit)
                     }
                 })
             },
@@ -1626,7 +1627,7 @@ mod tests {
             vec![1],
             limiter.partition(0)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             Arc::clone(&executor),
             metrics.clone(),
             cancellation.clone(),
@@ -1635,7 +1636,7 @@ mod tests {
             vec![2],
             limiter.partition(1)?,
             stream_options(1, 0)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics.clone(),
             cancellation.clone(),
@@ -1728,7 +1729,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             stream_options(1, 1)?,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics.clone(),
             cancellation.clone(),
@@ -1785,7 +1786,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             kernel_options,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics(),
             cancellation,
@@ -1854,7 +1855,7 @@ mod tests {
             vec![1, 2],
             limiter.partition(0)?,
             kernel_options,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             executor,
             metrics(),
             cancellation.clone(),

@@ -68,7 +68,9 @@ use crate::{
         delta_kernel_executor,
         metrics::saturating_fetch_add,
         planning::{DeltaScanFileTask, DeltaScanPartition, DeltaScanPlan, build_partition},
-        scheduling::{DeltaScanScheduler, FileAdmission, FileAdmissionFn, ScanReadLimiter},
+        scheduling::{
+            DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, ScanReadLimiter,
+        },
     },
 };
 
@@ -720,10 +722,10 @@ impl ExecutionPlan for DeltaDataFusionExec {
 fn dynamic_admission(
     metrics: ScanMetrics,
     filters: Arc<[RetainedDynamicFilter]>,
-) -> FileAdmissionFn<DeltaScanFileTask> {
+) -> FileAdmissionPolicy<DeltaScanFileTask> {
     Arc::new(move |task| {
         if filters.is_empty() {
-            return Ok(FileAdmission::Admit);
+            return Ok(FileAdmissionDecision::Admit);
         }
 
         let mut unusable_metadata = false;
@@ -733,7 +735,7 @@ fn dynamic_admission(
             match evaluate_dynamic_partition_filter(filter, task) {
                 DynamicPartitionPruningDecision::Prune(_) => {
                     metrics.record_dynamic_partition_task_pruned();
-                    return Ok(FileAdmission::Skip);
+                    return Ok(FileAdmissionDecision::Skip);
                 }
                 DynamicPartitionPruningDecision::Keep(reason) => {
                     unusable_metadata |= is_unusable_metadata(reason);
@@ -748,7 +750,7 @@ fn dynamic_admission(
             metrics.record_unevaluable_filter();
         }
         metrics.record_dynamic_partition_task_kept();
-        Ok(FileAdmission::Admit)
+        Ok(FileAdmissionDecision::Admit)
     })
 }
 
@@ -1851,7 +1853,7 @@ mod tests {
         };
         assert_eq!(
             dynamic_admission(metrics.clone(), Arc::from([first, second]))(&missing)?,
-            FileAdmission::Admit
+            FileAdmissionDecision::Admit
         );
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_partition_filter_checks, 2);
@@ -1868,7 +1870,7 @@ mod tests {
             .insert("region".to_owned(), "west".to_owned());
         assert_eq!(
             dynamic_admission(metrics.clone(), Arc::from([first, second]))(&present)?,
-            FileAdmission::Skip
+            FileAdmissionDecision::Skip
         );
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_partition_filter_checks, 3);
@@ -1880,7 +1882,7 @@ mod tests {
         unsupported.update(physical_lit("not boolean"))?;
         assert_eq!(
             dynamic_admission(metrics.clone(), Arc::from([retained(unsupported)?]))(&present)?,
-            FileAdmission::Admit
+            FileAdmissionDecision::Admit
         );
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_partition_filter_checks, 4);

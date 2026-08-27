@@ -35,8 +35,8 @@ use self::{
     planning::{DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan},
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
-        DeltaScanScheduler, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
-        PartitionStream,
+        DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream,
+        FileExecutor, PartitionStream,
     },
 };
 
@@ -481,7 +481,7 @@ impl DeltaScan {
             VecDeque::new()
         } else {
             let scheduler = DeltaScanScheduler::new(Arc::clone(&self.plan));
-            let admission: FileAdmissionFn<_> = Arc::new(|_| Ok(FileAdmission::Admit));
+            let admission: FileAdmissionPolicy<_> = Arc::new(|_| Ok(FileAdmissionDecision::Admit));
             let executor = match backend {
                 ParquetReaderBackend::Direct => direct_parquet_executor(
                     &self.plan,
@@ -811,8 +811,8 @@ mod tests {
         reader::{
             metrics::DeltaScanMetricsConfig,
             scheduling::{
-                FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor, FileReadPermit,
-                PartitionStream, ScanCancellation, ScanReadLimiter,
+                FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream, FileExecutor,
+                FileReadPermit, PartitionStream, ScanCancellation, ScanReadLimiter,
             },
         },
     };
@@ -972,7 +972,8 @@ mod tests {
                 .boxed()
             })
         };
-        let admission: FileAdmissionFn<i32> = Arc::new(|_: &i32| Ok(FileAdmission::Admit));
+        let admission: FileAdmissionPolicy<i32> =
+            Arc::new(|_: &i32| Ok(FileAdmissionDecision::Admit));
         let first = PartitionStream::new(
             vec![1],
             limiter.partition(0)?,
@@ -1140,7 +1141,7 @@ mod tests {
             }
             .boxed()
         });
-        let admission = Arc::new(|_: &i32| Ok(FileAdmission::Admit));
+        let admission = Arc::new(|_: &i32| Ok(FileAdmissionDecision::Admit));
         let first = PartitionStream::new(
             vec![1],
             limiter.partition(0)?,

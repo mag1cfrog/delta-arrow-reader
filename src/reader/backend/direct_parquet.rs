@@ -1496,7 +1496,7 @@ mod tests {
             metrics::DeltaScanMetricsConfig,
             planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
             scheduling::{
-                DeltaScanScheduler, FileAdmission, FileReadPermit, ScanCancellation,
+                DeltaScanScheduler, FileAdmissionDecision, FileReadPermit, ScanCancellation,
                 ScanReadLimiter,
             },
         },
@@ -2129,7 +2129,7 @@ mod tests {
         for partition in 0..plan.partitions.len() {
             let mut stream = scheduler.partition_stream(
                 partition,
-                Arc::new(|_| Ok(FileAdmission::Admit)),
+                Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
                 Arc::clone(&executor),
             )?;
             while let Some(batch) = stream.next().await {
@@ -2148,7 +2148,7 @@ mod tests {
         for partition in 0..plan.partitions.len() {
             let mut stream = scheduler.partition_stream(
                 partition,
-                Arc::new(|_| Ok(FileAdmission::Admit)),
+                Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
                 Arc::clone(&executor),
             )?;
             while let Some(batch) = stream.next().await {
@@ -3651,7 +3651,7 @@ mod tests {
         let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
         let stream = scheduler.partition_stream(
             0,
-            Arc::new(|_| Ok(FileAdmission::Admit)),
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
             delta_kernel_file_executor(&plan),
         )?;
 

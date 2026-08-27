@@ -4335,8 +4335,8 @@ mod tests {
         reader::{
             predicate::validate_predicate,
             scheduling::{
-                DeltaScanScheduler, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
-                FileReadPermit,
+                DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream,
+                FileExecutor, FileReadPermit,
             },
         },
     };
@@ -5494,7 +5494,8 @@ mod tests {
             },
         )?);
         let paths = Arc::new(Mutex::new(Vec::new()));
-        let admission: FileAdmissionFn<DeltaScanFileTask> = Arc::new(|_| Ok(FileAdmission::Admit));
+        let admission: FileAdmissionPolicy<DeltaScanFileTask> =
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit));
         let executor: FileExecutor<DeltaScanFileTask, FileBatchStream> = {
             let paths = Arc::clone(&paths);
             let schema = Arc::clone(&plan.logical_schema);
@@ -5588,7 +5589,8 @@ mod tests {
                 async move { Ok(pending_execution_file_stream(permit)) }.boxed()
             })
         };
-        let admission: FileAdmissionFn<DeltaScanFileTask> = Arc::new(|_| Ok(FileAdmission::Admit));
+        let admission: FileAdmissionPolicy<DeltaScanFileTask> =
+            Arc::new(|_| Ok(FileAdmissionDecision::Admit));
         let first_scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
         let second_scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
         let mut first =
