@@ -545,7 +545,7 @@ async fn direct_stream(
         .build()
         .await?;
     assert_eq!(scan.partition_count(), 1);
-    Ok(scan.execute())
+    Ok(scan.into_stream())
 }
 
 async fn scan_fixture(
@@ -571,7 +571,7 @@ async fn scan_fixture(
     .build()
     .await?;
     let logical_schema = scan.schema();
-    let stream = scan.execute();
+    let stream = scan.into_stream();
     let metrics = stream.metrics();
 
     match stream.try_collect::<Vec<_>>().await {

@@ -81,7 +81,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 ///     .with_limit(100)
 ///     .build()
 ///     .await?;
-/// let mut batches = scan.execute();
+/// let mut batches = scan.into_stream();
 ///
 /// while let Some(batch) = batches.try_next().await? {
 ///     println!("rows={}", batch.num_rows());
@@ -417,14 +417,14 @@ impl<'table> DeltaScanBuilder<'table> {
 
 /// One immutable, single-use direct Delta scan plan.
 ///
-/// A scan cannot be cloned or executed twice.
+/// A scan cannot be cloned or converted into a stream twice.
 ///
 /// ```compile_fail
 /// use delta_arrow_reader::DeltaScan;
 ///
-/// fn execute_twice(scan: DeltaScan) {
-///     let _ = scan.execute();
-///     let _ = scan.execute();
+/// fn stream_twice(scan: DeltaScan) {
+///     let _ = scan.into_stream();
+///     let _ = scan.into_stream();
 /// }
 /// ```
 ///
@@ -454,8 +454,10 @@ impl DeltaScan {
         self.partition_count
     }
 
-    /// Creates the pull-driven direct Arrow batch stream without starting data-file reads.
-    pub fn execute(self) -> DeltaBatchStream {
+    /// Converts the scan into a pull-driven Arrow batch stream.
+    ///
+    /// Data-file reads begin only when the stream is polled.
+    pub fn into_stream(self) -> DeltaBatchStream {
         let metrics = self.plan.metrics.clone();
         let schema = Arc::clone(&self.plan.projected_schema);
         let partition_count = self.plan.partitions.len();

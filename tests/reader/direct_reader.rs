@@ -197,7 +197,7 @@ fn runtime() -> TestResult<tokio::runtime::Runtime> {
 }
 
 async fn collect_scan(scan: DeltaScan) -> TestResult<(Vec<RecordBatch>, DeltaScanMetrics)> {
-    let stream = scan.execute();
+    let stream = scan.into_stream();
     let metrics = stream.metrics();
     let batches = stream.try_collect().await?;
     Ok((batches, metrics))
@@ -467,7 +467,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         }
 
         let zero = table.scan().with_limit(0).build().await?;
-        let stream = zero.execute();
+        let stream = zero.into_stream();
         let zero_metrics = stream.metrics();
         let zero_batches: Vec<RecordBatch> = stream.try_collect().await?;
         assert!(zero_batches.is_empty());
@@ -534,7 +534,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
             .await?;
 
         let idle = table.scan().with_target_partitions(1)?.build().await?;
-        let idle_stream = idle.execute();
+        let idle_stream = idle.into_stream();
         let idle_metrics = idle_stream.metrics();
         assert_eq!(idle_metrics.snapshot().file_tasks_started, 0);
         drop(idle_stream);
@@ -542,7 +542,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
         assert_eq!(idle_metrics.snapshot().file_tasks_started, 0);
 
         let partial = table.scan().with_target_partitions(1)?.build().await?;
-        let mut partial_stream = partial.execute();
+        let mut partial_stream = partial.into_stream();
         let partial_metrics = partial_stream.metrics();
         let first = partial_stream.next().await.expect("first batch")?;
         assert!(first.num_rows() > 0);
@@ -555,7 +555,7 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
         let missing = TestTable::missing_data_file("error")?;
         let table = DeltaTableBuilder::new(missing.uri()).load_table().await?;
         let scan = table.scan().with_target_partitions(1)?.build().await?;
-        let mut stream = scan.execute();
+        let mut stream = scan.into_stream();
         let metrics = stream.metrics();
         let error = stream
             .next()

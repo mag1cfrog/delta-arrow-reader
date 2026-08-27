@@ -258,7 +258,7 @@ fn direct_reader_contract_is_public() {
     }
     fn assert_scan_contract(builder: DeltaScanBuilder<'_>, scan: DeltaScan) {
         assert_future::<Result<DeltaScan, DeltaReaderError>>(builder.build());
-        let _: DeltaBatchStream = scan.execute();
+        let _: DeltaBatchStream = scan.into_stream();
     }
     let _ = configure_scan;
     let _ = assert_scan_contract;
