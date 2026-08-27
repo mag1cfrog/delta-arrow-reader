@@ -87,10 +87,10 @@ const CSV_HEADER: [&str; 80] = [
     "provider_stats_dynamic_partition_tasks_kept_p50",
     "provider_stats_dynamic_filters_received_p50",
     "provider_stats_dynamic_filters_accepted_p50",
-    "provider_stats_dynamic_filters_unsupported_p50",
+    "provider_stats_dynamic_filters_rejected_p50",
     "provider_stats_dynamic_filter_snapshot_attempts_p50",
-    "provider_stats_dynamic_partition_tasks_kept_missing_metadata_p50",
-    "provider_stats_dynamic_partition_tasks_kept_unsupported_expression_p50",
+    "provider_stats_dynamic_partition_tasks_kept_unusable_metadata_p50",
+    "provider_stats_dynamic_partition_tasks_kept_unevaluable_filter_p50",
     "provider_stats_scheduler_batches_emitted_p50",
     "provider_stats_scheduler_rows_emitted_p50",
     "provider_stats_deletion_vector_payloads_loaded_p50",
@@ -258,10 +258,10 @@ struct ReadSummary {
     dynamic_partition_tasks_kept: u64,
     dynamic_filters_received: u64,
     dynamic_filters_accepted: u64,
-    dynamic_filters_unsupported: u64,
+    dynamic_filters_rejected: u64,
     dynamic_filter_snapshot_attempts: u64,
-    dynamic_partition_tasks_kept_missing_metadata: u64,
-    dynamic_partition_tasks_kept_unsupported_expression: u64,
+    dynamic_partition_tasks_kept_unusable_metadata: u64,
+    dynamic_partition_tasks_kept_unevaluable_filter: u64,
     scheduler_batches_emitted: u64,
     scheduler_rows_emitted: u64,
     deletion_vector_payloads_loaded: u64,
@@ -1570,15 +1570,15 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         dynamic_partition_tasks_kept: dynamic(|snapshot| snapshot.dynamic_partition_tasks_kept),
         dynamic_filters_received: dynamic(|snapshot| snapshot.dynamic_filters_received),
         dynamic_filters_accepted: dynamic(|snapshot| snapshot.dynamic_filters_accepted),
-        dynamic_filters_unsupported: dynamic(|snapshot| snapshot.dynamic_filters_unsupported),
+        dynamic_filters_rejected: dynamic(|snapshot| snapshot.dynamic_filters_rejected),
         dynamic_filter_snapshot_attempts: dynamic(|snapshot| {
             snapshot.dynamic_filter_snapshot_attempts
         }),
-        dynamic_partition_tasks_kept_missing_metadata: dynamic(|snapshot| {
-            snapshot.dynamic_partition_tasks_kept_missing_metadata
+        dynamic_partition_tasks_kept_unusable_metadata: dynamic(|snapshot| {
+            snapshot.dynamic_partition_tasks_kept_unusable_metadata
         }),
-        dynamic_partition_tasks_kept_unsupported_expression: dynamic(|snapshot| {
-            snapshot.dynamic_partition_tasks_kept_unsupported_expression
+        dynamic_partition_tasks_kept_unevaluable_filter: dynamic(|snapshot| {
+            snapshot.dynamic_partition_tasks_kept_unevaluable_filter
         }),
         scheduler_batches_emitted: counter(|reader| reader.scheduler_batches_emitted),
         scheduler_rows_emitted: counter(|reader| reader.scheduler_rows_emitted),
@@ -1661,11 +1661,11 @@ fn csv_row(
         read.dynamic_partition_tasks_kept.to_string(),
         read.dynamic_filters_received.to_string(),
         read.dynamic_filters_accepted.to_string(),
-        read.dynamic_filters_unsupported.to_string(),
+        read.dynamic_filters_rejected.to_string(),
         read.dynamic_filter_snapshot_attempts.to_string(),
-        read.dynamic_partition_tasks_kept_missing_metadata
+        read.dynamic_partition_tasks_kept_unusable_metadata
             .to_string(),
-        read.dynamic_partition_tasks_kept_unsupported_expression
+        read.dynamic_partition_tasks_kept_unevaluable_filter
             .to_string(),
         read.scheduler_batches_emitted.to_string(),
         read.scheduler_rows_emitted.to_string(),

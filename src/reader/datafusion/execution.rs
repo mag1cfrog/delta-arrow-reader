@@ -114,13 +114,13 @@ pub struct ScanMetricsSnapshot {
     /// Offered filters retained for dynamic partition pruning.
     pub dynamic_filters_accepted: u64,
     /// Offered filters rejected by the dynamic partition policy.
-    pub dynamic_filters_unsupported: u64,
+    pub dynamic_filters_rejected: u64,
     /// Attempts to snapshot current dynamic expressions during file admission.
     pub dynamic_filter_snapshot_attempts: u64,
     /// Kept file tasks with missing, invalid, or unparsable partition metadata.
-    pub dynamic_partition_tasks_kept_missing_metadata: u64,
-    /// Kept file tasks with unavailable, unsupported, or failed expressions.
-    pub dynamic_partition_tasks_kept_unsupported_expression: u64,
+    pub dynamic_partition_tasks_kept_unusable_metadata: u64,
+    /// Kept file tasks whose dynamic filter was unavailable or unevaluable.
+    pub dynamic_partition_tasks_kept_unevaluable_filter: u64,
 }
 
 /// Shared live metrics for one DataFusion physical scan plan.
@@ -138,10 +138,10 @@ struct MetricsInner {
     dynamic_partition_tasks_kept: AtomicU64,
     dynamic_filters_received: AtomicU64,
     dynamic_filters_accepted: AtomicU64,
-    dynamic_filters_unsupported: AtomicU64,
+    dynamic_filters_rejected: AtomicU64,
     dynamic_filter_snapshot_attempts: AtomicU64,
-    dynamic_partition_tasks_kept_missing_metadata: AtomicU64,
-    dynamic_partition_tasks_kept_unsupported_expression: AtomicU64,
+    dynamic_partition_tasks_kept_unusable_metadata: AtomicU64,
+    dynamic_partition_tasks_kept_unevaluable_filter: AtomicU64,
 }
 
 impl ScanMetrics {
@@ -161,10 +161,10 @@ impl ScanMetrics {
                 dynamic_partition_tasks_kept: AtomicU64::new(0),
                 dynamic_filters_received: AtomicU64::new(0),
                 dynamic_filters_accepted: AtomicU64::new(0),
-                dynamic_filters_unsupported: AtomicU64::new(0),
+                dynamic_filters_rejected: AtomicU64::new(0),
                 dynamic_filter_snapshot_attempts: AtomicU64::new(0),
-                dynamic_partition_tasks_kept_missing_metadata: AtomicU64::new(0),
-                dynamic_partition_tasks_kept_unsupported_expression: AtomicU64::new(0),
+                dynamic_partition_tasks_kept_unusable_metadata: AtomicU64::new(0),
+                dynamic_partition_tasks_kept_unevaluable_filter: AtomicU64::new(0),
             }),
         }
     }
@@ -185,13 +185,13 @@ impl ScanMetrics {
             dynamic_partition_tasks_kept: load(&inner.dynamic_partition_tasks_kept),
             dynamic_filters_received: load(&inner.dynamic_filters_received),
             dynamic_filters_accepted: load(&inner.dynamic_filters_accepted),
-            dynamic_filters_unsupported: load(&inner.dynamic_filters_unsupported),
+            dynamic_filters_rejected: load(&inner.dynamic_filters_rejected),
             dynamic_filter_snapshot_attempts: load(&inner.dynamic_filter_snapshot_attempts),
-            dynamic_partition_tasks_kept_missing_metadata: load(
-                &inner.dynamic_partition_tasks_kept_missing_metadata,
+            dynamic_partition_tasks_kept_unusable_metadata: load(
+                &inner.dynamic_partition_tasks_kept_unusable_metadata,
             ),
-            dynamic_partition_tasks_kept_unsupported_expression: load(
-                &inner.dynamic_partition_tasks_kept_unsupported_expression,
+            dynamic_partition_tasks_kept_unevaluable_filter: load(
+                &inner.dynamic_partition_tasks_kept_unevaluable_filter,
             ),
         }
     }
@@ -229,9 +229,9 @@ impl ScanMetrics {
         );
     }
 
-    fn record_dynamic_filters_unsupported(&self, value: usize) {
+    fn record_dynamic_filters_rejected(&self, value: usize) {
         saturating_fetch_add(
-            &self.inner.dynamic_filters_unsupported,
+            &self.inner.dynamic_filters_rejected,
             u64::try_from(value).unwrap_or(u64::MAX),
         );
     }
@@ -240,15 +240,16 @@ impl ScanMetrics {
         saturating_fetch_add(&self.inner.dynamic_filter_snapshot_attempts, 1);
     }
 
-    fn record_missing_metadata(&self) {
-        saturating_fetch_add(&self.inner.dynamic_partition_tasks_kept_missing_metadata, 1);
+    fn record_unusable_metadata(&self) {
+        saturating_fetch_add(
+            &self.inner.dynamic_partition_tasks_kept_unusable_metadata,
+            1,
+        );
     }
 
-    fn record_unsupported_expression(&self) {
+    fn record_unevaluable_filter(&self) {
         saturating_fetch_add(
-            &self
-                .inner
-                .dynamic_partition_tasks_kept_unsupported_expression,
+            &self.inner.dynamic_partition_tasks_kept_unevaluable_filter,
             1,
         );
     }
@@ -704,7 +705,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
             .record_dynamic_filters_received(parent_filters.len());
         self.metrics.record_dynamic_filters_accepted(accepted);
         self.metrics
-            .record_dynamic_filters_unsupported(parent_filters.len().saturating_sub(accepted));
+            .record_dynamic_filters_rejected(parent_filters.len().saturating_sub(accepted));
         if !dynamic_filter_plan.has_accepted_filters() {
             return Ok(unsupported());
         }
@@ -733,8 +734,8 @@ fn dynamic_admission(
             return Ok(FileAdmission::Admit);
         }
 
-        let mut missing_metadata = false;
-        let mut unsupported_expression = false;
+        let mut unusable_metadata = false;
+        let mut unevaluable_filter = false;
         for filter in filters.iter() {
             metrics.record_dynamic_filter_snapshot_attempt();
             match evaluate_dynamic_partition_filter(filter, task) {
@@ -743,23 +744,23 @@ fn dynamic_admission(
                     return Ok(FileAdmission::Skip);
                 }
                 DeltaDynamicPartitionPruningDecision::Keep(reason) => {
-                    missing_metadata |= is_missing_metadata(reason);
-                    unsupported_expression |= is_unsupported_expression(reason);
+                    unusable_metadata |= is_unusable_metadata(reason);
+                    unevaluable_filter |= is_unevaluable_filter(reason);
                 }
             }
         }
-        if missing_metadata {
-            metrics.record_missing_metadata();
+        if unusable_metadata {
+            metrics.record_unusable_metadata();
         }
-        if unsupported_expression {
-            metrics.record_unsupported_expression();
+        if unevaluable_filter {
+            metrics.record_unevaluable_filter();
         }
         metrics.record_dynamic_partition_task_kept();
         Ok(FileAdmission::Admit)
     })
 }
 
-fn is_missing_metadata(reason: DeltaDynamicPartitionKeepReason) -> bool {
+fn is_unusable_metadata(reason: DeltaDynamicPartitionKeepReason) -> bool {
     matches!(
         reason,
         DeltaDynamicPartitionKeepReason::PartitionMetadataInvalid
@@ -768,7 +769,7 @@ fn is_missing_metadata(reason: DeltaDynamicPartitionKeepReason) -> bool {
     )
 }
 
-fn is_unsupported_expression(reason: DeltaDynamicPartitionKeepReason) -> bool {
+fn is_unevaluable_filter(reason: DeltaDynamicPartitionKeepReason) -> bool {
     matches!(
         reason,
         DeltaDynamicPartitionKeepReason::SnapshotUnavailable
@@ -1643,7 +1644,7 @@ mod tests {
             .snapshot();
         assert_eq!(metrics.dynamic_filters_received, 2);
         assert_eq!(metrics.dynamic_filters_accepted, 1);
-        assert_eq!(metrics.dynamic_filters_unsupported, 1);
+        assert_eq!(metrics.dynamic_filters_rejected, 1);
         assert_eq!(metrics.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
         assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
@@ -1795,10 +1796,10 @@ mod tests {
                 initial.dynamic_partition_tasks_kept,
                 initial.dynamic_filters_received,
                 initial.dynamic_filters_accepted,
-                initial.dynamic_filters_unsupported,
+                initial.dynamic_filters_rejected,
                 initial.dynamic_filter_snapshot_attempts,
-                initial.dynamic_partition_tasks_kept_missing_metadata,
-                initial.dynamic_partition_tasks_kept_unsupported_expression,
+                initial.dynamic_partition_tasks_kept_unusable_metadata,
+                initial.dynamic_partition_tasks_kept_unevaluable_filter,
             ],
             [0; 8]
         );
@@ -1888,7 +1889,7 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(snapshot.dynamic_partition_tasks_kept, 1);
-        assert_eq!(snapshot.dynamic_partition_tasks_kept_missing_metadata, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept_unusable_metadata, 1);
 
         let rejecting = dynamic_filter("region", 1);
         rejecting.update(physical_lit(false))?;
@@ -1906,7 +1907,7 @@ mod tests {
         assert_eq!(snapshot.dynamic_filter_snapshot_attempts, 3);
         assert_eq!(snapshot.dynamic_partition_tasks_pruned, 1);
         assert_eq!(snapshot.dynamic_partition_tasks_kept, 1);
-        assert_eq!(snapshot.dynamic_partition_tasks_kept_missing_metadata, 1);
+        assert_eq!(snapshot.dynamic_partition_tasks_kept_unusable_metadata, 1);
 
         let unsupported = dynamic_filter("region", 1);
         unsupported.update(physical_lit("not boolean"))?;
@@ -1917,10 +1918,7 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_filter_snapshot_attempts, 4);
         assert_eq!(snapshot.dynamic_partition_tasks_kept, 2);
-        assert_eq!(
-            snapshot.dynamic_partition_tasks_kept_unsupported_expression,
-            1
-        );
+        assert_eq!(snapshot.dynamic_partition_tasks_kept_unevaluable_filter, 1);
 
         metrics
             .inner
@@ -1960,10 +1958,10 @@ mod tests {
                     metrics.record_dynamic_partition_task_kept();
                     metrics.record_dynamic_filters_received(3);
                     metrics.record_dynamic_filters_accepted(1);
-                    metrics.record_dynamic_filters_unsupported(2);
+                    metrics.record_dynamic_filters_rejected(2);
                     metrics.record_dynamic_filter_snapshot_attempt();
-                    metrics.record_missing_metadata();
-                    metrics.record_unsupported_expression();
+                    metrics.record_unusable_metadata();
+                    metrics.record_unevaluable_filter();
                 }
             }));
         }
@@ -1977,14 +1975,14 @@ mod tests {
         assert_eq!(snapshot.dynamic_partition_tasks_kept, calls);
         assert_eq!(snapshot.dynamic_filters_received, calls * 3);
         assert_eq!(snapshot.dynamic_filters_accepted, calls);
-        assert_eq!(snapshot.dynamic_filters_unsupported, calls * 2);
+        assert_eq!(snapshot.dynamic_filters_rejected, calls * 2);
         assert_eq!(snapshot.dynamic_filter_snapshot_attempts, calls);
         assert_eq!(
-            snapshot.dynamic_partition_tasks_kept_missing_metadata,
+            snapshot.dynamic_partition_tasks_kept_unusable_metadata,
             calls
         );
         assert_eq!(
-            snapshot.dynamic_partition_tasks_kept_unsupported_expression,
+            snapshot.dynamic_partition_tasks_kept_unevaluable_filter,
             calls
         );
         Ok(())

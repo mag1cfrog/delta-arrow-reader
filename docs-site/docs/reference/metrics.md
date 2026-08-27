@@ -53,10 +53,10 @@ provider-specific fields.
 | `dynamic_partition_tasks_kept` | Tasks kept after consulting dynamic partition filters. |
 | `dynamic_filters_received` | Physical filters offered after optimization. |
 | `dynamic_filters_accepted` | Offered filters retained for partition pruning. |
-| `dynamic_filters_unsupported` | Offered filters rejected by the dynamic-filter policy. |
+| `dynamic_filters_rejected` | Offered filters rejected by the dynamic-filter policy. |
 | `dynamic_filter_snapshot_attempts` | Attempts to snapshot current dynamic expressions during task admission. |
-| `dynamic_partition_tasks_kept_missing_metadata` | Tasks kept because partition metadata was missing, invalid, or could not be parsed. |
-| `dynamic_partition_tasks_kept_unsupported_expression` | Tasks kept because an expression was unavailable, unsupported, or failed. |
+| `dynamic_partition_tasks_kept_unusable_metadata` | Tasks kept because partition metadata was missing, invalid, or could not be parsed. |
+| `dynamic_partition_tasks_kept_unevaluable_filter` | Tasks kept because a dynamic filter was unavailable or could not be evaluated. |
 
 `datafusion::collect_scan_metrics` walks a physical plan in depth-first order
 and returns each distinct Delta scan metric handle once.

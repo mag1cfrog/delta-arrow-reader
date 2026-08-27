@@ -1104,15 +1104,12 @@ async fn sql_join_dynamic_filter_prunes_before_file_admission() -> TestResult {
     assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
-    assert_eq!(metrics.dynamic_filters_unsupported, 0);
+    assert_eq!(metrics.dynamic_filters_rejected, 0);
     assert_eq!(metrics.dynamic_filter_snapshot_attempts, 2);
     assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
     assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
-    assert_eq!(metrics.dynamic_partition_tasks_kept_missing_metadata, 0);
-    assert_eq!(
-        metrics.dynamic_partition_tasks_kept_unsupported_expression,
-        0
-    );
+    assert_eq!(metrics.dynamic_partition_tasks_kept_unusable_metadata, 0);
+    assert_eq!(metrics.dynamic_partition_tasks_kept_unevaluable_filter, 0);
     Ok(())
 }
 
@@ -1489,7 +1486,7 @@ async fn dynamic_join_pruning_preserves_the_sql_residual() -> TestResult {
     assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 2);
     assert_eq!(metrics.dynamic_filters_received, 1);
     assert_eq!(metrics.dynamic_filters_accepted, 1);
-    assert_eq!(metrics.dynamic_filters_unsupported, 0);
+    assert_eq!(metrics.dynamic_filters_rejected, 0);
     assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
     assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
     assert_eq!(

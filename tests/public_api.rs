@@ -287,10 +287,10 @@ fn datafusion_metrics_contract_is_public() {
         let _: u64 = snapshot.dynamic_partition_tasks_kept;
         let _: u64 = snapshot.dynamic_filters_received;
         let _: u64 = snapshot.dynamic_filters_accepted;
-        let _: u64 = snapshot.dynamic_filters_unsupported;
+        let _: u64 = snapshot.dynamic_filters_rejected;
         let _: u64 = snapshot.dynamic_filter_snapshot_attempts;
-        let _: u64 = snapshot.dynamic_partition_tasks_kept_missing_metadata;
-        let _: u64 = snapshot.dynamic_partition_tasks_kept_unsupported_expression;
+        let _: u64 = snapshot.dynamic_partition_tasks_kept_unusable_metadata;
+        let _: u64 = snapshot.dynamic_partition_tasks_kept_unevaluable_filter;
     }
 
     assert_clone::<ScanMetrics>();
