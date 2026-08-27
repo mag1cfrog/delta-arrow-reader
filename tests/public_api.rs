@@ -19,6 +19,7 @@ use futures_util::Stream;
 fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> {
     let snapshot: fn(&DeltaReadMetrics) -> DeltaReadMetricsSnapshot = DeltaReadMetrics::snapshot;
     fn inspect_reader_metrics(snapshot: DeltaReadMetricsSnapshot) {
+        let _: Option<u64> = snapshot.add_actions_filtered_during_planning;
         let _: Option<u64> = snapshot.estimated_input_rows;
         let _: Option<u64> = snapshot.estimated_input_bytes;
         let _: u64 = snapshot.file_tasks_started;

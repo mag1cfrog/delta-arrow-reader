@@ -780,7 +780,7 @@ mod tests {
             scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 1,
             files_planned: 1,
-            files_filtered_during_planning: Some(0),
+            add_actions_filtered_during_planning: Some(0),
             estimated_input_rows: None,
             estimated_input_bytes: None,
         })

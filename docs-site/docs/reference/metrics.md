@@ -13,7 +13,7 @@ usable after its batch stream finishes or is dropped.
 | `scan_metadata_exhausted` | Whether planning consumed the scan metadata iterator, when known. |
 | `scan_partitions_planned` | Final number of execution partitions, including DataFusion repartitioning. |
 | `files_planned` | Physical data files selected during initial whole-file planning. |
-| `files_filtered_during_planning` | Best-effort count of Add actions excluded during metadata planning, when known. |
+| `add_actions_filtered_during_planning` | Best-effort count of Add actions excluded during metadata planning, when known. |
 | `estimated_input_rows` | Estimated rows in selected input files before row predicates and deletion vectors, when every file supplied a valid estimate. |
 | `estimated_input_bytes` | Estimated bytes in selected input files when every file supplied a size. |
 | `scan_partitions_started` | Execution partitions that started. |
@@ -32,7 +32,7 @@ usable after its batch stream finishes or is dropped.
 | `parquet_data_file_bytes_received` | Bytes delivered successfully through the direct reader's object store. |
 | `parquet_task_bytes_admitted` | Estimated bytes admitted across direct-reader tasks. A ranged task contributes its range length. |
 
-`files_filtered_during_planning` is not an exact active-file count. Delta
+`add_actions_filtered_during_planning` is not an exact active-file count. Delta
 Kernel's final selection also reconciles Add and Remove actions.
 
 The four Parquet I/O fields are `Some`, including `Some(0)`, for

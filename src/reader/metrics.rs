@@ -21,7 +21,7 @@ pub struct DeltaReadMetricsSnapshot {
     /// Data files selected during planning.
     pub files_planned: u64,
     /// Add actions filtered during planning, when known.
-    pub files_filtered_during_planning: Option<u64>,
+    pub add_actions_filtered_during_planning: Option<u64>,
     /// Estimated rows in selected input files before row filtering, when known for every file.
     pub estimated_input_rows: Option<u64>,
     /// Estimated bytes in selected input files, when every file reported a size.
@@ -70,7 +70,7 @@ struct DeltaReadMetricsInner {
     scan_metadata_exhausted: Option<bool>,
     scan_partitions_planned: AtomicU64,
     files_planned: u64,
-    files_filtered_during_planning: Option<u64>,
+    add_actions_filtered_during_planning: Option<u64>,
     estimated_input_rows: Option<u64>,
     estimated_input_bytes: Option<u64>,
     scan_partitions_started: AtomicU64,
@@ -97,7 +97,7 @@ pub(crate) struct DeltaReadMetricsConfig {
     pub(crate) scan_metadata_exhausted: Option<bool>,
     pub(crate) scan_partitions_planned: usize,
     pub(crate) files_planned: usize,
-    pub(crate) files_filtered_during_planning: Option<u64>,
+    pub(crate) add_actions_filtered_during_planning: Option<u64>,
     pub(crate) estimated_input_rows: Option<u64>,
     pub(crate) estimated_input_bytes: Option<u64>,
 }
@@ -114,7 +114,7 @@ impl DeltaReadMetrics {
                     config.scan_partitions_planned,
                 )),
                 files_planned: usize_to_u64_saturating(config.files_planned),
-                files_filtered_during_planning: config.files_filtered_during_planning,
+                add_actions_filtered_during_planning: config.add_actions_filtered_during_planning,
                 estimated_input_rows: config.estimated_input_rows,
                 estimated_input_bytes: config.estimated_input_bytes,
                 scan_partitions_started: AtomicU64::new(0),
@@ -145,7 +145,7 @@ impl DeltaReadMetrics {
             scan_metadata_exhausted: inner.scan_metadata_exhausted,
             scan_partitions_planned: load(&inner.scan_partitions_planned),
             files_planned: inner.files_planned,
-            files_filtered_during_planning: inner.files_filtered_during_planning,
+            add_actions_filtered_during_planning: inner.add_actions_filtered_during_planning,
             estimated_input_rows: inner.estimated_input_rows,
             estimated_input_bytes: inner.estimated_input_bytes,
             scan_partitions_started: load(&inner.scan_partitions_started),
@@ -286,7 +286,7 @@ mod tests {
             scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 3,
             files_planned: 5,
-            files_filtered_during_planning: Some(2),
+            add_actions_filtered_during_planning: Some(2),
             estimated_input_rows: Some(99),
             estimated_input_bytes: Some(42),
         })
@@ -300,7 +300,7 @@ mod tests {
         assert_eq!(direct.scan_metadata_exhausted, Some(true));
         assert_eq!(direct.scan_partitions_planned, 3);
         assert_eq!(direct.files_planned, 5);
-        assert_eq!(direct.files_filtered_during_planning, Some(2));
+        assert_eq!(direct.add_actions_filtered_during_planning, Some(2));
         assert_eq!(direct.estimated_input_rows, Some(99));
         assert_eq!(direct.estimated_input_bytes, Some(42));
         assert_eq!(direct.scan_partitions_started, 0);
