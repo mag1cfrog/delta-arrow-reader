@@ -1,5 +1,6 @@
 //! Public DataFusion-independent Delta-to-Arrow reader.
 
+pub(crate) mod backend;
 pub(crate) mod deletion_vector;
 pub(crate) mod metrics;
 mod options;
@@ -682,7 +683,7 @@ pub(crate) fn native_async_executor(
     output_batch_size: Option<usize>,
     row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
 ) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    Ok(crate::native_async_reader::native_async_file_executor(
+    Ok(backend::native_async::native_async_file_executor(
         plan,
         output_batch_size,
         row_predicate,
@@ -705,7 +706,9 @@ pub(crate) fn native_async_executor(
 pub(crate) fn official_kernel_executor(
     plan: &Arc<DeltaScanPlan>,
 ) -> Result<FileExecutor<planning::DeltaScanFileTask, FileBatchStream>, DeltaReaderError> {
-    Ok(crate::official_kernel_reader::official_kernel_file_executor(plan))
+    Ok(backend::official_kernel::official_kernel_file_executor(
+        plan,
+    ))
 }
 
 #[cfg(not(feature = "official-kernel"))]

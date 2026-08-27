@@ -409,8 +409,8 @@ mod tests {
     #[test]
     fn official_kernel_boundary_adds_no_runtime_or_backend_infrastructure()
     -> Result<(), Box<dyn std::error::Error>> {
-        let source = include_str!("official_kernel_reader.rs");
-        let manifest = include_str!("../Cargo.toml");
+        let source = include_str!("official_kernel.rs");
+        let manifest = include_str!("../../../Cargo.toml");
         for forbidden in [
             concat!("Runtime", "::new"),
             concat!("new_", "current_thread"),

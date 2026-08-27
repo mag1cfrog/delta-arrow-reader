@@ -49,7 +49,7 @@ use datafusion::{
 use futures_util::{StreamExt, stream};
 
 #[cfg(feature = "native-async")]
-use crate::native_async_reader::{
+use crate::reader::backend::native_async::{
     NativeAsyncParquetMetadataCache, native_async_file_executor,
     native_async_file_executor_with_metadata_cache,
 };

@@ -13,18 +13,6 @@ mod datafusion_planning;
 mod datafusion_provider;
 mod delta;
 mod error;
-#[cfg(feature = "native-async")]
-#[allow(dead_code)]
-mod metered_object_store;
-#[cfg(feature = "native-async")]
-#[allow(dead_code)]
-mod native_async_reader;
-#[cfg(feature = "native-async")]
-#[allow(dead_code)]
-mod native_async_row_group_pruning;
-#[cfg(feature = "official-kernel")]
-#[allow(dead_code)]
-mod official_kernel_reader;
 mod predicate;
 mod reader;
 

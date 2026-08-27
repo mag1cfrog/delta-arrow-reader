@@ -1,5 +1,8 @@
 //! NativeAsync Parquet data-file reader.
 
+mod metered_object_store;
+mod row_group_pruning;
+
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -26,6 +29,11 @@ use parquet::schema::types::{SchemaDescriptor, TypePtr};
 use snafu::{IntoError, ResultExt};
 use tokio::sync::OnceCell;
 
+use self::{
+    metered_object_store::MeteredParquetObjectStore,
+    row_group_pruning::native_async_pruned_row_groups,
+};
+
 const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index";
 
 use crate::{
@@ -35,8 +43,6 @@ use crate::{
         KernelScanSchemas,
     },
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
-    metered_object_store::MeteredParquetObjectStore,
-    native_async_row_group_pruning::native_async_pruned_row_groups,
     reader::{
         deletion_vector::{
             DeletionVectorSelection, load_deletion_vector_selection_from_engine_context,
@@ -1476,7 +1482,7 @@ mod tests {
         data_file_error, native_async_file_executor,
     };
     #[cfg(feature = "official-kernel")]
-    use crate::official_kernel_reader::official_kernel_file_executor;
+    use crate::reader::backend::official_kernel::official_kernel_file_executor;
     use crate::{
         DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions,
         DeltaSnapshotSelection, DeltaStorageOptions,
@@ -1485,8 +1491,8 @@ mod tests {
             KernelScanFileMetadata,
         },
         delta::snapshot::load_delta_table_snapshot_blocking,
-        metered_object_store::MeteredParquetObjectStore,
         reader::{
+            backend::native_async::metered_object_store::MeteredParquetObjectStore,
             metrics::DeltaReadMetricsConfig,
             planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
             scheduling::{
