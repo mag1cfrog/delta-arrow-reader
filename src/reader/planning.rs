@@ -598,7 +598,7 @@ mod tests {
                 kernel::{DeltaKernelPredicate, delta_predicate_to_kernel_pruning},
                 snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
             },
-            predicate::validate_predicate,
+            reader::predicate::validate_predicate,
         };
 
         const TIMESTAMP_NTZ_PROTOCOL_JSON: &str = r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz"],"writerFeatures":["timestampNtz"]}}"#;
@@ -2479,7 +2479,7 @@ mod tests {
                 kernel::delta_predicate_to_kernel_pruning,
                 snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
             },
-            predicate::validate_predicate,
+            reader::predicate::validate_predicate,
         };
 
         const TIMESTAMP_NTZ_PROTOCOL_JSON: &str = r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz"],"writerFeatures":["timestampNtz"]}}"#;
@@ -4379,10 +4379,12 @@ mod tests {
             kernel::{KernelScanFileMetadata, delta_predicate_to_kernel_pruning},
             snapshot::load_delta_table_snapshot_blocking,
         },
-        predicate::validate_predicate,
-        reader::scheduling::{
-            DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
-            FileReadPermit,
+        reader::{
+            predicate::validate_predicate,
+            scheduling::{
+                DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
+                FileReadPermit,
+            },
         },
     };
 

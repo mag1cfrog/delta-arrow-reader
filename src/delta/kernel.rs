@@ -575,7 +575,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::predicate::evaluate_predicate;
+    use crate::reader::predicate::evaluate_predicate;
 
     fn column(name: &str) -> Expression {
         Expression::Column(ColumnName::new([name]))

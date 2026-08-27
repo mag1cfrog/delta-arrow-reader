@@ -3,12 +3,10 @@
 
 mod delta;
 mod error;
-mod predicate;
 mod reader;
 
 pub use delta::DeltaProtocolInfo;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
-pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 #[doc(hidden)]
 pub use reader::partition_target::{
     DeltaScanPartitionTargetDiagnosticInput, DeltaScanPartitionTargetDiagnosticOutput,
@@ -18,9 +16,9 @@ pub use reader::partition_target::{
     derive_delta_scan_partition_target_diagnostic,
 };
 pub use reader::{
-    DeltaBatchStream, DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend,
-    DeltaReaderExecutionOptions, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection,
-    DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot,
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReadMetrics, DeltaReadMetricsSnapshot,
+    DeltaReaderBackend, DeltaReaderExecutionOptions, DeltaScalar, DeltaScan, DeltaScanBuilder,
+    DeltaSnapshotSelection, DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot,
 };
 #[cfg(feature = "datafusion")]
 pub use reader::{

@@ -46,7 +46,7 @@ Delta Funnel adopted the released crate.
 | DV masking portions of `crates/delta-funnel/src/query_engine/datafusion/execution/file_reader.rs` | `crates/delta-arrow-reader/src/reader/deletion_vector.rs` | #477 |
 | DV coordinate portions of `crates/delta-funnel/src/query_engine/datafusion/execution/native_async_reader.rs` | `crates/delta-arrow-reader/src/reader/deletion_vector.rs` | #477 |
 | DV counter portions of `crates/delta-funnel/src/query_engine/datafusion/execution/read_stats.rs` | `crates/delta-arrow-reader/src/reader/metrics.rs` | #477 |
-| DataFusion predicate-adapter portions of `crates/delta-funnel/src/table_formats/delta/kernel.rs` | `crates/delta-arrow-reader/src/predicate.rs` and `src/delta/kernel.rs` | #484 |
+| DataFusion predicate-adapter portions of `crates/delta-funnel/src/table_formats/delta/kernel.rs` | `crates/delta-arrow-reader/src/reader/predicate.rs` and `src/delta/kernel.rs` | #484 |
 | Scan-metadata and transform portions of `crates/delta-funnel/src/table_formats/delta.rs` | `crates/delta-arrow-reader/src/reader/planning.rs`, `src/delta/kernel.rs`, and `src/reader/transform.rs` | #463 |
 | Scan/read-schema portions of `crates/delta-funnel/src/table_formats/delta/read.rs` | `crates/delta-arrow-reader/src/reader/planning.rs` and `src/reader/transform.rs` | #463 |
 | Scan/schema/metadata portions of `crates/delta-funnel/src/table_formats/delta/kernel.rs` | `crates/delta-arrow-reader/src/delta/kernel.rs` and `src/reader/planning.rs` | #463 |

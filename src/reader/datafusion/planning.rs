@@ -16,7 +16,7 @@ use datafusion::{
 use crate::{
     DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaScalar,
     error::{InvalidProjectionSnafu, UnsupportedPredicateSnafu},
-    predicate::validate_predicate,
+    reader::predicate::validate_predicate,
 };
 
 #[derive(Clone, Copy, Default)]
@@ -1084,7 +1084,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::predicate::evaluate_predicate;
+    use crate::reader::predicate::evaluate_predicate;
 
     fn schema() -> SchemaRef {
         Arc::new(Schema::new_with_metadata(

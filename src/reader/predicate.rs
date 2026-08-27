@@ -1,3 +1,5 @@
+//! Logical row predicates and Arrow evaluation.
+
 use std::sync::Arc;
 
 use arrow::{

@@ -1,4 +1,4 @@
-//! Public DataFusion-independent Delta-to-Arrow reader.
+//! Public Delta-to-Arrow reader and optional DataFusion adapter.
 
 pub(crate) mod backend;
 #[cfg(feature = "datafusion")]
@@ -8,6 +8,7 @@ pub(crate) mod metrics;
 mod options;
 pub(crate) mod partition_target;
 pub(crate) mod planning;
+pub(crate) mod predicate;
 #[allow(dead_code)]
 pub(crate) mod scheduling;
 pub(crate) mod transform;
@@ -22,6 +23,7 @@ pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
 pub use options::{
     DeltaReaderBackend, DeltaReaderExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
 };
+pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 
 use std::{
     collections::VecDeque,
@@ -39,6 +41,7 @@ use self::{
     planning::{
         DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan, validate_backend_available,
     },
+    predicate::{evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
         DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
         PartitionStream,
@@ -46,7 +49,7 @@ use self::{
 };
 
 use crate::{
-    DeltaPredicate, DeltaProtocolInfo, DeltaReaderError,
+    DeltaProtocolInfo, DeltaReaderError,
     delta::{
         kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
         protocol::validate_protocol,
@@ -57,7 +60,6 @@ use crate::{
         },
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
-    predicate::{evaluate_predicate, referenced_columns, validate_predicate},
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
