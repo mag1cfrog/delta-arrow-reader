@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Loading the table and reading its rows happen at different times. `load_table`
 loads the Delta metadata, and `build` works out which files and columns the scan
-needs. The data files are not read until `execute` starts the batch stream.
+needs. The data files are not read until the returned batch stream is polled.
 
 ## Filter rows
 

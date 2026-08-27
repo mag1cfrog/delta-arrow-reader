@@ -125,7 +125,9 @@ impl DeltaTableBuilder {
         self
     }
 
-    /// Loads a ready-to-scan table through the caller-owned Tokio runtime.
+    /// Loads table metadata and its logical Arrow schema through the caller-owned Tokio runtime.
+    ///
+    /// Unsupported protocol metadata remains inspectable; scan planning validates it.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
         let snapshot = load_delta_table_snapshot_async(
             self.table_uri,
@@ -452,7 +454,7 @@ impl DeltaScan {
         self.partition_count
     }
 
-    /// Creates the pull-driven direct Arrow batch stream.
+    /// Creates the pull-driven direct Arrow batch stream without starting data-file reads.
     pub fn execute(self) -> Result<DeltaBatchStream, DeltaReaderError> {
         let metrics = self.plan.metrics.clone();
         let schema = Arc::clone(&self.plan.projected_schema);
