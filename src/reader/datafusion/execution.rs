@@ -69,7 +69,7 @@ use crate::{
     reader::{
         delta_kernel_executor,
         metrics::saturating_fetch_add,
-        planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
+        planning::{DeltaScanFileTask, DeltaScanPartition, DeltaScanPlan, build_partition},
         scheduling::{DeltaScanScheduler, FileAdmission, FileAdmissionFn, ScanReadLimiter},
     },
 };
@@ -386,7 +386,7 @@ impl DeltaDataFusionExec {
 
     fn with_repartitioned_partitions(
         &self,
-        partitions: Vec<DeltaScanFileTaskPartition>,
+        partitions: Vec<DeltaScanPartition>,
     ) -> Arc<dyn ExecutionPlan> {
         let partition_count = partitions.len();
         let mut plan = (*self.plan).clone();
@@ -429,11 +429,11 @@ fn scan_properties(schema: &SchemaRef, partition_count: usize) -> Arc<PlanProper
 /// apply, file sizes are unavailable, or DataFusion finds no useful
 /// repartitioning.
 fn repartition_file_tasks(
-    partitions: &[DeltaScanFileTaskPartition],
+    partitions: &[DeltaScanPartition],
     target_partitions: usize,
     minimum_total_bytes: usize,
     policy: IntraFileRepartitioning,
-) -> DataFusionResult<Option<Vec<DeltaScanFileTaskPartition>>> {
+) -> DataFusionResult<Option<Vec<DeltaScanPartition>>> {
     if target_partitions == 0 {
         return Err(adapter_error("scan_partition_target_must_be_positive"));
     }
@@ -460,7 +460,7 @@ fn repartition_file_tasks(
 }
 
 fn file_groups_from_partitions(
-    partitions: &[DeltaScanFileTaskPartition],
+    partitions: &[DeltaScanPartition],
 ) -> DataFusionResult<Option<Vec<FileGroup>>> {
     let mut groups = Vec::with_capacity(partitions.len());
     for partition in partitions {
@@ -500,7 +500,7 @@ fn partitioned_file_from_task(
 
 fn partitions_from_file_groups(
     groups: Vec<FileGroup>,
-) -> DataFusionResult<Vec<DeltaScanFileTaskPartition>> {
+) -> DataFusionResult<Vec<DeltaScanPartition>> {
     let mut partitions = Vec::with_capacity(groups.len());
     for group in groups {
         let tasks = group

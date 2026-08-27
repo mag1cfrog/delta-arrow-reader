@@ -51,7 +51,7 @@ pub(crate) struct DeltaScanPlan {
     pub(crate) projected_schema: SchemaRef,
     pub(crate) partition_columns: Vec<String>,
     pub(crate) kernel_schemas: KernelScanSchemas,
-    pub(crate) partitions: Vec<DeltaScanFileTaskPartition>,
+    pub(crate) partitions: Vec<DeltaScanPartition>,
     pub(crate) partition_target_diagnostic: DeltaScanPartitionTargetDiagnosticOutput,
     pub(crate) add_actions_excluded_during_planning: Option<u64>,
     pub(crate) estimated_input_bytes: Option<u64>,
@@ -303,7 +303,7 @@ fn logical_projection(
 /// File-read tasks executed together as one scan partition.
 #[allow(dead_code)]
 #[derive(Clone)]
-pub(crate) struct DeltaScanFileTaskPartition {
+pub(crate) struct DeltaScanPartition {
     /// Whole-file or ranged Parquet reads assigned to this partition.
     pub(crate) file_tasks: Vec<DeltaScanFileTask>,
     /// Total bytes to read when every task has a known size.
@@ -316,7 +316,7 @@ pub(crate) struct DeltaScanFileTaskPartition {
 pub(crate) fn group_scan_file_tasks(
     file_tasks: Vec<DeltaScanFileTask>,
     target_partitions: usize,
-) -> Result<Vec<DeltaScanFileTaskPartition>, DeltaReaderError> {
+) -> Result<Vec<DeltaScanPartition>, DeltaReaderError> {
     if target_partitions == 0 {
         return InvalidConfigurationSnafu {
             reason: "scan_partition_target_must_be_positive",
@@ -343,7 +343,7 @@ pub(crate) fn group_scan_file_tasks(
 fn group_by_estimated_bytes(
     mut file_tasks: Vec<DeltaScanFileTask>,
     target_partitions: usize,
-) -> Result<Vec<DeltaScanFileTaskPartition>, DeltaReaderError> {
+) -> Result<Vec<DeltaScanPartition>, DeltaReaderError> {
     let output_limit = target_partitions.min(file_tasks.len());
     file_tasks.sort_by_key(|task| Reverse(task.estimated_scan_bytes()));
     let mut file_tasks = file_tasks.into_iter();
@@ -381,7 +381,7 @@ fn group_by_estimated_bytes(
 fn group_by_file_count(
     file_tasks: Vec<DeltaScanFileTask>,
     target_partitions: usize,
-) -> Result<Vec<DeltaScanFileTaskPartition>, DeltaReaderError> {
+) -> Result<Vec<DeltaScanPartition>, DeltaReaderError> {
     let output_limit = target_partitions.min(file_tasks.len());
     let mut partitions = Vec::with_capacity(output_limit);
     let mut file_tasks = file_tasks.into_iter();
@@ -404,7 +404,7 @@ fn group_by_file_count(
 /// Builds a scan partition and its aggregate size and row estimates.
 pub(crate) fn build_partition(
     file_tasks: Vec<DeltaScanFileTask>,
-) -> Result<DeltaScanFileTaskPartition, DeltaReaderError> {
+) -> Result<DeltaScanPartition, DeltaReaderError> {
     let estimated_input_bytes = checked_sum(
         file_tasks
             .iter()
@@ -415,7 +415,7 @@ pub(crate) fn build_partition(
         file_tasks.iter().map(|task| task.estimated_input_rows),
         "partition_estimated_rows_overflow",
     )?;
-    Ok(DeltaScanFileTaskPartition {
+    Ok(DeltaScanPartition {
         file_tasks,
         estimated_input_bytes,
         estimated_input_rows,
@@ -4321,7 +4321,7 @@ mod tests {
     use futures_util::{FutureExt, StreamExt, stream};
 
     use super::{
-        DeltaScanFileStats, DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan,
+        DeltaScanFileStats, DeltaScanFileTask, DeltaScanPartition, DeltaScanPlan,
         DeltaUnpartitionedScanPlan, KernelPhysicalToLogicalTransform, build_kernel_scan,
         checked_sum, group_scan_file_tasks,
     };
@@ -4531,7 +4531,7 @@ mod tests {
         Ok(task)
     }
 
-    fn partition_paths(partitions: &[DeltaScanFileTaskPartition]) -> Vec<Vec<&str>> {
+    fn partition_paths(partitions: &[DeltaScanPartition]) -> Vec<Vec<&str>> {
         partitions
             .iter()
             .map(|partition| {
