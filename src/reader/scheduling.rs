@@ -535,18 +535,18 @@ async fn run_partition<Task>(
         )
         .await
         {
-            NextFile::Ready(file) => file,
-            NextFile::Exhausted => {
+            NextFileOutcome::Ready(file) => file,
+            NextFileOutcome::Exhausted => {
                 metrics.record_scan_partition_completed();
                 return;
             }
-            NextFile::Cancelled => return,
-            NextFile::Error(error) => {
+            NextFileOutcome::Cancelled => return,
+            NextFileOutcome::Error(error) => {
                 send_first_error(&output, &cancellation, error).await;
                 return;
             }
         };
-        refill_file_setups(&mut scheduler, &mut in_flight, ready.len(), prefetch_files);
+        refill_pending_file_streams(&mut scheduler, &mut in_flight, ready.len(), prefetch_files);
 
         match drain_current_file(
             &output,
@@ -560,9 +560,9 @@ async fn run_partition<Task>(
         )
         .await
         {
-            DrainFile::Completed => metrics.record_file_task_completed(),
-            DrainFile::Cancelled => return,
-            DrainFile::Error(error) => {
+            FileDrainOutcome::Completed => metrics.record_file_task_completed(),
+            FileDrainOutcome::Cancelled => return,
+            FileDrainOutcome::Error(error) => {
                 send_first_error(&output, &cancellation, error).await;
                 return;
             }
@@ -580,14 +580,14 @@ async fn send_first_error(
     }
 }
 
-enum NextFile {
+enum NextFileOutcome {
     Ready(FileBatchStream),
     Exhausted,
     Cancelled,
     Error(DeltaReaderError),
 }
 
-enum DrainFile {
+enum FileDrainOutcome {
     Completed,
     Cancelled,
     Error(DeltaReaderError),
@@ -599,12 +599,12 @@ async fn take_next_file<Task>(
     ready: &mut ReadyFileStreams,
     prefetch_files: usize,
     cancellation: &ScanCancellation,
-) -> NextFile
+) -> NextFileOutcome
 where
     Task: Send + 'static,
 {
     loop {
-        refill_file_setups(
+        refill_pending_file_streams(
             scheduler,
             in_flight,
             ready.len(),
@@ -612,20 +612,20 @@ where
         );
         if let Some(file) = ready.pop_front() {
             return match file {
-                Ok(file) => NextFile::Ready(file),
-                Err(error) => NextFile::Error(error),
+                Ok(file) => NextFileOutcome::Ready(file),
+                Err(error) => NextFileOutcome::Error(error),
             };
         }
         let file = tokio::select! {
             biased;
             file = in_flight.next() => file,
-            () = cancellation.cancelled() => return NextFile::Cancelled,
+            () = cancellation.cancelled() => return NextFileOutcome::Cancelled,
         };
         match file {
-            Some(Ok(Some(file))) => return NextFile::Ready(file),
+            Some(Ok(Some(file))) => return NextFileOutcome::Ready(file),
             Some(Ok(None)) => {}
-            Some(Err(error)) => return NextFile::Error(error),
-            None => return NextFile::Exhausted,
+            Some(Err(error)) => return NextFileOutcome::Error(error),
+            None => return NextFileOutcome::Exhausted,
         }
     }
 }
@@ -640,7 +640,7 @@ async fn drain_current_file<Task>(
     prefetch_files: usize,
     metrics: &DeltaScanMetrics,
     cancellation: &ScanCancellation,
-) -> DrainFile
+) -> FileDrainOutcome
 where
     Task: Send + 'static,
 {
@@ -649,13 +649,13 @@ where
             tokio::select! {
                 biased;
                 batch = file.next() => Some(batch),
-                setup = in_flight.next() => {
-                    match setup {
+                pending_file = in_flight.next() => {
+                    match pending_file {
                         Some(Ok(Some(file))) => ready.push_back(Ok(file)),
                         Some(Ok(None)) | None => {}
                         Some(Err(error)) => ready.push_back(Err(error)),
                     }
-                    refill_file_setups(
+                    refill_pending_file_streams(
                         scheduler,
                         in_flight,
                         ready.len(),
@@ -663,38 +663,38 @@ where
                     );
                     continue;
                 }
-                () = cancellation.cancelled() => return DrainFile::Cancelled,
+                () = cancellation.cancelled() => return FileDrainOutcome::Cancelled,
             }
         } else {
             tokio::select! {
                 biased;
                 batch = file.next() => Some(batch),
-                () = cancellation.cancelled() => return DrainFile::Cancelled,
+                () = cancellation.cancelled() => return FileDrainOutcome::Cancelled,
             }
         };
         let Some(batch) = batch.flatten() else {
-            return DrainFile::Completed;
+            return FileDrainOutcome::Completed;
         };
         let batch = match batch {
             Ok(batch) => batch,
-            Err(error) => return DrainFile::Error(error),
+            Err(error) => return FileDrainOutcome::Error(error),
         };
         let rows = batch.num_rows();
         let permit = tokio::select! {
             biased;
-            () = cancellation.cancelled() => return DrainFile::Cancelled,
+            () = cancellation.cancelled() => return FileDrainOutcome::Cancelled,
             permit = output.reserve() => permit,
         };
         let Ok(permit) = permit else {
             cancellation.cancel();
-            return DrainFile::Cancelled;
+            return FileDrainOutcome::Cancelled;
         };
         metrics.record_scheduler_batch_emitted(rows);
         permit.send(Ok(batch));
     }
 }
 
-fn refill_file_setups<Task>(
+fn refill_pending_file_streams<Task>(
     scheduler: &mut FileScheduler<Task, FileBatchStream>,
     in_flight: &mut PendingFileStreams,
     ready_count: usize,
