@@ -253,12 +253,12 @@ fn direct_reader_contract_is_public() {
             .with_target_partitions(1)?
             .with_execution_options(options))
     }
-    fn assert_scan_futures(builder: DeltaScanBuilder<'_>, scan: DeltaScan) {
+    fn assert_scan_contract(builder: DeltaScanBuilder<'_>, scan: DeltaScan) {
         assert_future::<Result<DeltaScan, DeltaReaderError>>(builder.build());
-        assert_future::<Result<DeltaBatchStream, DeltaReaderError>>(scan.execute());
+        let _: Result<DeltaBatchStream, DeltaReaderError> = scan.execute();
     }
     let _ = configure_scan;
-    let _ = assert_scan_futures;
+    let _ = assert_scan_contract;
 
     let scan_schema: for<'a> fn(&'a DeltaScan) -> &'a SchemaRef = DeltaScan::schema;
     let partition_count: fn(&DeltaScan) -> usize = DeltaScan::partition_count;
