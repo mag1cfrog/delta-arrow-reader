@@ -59,14 +59,14 @@ struct DirectParquetReader {
 
 /// Parquet footer metadata shared by ranged tasks within one physical scan.
 #[derive(Default)]
-pub(crate) struct DirectParquetMetadataCache {
+pub(crate) struct RangedParquetMetadataCache {
     /// In-flight or completed footer loads keyed by file path and planned size.
     entries: Mutex<HashMap<(Path, u64), Arc<ParquetMetadataCell>>>,
 }
 
 type ParquetMetadataCell = OnceCell<Arc<ParquetMetaData>>;
 
-impl DirectParquetMetadataCache {
+impl RangedParquetMetadataCache {
     fn entry(&self, path: &Path, file_size: u64) -> Arc<ParquetMetadataCell> {
         Arc::clone(
             self.entries
@@ -189,7 +189,7 @@ impl DirectParquetReader {
 
     async fn load_ranged_parquet_metadata(
         &self,
-        metadata_cache: Option<&DirectParquetMetadataCache>,
+        metadata_cache: Option<&RangedParquetMetadataCache>,
         path: &Path,
         file_size: u64,
         reader: &mut ParquetObjectReader,
@@ -250,7 +250,7 @@ impl DirectParquetReader {
         physical_predicate: Option<&DeltaKernelPredicate>,
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
-        metadata_cache: Option<&DirectParquetMetadataCache>,
+        metadata_cache: Option<&RangedParquetMetadataCache>,
     ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
         let file_size = object.file_size;
@@ -376,7 +376,7 @@ impl DirectParquetReader {
     async fn open_logical_file_stream_with_metadata_cache(
         self: &Arc<Self>,
         request: LogicalFileReadRequest,
-        metadata_cache: Option<&DirectParquetMetadataCache>,
+        metadata_cache: Option<&RangedParquetMetadataCache>,
     ) -> Result<LogicalDataFileStream, DeltaReaderError> {
         let include_original_row_index = request.task.deletion_vector.is_present();
         let physical_stream = tokio::select! {
@@ -557,7 +557,7 @@ pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
-    metadata_cache: Arc<DirectParquetMetadataCache>,
+    metadata_cache: Arc<RangedParquetMetadataCache>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     file_executor_from_reader::<true>(
         plan,
@@ -577,7 +577,7 @@ fn file_executor_from_reader<const SHARED_METADATA: bool>(
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
     reader: Arc<DirectParquetReader>,
-    metadata_cache: Option<Arc<DirectParquetMetadataCache>>,
+    metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let physical_schema = Arc::clone(&plan.physical_schema);
     let logical_schema = Arc::clone(&plan.logical_schema);
@@ -1448,7 +1448,7 @@ mod tests {
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
-        DirectParquetMetadataCache, DirectParquetReader, LogicalFileReadRequest, data_file_error,
+        DirectParquetReader, LogicalFileReadRequest, RangedParquetMetadataCache, data_file_error,
         direct_parquet_file_executor,
     };
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
@@ -2173,7 +2173,7 @@ mod tests {
         Ok((Arc::new(reader), gated, task))
     }
 
-    async fn gated_split_metadata_reader(
+    async fn gated_ranged_metadata_reader(
         name: &str,
         gate_request: GateRequest,
     ) -> Result<
@@ -2182,7 +2182,7 @@ mod tests {
             Arc<GatedObjectStore>,
             DeltaScanFileTask,
             Arc<Schema>,
-            Arc<DirectParquetMetadataCache>,
+            Arc<RangedParquetMetadataCache>,
         ),
         Box<dyn std::error::Error>,
     > {
@@ -2210,7 +2210,7 @@ mod tests {
             gated,
             task,
             schema,
-            Arc::new(DirectParquetMetadataCache::default()),
+            Arc::new(RangedParquetMetadataCache::default()),
         ))
     }
 
@@ -2461,10 +2461,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn split_tasks_share_one_concurrent_parquet_metadata_load()
+    async fn ranged_tasks_share_one_concurrent_parquet_metadata_load()
     -> Result<(), Box<dyn std::error::Error>> {
-        let (reader, gated, mut first_task, schema, metadata_cache) = gated_split_metadata_reader(
-            "direct-split-metadata-single-flight",
+        let (reader, gated, mut first_task, schema, metadata_cache) = gated_ranged_metadata_reader(
+            "direct-ranged-metadata-single-flight",
             GateRequest::Range(1),
         )
         .await?;
@@ -2525,9 +2525,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn failed_split_metadata_load_can_be_retried() -> Result<(), Box<dyn std::error::Error>> {
-        let (reader, gated, task, schema, metadata_cache) = gated_split_metadata_reader(
-            "direct-split-metadata-retry",
+    async fn failed_ranged_metadata_load_can_be_retried() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let (reader, gated, task, schema, metadata_cache) = gated_ranged_metadata_reader(
+            "direct-ranged-metadata-retry",
             GateRequest::Range(usize::MAX),
         )
         .await?;
@@ -2573,10 +2574,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cancelled_split_metadata_load_wakes_a_retrying_task()
+    async fn cancelled_ranged_metadata_load_wakes_a_retrying_task()
     -> Result<(), Box<dyn std::error::Error>> {
-        let (reader, gated, task, schema, metadata_cache) = gated_split_metadata_reader(
-            "direct-split-metadata-cancellation",
+        let (reader, gated, task, schema, metadata_cache) = gated_ranged_metadata_reader(
+            "direct-ranged-metadata-cancellation",
             GateRequest::Range(1),
         )
         .await?;

@@ -58,7 +58,7 @@ use super::{
 };
 
 use crate::reader::backend::direct_parquet::{
-    DirectParquetMetadataCache, direct_parquet_file_executor,
+    RangedParquetMetadataCache, direct_parquet_file_executor,
     direct_parquet_file_executor_with_metadata_cache,
 };
 use crate::{
@@ -332,7 +332,7 @@ struct DeltaDataFusionExec {
     dynamic_filters: Arc<[RetainedDynamicFilter]>,
     intra_file_repartitioning: IntraFileRepartitioning,
     intra_file_repartitioning_applied: bool,
-    parquet_metadata_cache: Option<Arc<DirectParquetMetadataCache>>,
+    parquet_metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 }
 
 impl DeltaDataFusionExec {
@@ -405,7 +405,7 @@ impl DeltaDataFusionExec {
             properties: scan_properties(&self.schema, partition_count),
             limiter,
             intra_file_repartitioning_applied: true,
-            parquet_metadata_cache: Some(Arc::new(DirectParquetMetadataCache::default())),
+            parquet_metadata_cache: Some(Arc::new(RangedParquetMetadataCache::default())),
             ..self.clone()
         })
     }
