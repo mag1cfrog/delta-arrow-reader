@@ -32,8 +32,8 @@ pub(crate) struct DataFusionFilterDecision {
 
 pub(crate) struct DataFusionFilterPlan {
     pub(crate) decisions: Vec<DataFusionFilterDecision>,
-    pub(crate) predicate: Option<DeltaPredicate>,
-    pub(crate) row_predicate: Option<DeltaPredicate>,
+    pub(crate) pruning_predicate: Option<DeltaPredicate>,
+    pub(crate) exact_row_predicate: Option<DeltaPredicate>,
     pub(crate) requires_statistics: bool,
     pub(crate) referenced_columns: Vec<String>,
     pub(crate) has_unresolved_predicate: bool,
@@ -241,8 +241,8 @@ fn plan_filters(
         .iter()
         .filter_map(|decision| decision.predicate.clone())
         .collect::<Vec<_>>();
-    let predicate = and_predicates(predicates);
-    let row_predicate = and_predicates(
+    let pruning_predicate = and_predicates(predicates);
+    let exact_row_predicate = and_predicates(
         decisions
             .iter()
             .filter(|decision| decision.pushdown == TableProviderFilterPushDown::Exact)
@@ -287,8 +287,8 @@ fn plan_filters(
     );
     DataFusionFilterPlan {
         decisions,
-        predicate,
-        row_predicate,
+        pruning_predicate,
+        exact_row_predicate,
         requires_statistics,
         referenced_columns,
         has_unresolved_predicate,
@@ -1295,16 +1295,16 @@ mod tests {
             value: DeltaScalar::Int32(1),
         };
         assert_eq!(
-            plan.filters.predicate,
+            plan.filters.pruning_predicate,
             Some(DeltaPredicate::And(vec![expected.clone(), expected]))
         );
-        assert!(plan.filters.row_predicate.is_none());
+        assert!(plan.filters.exact_row_predicate.is_none());
         assert!(plan.filters.has_unresolved_predicate);
 
         let empty = plan_scan(&schema, &HashSet::new(), None, &[], false);
         assert!(empty.filters.decisions.is_empty());
-        assert!(empty.filters.predicate.is_none());
-        assert!(empty.filters.row_predicate.is_none());
+        assert!(empty.filters.pruning_predicate.is_none());
+        assert!(empty.filters.exact_row_predicate.is_none());
         assert!(empty.filters.referenced_columns.is_empty());
         assert!(!empty.filters.has_unresolved_predicate);
     }
@@ -1439,7 +1439,7 @@ mod tests {
             );
         }
         assert!(!plan.filters.has_unresolved_predicate);
-        assert!(plan.filters.row_predicate.is_none());
+        assert!(plan.filters.exact_row_predicate.is_none());
         assert!(!plan.filters.requires_statistics);
         assert_eq!(
             plan.filters
@@ -1500,7 +1500,7 @@ mod tests {
                 .iter()
                 .all(|pushdown| *pushdown == TableProviderFilterPushDown::Unsupported)
         );
-        assert!(plan.filters.predicate.is_none());
+        assert!(plan.filters.pruning_predicate.is_none());
     }
 
     #[test]
@@ -1556,7 +1556,7 @@ mod tests {
                 .iter()
                 .all(|pushdown| *pushdown == TableProviderFilterPushDown::Exact)
         );
-        assert!(exact.filters.row_predicate.is_some());
+        assert!(exact.filters.exact_row_predicate.is_some());
         assert!(exact.filters.requires_statistics);
         assert!(!exact.filters.has_unresolved_predicate);
     }
@@ -1600,7 +1600,7 @@ mod tests {
                 .iter()
                 .all(|pushdown| *pushdown == TableProviderFilterPushDown::Unsupported)
         );
-        assert!(plan.filters.predicate.is_none());
+        assert!(plan.filters.pruning_predicate.is_none());
     }
 
     #[test]
@@ -1689,7 +1689,7 @@ mod tests {
                 .iter()
                 .all(|pushdown| *pushdown == TableProviderFilterPushDown::Unsupported)
         );
-        assert!(plan.filters.predicate.is_none());
+        assert!(plan.filters.pruning_predicate.is_none());
     }
 
     #[test]

@@ -305,7 +305,7 @@ pub fn collect_scan_metrics(plan: &dyn ExecutionPlan) -> Vec<ScanMetrics> {
 pub(crate) fn create_datafusion_execution_plan(
     plan: DeltaScanPlan,
     planning: DataFusionScanPlanning,
-    row_predicate: Option<DeltaKernelPredicate>,
+    exact_row_predicate: Option<DeltaKernelPredicate>,
     registration_name: Option<String>,
     use_arrow_view_types: bool,
     intra_file_repartitioning: IntraFileRepartitioning,
@@ -313,7 +313,7 @@ pub(crate) fn create_datafusion_execution_plan(
     Arc::new(DeltaDataFusionExec::new(
         plan,
         planning,
-        row_predicate,
+        exact_row_predicate,
         registration_name,
         use_arrow_view_types,
         intra_file_repartitioning,
@@ -325,7 +325,7 @@ struct DeltaDataFusionExec {
     plan: Arc<DeltaScanPlan>,
     schema: SchemaRef,
     output_projection: Option<Arc<[usize]>>,
-    row_predicate: Option<DeltaKernelPredicate>,
+    exact_row_predicate: Option<DeltaKernelPredicate>,
     properties: Arc<PlanProperties>,
     metrics: ScanMetrics,
     limiter: Arc<ScanReadLimiter>,
@@ -340,7 +340,7 @@ impl DeltaDataFusionExec {
     fn new(
         plan: DeltaScanPlan,
         planning: DataFusionScanPlanning,
-        row_predicate: Option<DeltaKernelPredicate>,
+        exact_row_predicate: Option<DeltaKernelPredicate>,
         registration_name: Option<String>,
         use_arrow_view_types: bool,
         intra_file_repartitioning: IntraFileRepartitioning,
@@ -363,7 +363,7 @@ impl DeltaDataFusionExec {
             plan: Arc::new(plan),
             schema,
             output_projection,
-            row_predicate,
+            exact_row_predicate,
             properties,
             metrics,
             limiter,
@@ -635,13 +635,13 @@ impl ExecutionPlan for DeltaDataFusionExec {
                 Some(cache) => direct_parquet_file_executor_with_metadata_cache(
                     &self.plan,
                     Some(configured_batch_size_rows),
-                    self.row_predicate.clone(),
+                    self.exact_row_predicate.clone(),
                     Arc::clone(cache),
                 ),
                 None => direct_parquet_file_executor(
                     &self.plan,
                     Some(configured_batch_size_rows),
-                    self.row_predicate.clone(),
+                    self.exact_row_predicate.clone(),
                 ),
             },
             ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
@@ -1037,12 +1037,12 @@ mod tests {
         )?;
         let physical_projection = planning.projection.physical_projection.clone();
         let hidden_columns = planning.projection.hidden_columns.clone();
-        let kernel_predicate = planning
+        let pruning_predicate = planning
             .filters
-            .predicate
+            .pruning_predicate
             .as_ref()
             .and_then(delta_predicate_to_kernel_pruning);
-        let row_predicate = match planning.filters.row_predicate.as_ref() {
+        let exact_row_predicate = match planning.filters.exact_row_predicate.as_ref() {
             Some(predicate) => Some(delta_predicate_to_kernel_pruning(predicate).ok_or(
                 DeltaReaderError::UnsupportedPredicate {
                     reason: "exact_row_predicate_not_kernel_safe",
@@ -1050,18 +1050,18 @@ mod tests {
             )?),
             None => None,
         };
-        let row_predicate = plan_row_predicate(
+        let exact_row_predicate = plan_row_predicate(
             table.snapshot(),
             physical_projection.as_deref(),
             &hidden_columns,
-            row_predicate,
+            exact_row_predicate,
         )?;
         let include_stats = planning.filters.requires_statistics;
         let core = plan_scan(
             table.snapshot(),
             physical_projection.as_deref(),
             &hidden_columns,
-            kernel_predicate,
+            pruning_predicate,
             include_stats,
             execution_options,
             DeltaScanPartitionTargetOptions {
@@ -1072,7 +1072,7 @@ mod tests {
         Ok(create_datafusion_execution_plan(
             core,
             planning,
-            row_predicate,
+            exact_row_predicate,
             registration_name,
             true,
             intra_file_repartitioning,

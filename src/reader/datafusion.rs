@@ -161,9 +161,9 @@ impl DeltaTableProvider {
         }
         let physical_projection = planning.projection.physical_projection.clone();
         let hidden_columns = planning.projection.hidden_columns.clone();
-        let kernel_predicate = planning
+        let pruning_predicate = planning
             .filters
-            .predicate
+            .pruning_predicate
             .as_ref()
             .map(|predicate| {
                 delta_predicate_to_kernel_pruning(predicate).ok_or(
@@ -173,9 +173,9 @@ impl DeltaTableProvider {
                 )
             })
             .transpose()?;
-        let row_predicate = planning
+        let exact_row_predicate = planning
             .filters
-            .row_predicate
+            .exact_row_predicate
             .as_ref()
             .map(|predicate| {
                 delta_predicate_to_kernel_pruning(predicate).ok_or(
@@ -185,17 +185,17 @@ impl DeltaTableProvider {
                 )
             })
             .transpose()?;
-        let row_predicate = plan_row_predicate(
+        let exact_row_predicate = plan_row_predicate(
             self.table.snapshot(),
             physical_projection.as_deref(),
             &hidden_columns,
-            row_predicate,
+            exact_row_predicate,
         )?;
         let mut core = plan_scan(
             self.table.snapshot(),
             physical_projection.as_deref(),
             &hidden_columns,
-            kernel_predicate,
+            pruning_predicate,
             planning.filters.requires_statistics,
             self.options.execution_options,
             DeltaScanPartitionTargetOptions {
@@ -233,7 +233,7 @@ impl DeltaTableProvider {
             create_datafusion_execution_plan(
                 core,
                 planning,
-                row_predicate,
+                exact_row_predicate,
                 self.registration_name.clone(),
                 self.options.use_arrow_view_types,
                 self.options.intra_file_repartitioning,
