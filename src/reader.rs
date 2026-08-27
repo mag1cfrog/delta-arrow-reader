@@ -248,7 +248,7 @@ impl DeltaTable {
 
     /// Returns a shared handle to the logical Arrow schema.
     pub fn schema(&self) -> SchemaRef {
-        Arc::clone(self.snapshot.schema_ref())
+        self.snapshot.schema()
     }
 
     /// Returns the loaded Delta protocol metadata.
