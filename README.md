@@ -47,7 +47,7 @@ let table = DeltaTableBuilder::new("/tmp/example-delta-table")
     .await?;
 let scan = table
     .scan()
-    .with_projection(vec!["id".into(), "name".into()])
+    .with_projection(["id", "name"])
     .with_predicate(DeltaPredicate::Compare {
         column: "id".into(),
         op: DeltaComparison::GtEq,

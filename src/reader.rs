@@ -72,7 +72,7 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 ///     .await?;
 /// let scan = table
 ///     .scan()
-///     .with_projection(vec!["id".into(), "name".into()])
+///     .with_projection(["id", "name"])
 ///     .with_predicate(DeltaPredicate::Compare {
 ///         column: "id".into(),
 ///         op: DeltaComparison::GtEq,
@@ -309,8 +309,11 @@ pub struct DeltaScanBuilder<'table> {
 
 impl<'table> DeltaScanBuilder<'table> {
     /// Selects visible logical columns in caller order.
-    pub fn with_projection(mut self, logical_columns: Vec<String>) -> Self {
-        self.projection = Some(logical_columns);
+    pub fn with_projection(
+        mut self,
+        logical_columns: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.projection = Some(logical_columns.into_iter().map(Into::into).collect());
         self
     }
 

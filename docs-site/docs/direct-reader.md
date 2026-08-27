@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     let scan = table
         .scan()
-        .with_projection(vec!["id".into(), "name".into()])
+        .with_projection(["id", "name"])
         .with_limit(100)
         .build()
         .await?;

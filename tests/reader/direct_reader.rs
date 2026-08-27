@@ -290,7 +290,7 @@ fn local_end_to_end_example_reads_without_sql() -> TestResult {
             .await?;
         let scan = table
             .scan()
-            .with_projection(vec!["id".into(), "label".into()])
+            .with_projection(["id", "label"])
             .with_limit(3)
             .build()
             .await?;
@@ -318,7 +318,7 @@ fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
         Err(error) => error,
     };
     assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
-    let build = runtime.block_on(table.scan().with_projection(vec!["missing".into()]).build());
+    let build = runtime.block_on(table.scan().with_projection(["missing"]).build());
     let error = match build {
         Ok(_) => panic!("unsupported protocol built another scan"),
         Err(error) => error,
@@ -357,7 +357,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
 
         let ordered = table
             .scan()
-            .with_projection(vec!["label".into(), "id".into()])
+            .with_projection(["label", "id"])
             .build()
             .await?;
         assert_eq!(
@@ -372,7 +372,11 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         let (ordered_batches, _) = collect_scan(ordered).await?;
         assert_eq!(ids(&ordered_batches), full_ids);
 
-        let empty = table.scan().with_projection(Vec::new()).build().await?;
+        let empty = table
+            .scan()
+            .with_projection(Vec::<&str>::new())
+            .build()
+            .await?;
         assert!(empty.schema().fields().is_empty());
         let (empty_batches, _) = collect_scan(empty).await?;
         assert!(empty_batches.iter().all(|batch| batch.num_columns() == 0));
@@ -384,7 +388,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
             8
         );
 
-        for invalid in [vec!["id".into(), "id".into()], vec!["missing".into()]] {
+        for invalid in [vec!["id", "id"], vec!["missing"]] {
             let result = table.scan().with_projection(invalid).build().await;
             let error = match result {
                 Ok(_) => panic!("invalid projection built a scan"),
@@ -401,7 +405,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
         };
         let hidden = table
             .scan()
-            .with_projection(vec!["label".into()])
+            .with_projection(["label"])
             .with_predicate(hidden_predicate.clone())
             .build()
             .await?;
@@ -417,7 +421,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
 
         let empty_filtered = table
             .scan()
-            .with_projection(Vec::new())
+            .with_projection(Vec::<&str>::new())
             .with_predicate(hidden_predicate)
             .build()
             .await?;
@@ -437,7 +441,7 @@ fn projection_predicate_limit_partition_and_metrics_contracts_hold() -> TestResu
 
         let signed_zero = table
             .scan()
-            .with_projection(vec!["id".into()])
+            .with_projection(["id"])
             .with_predicate(DeltaPredicate::Compare {
                 column: "score".into(),
                 op: DeltaComparison::Eq,
@@ -583,14 +587,14 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         };
         let direct_scan = direct
             .scan()
-            .with_projection(vec!["id".into()])
+            .with_projection(["id"])
             .with_predicate(predicate.clone())
             .with_target_partitions(2)?
             .build()
             .await?;
         let kernel_scan = kernel
             .scan()
-            .with_projection(vec!["id".into()])
+            .with_projection(["id"])
             .with_predicate(predicate)
             .with_target_partitions(2)?
             .build()
@@ -618,13 +622,13 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         };
         let direct_residual = direct
             .scan()
-            .with_projection(vec!["id".into()])
+            .with_projection(["id"])
             .with_predicate(residual.clone())
             .build()
             .await?;
         let kernel_residual = kernel
             .scan()
-            .with_projection(vec!["id".into()])
+            .with_projection(["id"])
             .with_predicate(residual)
             .build()
             .await?;
@@ -637,7 +641,7 @@ fn delta_kernel_matches_direct_results() -> TestResult {
 
         let per_scan_override = direct
             .scan()
-            .with_projection(vec!["id".into()])
+            .with_projection(["id"])
             .with_execution_options(kernel_options)
             .build()
             .await?;
@@ -663,7 +667,7 @@ fn delta_kernel_reads_through_the_direct_surface() -> TestResult {
             .await?;
         let scan = table
             .scan()
-            .with_projection(vec!["id".into()])
+            .with_projection(["id"])
             .with_target_partitions(2)?
             .build()
             .await?;

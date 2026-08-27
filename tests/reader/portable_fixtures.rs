@@ -540,7 +540,7 @@ async fn direct_stream(
         .await?;
     let scan = table
         .scan()
-        .with_projection(vec!["id".to_owned()])
+        .with_projection(["id"])
         .with_target_partitions(1)?
         .build()
         .await?;

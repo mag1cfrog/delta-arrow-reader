@@ -254,7 +254,7 @@ fn direct_reader_contract_is_public() {
         options: DeltaReaderExecutionOptions,
     ) -> Result<DeltaScanBuilder<'a>, DeltaReaderError> {
         Ok(builder
-            .with_projection(vec!["id".into()])
+            .with_projection(["id"])
             .with_predicate(predicate)
             .with_limit(1)
             .with_target_partitions(1)?
