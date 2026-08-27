@@ -133,7 +133,7 @@ fn build_kernel_table_snapshot(
     selection: DeltaSnapshotSelection,
 ) -> Result<KernelTableSnapshot, DeltaReaderError> {
     let table_url = normalize_table_location(table_location)?;
-    let s3_auth_mode_hint = s3_auth_mode_hint_for_source(&table_url, storage_options);
+    let s3_auth_mode_hint = s3_auth_mode_hint_for_table(&table_url, storage_options);
     let engine_context = DeltaKernelEngineContext::try_new(table_url, storage_options)
         .boxed()
         .context(StorageInitializationSnafu {
@@ -266,7 +266,7 @@ pub(crate) enum S3AuthModeHint {
     OtherExplicit,
 }
 
-fn s3_auth_mode_hint_for_source(
+fn s3_auth_mode_hint_for_table(
     table_url: &url::Url,
     storage_options: &DeltaStorageOptions,
 ) -> Option<S3AuthModeHint> {
@@ -394,7 +394,7 @@ mod tests {
     use super::{
         S3AuthModeHint, TRACING_TARGET, load_delta_table_snapshot,
         load_delta_table_snapshot_blocking, load_kernel_table_snapshot_blocking,
-        s3_auth_mode_hint_for_source, snapshot_load_failed_reason,
+        s3_auth_mode_hint_for_table, snapshot_load_failed_reason,
     };
     use crate::{
         DeltaReaderError, DeltaReaderPhase, DeltaSnapshotSelection, DeltaStorageOptions,
@@ -1063,7 +1063,7 @@ mod tests {
             "https://ACCOUNT_ID.r2.cloudflarestorage.com/bucket/table",
         ] {
             assert_eq!(
-                s3_auth_mode_hint_for_source(
+                s3_auth_mode_hint_for_table(
                     &url::Url::parse(table_uri)?,
                     &DeltaStorageOptions::new()
                 ),
@@ -1119,13 +1119,13 @@ mod tests {
 
         for (options, expected) in cases {
             assert_eq!(
-                s3_auth_mode_hint_for_source(&table_url, &options),
+                s3_auth_mode_hint_for_table(&table_url, &options),
                 Some(expected)
             );
         }
 
         assert_eq!(
-            s3_auth_mode_hint_for_source(
+            s3_auth_mode_hint_for_table(
                 &url::Url::parse("https://example.com/table")?,
                 &DeltaStorageOptions::new()
             ),
