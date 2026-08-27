@@ -637,7 +637,10 @@ impl ExecutionPlan for DeltaDataFusionExec {
         let configured_batch_size_rows = context.session_config().batch_size();
         self.metrics
             .record_configured_batch_size_rows(configured_batch_size_rows);
-        let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
+        let admission = dynamic_partition_admission_policy(
+            self.metrics.clone(),
+            Arc::clone(&self.dynamic_filters),
+        );
         let executor = match self.reader_plan.execution_options.parquet_backend() {
             ParquetReaderBackend::Direct => match &self.parquet_metadata_cache {
                 Some(cache) => direct_parquet_file_executor_with_metadata_cache(
@@ -731,7 +734,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
     }
 }
 
-fn dynamic_admission(
+fn dynamic_partition_admission_policy(
     metrics: ScanMetrics,
     filters: Arc<[RetainedDynamicFilter]>,
 ) -> FileAdmissionPolicy<DeltaScanFileTask> {
@@ -1821,7 +1824,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
+    async fn dynamic_partition_admission_reason_counts_are_once_per_file_and_saturating()
+    -> TestResult {
         use crate::{
             delta::kernel::KernelPhysicalToLogicalTransform,
             reader::datafusion::dynamic_filters::DynamicFilterClassification,
@@ -1864,7 +1868,9 @@ mod tests {
             transform: KernelPhysicalToLogicalTransform::default(),
         };
         assert_eq!(
-            dynamic_admission(metrics.clone(), Arc::from([first, second]))(&missing)?,
+            dynamic_partition_admission_policy(metrics.clone(), Arc::from([first, second]))(
+                &missing,
+            )?,
             FileAdmissionDecision::Admit
         );
         let snapshot = metrics.snapshot();
@@ -1881,7 +1887,9 @@ mod tests {
             .partition_values
             .insert("region".to_owned(), "west".to_owned());
         assert_eq!(
-            dynamic_admission(metrics.clone(), Arc::from([first, second]))(&present)?,
+            dynamic_partition_admission_policy(metrics.clone(), Arc::from([first, second]))(
+                &present,
+            )?,
             FileAdmissionDecision::Skip
         );
         let snapshot = metrics.snapshot();
@@ -1892,10 +1900,11 @@ mod tests {
 
         let unsupported = dynamic_filter("region", 1);
         unsupported.update(physical_lit("not boolean"))?;
-        assert_eq!(
-            dynamic_admission(metrics.clone(), Arc::from([retained(unsupported)?]))(&present)?,
-            FileAdmissionDecision::Admit
+        let admission = dynamic_partition_admission_policy(
+            metrics.clone(),
+            Arc::from([retained(unsupported)?]),
         );
+        assert_eq!(admission(&present)?, FileAdmissionDecision::Admit);
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.dynamic_partition_filter_checks, 4);
         assert_eq!(snapshot.dynamic_partition_tasks_kept, 2);
