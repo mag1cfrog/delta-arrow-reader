@@ -91,7 +91,7 @@ impl KernelScanSchemas {
 }
 
 #[allow(dead_code)]
-pub(crate) struct KernelScanMetadata {
+pub(crate) struct KernelScanFileCollection {
     pub(crate) files: Vec<KernelScanFileMetadata>,
     pub(crate) add_actions_excluded_during_planning: Option<u64>,
 }
@@ -164,7 +164,7 @@ impl KernelScan {
     pub(crate) fn collect_file_metadata(
         &self,
         engine_context: &DeltaKernelEngineContext,
-    ) -> delta_kernel::DeltaResult<KernelScanMetadata> {
+    ) -> delta_kernel::DeltaResult<KernelScanFileCollection> {
         fn collect(files: &mut Vec<KernelScanFileMetadata>, file: ScanFile) {
             files.push(KernelScanFileMetadata::from_scan_file(file));
         }
@@ -180,7 +180,7 @@ impl KernelScan {
             });
             files = metadata.visit_scan_files(files, collect)?;
         }
-        Ok(KernelScanMetadata {
+        Ok(KernelScanFileCollection {
             files,
             add_actions_excluded_during_planning: saw_batch.then_some(filtered).flatten(),
         })
