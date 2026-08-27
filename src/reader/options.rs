@@ -33,6 +33,7 @@ pub enum ParquetReaderBackend {
 }
 
 /// Bounded execution settings for one Delta scan.
+#[must_use = "execution options do nothing unless passed to a table or scan"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeltaScanExecutionOptions {
     parquet_backend: ParquetReaderBackend,
