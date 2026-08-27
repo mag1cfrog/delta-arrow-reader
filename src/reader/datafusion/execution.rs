@@ -235,14 +235,14 @@ impl ScanMetrics {
         saturating_fetch_add(&self.inner.dynamic_partition_filter_checks, 1);
     }
 
-    fn record_unusable_metadata(&self) {
+    fn record_dynamic_partition_task_kept_unusable_metadata(&self) {
         saturating_fetch_add(
             &self.inner.dynamic_partition_tasks_kept_unusable_metadata,
             1,
         );
     }
 
-    fn record_unevaluable_filter(&self) {
+    fn record_dynamic_partition_task_kept_unevaluable_filter(&self) {
         saturating_fetch_add(
             &self.inner.dynamic_partition_tasks_kept_unevaluable_filter,
             1,
@@ -759,10 +759,10 @@ fn dynamic_partition_admission_policy(
             }
         }
         if unusable_metadata {
-            metrics.record_unusable_metadata();
+            metrics.record_dynamic_partition_task_kept_unusable_metadata();
         }
         if unevaluable_filter {
-            metrics.record_unevaluable_filter();
+            metrics.record_dynamic_partition_task_kept_unevaluable_filter();
         }
         metrics.record_dynamic_partition_task_kept();
         Ok(FileAdmissionDecision::Admit)
@@ -1941,8 +1941,8 @@ mod tests {
                     metrics.record_dynamic_filters_accepted(1);
                     metrics.record_dynamic_filters_rejected(2);
                     metrics.record_dynamic_partition_filter_check();
-                    metrics.record_unusable_metadata();
-                    metrics.record_unevaluable_filter();
+                    metrics.record_dynamic_partition_task_kept_unusable_metadata();
+                    metrics.record_dynamic_partition_task_kept_unevaluable_filter();
                 }
             }));
         }
