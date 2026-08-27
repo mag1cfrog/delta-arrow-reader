@@ -1764,7 +1764,7 @@ mod tests {
     fn metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
-            reader_backend: ParquetReaderBackend::Direct,
+            parquet_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 1,
             files_planned: 1,
             add_actions_filtered_during_planning: Some(0),
@@ -2053,7 +2053,7 @@ mod tests {
         let options = DeltaScanExecutionOptions::new()
             .with_parquet_full_file_read_threshold_bytes(full_file_read_threshold_bytes)?
             .with_parquet_metadata_size_hint_bytes(metadata_size_hint_bytes)?
-            .with_reader_backend(backend);
+            .with_parquet_backend(backend);
         let predicate = with_predicate.then(|| {
             DeltaKernelPredicate::from_test_predicate(Predicate::gt(
                 Expression::Column(ColumnName::new(["id"])),
@@ -2090,7 +2090,7 @@ mod tests {
             &["region".to_owned()],
             Some(DeltaKernelPredicate::from_test_predicate(predicate)),
             true,
-            DeltaScanExecutionOptions::new().with_reader_backend(backend),
+            DeltaScanExecutionOptions::new().with_parquet_backend(backend),
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: Some(1),
                 caller_target_partitions: None,
@@ -3307,7 +3307,7 @@ mod tests {
             kernel_default_metrics.snapshot(),
             kernel_tuned_metrics.snapshot(),
         ] {
-            assert_eq!(metrics.reader_backend, ParquetReaderBackend::DeltaKernel);
+            assert_eq!(metrics.parquet_backend, ParquetReaderBackend::DeltaKernel);
             assert_eq!(metrics.scan_partitions_started, 1);
             assert_eq!(metrics.scan_partitions_completed, 1);
             assert_eq!(metrics.file_tasks_started, 1);
@@ -3742,7 +3742,7 @@ mod tests {
                 &[],
                 None,
                 false,
-                DeltaScanExecutionOptions::new().with_reader_backend(backend),
+                DeltaScanExecutionOptions::new().with_parquet_backend(backend),
                 DeltaScanPartitionTargetOptions {
                     explicit_target_partitions: Some(1),
                     caller_target_partitions: None,

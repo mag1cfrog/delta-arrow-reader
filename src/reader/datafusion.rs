@@ -145,7 +145,7 @@ impl DeltaTableProvider {
             projection,
             &filter_refs,
             DataFusionFilterCapabilities {
-                exact_predicate_evaluation: self.options.execution_options.reader_backend()
+                exact_predicate_evaluation: self.options.execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },
         )?;
@@ -316,7 +316,7 @@ impl TableProvider for DeltaTableProvider {
                     event = "provider_scan.planned",
                     snapshot_version = self.table.version(),
                     partition_count,
-                    backend = ?self.options.execution_options.reader_backend(),
+                    backend = ?self.options.execution_options.parquet_backend(),
                     outcome = "planned"
                 );
                 Ok(plan)
@@ -325,7 +325,7 @@ impl TableProvider for DeltaTableProvider {
                 trace_failure(
                     "provider_scan.failed",
                     self.table.version(),
-                    self.options.execution_options.reader_backend(),
+                    self.options.execution_options.parquet_backend(),
                     &error,
                 );
                 Err(DataFusionError::External(Box::new(error)))
@@ -348,7 +348,7 @@ impl TableProvider for DeltaTableProvider {
             &partition_columns,
             filters,
             DataFusionFilterCapabilities {
-                exact_predicate_evaluation: self.options.execution_options.reader_backend()
+                exact_predicate_evaluation: self.options.execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },
         );
@@ -404,7 +404,7 @@ pub fn register_table(
 ) -> Result<TableRegistration, DeltaReaderError> {
     let name = name.into();
     let snapshot_version = table.version();
-    let backend = options.execution_options.reader_backend();
+    let backend = options.execution_options.parquet_backend();
     let result = (|| {
         validate_registration_name(&name)?;
         let provider =

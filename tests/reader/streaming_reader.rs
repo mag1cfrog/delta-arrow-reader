@@ -577,12 +577,12 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         let kernel = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(
                 DeltaScanExecutionOptions::new()
-                    .with_reader_backend(ParquetReaderBackend::DeltaKernel),
+                    .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
             )
             .load_table()
             .await?;
-        let kernel_options =
-            DeltaScanExecutionOptions::new().with_reader_backend(ParquetReaderBackend::DeltaKernel);
+        let kernel_options = DeltaScanExecutionOptions::new()
+            .with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let predicate = DeltaPredicate::Compare {
             column: "id".into(),
             op: DeltaComparison::GtEq,
@@ -610,11 +610,11 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         assert_eq!(direct_metrics.snapshot().files_planned, 1);
         assert_eq!(kernel_metrics.snapshot().files_planned, 1);
         assert_eq!(
-            direct_metrics.snapshot().reader_backend,
+            direct_metrics.snapshot().parquet_backend,
             ParquetReaderBackend::Direct
         );
         assert_eq!(
-            kernel_metrics.snapshot().reader_backend,
+            kernel_metrics.snapshot().parquet_backend,
             ParquetReaderBackend::DeltaKernel
         );
 
@@ -651,7 +651,7 @@ fn delta_kernel_matches_direct_results() -> TestResult {
         let (override_batches, override_metrics) = collect_scan(per_scan_override).await?;
         assert_eq!(sorted_ids(&override_batches), [1, 2, 3, 4, 5, 6, 7, 8]);
         assert_eq!(
-            override_metrics.snapshot().reader_backend,
+            override_metrics.snapshot().parquet_backend,
             ParquetReaderBackend::DeltaKernel
         );
         Ok::<_, Box<dyn Error>>(())
@@ -662,8 +662,8 @@ fn delta_kernel_matches_direct_results() -> TestResult {
 fn delta_kernel_reads_through_the_streaming_surface() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("kernel-streaming")?;
-        let options =
-            DeltaScanExecutionOptions::new().with_reader_backend(ParquetReaderBackend::DeltaKernel);
+        let options = DeltaScanExecutionOptions::new()
+            .with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let table = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(options)
             .load_table()
@@ -678,7 +678,7 @@ fn delta_kernel_reads_through_the_streaming_surface() -> TestResult {
 
         assert_eq!(ids(&batches).len(), 8);
         assert_eq!(
-            metrics.snapshot().reader_backend,
+            metrics.snapshot().parquet_backend,
             ParquetReaderBackend::DeltaKernel
         );
         Ok::<_, Box<dyn Error>>(())

@@ -236,7 +236,7 @@ mod tests {
             .with_prefetch_files_per_partition(0)
             .with_max_concurrent_file_reads_per_partition(1)?
             .with_max_concurrent_file_reads_per_scan(Some(1))?
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel))
+            .with_parquet_backend(ParquetReaderBackend::DeltaKernel))
     }
 
     fn batch(id: i32) -> Result<RecordBatch, arrow::error::ArrowError> {

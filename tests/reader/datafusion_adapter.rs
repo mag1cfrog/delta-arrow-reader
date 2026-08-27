@@ -1007,7 +1007,7 @@ async fn direct_exact_and_kernel_residual_execution_return_the_same_rows() -> Te
         ("kernel_orders", ParquetReaderBackend::DeltaKernel),
     ] {
         let context = SessionContext::new();
-        let execution_options = DeltaScanExecutionOptions::new().with_reader_backend(backend);
+        let execution_options = DeltaScanExecutionOptions::new().with_parquet_backend(backend);
         let provider = DeltaTableProvider::try_new(
             table.clone(),
             ScanOptions {
@@ -1495,7 +1495,7 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
         .load_table()
         .await?;
     let execution_options =
-        DeltaScanExecutionOptions::new().with_reader_backend(ParquetReaderBackend::DeltaKernel);
+        DeltaScanExecutionOptions::new().with_parquet_backend(ParquetReaderBackend::DeltaKernel);
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
     register_table(
         &context,

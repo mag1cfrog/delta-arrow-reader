@@ -37,7 +37,7 @@ The adapter registers one table at a time. Applications such as Delta Funnel
 remain responsible for coordinating several tables, exposing configuration,
 building reports, and sending the results elsewhere.
 
-## Reader backends
+## Parquet backends
 
 The default `Direct` backend reads Parquet data asynchronously through
 the same object store used to load the snapshot. The `DeltaKernel` backend

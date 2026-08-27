@@ -56,7 +56,7 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
     );
 
     let options = DeltaScanExecutionOptions::new()
-        .with_reader_backend(ParquetReaderBackend::DeltaKernel)
+        .with_parquet_backend(ParquetReaderBackend::DeltaKernel)
         .with_max_concurrent_file_reads_per_scan(Some(6))?
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_batches_per_partition(1)?
@@ -64,7 +64,7 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
         .with_parquet_metadata_size_hint_bytes(Some(65_536))?
         .with_parquet_full_file_read_threshold_bytes(None)?;
 
-    assert_eq!(options.reader_backend(), ParquetReaderBackend::DeltaKernel);
+    assert_eq!(options.parquet_backend(), ParquetReaderBackend::DeltaKernel);
 
     let error = DeltaScanExecutionOptions::new()
         .with_output_buffer_batches_per_partition(0)

@@ -1,4 +1,4 @@
-//! Data-file reader backend implementations.
+//! Parquet data-file backend implementations.
 
 pub(crate) mod direct_parquet;
 pub(crate) mod kernel_reader;

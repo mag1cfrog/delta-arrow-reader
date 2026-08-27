@@ -357,7 +357,7 @@ impl<'table> DeltaScanBuilder<'table> {
         }
 
         let snapshot_version = self.table.version();
-        let backend = self.execution_options.reader_backend();
+        let backend = self.execution_options.parquet_backend();
         trace_planning_started(snapshot_version, backend);
         let snapshot = Arc::clone(&self.table.snapshot);
         let projection = self.projection;
@@ -462,7 +462,7 @@ impl DeltaScan {
         let schema = Arc::clone(&self.plan.projected_schema);
         let partition_count = self.plan.partitions.len();
         let snapshot_version = self.plan.snapshot_version;
-        let backend = self.plan.execution_options.reader_backend();
+        let backend = self.plan.execution_options.parquet_backend();
         let projection = (self.plan.logical_schema.as_ref() != schema.as_ref())
             .then(|| (0..schema.fields().len()).collect::<Vec<_>>());
         let partitions = if self.limit == Some(0) {
@@ -883,7 +883,7 @@ mod tests {
     fn metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 7,
-            reader_backend: ParquetReaderBackend::Direct,
+            parquet_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 2,
             files_planned: 2,
             add_actions_filtered_during_planning: Some(0),

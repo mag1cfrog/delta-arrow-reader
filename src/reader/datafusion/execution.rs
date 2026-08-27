@@ -599,7 +599,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
         if self.intra_file_repartitioning_applied
-            || self.plan.execution_options.reader_backend() != ParquetReaderBackend::Direct
+            || self.plan.execution_options.parquet_backend() != ParquetReaderBackend::Direct
         {
             return Ok(None);
         }
@@ -630,7 +630,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
         self.metrics
             .record_configured_batch_size_rows(configured_batch_size_rows);
         let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
-        let executor = match self.plan.execution_options.reader_backend() {
+        let executor = match self.plan.execution_options.parquet_backend() {
             ParquetReaderBackend::Direct => match &self.parquet_metadata_cache {
                 Some(cache) => direct_parquet_file_executor_with_metadata_cache(
                     &self.plan,
@@ -1031,7 +1031,7 @@ mod tests {
             projection,
             &filter_refs,
             DataFusionFilterCapabilities {
-                exact_predicate_evaluation: execution_options.reader_backend()
+                exact_predicate_evaluation: execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },
         )?;
@@ -1400,7 +1400,7 @@ mod tests {
                 &[],
                 4,
                 DeltaScanExecutionOptions::new()
-                    .with_reader_backend(ParquetReaderBackend::DeltaKernel),
+                    .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
                 None,
                 IntraFileRepartitioning::Always,
             )?;
@@ -2004,7 +2004,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reader_backends_produce_the_same_logical_rows() -> TestResult {
+    async fn parquet_backends_produce_the_same_logical_rows() -> TestResult {
         let fixture = TestTable::partitioned("backends")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let mut outputs = Vec::new();
@@ -2012,7 +2012,7 @@ mod tests {
             ParquetReaderBackend::Direct,
             ParquetReaderBackend::DeltaKernel,
         ] {
-            let options = DeltaScanExecutionOptions::new().with_reader_backend(backend);
+            let options = DeltaScanExecutionOptions::new().with_parquet_backend(backend);
             let plan = build_plan(&table, Some(&[1, 0]), &[], 2, options, None)?;
             let mut batches =
                 datafusion::physical_plan::collect(plan, SessionContext::new().task_ctx()).await?;
@@ -2047,8 +2047,8 @@ mod tests {
         }
         assert_eq!(outputs[0], outputs[1]);
 
-        let kernel_options =
-            DeltaScanExecutionOptions::new().with_reader_backend(ParquetReaderBackend::DeltaKernel);
+        let kernel_options = DeltaScanExecutionOptions::new()
+            .with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let inexact = build_plan(
             &table,
             None,

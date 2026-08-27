@@ -33,7 +33,7 @@ You can now continue to the [DataFusion quickstart](datafusion.md).
 
 ## Optional feature
 
-The streaming API and both data-file reader backends are always available. The
+The streaming API and both Parquet backends are always available. The
 only optional feature adds the DataFusion integration.
 
 | Feature | Default | Purpose |

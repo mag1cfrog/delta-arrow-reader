@@ -250,7 +250,7 @@ fn finalize_scan_plan(
     };
     let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
         snapshot_version: unpartitioned.snapshot_version,
-        reader_backend: unpartitioned.execution_options.reader_backend(),
+        parquet_backend: unpartitioned.execution_options.parquet_backend(),
         scan_partitions_planned: partitions.len(),
         files_planned,
         add_actions_filtered_during_planning: unpartitioned.add_actions_filtered_during_planning,
@@ -4691,7 +4691,7 @@ mod tests {
         let empty_metrics = empty.metrics.snapshot();
         assert_eq!(empty_metrics.snapshot_version, empty.snapshot_version);
         assert_eq!(
-            empty_metrics.reader_backend,
+            empty_metrics.parquet_backend,
             crate::ParquetReaderBackend::Direct
         );
         assert_eq!(empty_metrics.scan_partitions_planned, 0);
@@ -5460,7 +5460,7 @@ mod tests {
         let retained_metrics = plan.metrics.clone();
         let metrics = retained_metrics.snapshot();
         assert_eq!(metrics.snapshot_version, snapshot.version());
-        assert_eq!(metrics.reader_backend, crate::ParquetReaderBackend::Direct);
+        assert_eq!(metrics.parquet_backend, crate::ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_planned, 2);
         assert_eq!(metrics.files_planned, 4);
         assert_eq!(metrics.add_actions_filtered_during_planning, Some(0));

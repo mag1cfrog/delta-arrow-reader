@@ -1,4 +1,4 @@
-//! Reader backend, snapshot, storage, and execution options.
+//! Parquet backend, snapshot, storage, and execution options.
 
 use std::collections::BTreeMap;
 
@@ -35,7 +35,7 @@ pub enum ParquetReaderBackend {
 /// Bounded execution settings for one Delta scan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeltaScanExecutionOptions {
-    reader_backend: ParquetReaderBackend,
+    parquet_backend: ParquetReaderBackend,
     max_concurrent_file_reads_per_scan: Option<usize>,
     max_concurrent_file_reads_per_partition: usize,
     output_buffer_batches_per_partition: usize,
@@ -48,7 +48,7 @@ impl DeltaScanExecutionOptions {
     /// Returns the baseline execution settings.
     pub const fn new() -> Self {
         Self {
-            reader_backend: ParquetReaderBackend::Direct,
+            parquet_backend: ParquetReaderBackend::Direct,
             max_concurrent_file_reads_per_scan: None,
             max_concurrent_file_reads_per_partition:
                 DEFAULT_MAX_CONCURRENT_FILE_READS_PER_PARTITION,
@@ -60,8 +60,8 @@ impl DeltaScanExecutionOptions {
     }
 
     /// Returns the selected Parquet reader backend.
-    pub const fn reader_backend(&self) -> ParquetReaderBackend {
-        self.reader_backend
+    pub const fn parquet_backend(&self) -> ParquetReaderBackend {
+        self.parquet_backend
     }
 
     /// Returns the optional scan-wide file-read limit.
@@ -95,8 +95,8 @@ impl DeltaScanExecutionOptions {
     }
 
     /// Selects a Parquet reader backend.
-    pub const fn with_reader_backend(mut self, value: ParquetReaderBackend) -> Self {
-        self.reader_backend = value;
+    pub const fn with_parquet_backend(mut self, value: ParquetReaderBackend) -> Self {
+        self.parquet_backend = value;
         self
     }
 
@@ -222,7 +222,7 @@ mod tests {
             ParquetReaderBackend::Direct
         );
         assert_eq!(DeltaScanExecutionOptions::default(), options);
-        assert_eq!(options.reader_backend(), ParquetReaderBackend::Direct);
+        assert_eq!(options.parquet_backend(), ParquetReaderBackend::Direct);
         assert_eq!(options.max_concurrent_file_reads_per_scan(), None);
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 3);
         assert_eq!(options.output_buffer_batches_per_partition(), 1);
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn builders_set_every_public_option() -> Result<(), Box<dyn std::error::Error>> {
         let options = DeltaScanExecutionOptions::new()
-            .with_reader_backend(ParquetReaderBackend::DeltaKernel)
+            .with_parquet_backend(ParquetReaderBackend::DeltaKernel)
             .with_max_concurrent_file_reads_per_scan(Some(8))?
             .with_max_concurrent_file_reads_per_partition(4)?
             .with_output_buffer_batches_per_partition(2)?
@@ -247,7 +247,7 @@ mod tests {
             .with_parquet_metadata_size_hint_bytes(None)?
             .with_parquet_full_file_read_threshold_bytes(Some(1024))?;
 
-        assert_eq!(options.reader_backend(), ParquetReaderBackend::DeltaKernel);
+        assert_eq!(options.parquet_backend(), ParquetReaderBackend::DeltaKernel);
         assert_eq!(options.max_concurrent_file_reads_per_scan(), Some(8));
         assert_eq!(options.max_concurrent_file_reads_per_partition(), 4);
         assert_eq!(options.output_buffer_batches_per_partition(), 2);

@@ -10,7 +10,7 @@ them, see [scan planning](../scan-planning.md) and
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `reader_backend` | `Direct` | Data-file reader used by the scan. |
+| `parquet_backend` | `Direct` | Backend used to read Parquet data files. |
 | `max_concurrent_file_reads_per_scan` | `None` | Scan-wide active-read cap. `None` resolves to the partition target multiplied by the per-partition cap. |
 | `max_concurrent_file_reads_per_partition` | `3` | Active-read cap for one execution partition. |
 | `output_buffer_batches_per_partition` | `1` | Batches held between a partition producer and its consumer. |

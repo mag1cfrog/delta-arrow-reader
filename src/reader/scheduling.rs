@@ -401,7 +401,7 @@ impl PartitionStream {
         Task: Send + 'static,
     {
         let output_buffer_batches = options.output_buffer_batches_per_partition();
-        let prefetch_files = match options.reader_backend() {
+        let prefetch_files = match options.parquet_backend() {
             ParquetReaderBackend::Direct => options.prefetch_files_per_partition(),
             ParquetReaderBackend::DeltaKernel => 0,
         };
@@ -767,7 +767,7 @@ mod tests {
     fn metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 1,
-            reader_backend: ParquetReaderBackend::Direct,
+            parquet_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 1,
             files_planned: 3,
             add_actions_filtered_during_planning: None,
@@ -1780,7 +1780,7 @@ mod tests {
             })
         };
         let kernel_options =
-            stream_options(1, 1)?.with_reader_backend(ParquetReaderBackend::DeltaKernel);
+            stream_options(1, 1)?.with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let mut stream = PartitionStream::new(
             vec![1, 2],
             limiter.partition(0)?,
@@ -1849,7 +1849,7 @@ mod tests {
             })
         };
         let kernel_options =
-            stream_options(1, 0)?.with_reader_backend(ParquetReaderBackend::DeltaKernel);
+            stream_options(1, 0)?.with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let mut stream = PartitionStream::new(
             vec![1, 2],
             limiter.partition(0)?,

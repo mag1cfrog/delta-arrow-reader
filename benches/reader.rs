@@ -29,7 +29,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 28;
+const BENCHMARK_SCHEMA_VERSION: u32 = 29;
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
@@ -59,7 +59,7 @@ const CSV_HEADER: [&str; 79] = [
     "workload_case",
     "provider_exec_storage_profile",
     "query_case",
-    "reader_backend",
+    "parquet_backend",
     "scheduling_mode",
     "scan_target_partitions",
     "max_concurrent_file_reads_per_scan",
@@ -1306,7 +1306,7 @@ async fn run_once(
 ) -> Result<Measurement, Box<dyn Error>> {
     let context = SessionContext::new();
     let execution_options = DeltaScanExecutionOptions::new()
-        .with_reader_backend(config.backend)
+        .with_parquet_backend(config.backend)
         .with_max_concurrent_file_reads_per_scan(Some(target_partitions.saturating_mul(3).max(1)))?
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_batches_per_partition(1)?
@@ -2105,7 +2105,7 @@ mod tests {
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "28");
+            assert_eq!(row[0], "29");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);
