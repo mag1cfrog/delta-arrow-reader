@@ -7,7 +7,7 @@ use snafu::ResultExt;
 
 use super::{
     kernel::{DeltaKernelEngineContext, KernelSnapshot, snapshot_arrow_schema},
-    protocol::DeltaProtocolInfo,
+    protocol::DeltaProtocol,
     uri::normalize_delta_table_uri,
 };
 use crate::{
@@ -23,14 +23,14 @@ const SNAPSHOT_LOAD_FAILED_EVENT: &str = "snapshot_load.failed";
 #[derive(Clone)]
 pub(crate) struct LoadedDeltaTableSnapshot {
     snapshot: KernelSnapshot,
-    protocol_info: DeltaProtocolInfo,
+    protocol: DeltaProtocol,
     schema: SchemaRef,
     engine_context: Arc<DeltaKernelEngineContext>,
 }
 
 pub(crate) struct StagedDeltaTableSnapshot {
     snapshot: KernelSnapshot,
-    protocol_info: DeltaProtocolInfo,
+    protocol: DeltaProtocol,
     engine_context: Arc<DeltaKernelEngineContext>,
 }
 
@@ -43,8 +43,8 @@ impl StagedDeltaTableSnapshot {
         self.snapshot.version()
     }
 
-    pub(crate) fn protocol_info(&self) -> &DeltaProtocolInfo {
-        &self.protocol_info
+    pub(crate) fn protocol(&self) -> &DeltaProtocol {
+        &self.protocol
     }
 
     pub(crate) fn into_loaded(self) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
@@ -56,7 +56,7 @@ impl StagedDeltaTableSnapshot {
                 })?;
         Ok(LoadedDeltaTableSnapshot {
             snapshot: self.snapshot,
-            protocol_info: self.protocol_info,
+            protocol: self.protocol,
             schema,
             engine_context: self.engine_context,
         })
@@ -73,8 +73,8 @@ impl LoadedDeltaTableSnapshot {
         self.snapshot.version()
     }
 
-    pub(crate) fn protocol_info(&self) -> &DeltaProtocolInfo {
-        &self.protocol_info
+    pub(crate) fn protocol(&self) -> &DeltaProtocol {
+        &self.protocol
     }
 
     pub(crate) fn schema(&self) -> SchemaRef {
@@ -154,11 +154,11 @@ fn stage_delta_table_snapshot(
         .context(SnapshotLoadSnafu {
             reason: snapshot_load_failed_reason(s3_auth_mode_hint),
         })?;
-    let protocol_info = DeltaProtocolInfo::from_snapshot(&snapshot);
+    let protocol = DeltaProtocol::from_snapshot(&snapshot);
 
     Ok(StagedDeltaTableSnapshot {
         snapshot,
-        protocol_info,
+        protocol,
         engine_context,
     })
 }
@@ -237,7 +237,7 @@ fn trace_snapshot_load_completed(selection: &'static str, snapshot: &LoadedDelta
         event = SNAPSHOT_LOAD_COMPLETED_EVENT,
         selection,
         snapshot_version = snapshot.version(),
-        protocol_reader_version = snapshot.protocol_info().min_reader_version()
+        protocol_reader_version = snapshot.protocol().min_reader_version()
     );
 }
 
@@ -250,7 +250,7 @@ fn trace_staged_snapshot_load_completed(
         event = SNAPSHOT_LOAD_COMPLETED_EVENT,
         selection,
         snapshot_version = snapshot.version(),
-        protocol_reader_version = snapshot.protocol_info().min_reader_version()
+        protocol_reader_version = snapshot.protocol().min_reader_version()
     );
 }
 
@@ -681,7 +681,7 @@ mod tests {
         )?;
 
         assert_eq!(staged.version(), 1);
-        assert_eq!(staged.protocol_info().min_reader_version(), 1);
+        assert_eq!(staged.protocol().min_reader_version(), 1);
         assert!(staged.table_uri().starts_with("file://"));
         let error = match staged.into_loaded() {
             Ok(_) => panic!("invalid nested column metadata must fail schema conversion"),

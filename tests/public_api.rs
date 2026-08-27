@@ -4,7 +4,7 @@ use std::{error::Error as _, future::Future};
 
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use delta_arrow_reader::{
-    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaProtocolInfo, DeltaReaderError,
+    DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaProtocol, DeltaReaderError,
     DeltaReaderPhase, DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaScanExecutionOptions,
     DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection, DeltaStorageOptions,
     DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
@@ -30,14 +30,14 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
     }
     let _ = snapshot;
     let _ = inspect_scan_metrics;
-    let min_reader_version: fn(&DeltaProtocolInfo) -> i32 = DeltaProtocolInfo::min_reader_version;
-    let min_writer_version: fn(&DeltaProtocolInfo) -> i32 = DeltaProtocolInfo::min_writer_version;
-    let reader_features: for<'a> fn(&'a DeltaProtocolInfo) -> &'a [String] =
-        DeltaProtocolInfo::reader_features;
-    let writer_features: for<'a> fn(&'a DeltaProtocolInfo) -> &'a [String] =
-        DeltaProtocolInfo::writer_features;
-    let first_unsupported_reader_feature: for<'a> fn(&'a DeltaProtocolInfo) -> Option<&'a str> =
-        DeltaProtocolInfo::first_unsupported_reader_feature;
+    let min_reader_version: fn(&DeltaProtocol) -> i32 = DeltaProtocol::min_reader_version;
+    let min_writer_version: fn(&DeltaProtocol) -> i32 = DeltaProtocol::min_writer_version;
+    let reader_features: for<'a> fn(&'a DeltaProtocol) -> &'a [String] =
+        DeltaProtocol::reader_features;
+    let writer_features: for<'a> fn(&'a DeltaProtocol) -> &'a [String] =
+        DeltaProtocol::writer_features;
+    let first_unsupported_reader_feature: for<'a> fn(&'a DeltaProtocol) -> Option<&'a str> =
+        DeltaProtocol::first_unsupported_reader_feature;
     let _ = (
         min_reader_version,
         min_writer_version,
@@ -213,7 +213,7 @@ fn streaming_reader_contract_is_public() {
     assert_future::<Result<DeltaTableSnapshot, DeltaReaderError>>(snapshot_builder.load_snapshot());
 
     let snapshot_version: fn(&DeltaTableSnapshot) -> u64 = DeltaTableSnapshot::version;
-    let snapshot_protocol: for<'a> fn(&'a DeltaTableSnapshot) -> &'a DeltaProtocolInfo =
+    let snapshot_protocol: for<'a> fn(&'a DeltaTableSnapshot) -> &'a DeltaProtocol =
         DeltaTableSnapshot::protocol;
     let snapshot_table_uri: for<'a> fn(&'a DeltaTableSnapshot) -> &'a str =
         DeltaTableSnapshot::table_uri;
@@ -231,7 +231,7 @@ fn streaming_reader_contract_is_public() {
 
     let version: fn(&DeltaTable) -> u64 = DeltaTable::version;
     let schema: fn(&DeltaTable) -> SchemaRef = DeltaTable::schema;
-    let protocol: for<'a> fn(&'a DeltaTable) -> &'a DeltaProtocolInfo = DeltaTable::protocol;
+    let protocol: for<'a> fn(&'a DeltaTable) -> &'a DeltaProtocol = DeltaTable::protocol;
     let table_uri: for<'a> fn(&'a DeltaTable) -> &'a str = DeltaTable::table_uri;
     let validate_protocol: fn(&DeltaTable) -> Result<(), DeltaReaderError> =
         DeltaTable::validate_protocol;

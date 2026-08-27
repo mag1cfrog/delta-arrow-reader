@@ -5,4 +5,4 @@ pub(crate) mod protocol;
 pub(crate) mod snapshot;
 mod uri;
 
-pub use protocol::DeltaProtocolInfo;
+pub use protocol::DeltaProtocol;

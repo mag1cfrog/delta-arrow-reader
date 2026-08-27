@@ -18,14 +18,14 @@ const SUPPORTED_READER_FEATURES: &[&str] = &[
 
 /// Protocol metadata captured from one immutable Delta snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeltaProtocolInfo {
+pub struct DeltaProtocol {
     min_reader_version: i32,
     min_writer_version: i32,
     reader_features: Vec<String>,
     writer_features: Vec<String>,
 }
 
-impl DeltaProtocolInfo {
+impl DeltaProtocol {
     pub(crate) fn from_snapshot(snapshot: &KernelSnapshot) -> Self {
         let DeltaKernelProtocol {
             min_reader_version,
@@ -72,7 +72,7 @@ impl DeltaProtocolInfo {
 }
 
 #[allow(dead_code)]
-pub(crate) fn validate_protocol(protocol: &DeltaProtocolInfo) -> Result<(), DeltaReaderError> {
+pub(crate) fn validate_protocol(protocol: &DeltaProtocol) -> Result<(), DeltaReaderError> {
     if !matches!(protocol.min_reader_version, 1 | 2)
         && protocol.min_reader_version != TABLE_FEATURES_READER_VERSION
     {
@@ -100,7 +100,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{DeltaProtocolInfo, validate_protocol};
+    use super::{DeltaProtocol, validate_protocol};
     use crate::{
         DeltaReaderError, DeltaReaderPhase, DeltaSnapshotSelection, DeltaStorageOptions,
         delta::snapshot::load_delta_table_snapshot_blocking,
@@ -150,7 +150,7 @@ mod tests {
             r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz","typeWidening-preview"],"writerFeatures":["timestampNtz","typeWidening-preview"]}}"#,
         )?;
         let loaded = table.load()?;
-        let protocol = loaded.protocol_info();
+        let protocol = loaded.protocol();
 
         assert_eq!(protocol.min_reader_version(), 3);
         assert_eq!(protocol.min_writer_version(), 7);
@@ -173,7 +173,7 @@ mod tests {
             r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz","deletionVectors","columnMapping","v2Checkpoint","vacuumProtocolCheck","typeWidening","typeWidening-preview"],"writerFeatures":["timestampNtz","deletionVectors","columnMapping","v2Checkpoint","vacuumProtocolCheck","typeWidening","typeWidening-preview"]}}"#,
         )?;
         let loaded = table.load()?;
-        let protocol = loaded.protocol_info();
+        let protocol = loaded.protocol();
 
         assert_eq!(
             protocol.reader_features(),
@@ -210,7 +210,7 @@ mod tests {
         ] {
             let table = DeltaLogTable::new(name, protocol_json)?;
             let loaded = table.load()?;
-            let protocol = loaded.protocol_info();
+            let protocol = loaded.protocol();
 
             assert_eq!(protocol.min_reader_version(), reader_version);
             assert!(protocol.reader_features().is_empty());
@@ -228,7 +228,7 @@ mod tests {
             r#"{"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["madeUpFeature"],"writerFeatures":["madeUpFeature"]}}"#,
         )?;
         let loaded = table.load()?;
-        let protocol = loaded.protocol_info();
+        let protocol = loaded.protocol();
 
         assert_eq!(protocol.reader_features(), ["madeUpFeature"]);
         assert_eq!(
@@ -262,7 +262,7 @@ mod tests {
         assert!(matches!(load_error, DeltaReaderError::SnapshotLoad { .. }));
         assert_eq!(load_error.phase(), DeltaReaderPhase::Snapshot);
 
-        let protocol = DeltaProtocolInfo {
+        let protocol = DeltaProtocol {
             min_reader_version: 4,
             min_writer_version: 7,
             reader_features: Vec::new(),

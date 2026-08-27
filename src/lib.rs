@@ -8,7 +8,7 @@ mod reader;
 #[cfg(feature = "datafusion")]
 pub use reader::datafusion;
 
-pub use delta::DeltaProtocolInfo;
+pub use delta::DeltaProtocol;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
 #[doc(hidden)]
 pub mod diagnostics {

@@ -90,7 +90,7 @@ pub(crate) fn build_scan(
         "Delta Kernel scan construction"
     )
     .entered();
-    validate_protocol(snapshot.protocol_info())?;
+    validate_protocol(snapshot.protocol())?;
     validate_projection(snapshot.schema().as_ref(), projection)?;
     snapshot
         .kernel_snapshot()

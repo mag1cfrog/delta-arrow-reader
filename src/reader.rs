@@ -41,7 +41,7 @@ use self::{
 };
 
 use crate::{
-    DeltaProtocolInfo, DeltaReaderError,
+    DeltaProtocol, DeltaReaderError,
     delta::{
         kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
         protocol::validate_protocol,
@@ -185,8 +185,8 @@ impl DeltaTableSnapshot {
     }
 
     /// Returns the loaded Delta protocol metadata.
-    pub fn protocol(&self) -> &DeltaProtocolInfo {
-        self.snapshot.protocol_info()
+    pub fn protocol(&self) -> &DeltaProtocol {
+        self.snapshot.protocol()
     }
 
     /// Returns the normalized table URI.
@@ -251,8 +251,8 @@ impl DeltaTable {
     }
 
     /// Returns the loaded Delta protocol metadata.
-    pub fn protocol(&self) -> &DeltaProtocolInfo {
-        self.snapshot.protocol_info()
+    pub fn protocol(&self) -> &DeltaProtocol {
+        self.snapshot.protocol()
     }
 
     /// Returns the normalized table URI.
