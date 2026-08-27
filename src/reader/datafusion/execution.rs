@@ -331,7 +331,6 @@ struct DeltaDataFusionExec {
     limiter: Arc<ScanReadLimiter>,
     dynamic_filters: Arc<[RetainedDynamicFilter]>,
     intra_file_repartitioning: IntraFileRepartitioning,
-    intra_file_repartitioning_applied: bool,
     parquet_metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 }
 
@@ -369,7 +368,6 @@ impl DeltaDataFusionExec {
             limiter,
             dynamic_filters: Arc::from([]),
             intra_file_repartitioning,
-            intra_file_repartitioning_applied: false,
             parquet_metadata_cache: None,
         }
     }
@@ -404,7 +402,6 @@ impl DeltaDataFusionExec {
             reader_plan: Arc::new(reader_plan),
             properties: scan_properties(&self.schema, partition_count),
             limiter,
-            intra_file_repartitioning_applied: true,
             parquet_metadata_cache: Some(Arc::new(RangedParquetMetadataCache::default())),
             ..self.clone()
         })
@@ -598,7 +595,7 @@ impl ExecutionPlan for DeltaDataFusionExec {
         _datafusion_target_partitions: usize,
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
-        if self.intra_file_repartitioning_applied
+        if self.parquet_metadata_cache.is_some()
             || self.reader_plan.execution_options.parquet_backend() != ParquetReaderBackend::Direct
         {
             return Ok(None);
