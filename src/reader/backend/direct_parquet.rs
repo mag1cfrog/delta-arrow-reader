@@ -89,14 +89,14 @@ struct DirectParquetObject {
     file_size: u64,
 }
 
-struct DirectParquetStream {
+struct PhysicalParquetStream {
     stream: ParquetRecordBatchStream<ParquetObjectReader>,
     schema_match: DirectParquetSchemaMatch,
     include_original_row_index: bool,
 }
 
-struct DirectParquetFileReadStream {
-    parquet: DirectParquetStream,
+struct LogicalDataFileStream {
+    physical_stream: PhysicalParquetStream,
     engine_context: Arc<DeltaKernelEngineContext>,
     kernel_schemas: KernelScanSchemas,
     logical_schema: SchemaRef,
@@ -226,7 +226,7 @@ impl DirectParquetFileReader {
     }
 
     #[cfg(test)]
-    async fn open_parquet_stream(
+    async fn open_physical_parquet_stream(
         &self,
         task: &DeltaScanFileTask,
         provider_schema: SchemaRef,
@@ -234,8 +234,8 @@ impl DirectParquetFileReader {
         physical_predicate: Option<&DeltaKernelPredicate>,
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
-    ) -> Result<DirectParquetStream, DeltaReaderError> {
-        self.open_parquet_stream_with_metadata_cache(
+    ) -> Result<PhysicalParquetStream, DeltaReaderError> {
+        self.open_physical_parquet_stream_with_metadata_cache(
             task,
             provider_schema,
             output_batch_size_rows,
@@ -248,7 +248,7 @@ impl DirectParquetFileReader {
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn open_parquet_stream_with_metadata_cache(
+    async fn open_physical_parquet_stream_with_metadata_cache(
         &self,
         task: &DeltaScanFileTask,
         provider_schema: SchemaRef,
@@ -257,7 +257,7 @@ impl DirectParquetFileReader {
         row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
         include_original_row_index: bool,
         metadata_cache: Option<&DirectParquetMetadataCache>,
-    ) -> Result<DirectParquetStream, DeltaReaderError> {
+    ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
         let file_size = object.file_size;
         let path = object.path;
@@ -367,7 +367,7 @@ impl DirectParquetFileReader {
                 reason: "parquet_read_setup_failed",
             })?;
 
-        Ok(DirectParquetStream {
+        Ok(PhysicalParquetStream {
             stream,
             schema_match,
             include_original_row_index,
@@ -377,7 +377,7 @@ impl DirectParquetFileReader {
     async fn open_logical_file_stream(
         self: &Arc<Self>,
         request: DirectParquetFileReadRequest,
-    ) -> Result<DirectParquetFileReadStream, DeltaReaderError> {
+    ) -> Result<LogicalDataFileStream, DeltaReaderError> {
         self.open_logical_file_stream_with_metadata_cache(request, None)
             .await
     }
@@ -386,12 +386,12 @@ impl DirectParquetFileReader {
         self: &Arc<Self>,
         request: DirectParquetFileReadRequest,
         metadata_cache: Option<&DirectParquetMetadataCache>,
-    ) -> Result<DirectParquetFileReadStream, DeltaReaderError> {
+    ) -> Result<LogicalDataFileStream, DeltaReaderError> {
         let include_original_row_index = request.task.deletion_vector.is_present();
-        let parquet = tokio::select! {
+        let physical_stream = tokio::select! {
             biased;
             () = request.cancellation.cancelled() => return Err(cancelled_error()),
-            result = self.open_parquet_stream_with_metadata_cache(
+            result = self.open_physical_parquet_stream_with_metadata_cache(
                 &request.task,
                 request.physical_schema,
                 request.output_batch_size_rows,
@@ -417,8 +417,8 @@ impl DirectParquetFileReader {
             return Err(cancelled_error());
         }
 
-        Ok(DirectParquetFileReadStream {
-            parquet,
+        Ok(LogicalDataFileStream {
+            physical_stream,
             engine_context: Arc::clone(&self.engine_context),
             kernel_schemas: request.kernel_schemas,
             logical_schema: request.logical_schema,
@@ -645,7 +645,7 @@ fn direct_parquet_file_executor_from_reader<const SHARED_METADATA: bool>(
     })
 }
 
-impl DirectParquetStream {
+impl PhysicalParquetStream {
     #[cfg(test)]
     async fn next_batch(&mut self) -> Result<Option<RecordBatch>, DeltaReaderError> {
         self.next_batch_with_original_row_indexes()
@@ -695,12 +695,12 @@ impl DirectParquetStream {
     }
 }
 
-impl DirectParquetFileReadStream {
+impl LogicalDataFileStream {
     async fn next_batch(&mut self) -> Result<Option<RecordBatch>, DeltaReaderError> {
         let next = tokio::select! {
             biased;
             () = self.cancellation.cancelled() => return Err(cancelled_error()),
-            result = self.parquet.next_batch_with_original_row_indexes() => result?,
+            result = self.physical_stream.next_batch_with_original_row_indexes() => result?,
         };
         let Some((physical_batch, original_row_indexes)) = next else {
             if let Some(deletion_vector) = self.deletion_vector.as_mut() {
@@ -2461,7 +2461,7 @@ mod tests {
             Field::new("name", DataType::Utf8, true),
         ]));
         let mut stream = reader
-            .open_parquet_stream(&task, schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, schema, None, None, None, false)
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let ids = batch
@@ -2491,7 +2491,7 @@ mod tests {
         ]));
 
         let error = match reader
-            .open_parquet_stream(&task, schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, schema, None, None, None, false)
             .await
         {
             Ok(_) => return Err("invalid Parquet range unexpectedly succeeded".into()),
@@ -2525,7 +2525,7 @@ mod tests {
         let first_cache = Arc::clone(&metadata_cache);
         let first = tokio::spawn(async move {
             first_reader
-                .open_parquet_stream_with_metadata_cache(
+                .open_physical_parquet_stream_with_metadata_cache(
                     &first_task,
                     first_schema,
                     None,
@@ -2541,7 +2541,7 @@ mod tests {
         let second_reader = Arc::clone(&reader);
         let second = tokio::spawn(async move {
             second_reader
-                .open_parquet_stream_with_metadata_cache(
+                .open_physical_parquet_stream_with_metadata_cache(
                     &second_task,
                     schema,
                     None,
@@ -2579,7 +2579,7 @@ mod tests {
         gated.fail_next_range();
 
         let error = match reader
-            .open_parquet_stream_with_metadata_cache(
+            .open_physical_parquet_stream_with_metadata_cache(
                 &task,
                 Arc::clone(&schema),
                 None,
@@ -2595,7 +2595,7 @@ mod tests {
         };
         assert_eq!(error.code(), "data_file_read");
         reader
-            .open_parquet_stream_with_metadata_cache(
+            .open_physical_parquet_stream_with_metadata_cache(
                 &task,
                 schema,
                 None,
@@ -2632,7 +2632,7 @@ mod tests {
         let first_cache = Arc::clone(&metadata_cache);
         let first = tokio::spawn(async move {
             first_reader
-                .open_parquet_stream_with_metadata_cache(
+                .open_physical_parquet_stream_with_metadata_cache(
                     &first_task,
                     first_schema,
                     None,
@@ -2656,7 +2656,7 @@ mod tests {
         let second_reader = Arc::clone(&reader);
         let second = tokio::spawn(async move {
             second_reader
-                .open_parquet_stream_with_metadata_cache(
+                .open_physical_parquet_stream_with_metadata_cache(
                     &task,
                     schema,
                     None,
@@ -2820,7 +2820,7 @@ mod tests {
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let provider_schema = Arc::new(Schema::new(vec![Field::new("name", DataType::Utf8, true)]));
         let mut stream = reader
-            .open_parquet_stream(&task, provider_schema, Some(2), None, None, false)
+            .open_physical_parquet_stream(&task, provider_schema, Some(2), None, None, false)
             .await?;
         let mut batches = Vec::new();
         while let Some(batch) = stream.next_batch().await? {
@@ -2879,7 +2879,7 @@ mod tests {
             (Arc::new(Schema::empty()), Vec::new(), 0),
         ] {
             let mut stream = reader
-                .open_parquet_stream(&task, schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, schema, None, None, None, false)
                 .await?;
             let mut rows = 0;
             while let Some(batch) = stream.next_batch().await? {
@@ -2922,7 +2922,7 @@ mod tests {
                 Field::new("name", DataType::Utf8, true),
             ]));
             let _stream = reader
-                .open_parquet_stream(&task, provider_schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, provider_schema, None, None, None, false)
                 .await?;
             snapshots.push(metrics.snapshot());
         }
@@ -3000,7 +3000,14 @@ mod tests {
         ] {
             let task = task(path, Some(u64::try_from(file_size)?))?;
             let mut stream = reader
-                .open_parquet_stream(&task, Arc::clone(&schema), None, predicate, None, false)
+                .open_physical_parquet_stream(
+                    &task,
+                    Arc::clone(&schema),
+                    None,
+                    predicate,
+                    None,
+                    false,
+                )
                 .await?;
             let mut ids = Vec::new();
             while let Some(batch) = stream.next_batch().await? {
@@ -3018,7 +3025,7 @@ mod tests {
 
         let task = task("with-stats.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
-            .open_parquet_stream(
+            .open_physical_parquet_stream(
                 &task,
                 Arc::clone(&schema),
                 None,
@@ -3067,7 +3074,7 @@ mod tests {
         let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
-            .open_parquet_stream(&task, schema, None, Some(&predicate), None, false)
+            .open_physical_parquet_stream(&task, schema, None, Some(&predicate), None, false)
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let amounts = batch
@@ -4077,7 +4084,7 @@ mod tests {
         )?;
         let corrupt_task = task("secret.parquet", Some(11))?;
         let error = match corrupt_reader
-            .open_parquet_stream(
+            .open_physical_parquet_stream(
                 &corrupt_task,
                 Arc::new(Schema::empty()),
                 None,
@@ -6010,7 +6017,7 @@ mod tests {
         let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
-            .open_parquet_stream(&task, provider_schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, provider_schema, None, None, None, false)
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
 
@@ -6062,7 +6069,7 @@ mod tests {
             true,
         )]));
         let mut stream = reader
-            .open_parquet_stream(&task, timestamp_schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, timestamp_schema, None, None, None, false)
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let timestamps = batch
@@ -6087,7 +6094,7 @@ mod tests {
             )])),
         ] {
             let error = match reader
-                .open_parquet_stream(&task, provider_schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, provider_schema, None, None, None, false)
                 .await
             {
                 Ok(_) => return Err("unsupported schema must fail".into()),
