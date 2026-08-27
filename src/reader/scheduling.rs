@@ -87,17 +87,17 @@ pub(crate) struct FileScheduler<Task, Output> {
 }
 
 type BatchResult = Result<RecordBatch, DeltaReaderError>;
-type StartPartition = Box<dyn FnOnce(mpsc::Sender<BatchResult>) -> JoinHandle<()> + Send>;
+type PartitionStarter = Box<dyn FnOnce(mpsc::Sender<BatchResult>) -> JoinHandle<()> + Send>;
 type PendingFileStreams = FuturesOrdered<ScheduledFileFuture<FileBatchStream>>;
 type ReadyFileStreams = VecDeque<Result<FileBatchStream, DeltaReaderError>>;
 
-struct PartitionStart {
+struct PendingPartition {
     output_buffer_batches: usize,
-    start: StartPartition,
+    start: PartitionStarter,
 }
 
 enum PartitionStreamState {
-    NotStarted(Option<PartitionStart>),
+    NotStarted(Option<PendingPartition>),
     Running {
         receiver: mpsc::Receiver<BatchResult>,
         task: JoinHandle<()>,
@@ -432,7 +432,7 @@ impl PartitionStream {
         });
 
         Self {
-            state: PartitionStreamState::NotStarted(Some(PartitionStart {
+            state: PartitionStreamState::NotStarted(Some(PendingPartition {
                 output_buffer_batches,
                 start,
             })),
