@@ -53,7 +53,7 @@ pub(crate) struct DeltaScanPlan {
     pub(crate) kernel_schemas: KernelScanSchemas,
     pub(crate) partitions: Vec<DeltaScanFileTaskPartition>,
     pub(crate) partition_target_diagnostic: DeltaScanPartitionTargetDiagnosticOutput,
-    pub(crate) add_actions_filtered_during_planning: Option<u64>,
+    pub(crate) add_actions_excluded_during_planning: Option<u64>,
     pub(crate) estimated_input_bytes: Option<u64>,
     pub(crate) estimated_input_rows: Option<u64>,
     pub(crate) physical_predicate: Option<DeltaKernelPredicate>,
@@ -71,7 +71,7 @@ pub(crate) struct DeltaUnpartitionedScanPlan {
     pub(crate) partition_columns: Vec<String>,
     pub(crate) kernel_schemas: KernelScanSchemas,
     pub(crate) file_tasks: Vec<DeltaScanFileTask>,
-    pub(crate) add_actions_filtered_during_planning: Option<u64>,
+    pub(crate) add_actions_excluded_during_planning: Option<u64>,
     pub(crate) estimated_input_bytes: Option<u64>,
     pub(crate) estimated_input_rows: Option<u64>,
     pub(crate) physical_predicate: Option<DeltaKernelPredicate>,
@@ -205,7 +205,7 @@ pub(crate) fn plan_unpartitioned_scan(
         partition_columns: snapshot.partition_columns().to_vec(),
         kernel_schemas: scan.schemas(),
         file_tasks,
-        add_actions_filtered_during_planning: metadata.add_actions_filtered_during_planning,
+        add_actions_excluded_during_planning: metadata.add_actions_excluded_during_planning,
         estimated_input_bytes,
         estimated_input_rows,
         physical_predicate,
@@ -234,7 +234,7 @@ fn finalize_scan_plan(
         parquet_backend: unpartitioned.execution_options.parquet_backend(),
         scan_partitions_planned: partitions.len(),
         files_planned,
-        add_actions_filtered_during_planning: unpartitioned.add_actions_filtered_during_planning,
+        add_actions_excluded_during_planning: unpartitioned.add_actions_excluded_during_planning,
         estimated_input_rows: unpartitioned.estimated_input_rows,
         estimated_input_bytes: unpartitioned.estimated_input_bytes,
     });
@@ -249,7 +249,7 @@ fn finalize_scan_plan(
         kernel_schemas: unpartitioned.kernel_schemas,
         partitions,
         partition_target_diagnostic,
-        add_actions_filtered_during_planning: unpartitioned.add_actions_filtered_during_planning,
+        add_actions_excluded_during_planning: unpartitioned.add_actions_excluded_during_planning,
         estimated_input_bytes: unpartitioned.estimated_input_bytes,
         estimated_input_rows: unpartitioned.estimated_input_rows,
         physical_predicate: unpartitioned.physical_predicate,
@@ -4678,8 +4678,8 @@ mod tests {
         assert_eq!(empty_metrics.scan_partitions_planned, 0);
         assert_eq!(empty_metrics.files_planned, 0);
         assert_eq!(
-            empty_metrics.add_actions_filtered_during_planning,
-            empty.add_actions_filtered_during_planning
+            empty_metrics.add_actions_excluded_during_planning,
+            empty.add_actions_excluded_during_planning
         );
         assert_eq!(empty_metrics.estimated_input_bytes, Some(0));
         assert_eq!(empty_metrics.estimated_input_rows, Some(0));
@@ -4747,7 +4747,7 @@ mod tests {
         assert_eq!(second.estimated_input_rows, None);
         assert_eq!(last.file_size, Some(1_000));
         assert_eq!(last.estimated_input_rows, Some(1_000));
-        assert_eq!(many.add_actions_filtered_during_planning, Some(0));
+        assert_eq!(many.add_actions_excluded_during_planning, Some(0));
         assert_eq!(many.estimated_input_bytes, Some(500_500));
         assert_eq!(many.estimated_input_rows, None);
         assert!(Arc::ptr_eq(
@@ -4784,7 +4784,7 @@ mod tests {
             ["first.parquet", "second.parquet", "third.parquet"]
         );
         assert_eq!(plan.file_tasks.len(), 3);
-        assert_eq!(plan.add_actions_filtered_during_planning, Some(0));
+        assert_eq!(plan.add_actions_excluded_during_planning, Some(0));
         assert_eq!(plan.estimated_input_bytes, Some(60));
         assert_eq!(plan.estimated_input_rows, Some(6));
         assert!(Arc::ptr_eq(&plan.engine_context, snapshot.engine_context()));
@@ -4890,7 +4890,7 @@ mod tests {
             .find(|task| task.path == "id-plain-missing-stats.parquet")
             .ok_or("expected surviving plain task")?;
         assert!(!plain.deletion_vector.is_present());
-        assert_eq!(plan.add_actions_filtered_during_planning, Some(2));
+        assert_eq!(plan.add_actions_excluded_during_planning, Some(2));
         assert_eq!(plan.estimated_input_rows, None);
         Ok(())
     }
@@ -4961,7 +4961,7 @@ mod tests {
         );
         assert!(plan.file_tasks[0].deletion_vector.is_present());
         assert!(!plan.file_tasks[1].deletion_vector.is_present());
-        assert_eq!(plan.add_actions_filtered_during_planning, Some(2));
+        assert_eq!(plan.add_actions_excluded_during_planning, Some(2));
         Ok(())
     }
 
@@ -5444,7 +5444,7 @@ mod tests {
         assert_eq!(metrics.parquet_backend, crate::ParquetReaderBackend::Direct);
         assert_eq!(metrics.scan_partitions_planned, 2);
         assert_eq!(metrics.files_planned, 4);
-        assert_eq!(metrics.add_actions_filtered_during_planning, Some(0));
+        assert_eq!(metrics.add_actions_excluded_during_planning, Some(0));
         assert_eq!(metrics.estimated_input_rows, Some(10));
         assert_eq!(metrics.estimated_input_bytes, Some(100));
         assert_eq!(metrics.scan_partitions_started, 0);
@@ -5732,7 +5732,7 @@ mod tests {
             .collect::<Vec<_>>();
         paths.sort_unstable();
         assert_eq!(paths, ["missing-stats.parquet", "possible.parquet"]);
-        assert_eq!(plan.add_actions_filtered_during_planning, Some(1));
+        assert_eq!(plan.add_actions_excluded_during_planning, Some(1));
         assert_eq!(plan.estimated_input_bytes, Some(50));
         assert_eq!(plan.estimated_input_rows, None);
         assert!(plan.physical_predicate.is_some());
@@ -6006,7 +6006,7 @@ mod tests {
         let final_state = (
             plan.partitions.len(),
             planned_tasks(&plan).count(),
-            plan.add_actions_filtered_during_planning,
+            plan.add_actions_excluded_during_planning,
             plan.estimated_input_bytes,
             plan.estimated_input_rows,
         );

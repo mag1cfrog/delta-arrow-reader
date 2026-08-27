@@ -93,7 +93,7 @@ impl KernelScanSchemas {
 #[allow(dead_code)]
 pub(crate) struct KernelScanMetadata {
     pub(crate) files: Vec<KernelScanFileMetadata>,
-    pub(crate) add_actions_filtered_during_planning: Option<u64>,
+    pub(crate) add_actions_excluded_during_planning: Option<u64>,
 }
 
 #[allow(dead_code)]
@@ -182,7 +182,7 @@ impl KernelScan {
         }
         Ok(KernelScanMetadata {
             files,
-            add_actions_filtered_during_planning: saw_batch.then_some(filtered).flatten(),
+            add_actions_excluded_during_planning: saw_batch.then_some(filtered).flatten(),
         })
     }
 }

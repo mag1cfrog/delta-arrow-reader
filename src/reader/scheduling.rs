@@ -770,7 +770,7 @@ mod tests {
             parquet_backend: ParquetReaderBackend::Direct,
             scan_partitions_planned: 1,
             files_planned: 3,
-            add_actions_filtered_during_planning: None,
+            add_actions_excluded_during_planning: None,
             estimated_input_rows: Some(3),
             estimated_input_bytes: Some(3),
         })

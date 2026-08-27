@@ -21,8 +21,8 @@ pub struct DeltaScanMetricsSnapshot {
     pub scan_partitions_planned: u64,
     /// Data files selected during planning.
     pub files_planned: u64,
-    /// Add actions filtered during planning, when known.
-    pub add_actions_filtered_during_planning: Option<u64>,
+    /// Add actions excluded during planning, when known.
+    pub add_actions_excluded_during_planning: Option<u64>,
     /// Estimated rows in selected input files before row filtering, when known for every file.
     pub estimated_input_rows: Option<u64>,
     /// Estimated bytes in selected input files, when every file reported a size.
@@ -78,7 +78,7 @@ struct DeltaScanMetricsInner {
     parquet_backend: ParquetReaderBackend,
     scan_partitions_planned: AtomicU64,
     files_planned: u64,
-    add_actions_filtered_during_planning: Option<u64>,
+    add_actions_excluded_during_planning: Option<u64>,
     estimated_input_rows: Option<u64>,
     estimated_input_bytes: Option<u64>,
     scan_partitions_started: AtomicU64,
@@ -104,7 +104,7 @@ pub(crate) struct DeltaScanMetricsConfig {
     pub(crate) parquet_backend: ParquetReaderBackend,
     pub(crate) scan_partitions_planned: usize,
     pub(crate) files_planned: usize,
-    pub(crate) add_actions_filtered_during_planning: Option<u64>,
+    pub(crate) add_actions_excluded_during_planning: Option<u64>,
     pub(crate) estimated_input_rows: Option<u64>,
     pub(crate) estimated_input_bytes: Option<u64>,
 }
@@ -120,7 +120,7 @@ impl DeltaScanMetrics {
                     config.scan_partitions_planned,
                 )),
                 files_planned: usize_to_u64_saturating(config.files_planned),
-                add_actions_filtered_during_planning: config.add_actions_filtered_during_planning,
+                add_actions_excluded_during_planning: config.add_actions_excluded_during_planning,
                 estimated_input_rows: config.estimated_input_rows,
                 estimated_input_bytes: config.estimated_input_bytes,
                 scan_partitions_started: AtomicU64::new(0),
@@ -150,7 +150,7 @@ impl DeltaScanMetrics {
             parquet_backend: inner.parquet_backend,
             scan_partitions_planned: load(&inner.scan_partitions_planned),
             files_planned: inner.files_planned,
-            add_actions_filtered_during_planning: inner.add_actions_filtered_during_planning,
+            add_actions_excluded_during_planning: inner.add_actions_excluded_during_planning,
             estimated_input_rows: inner.estimated_input_rows,
             estimated_input_bytes: inner.estimated_input_bytes,
             scan_partitions_started: load(&inner.scan_partitions_started),
@@ -294,7 +294,7 @@ mod tests {
             parquet_backend,
             scan_partitions_planned: 3,
             files_planned: 5,
-            add_actions_filtered_during_planning: Some(2),
+            add_actions_excluded_during_planning: Some(2),
             estimated_input_rows: Some(99),
             estimated_input_bytes: Some(42),
         })
@@ -307,7 +307,7 @@ mod tests {
         assert_eq!(direct.parquet_backend, ParquetReaderBackend::Direct);
         assert_eq!(direct.scan_partitions_planned, 3);
         assert_eq!(direct.files_planned, 5);
-        assert_eq!(direct.add_actions_filtered_during_planning, Some(2));
+        assert_eq!(direct.add_actions_excluded_during_planning, Some(2));
         assert_eq!(direct.estimated_input_rows, Some(99));
         assert_eq!(direct.estimated_input_bytes, Some(42));
         assert_eq!(direct.scan_partitions_started, 0);
