@@ -298,10 +298,9 @@ fn datafusion_metrics_contract_is_public() {
     let registration_name: for<'a> fn(&'a ScanMetrics) -> Option<&'a str> =
         ScanMetrics::registration_name;
     let snapshot: fn(&ScanMetrics) -> ScanMetricsSnapshot = ScanMetrics::snapshot;
-    let same_instance: fn(&ScanMetrics, &ScanMetrics) -> bool = ScanMetrics::same_instance;
     let collect: fn(&dyn datafusion::physical_plan::ExecutionPlan) -> Vec<ScanMetrics> =
         collect_scan_metrics;
-    let _ = (registration_name, snapshot, same_instance, collect, inspect);
+    let _ = (registration_name, snapshot, collect, inspect);
 }
 
 #[cfg(feature = "datafusion")]

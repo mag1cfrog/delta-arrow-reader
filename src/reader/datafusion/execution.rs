@@ -196,11 +196,6 @@ impl ScanMetrics {
         }
     }
 
-    /// Returns whether both handles refer to the same live metrics instance.
-    pub fn same_instance(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.inner, &other.inner)
-    }
-
     fn record_configured_batch_size_rows(&self, value: usize) {
         self.inner
             .configured_batch_size_rows
@@ -1819,8 +1814,8 @@ mod tests {
         assert_eq!(shared_handles.len(), 2);
         assert_eq!(shared_handles[0].registration_name(), Some("first"));
         assert_eq!(shared_handles[1].registration_name(), Some("second"));
-        assert!(handles[0].same_instance(&shared_handles[0]));
-        assert!(!handles[0].same_instance(&shared_handles[1]));
+        assert_eq!(handles[0].identity(), shared_handles[0].identity());
+        assert_ne!(handles[0].identity(), shared_handles[1].identity());
 
         drop(shared_metrics_union);
         drop(union);
