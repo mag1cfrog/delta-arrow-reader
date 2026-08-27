@@ -1491,7 +1491,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
                 .map(|snapshots| {
                     snapshots
                         .iter()
-                        .map(|snapshot| reader(&snapshot.reader_metrics))
+                        .map(|snapshot| reader(&snapshot.core_metrics))
                         .sum()
                 })
                 .collect::<Vec<_>>(),
@@ -1511,7 +1511,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         optional_percentile(
             snapshots.iter().map(|snapshots| {
                 snapshots.iter().try_fold(0_u64, |sum, snapshot| {
-                    sum.checked_add(select(&snapshot.reader_metrics)?)
+                    sum.checked_add(select(&snapshot.core_metrics)?)
                 })
             }),
             50,
@@ -1523,7 +1523,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
                 .iter()
                 .filter_map(|snapshots| {
                     snapshots.iter().try_fold(0_u64, |sum, snapshot| {
-                        sum.checked_add(select(&snapshot.reader_metrics)?)
+                        sum.checked_add(select(&snapshot.core_metrics)?)
                     })
                 })
                 .max()
@@ -1531,7 +1531,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
     let scan_metadata_exhausted = summarize_scan_metadata(snapshots.iter().flat_map(|snapshots| {
         snapshots
             .iter()
-            .map(|snapshot| snapshot.reader_metrics.scan_metadata_exhausted)
+            .map(|snapshot| snapshot.core_metrics.scan_metadata_exhausted)
     }));
     ReadSummary {
         scan_count: snapshots
@@ -1545,7 +1545,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             .map(|snapshots| {
                 snapshots
                     .iter()
-                    .map(|snapshot| snapshot.reader_metrics.scan_partitions_planned)
+                    .map(|snapshot| snapshot.core_metrics.scan_partitions_planned)
                     .sum()
             })
             .max()
@@ -1555,7 +1555,7 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
             .map(|snapshots| {
                 snapshots
                     .iter()
-                    .map(|snapshot| snapshot.reader_metrics.files_planned)
+                    .map(|snapshot| snapshot.core_metrics.files_planned)
                     .sum()
             })
             .max()
@@ -2069,7 +2069,7 @@ mod tests {
             let unequal_measurement = run_once(&unequal_config, &unequal, 4).await?;
             assert_eq!(unequal_measurement.produced_rows, 68_608);
             assert_eq!(
-                unequal_measurement.metrics[0].reader_metrics.files_planned,
+                unequal_measurement.metrics[0].core_metrics.files_planned,
                 32
             );
 
@@ -2088,7 +2088,7 @@ mod tests {
                 false,
             )?;
             let http_measurement = run_once(&http_config, &http, 4).await?;
-            let reader = &http_measurement.metrics[0].reader_metrics;
+            let reader = &http_measurement.metrics[0].core_metrics;
             assert_eq!(reader.scheduler_rows_emitted, 32_768);
             assert_eq!(reader.parquet_data_file_range_get_operations, Some(8));
             Ok::<_, Box<dyn Error>>(())

@@ -97,8 +97,8 @@ impl IntraFileRepartitioning {
 /// Immutable point-in-time DataFusion scan metrics.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanMetricsSnapshot {
-    /// Core reader planning and execution metrics.
-    pub reader_metrics: DeltaScanMetricsSnapshot,
+    /// Core Delta scan planning and execution metrics.
+    pub core_metrics: DeltaScanMetricsSnapshot,
     /// Whether the provider requested Arrow view arrays for string and binary data columns.
     pub use_arrow_view_types: bool,
     /// Configured DataFusion batch row target observed at execution.
@@ -131,7 +131,7 @@ pub struct ScanMetrics {
 
 struct MetricsInner {
     registration_name: Option<String>,
-    reader: DeltaScanMetrics,
+    core_metrics: DeltaScanMetrics,
     use_arrow_view_types: bool,
     configured_batch_size_rows: AtomicU64,
     dynamic_partition_tasks_pruned: AtomicU64,
@@ -148,13 +148,13 @@ impl ScanMetrics {
     #[allow(dead_code)]
     fn new(
         registration_name: Option<String>,
-        reader: DeltaScanMetrics,
+        core_metrics: DeltaScanMetrics,
         use_arrow_view_types: bool,
     ) -> Self {
         Self {
             inner: Arc::new(MetricsInner {
                 registration_name,
-                reader,
+                core_metrics,
                 use_arrow_view_types,
                 configured_batch_size_rows: AtomicU64::new(0),
                 dynamic_partition_tasks_pruned: AtomicU64::new(0),
@@ -178,7 +178,7 @@ impl ScanMetrics {
     pub fn snapshot(&self) -> ScanMetricsSnapshot {
         let inner = self.inner.as_ref();
         ScanMetricsSnapshot {
-            reader_metrics: inner.reader.snapshot(),
+            core_metrics: inner.core_metrics.snapshot(),
             use_arrow_view_types: inner.use_arrow_view_types,
             configured_batch_size_rows: nonzero_load(&inner.configured_batch_size_rows),
             dynamic_partition_tasks_pruned: load(&inner.dynamic_partition_tasks_pruned),
@@ -1366,7 +1366,7 @@ mod tests {
         )?;
         let expected_bytes = collect_scan_metrics(plan.as_ref())[0]
             .snapshot()
-            .reader_metrics
+            .core_metrics
             .estimated_input_bytes;
         let mut config = ConfigOptions::new();
         config.optimizer.repartition_file_min_size = 1;
@@ -1390,9 +1390,9 @@ mod tests {
         actual_ids.sort_unstable();
         assert_eq!(actual_ids, [1, 2, 3, 4]);
         let metrics = collect_scan_metrics(repartitioned.as_ref())[0].snapshot();
-        assert_eq!(metrics.reader_metrics.scan_partitions_planned, 4);
+        assert_eq!(metrics.core_metrics.scan_partitions_planned, 4);
         assert_eq!(
-            metrics.reader_metrics.estimated_parquet_task_bytes_admitted,
+            metrics.core_metrics.estimated_parquet_task_bytes_admitted,
             expected_bytes
         );
 
@@ -1489,9 +1489,9 @@ mod tests {
         assert_eq!(handles[0].registration_name(), None);
         let metrics = handles[0].snapshot();
         assert_eq!(metrics.configured_batch_size_rows, Some(1));
-        assert_eq!(metrics.reader_metrics.scan_partitions_started, 4);
-        assert_eq!(metrics.reader_metrics.file_tasks_completed, 4);
-        assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 6);
+        assert_eq!(metrics.core_metrics.scan_partitions_started, 4);
+        assert_eq!(metrics.core_metrics.file_tasks_completed, 4);
+        assert_eq!(metrics.core_metrics.scheduler_rows_emitted, 6);
 
         let hidden = build_plan(
             &table,
@@ -1534,7 +1534,7 @@ mod tests {
         assert_eq!(
             collect_scan_metrics(partition_filter.as_ref())[0]
                 .snapshot()
-                .reader_metrics
+                .core_metrics
                 .file_tasks_started,
             1
         );
@@ -1649,8 +1649,8 @@ mod tests {
         assert_eq!(metrics.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
         assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
-        assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
-        assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
+        assert_eq!(metrics.core_metrics.file_tasks_started, 1);
+        assert_eq!(metrics.core_metrics.file_tasks_completed, 1);
         assert_eq!(
             collect_scan_metrics(plan.as_ref())[0]
                 .snapshot()
@@ -1738,8 +1738,8 @@ mod tests {
         assert_eq!(metrics.dynamic_filter_snapshot_attempts, 2);
         assert_eq!(metrics.dynamic_partition_tasks_kept, 1);
         assert_eq!(metrics.dynamic_partition_tasks_pruned, 1);
-        assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
-        assert_eq!(metrics.reader_metrics.file_tasks_completed, 1);
+        assert_eq!(metrics.core_metrics.file_tasks_started, 1);
+        assert_eq!(metrics.core_metrics.file_tasks_completed, 1);
         Ok(())
     }
 
@@ -1828,7 +1828,7 @@ mod tests {
         drop(union);
         drop(first);
         drop(second);
-        assert_eq!(handles[0].snapshot().reader_metrics.file_tasks_started, 0);
+        assert_eq!(handles[0].snapshot().core_metrics.file_tasks_started, 0);
         assert_eq!(handles[0].registration_name(), Some("first"));
         Ok(())
     }
@@ -2014,7 +2014,7 @@ mod tests {
         let failed = collect_scan_metrics(missing_plan.as_ref())
             .pop()
             .ok_or("missing failure metrics")?;
-        assert_eq!(failed.snapshot().reader_metrics.file_tasks_started, 1);
+        assert_eq!(failed.snapshot().core_metrics.file_tasks_started, 1);
 
         let fixture = TestTable::partitioned("drop")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -2034,7 +2034,7 @@ mod tests {
         let stable = handle.snapshot();
         tokio::task::yield_now().await;
         assert_eq!(handle.snapshot(), stable);
-        assert!(stable.reader_metrics.file_tasks_started >= 1);
+        assert!(stable.core_metrics.file_tasks_started >= 1);
         let retry = datafusion::physical_plan::collect(
             Arc::clone(&drop_plan),
             SessionContext::new().task_ctx(),
