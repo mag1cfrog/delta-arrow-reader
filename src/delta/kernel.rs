@@ -153,10 +153,6 @@ impl KernelScan {
         self.schemas.clone()
     }
 
-    pub(crate) fn has_physical_predicate(&self) -> bool {
-        self.scan.physical_predicate().is_some()
-    }
-
     pub(crate) fn physical_predicate(&self) -> Option<DeltaKernelPredicate> {
         self.scan.physical_predicate().map(DeltaKernelPredicate)
     }

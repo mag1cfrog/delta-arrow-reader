@@ -6082,7 +6082,7 @@ mod tests {
 
         assert_eq!(field_names(&scan.logical_schema()), ["label"]);
         assert_eq!(field_names(&scan.physical_schema()), ["label"]);
-        assert!(scan.has_physical_predicate());
+        assert!(scan.physical_predicate().is_some());
 
         Ok(())
     }
