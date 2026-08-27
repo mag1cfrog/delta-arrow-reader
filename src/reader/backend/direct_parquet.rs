@@ -102,7 +102,7 @@ struct LogicalDataFileStream {
     _permit: FileReadPermit,
 }
 
-struct LogicalFileReadRequest {
+struct LogicalDataFileReadRequest {
     task: DeltaScanFileTask,
     physical_schema: SchemaRef,
     logical_schema: SchemaRef,
@@ -342,9 +342,9 @@ impl DirectParquetReader {
         })
     }
 
-    async fn open_logical_file_stream(
+    async fn open_logical_data_file_stream(
         self: &Arc<Self>,
-        request: LogicalFileReadRequest,
+        request: LogicalDataFileReadRequest,
     ) -> Result<LogicalDataFileStream, DeltaReaderError> {
         let include_original_row_index = request.task.deletion_vector.is_present();
         let physical_stream = tokio::select! {
@@ -539,7 +539,7 @@ pub(crate) fn direct_parquet_file_executor(
         let physical_predicate = physical_predicate.clone();
         let row_predicate = row_predicate.clone();
         Box::pin(async move {
-            let request = LogicalFileReadRequest {
+            let request = LogicalDataFileReadRequest {
                 task,
                 physical_schema,
                 logical_schema,
@@ -550,7 +550,7 @@ pub(crate) fn direct_parquet_file_executor(
                 permit,
                 cancellation,
             };
-            let file = reader.open_logical_file_stream(request).await?;
+            let file = reader.open_logical_data_file_stream(request).await?;
             let batches = stream::try_unfold(file, |mut file| async move {
                 file.next_batch()
                     .await
@@ -1381,8 +1381,8 @@ mod tests {
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
-        DirectParquetReader, LogicalFileReadRequest, RangedParquetMetadataCache, data_file_error,
-        direct_parquet_file_executor,
+        DirectParquetReader, LogicalDataFileReadRequest, RangedParquetMetadataCache,
+        data_file_error, direct_parquet_file_executor,
     };
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
@@ -2146,8 +2146,8 @@ mod tests {
         task: DeltaScanFileTask,
         permit: FileReadPermit,
         cancellation: ScanCancellation,
-    ) -> LogicalFileReadRequest {
-        LogicalFileReadRequest {
+    ) -> LogicalDataFileReadRequest {
+        LogicalDataFileReadRequest {
             task,
             physical_schema: Arc::clone(&plan.physical_schema),
             logical_schema: Arc::clone(&plan.logical_schema),
@@ -2628,7 +2628,7 @@ mod tests {
             permit,
             ScanCancellation::new(),
         );
-        let file = reader.open_logical_file_stream(request).await?;
+        let file = reader.open_logical_data_file_stream(request).await?;
 
         let mut next_permit = Box::pin(partition.acquire());
         assert!(matches!(
@@ -3824,7 +3824,8 @@ mod tests {
             let permit = partition.acquire().await?;
             let cancellation = ScanCancellation::new();
             let request = file_read_request(&plan, task, permit, cancellation.clone());
-            let job = tokio::spawn(async move { reader.open_logical_file_stream(request).await });
+            let job =
+                tokio::spawn(async move { reader.open_logical_data_file_stream(request).await });
 
             tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
             assert!(cancellation.cancel());
@@ -3877,7 +3878,7 @@ mod tests {
         let permit = partition.acquire().await?;
         let cancellation = ScanCancellation::new();
         let request = file_read_request(&plan, task, permit, cancellation.clone());
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let before = plan.metrics.snapshot();
         gated.gate_next_range();
         let job = tokio::spawn(async move { file.next_batch().await });
@@ -3990,7 +3991,7 @@ mod tests {
         let permit = partition.acquire().await?;
         let decode_task = task.clone();
         let request = file_read_request(&plan, task, permit, ScanCancellation::new());
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let before = plan.metrics.snapshot();
         gated.fail_next_range();
         let error = file
@@ -4016,7 +4017,7 @@ mod tests {
         let permit =
             tokio::time::timeout(std::time::Duration::from_secs(5), partition.acquire()).await??;
         let request = file_read_request(&plan, decode_task, permit, ScanCancellation::new());
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let before = plan.metrics.snapshot();
         gated.corrupt_next_range();
         let error = file
@@ -4088,7 +4089,7 @@ mod tests {
             permit,
             ScanCancellation::new(),
         );
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let error = file
             .next_batch()
             .await
@@ -4100,7 +4101,7 @@ mod tests {
         let permit = partition.acquire().await?;
         let mut request = file_read_request(&plan, task, permit, ScanCancellation::new());
         request.logical_schema = Arc::new(Schema::empty());
-        let mut file = reader.open_logical_file_stream(request).await?;
+        let mut file = reader.open_logical_data_file_stream(request).await?;
         let error = file
             .next_batch()
             .await
