@@ -264,7 +264,7 @@ fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
             .load_snapshot(),
     )?;
     assert_eq!(fixed_snapshot.version(), 0);
-    assert_eq!(fixed_snapshot.table_uri(), fixture.normalized_uri()?);
+    assert_eq!(fixed_snapshot.table_url(), fixture.normalized_uri()?);
     fixed_snapshot.validate_protocol()?;
     assert!(!format!("{fixed_snapshot:?}").contains(&secret_uri));
 
@@ -273,7 +273,7 @@ fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
 
     assert_eq!(latest.version(), 1);
     assert_eq!(fixed.version(), 0);
-    assert_eq!(latest.table_uri(), fixture.normalized_uri()?);
+    assert_eq!(latest.table_url(), fixture.normalized_uri()?);
     assert!(Arc::ptr_eq(&latest.schema(), &cloned.schema()));
     latest.validate_protocol()?;
     assert!(!format!("{latest:?}").contains(&secret_uri));

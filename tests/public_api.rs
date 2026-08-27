@@ -215,8 +215,8 @@ fn streaming_reader_contract_is_public() {
     let snapshot_version: fn(&DeltaTableSnapshot) -> u64 = DeltaTableSnapshot::version;
     let snapshot_protocol: for<'a> fn(&'a DeltaTableSnapshot) -> &'a DeltaProtocol =
         DeltaTableSnapshot::protocol;
-    let snapshot_table_uri: for<'a> fn(&'a DeltaTableSnapshot) -> &'a str =
-        DeltaTableSnapshot::table_uri;
+    let snapshot_table_url: for<'a> fn(&'a DeltaTableSnapshot) -> &'a str =
+        DeltaTableSnapshot::table_url;
     let validate_snapshot_protocol: fn(&DeltaTableSnapshot) -> Result<(), DeltaReaderError> =
         DeltaTableSnapshot::validate_protocol;
     let into_table: fn(DeltaTableSnapshot) -> Result<DeltaTable, DeltaReaderError> =
@@ -224,7 +224,7 @@ fn streaming_reader_contract_is_public() {
     let _ = (
         snapshot_version,
         snapshot_protocol,
-        snapshot_table_uri,
+        snapshot_table_url,
         validate_snapshot_protocol,
         into_table,
     );
@@ -232,7 +232,7 @@ fn streaming_reader_contract_is_public() {
     let version: fn(&DeltaTable) -> u64 = DeltaTable::version;
     let schema: fn(&DeltaTable) -> SchemaRef = DeltaTable::schema;
     let protocol: for<'a> fn(&'a DeltaTable) -> &'a DeltaProtocol = DeltaTable::protocol;
-    let table_uri: for<'a> fn(&'a DeltaTable) -> &'a str = DeltaTable::table_uri;
+    let table_url: for<'a> fn(&'a DeltaTable) -> &'a str = DeltaTable::table_url;
     let validate_protocol: fn(&DeltaTable) -> Result<(), DeltaReaderError> =
         DeltaTable::validate_protocol;
     let scan: for<'a> fn(&'a DeltaTable) -> DeltaScanBuilder<'a> = DeltaTable::scan;
@@ -241,7 +241,7 @@ fn streaming_reader_contract_is_public() {
         table_version,
         schema,
         protocol,
-        table_uri,
+        table_url,
         validate_protocol,
         scan,
     );

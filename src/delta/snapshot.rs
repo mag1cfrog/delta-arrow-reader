@@ -35,7 +35,7 @@ pub(crate) struct StagedDeltaTableSnapshot {
 }
 
 impl StagedDeltaTableSnapshot {
-    pub(crate) fn table_uri(&self) -> &str {
+    pub(crate) fn table_url(&self) -> &str {
         self.engine_context.table_url().as_str()
     }
 
@@ -65,7 +65,7 @@ impl StagedDeltaTableSnapshot {
 
 #[allow(dead_code)]
 impl LoadedDeltaTableSnapshot {
-    pub(crate) fn table_uri(&self) -> &str {
+    pub(crate) fn table_url(&self) -> &str {
         self.engine_context.table_url().as_str()
     }
 
@@ -581,7 +581,7 @@ mod tests {
 
         assert_eq!(latest.version(), 1);
         assert_eq!(fixed.version(), 0);
-        assert!(latest.table_uri().starts_with("file://"));
+        assert!(latest.table_url().starts_with("file://"));
         assert!(Arc::ptr_eq(
             latest.engine_context(),
             cloned.engine_context()
@@ -682,7 +682,7 @@ mod tests {
 
         assert_eq!(staged.version(), 1);
         assert_eq!(staged.protocol().min_reader_version(), 1);
-        assert!(staged.table_uri().starts_with("file://"));
+        assert!(staged.table_url().starts_with("file://"));
         let error = match staged.into_loaded() {
             Ok(_) => panic!("invalid nested column metadata must fail schema conversion"),
             Err(error) => error,

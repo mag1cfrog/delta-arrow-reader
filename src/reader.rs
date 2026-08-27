@@ -195,11 +195,11 @@ impl DeltaTableSnapshot {
         self.snapshot.protocol()
     }
 
-    /// Returns the normalized table URI.
+    /// Returns the normalized table URL.
     ///
     /// This value may contain sensitive caller input. Do not log or expose it.
-    pub fn table_uri(&self) -> &str {
-        self.snapshot.table_uri()
+    pub fn table_url(&self) -> &str {
+        self.snapshot.table_url()
     }
 
     /// Validates the loaded snapshot against the supported reader protocol.
@@ -261,11 +261,11 @@ impl DeltaTable {
         self.snapshot.protocol()
     }
 
-    /// Returns the normalized table URI.
+    /// Returns the normalized table URL.
     ///
     /// This value may contain sensitive caller input. Do not log or expose it.
-    pub fn table_uri(&self) -> &str {
-        self.snapshot.table_uri()
+    pub fn table_url(&self) -> &str {
+        self.snapshot.table_url()
     }
 
     #[allow(dead_code)]
