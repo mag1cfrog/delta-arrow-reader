@@ -21,7 +21,7 @@ const SNAPSHOT_LOAD_COMPLETED_EVENT: &str = "snapshot_load.completed";
 const SNAPSHOT_LOAD_FAILED_EVENT: &str = "snapshot_load.failed";
 
 #[derive(Clone)]
-pub(crate) struct LoadedDeltaTableSnapshot {
+pub(crate) struct ArrowTableSnapshot {
     snapshot: KernelSnapshot,
     protocol: DeltaProtocol,
     schema: SchemaRef,
@@ -47,14 +47,14 @@ impl KernelTableSnapshot {
         &self.protocol
     }
 
-    pub(crate) fn into_loaded(self) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
+    pub(crate) fn into_arrow_snapshot(self) -> Result<ArrowTableSnapshot, DeltaReaderError> {
         let schema =
             snapshot_arrow_schema(&self.snapshot)
                 .boxed()
                 .context(SchemaConversionSnafu {
                     reason: "schema_conversion_failed",
                 })?;
-        Ok(LoadedDeltaTableSnapshot {
+        Ok(ArrowTableSnapshot {
             snapshot: self.snapshot,
             protocol: self.protocol,
             schema,
@@ -64,7 +64,7 @@ impl KernelTableSnapshot {
 }
 
 #[allow(dead_code)]
-impl LoadedDeltaTableSnapshot {
+impl ArrowTableSnapshot {
     pub(crate) fn table_url(&self) -> &str {
         self.engine_context.table_url().as_str()
     }
@@ -102,11 +102,11 @@ pub(crate) fn load_delta_table_snapshot_blocking(
     table_location: &str,
     storage_options: &DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     trace_snapshot_load_started(selection_kind);
     let result = stage_delta_table_snapshot(table_location, storage_options, selection)
-        .and_then(KernelTableSnapshot::into_loaded);
+        .and_then(KernelTableSnapshot::into_arrow_snapshot);
 
     match &result {
         Ok(snapshot) => trace_snapshot_load_completed(selection_kind, snapshot),
@@ -172,7 +172,7 @@ pub(crate) async fn load_delta_table_snapshot_async(
     table_location: String,
     storage_options: DeltaStorageOptions,
     selection: DeltaSnapshotSelection,
-) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
+) -> Result<ArrowTableSnapshot, DeltaReaderError> {
     let selection_kind = snapshot_selection_kind(selection);
     let result = tokio::task::spawn_blocking(move || {
         load_delta_table_snapshot_blocking(&table_location, &storage_options, selection)
@@ -231,7 +231,7 @@ fn trace_snapshot_load_started(selection: &'static str) {
     );
 }
 
-fn trace_snapshot_load_completed(selection: &'static str, snapshot: &LoadedDeltaTableSnapshot) {
+fn trace_snapshot_load_completed(selection: &'static str, snapshot: &ArrowTableSnapshot) {
     tracing::debug!(
         target: TRACING_TARGET,
         event = SNAPSHOT_LOAD_COMPLETED_EVENT,
@@ -680,7 +680,7 @@ mod tests {
         assert_eq!(kernel_snapshot.version(), 1);
         assert_eq!(kernel_snapshot.protocol().min_reader_version(), 1);
         assert!(kernel_snapshot.table_url().starts_with("file://"));
-        let error = match kernel_snapshot.into_loaded() {
+        let error = match kernel_snapshot.into_arrow_snapshot() {
             Ok(_) => panic!("invalid nested column metadata must fail schema conversion"),
             Err(error) => error,
         };

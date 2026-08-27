@@ -27,7 +27,7 @@ use crate::{
             KernelScan, KernelScanFileMetadata, KernelScanSchemas,
         },
         protocol::validate_protocol,
-        snapshot::LoadedDeltaTableSnapshot,
+        snapshot::ArrowTableSnapshot,
     },
     error::{
         InvalidConfigurationSnafu, InvalidProjectionSnafu, ScanPartitionPlanningSnafu,
@@ -80,7 +80,7 @@ pub(crate) struct DeltaUnpartitionedScanPlan {
 
 #[allow(dead_code)]
 pub(crate) fn build_kernel_scan(
-    snapshot: &LoadedDeltaTableSnapshot,
+    snapshot: &ArrowTableSnapshot,
     projection: Option<&[String]>,
     predicate: Option<DeltaKernelPredicate>,
     include_stats: bool,
@@ -103,7 +103,7 @@ pub(crate) fn build_kernel_scan(
 
 #[allow(dead_code)]
 pub(crate) fn plan_scan(
-    snapshot: &LoadedDeltaTableSnapshot,
+    snapshot: &ArrowTableSnapshot,
     projection: Option<&[String]>,
     hidden_columns: &[String],
     kernel_predicate: Option<DeltaKernelPredicate>,
@@ -125,7 +125,7 @@ pub(crate) fn plan_scan(
 
 #[allow(dead_code)]
 pub(crate) fn build_physical_row_predicate(
-    snapshot: &LoadedDeltaTableSnapshot,
+    snapshot: &ArrowTableSnapshot,
     projection: Option<&[String]>,
     hidden_columns: &[String],
     predicate: Option<DeltaKernelPredicate>,
@@ -146,7 +146,7 @@ pub(crate) fn build_physical_row_predicate(
 }
 
 pub(crate) fn plan_unpartitioned_scan(
-    snapshot: &LoadedDeltaTableSnapshot,
+    snapshot: &ArrowTableSnapshot,
     projection: Option<&[String]>,
     hidden_columns: &[String],
     kernel_predicate: Option<DeltaKernelPredicate>,
@@ -549,7 +549,7 @@ mod tests {
             DeltaScanExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions,
             delta::{
                 kernel::{DeltaKernelPredicate, delta_predicate_to_kernel_pruning},
-                snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
+                snapshot::{ArrowTableSnapshot, load_delta_table_snapshot_blocking},
             },
             reader::predicate::validate_predicate,
         };
@@ -558,7 +558,7 @@ mod tests {
 
         struct PartitionFixture {
             _table: DeltaLogTable,
-            snapshot: LoadedDeltaTableSnapshot,
+            snapshot: ArrowTableSnapshot,
         }
 
         impl PartitionFixture {
@@ -2430,7 +2430,7 @@ mod tests {
             DeltaSnapshotSelection, DeltaStorageOptions,
             delta::{
                 kernel::delta_predicate_to_kernel_pruning,
-                snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
+                snapshot::{ArrowTableSnapshot, load_delta_table_snapshot_blocking},
             },
             reader::predicate::validate_predicate,
         };
@@ -2439,7 +2439,7 @@ mod tests {
 
         struct StatisticsFixture {
             _table: DeltaLogTable,
-            snapshot: LoadedDeltaTableSnapshot,
+            snapshot: ArrowTableSnapshot,
         }
 
         impl StatisticsFixture {
@@ -4390,10 +4390,7 @@ mod tests {
     fn loaded_snapshot(
         name: &str,
     ) -> Result<
-        (
-            DeltaLogTable,
-            crate::delta::snapshot::LoadedDeltaTableSnapshot,
-        ),
+        (DeltaLogTable, crate::delta::snapshot::ArrowTableSnapshot),
         Box<dyn std::error::Error>,
     > {
         loaded_snapshot_with_adds(name, &[])
@@ -4403,10 +4400,7 @@ mod tests {
         name: &str,
         adds: &[String],
     ) -> Result<
-        (
-            DeltaLogTable,
-            crate::delta::snapshot::LoadedDeltaTableSnapshot,
-        ),
+        (DeltaLogTable, crate::delta::snapshot::ArrowTableSnapshot),
         Box<dyn std::error::Error>,
     > {
         loaded_snapshot_with_metadata_and_adds(name, METADATA_JSON, adds)
@@ -4417,10 +4411,7 @@ mod tests {
         metadata: &str,
         adds: &[String],
     ) -> Result<
-        (
-            DeltaLogTable,
-            crate::delta::snapshot::LoadedDeltaTableSnapshot,
-        ),
+        (DeltaLogTable, crate::delta::snapshot::ArrowTableSnapshot),
         Box<dyn std::error::Error>,
     > {
         let table = DeltaLogTable::new_with_metadata_and_adds(name, metadata, adds)?;
@@ -4571,7 +4562,7 @@ mod tests {
     }
 
     fn plan_scan(
-        snapshot: &crate::delta::snapshot::LoadedDeltaTableSnapshot,
+        snapshot: &crate::delta::snapshot::ArrowTableSnapshot,
         projection: Option<&[String]>,
         hidden_columns: &[String],
         kernel_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,

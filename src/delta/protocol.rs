@@ -125,9 +125,7 @@ mod tests {
             Ok(Self(path))
         }
 
-        fn load(
-            &self,
-        ) -> Result<crate::delta::snapshot::LoadedDeltaTableSnapshot, DeltaReaderError> {
+        fn load(&self) -> Result<crate::delta::snapshot::ArrowTableSnapshot, DeltaReaderError> {
             load_delta_table_snapshot_blocking(
                 &self.0.to_string_lossy(),
                 &DeltaStorageOptions::new(),

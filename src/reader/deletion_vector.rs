@@ -13,7 +13,7 @@ use crate::{
     DeltaReaderError, DeltaScanMetrics,
     delta::{
         kernel::{DeltaKernelEngineContext, KernelDeletionVectorHandle},
-        snapshot::LoadedDeltaTableSnapshot,
+        snapshot::ArrowTableSnapshot,
     },
     error::DeletionVectorReadSnafu,
 };
@@ -64,7 +64,7 @@ impl DeletionVectorMetadata {
 
 #[allow(dead_code)]
 pub(crate) async fn load_deletion_vector_selection(
-    snapshot: &LoadedDeltaTableSnapshot,
+    snapshot: &ArrowTableSnapshot,
     metadata: DeletionVectorMetadata,
     metrics: &DeltaScanMetrics,
 ) -> Result<Option<DeletionVectorSelection>, DeltaReaderError> {
@@ -482,7 +482,7 @@ mod tests {
         DeltaStorageOptions, ParquetReaderBackend,
         delta::{
             kernel::{is_kernel_error, preserve_deletion_vector},
-            snapshot::{LoadedDeltaTableSnapshot, load_delta_table_snapshot_blocking},
+            snapshot::{ArrowTableSnapshot, load_delta_table_snapshot_blocking},
         },
         reader::metrics::DeltaScanMetricsConfig,
     };
@@ -509,7 +509,7 @@ mod tests {
             Ok(Self(path))
         }
 
-        fn snapshot(&self) -> Result<LoadedDeltaTableSnapshot, DeltaReaderError> {
+        fn snapshot(&self) -> Result<ArrowTableSnapshot, DeltaReaderError> {
             load_delta_table_snapshot_blocking(
                 &self.0.to_string_lossy(),
                 &DeltaStorageOptions::new(),

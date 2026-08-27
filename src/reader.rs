@@ -46,7 +46,7 @@ use crate::{
         kernel::{delta_predicate_kernel_pruning_is_exact, delta_predicate_to_kernel_pruning},
         protocol::validate_protocol,
         snapshot::{
-            KernelTableSnapshot, LoadedDeltaTableSnapshot, load_delta_table_snapshot_async,
+            ArrowTableSnapshot, KernelTableSnapshot, load_delta_table_snapshot_async,
             load_kernel_table_snapshot_async,
         },
     },
@@ -207,7 +207,7 @@ impl DeltaTableSnapshot {
     /// Converts the logical Arrow schema and finishes constructing the table.
     pub fn into_table(self) -> Result<DeltaTable, DeltaReaderError> {
         Ok(DeltaTable::new(
-            self.snapshot.into_loaded()?,
+            self.snapshot.into_arrow_snapshot()?,
             self.execution_options,
         ))
     }
@@ -225,16 +225,13 @@ impl fmt::Debug for DeltaTableSnapshot {
 /// One immutable loaded Delta table snapshot.
 #[derive(Clone)]
 pub struct DeltaTable {
-    snapshot: Arc<LoadedDeltaTableSnapshot>,
+    snapshot: Arc<ArrowTableSnapshot>,
     version: u64,
     execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTable {
-    fn new(
-        snapshot: LoadedDeltaTableSnapshot,
-        execution_options: DeltaScanExecutionOptions,
-    ) -> Self {
+    fn new(snapshot: ArrowTableSnapshot, execution_options: DeltaScanExecutionOptions) -> Self {
         let version = snapshot.version();
         Self {
             snapshot: Arc::new(snapshot),
@@ -271,7 +268,7 @@ impl DeltaTable {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn snapshot(&self) -> &LoadedDeltaTableSnapshot {
+    pub(crate) fn snapshot(&self) -> &ArrowTableSnapshot {
         self.snapshot.as_ref()
     }
 
