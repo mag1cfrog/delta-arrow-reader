@@ -101,8 +101,8 @@ pub struct ScanMetricsSnapshot {
     pub reader_metrics: DeltaScanMetricsSnapshot,
     /// Whether the provider requested Arrow view arrays for string and binary data columns.
     pub use_arrow_view_types: bool,
-    /// Effective DataFusion task batch size observed at execution.
-    pub output_batch_size: Option<u64>,
+    /// Configured DataFusion batch row target observed at execution.
+    pub configured_batch_size_rows: Option<u64>,
     /// File tasks pruned before admission by a dynamic partition filter.
     /// A task is either a whole physical file or one independently read file range.
     pub dynamic_partition_tasks_pruned: u64,
@@ -133,7 +133,7 @@ struct MetricsInner {
     registration_name: Option<String>,
     reader: DeltaScanMetrics,
     use_arrow_view_types: bool,
-    output_batch_size: AtomicU64,
+    configured_batch_size_rows: AtomicU64,
     dynamic_partition_tasks_pruned: AtomicU64,
     dynamic_partition_tasks_kept: AtomicU64,
     dynamic_filters_received: AtomicU64,
@@ -156,7 +156,7 @@ impl ScanMetrics {
                 registration_name,
                 reader,
                 use_arrow_view_types,
-                output_batch_size: AtomicU64::new(0),
+                configured_batch_size_rows: AtomicU64::new(0),
                 dynamic_partition_tasks_pruned: AtomicU64::new(0),
                 dynamic_partition_tasks_kept: AtomicU64::new(0),
                 dynamic_filters_received: AtomicU64::new(0),
@@ -180,7 +180,7 @@ impl ScanMetrics {
         ScanMetricsSnapshot {
             reader_metrics: inner.reader.snapshot(),
             use_arrow_view_types: inner.use_arrow_view_types,
-            output_batch_size: nonzero_load(&inner.output_batch_size),
+            configured_batch_size_rows: nonzero_load(&inner.configured_batch_size_rows),
             dynamic_partition_tasks_pruned: load(&inner.dynamic_partition_tasks_pruned),
             dynamic_partition_tasks_kept: load(&inner.dynamic_partition_tasks_kept),
             dynamic_filters_received: load(&inner.dynamic_filters_received),
@@ -201,9 +201,9 @@ impl ScanMetrics {
         Arc::ptr_eq(&self.inner, &other.inner)
     }
 
-    fn record_output_batch_size(&self, value: usize) {
+    fn record_configured_batch_size_rows(&self, value: usize) {
         self.inner
-            .output_batch_size
+            .configured_batch_size_rows
             .store(u64::try_from(value).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
@@ -631,20 +631,21 @@ impl ExecutionPlan for DeltaDataFusionExec {
             return Err(adapter_error("scan_partition_index_out_of_range"));
         }
 
-        let output_batch_size = context.session_config().batch_size();
-        self.metrics.record_output_batch_size(output_batch_size);
+        let configured_batch_size_rows = context.session_config().batch_size();
+        self.metrics
+            .record_configured_batch_size_rows(configured_batch_size_rows);
         let admission = dynamic_admission(self.metrics.clone(), Arc::clone(&self.dynamic_filters));
         let executor = match self.plan.execution_options.reader_backend() {
             ParquetReaderBackend::DirectParquet => match &self.parquet_metadata_cache {
                 Some(cache) => direct_parquet_file_executor_with_metadata_cache(
                     &self.plan,
-                    Some(output_batch_size),
+                    Some(configured_batch_size_rows),
                     self.row_predicate.clone(),
                     Arc::clone(cache),
                 ),
                 None => direct_parquet_file_executor(
                     &self.plan,
-                    Some(output_batch_size),
+                    Some(configured_batch_size_rows),
                     self.row_predicate.clone(),
                 ),
             },
@@ -1487,7 +1488,7 @@ mod tests {
         assert_eq!(handles.len(), 1);
         assert_eq!(handles[0].registration_name(), None);
         let metrics = handles[0].snapshot();
-        assert_eq!(metrics.output_batch_size, Some(1));
+        assert_eq!(metrics.configured_batch_size_rows, Some(1));
         assert_eq!(metrics.reader_metrics.scan_partitions_started, 4);
         assert_eq!(metrics.reader_metrics.file_tasks_completed, 4);
         assert_eq!(metrics.reader_metrics.scheduler_rows_emitted, 6);
@@ -1789,7 +1790,7 @@ mod tests {
         assert_eq!(handles[1].registration_name(), Some("second"));
         assert!(!format!("{:?}", handles[0]).contains("first"));
         let initial = handles[0].snapshot();
-        assert_eq!(initial.output_batch_size, None);
+        assert_eq!(initial.configured_batch_size_rows, None);
         assert_eq!(
             [
                 initial.dynamic_partition_tasks_pruned,

@@ -282,7 +282,7 @@ fn datafusion_metrics_contract_is_public() {
     fn inspect(snapshot: ScanMetricsSnapshot) {
         let _: DeltaScanMetricsSnapshot = snapshot.reader_metrics;
         let _: bool = snapshot.use_arrow_view_types;
-        let _: Option<u64> = snapshot.output_batch_size;
+        let _: Option<u64> = snapshot.configured_batch_size_rows;
         let _: u64 = snapshot.dynamic_partition_tasks_pruned;
         let _: u64 = snapshot.dynamic_partition_tasks_kept;
         let _: u64 = snapshot.dynamic_filters_received;

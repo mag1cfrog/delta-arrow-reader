@@ -1225,7 +1225,7 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
     let plan = provider.scan(&context.state(), None, &[], None).await?;
     let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
-    assert_eq!(metrics[0].snapshot().output_batch_size, None);
+    assert_eq!(metrics[0].snapshot().configured_batch_size_rows, None);
 
     let error = plan
         .execute(1, context.task_ctx())
@@ -1241,7 +1241,7 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
 
     assert_eq!(ids(&collect_plan(&context, plan).await?), [1, 2, 3]);
     let metrics = metrics[0].snapshot();
-    assert_eq!(metrics.output_batch_size, Some(13));
+    assert_eq!(metrics.configured_batch_size_rows, Some(13));
     assert_eq!(metrics.reader_metrics.scan_partitions_started, 1);
     assert_eq!(metrics.reader_metrics.scan_partitions_completed, 1);
     assert_eq!(metrics.reader_metrics.file_tasks_started, 1);
