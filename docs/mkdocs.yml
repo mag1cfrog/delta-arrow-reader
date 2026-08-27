@@ -3,8 +3,8 @@ site_url: https://mag1cfrog.github.io/delta-arrow-reader/
 site_description: Read Delta Lake tables as Apache Arrow streams or DataFusion tables.
 repo_name: mag1cfrog/delta-arrow-reader
 repo_url: https://github.com/mag1cfrog/delta-arrow-reader
-docs_dir: docs
-site_dir: docs-site/site
+docs_dir: content
+site_dir: .site
 
 theme:
   name: material
