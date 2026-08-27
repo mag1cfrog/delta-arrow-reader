@@ -100,7 +100,7 @@ pub struct ScanMetricsSnapshot {
     /// Delta reader planning and execution metrics.
     pub reader_metrics: DeltaScanMetricsSnapshot,
     /// Whether the provider requested Arrow view arrays for string and binary data columns.
-    pub use_arrow_view_types: bool,
+    pub uses_arrow_view_types: bool,
     /// Configured DataFusion batch row target observed at execution.
     pub configured_batch_size_rows: Option<u64>,
     /// File tasks pruned before admission by a dynamic partition filter.
@@ -132,7 +132,7 @@ pub struct ScanMetrics {
 struct MetricsInner {
     registration_name: Option<String>,
     reader_metrics: DeltaScanMetrics,
-    use_arrow_view_types: bool,
+    uses_arrow_view_types: bool,
     configured_batch_size_rows: AtomicU64,
     dynamic_partition_tasks_pruned: AtomicU64,
     dynamic_partition_tasks_kept: AtomicU64,
@@ -155,7 +155,7 @@ impl ScanMetrics {
             inner: Arc::new(MetricsInner {
                 registration_name,
                 reader_metrics,
-                use_arrow_view_types,
+                uses_arrow_view_types: use_arrow_view_types,
                 configured_batch_size_rows: AtomicU64::new(0),
                 dynamic_partition_tasks_pruned: AtomicU64::new(0),
                 dynamic_partition_tasks_kept: AtomicU64::new(0),
@@ -179,7 +179,7 @@ impl ScanMetrics {
         let inner = self.inner.as_ref();
         ScanMetricsSnapshot {
             reader_metrics: inner.reader_metrics.snapshot(),
-            use_arrow_view_types: inner.use_arrow_view_types,
+            uses_arrow_view_types: inner.uses_arrow_view_types,
             configured_batch_size_rows: nonzero_load(&inner.configured_batch_size_rows),
             dynamic_partition_tasks_pruned: load(&inner.dynamic_partition_tasks_pruned),
             dynamic_partition_tasks_kept: load(&inner.dynamic_partition_tasks_kept),

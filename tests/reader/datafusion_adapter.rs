@@ -1537,7 +1537,7 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
 
     let metrics = collect_scan_metrics(plan.as_ref());
     assert_eq!(metrics.len(), 1);
-    assert!(metrics[0].snapshot().use_arrow_view_types);
+    assert!(metrics[0].snapshot().uses_arrow_view_types);
     assert_eq!(
         metrics[0].snapshot().reader_metrics.estimated_input_rows,
         Some(3)
@@ -1573,7 +1573,7 @@ async fn optimizer_keeps_limit_above_delta_kernel_residual() -> TestResult {
         .await?;
     let metrics = collect_scan_metrics(plan.as_ref());
     let batches = collect_plan(&context, plan).await?;
-    assert!(!metrics[0].snapshot().use_arrow_view_types);
+    assert!(!metrics[0].snapshot().uses_arrow_view_types);
     let names = batches[0]
         .column(0)
         .as_any()
@@ -1599,7 +1599,7 @@ async fn direct_scan_decodes_both_string_representations_with_exact_values() -> 
         .await?;
     let metrics = collect_scan_metrics(plan.as_ref());
     let batches = collect_plan(&context, plan).await?;
-    assert!(metrics[0].snapshot().use_arrow_view_types);
+    assert!(metrics[0].snapshot().uses_arrow_view_types);
     assert_eq!(batches.len(), 1);
     let batch = &batches[0];
     let names = batch
@@ -1662,7 +1662,7 @@ async fn direct_scan_decodes_both_string_representations_with_exact_values() -> 
         .await?;
     let metrics = collect_scan_metrics(plan.as_ref());
     let batches = collect_plan(&context, plan).await?;
-    assert!(!metrics[0].snapshot().use_arrow_view_types);
+    assert!(!metrics[0].snapshot().uses_arrow_view_types);
     assert_eq!(batches.len(), 1);
     let batch = &batches[0];
     let names = batch

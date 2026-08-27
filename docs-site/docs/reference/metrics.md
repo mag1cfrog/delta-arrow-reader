@@ -46,7 +46,7 @@ provider-specific fields.
 | Field | Meaning |
 | --- | --- |
 | `reader_metrics` | `DeltaScanMetricsSnapshot` for this physical scan. |
-| `use_arrow_view_types` | Whether the provider requested Arrow view arrays for string and binary data columns. |
+| `uses_arrow_view_types` | Whether the provider requested Arrow view arrays for string and binary data columns. |
 | `configured_batch_size_rows` | DataFusion's configured batch row target, recorded when execution starts. |
 | `dynamic_partition_tasks_pruned` | Whole-file or ranged tasks skipped by a dynamic partition filter before admission. |
 | `dynamic_partition_tasks_kept` | Tasks kept after consulting dynamic partition filters. |
