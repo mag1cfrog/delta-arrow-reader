@@ -60,7 +60,7 @@ pub enum DeltaReaderError {
     /// Reader configuration is invalid.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=configuration error=invalid_configuration reason={reason}"
+        "delta reader error: phase=configuration code=invalid_configuration reason={reason}"
     ))]
     InvalidConfiguration {
         /// Fixed redacted reason category.
@@ -68,9 +68,7 @@ pub enum DeltaReaderError {
     },
     /// The table URI is invalid.
     #[non_exhaustive]
-    #[snafu(display(
-        "delta reader error: phase=table_uri error=invalid_table_uri reason={reason}"
-    ))]
+    #[snafu(display("delta reader error: phase=table_uri code=invalid_table_uri reason={reason}"))]
     InvalidTableUri {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -78,7 +76,7 @@ pub enum DeltaReaderError {
     /// Object-store initialization failed.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=storage error=storage_initialization reason={reason}"
+        "delta reader error: phase=storage code=storage_initialization reason={reason}"
     ))]
     StorageInitialization {
         /// Fixed redacted reason category.
@@ -89,7 +87,7 @@ pub enum DeltaReaderError {
     },
     /// Snapshot loading failed.
     #[non_exhaustive]
-    #[snafu(display("delta reader error: phase=snapshot error=snapshot_load reason={reason}"))]
+    #[snafu(display("delta reader error: phase=snapshot code=snapshot_load reason={reason}"))]
     SnapshotLoad {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -100,7 +98,7 @@ pub enum DeltaReaderError {
     /// The table protocol is unsupported.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=protocol error=unsupported_protocol reason={reason}"
+        "delta reader error: phase=protocol code=unsupported_protocol reason={reason}"
     ))]
     UnsupportedProtocol {
         /// Fixed redacted reason category.
@@ -108,7 +106,7 @@ pub enum DeltaReaderError {
     },
     /// Delta-to-Arrow schema conversion failed.
     #[non_exhaustive]
-    #[snafu(display("delta reader error: phase=schema error=schema_conversion reason={reason}"))]
+    #[snafu(display("delta reader error: phase=schema code=schema_conversion reason={reason}"))]
     SchemaConversion {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -119,7 +117,7 @@ pub enum DeltaReaderError {
     /// A requested projection is invalid.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=scan_planning error=invalid_projection reason={reason}"
+        "delta reader error: phase=scan_planning code=invalid_projection reason={reason}"
     ))]
     InvalidProjection {
         /// Fixed redacted reason category.
@@ -128,7 +126,7 @@ pub enum DeltaReaderError {
     /// A requested predicate is unsupported.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=scan_planning error=unsupported_predicate reason={reason}"
+        "delta reader error: phase=scan_planning code=unsupported_predicate reason={reason}"
     ))]
     UnsupportedPredicate {
         /// Fixed redacted reason category.
@@ -136,9 +134,7 @@ pub enum DeltaReaderError {
     },
     /// Delta scan planning failed.
     #[non_exhaustive]
-    #[snafu(display(
-        "delta reader error: phase=scan_planning error=scan_planning reason={reason}"
-    ))]
+    #[snafu(display("delta reader error: phase=scan_planning code=scan_planning reason={reason}"))]
     ScanPlanning {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -149,7 +145,7 @@ pub enum DeltaReaderError {
     /// Delta scan file tasks could not be grouped into partitions.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=scan_planning error=scan_partition_planning reason={reason}"
+        "delta reader error: phase=scan_planning code=scan_partition_planning reason={reason}"
     ))]
     ScanPartitionPlanning {
         /// Fixed redacted reason category.
@@ -158,7 +154,7 @@ pub enum DeltaReaderError {
     /// A Delta data file could not be read.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=data_file_read error=data_file_read reason={reason}"
+        "delta reader error: phase=data_file_read code=data_file_read reason={reason}"
     ))]
     DataFileRead {
         /// Fixed redacted reason category.
@@ -170,7 +166,7 @@ pub enum DeltaReaderError {
     /// A deletion vector could not be read.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=deletion_vector error=deletion_vector_read reason={reason}"
+        "delta reader error: phase=deletion_vector code=deletion_vector_read reason={reason}"
     ))]
     DeletionVectorRead {
         /// Fixed redacted reason category.
@@ -182,7 +178,7 @@ pub enum DeltaReaderError {
     /// A physical-to-logical transform failed.
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=transform error=physical_to_logical_transform reason={reason}"
+        "delta reader error: phase=transform code=physical_to_logical_transform reason={reason}"
     ))]
     PhysicalToLogicalTransform {
         /// Fixed redacted reason category.
@@ -193,7 +189,7 @@ pub enum DeltaReaderError {
     },
     /// Reader execution was cancelled.
     #[non_exhaustive]
-    #[snafu(display("delta reader error: phase=execution error=cancelled reason={reason}"))]
+    #[snafu(display("delta reader error: phase=execution code=cancelled reason={reason}"))]
     Cancelled {
         /// Fixed redacted reason category.
         reason: &'static str,
@@ -202,7 +198,7 @@ pub enum DeltaReaderError {
     #[cfg(feature = "datafusion")]
     #[non_exhaustive]
     #[snafu(display(
-        "delta reader error: phase=datafusion error=datafusion_adapter reason={reason}"
+        "delta reader error: phase=datafusion code=datafusion_adapter reason={reason}"
     ))]
     DataFusionAdapter {
         /// Fixed redacted reason category.
@@ -436,7 +432,7 @@ mod tests {
             let display = error.to_string();
             let debug = format!("{error:?}");
             assert!(display.contains(&format!("phase={}", phase.as_str())));
-            assert!(display.contains(&format!("error={name}")));
+            assert!(display.contains(&format!("code={name}")));
             assert!(!display.contains("sensitive dependency detail"));
             assert!(!debug.contains("sensitive dependency detail"));
         }

@@ -243,7 +243,7 @@ mod tests {
         assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=protocol error=unsupported_protocol reason=unsupported_reader_feature"
+            "delta reader error: phase=protocol code=unsupported_protocol reason=unsupported_reader_feature"
         );
         Ok(())
     }

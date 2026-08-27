@@ -1215,7 +1215,7 @@ mod tests {
         .expect("duplicate projection should fail");
         assert_eq!(
             duplicate.to_string(),
-            "delta reader error: phase=scan_planning error=invalid_projection reason=duplicate_projection_index"
+            "delta reader error: phase=scan_planning code=invalid_projection reason=duplicate_projection_index"
         );
 
         for index in [schema.fields().len(), usize::MAX] {
@@ -1230,7 +1230,7 @@ mod tests {
             .expect("invalid projection should fail");
             assert_eq!(
                 error.to_string(),
-                "delta reader error: phase=scan_planning error=invalid_projection reason=projection_index_out_of_bounds"
+                "delta reader error: phase=scan_planning code=invalid_projection reason=projection_index_out_of_bounds"
             );
         }
     }
@@ -1663,7 +1663,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=scan_planning error=unsupported_predicate reason=inexact_filter_columns_not_projected"
+            "delta reader error: phase=scan_planning code=unsupported_predicate reason=inexact_filter_columns_not_projected"
         );
     }
 

@@ -719,7 +719,7 @@ mod tests {
         assert!(error.source().is_some_and(is_kernel_error));
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=deletion_vector error=deletion_vector_read reason=deletion_vector_payload_read_failed"
+            "delta reader error: phase=deletion_vector code=deletion_vector_read reason=deletion_vector_payload_read_failed"
         );
         let debug = format!("{error:?}");
         assert!(!debug.contains("secret-token"));

@@ -826,7 +826,7 @@ mod tests {
         assert!(matches!(error, DeltaReaderError::SnapshotLoad { .. }));
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=snapshot error=snapshot_load reason=snapshot_load_failed"
+            "delta reader error: phase=snapshot code=snapshot_load reason=snapshot_load_failed"
         );
         assert!(is_kernel_error(error.source().expect("Kernel source")));
         Ok(())

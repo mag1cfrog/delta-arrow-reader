@@ -2498,7 +2498,7 @@ mod tests {
         };
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_row_group_range_invalid"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_row_group_range_invalid"
         );
         assert!(!error.to_string().contains("secret.parquet"));
         Ok(())
@@ -3892,7 +3892,7 @@ mod tests {
             .expect_err("wrong logical schema must fail");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=backend_logical_schema_mismatch"
+            "delta reader error: phase=data_file_read code=data_file_read reason=backend_logical_schema_mismatch"
         );
         assert_failed_metrics(&schema_metrics.snapshot(), 0);
         Ok(())
@@ -4091,7 +4091,7 @@ mod tests {
         };
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_read_setup_failed"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_read_setup_failed"
         );
         assert!(!error.to_string().contains("secret.parquet"));
         assert_eq!(
@@ -4118,7 +4118,7 @@ mod tests {
         };
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_full_file_read_failed"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_full_file_read_failed"
         );
         assert!(!error.to_string().contains("secret-missing.parquet"));
         assert_eq!(
@@ -4155,7 +4155,7 @@ mod tests {
             .expect_err("injected batch range failure must fail");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_batch_read_failed"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_batch_read_failed"
         );
         let after = plan.metrics.snapshot();
         assert_eq!(
@@ -4181,7 +4181,7 @@ mod tests {
             .expect_err("corrupt Parquet data must fail decoding");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=parquet_batch_read_failed"
+            "delta reader error: phase=data_file_read code=data_file_read reason=parquet_batch_read_failed"
         );
         let after = plan.metrics.snapshot();
         assert_eq!(
@@ -4263,7 +4263,7 @@ mod tests {
             .expect_err("wrong logical schema must fail");
         assert_eq!(
             error.to_string(),
-            "delta reader error: phase=data_file_read error=data_file_read reason=backend_logical_schema_mismatch"
+            "delta reader error: phase=data_file_read code=data_file_read reason=backend_logical_schema_mismatch"
         );
         Ok(())
     }
@@ -6095,7 +6095,7 @@ mod tests {
             assert_eq!(error.code(), "data_file_read");
             assert_eq!(
                 error.to_string(),
-                "delta reader error: phase=data_file_read error=data_file_read reason=parquet_schema_match_failed"
+                "delta reader error: phase=data_file_read code=data_file_read reason=parquet_schema_match_failed"
             );
         }
         Ok(())
