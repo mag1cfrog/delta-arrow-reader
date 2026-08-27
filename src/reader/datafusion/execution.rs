@@ -59,7 +59,6 @@ use super::{
 
 use crate::reader::backend::direct_parquet::{
     RangedParquetMetadataCache, direct_parquet_file_executor,
-    direct_parquet_file_executor_with_metadata_cache,
 };
 use crate::{
     DeltaReaderError, DeltaScanMetrics, DeltaScanMetricsSnapshot, ParquetReaderBackend,
@@ -634,19 +633,12 @@ impl ExecutionPlan for DeltaDataFusionExec {
             Arc::clone(&self.dynamic_filters),
         );
         let executor = match self.reader_plan.execution_options.parquet_backend() {
-            ParquetReaderBackend::Direct => match &self.parquet_metadata_cache {
-                Some(cache) => direct_parquet_file_executor_with_metadata_cache(
-                    &self.reader_plan,
-                    Some(configured_batch_size_rows),
-                    self.exact_row_predicate.clone(),
-                    Arc::clone(cache),
-                ),
-                None => direct_parquet_file_executor(
-                    &self.reader_plan,
-                    Some(configured_batch_size_rows),
-                    self.exact_row_predicate.clone(),
-                ),
-            },
+            ParquetReaderBackend::Direct => direct_parquet_file_executor(
+                &self.reader_plan,
+                Some(configured_batch_size_rows),
+                self.exact_row_predicate.clone(),
+                self.parquet_metadata_cache.clone(),
+            ),
             ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.reader_plan),
         };
         let stream = DeltaScanScheduler::new_with_limiter(

@@ -189,7 +189,6 @@ impl DirectParquetReader {
         }
     }
 
-    #[cfg(any(feature = "datafusion", test))]
     fn with_metadata_cache(mut self, metadata_cache: Arc<RangedParquetMetadataCache>) -> Self {
         self.metadata_cache = Some(metadata_cache);
         self
@@ -511,43 +510,17 @@ pub(crate) fn direct_parquet_file_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
+    metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
-    let reader = Arc::new(DirectParquetReader::new(
+    let reader = DirectParquetReader::new(
         Arc::clone(&plan.engine_context),
         plan.execution_options,
         plan.metrics.clone(),
-    ));
-    file_executor_from_reader(plan, output_batch_size_rows, row_predicate, reader)
-}
-
-#[cfg(feature = "datafusion")]
-pub(crate) fn direct_parquet_file_executor_with_metadata_cache(
-    plan: &Arc<DeltaScanPlan>,
-    output_batch_size_rows: Option<usize>,
-    row_predicate: Option<DeltaKernelPredicate>,
-    metadata_cache: Arc<RangedParquetMetadataCache>,
-) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
-    file_executor_from_reader(
-        plan,
-        output_batch_size_rows,
-        row_predicate,
-        Arc::new(
-            DirectParquetReader::new(
-                Arc::clone(&plan.engine_context),
-                plan.execution_options,
-                plan.metrics.clone(),
-            )
-            .with_metadata_cache(metadata_cache),
-        ),
-    )
-}
-
-fn file_executor_from_reader(
-    plan: &Arc<DeltaScanPlan>,
-    output_batch_size_rows: Option<usize>,
-    row_predicate: Option<DeltaKernelPredicate>,
-    reader: Arc<DirectParquetReader>,
-) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
+    );
+    let reader = Arc::new(match metadata_cache {
+        Some(cache) => reader.with_metadata_cache(cache),
+        None => reader,
+    });
     let physical_schema = Arc::clone(&plan.physical_schema);
     let logical_schema = Arc::clone(&plan.logical_schema);
     let kernel_schemas = plan.kernel_schemas.clone();
@@ -2053,7 +2026,7 @@ mod tests {
         row_predicate: Option<DeltaKernelPredicate>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
-        let executor = direct_parquet_file_executor(&plan, Some(2), row_predicate);
+        let executor = direct_parquet_file_executor(&plan, Some(2), row_predicate, None);
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
             let mut stream = scheduler.partition_stream(
