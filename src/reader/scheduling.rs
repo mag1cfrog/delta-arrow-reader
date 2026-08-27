@@ -73,7 +73,7 @@ pub(crate) type FileExecutor<Task, Output> = Arc<
         + Send
         + Sync,
 >;
-pub(crate) type ScheduledFile<Output> =
+pub(crate) type ScheduledFileFuture<Output> =
     BoxFuture<'static, Result<Option<Output>, DeltaReaderError>>;
 pub(crate) type FileBatchStream =
     Pin<Box<dyn Stream<Item = Result<RecordBatch, DeltaReaderError>> + Send + 'static>>;
@@ -88,7 +88,7 @@ pub(crate) struct FileScheduler<Task, Output> {
 
 type BatchResult = Result<RecordBatch, DeltaReaderError>;
 type StartPartition = Box<dyn FnOnce(mpsc::Sender<BatchResult>) -> JoinHandle<()> + Send>;
-type FileSetups = FuturesOrdered<ScheduledFile<FileBatchStream>>;
+type FileSetups = FuturesOrdered<ScheduledFileFuture<FileBatchStream>>;
 type ReadyFiles = VecDeque<Result<FileBatchStream, DeltaReaderError>>;
 
 struct PartitionStart {
@@ -356,7 +356,7 @@ where
         }
     }
 
-    pub(crate) fn schedule_next(&mut self) -> Option<ScheduledFile<Output>> {
+    pub(crate) fn schedule_next(&mut self) -> Option<ScheduledFileFuture<Output>> {
         let task = self.file_tasks.pop_front()?;
         let limiter = self.partition_limiter.clone();
         let admission = Arc::clone(&self.admission);
