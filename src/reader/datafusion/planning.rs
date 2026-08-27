@@ -673,10 +673,13 @@ fn partition_column_supports(
     };
     schema
         .field_with_name(&name)
-        .is_ok_and(|field| partition_type_supports(field.data_type(), family))
+        .is_ok_and(|field| supports_partition_operator_family(field.data_type(), family))
 }
 
-fn partition_type_supports(data_type: &DataType, family: PartitionOperatorFamily) -> bool {
+fn supports_partition_operator_family(
+    data_type: &DataType,
+    family: PartitionOperatorFamily,
+) -> bool {
     use PartitionOperatorFamily::{
         Between, BooleanShorthand, Equality, Membership, NullCheck, Ordering,
     };
@@ -730,8 +733,13 @@ fn is_supported_data_stats_filter(filter: &Expr, schema: &Schema) -> bool {
                     | Operator::GtEq
             ) =>
         {
-            data_stats_column_literal(&binary.left, binary.op, &binary.right, schema)
-                || data_stats_column_literal(&binary.right, binary.op, &binary.left, schema)
+            is_supported_data_stats_column_literal(&binary.left, binary.op, &binary.right, schema)
+                || is_supported_data_stats_column_literal(
+                    &binary.right,
+                    binary.op,
+                    &binary.left,
+                    schema,
+                )
         }
         Expr::IsNull(inner) | Expr::IsNotNull(inner) => data_column_type(inner, schema)
             .is_some_and(|data_type| {
@@ -754,7 +762,12 @@ fn is_supported_data_stats_filter(filter: &Expr, schema: &Schema) -> bool {
     }
 }
 
-fn data_stats_column_literal(column: &Expr, op: Operator, literal: &Expr, schema: &Schema) -> bool {
+fn is_supported_data_stats_column_literal(
+    column: &Expr,
+    op: Operator,
+    literal: &Expr,
+    schema: &Schema,
+) -> bool {
     let Some(data_type) = data_column_type(column, schema) else {
         return false;
     };
