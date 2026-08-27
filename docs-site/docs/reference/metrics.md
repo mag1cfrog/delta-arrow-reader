@@ -10,7 +10,6 @@ usable after its batch stream finishes or is dropped.
 | --- | --- |
 | `snapshot_version` | Delta snapshot version used by the scan. |
 | `reader_backend` | Data-file reader selected for the scan. |
-| `scan_metadata_exhausted` | Whether planning consumed the scan metadata iterator, when known. |
 | `scan_partitions_planned` | Final number of execution partitions, including DataFusion repartitioning. |
 | `files_planned` | Physical data files selected during initial whole-file planning. |
 | `add_actions_filtered_during_planning` | Best-effort count of Add actions excluded during metadata planning, when known. |

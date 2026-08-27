@@ -29,7 +29,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 25;
+const BENCHMARK_SCHEMA_VERSION: u32 = 26;
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
@@ -48,7 +48,7 @@ const EXPECTED_FIXTURE_FINGERPRINTS: [(&str, &str); 4] = [
     ),
 ];
 
-const CSV_HEADER: [&str; 80] = [
+const CSV_HEADER: [&str; 79] = [
     "benchmark_schema_version",
     "benchmark_mode",
     "host_os",
@@ -74,7 +74,6 @@ const CSV_HEADER: [&str; 80] = [
     "deletion_vector_deleted_rows",
     "deletion_vector_deleted_rows_per_file",
     "provider_stats_scan_count",
-    "provider_stats_scan_metadata_exhausted",
     "provider_stats_scan_partitions_planned",
     "provider_stats_files_planned",
     "provider_stats_estimated_input_rows",
@@ -245,7 +244,6 @@ struct Summary {
 #[derive(Debug)]
 struct ReadSummary {
     scan_count: usize,
-    scan_metadata_exhausted: String,
     scan_partitions_planned: u64,
     files_planned: u64,
     estimated_input_rows: Option<u64>,
@@ -1528,18 +1526,12 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
                 })
                 .max()
         };
-    let scan_metadata_exhausted = summarize_scan_metadata(snapshots.iter().flat_map(|snapshots| {
-        snapshots
-            .iter()
-            .map(|snapshot| snapshot.core_metrics.scan_metadata_exhausted)
-    }));
     ReadSummary {
         scan_count: snapshots
             .iter()
             .map(|snapshots| snapshots.len())
             .max()
             .unwrap_or(0),
-        scan_metadata_exhausted,
         scan_partitions_planned: snapshots
             .iter()
             .map(|snapshots| {
@@ -1596,25 +1588,6 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
     }
 }
 
-fn summarize_scan_metadata(values: impl IntoIterator<Item = Option<bool>>) -> String {
-    let mut true_seen = false;
-    let mut false_seen = false;
-    let mut unknown_seen = false;
-    for value in values {
-        match value {
-            Some(true) => true_seen = true,
-            Some(false) => false_seen = true,
-            None => unknown_seen = true,
-        }
-    }
-    match (true_seen, false_seen, unknown_seen) {
-        (true, false, false) => "true".to_owned(),
-        (false, true, false) => "false".to_owned(),
-        (false, false, true) | (false, false, false) => String::new(),
-        _ => "mixed".to_owned(),
-    }
-}
-
 fn csv_row(
     config: &Config,
     fixture: &Fixture,
@@ -1650,7 +1623,6 @@ fn csv_row(
         fixture.deletion_vector_deleted_rows.to_string(),
         fixture.deletion_vector_deleted_rows_per_file.to_string(),
         read.scan_count.to_string(),
-        read.scan_metadata_exhausted.clone(),
         read.scan_partitions_planned.to_string(),
         read.files_planned.to_string(),
         optional(read.estimated_input_rows),
@@ -2097,7 +2069,7 @@ mod tests {
 
     #[test]
     fn csv_and_helpers_preserve_frozen_edge_behavior() -> TestResult {
-        assert_eq!(CSV_HEADER.len(), 80);
+        assert_eq!(CSV_HEADER.len(), 79);
         assert_eq!(percentile(&[], 50), 0);
         assert_eq!(percentile(&[10, 20, 30, 40], 50), 20);
         assert_eq!(percentile(&[10, 20, 30, 40], 95), 40);
@@ -2139,7 +2111,7 @@ mod tests {
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "25");
+            assert_eq!(row[0], "26");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);
@@ -2160,41 +2132,40 @@ mod tests {
             assert_eq!(row[22], "12");
             assert_eq!(row[23], "3");
             assert_eq!(row[24], "1");
-            assert_eq!(row[25], "true");
-            assert_eq!(&row[26..30], ["4", "4", "32768", "819772"]);
-            assert_eq!(&row[30..34], ["4", "4", "4", "4"]);
-            assert!(row[34..42].iter().all(|value| value == "0"));
-            assert_eq!(row[42], "36");
-            assert_eq!(row[43], "32756");
-            assert_eq!(&row[44..49], ["4", "4", "12", "0", "0"]);
-            assert_eq!(row[49], "32756");
-            assert_eq!(row[50], "36");
-            assert_eq!(row[51], optional(summary.peak_rss));
-            assert_eq!(row[52], optional(summary.peak_rss_delta));
-            assert_eq!(row[53], summary.planning.p50.to_string());
-            assert_eq!(row[54], summary.planning.p95.to_string());
-            assert_eq!(row[55], summary.planning.p99.to_string());
-            assert_eq!(row[56], summary.first_batch.p50.to_string());
-            assert_eq!(row[57], summary.first_batch.p95.to_string());
-            assert_eq!(row[58], summary.first_batch.p99.to_string());
-            assert_eq!(row[59], summary.total.p50.to_string());
-            assert_eq!(row[60], summary.total.p95.to_string());
-            assert_eq!(row[61], summary.total.p99.to_string());
-            assert_eq!(row[62], summary.rows_per_second.p50.to_string());
-            assert_eq!(row[63], summary.rows_per_second.p95.to_string());
-            assert_eq!(row[64], summary.rows_per_second.p99.to_string());
-            assert_eq!(row[65], summary.batch_latency.p50.to_string());
-            assert_eq!(row[66], summary.batch_latency.p95.to_string());
-            assert_eq!(row[67], summary.batch_latency.p99.to_string());
-            assert_eq!(row[68], summary.min_total.to_string());
-            assert_eq!(row[69], summary.max_total.to_string());
+            assert_eq!(&row[25..29], ["4", "4", "32768", "819772"]);
+            assert_eq!(&row[29..33], ["4", "4", "4", "4"]);
+            assert!(row[33..41].iter().all(|value| value == "0"));
+            assert_eq!(row[41], "36");
+            assert_eq!(row[42], "32756");
+            assert_eq!(&row[43..48], ["4", "4", "12", "0", "0"]);
+            assert_eq!(row[48], "32756");
+            assert_eq!(row[49], "36");
+            assert_eq!(row[50], optional(summary.peak_rss));
+            assert_eq!(row[51], optional(summary.peak_rss_delta));
+            assert_eq!(row[52], summary.planning.p50.to_string());
+            assert_eq!(row[53], summary.planning.p95.to_string());
+            assert_eq!(row[54], summary.planning.p99.to_string());
+            assert_eq!(row[55], summary.first_batch.p50.to_string());
+            assert_eq!(row[56], summary.first_batch.p95.to_string());
+            assert_eq!(row[57], summary.first_batch.p99.to_string());
+            assert_eq!(row[58], summary.total.p50.to_string());
+            assert_eq!(row[59], summary.total.p95.to_string());
+            assert_eq!(row[60], summary.total.p99.to_string());
+            assert_eq!(row[61], summary.rows_per_second.p50.to_string());
+            assert_eq!(row[62], summary.rows_per_second.p95.to_string());
+            assert_eq!(row[63], summary.rows_per_second.p99.to_string());
+            assert_eq!(row[64], summary.batch_latency.p50.to_string());
+            assert_eq!(row[65], summary.batch_latency.p95.to_string());
+            assert_eq!(row[66], summary.batch_latency.p99.to_string());
+            assert_eq!(row[67], summary.min_total.to_string());
+            assert_eq!(row[68], summary.max_total.to_string());
+            assert_eq!(row[69], "0");
             assert_eq!(row[70], "0");
-            assert_eq!(row[71], "0");
-            assert_eq!(row[72], "disabled");
-            assert_eq!(row[73], "65536");
-            assert_eq!(row[74], "");
-            assert_eq!(&row[75..79], ["", "", "", ""]);
-            assert_eq!(row[79], "fnv1a64:e1509da31486f25a");
+            assert_eq!(row[71], "disabled");
+            assert_eq!(row[72], "65536");
+            assert_eq!(row[73], "");
+            assert_eq!(&row[74..78], ["", "", "", ""]);
+            assert_eq!(row[78], "fnv1a64:e1509da31486f25a");
             Ok::<_, Box<dyn Error>>(())
         })?;
         Ok(())

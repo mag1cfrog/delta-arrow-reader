@@ -14,8 +14,6 @@ pub struct DeltaScanMetricsSnapshot {
     pub snapshot_version: u64,
     /// Parquet reader backend selected for the scan.
     pub reader_backend: ParquetReaderBackend,
-    /// Whether planning exhausted the Delta scan metadata iterator.
-    pub scan_metadata_exhausted: Option<bool>,
     /// Final execution partitions planned for the scan, including source repartitioning.
     pub scan_partitions_planned: u64,
     /// Data files selected during planning.
@@ -67,7 +65,6 @@ pub struct DeltaScanMetrics {
 struct DeltaScanMetricsInner {
     snapshot_version: u64,
     reader_backend: ParquetReaderBackend,
-    scan_metadata_exhausted: Option<bool>,
     scan_partitions_planned: AtomicU64,
     files_planned: u64,
     add_actions_filtered_during_planning: Option<u64>,
@@ -94,7 +91,6 @@ struct DeltaScanMetricsInner {
 pub(crate) struct DeltaScanMetricsConfig {
     pub(crate) snapshot_version: u64,
     pub(crate) reader_backend: ParquetReaderBackend,
-    pub(crate) scan_metadata_exhausted: Option<bool>,
     pub(crate) scan_partitions_planned: usize,
     pub(crate) files_planned: usize,
     pub(crate) add_actions_filtered_during_planning: Option<u64>,
@@ -109,7 +105,6 @@ impl DeltaScanMetrics {
             inner: Arc::new(DeltaScanMetricsInner {
                 snapshot_version: config.snapshot_version,
                 reader_backend: config.reader_backend,
-                scan_metadata_exhausted: config.scan_metadata_exhausted,
                 scan_partitions_planned: AtomicU64::new(usize_to_u64_saturating(
                     config.scan_partitions_planned,
                 )),
@@ -142,7 +137,6 @@ impl DeltaScanMetrics {
         DeltaScanMetricsSnapshot {
             snapshot_version: inner.snapshot_version,
             reader_backend: inner.reader_backend,
-            scan_metadata_exhausted: inner.scan_metadata_exhausted,
             scan_partitions_planned: load(&inner.scan_partitions_planned),
             files_planned: inner.files_planned,
             add_actions_filtered_during_planning: inner.add_actions_filtered_during_planning,
@@ -287,7 +281,6 @@ mod tests {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 7,
             reader_backend,
-            scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 3,
             files_planned: 5,
             add_actions_filtered_during_planning: Some(2),
@@ -301,7 +294,6 @@ mod tests {
         let direct = metrics(ParquetReaderBackend::DirectParquet).snapshot();
         assert_eq!(direct.snapshot_version, 7);
         assert_eq!(direct.reader_backend, ParquetReaderBackend::DirectParquet);
-        assert_eq!(direct.scan_metadata_exhausted, Some(true));
         assert_eq!(direct.scan_partitions_planned, 3);
         assert_eq!(direct.files_planned, 5);
         assert_eq!(direct.add_actions_filtered_during_planning, Some(2));

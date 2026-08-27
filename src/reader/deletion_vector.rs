@@ -777,7 +777,6 @@ mod tests {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
             snapshot_version: 7,
             reader_backend: ParquetReaderBackend::DirectParquet,
-            scan_metadata_exhausted: Some(true),
             scan_partitions_planned: 1,
             files_planned: 1,
             add_actions_filtered_during_planning: Some(0),

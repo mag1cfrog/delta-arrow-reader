@@ -53,7 +53,6 @@ pub(crate) struct DeltaScanPlan {
     pub(crate) kernel_schemas: KernelScanSchemas,
     pub(crate) partitions: Vec<DeltaScanFileTaskPartition>,
     pub(crate) partition_target_diagnostic: DeltaScanPartitionTargetDiagnosticOutput,
-    pub(crate) scan_metadata_exhausted: bool,
     pub(crate) add_actions_filtered_during_planning: Option<u64>,
     pub(crate) estimated_bytes: Option<u64>,
     pub(crate) estimated_rows: Option<u64>,
@@ -72,7 +71,6 @@ pub(crate) struct DeltaUnpartitionedScanPlan {
     pub(crate) partition_columns: Vec<String>,
     pub(crate) kernel_schemas: KernelScanSchemas,
     pub(crate) file_tasks: Vec<DeltaScanFileTask>,
-    pub(crate) scan_metadata_exhausted: bool,
     pub(crate) add_actions_filtered_during_planning: Option<u64>,
     pub(crate) estimated_bytes: Option<u64>,
     pub(crate) estimated_rows: Option<u64>,
@@ -226,7 +224,6 @@ fn build_unpartitioned_scan_plan(
         partition_columns: snapshot.partition_columns().to_vec(),
         kernel_schemas: scan.schemas(),
         file_tasks,
-        scan_metadata_exhausted: true,
         add_actions_filtered_during_planning: metadata.add_actions_filtered_during_planning,
         estimated_bytes,
         estimated_rows,
@@ -254,7 +251,6 @@ fn finalize_scan_plan(
     let metrics = DeltaScanMetrics::new(DeltaScanMetricsConfig {
         snapshot_version: unpartitioned.snapshot_version,
         reader_backend: unpartitioned.execution_options.reader_backend(),
-        scan_metadata_exhausted: Some(unpartitioned.scan_metadata_exhausted),
         scan_partitions_planned: partitions.len(),
         files_planned,
         add_actions_filtered_during_planning: unpartitioned.add_actions_filtered_during_planning,
@@ -272,7 +268,6 @@ fn finalize_scan_plan(
         kernel_schemas: unpartitioned.kernel_schemas,
         partitions,
         partition_target_diagnostic,
-        scan_metadata_exhausted: unpartitioned.scan_metadata_exhausted,
         add_actions_filtered_during_planning: unpartitioned.add_actions_filtered_during_planning,
         estimated_bytes: unpartitioned.estimated_bytes,
         estimated_rows: unpartitioned.estimated_rows,
@@ -4699,7 +4694,6 @@ mod tests {
             empty_metrics.reader_backend,
             crate::ParquetReaderBackend::DirectParquet
         );
-        assert_eq!(empty_metrics.scan_metadata_exhausted, Some(true));
         assert_eq!(empty_metrics.scan_partitions_planned, 0);
         assert_eq!(empty_metrics.files_planned, 0);
         assert_eq!(
@@ -4772,7 +4766,6 @@ mod tests {
         assert_eq!(second.estimated_rows, None);
         assert_eq!(last.file_size, Some(1_000));
         assert_eq!(last.estimated_rows, Some(1_000));
-        assert!(many.scan_metadata_exhausted);
         assert_eq!(many.add_actions_filtered_during_planning, Some(0));
         assert_eq!(many.estimated_bytes, Some(500_500));
         assert_eq!(many.estimated_rows, None);
@@ -4810,7 +4803,6 @@ mod tests {
             ["first.parquet", "second.parquet", "third.parquet"]
         );
         assert_eq!(plan.file_tasks.len(), 3);
-        assert!(plan.scan_metadata_exhausted);
         assert_eq!(plan.add_actions_filtered_during_planning, Some(0));
         assert_eq!(plan.estimated_bytes, Some(60));
         assert_eq!(plan.estimated_rows, Some(6));
@@ -5472,7 +5464,6 @@ mod tests {
             metrics.reader_backend,
             crate::ParquetReaderBackend::DirectParquet
         );
-        assert_eq!(metrics.scan_metadata_exhausted, Some(true));
         assert_eq!(metrics.scan_partitions_planned, 2);
         assert_eq!(metrics.files_planned, 4);
         assert_eq!(metrics.add_actions_filtered_during_planning, Some(0));
@@ -6031,14 +6022,13 @@ mod tests {
         assert_eq!(field_names(&plan.physical_schema), ["id"]);
         assert_eq!(field_names(&plan.projected_schema), ["id"]);
         let final_state = (
-            plan.scan_metadata_exhausted,
             plan.partitions.len(),
             planned_tasks(&plan).count(),
             plan.add_actions_filtered_during_planning,
             plan.estimated_bytes,
             plan.estimated_rows,
         );
-        assert_eq!(final_state, (true, 1, 1, Some(1), Some(20), Some(2)));
+        assert_eq!(final_state, (1, 1, Some(1), Some(20), Some(2)));
         assert!(Arc::ptr_eq(&plan.engine_context, snapshot.engine_context()));
 
         let task = planned_tasks(&plan)
