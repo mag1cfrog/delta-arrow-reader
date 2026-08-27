@@ -20,18 +20,18 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct DataFusionFilterCapabilities {
+pub(crate) struct FilterCapabilities {
     pub(crate) supports_exact_row_filtering: bool,
 }
 
-pub(crate) struct DataFusionFilterDecision {
+pub(crate) struct FilterDecision {
     pub(crate) pruning_predicate: Option<DeltaPredicate>,
     pub(crate) pushdown: TableProviderFilterPushDown,
     pub(crate) referenced_columns: Vec<String>,
 }
 
-pub(crate) struct DataFusionFilterPlan {
-    pub(crate) decisions: Vec<DataFusionFilterDecision>,
+pub(crate) struct FilterPlan {
+    pub(crate) decisions: Vec<FilterDecision>,
     pub(crate) pruning_predicate: Option<DeltaPredicate>,
     pub(crate) exact_row_predicate: Option<DeltaPredicate>,
     pub(crate) requires_statistics: bool,
@@ -39,7 +39,7 @@ pub(crate) struct DataFusionFilterPlan {
     pub(crate) has_unresolved_predicate: bool,
 }
 
-pub(crate) struct DataFusionProjectionPlan {
+pub(crate) struct ProjectionPlan {
     pub(crate) output_schema: SchemaRef,
     pub(crate) scan_projection: Option<Vec<String>>,
     pub(crate) hidden_columns: Vec<String>,
@@ -47,8 +47,8 @@ pub(crate) struct DataFusionProjectionPlan {
 }
 
 pub(crate) struct DataFusionScanPlan {
-    pub(crate) projection: DataFusionProjectionPlan,
-    pub(crate) filters: DataFusionFilterPlan,
+    pub(crate) projection: ProjectionPlan,
+    pub(crate) filters: FilterPlan,
 }
 
 pub(crate) fn plan_datafusion_scan(
@@ -56,7 +56,7 @@ pub(crate) fn plan_datafusion_scan(
     partition_columns: &HashSet<String>,
     projection: Option<&[usize]>,
     filters: &[&Expr],
-    capabilities: DataFusionFilterCapabilities,
+    capabilities: FilterCapabilities,
 ) -> Result<DataFusionScanPlan, DeltaReaderError> {
     validate_projection(schema, projection)?;
     let filter_plan = {
@@ -85,7 +85,7 @@ pub(crate) fn plan_datafusion_scan(
 fn validate_inexact_residual_projection(
     schema: &Schema,
     projection: Option<&[usize]>,
-    filters: &DataFusionFilterPlan,
+    filters: &FilterPlan,
 ) -> Result<(), DeltaReaderError> {
     let Some(projection) = projection else {
         return Ok(());
@@ -139,7 +139,7 @@ fn plan_projection(
     schema: &SchemaRef,
     projection: Option<&[usize]>,
     filter_columns: &[String],
-) -> Result<DataFusionProjectionPlan, DeltaReaderError> {
+) -> Result<ProjectionPlan, DeltaReaderError> {
     let Some(projection) = projection else {
         tracing::debug!(
             target: "delta_arrow_reader::datafusion",
@@ -148,7 +148,7 @@ fn plan_projection(
             hidden_columns = 0,
             "planned DataFusion projection"
         );
-        return Ok(DataFusionProjectionPlan {
+        return Ok(ProjectionPlan {
             output_schema: Arc::clone(schema),
             scan_projection: None,
             hidden_columns: Vec::new(),
@@ -182,7 +182,7 @@ fn plan_projection(
         hidden_columns = hidden_columns.len(),
         "planned DataFusion projection"
     );
-    Ok(DataFusionProjectionPlan {
+    Ok(ProjectionPlan {
         output_schema,
         scan_projection: Some(scan_projection),
         hidden_columns,
@@ -194,8 +194,8 @@ pub(crate) fn plan_datafusion_filters(
     schema: &SchemaRef,
     partition_columns: &HashSet<String>,
     filters: &[&Expr],
-    capabilities: DataFusionFilterCapabilities,
-) -> DataFusionFilterPlan {
+    capabilities: FilterCapabilities,
+) -> FilterPlan {
     let mut requires_statistics = false;
     let decisions = filters
         .iter()
@@ -205,7 +205,7 @@ pub(crate) fn plan_datafusion_filters(
             let Some(translation) =
                 translate_filter_for_pushdown(&filter, schema, partition_columns)
             else {
-                return DataFusionFilterDecision {
+                return FilterDecision {
                     pruning_predicate: None,
                     pushdown: TableProviderFilterPushDown::Unsupported,
                     referenced_columns,
@@ -221,7 +221,7 @@ pub(crate) fn plan_datafusion_filters(
                 }
             };
             requires_statistics |= !matches!(translation.kind, TranslatedFilterKind::Partition);
-            DataFusionFilterDecision {
+            FilterDecision {
                 pruning_predicate: Some(translation.predicate),
                 pushdown,
                 referenced_columns: translation.referenced_columns,
@@ -276,7 +276,7 @@ pub(crate) fn plan_datafusion_filters(
         unsupported,
         "planned DataFusion filters"
     );
-    DataFusionFilterPlan {
+    FilterPlan {
         decisions,
         pruning_predicate,
         exact_row_predicate,
@@ -1140,7 +1140,7 @@ mod tests {
             partitions,
             projection,
             filters,
-            DataFusionFilterCapabilities {
+            FilterCapabilities {
                 supports_exact_row_filtering,
             },
         )
@@ -1645,7 +1645,7 @@ mod tests {
             &partitions,
             Some(&[0]),
             &[&filter],
-            DataFusionFilterCapabilities {
+            FilterCapabilities {
                 supports_exact_row_filtering: true,
             },
         )

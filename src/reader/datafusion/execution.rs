@@ -848,7 +848,7 @@ mod tests {
     use crate::{
         DeltaScanExecutionOptions, DeltaTable, DeltaTableBuilder,
         delta::kernel::delta_predicate_to_kernel_pruning,
-        reader::datafusion::planning::{DataFusionFilterCapabilities, plan_datafusion_scan},
+        reader::datafusion::planning::{FilterCapabilities, plan_datafusion_scan},
         reader::planning::{
             DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan,
         },
@@ -1032,7 +1032,7 @@ mod tests {
             &partition_columns,
             projection,
             &filter_refs,
-            DataFusionFilterCapabilities {
+            FilterCapabilities {
                 supports_exact_row_filtering: execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },

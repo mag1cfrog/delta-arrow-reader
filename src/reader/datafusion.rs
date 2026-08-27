@@ -24,7 +24,7 @@ use datafusion::{
 
 use self::{
     execution::create_datafusion_execution_plan,
-    planning::{DataFusionFilterCapabilities, plan_datafusion_filters, plan_datafusion_scan},
+    planning::{FilterCapabilities, plan_datafusion_filters, plan_datafusion_scan},
 };
 
 use crate::{
@@ -144,7 +144,7 @@ impl DeltaTableProvider {
             &partition_columns,
             projection,
             &filter_refs,
-            DataFusionFilterCapabilities {
+            FilterCapabilities {
                 supports_exact_row_filtering: self.options.execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },
@@ -347,7 +347,7 @@ impl TableProvider for DeltaTableProvider {
             &self.table.schema(),
             &partition_columns,
             filters,
-            DataFusionFilterCapabilities {
+            FilterCapabilities {
                 supports_exact_row_filtering: self.options.execution_options.parquet_backend()
                     == ParquetReaderBackend::Direct,
             },
