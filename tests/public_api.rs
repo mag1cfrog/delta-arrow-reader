@@ -192,10 +192,10 @@ fn streaming_reader_contract_is_public() {
     fn assert_clone<T: Clone>() {}
     fn assert_batch_stream<T: Stream<Item = Result<RecordBatch, DeltaReaderError>>>() {}
     fn assert_future<T>(_: impl Future<Output = T>) {}
-    const fn table_version(table: &DeltaTable) -> u64 {
+    fn table_version(table: &DeltaTable) -> u64 {
         table.version()
     }
-    const fn scan_partition_count(scan: &DeltaScan) -> usize {
+    fn scan_partition_count(scan: &DeltaScan) -> usize {
         scan.partition_count()
     }
 

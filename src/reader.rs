@@ -227,23 +227,20 @@ impl fmt::Debug for DeltaTableSnapshot {
 #[derive(Clone)]
 pub struct DeltaTable {
     snapshot: Arc<ArrowTableSnapshot>,
-    version: u64,
     execution_options: DeltaScanExecutionOptions,
 }
 
 impl DeltaTable {
     fn new(snapshot: ArrowTableSnapshot, execution_options: DeltaScanExecutionOptions) -> Self {
-        let version = snapshot.version();
         Self {
             snapshot: Arc::new(snapshot),
-            version,
             execution_options,
         }
     }
 
     /// Returns the loaded Delta snapshot version.
-    pub const fn version(&self) -> u64 {
-        self.version
+    pub fn version(&self) -> u64 {
+        self.snapshot.version()
     }
 
     /// Returns a shared handle to the logical Arrow schema.
@@ -295,7 +292,7 @@ impl fmt::Debug for DeltaTable {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("DeltaTable")
-            .field("version", &self.version)
+            .field("version", &self.version())
             .finish_non_exhaustive()
     }
 }
@@ -405,7 +402,6 @@ impl<'table> DeltaScanBuilder<'table> {
             Ok(plan) => {
                 trace_planning_completed(snapshot_version, backend, plan.partitions.len());
                 Ok(DeltaScan {
-                    partition_count: plan.partitions.len(),
                     plan: Arc::new(plan),
                     predicate,
                     limit: self.limit,
@@ -445,7 +441,6 @@ pub struct DeltaScan {
     plan: Arc<DeltaScanPlan>,
     predicate: Option<DeltaPredicate>,
     limit: Option<usize>,
-    partition_count: usize,
     enforce_physical_predicate_rows: bool,
 }
 
@@ -456,8 +451,8 @@ impl DeltaScan {
     }
 
     /// Returns the number of planned execution partitions.
-    pub const fn partition_count(&self) -> usize {
-        self.partition_count
+    pub fn partition_count(&self) -> usize {
+        self.plan.partitions.len()
     }
 
     /// Converts the scan into a pull-driven Arrow batch stream.
