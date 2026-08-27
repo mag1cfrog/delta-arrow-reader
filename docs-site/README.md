@@ -3,13 +3,13 @@
 Build the site locally with:
 
 ```bash
-python -m pip install -r docs-site/requirements.txt && python -m zensical build --strict -f docs-site/mkdocs.yml
+python -m pip install -r docs-site/requirements.txt && python -m zensical build --strict -f mkdocs.yml
 ```
 
 Serve it locally with:
 
 ```bash
-python -m zensical serve -f docs-site/mkdocs.yml
+python -m zensical serve -f mkdocs.yml
 ```
 
 ## Content structure
@@ -26,3 +26,11 @@ python -m zensical serve -f docs-site/mkdocs.yml
 
 Keep Delta Funnel workflow, Python, reporting, and SQL Server documentation in
 the Delta Funnel site. This site owns the standalone reader's behavior.
+
+## Shared Rust documentation
+
+The Markdown files in `docs/` are the single source for the site. The
+installation, quickstart, `How it works`, and `Reference` pages are also
+included in the crate documentation by `src/guides.rs`. Use absolute links
+between pages, and mark runnable Rust examples as `no_run` or incomplete
+snippets as `ignore` so Zensical and rustdoc can render the same source.

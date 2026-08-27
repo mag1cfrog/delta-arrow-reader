@@ -15,7 +15,7 @@ futures-util = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-You can now continue to the [streaming reader quickstart](streaming-reader.md).
+You can now continue to the [streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/).
 
 ## DataFusion adapter
 
@@ -29,7 +29,7 @@ delta-arrow-reader = { version = "0.3.0", features = ["datafusion"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-You can now continue to the [DataFusion quickstart](datafusion.md).
+You can now continue to the [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
 
 ## Optional feature
 

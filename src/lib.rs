@@ -5,6 +5,8 @@ mod delta;
 mod error;
 mod reader;
 
+pub mod guides;
+
 #[cfg(feature = "datafusion")]
 pub use reader::datafusion;
 

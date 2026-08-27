@@ -91,5 +91,5 @@ Asynchronous reads stop at cancellation boundaries. Synchronous Delta Kernel
 work that has already entered a dependency call may continue until its next
 safe handoff, but it cannot start a later file after cancellation.
 
-See [execution options](reference/execution-options.md) for exact defaults and
-[scan metrics](reference/metrics.md) for the counters exposed by this process.
+See [execution options](https://mag1cfrog.github.io/delta-arrow-reader/reference/execution-options/) for exact defaults and
+[scan metrics](https://mag1cfrog.github.io/delta-arrow-reader/reference/metrics/) for the counters exposed by this process.

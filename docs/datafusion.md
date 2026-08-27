@@ -6,12 +6,12 @@ small result from it.
 
 ## Before you start
 
-Add the [DataFusion dependencies](installation.md#datafusion-adapter). You will
+Add the [DataFusion dependencies](https://mag1cfrog.github.io/delta-arrow-reader/installation/#datafusion-adapter). You will
 also need the path to a Delta table that your application can read.
 
 ## Register and query the table
 
-```rust
+```no_run
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
     DeltaTableBuilder,
@@ -47,6 +47,6 @@ a name in DataFusion, but does not open its Parquet data files. DataFusion reads
 those files when `collect` runs the query. The `LIMIT` keeps this first result
 small.
 
-Once the query works, you can read about [how the reader works](architecture.md)
+Once the query works, you can read about [how the reader works](https://mag1cfrog.github.io/delta-arrow-reader/architecture/)
 or use the [Rust API reference](https://docs.rs/delta-arrow-reader) to explore
 scan options and metrics.

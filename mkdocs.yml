@@ -3,6 +3,8 @@ site_url: https://mag1cfrog.github.io/delta-arrow-reader/
 site_description: Read Delta Lake tables as Apache Arrow streams or DataFusion tables.
 repo_name: mag1cfrog/delta-arrow-reader
 repo_url: https://github.com/mag1cfrog/delta-arrow-reader
+docs_dir: docs
+site_dir: docs-site/site
 
 theme:
   name: material
@@ -23,6 +25,11 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.highlight:
       anchor_linenums: true
+      extend_pygments_lang:
+        - name: no_run
+          lang: rust
+        - name: ignore
+          lang: rust
 
 nav:
   - Start here:
