@@ -19,10 +19,10 @@ use tokio::{
 };
 use tracing::Instrument;
 
+use super::planning::{DeltaScanFileTask, DeltaScanPlan};
 use crate::{
     DeltaReadMetrics, DeltaReaderBackend, DeltaReaderError, DeltaReaderExecutionOptions,
     error::{CancelledSnafu, InvalidConfigurationSnafu},
-    reader::planning::{DeltaScanFileTask, DeltaScanPlan},
 };
 
 pub(crate) struct ScanReadLimiter {

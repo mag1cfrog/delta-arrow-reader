@@ -70,8 +70,8 @@ use crate::{
         metrics::saturating_fetch_add,
         official_kernel_executor,
         planning::{DeltaScanFileTask, DeltaScanFileTaskPartition, DeltaScanPlan, build_partition},
+        scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
     },
-    scheduling::{DeltaScanExecution, FileAdmission, FileAdmissionFn, ScanReadLimiter},
 };
 
 /// Controls when DataFusion may split NativeAsync Parquet files into ranged scan tasks.
@@ -1100,8 +1100,8 @@ mod tests {
 
     fn sized_file_task(path: &str, size: Option<u64>) -> DeltaScanFileTask {
         use crate::{
-            deletion_vector::DeletionVectorMetadata,
             delta::kernel::KernelPhysicalToLogicalTransform,
+            reader::deletion_vector::DeletionVectorMetadata,
         };
 
         DeltaScanFileTask {
@@ -1855,8 +1855,8 @@ mod tests {
     fn dynamic_admission_reason_counts_are_once_per_file_and_saturating() -> TestResult {
         use crate::{
             datafusion_dynamic_filters::DeltaDynamicFilterPlan,
-            deletion_vector::DeletionVectorMetadata,
             delta::kernel::KernelPhysicalToLogicalTransform,
+            reader::deletion_vector::DeletionVectorMetadata,
         };
 
         let fixture = TestTable::partitioned("dynamic-counters")?;

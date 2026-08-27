@@ -1,8 +1,12 @@
 //! Public DataFusion-independent Delta-to-Arrow reader.
 
+pub(crate) mod deletion_vector;
 pub(crate) mod metrics;
 mod options;
+pub(crate) mod partition_target;
 pub(crate) mod planning;
+#[allow(dead_code)]
+pub(crate) mod scheduling;
 pub(crate) mod transform;
 
 pub use metrics::{DeltaReadMetrics, DeltaReadMetricsSnapshot};
@@ -22,8 +26,14 @@ use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use futures_util::Stream;
 use snafu::ResultExt;
 
-use self::planning::{
-    DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan, validate_backend_available,
+use self::{
+    planning::{
+        DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan, validate_backend_available,
+    },
+    scheduling::{
+        DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
+        PartitionStream,
+    },
 };
 
 use crate::{
@@ -39,10 +49,6 @@ use crate::{
     },
     error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
-    scheduling::{
-        DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
-        PartitionStream,
-    },
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
@@ -848,10 +854,12 @@ mod tests {
     use crate::{
         DeltaReadMetrics, DeltaReaderBackend, DeltaReaderExecutionOptions,
         error::InvalidConfigurationSnafu,
-        reader::metrics::DeltaReadMetricsConfig,
-        scheduling::{
-            FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor, FileReadPermit,
-            PartitionStream, ScanCancellation, ScanReadLimiter,
+        reader::{
+            metrics::DeltaReadMetricsConfig,
+            scheduling::{
+                FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor, FileReadPermit,
+                PartitionStream, ScanCancellation, ScanReadLimiter,
+            },
         },
     };
 

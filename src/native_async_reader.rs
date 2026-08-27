@@ -30,9 +30,6 @@ const ORIGINAL_ROW_INDEX_COLUMN: &str = "__delta_arrow_reader_original_row_index
 
 use crate::{
     DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions,
-    deletion_vector::{
-        DeletionVectorSelection, load_deletion_vector_selection_from_engine_context,
-    },
     delta::kernel::{
         DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
         KernelScanSchemas,
@@ -40,11 +37,16 @@ use crate::{
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     metered_object_store::MeteredParquetObjectStore,
     native_async_row_group_pruning::native_async_pruned_row_groups,
-    reader::planning::{DeltaScanFileTask, DeltaScanPlan},
-    reader::transform::{
-        align_batch_to_logical_schema, schema_uses_view_types, schema_with_view_types,
+    reader::{
+        deletion_vector::{
+            DeletionVectorSelection, load_deletion_vector_selection_from_engine_context,
+        },
+        planning::{DeltaScanFileTask, DeltaScanPlan},
+        scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
+        transform::{
+            align_batch_to_logical_schema, schema_uses_view_types, schema_with_view_types,
+        },
     },
-    scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
 };
 
 struct NativeAsyncFileReader {
@@ -1487,9 +1489,10 @@ mod tests {
         reader::{
             metrics::DeltaReadMetricsConfig,
             planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
-        },
-        scheduling::{
-            DeltaScanExecution, FileAdmission, FileReadPermit, ScanCancellation, ScanReadLimiter,
+            scheduling::{
+                DeltaScanExecution, FileAdmission, FileReadPermit, ScanCancellation,
+                ScanReadLimiter,
+            },
         },
     };
 

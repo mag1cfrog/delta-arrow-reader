@@ -10,9 +10,17 @@ use std::{
 use arrow::datatypes::{Schema, SchemaRef};
 use snafu::ResultExt;
 
+use super::{
+    deletion_vector::DeletionVectorMetadata,
+    metrics::DeltaReadMetricsConfig,
+    partition_target::{
+        DeltaScanPartitionTargetDiagnosticOutput,
+        delta_scan_partition_target_local_environment_diagnostic,
+        derive_delta_scan_partition_target_diagnostic,
+    },
+};
 use crate::{
     DeltaReadMetrics, DeltaReaderError, DeltaReaderExecutionOptions,
-    deletion_vector::DeletionVectorMetadata,
     delta::{
         kernel::{
             DeltaKernelEngineContext, DeltaKernelPredicate, KernelPhysicalToLogicalTransform,
@@ -25,12 +33,6 @@ use crate::{
         InvalidConfigurationSnafu, InvalidProjectionSnafu, ScanPartitionPlanningSnafu,
         ScanPlanningSnafu, UnsupportedPredicateSnafu,
     },
-    partition_target::{
-        DeltaScanPartitionTargetDiagnosticOutput,
-        delta_scan_partition_target_local_environment_diagnostic,
-        derive_delta_scan_partition_target_diagnostic,
-    },
-    reader::metrics::DeltaReadMetricsConfig,
 };
 
 #[derive(Default)]
@@ -4378,7 +4380,7 @@ mod tests {
             snapshot::load_delta_table_snapshot_blocking,
         },
         predicate::validate_predicate,
-        scheduling::{
+        reader::scheduling::{
             DeltaScanExecution, FileAdmission, FileAdmissionFn, FileBatchStream, FileExecutor,
             FileReadPermit,
         },

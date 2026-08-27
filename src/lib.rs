@@ -11,7 +11,6 @@ mod datafusion_execution;
 mod datafusion_planning;
 #[cfg(feature = "datafusion")]
 mod datafusion_provider;
-mod deletion_vector;
 mod delta;
 mod error;
 #[cfg(feature = "native-async")]
@@ -26,11 +25,8 @@ mod native_async_row_group_pruning;
 #[cfg(feature = "official-kernel")]
 #[allow(dead_code)]
 mod official_kernel_reader;
-mod partition_target;
 mod predicate;
 mod reader;
-#[allow(dead_code)]
-mod scheduling;
 
 #[cfg(feature = "datafusion")]
 pub use datafusion_execution::{
@@ -43,15 +39,15 @@ pub use datafusion_provider::{
 };
 pub use delta::DeltaProtocolInfo;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
+pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 #[doc(hidden)]
-pub use partition_target::{
+pub use reader::partition_target::{
     DeltaScanPartitionTargetDiagnosticInput, DeltaScanPartitionTargetDiagnosticOutput,
     DeltaScanPartitionTargetDiagnosticSource, DeltaScanPartitionTargetLocalEnvironmentDiagnostic,
     DeltaScanPartitionTargetLocalUnixFileDescriptorLimitStatus,
     delta_scan_partition_target_local_environment_diagnostic,
     derive_delta_scan_partition_target_diagnostic,
 };
-pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 pub use reader::{
     DeltaBatchStream, DeltaReadMetrics, DeltaReadMetricsSnapshot, DeltaReaderBackend,
     DeltaReaderExecutionOptions, DeltaScan, DeltaScanBuilder, DeltaSnapshotSelection,

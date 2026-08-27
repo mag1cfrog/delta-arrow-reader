@@ -425,7 +425,8 @@ mod tests {
     use super::*;
     use crate::{
         datafusion_dynamic_filters::DeltaDynamicFilterPlan,
-        deletion_vector::DeletionVectorMetadata, delta::kernel::KernelPhysicalToLogicalTransform,
+        delta::kernel::KernelPhysicalToLogicalTransform,
+        reader::deletion_vector::DeletionVectorMetadata,
     };
 
     fn test_schema() -> Arc<Schema> {

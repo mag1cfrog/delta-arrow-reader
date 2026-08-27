@@ -10,13 +10,13 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     DeltaReaderError,
-    deletion_vector::load_deletion_vector_selection_blocking,
     error::{CancelledSnafu, DataFileReadSnafu, PhysicalToLogicalTransformSnafu},
     reader::{
+        deletion_vector::load_deletion_vector_selection_blocking,
         planning::{DeltaScanFileTask, DeltaScanPlan},
+        scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
         transform::align_batch_to_logical_schema,
     },
-    scheduling::{FileBatchStream, FileExecutor, FileReadPermit, ScanCancellation},
 };
 
 struct OfficialKernelFileStreamState {
@@ -230,7 +230,7 @@ mod tests {
     use super::spawn_blocking_file_stream;
     use crate::{
         DeltaReaderBackend, DeltaReaderExecutionOptions,
-        scheduling::{ScanCancellation, ScanReadLimiter},
+        reader::scheduling::{ScanCancellation, ScanReadLimiter},
     };
 
     fn options() -> Result<DeltaReaderExecutionOptions, crate::DeltaReaderError> {

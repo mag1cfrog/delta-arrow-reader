@@ -1098,7 +1098,7 @@ mod tests {
             .split("#[cfg(test)]")
             .next()
             .expect("production source");
-        let kernel_source = include_str!("delta/kernel.rs");
+        let kernel_source = include_str!("../delta/kernel.rs");
 
         for forbidden in [
             "DefaultEngineBuilder",
