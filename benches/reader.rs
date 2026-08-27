@@ -88,7 +88,7 @@ const CSV_HEADER: [&str; 80] = [
     "provider_stats_dynamic_filters_received_p50",
     "provider_stats_dynamic_filters_accepted_p50",
     "provider_stats_dynamic_filters_rejected_p50",
-    "provider_stats_dynamic_filter_snapshot_attempts_p50",
+    "provider_stats_dynamic_partition_filter_checks_p50",
     "provider_stats_dynamic_partition_tasks_kept_unusable_metadata_p50",
     "provider_stats_dynamic_partition_tasks_kept_unevaluable_filter_p50",
     "provider_stats_scheduler_batches_emitted_p50",
@@ -259,7 +259,7 @@ struct ReadSummary {
     dynamic_filters_received: u64,
     dynamic_filters_accepted: u64,
     dynamic_filters_rejected: u64,
-    dynamic_filter_snapshot_attempts: u64,
+    dynamic_partition_filter_checks: u64,
     dynamic_partition_tasks_kept_unusable_metadata: u64,
     dynamic_partition_tasks_kept_unevaluable_filter: u64,
     scheduler_batches_emitted: u64,
@@ -1571,8 +1571,8 @@ fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
         dynamic_filters_received: dynamic(|snapshot| snapshot.dynamic_filters_received),
         dynamic_filters_accepted: dynamic(|snapshot| snapshot.dynamic_filters_accepted),
         dynamic_filters_rejected: dynamic(|snapshot| snapshot.dynamic_filters_rejected),
-        dynamic_filter_snapshot_attempts: dynamic(|snapshot| {
-            snapshot.dynamic_filter_snapshot_attempts
+        dynamic_partition_filter_checks: dynamic(|snapshot| {
+            snapshot.dynamic_partition_filter_checks
         }),
         dynamic_partition_tasks_kept_unusable_metadata: dynamic(|snapshot| {
             snapshot.dynamic_partition_tasks_kept_unusable_metadata
@@ -1664,7 +1664,7 @@ fn csv_row(
         read.dynamic_filters_received.to_string(),
         read.dynamic_filters_accepted.to_string(),
         read.dynamic_filters_rejected.to_string(),
-        read.dynamic_filter_snapshot_attempts.to_string(),
+        read.dynamic_partition_filter_checks.to_string(),
         read.dynamic_partition_tasks_kept_unusable_metadata
             .to_string(),
         read.dynamic_partition_tasks_kept_unevaluable_filter
