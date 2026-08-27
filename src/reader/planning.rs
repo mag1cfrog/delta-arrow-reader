@@ -167,7 +167,7 @@ pub(crate) fn plan_unpartitioned_scan(
             "Delta scan metadata expansion"
         )
         .entered();
-        scan.file_metadata(snapshot.engine_context())
+        scan.collect_file_metadata(snapshot.engine_context())
             .boxed()
             .context(ScanPlanningSnafu {
                 reason: "kernel_scan_metadata_failed",

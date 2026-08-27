@@ -161,7 +161,7 @@ impl KernelScan {
         self.scan.physical_predicate().map(DeltaKernelPredicate)
     }
 
-    pub(crate) fn file_metadata(
+    pub(crate) fn collect_file_metadata(
         &self,
         engine_context: &DeltaKernelEngineContext,
     ) -> delta_kernel::DeltaResult<KernelScanMetadata> {
