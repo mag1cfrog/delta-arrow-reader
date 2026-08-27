@@ -109,7 +109,6 @@ enum PartitionStreamState {
 pub(crate) struct PartitionStream {
     state: PartitionStreamState,
     cancellation: ScanCancellation,
-    done: bool,
 }
 
 pub(crate) struct DeltaScanScheduler {
@@ -437,7 +436,6 @@ impl PartitionStream {
                 start,
             })),
             cancellation,
-            done: false,
         }
     }
 
@@ -447,7 +445,6 @@ impl PartitionStream {
         };
         let Some(start) = start.take() else {
             self.state = PartitionStreamState::Done;
-            self.done = true;
             return;
         };
         let (output, receiver) = mpsc::channel(start.output_buffer_batches);
@@ -482,12 +479,10 @@ impl Stream for PartitionStream {
                 PartitionStreamState::Finishing(task) => match Pin::new(task).poll(context) {
                     Poll::Ready(Ok(())) => {
                         self.state = PartitionStreamState::Done;
-                        self.done = true;
                         return Poll::Ready(None);
                     }
                     Poll::Ready(Err(_)) => {
                         self.state = PartitionStreamState::Done;
-                        self.done = true;
                         return Poll::Ready(self.cancellation.cancel().then(|| {
                             Err(CancelledSnafu {
                                 reason: "partition_scheduler_task_failed",
@@ -505,7 +500,7 @@ impl Stream for PartitionStream {
 
 impl Drop for PartitionStream {
     fn drop(&mut self) {
-        if self.done {
+        if matches!(&self.state, PartitionStreamState::Done) {
             return;
         }
         self.cancellation.cancel();
@@ -1694,7 +1689,6 @@ mod tests {
         let mut stream = PartitionStream {
             state: PartitionStreamState::Running { receiver, task },
             cancellation,
-            done: false,
         };
 
         let error = timeout(Duration::from_secs(5), stream.next())
