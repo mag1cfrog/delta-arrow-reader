@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+## [0.4.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.3.0...v0.4.0) - 2026-08-28
+
+### Added
+
+- expose eager Delta metadata cache lifecycle tracing
+- add opt-in Delta metadata preloading for log-free query planning
+- [**breaking**] simplify table loading with explicit async methods
+
+### Changed
+
+- separate Parquet schema alignment from direct file reading
+- [**breaking**] make reader APIs easier to understand ([#24](https://github.com/mag1cfrog/delta-arrow-reader/pull/24))
+- [**breaking**] simplify Parquet reader backend selection
+- organize reader modules ([#21](https://github.com/mag1cfrog/delta-arrow-reader/pull/21))
+- [**breaking**] require Rust 1.94 and make release cache read-only ([#19](https://github.com/mag1cfrog/delta-arrow-reader/pull/19))
+
+### Documentation
+
+- quantify eager metadata caching performance and memory tradeoffs
+- explain eager Delta scan metadata initialization
+- compare Delta reader performance and tradeoffs
+- make the README easier for new users
+- organize benchmark and documentation files
+- publish shared user guides on docs.rs
+- add a standalone Delta Arrow Reader site
+- publish reproducible reader benchmark results
+
+### Maintenance
+
+- organize release changelog sections
+
 ## [0.3.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.2.0...v0.3.0) - 2026-08-12
 
 ### Added
