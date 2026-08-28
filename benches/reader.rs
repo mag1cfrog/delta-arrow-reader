@@ -31,7 +31,9 @@ use parquet::file::properties::WriterProperties;
 const MIB: u64 = 1024 * 1024;
 const BENCHMARK_SCHEMA_VERSION: u32 = 30;
 const DEFAULT_REPETITIONS: usize = 3;
+const DEFAULT_QUERIES_PER_TABLE: usize = 1;
 const MAX_REPETITIONS: usize = 128;
+const MAX_QUERIES_PER_TABLE: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
 const FROZEN_PARQUET_CREATED_BY: &str = "parquet-rs version 58.3.0";
 const PROTOCOL_JSON: &str = r#"{"protocol":{"minReaderVersion":1,"minWriterVersion":2}}"#;
@@ -138,11 +140,19 @@ struct Config {
     workload: Workload,
     query: Query,
     backend: ParquetReaderBackend,
+    scan_metadata_mode: ScanMetadataMode,
+    queries_per_table: usize,
     repetitions: usize,
     metadata_size_hint_bytes: Option<usize>,
     full_file_read_threshold_bytes: Option<usize>,
     retain_fixture: bool,
     seed: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScanMetadataMode {
+    Lazy,
+    Eager,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -302,6 +312,8 @@ impl Config {
             workload: Workload::FewLarger,
             query: Query::FullRows,
             backend: ParquetReaderBackend::Direct,
+            scan_metadata_mode: ScanMetadataMode::Lazy,
+            queries_per_table: DEFAULT_QUERIES_PER_TABLE,
             repetitions: DEFAULT_REPETITIONS,
             metadata_size_hint_bytes: Some(65_536),
             full_file_read_threshold_bytes: None,
@@ -338,6 +350,16 @@ impl Config {
                         "direct_parquet" => ParquetReaderBackend::Direct,
                         "delta_kernel" => ParquetReaderBackend::DeltaKernel,
                         other => return Err(invalid(format!("unknown backend: {other}")).into()),
+                    }
+                }
+                "--provider-exec-scan-metadata-mode" => {
+                    config.scan_metadata_mode =
+                        ScanMetadataMode::parse(&required_arg(&mut args, &argument)?)?
+                }
+                "--provider-exec-queries-per-table" => {
+                    config.queries_per_table = required_arg(&mut args, &argument)?.parse()?;
+                    if !(1..=MAX_QUERIES_PER_TABLE).contains(&config.queries_per_table) {
+                        return Err(invalid("queries per table must be between 1 and 128").into());
                     }
                 }
                 "--provider-exec-scheduling-profile" => {
@@ -458,6 +480,16 @@ fn required_arg(
 ) -> Result<String, io::Error> {
     args.next()
         .ok_or_else(|| invalid(format!("missing value for {argument}")))
+}
+
+impl ScanMetadataMode {
+    fn parse(value: &str) -> Result<Self, io::Error> {
+        match value {
+            "lazy" => Ok(Self::Lazy),
+            "eager" => Ok(Self::Eager),
+            other => Err(invalid(format!("unknown scan metadata mode: {other}"))),
+        }
+    }
 }
 
 impl StorageProfile {
@@ -1777,6 +1809,8 @@ mod tests {
             workload,
             query,
             backend,
+            scan_metadata_mode: ScanMetadataMode::Lazy,
+            queries_per_table: DEFAULT_QUERIES_PER_TABLE,
             repetitions: 1,
             metadata_size_hint_bytes,
             full_file_read_threshold_bytes,
@@ -1888,8 +1922,11 @@ mod tests {
             ),
         ];
         assert_eq!(cases.len(), 12);
-        for case in cases {
-            case.validate()?;
+        for mut case in cases {
+            for mode in [ScanMetadataMode::Lazy, ScanMetadataMode::Eager] {
+                case.scan_metadata_mode = mode;
+                case.validate()?;
+            }
         }
         let outside = config(
             Workload::ManySmall,
@@ -1919,6 +1956,10 @@ mod tests {
                 "full_rows",
                 "--provider-exec-backend",
                 "direct_parquet",
+                "--provider-exec-scan-metadata-mode",
+                "eager",
+                "--provider-exec-queries-per-table",
+                "128",
                 "--provider-exec-scheduling-profile",
                 "prefetch_2_ap_target_scan_3x",
                 "--provider-exec-parquet-metadata-size-hint-bytes",
@@ -1940,12 +1981,17 @@ mod tests {
         assert_eq!(parsed.workload.name(), "provider_few_larger_files");
         assert_eq!(parsed.query.name(), "full_rows");
         assert!(matches!(parsed.backend, ParquetReaderBackend::Direct));
+        assert_eq!(parsed.scan_metadata_mode, ScanMetadataMode::Eager);
+        assert_eq!(parsed.queries_per_table, 128);
         assert_eq!(parsed.repetitions, 5);
         assert_eq!(parsed.metadata_size_hint_bytes, Some(65_536));
         assert_eq!(parsed.full_file_read_threshold_bytes, None);
         assert_eq!(parsed.temp_dir, PathBuf::from("target/frozen-fixtures"));
         assert!(parsed.retain_fixture);
         assert_eq!(parsed.output, Some(PathBuf::from("target/frozen.csv")));
+        let debug = format!("{parsed:?}");
+        assert!(debug.contains("scan_metadata_mode: Eager"));
+        assert!(debug.contains("queries_per_table: 128"));
 
         let defaults = Config::parse(Vec::<String>::new())?;
         assert_eq!(defaults.seed, 0);
@@ -1953,6 +1999,8 @@ mod tests {
         assert_eq!(defaults.workload.name(), "provider_few_larger_files");
         assert_eq!(defaults.query.name(), "full_rows");
         assert!(matches!(defaults.backend, ParquetReaderBackend::Direct));
+        assert_eq!(defaults.scan_metadata_mode, ScanMetadataMode::Lazy);
+        assert_eq!(defaults.queries_per_table, DEFAULT_QUERIES_PER_TABLE);
         assert_eq!(defaults.repetitions, DEFAULT_REPETITIONS);
         assert_eq!(defaults.metadata_size_hint_bytes, Some(65_536));
         assert_eq!(defaults.full_file_read_threshold_bytes, None);
@@ -1967,6 +2015,35 @@ mod tests {
             .map(str::to_owned),
         )?;
         assert_eq!(full_read.full_file_read_threshold_bytes, Some(1_000_000));
+        assert_eq!(
+            Config::parse(["--provider-exec-scan-metadata-mode", "lazy"].map(str::to_owned))?
+                .scan_metadata_mode,
+            ScanMetadataMode::Lazy
+        );
+        assert_eq!(
+            Config::parse(["--provider-exec-scan-metadata-mode", "eager"].map(str::to_owned))?
+                .scan_metadata_mode,
+            ScanMetadataMode::Eager
+        );
+        assert!(
+            Config::parse(["--provider-exec-scan-metadata-mode", "automatic"].map(str::to_owned))
+                .is_err()
+        );
+        assert!(Config::parse(["--provider-exec-scan-metadata-mode"].map(str::to_owned)).is_err());
+        for count in ["1", "128"] {
+            assert_eq!(
+                Config::parse(["--provider-exec-queries-per-table", count].map(str::to_owned))?
+                    .queries_per_table,
+                count.parse::<usize>()?
+            );
+        }
+        for count in ["0", "129"] {
+            assert!(
+                Config::parse(["--provider-exec-queries-per-table", count].map(str::to_owned))
+                    .is_err()
+            );
+        }
+        assert!(Config::parse(["--provider-exec-queries-per-table"].map(str::to_owned)).is_err());
         assert!(Config::parse(["--provider-exec-repetitions", "0"].map(str::to_owned)).is_err());
         assert!(Config::parse(["--provider-exec-repetitions"].map(str::to_owned)).is_err());
         assert!(
