@@ -192,7 +192,8 @@ impl KernelScan {
             let metadata = metadata?;
             let data = metadata.scan_files.apply_selection_vector()?;
             let mut batch: RecordBatch = ArrowEngineData::try_from_engine_data(data)?.into();
-            // Cached replay consumes JSON stats and reconstructs typed stats per predicate.
+            // Cached replay rebuilds typed stats from JSON `stats`, so retaining
+            // `stats_parsed` would only duplicate the same statistics in memory.
             if let Ok(index) = batch.schema().index_of("stats_parsed") {
                 batch.remove_column(index);
             }
