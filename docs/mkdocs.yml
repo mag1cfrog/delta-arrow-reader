@@ -39,6 +39,7 @@ nav:
       - DataFusion quickstart: datafusion.md
   - How it works:
       - Architecture: architecture.md
+      - Delta metadata lifecycle: delta-metadata-lifecycle.md
       - Scan planning: scan-planning.md
       - Read scheduling: read-scheduling.md
   - Performance:

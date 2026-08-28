@@ -12,13 +12,13 @@ Arrow batches, with optional SQL through DataFusion.
   <a href="https://crates.io/crates/delta-arrow-reader"><img alt="crates.io" src="https://img.shields.io/crates/v/delta-arrow-reader.svg"></a>
 </p>
 
-For guided examples and design details, see the
-[Delta Arrow Reader documentation](https://mag1cfrog.github.io/delta-arrow-reader/).
+The [Delta Arrow Reader documentation](https://mag1cfrog.github.io/delta-arrow-reader/)
+has guided examples and design details.
 
 ## When to use it
 
-Delta Arrow Reader fits Rust services, command-line tools, and data pipelines
-that read Delta Lake tables. It is especially useful when:
+Delta Arrow Reader is meant for Rust services, command-line tools, and data
+pipelines that read Delta Lake tables. It is a good fit when:
 
 - You need to read a large table without holding all of it in memory.
 - You want to process each batch as soon as it arrives.
@@ -67,7 +67,7 @@ return one live row and seven times as long to scan the full table.**
 Databricks now
 [recommends deletion vectors for most tables and is rolling out automatic enablement for new tables](https://docs.databricks.com/aws/en/admin/workspace-settings/deletion-vectors).
 
-## Install
+## Installation
 
 Add the reader, Tokio, and the futures utilities used by the example:
 
@@ -101,24 +101,24 @@ while let Some(batch) = batches.try_next().await? {
 # }
 ```
 
-When you load a table, the reader selects the latest or requested version and
-reads its schema. By default, it evaluates Delta scan metadata (the information
-used to choose files) each time it builds a scan. For repeated queries against
-the same loaded table,
+Loading a table selects the latest or requested version and reads its schema.
+By default, the reader evaluates Delta scan metadata, which it uses to choose
+files, each time it builds a scan. For repeated queries against the same loaded
+table,
 [eager scan-metadata initialization](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/#reuse-scan-metadata-across-queries)
-caches this information in memory when the table loads so later scans can reuse
-it. The cache works with both the streaming API and DataFusion. Parquet data is
-still read separately when each scan executes.
+caches that metadata in memory when the table loads. Later scans can reuse the
+cache through either the streaming API or DataFusion. Each scan still reads
+its Parquet data separately when it runs.
 
-Once this works, the
+The
 [streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 shows how to select columns, filter rows, limit results, and inspect metrics.
 
 ## Query with DataFusion
 
 Enable the `datafusion` feature to query a Delta table through a DataFusion
-`SessionContext`. Registration only makes an already loaded table available by
-name in DataFusion; it does not change when its scan metadata is evaluated.
+`SessionContext`. Registration gives an already loaded table a name in
+DataFusion. It does not change when the reader evaluates scan metadata, and
 Parquet data is read only when DataFusion executes a query.
 
 The [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)

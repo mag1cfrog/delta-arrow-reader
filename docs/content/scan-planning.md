@@ -32,6 +32,9 @@ initialization and 15.0 MiB to full-session peak memory. See the
 [methodology, results, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/#representative-real-s3-result)
 before applying those measurements to another table or workload.
 
+To see how this initialization choice plays out across several queries, follow
+the [lazy and eager metadata lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
+
 ## Choose a partition target
 
 The partition target is the number of independent groups the reader tries to

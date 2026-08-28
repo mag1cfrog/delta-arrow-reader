@@ -1,12 +1,12 @@
 # Installation
 
 Delta Arrow Reader requires Rust 1.94 or newer. The dependencies you need
-depend on whether you want an Arrow stream or a DataFusion table.
+depend on whether you plan to use the streaming API or DataFusion.
 
 ## Streaming reader
 
-For streaming Arrow batches, add the reader, Tokio, and the futures utilities used
-by the quickstart:
+For streaming Arrow batches, add the reader, Tokio, and the futures utilities
+used by the quickstart:
 
 ```toml
 [dependencies]
@@ -15,7 +15,8 @@ futures-util = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-You can now continue to the [streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/).
+The [streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
+shows how to load a table and consume its Arrow batches.
 
 ## DataFusion adapter
 
@@ -29,12 +30,13 @@ delta-arrow-reader = { version = "0.3.0", features = ["datafusion"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-You can now continue to the [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/).
+The [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
+shows how to register a table and query it with SQL.
 
 ## Optional feature
 
 The streaming API and both Parquet backends are always available. The
-only optional feature adds the DataFusion integration.
+DataFusion integration is the only optional feature.
 
 | Feature | Default | Purpose |
 | --- | --- | --- |
