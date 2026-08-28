@@ -1,6 +1,6 @@
 //! Immutable Delta snapshot loading.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use snafu::ResultExt;
@@ -21,6 +21,9 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 const SNAPSHOT_LOAD_STARTED_EVENT: &str = "snapshot_load.started";
 const SNAPSHOT_LOAD_COMPLETED_EVENT: &str = "snapshot_load.completed";
 const SNAPSHOT_LOAD_FAILED_EVENT: &str = "snapshot_load.failed";
+const SCAN_METADATA_CACHE_BUILD_STARTED_EVENT: &str = "scan_metadata_cache_build.started";
+const SCAN_METADATA_CACHE_BUILD_COMPLETED_EVENT: &str = "scan_metadata_cache_build.completed";
+const SCAN_METADATA_CACHE_BUILD_FAILED_EVENT: &str = "scan_metadata_cache_build.failed";
 
 #[derive(Clone)]
 pub(crate) struct ArrowTableSnapshot {
@@ -102,16 +105,37 @@ impl ArrowTableSnapshot {
     }
 
     pub(crate) fn materialize_eager_scan_metadata(mut self) -> Result<Self, DeltaReaderError> {
-        let metadata = self
+        let snapshot_version = self.version();
+        trace_scan_metadata_cache_build_started(snapshot_version);
+        let started_at = Instant::now();
+        let result = self
             .snapshot
             .build_scan(None, None, true)
             .and_then(|scan| scan.materialize_scan_metadata(self.engine_context.as_ref()))
             .boxed()
             .context(ScanPlanningSnafu {
                 reason: "eager_scan_metadata_materialization_failed",
-            })?;
-        self.eager_scan_metadata = Some(metadata);
-        Ok(self)
+            });
+
+        match result {
+            Ok(metadata) => {
+                trace_scan_metadata_cache_build_completed(
+                    snapshot_version,
+                    metadata.as_ref(),
+                    started_at.elapsed().as_micros(),
+                );
+                self.eager_scan_metadata = Some(metadata);
+                Ok(self)
+            }
+            Err(error) => {
+                trace_scan_metadata_cache_build_failed(
+                    snapshot_version,
+                    started_at.elapsed().as_micros(),
+                    &error,
+                );
+                Err(error)
+            }
+        }
     }
 }
 
@@ -278,6 +302,47 @@ fn trace_snapshot_load_failed(selection: &'static str, error: &DeltaReaderError)
     );
 }
 
+fn trace_scan_metadata_cache_build_started(snapshot_version: u64) {
+    tracing::debug!(
+        target: TRACING_TARGET,
+        event = SCAN_METADATA_CACHE_BUILD_STARTED_EVENT,
+        snapshot_version,
+        outcome = "started"
+    );
+}
+
+fn trace_scan_metadata_cache_build_completed(
+    snapshot_version: u64,
+    metadata: &[RecordBatch],
+    elapsed_micros: u128,
+) {
+    tracing::debug!(
+        target: TRACING_TARGET,
+        event = SCAN_METADATA_CACHE_BUILD_COMPLETED_EVENT,
+        snapshot_version,
+        outcome = "completed",
+        cached_batch_count = metadata.len(),
+        cached_file_count = metadata.iter().map(RecordBatch::num_rows).sum::<usize>(),
+        elapsed_micros
+    );
+}
+
+fn trace_scan_metadata_cache_build_failed(
+    snapshot_version: u64,
+    elapsed_micros: u128,
+    error: &DeltaReaderError,
+) {
+    tracing::debug!(
+        target: TRACING_TARGET,
+        event = SCAN_METADATA_CACHE_BUILD_FAILED_EVENT,
+        snapshot_version,
+        outcome = "failed",
+        elapsed_micros,
+        error_code = error.code(),
+        error_phase = error.phase().as_str()
+    );
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum S3AuthModeHint {
     ExplicitStatic,
@@ -402,7 +467,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use arrow::datatypes::{DataType, TimeUnit};
+    use arrow::{
+        datatypes::{DataType, TimeUnit},
+        record_batch::RecordBatch,
+    };
     use futures_util::future;
     use object_store::{ObjectStoreExt, memory::InMemory, path::Path as ObjectStorePath};
     use tracing::{
@@ -480,11 +548,9 @@ mod tests {
         fn event(&self, event: &Event<'_>) {
             let mut visitor = FieldVisitor::default();
             event.record(&mut visitor);
-            if visitor
-                .0
-                .get("event")
-                .is_some_and(|name| name.starts_with("snapshot_load."))
-                && let Some(events) = &self.0
+            if visitor.0.get("event").is_some_and(|name| {
+                name.starts_with("snapshot_load.") || name.starts_with("scan_metadata_cache_build.")
+            }) && let Some(events) = &self.0
                 && let Ok(mut events) = events.lock()
             {
                 events.push(CapturedEvent {
@@ -519,6 +585,10 @@ mod tests {
         fn record_i64(&mut self, field: &Field, value: i64) {
             self.0.insert(field.name().to_owned(), value.to_string());
         }
+
+        fn record_u128(&mut self, field: &Field, value: u128) {
+            self.0.insert(field.name().to_owned(), value.to_string());
+        }
     }
 
     struct DeltaLogTable(PathBuf);
@@ -548,6 +618,15 @@ mod tests {
             )?;
             Ok(Self(path))
         }
+
+        fn write_log(&self, version: u64, contents: &str) -> Result<(), std::io::Error> {
+            fs::write(
+                self.0
+                    .join("_delta_log")
+                    .join(format!("{version:020}.json")),
+                format!("{contents}\n"),
+            )
+        }
     }
 
     impl Drop for DeltaLogTable {
@@ -574,6 +653,23 @@ mod tests {
             .join(unique_name(name)?);
         fs::create_dir_all(&path)?;
         Ok(DeltaLogTable(path))
+    }
+
+    fn capture_events<T>(run: impl FnOnce() -> T) -> (T, Vec<CapturedEvent>) {
+        let _lock = TRACING_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let collector = EventCollector::capturing();
+        let capture = collector.clone();
+        TRACING_TEST_GLOBAL_SUBSCRIBER.call_once(|| {
+            let _ = tracing::subscriber::set_global_default(EventCollector::default());
+        });
+        let result = tracing::subscriber::with_default(collector, || {
+            tracing::callsite::rebuild_interest_cache();
+            run()
+        });
+        tracing::callsite::rebuild_interest_cache();
+        (result, capture.events())
     }
 
     #[test]
@@ -744,19 +840,9 @@ mod tests {
 
     #[test]
     fn tracing_emits_only_the_bounded_load_fields() -> Result<(), Box<dyn std::error::Error>> {
-        let _lock = TRACING_TEST_LOCK
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let table = DeltaLogTable::new("tracing")?;
-        let collector = EventCollector::capturing();
-        let capture = collector.clone();
         let secret_uri = "ftp://user:password@example.com/table?token=secret";
-
-        TRACING_TEST_GLOBAL_SUBSCRIBER.call_once(|| {
-            let _ = tracing::subscriber::set_global_default(EventCollector::default());
-        });
-        tracing::subscriber::with_default(collector, || {
-            tracing::callsite::rebuild_interest_cache();
+        let (result, events) = capture_events(|| {
             load_delta_table_snapshot_blocking(
                 &table.0.to_string_lossy(),
                 &DeltaStorageOptions::new(),
@@ -771,10 +857,9 @@ mod tests {
                 .is_err()
             );
             Ok::<_, DeltaReaderError>(())
-        })?;
-        tracing::callsite::rebuild_interest_cache();
+        });
+        result?;
 
-        let events = capture.events();
         assert_eq!(events.len(), 4);
         assert!(events.iter().all(|event| {
             event.target == TRACING_TARGET
@@ -816,6 +901,192 @@ mod tests {
                 ("selection".to_owned(), "version".to_owned()),
             ])
         );
+        Ok(())
+    }
+
+    #[test]
+    fn eager_cache_build_tracing_reports_retained_metadata_without_sensitive_values()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const OBJECT_KEY: &str = "secret-object-key.parquet";
+        const SECOND_OBJECT_KEY: &str = "second-secret-object-key.parquet";
+        const STORAGE_VALUE: &str = "secret-storage-value";
+        let table = DeltaLogTable::new("eager-cache-tracing")?;
+        table.write_log(
+            2,
+            r#"{"add":{"path":"secret-object-key.parquet","partitionValues":{},"size":10,"modificationTime":1587968586000,"dataChange":true,"stats":"{\"numRecords\":1,\"minValues\":{\"id\":1},\"maxValues\":{\"id\":1},\"nullCount\":{\"id\":0}}"}}
+{"add":{"path":"second-secret-object-key.parquet","partitionValues":{},"size":10,"modificationTime":1587968586001,"dataChange":true,"stats":"{\"numRecords\":1,\"minValues\":{\"id\":2},\"maxValues\":{\"id\":2},\"nullCount\":{\"id\":0}}"}}"#,
+        )?;
+        let snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &storage_options(&[("secret-option", STORAGE_VALUE)]),
+            DeltaSnapshotSelection::Latest,
+        )?;
+        let table_path = table.0.to_string_lossy().into_owned();
+        let (result, events) = capture_events(|| snapshot.materialize_eager_scan_metadata());
+        let snapshot = result?;
+        let cached_metadata = snapshot
+            .eager_scan_metadata()
+            .ok_or("eager metadata missing")?;
+        let expected_batch_count = cached_metadata.len().to_string();
+        let expected_file_count = cached_metadata
+            .iter()
+            .map(RecordBatch::num_rows)
+            .sum::<usize>()
+            .to_string();
+        assert_eq!(expected_file_count, "2");
+
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events[0].fields,
+            BTreeMap::from([
+                (
+                    "event".to_owned(),
+                    "scan_metadata_cache_build.started".to_owned(),
+                ),
+                ("outcome".to_owned(), "started".to_owned()),
+                ("snapshot_version".to_owned(), "2".to_owned()),
+            ])
+        );
+        let completed = &events[1];
+        assert_eq!(completed.target, TRACING_TARGET);
+        assert_eq!(completed.level, Level::DEBUG);
+        assert_eq!(completed.fields.len(), 6);
+        assert_eq!(
+            completed.fields.get("event").map(String::as_str),
+            Some("scan_metadata_cache_build.completed")
+        );
+        assert_eq!(
+            completed.fields.get("outcome").map(String::as_str),
+            Some("completed")
+        );
+        assert_eq!(
+            completed.fields.get("snapshot_version").map(String::as_str),
+            Some("2")
+        );
+        assert_eq!(
+            completed
+                .fields
+                .get("cached_batch_count")
+                .map(String::as_str),
+            Some(expected_batch_count.as_str())
+        );
+        assert_eq!(
+            completed
+                .fields
+                .get("cached_file_count")
+                .map(String::as_str),
+            Some(expected_file_count.as_str())
+        );
+        completed
+            .fields
+            .get("elapsed_micros")
+            .ok_or("elapsed time missing")?
+            .parse::<u128>()?;
+        let captured = format!("{events:?}");
+        assert!(!captured.contains(&table_path));
+        assert!(!captured.contains(OBJECT_KEY));
+        assert!(!captured.contains(SECOND_OBJECT_KEY));
+        assert!(!captured.contains(STORAGE_VALUE));
+        Ok(())
+    }
+
+    #[test]
+    fn eager_cache_build_tracing_reports_an_empty_cache() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let table = DeltaLogTable::new("empty-eager-cache-tracing")?;
+        let snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &DeltaStorageOptions::new(),
+            DeltaSnapshotSelection::Latest,
+        )?;
+        let (result, events) = capture_events(|| snapshot.materialize_eager_scan_metadata());
+        result?;
+
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events[1]
+                .fields
+                .get("cached_batch_count")
+                .map(String::as_str),
+            Some("0")
+        );
+        assert_eq!(
+            events[1]
+                .fields
+                .get("cached_file_count")
+                .map(String::as_str),
+            Some("0")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn eager_cache_build_tracing_reports_redacted_failure_without_completion()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const INVALID_SIZE: &str = "secret-not-a-file-size";
+        const OBJECT_KEY: &str = "secret-malformed-object.parquet";
+        let table = DeltaLogTable::new("failed-eager-cache-tracing")?;
+        table.write_log(
+            2,
+            r#"{"add":{"path":"secret-malformed-object.parquet","partitionValues":{},"size":"secret-not-a-file-size","modificationTime":1587968586000,"dataChange":true}}"#,
+        )?;
+        let snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &DeltaStorageOptions::new(),
+            DeltaSnapshotSelection::Latest,
+        )?;
+        let (result, events) = capture_events(|| snapshot.materialize_eager_scan_metadata());
+        let error = match result {
+            Ok(_) => return Err("malformed eager metadata should fail".into()),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), "scan_planning");
+        assert_eq!(events.len(), 2);
+        assert!(
+            events
+                .iter()
+                .all(|event| { event.target == TRACING_TARGET && event.level == Level::DEBUG })
+        );
+        assert_eq!(
+            events[0].fields.get("event").map(String::as_str),
+            Some("scan_metadata_cache_build.started")
+        );
+        assert_eq!(
+            events[1].fields.get("event").map(String::as_str),
+            Some("scan_metadata_cache_build.failed")
+        );
+        assert_eq!(
+            events[1].fields.get("outcome").map(String::as_str),
+            Some("failed")
+        );
+        assert_eq!(
+            events[1].fields.get("snapshot_version").map(String::as_str),
+            Some("2")
+        );
+        assert_eq!(
+            events[1].fields.get("error_code").map(String::as_str),
+            Some("scan_planning")
+        );
+        assert_eq!(
+            events[1].fields.get("error_phase").map(String::as_str),
+            Some("scan_planning")
+        );
+        assert_eq!(events[1].fields.len(), 6);
+        events[1]
+            .fields
+            .get("elapsed_micros")
+            .ok_or("elapsed time missing")?
+            .parse::<u128>()?;
+        assert!(events.iter().all(|event| {
+            event
+                .fields
+                .get("event")
+                .is_none_or(|name| name != "scan_metadata_cache_build.completed")
+        }));
+        let captured = format!("{events:?}");
+        assert!(!captured.contains(INVALID_SIZE));
+        assert!(!captured.contains(OBJECT_KEY));
         Ok(())
     }
 
