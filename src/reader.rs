@@ -155,6 +155,8 @@ impl DeltaTableBuilder {
     /// Parquet footer and data reads remain query-time operations. Load a new table to observe a
     /// newer snapshot. Unlike [`Self::load_table`], unsupported protocols fail during
     /// initialization because materialization constructs a scan.
+    /// See [the scan-planning guide](crate::guides::concepts::scan_planning) for measured
+    /// tradeoffs.
     pub async fn load_table_with_eager_scan_metadata(self) -> Result<DeltaTable, DeltaReaderError> {
         let snapshot = load_delta_table_snapshot(
             self.table_location,

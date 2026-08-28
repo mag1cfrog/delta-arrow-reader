@@ -26,6 +26,12 @@ and deletion-vector information follow the selected files in either mode.
 Parquet footer pruning happens later and is not part of this initialization
 choice.
 
+In one dated real-S3 case study, eager initialization reduced the median time
+for a six-query session by 15.4% while adding 30.2 MiB of resident memory after
+initialization and 15.0 MiB to full-session peak memory. See the
+[methodology, results, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/#representative-real-s3-result)
+before applying those measurements to another table or workload.
+
 ## Choose a partition target
 
 The partition target is the number of independent groups the reader tries to
