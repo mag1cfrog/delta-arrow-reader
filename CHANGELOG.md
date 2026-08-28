@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## [0.4.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.4.0...v0.4.1) - 2026-08-28
+
+### Documentation
+
+- clarify Delta reader tradeoffs in the README
+- explain Delta metadata caching and improve reader guides ([#50](https://github.com/mag1cfrog/delta-arrow-reader/pull/50))
+- clarify lazy and eager metadata loading ([#49](https://github.com/mag1cfrog/delta-arrow-reader/pull/49))
+
+### Performance
+
+- reduce memory retained by eager Delta metadata caching
+
 ## [0.4.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.3.0...v0.4.0) - 2026-08-28
 
 ### Added
