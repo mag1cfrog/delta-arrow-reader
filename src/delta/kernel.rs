@@ -191,7 +191,11 @@ impl KernelScan {
         for metadata in self.scan.scan_metadata(engine_context.engine.as_ref())? {
             let metadata = metadata?;
             let data = metadata.scan_files.apply_selection_vector()?;
-            let batch: RecordBatch = ArrowEngineData::try_from_engine_data(data)?.into();
+            let mut batch: RecordBatch = ArrowEngineData::try_from_engine_data(data)?.into();
+            // Cached replay consumes JSON stats and reconstructs typed stats per predicate.
+            if let Ok(index) = batch.schema().index_of("stats_parsed") {
+                batch.remove_column(index);
+            }
             if batch.num_rows() > 0 {
                 batches.push(batch);
             }

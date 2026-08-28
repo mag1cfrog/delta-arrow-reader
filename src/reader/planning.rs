@@ -4967,6 +4967,12 @@ mod tests {
             Default::default(),
         )?;
         let snapshot = snapshot.materialize_eager_scan_metadata()?;
+        assert!(snapshot.eager_scan_metadata().is_some_and(|batches| {
+            batches.iter().all(|batch| {
+                batch.schema().index_of("stats").is_ok()
+                    && batch.schema().index_of("stats_parsed").is_err()
+            })
+        }));
         table.disable_delta_log()?;
         let plan = super::plan_unpartitioned_scan(
             &snapshot,

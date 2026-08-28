@@ -38,6 +38,19 @@ struct TestTable(PathBuf);
 
 impl TestTable {
     fn two_versions(name: &str) -> TestResult<Self> {
+        Self::two_versions_with_metadata(name, metadata())
+    }
+
+    fn two_versions_with_parsed_stats_only_checkpoint(name: &str) -> TestResult<Self> {
+        let mut table_metadata = metadata();
+        table_metadata["metaData"]["configuration"] = json!({
+            "delta.checkpoint.writeStatsAsJson": "false",
+            "delta.checkpoint.writeStatsAsStruct": "true"
+        });
+        Self::two_versions_with_metadata(name, table_metadata)
+    }
+
+    fn two_versions_with_metadata(name: &str, table_metadata: Value) -> TestResult<Self> {
         let table = Self::empty(name)?;
         let first = table.write_parquet(
             "part-0.parquet",
@@ -53,7 +66,11 @@ impl TestTable {
         )?;
         table.write_log(
             0,
-            &[protocol(1), metadata(), add("part-0.parquet", first, 1, 4)],
+            &[
+                protocol(1),
+                table_metadata,
+                add("part-0.parquet", first, 1, 4),
+            ],
         )?;
         table.write_log(1, &[add("part-1.parquet", second, 5, 8)])?;
         Ok(table)
@@ -418,9 +435,10 @@ fn eager_scan_metadata_supports_concurrent_planning_without_the_delta_log() -> T
 }
 
 #[test]
-fn eager_scan_metadata_loads_from_a_checkpoint_without_json_logs() -> TestResult {
+fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -> TestResult {
     runtime()?.block_on(async {
-        let fixture = TestTable::two_versions("eager-checkpoint")?;
+        let fixture =
+            TestTable::two_versions_with_parsed_stats_only_checkpoint("eager-checkpoint")?;
         let table_url: url::Url = fixture.normalized_uri()?.parse()?;
         let engine = DefaultEngineBuilder::new(store_from_url(&table_url)?)
             .with_task_executor(Arc::new(TokioMultiThreadExecutor::new(
