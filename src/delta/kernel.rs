@@ -4,7 +4,6 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use arrow::{
     array::{Array as _, BooleanArray},
-    compute::filter_record_batch,
     datatypes::SchemaRef,
     error::ArrowError,
     record_batch::RecordBatch,
@@ -191,9 +190,8 @@ impl KernelScan {
         let mut batches = Vec::new();
         for metadata in self.scan.scan_metadata(engine_context.engine.as_ref())? {
             let metadata = metadata?;
-            let (data, selection) = metadata.scan_files.into_parts();
+            let data = metadata.scan_files.apply_selection_vector()?;
             let batch: RecordBatch = ArrowEngineData::try_from_engine_data(data)?.into();
-            let batch = apply_selection_vector(&batch, &selection)?;
             if batch.num_rows() > 0 {
                 batches.push(batch);
             }
@@ -224,18 +222,6 @@ fn collect_file_metadata(
         files,
         add_actions_excluded_during_planning: saw_batch.then_some(excluded_add_actions).flatten(),
     })
-}
-
-fn apply_selection_vector(
-    batch: &RecordBatch,
-    selection: &[bool],
-) -> Result<RecordBatch, ArrowError> {
-    let selection = BooleanArray::from(
-        (0..batch.num_rows())
-            .map(|index| selection.get(index).copied().unwrap_or(true))
-            .collect::<Vec<_>>(),
-    );
-    filter_record_batch(batch, &selection)
 }
 
 fn excluded_add_action_count(metadata: &ScanMetadata) -> Option<u64> {
@@ -666,7 +652,10 @@ mod tests {
             Arc::new(Int32Array::from(vec![1, 2, 3])) as Arc<dyn arrow::array::Array>,
         )])?;
 
-        let selected = apply_selection_vector(&batch, &[false])?;
+        let data: Box<dyn EngineData> = Box::new(ArrowEngineData::new(batch));
+        let selected = delta_kernel::FilteredEngineData::try_new(data, vec![false])?
+            .apply_selection_vector()?;
+        let selected: RecordBatch = ArrowEngineData::try_from_engine_data(selected)?.into();
         let ids = selected
             .column(0)
             .as_any()
