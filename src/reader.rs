@@ -161,12 +161,13 @@ impl DeltaTableBuilder {
         )
         .await?;
         validate_protocol(snapshot.protocol())?;
-        let snapshot = tokio::task::spawn_blocking(move || snapshot.with_eager_scan_metadata())
-            .await
-            .boxed()
-            .context(ScanPlanningSnafu {
-                reason: "eager_scan_metadata_task_failed",
-            })??;
+        let snapshot =
+            tokio::task::spawn_blocking(move || snapshot.materialize_eager_scan_metadata())
+                .await
+                .boxed()
+                .context(ScanPlanningSnafu {
+                    reason: "eager_scan_metadata_task_failed",
+                })??;
         Ok(DeltaTable::new(snapshot, self.execution_options))
     }
 

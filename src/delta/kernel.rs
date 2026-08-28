@@ -172,14 +172,14 @@ impl KernelScan {
                     .cloned()
                     .map(|batch| Box::new(ArrowEngineData::new(batch)) as Box<dyn EngineData>)
                     .collect::<Vec<_>>();
-                collect_file_metadata(self.scan.scan_metadata_from(
+                collect_scan_files(self.scan.scan_metadata_from(
                     engine_context.engine.as_ref(),
                     snapshot_version,
                     data,
                     None,
                 )?)
             }
-            None => collect_file_metadata(self.scan.scan_metadata(engine_context.engine.as_ref())?),
+            None => collect_scan_files(self.scan.scan_metadata(engine_context.engine.as_ref())?),
         }
     }
 
@@ -200,7 +200,7 @@ impl KernelScan {
     }
 }
 
-fn collect_file_metadata(
+fn collect_scan_files(
     metadata: impl Iterator<Item = delta_kernel::DeltaResult<ScanMetadata>>,
 ) -> delta_kernel::DeltaResult<KernelScanFileCollection> {
     fn collect(files: &mut Vec<KernelScanFileMetadata>, file: ScanFile) {

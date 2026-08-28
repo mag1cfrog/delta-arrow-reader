@@ -101,7 +101,7 @@ impl ArrowTableSnapshot {
         self.eager_scan_metadata.as_deref()
     }
 
-    pub(crate) fn with_eager_scan_metadata(mut self) -> Result<Self, DeltaReaderError> {
+    pub(crate) fn materialize_eager_scan_metadata(mut self) -> Result<Self, DeltaReaderError> {
         let metadata = self
             .snapshot
             .build_scan(None, None, true)

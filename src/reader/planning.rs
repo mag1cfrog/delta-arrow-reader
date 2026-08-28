@@ -4799,7 +4799,7 @@ mod tests {
         )?;
         let lazy =
             super::plan_unpartitioned_scan(&snapshot, None, &[], None, true, Default::default())?;
-        let snapshot = snapshot.with_eager_scan_metadata()?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
         table.disable_delta_log()?;
 
         let plan =
@@ -4820,7 +4820,7 @@ mod tests {
     fn eager_metadata_represents_an_empty_table_without_reopening_the_log()
     -> Result<(), Box<dyn std::error::Error>> {
         let (table, snapshot) = loaded_snapshot("eager-empty-table")?;
-        let snapshot = snapshot.with_eager_scan_metadata()?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
         table.disable_delta_log()?;
 
         let plan =
@@ -4867,7 +4867,7 @@ mod tests {
             false,
             Default::default(),
         )?;
-        let snapshot = snapshot.with_eager_scan_metadata()?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
         table.disable_delta_log()?;
 
         let plan = super::plan_unpartitioned_scan(
@@ -4966,7 +4966,7 @@ mod tests {
             true,
             Default::default(),
         )?;
-        let snapshot = snapshot.with_eager_scan_metadata()?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
         table.disable_delta_log()?;
         let plan = super::plan_unpartitioned_scan(
             &snapshot,
