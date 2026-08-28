@@ -101,18 +101,29 @@ while let Some(batch) = batches.try_next().await? {
 # }
 ```
 
+When you load a table, the reader selects the latest or requested version and
+reads its schema. By default, it evaluates Delta scan metadata (the information
+used to choose files) each time it builds a scan. For repeated queries against
+the same loaded table,
+[eager scan-metadata initialization](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/#reuse-scan-metadata-across-queries)
+caches this information in memory when the table loads so later scans can reuse
+it. The cache works with both the streaming API and DataFusion. Parquet data is
+still read separately when each scan executes.
+
 Once this works, the
 [streaming reader quickstart](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 shows how to select columns, filter rows, limit results, and inspect metrics.
 
 ## Query with DataFusion
 
-Enable the `datafusion` feature when you want to register a Delta table with a
-DataFusion `SessionContext`. Registration loads the Delta metadata; Parquet data
-is read when DataFusion executes the query.
+Enable the `datafusion` feature to query a Delta table through a DataFusion
+`SessionContext`. Registration only makes an already loaded table available by
+name in DataFusion; it does not change when its scan metadata is evaluated.
+Parquet data is read only when DataFusion executes a query.
 
 The [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
-walks through registration and a first SQL query.
+walks through registration and a first SQL query. It also shows how to
+[reuse scan metadata across SQL queries](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/#reuse-scan-metadata-across-sql-queries).
 
 ## Scope
 
