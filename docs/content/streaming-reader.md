@@ -1,4 +1,4 @@
-# Read a Table as a Stream
+# Read a table as a stream
 
 In this quickstart, you will load a Delta table and read up to 100 rows from two
 columns. The rows arrive as Arrow record batches.
@@ -35,16 +35,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Loading the table and reading its rows happen at different times. `load_table`
-loads an immutable Delta snapshot and its Arrow schema. Each `build` then
-evaluates the Delta scan metadata to select the active files and columns it
-needs. Parquet files are not read until the returned batch stream is polled.
+Loading the table and reading its rows are separate steps. `load_table` selects
+one Delta table version and reads its Arrow schema. The loaded table stays on
+that version. Each `build` evaluates the Delta scan metadata to choose the
+active files and requested columns. The reader opens the Parquet files only
+after you poll the returned batch stream.
 
 ## Reuse scan metadata across queries
 
-The default `load_table` path is a good fit for a table that you will query once
-or only occasionally. If one process will plan several queries against the same
-loaded table, opt into eager Delta scan metadata initialization:
+The default `load_table` path works well when you query a table once or only
+occasionally. If one process will run several queries against the same loaded
+table, you can cache its reusable scan metadata during table loading:
 
 ```no_run
 use delta_arrow_reader::DeltaTableBuilder;
@@ -72,23 +73,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-The eager method resolves only after the active-file metadata and available
-file statistics have been materialized. Later scan builds reuse that retained
-metadata without another Delta log/checkpoint replay. This can help repeated
-selective queries where metadata planning is a large part of latency. The
-metadata remains in memory for the lifetime of the loaded table.
+`load_table_with_eager_scan_metadata` returns after it has built the cache. The
+cache holds active-file metadata and available file statistics in memory.
+Later scan builds reuse it instead of replaying the Delta log or checkpoint.
+This reduces repeated planning work when metadata accounts for much of a
+selective query's latency. The cache remains in memory as long as the loaded
+table does.
 
-Eager initialization does not read Parquet footers or Parquet data. A scan
-build still applies its own projection and predicate, and polling the returned
-stream performs the query's Parquet I/O. The loaded table stays pinned to one
-immutable snapshot; load the table again to see a newer version.
+The cache does not contain Parquet footers or Parquet data. Each scan still
+applies its own projection and predicate, then performs its Parquet I/O when
+you poll the returned stream. Load the table again when you want to read a
+newer Delta version.
 
-To understand what the eager method caches, and why it helps only some
-workloads, read about the [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
+The [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/)
+explains what the eager method caches and when the tradeoff is worthwhile.
 
 ## Filter rows
 
-Once the basic scan works, you can add a predicate before building it:
+Add a predicate before building the scan to filter its rows:
 
 ```ignore
 use delta_arrow_reader::{DeltaComparison, DeltaPredicate, DeltaScalar};
@@ -104,14 +106,15 @@ let scan = table
     .await?;
 ```
 
-A predicate does two jobs. It helps the reader skip files that cannot contain
-matching rows, and it filters the rows that are read. The final result stays
-correct even when the table statistics cannot skip a file.
+A predicate can help the reader skip files that cannot contain matching rows.
+It also filters the rows read from the remaining files. If the table statistics
+cannot rule out a file, the reader reads and filters it so the result remains
+correct.
 
 ## Inspect scan metrics
 
-If you want to see what the scan did, save its metrics handle before consuming
-the stream:
+Save the metrics handle before consuming the stream to inspect what the scan
+did:
 
 ```ignore
 let mut batches = scan.into_stream();
