@@ -335,6 +335,10 @@ fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestRes
         let eager = DeltaTableBuilder::new(fixture.uri())
             .load_table_with_eager_scan_metadata()
             .await?;
+        let fixed = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
+            .load_table_with_eager_scan_metadata()
+            .await?;
         let lazy = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let low_ids = DeltaPredicate::Compare {
             column: "id".into(),
@@ -358,11 +362,15 @@ fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestRes
             collect_scan(eager.scan().with_predicate(low_ids).build().await?).await?;
         let (actual_high, high_metrics) =
             collect_scan(eager.scan().with_predicate(high_ids).build().await?).await?;
+        let (fixed_batches, fixed_metrics) = collect_scan(fixed.scan().build().await?).await?;
 
         assert_eq!(sorted_ids(&actual_low), sorted_ids(&expected_low));
         assert_eq!(sorted_ids(&actual_high), sorted_ids(&expected_high));
+        assert_eq!(fixed.version(), 0);
+        assert_eq!(sorted_ids(&fixed_batches), [1, 2, 3, 4]);
         assert_eq!(low_metrics.snapshot().files_planned, 1);
         assert_eq!(high_metrics.snapshot().files_planned, 1);
+        assert_eq!(fixed_metrics.snapshot().files_planned, 1);
         Ok::<_, Box<dyn Error>>(())
     })
 }
@@ -389,6 +397,14 @@ fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
         Err(error) => error,
     };
     assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+    let eager = runtime
+        .block_on(DeltaTableBuilder::new(fixture.uri()).load_table_with_eager_scan_metadata());
+    let error = match eager {
+        Ok(_) => panic!("unsupported protocol eagerly loaded a table"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), "unsupported_protocol");
+    assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
     Ok(())
 }
 
@@ -414,7 +430,11 @@ fn eager_metadata_failure_returns_no_table_and_redacts_the_source() -> TestResul
             .to_string()
             .contains("eager_scan_metadata_materialization_failed")
     );
-    assert!(error.source().is_some());
+    assert!(
+        error
+            .source()
+            .is_some_and(|source| source.downcast_ref::<delta_kernel::Error>().is_some())
+    );
     assert!(!error.to_string().contains(INVALID_SIZE));
     assert!(!format!("{error:?}").contains(INVALID_SIZE));
     Ok(())
