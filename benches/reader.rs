@@ -669,7 +669,7 @@ async fn run(config: &Config, output: &mut dyn Write) -> Result<(), Box<dyn Erro
         .map(std::num::NonZeroUsize::get)
         .ok();
     let target_partitions = available_parallelism.unwrap_or(4).max(1);
-    let measurements = benchmark(config, &fixture, target_partitions).await?;
+    let repetitions = benchmark(config, &fixture, target_partitions).await?;
     writeln!(output, "{}", CSV_HEADER.join(","))?;
     writeln!(
         output,
@@ -679,7 +679,7 @@ async fn run(config: &Config, output: &mut dyn Write) -> Result<(), Box<dyn Erro
             &fixture,
             available_parallelism,
             target_partitions,
-            &measurements,
+            &repetitions,
         )
         .join(",")
     )?;
@@ -774,20 +774,7 @@ impl Fixture {
             fixture_files.push(RELATIVE_DV_FILE.to_owned());
         }
         let fingerprint = fixture_fingerprint(&path, fixture_files)?;
-        let expected = EXPECTED_FIXTURE_FINGERPRINTS
-            .iter()
-            .find_map(|(name, fingerprint)| (*name == workload.name()).then_some(*fingerprint))
-            .ok_or_else(|| invalid("frozen workload is missing its fingerprint"))?;
-        if fingerprint != expected {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "fixture {} drifted: expected {expected}, got {fingerprint}",
-                    workload.name()
-                ),
-            )
-            .into());
-        }
+        validate_fixture_fingerprint(workload, &fingerprint)?;
         let server = storage
             .uses_http()
             .then(|| DelayedHttpServer::start(path.clone(), storage))
@@ -939,6 +926,23 @@ fn fixture_fingerprint(root: &Path, mut paths: Vec<String>) -> io::Result<String
         }
     }
     Ok(format!("fnv1a64:{hash:016x}"))
+}
+
+fn validate_fixture_fingerprint(workload: Workload, fingerprint: &str) -> io::Result<()> {
+    let expected = EXPECTED_FIXTURE_FINGERPRINTS
+        .iter()
+        .find_map(|(name, expected)| (*name == workload.name()).then_some(*expected))
+        .ok_or_else(|| invalid("frozen workload is missing its fingerprint"))?;
+    if fingerprint != expected {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "fixture {} drifted: expected {expected}, got {fingerprint}",
+                workload.name()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn fnv1a64_update(hash: &mut u64, bytes: &[u8]) {
@@ -1348,11 +1352,11 @@ async fn benchmark(
     fixture: &Fixture,
     target_partitions: usize,
 ) -> Result<Vec<RepetitionMeasurement>, Box<dyn Error>> {
-    let mut measurements = Vec::with_capacity(config.repetitions);
+    let mut repetitions = Vec::with_capacity(config.repetitions);
     for _ in 0..config.repetitions {
-        measurements.push(run_repetition(config, fixture, target_partitions).await?);
+        repetitions.push(run_repetition(config, fixture, target_partitions).await?);
     }
-    Ok(measurements)
+    Ok(repetitions)
 }
 
 async fn run_repetition(
@@ -1372,6 +1376,12 @@ async fn run_repetition(
     let builder = DeltaTableBuilder::new(&fixture.table_uri)
         .with_storage_options(fixture.storage_options.clone())
         .with_execution_options(execution_options);
+    let scan_options = ScanOptions {
+        execution_options,
+        target_partitions: Some(target_partitions),
+        intra_file_repartitioning: Default::default(),
+        use_arrow_view_types: true,
+    };
     let session_started = Instant::now();
     let table_initialization_started = session_started;
     let table = match config.scan_metadata_mode {
@@ -1380,17 +1390,7 @@ async fn run_repetition(
     };
     let table_initialization_micros =
         saturating_u64(table_initialization_started.elapsed().as_micros());
-    register_table(
-        &context,
-        "orders",
-        table,
-        ScanOptions {
-            execution_options,
-            target_partitions: Some(target_partitions),
-            intra_file_repartitioning: Default::default(),
-            use_arrow_view_types: true,
-        },
-    )?;
+    register_table(&context, "orders", table, scan_options)?;
 
     let mut query_measurements = Vec::with_capacity(config.queries_per_table);
     for _ in 0..config.queries_per_table {
@@ -1439,6 +1439,7 @@ async fn measure_query(
     }
     let total_micros = saturating_u64(query_started.elapsed().as_micros()).max(1);
     validate_schema(config.query, output_schema.fields())?;
+    validate_fixture_fingerprint(config.workload, &fixture.fingerprint)?;
     let expected_rows = expected_rows(config.workload, config.query, fixture);
     if produced_rows != expected_rows || produced_batches == 0 {
         return Err(io::Error::new(
@@ -1461,6 +1462,7 @@ async fn measure_query(
         )
         .into());
     }
+    validate_deletion_vector_metrics(fixture, &metrics)?;
     Ok(QueryMeasurement {
         planning_micros,
         first_batch_micros: first_batch_micros.unwrap_or(0),
@@ -1489,6 +1491,39 @@ fn expected_rows(workload: Workload, query: Query, fixture: &Fixture) -> usize {
                 .saturating_mul(fixture.file_count),
         ),
     }
+}
+
+fn validate_deletion_vector_metrics(
+    fixture: &Fixture,
+    metrics: &[ScanMetricsSnapshot],
+) -> Result<(), Box<dyn Error>> {
+    let total = |select: fn(&delta_arrow_reader::DeltaScanMetricsSnapshot) -> u64| {
+        metrics.iter().fold(0_u64, |sum, snapshot| {
+            sum.saturating_add(select(&snapshot.reader_metrics))
+        })
+    };
+    let expected = (
+        u64::try_from(fixture.deletion_vector_file_count)?,
+        u64::try_from(fixture.deletion_vector_file_count)?,
+        u64::try_from(fixture.deletion_vector_deleted_rows)?,
+        0,
+        0,
+    );
+    let actual = (
+        total(|reader| reader.deletion_vector_payloads_loaded),
+        total(|reader| reader.deletion_vectors_applied),
+        total(|reader| reader.deletion_vector_rows_deleted),
+        total(|reader| reader.deletion_vector_failures),
+        total(|reader| reader.deletion_vector_coordinate_rejections),
+    );
+    if actual != expected {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("deletion-vector metrics drifted: expected {expected:?}, got {actual:?}"),
+        )
+        .into());
+    }
+    Ok(())
 }
 
 fn validate_schema(
@@ -1694,9 +1729,9 @@ fn csv_row(
     fixture: &Fixture,
     available_parallelism: Option<usize>,
     target_partitions: usize,
-    measurements: &[RepetitionMeasurement],
+    repetitions: &[RepetitionMeasurement],
 ) -> Vec<String> {
-    let summary = summarize(measurements);
+    let summary = summarize(repetitions);
     let read = &summary.read;
     let row = vec![
         BENCHMARK_SCHEMA_VERSION.to_string(),
@@ -2377,9 +2412,9 @@ mod tests {
             let fixture =
                 Fixture::create(&env::temp_dir(), config.workload, config.storage, false)?;
             let repetition = run_repetition(&config, &fixture, 4).await?;
-            let measurements = [repetition];
-            let summary = summarize(&measurements);
-            let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
+            let repetitions = [repetition];
+            let summary = summarize(&repetitions);
+            let row = csv_row(&config, &fixture, Some(4), 4, &repetitions);
             assert_eq!(row.len(), CSV_HEADER.len());
             assert_eq!(row[0], "31");
             assert_eq!(row[1], "provider_exec");
