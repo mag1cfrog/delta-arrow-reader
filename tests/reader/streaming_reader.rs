@@ -110,6 +110,11 @@ impl TestTable {
             .map_err(|()| "test path cannot become a file URL".into())
     }
 
+    fn disable_delta_log(&self) -> TestResult {
+        fs::rename(self.0.join("_delta_log"), self.0.join("disabled-log"))?;
+        Ok(())
+    }
+
     fn write_parquet(
         &self,
         name: &str,
@@ -347,7 +352,7 @@ fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestRes
         let (expected_high, _) =
             collect_scan(lazy.scan().with_predicate(high_ids.clone()).build().await?).await?;
 
-        fs::rename(fixture.0.join("_delta_log"), fixture.0.join("disabled-log"))?;
+        fixture.disable_delta_log()?;
 
         let (actual_low, low_metrics) =
             collect_scan(eager.scan().with_predicate(low_ids).build().await?).await?;
@@ -658,17 +663,20 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
 }
 
 #[test]
-fn delta_kernel_matches_direct_results() -> TestResult {
+fn eager_metadata_preserves_direct_and_delta_kernel_results_without_the_log() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("backend-parity")?;
-        let direct = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let direct = DeltaTableBuilder::new(fixture.uri())
+            .load_table_with_eager_scan_metadata()
+            .await?;
         let kernel = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(
                 DeltaScanExecutionOptions::new()
                     .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
             )
-            .load_table()
+            .load_table_with_eager_scan_metadata()
             .await?;
+        fixture.disable_delta_log()?;
         let kernel_options = DeltaScanExecutionOptions::new()
             .with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let predicate = DeltaPredicate::Compare {

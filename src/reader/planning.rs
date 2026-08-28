@@ -4517,6 +4517,34 @@ mod tests {
         plan.file_tasks.iter()
     }
 
+    fn assert_file_task_parity(expected: &DeltaScanFileTask, actual: &DeltaScanFileTask) {
+        assert_eq!(actual.path, expected.path);
+        assert_eq!(actual.file_size, expected.file_size);
+        assert_eq!(actual.parquet_byte_range, expected.parquet_byte_range);
+        assert_eq!(actual.modification_time_ms, expected.modification_time_ms);
+        assert_eq!(actual.partition_values, expected.partition_values);
+        assert_eq!(
+            actual.deletion_vector.is_present(),
+            expected.deletion_vector.is_present()
+        );
+        assert_eq!(
+            actual.transform.clone().into_expression(),
+            expected.transform.clone().into_expression()
+        );
+    }
+
+    fn assert_unpartitioned_plan_parity(
+        expected: &DeltaUnpartitionedScanPlan,
+        actual: &DeltaUnpartitionedScanPlan,
+    ) {
+        assert_eq!(actual.file_tasks.len(), expected.file_tasks.len());
+        for (expected, actual) in expected.file_tasks.iter().zip(&actual.file_tasks) {
+            assert_file_task_parity(expected, actual);
+        }
+        assert_eq!(actual.estimated_input_bytes, expected.estimated_input_bytes);
+        assert_eq!(actual.estimated_input_rows, expected.estimated_input_rows);
+    }
+
     fn execution_file_stream(permit: FileReadPermit, batch: RecordBatch) -> FileBatchStream {
         Box::pin(stream::unfold(
             (Some(batch), permit),
@@ -4741,7 +4769,7 @@ mod tests {
     }
 
     #[test]
-    fn eager_metadata_keeps_only_active_files_after_log_reconciliation()
+    fn eager_metadata_matches_lazy_active_files_after_log_reconciliation()
     -> Result<(), Box<dyn std::error::Error>> {
         let table = DeltaLogTable::new_with_metadata_and_adds(
             "eager-active-files",
@@ -4768,13 +4796,16 @@ mod tests {
             &table.0.to_string_lossy(),
             &DeltaStorageOptions::new(),
             DeltaSnapshotSelection::Latest,
-        )?
-        .with_eager_scan_metadata()?;
+        )?;
+        let lazy =
+            super::plan_unpartitioned_scan(&snapshot, None, &[], None, true, Default::default())?;
+        let snapshot = snapshot.with_eager_scan_metadata()?;
         table.disable_delta_log()?;
 
         let plan =
             super::plan_unpartitioned_scan(&snapshot, None, &[], None, true, Default::default())?;
 
+        assert_unpartitioned_plan_parity(&lazy, &plan);
         assert_eq!(
             unpartitioned_tasks(&plan)
                 .map(|task| task.path.as_str())
@@ -4807,7 +4838,7 @@ mod tests {
     }
 
     #[test]
-    fn eager_metadata_preserves_partition_pruning_without_the_log()
+    fn eager_metadata_matches_lazy_partition_pruning_without_the_log()
     -> Result<(), Box<dyn std::error::Error>> {
         let table = DeltaLogTable::new_with_metadata_and_adds(
             "eager-partition-pruning",
@@ -4821,15 +4852,23 @@ mod tests {
             &table.0.to_string_lossy(),
             &DeltaStorageOptions::new(),
             DeltaSnapshotSelection::Latest,
-        )?
-        .with_eager_scan_metadata()?;
-        table.disable_delta_log()?;
+        )?;
         let predicate = DeltaPredicate::Compare {
             column: "region".to_owned(),
             op: DeltaComparison::Eq,
             value: DeltaScalar::Utf8("west".to_owned()),
         };
         let kernel_predicate = kernel_pruning_predicate(&predicate).ok_or("expected predicate")?;
+        let lazy = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(kernel_predicate.clone()),
+            false,
+            Default::default(),
+        )?;
+        let snapshot = snapshot.with_eager_scan_metadata()?;
+        table.disable_delta_log()?;
 
         let plan = super::plan_unpartitioned_scan(
             &snapshot,
@@ -4840,6 +4879,7 @@ mod tests {
             Default::default(),
         )?;
 
+        assert_unpartitioned_plan_parity(&lazy, &plan);
         assert_eq!(
             unpartitioned_tasks(&plan)
                 .map(|task| task.path.as_str())
@@ -4851,7 +4891,7 @@ mod tests {
     }
 
     #[test]
-    fn statistics_pruning_preserves_surviving_files_and_deletion_vectors()
+    fn eager_metadata_matches_lazy_statistics_pruning_and_deletion_vectors()
     -> Result<(), Box<dyn std::error::Error>> {
         let adds = [
             dv_add_action(
@@ -4904,7 +4944,30 @@ mod tests {
         validate_predicate(&predicate, snapshot.schema().as_ref())?;
         let kernel_predicate =
             kernel_pruning_predicate(&predicate).ok_or("expected Kernel predicate")?;
-
+        let lazy_high = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(kernel_predicate.clone()),
+            true,
+            Default::default(),
+        )?;
+        let low_predicate = kernel_pruning_predicate(&DeltaPredicate::Compare {
+            column: "id".to_owned(),
+            op: DeltaComparison::LtEq,
+            value: DeltaScalar::Int32(50),
+        })
+        .ok_or("expected second Kernel predicate")?;
+        let lazy_low = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(low_predicate.clone()),
+            true,
+            Default::default(),
+        )?;
+        let snapshot = snapshot.with_eager_scan_metadata()?;
+        table.disable_delta_log()?;
         let plan = super::plan_unpartitioned_scan(
             &snapshot,
             None,
@@ -4913,7 +4976,17 @@ mod tests {
             true,
             Default::default(),
         )?;
+        let low_plan = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(low_predicate),
+            true,
+            Default::default(),
+        )?;
 
+        assert_unpartitioned_plan_parity(&lazy_high, &plan);
+        assert_unpartitioned_plan_parity(&lazy_low, &low_plan);
         assert_eq!(
             unpartitioned_tasks(&plan)
                 .map(|task| task.path.as_str())
@@ -4944,6 +5017,17 @@ mod tests {
         assert!(!plain.deletion_vector.is_present());
         assert_eq!(plan.add_actions_excluded_during_planning, Some(2));
         assert_eq!(plan.estimated_input_rows, None);
+        assert_eq!(
+            unpartitioned_tasks(&low_plan)
+                .map(|task| task.path.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "id-dv-impossible.parquet",
+                "id-plain-impossible.parquet",
+                "id-plain-missing-stats.parquet",
+                "id-dv-missing-stats.parquet",
+            ]
+        );
         Ok(())
     }
 
