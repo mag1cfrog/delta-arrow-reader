@@ -106,8 +106,8 @@ impl ArrowTableSnapshot {
 
     pub(crate) fn materialize_eager_scan_metadata(mut self) -> Result<Self, DeltaReaderError> {
         let snapshot_version = self.version();
-        let started_at = Instant::now();
         trace_scan_metadata_cache_build_started(snapshot_version);
+        let started_at = Instant::now();
         let result = self
             .snapshot
             .build_scan(None, None, true)
@@ -467,7 +467,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use arrow::datatypes::{DataType, TimeUnit};
+    use arrow::{
+        datatypes::{DataType, TimeUnit},
+        record_batch::RecordBatch,
+    };
     use futures_util::future;
     use object_store::{ObjectStoreExt, memory::InMemory, path::Path as ObjectStorePath};
     use tracing::{
@@ -905,11 +908,13 @@ mod tests {
     fn eager_cache_build_tracing_reports_retained_metadata_without_sensitive_values()
     -> Result<(), Box<dyn std::error::Error>> {
         const OBJECT_KEY: &str = "secret-object-key.parquet";
+        const SECOND_OBJECT_KEY: &str = "second-secret-object-key.parquet";
         const STORAGE_VALUE: &str = "secret-storage-value";
         let table = DeltaLogTable::new("eager-cache-tracing")?;
         table.write_log(
             2,
-            r#"{"add":{"path":"secret-object-key.parquet","partitionValues":{},"size":10,"modificationTime":1587968586000,"dataChange":true,"stats":"{\"numRecords\":1,\"minValues\":{\"id\":1},\"maxValues\":{\"id\":1},\"nullCount\":{\"id\":0}}"}}"#,
+            r#"{"add":{"path":"secret-object-key.parquet","partitionValues":{},"size":10,"modificationTime":1587968586000,"dataChange":true,"stats":"{\"numRecords\":1,\"minValues\":{\"id\":1},\"maxValues\":{\"id\":1},\"nullCount\":{\"id\":0}}"}}
+{"add":{"path":"second-secret-object-key.parquet","partitionValues":{},"size":10,"modificationTime":1587968586001,"dataChange":true,"stats":"{\"numRecords\":1,\"minValues\":{\"id\":2},\"maxValues\":{\"id\":2},\"nullCount\":{\"id\":0}}"}}"#,
         )?;
         let snapshot = load_delta_table_snapshot_blocking(
             &table.0.to_string_lossy(),
@@ -918,7 +923,17 @@ mod tests {
         )?;
         let table_path = table.0.to_string_lossy().into_owned();
         let (result, events) = capture_events(|| snapshot.materialize_eager_scan_metadata());
-        result?;
+        let snapshot = result?;
+        let cached_metadata = snapshot
+            .eager_scan_metadata()
+            .ok_or("eager metadata missing")?;
+        let expected_batch_count = cached_metadata.len().to_string();
+        let expected_file_count = cached_metadata
+            .iter()
+            .map(RecordBatch::num_rows)
+            .sum::<usize>()
+            .to_string();
+        assert_eq!(expected_file_count, "2");
 
         assert_eq!(events.len(), 2);
         assert_eq!(
@@ -948,21 +963,19 @@ mod tests {
             completed.fields.get("snapshot_version").map(String::as_str),
             Some("2")
         );
-        assert!(
+        assert_eq!(
             completed
                 .fields
                 .get("cached_batch_count")
-                .ok_or("cached batch count missing")?
-                .parse::<usize>()?
-                > 0
+                .map(String::as_str),
+            Some(expected_batch_count.as_str())
         );
-        assert!(
+        assert_eq!(
             completed
                 .fields
                 .get("cached_file_count")
-                .ok_or("cached file count missing")?
-                .parse::<usize>()?
-                > 0
+                .map(String::as_str),
+            Some(expected_file_count.as_str())
         );
         completed
             .fields
@@ -972,6 +985,7 @@ mod tests {
         let captured = format!("{events:?}");
         assert!(!captured.contains(&table_path));
         assert!(!captured.contains(OBJECT_KEY));
+        assert!(!captured.contains(SECOND_OBJECT_KEY));
         assert!(!captured.contains(STORAGE_VALUE));
         Ok(())
     }
