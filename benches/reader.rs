@@ -214,7 +214,7 @@ struct DelayedHttpServer {
 }
 
 #[derive(Debug)]
-struct Measurement {
+struct QueryMeasurement {
     planning_micros: u64,
     first_batch_micros: u64,
     total_micros: u64,
@@ -225,6 +225,11 @@ struct Measurement {
     process_peak_rss_delta_bytes: Option<u64>,
     batch_latency_micros: Vec<u64>,
     metrics: Vec<ScanMetricsSnapshot>,
+}
+
+#[derive(Debug)]
+struct RepetitionMeasurement {
+    query_measurements: Vec<QueryMeasurement>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1323,19 +1328,19 @@ async fn benchmark(
     config: &Config,
     fixture: &Fixture,
     target_partitions: usize,
-) -> Result<Vec<Measurement>, Box<dyn Error>> {
+) -> Result<Vec<RepetitionMeasurement>, Box<dyn Error>> {
     let mut measurements = Vec::with_capacity(config.repetitions);
     for _ in 0..config.repetitions {
-        measurements.push(run_once(config, fixture, target_partitions).await?);
+        measurements.push(run_repetition(config, fixture, target_partitions).await?);
     }
     Ok(measurements)
 }
 
-async fn run_once(
+async fn run_repetition(
     config: &Config,
     fixture: &Fixture,
     target_partitions: usize,
-) -> Result<Measurement, Box<dyn Error>> {
+) -> Result<RepetitionMeasurement, Box<dyn Error>> {
     let context = SessionContext::new();
     let execution_options = DeltaScanExecutionOptions::new()
         .with_parquet_backend(config.backend)
@@ -1345,11 +1350,13 @@ async fn run_once(
         .with_prefetch_files_per_partition(2)
         .with_parquet_metadata_size_hint_bytes(config.metadata_size_hint_bytes)?
         .with_parquet_full_file_read_threshold_bytes(config.full_file_read_threshold_bytes)?;
-    let table = DeltaTableBuilder::new(&fixture.table_uri)
+    let builder = DeltaTableBuilder::new(&fixture.table_uri)
         .with_storage_options(fixture.storage_options.clone())
-        .with_execution_options(execution_options)
-        .load_table()
-        .await?;
+        .with_execution_options(execution_options);
+    let table = match config.scan_metadata_mode {
+        ScanMetadataMode::Lazy => builder.load_table().await?,
+        ScanMetadataMode::Eager => builder.load_table_with_eager_scan_metadata().await?,
+    };
     register_table(
         &context,
         "orders",
@@ -1362,6 +1369,18 @@ async fn run_once(
         },
     )?;
 
+    let mut query_measurements = Vec::with_capacity(config.queries_per_table);
+    for _ in 0..config.queries_per_table {
+        query_measurements.push(measure_query(config, fixture, &context).await?);
+    }
+    Ok(RepetitionMeasurement { query_measurements })
+}
+
+async fn measure_query(
+    config: &Config,
+    fixture: &Fixture,
+    context: &SessionContext,
+) -> Result<QueryMeasurement, Box<dyn Error>> {
     let query_started = Instant::now();
     let planning_started = Instant::now();
     let dataframe = context.sql(config.query.sql()).await?;
@@ -1414,7 +1433,7 @@ async fn run_once(
         )
         .into());
     }
-    Ok(Measurement {
+    Ok(QueryMeasurement {
         planning_micros,
         first_batch_micros: first_batch_micros.unwrap_or(0),
         total_micros,
@@ -1470,16 +1489,24 @@ fn validate_schema(
     Ok(())
 }
 
-fn summarize(measurements: &[Measurement]) -> Summary {
-    let values =
-        |select: fn(&Measurement) -> u64| measurements.iter().map(select).collect::<Vec<_>>();
+fn summarize(repetitions: &[RepetitionMeasurement]) -> Summary {
+    let measurements = repetitions
+        .iter()
+        .flat_map(|repetition| &repetition.query_measurements)
+        .collect::<Vec<_>>();
+    let values = |select: fn(&QueryMeasurement) -> u64| {
+        measurements
+            .iter()
+            .map(|measurement| select(measurement))
+            .collect::<Vec<_>>()
+    };
     let totals = values(|measurement| measurement.total_micros);
     let batch_latency = measurements
         .iter()
         .flat_map(|measurement| measurement.batch_latency_micros.iter().copied())
         .collect::<Vec<_>>();
     Summary {
-        repetitions: measurements.len(),
+        repetitions: repetitions.len(),
         produced_rows: measurements
             .iter()
             .map(|measurement| measurement.produced_rows)
@@ -1505,11 +1532,11 @@ fn summarize(measurements: &[Measurement]) -> Summary {
             .iter()
             .filter_map(|measurement| measurement.process_peak_rss_delta_bytes)
             .max(),
-        read: summarize_read(measurements),
+        read: summarize_read(&measurements),
     }
 }
 
-fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
+fn summarize_read(measurements: &[&QueryMeasurement]) -> ReadSummary {
     let snapshots = measurements
         .iter()
         .map(|measurement| measurement.metrics.as_slice())
@@ -1627,7 +1654,7 @@ fn csv_row(
     fixture: &Fixture,
     available_parallelism: Option<usize>,
     target_partitions: usize,
-    measurements: &[Measurement],
+    measurements: &[RepetitionMeasurement],
 ) -> Vec<String> {
     let summary = summarize(measurements);
     let read = &summary.read;
@@ -1817,6 +1844,13 @@ mod tests {
             retain_fixture: false,
             seed: 0,
         }
+    }
+
+    fn only_query(repetition: &RepetitionMeasurement) -> Result<&QueryMeasurement, Box<dyn Error>> {
+        let [measurement] = repetition.query_measurements.as_slice() else {
+            return Err(invalid("expected exactly one query measurement").into());
+        };
+        Ok(measurement)
     }
 
     #[test]
@@ -2111,7 +2145,8 @@ mod tests {
                 unequal_config.storage,
                 false,
             )?;
-            let unequal_measurement = run_once(&unequal_config, &unequal, 4).await?;
+            let unequal_repetition = run_repetition(&unequal_config, &unequal, 4).await?;
+            let unequal_measurement = only_query(&unequal_repetition)?;
             assert_eq!(unequal_measurement.produced_rows, 68_608);
             assert_eq!(
                 unequal_measurement.metrics[0].reader_metrics.files_planned,
@@ -2132,10 +2167,44 @@ mod tests {
                 http_config.storage,
                 false,
             )?;
-            let http_measurement = run_once(&http_config, &http, 4).await?;
+            let http_repetition = run_repetition(&http_config, &http, 4).await?;
+            let http_measurement = only_query(&http_repetition)?;
             let reader = &http_measurement.metrics[0].reader_metrics;
             assert_eq!(reader.scheduler_rows_emitted, 32_768);
             assert_eq!(reader.parquet_data_file_range_get_operations, Some(8));
+            Ok::<_, Box<dyn Error>>(())
+        })
+    }
+
+    #[test]
+    fn one_registered_table_runs_three_fresh_queries_in_both_metadata_modes() -> TestResult {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        runtime.block_on(async {
+            let mut config = config(
+                Workload::FewLarger,
+                Query::FullRows,
+                ParquetReaderBackend::Direct,
+                StorageProfile::local(),
+                Some(65_536),
+                None,
+            );
+            config.queries_per_table = 3;
+            let fixture =
+                Fixture::create(&env::temp_dir(), config.workload, config.storage, false)?;
+            let expected_rows = expected_rows(config.workload, config.query, &fixture);
+
+            for mode in [ScanMetadataMode::Lazy, ScanMetadataMode::Eager] {
+                config.scan_metadata_mode = mode;
+                let repetition = run_repetition(&config, &fixture, 4).await?;
+                assert_eq!(repetition.query_measurements.len(), 3);
+                for measurement in repetition.query_measurements {
+                    assert_eq!(measurement.produced_rows, expected_rows);
+                    assert!(measurement.produced_batches > 0);
+                    assert!(!measurement.metrics.is_empty());
+                }
+            }
             Ok::<_, Box<dyn Error>>(())
         })
     }
@@ -2179,8 +2248,8 @@ mod tests {
             );
             let fixture =
                 Fixture::create(&env::temp_dir(), config.workload, config.storage, false)?;
-            let measurement = run_once(&config, &fixture, 4).await?;
-            let measurements = [measurement];
+            let repetition = run_repetition(&config, &fixture, 4).await?;
+            let measurements = [repetition];
             let summary = summarize(&measurements);
             let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
             assert_eq!(row.len(), CSV_HEADER.len());
