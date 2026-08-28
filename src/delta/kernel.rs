@@ -2,12 +2,14 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use arrow::array::BooleanArray;
 use arrow::{
-    array::Array as _, datatypes::SchemaRef, error::ArrowError, record_batch::RecordBatch,
+    array::{Array as _, BooleanArray},
+    datatypes::SchemaRef,
+    error::ArrowError,
+    record_batch::RecordBatch,
 };
 use delta_kernel::{
-    Engine, Snapshot, SnapshotRef,
+    Engine, EngineData, Snapshot, SnapshotRef,
     engine::{
         arrow_conversion::TryIntoArrow,
         arrow_data::{ArrowEngineData, EngineDataArrowExt},
@@ -160,29 +162,66 @@ impl KernelScan {
     pub(crate) fn collect_file_metadata(
         &self,
         engine_context: &DeltaKernelEngineContext,
+        snapshot_version: u64,
+        eager_scan_metadata: Option<&[RecordBatch]>,
     ) -> delta_kernel::DeltaResult<KernelScanFileCollection> {
-        fn collect(files: &mut Vec<KernelScanFileMetadata>, file: ScanFile) {
-            files.push(KernelScanFileMetadata::from_scan_file(file));
+        match eager_scan_metadata {
+            Some(batches) => {
+                let data = batches
+                    .iter()
+                    .cloned()
+                    .map(|batch| Box::new(ArrowEngineData::new(batch)) as Box<dyn EngineData>)
+                    .collect::<Vec<_>>();
+                collect_scan_files(self.scan.scan_metadata_from(
+                    engine_context.engine.as_ref(),
+                    snapshot_version,
+                    data,
+                    None,
+                )?)
+            }
+            None => collect_scan_files(self.scan.scan_metadata(engine_context.engine.as_ref())?),
         }
+    }
 
-        let mut files = Vec::new();
-        let mut excluded_add_actions = Some(0_u64);
-        let mut saw_batch = false;
+    pub(crate) fn materialize_scan_metadata(
+        &self,
+        engine_context: &DeltaKernelEngineContext,
+    ) -> delta_kernel::DeltaResult<Arc<[RecordBatch]>> {
+        let mut batches = Vec::new();
         for metadata in self.scan.scan_metadata(engine_context.engine.as_ref())? {
             let metadata = metadata?;
-            saw_batch = true;
-            excluded_add_actions = excluded_add_actions.and_then(|total| {
-                excluded_add_action_count(&metadata).and_then(|count| total.checked_add(count))
-            });
-            files = metadata.visit_scan_files(files, collect)?;
+            let data = metadata.scan_files.apply_selection_vector()?;
+            let batch: RecordBatch = ArrowEngineData::try_from_engine_data(data)?.into();
+            if batch.num_rows() > 0 {
+                batches.push(batch);
+            }
         }
-        Ok(KernelScanFileCollection {
-            files,
-            add_actions_excluded_during_planning: saw_batch
-                .then_some(excluded_add_actions)
-                .flatten(),
-        })
+        Ok(batches.into())
     }
+}
+
+fn collect_scan_files(
+    metadata: impl Iterator<Item = delta_kernel::DeltaResult<ScanMetadata>>,
+) -> delta_kernel::DeltaResult<KernelScanFileCollection> {
+    fn collect(files: &mut Vec<KernelScanFileMetadata>, file: ScanFile) {
+        files.push(KernelScanFileMetadata::from_scan_file(file));
+    }
+
+    let mut files = Vec::new();
+    let mut excluded_add_actions = Some(0_u64);
+    let mut saw_batch = false;
+    for metadata in metadata {
+        let metadata = metadata?;
+        saw_batch = true;
+        excluded_add_actions = excluded_add_actions.and_then(|total| {
+            excluded_add_action_count(&metadata).and_then(|count| total.checked_add(count))
+        });
+        files = metadata.visit_scan_files(files, collect)?;
+    }
+    Ok(KernelScanFileCollection {
+        files,
+        add_actions_excluded_during_planning: saw_batch.then_some(excluded_add_actions).flatten(),
+    })
 }
 
 fn excluded_add_action_count(metadata: &ScanMetadata) -> Option<u64> {
@@ -604,6 +643,27 @@ mod tests {
             .expect("Kernel predicate evaluator must return Boolean");
 
         Ok(filter_record_batch(batch, selection)?)
+    }
+
+    #[test]
+    fn selection_vectors_keep_implicit_trailing_rows() -> Result<(), Box<dyn std::error::Error>> {
+        let batch = RecordBatch::try_from_iter([(
+            "id",
+            Arc::new(Int32Array::from(vec![1, 2, 3])) as Arc<dyn arrow::array::Array>,
+        )])?;
+
+        let data: Box<dyn EngineData> = Box::new(ArrowEngineData::new(batch));
+        let selected = delta_kernel::FilteredEngineData::try_new(data, vec![false])?
+            .apply_selection_vector()?;
+        let selected: RecordBatch = ArrowEngineData::try_from_engine_data(selected)?.into();
+        let ids = selected
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .ok_or("expected Int32 ids")?;
+
+        assert_eq!(ids.values(), &[2, 3]);
+        Ok(())
     }
 
     #[test]

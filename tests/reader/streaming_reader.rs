@@ -23,6 +23,10 @@ use delta_arrow_reader::{
 use delta_arrow_reader::{
     DeltaScan, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaTableBuilder,
 };
+use delta_kernel::Snapshot;
+use delta_kernel_default_engine::{
+    DefaultEngineBuilder, executor::tokio::TokioMultiThreadExecutor, storage::store_from_url,
+};
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
 use parquet::{arrow::ArrowWriter, file::properties::WriterProperties};
@@ -70,6 +74,27 @@ impl TestTable {
         Ok(table)
     }
 
+    fn malformed_add(name: &str, invalid_size: &str) -> TestResult<Self> {
+        let table = Self::empty(name)?;
+        table.write_log(
+            0,
+            &[
+                protocol(1),
+                metadata(),
+                json!({
+                    "add": {
+                        "path": "secret.parquet",
+                        "partitionValues": {},
+                        "size": invalid_size,
+                        "modificationTime": 1587968586000_i64,
+                        "dataChange": true
+                    }
+                }),
+            ],
+        )?;
+        Ok(table)
+    }
+
     fn empty(name: &str) -> TestResult<Self> {
         let nonce = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let path = Path::new("target")
@@ -87,6 +112,11 @@ impl TestTable {
         url::Url::from_directory_path(fs::canonicalize(&self.0)?)
             .map(|url| url.into())
             .map_err(|()| "test path cannot become a file URL".into())
+    }
+
+    fn disable_delta_log(&self) -> TestResult {
+        fs::rename(self.0.join("_delta_log"), self.0.join("disabled-log"))?;
+        Ok(())
     }
 
     fn write_parquet(
@@ -303,6 +333,137 @@ fn local_end_to_end_example_reads_without_sql() -> TestResult {
 }
 
 #[test]
+fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("eager-scan-metadata")?;
+        let eager = DeltaTableBuilder::new(fixture.uri())
+            .load_table_with_eager_scan_metadata()
+            .await?;
+        let fixed = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
+            .load_table_with_eager_scan_metadata()
+            .await?;
+        let lazy = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let low_ids = DeltaPredicate::Compare {
+            column: "id".into(),
+            op: DeltaComparison::LtEq,
+            value: DeltaScalar::Int32(4),
+        };
+        let high_ids = DeltaPredicate::Compare {
+            column: "id".into(),
+            op: DeltaComparison::Gt,
+            value: DeltaScalar::Int32(4),
+        };
+
+        let (expected_low, _) =
+            collect_scan(lazy.scan().with_predicate(low_ids.clone()).build().await?).await?;
+        let (expected_high, _) =
+            collect_scan(lazy.scan().with_predicate(high_ids.clone()).build().await?).await?;
+
+        fixture.disable_delta_log()?;
+
+        let (actual_low, low_metrics) =
+            collect_scan(eager.scan().with_predicate(low_ids).build().await?).await?;
+        let (actual_high, high_metrics) =
+            collect_scan(eager.scan().with_predicate(high_ids).build().await?).await?;
+        let (fixed_batches, fixed_metrics) = collect_scan(fixed.scan().build().await?).await?;
+
+        assert_eq!(sorted_ids(&actual_low), sorted_ids(&expected_low));
+        assert_eq!(sorted_ids(&actual_high), sorted_ids(&expected_high));
+        assert_eq!(fixed.version(), 0);
+        assert_eq!(sorted_ids(&fixed_batches), [1, 2, 3, 4]);
+        assert_eq!(low_metrics.snapshot().files_planned, 1);
+        assert_eq!(high_metrics.snapshot().files_planned, 1);
+        assert_eq!(fixed_metrics.snapshot().files_planned, 1);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn eager_scan_metadata_supports_concurrent_planning_without_the_delta_log() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("eager-concurrent-planning")?;
+        let table = DeltaTableBuilder::new(fixture.uri())
+            .load_table_with_eager_scan_metadata()
+            .await?;
+        fixture.disable_delta_log()?;
+
+        let (low_scan, high_scan) = tokio::try_join!(
+            table
+                .scan()
+                .with_predicate(DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: DeltaComparison::LtEq,
+                    value: DeltaScalar::Int32(4),
+                })
+                .build(),
+            table
+                .scan()
+                .with_predicate(DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: DeltaComparison::Gt,
+                    value: DeltaScalar::Int32(4),
+                })
+                .build(),
+        )?;
+        let ((low_batches, low_metrics), (high_batches, high_metrics)) =
+            tokio::try_join!(collect_scan(low_scan), collect_scan(high_scan))?;
+
+        assert_eq!(sorted_ids(&low_batches), [1, 2, 3, 4]);
+        assert_eq!(sorted_ids(&high_batches), [5, 6, 7, 8]);
+        assert_eq!(low_metrics.snapshot().files_planned, 1);
+        assert_eq!(high_metrics.snapshot().files_planned, 1);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn eager_scan_metadata_loads_from_a_checkpoint_without_json_logs() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("eager-checkpoint")?;
+        let table_url: url::Url = fixture.normalized_uri()?.parse()?;
+        let engine = DefaultEngineBuilder::new(store_from_url(&table_url)?)
+            .with_task_executor(Arc::new(TokioMultiThreadExecutor::new(
+                tokio::runtime::Handle::current(),
+            )))
+            .build();
+        let snapshot = Snapshot::builder_for(table_url).build(&engine)?;
+        snapshot.checkpoint(&engine, None)?;
+
+        let delta_log = fixture.0.join("_delta_log");
+        fs::remove_file(delta_log.join("00000000000000000000.json"))?;
+        fs::remove_file(delta_log.join("00000000000000000001.json"))?;
+        assert!(
+            delta_log
+                .join("00000000000000000001.checkpoint.parquet")
+                .is_file()
+        );
+
+        let table = DeltaTableBuilder::new(fixture.uri())
+            .load_table_with_eager_scan_metadata()
+            .await?;
+        fixture.disable_delta_log()?;
+        let (batches, metrics) = collect_scan(
+            table
+                .scan()
+                .with_predicate(DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: DeltaComparison::Gt,
+                    value: DeltaScalar::Int32(4),
+                })
+                .build()
+                .await?,
+        )
+        .await?;
+
+        assert_eq!(table.version(), 1);
+        assert_eq!(sorted_ids(&batches), [5, 6, 7, 8]);
+        assert_eq!(metrics.snapshot().files_planned, 1);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
 fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
     let fixture = TestTable::unsupported("unsupported")?;
     let runtime = runtime()?;
@@ -324,6 +485,46 @@ fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
         Err(error) => error,
     };
     assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+    let eager = runtime
+        .block_on(DeltaTableBuilder::new(fixture.uri()).load_table_with_eager_scan_metadata());
+    let error = match eager {
+        Ok(_) => panic!("unsupported protocol eagerly loaded a table"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), "unsupported_protocol");
+    assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+    Ok(())
+}
+
+#[test]
+fn eager_metadata_failure_returns_no_table_and_redacts_the_source() -> TestResult {
+    const INVALID_SIZE: &str = "secret-not-a-file-size";
+    let fixture = TestTable::malformed_add("eager-failure", INVALID_SIZE)?;
+    let runtime = runtime()?;
+
+    let lazy = runtime.block_on(DeltaTableBuilder::new(fixture.uri()).load_table())?;
+    assert_eq!(lazy.version(), 0);
+    let error = match runtime
+        .block_on(DeltaTableBuilder::new(fixture.uri()).load_table_with_eager_scan_metadata())
+    {
+        Ok(_) => return Err("malformed eager metadata should not return a table".into()),
+        Err(error) => error,
+    };
+
+    assert_eq!(error.code(), "scan_planning");
+    assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
+    assert!(
+        error
+            .to_string()
+            .contains("eager_scan_metadata_materialization_failed")
+    );
+    assert!(
+        error
+            .source()
+            .is_some_and(|source| source.downcast_ref::<delta_kernel::Error>().is_some())
+    );
+    assert!(!error.to_string().contains(INVALID_SIZE));
+    assert!(!format!("{error:?}").contains(INVALID_SIZE));
     Ok(())
 }
 
@@ -570,17 +771,20 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
 }
 
 #[test]
-fn delta_kernel_matches_direct_results() -> TestResult {
+fn eager_metadata_preserves_direct_and_delta_kernel_results_without_the_log() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("backend-parity")?;
-        let direct = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let direct = DeltaTableBuilder::new(fixture.uri())
+            .load_table_with_eager_scan_metadata()
+            .await?;
         let kernel = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(
                 DeltaScanExecutionOptions::new()
                     .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
             )
-            .load_table()
+            .load_table_with_eager_scan_metadata()
             .await?;
+        fixture.disable_delta_log()?;
         let kernel_options = DeltaScanExecutionOptions::new()
             .with_parquet_backend(ParquetReaderBackend::DeltaKernel);
         let predicate = DeltaPredicate::Compare {

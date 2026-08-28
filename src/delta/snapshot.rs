@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use arrow::datatypes::SchemaRef;
+use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use snafu::ResultExt;
 
 use super::{
@@ -12,7 +12,9 @@ use super::{
 };
 use crate::{
     DeltaReaderError, DeltaSnapshotSelection, DeltaStorageOptions,
-    error::{SchemaConversionSnafu, SnapshotLoadSnafu, StorageInitializationSnafu},
+    error::{
+        ScanPlanningSnafu, SchemaConversionSnafu, SnapshotLoadSnafu, StorageInitializationSnafu,
+    },
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
@@ -26,6 +28,7 @@ pub(crate) struct ArrowTableSnapshot {
     protocol: DeltaProtocol,
     schema: SchemaRef,
     engine_context: Arc<DeltaKernelEngineContext>,
+    eager_scan_metadata: Option<Arc<[RecordBatch]>>,
 }
 
 pub(crate) struct KernelTableSnapshot {
@@ -59,6 +62,7 @@ impl KernelTableSnapshot {
             protocol: self.protocol,
             schema,
             engine_context: self.engine_context,
+            eager_scan_metadata: None,
         })
     }
 }
@@ -91,6 +95,23 @@ impl ArrowTableSnapshot {
 
     pub(crate) fn partition_columns(&self) -> &[String] {
         self.snapshot.partition_columns()
+    }
+
+    pub(crate) fn eager_scan_metadata(&self) -> Option<&[RecordBatch]> {
+        self.eager_scan_metadata.as_deref()
+    }
+
+    pub(crate) fn materialize_eager_scan_metadata(mut self) -> Result<Self, DeltaReaderError> {
+        let metadata = self
+            .snapshot
+            .build_scan(None, None, true)
+            .and_then(|scan| scan.materialize_scan_metadata(self.engine_context.as_ref()))
+            .boxed()
+            .context(ScanPlanningSnafu {
+                reason: "eager_scan_metadata_materialization_failed",
+            })?;
+        self.eager_scan_metadata = Some(metadata);
+        Ok(self)
     }
 }
 

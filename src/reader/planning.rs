@@ -164,11 +164,15 @@ pub(crate) fn plan_unpartitioned_scan(
             "Delta scan metadata expansion"
         )
         .entered();
-        scan.collect_file_metadata(snapshot.engine_context())
-            .boxed()
-            .context(ScanPlanningSnafu {
-                reason: "kernel_scan_metadata_failed",
-            })?
+        scan.collect_file_metadata(
+            snapshot.engine_context(),
+            snapshot.version(),
+            snapshot.eager_scan_metadata(),
+        )
+        .boxed()
+        .context(ScanPlanningSnafu {
+            reason: "kernel_scan_metadata_failed",
+        })?
     };
     let estimated_input_rows = checked_sum(
         metadata.files.iter().map(|file| file.estimated_rows),
@@ -4335,6 +4339,11 @@ mod tests {
             )?;
             Ok(Self(path))
         }
+
+        fn disable_delta_log(&self) -> Result<(), Box<dyn std::error::Error>> {
+            fs::rename(self.0.join("_delta_log"), self.0.join("disabled-log"))?;
+            Ok(())
+        }
     }
 
     impl Drop for DeltaLogTable {
@@ -4506,6 +4515,34 @@ mod tests {
         plan: &DeltaUnpartitionedScanPlan,
     ) -> impl Iterator<Item = &DeltaScanFileTask> {
         plan.file_tasks.iter()
+    }
+
+    fn assert_file_task_parity(expected: &DeltaScanFileTask, actual: &DeltaScanFileTask) {
+        assert_eq!(actual.path, expected.path);
+        assert_eq!(actual.file_size, expected.file_size);
+        assert_eq!(actual.parquet_byte_range, expected.parquet_byte_range);
+        assert_eq!(actual.modification_time_ms, expected.modification_time_ms);
+        assert_eq!(actual.partition_values, expected.partition_values);
+        assert_eq!(
+            actual.deletion_vector.is_present(),
+            expected.deletion_vector.is_present()
+        );
+        assert_eq!(
+            actual.transform.clone().into_expression(),
+            expected.transform.clone().into_expression()
+        );
+    }
+
+    fn assert_unpartitioned_plan_parity(
+        expected: &DeltaUnpartitionedScanPlan,
+        actual: &DeltaUnpartitionedScanPlan,
+    ) {
+        assert_eq!(actual.file_tasks.len(), expected.file_tasks.len());
+        for (expected, actual) in expected.file_tasks.iter().zip(&actual.file_tasks) {
+            assert_file_task_parity(expected, actual);
+        }
+        assert_eq!(actual.estimated_input_bytes, expected.estimated_input_bytes);
+        assert_eq!(actual.estimated_input_rows, expected.estimated_input_rows);
     }
 
     fn execution_file_stream(permit: FileReadPermit, batch: RecordBatch) -> FileBatchStream {
@@ -4732,7 +4769,129 @@ mod tests {
     }
 
     #[test]
-    fn statistics_pruning_preserves_surviving_files_and_deletion_vectors()
+    fn eager_metadata_matches_lazy_active_files_after_log_reconciliation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let table = DeltaLogTable::new_with_metadata_and_adds(
+            "eager-active-files",
+            METADATA_JSON,
+            &[
+                add("removed.parquet", 10, Some(1)),
+                add("active.parquet", 20, Some(2)),
+            ],
+        )?;
+        fs::write(
+            table.0.join("_delta_log/00000000000000000001.json"),
+            format!(
+                "{}\n",
+                serde_json::json!({
+                    "remove": {
+                        "path": "removed.parquet",
+                        "deletionTimestamp": 1_587_968_586_001_i64,
+                        "dataChange": true
+                    }
+                })
+            ),
+        )?;
+        let snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &DeltaStorageOptions::new(),
+            DeltaSnapshotSelection::Latest,
+        )?;
+        let lazy =
+            super::plan_unpartitioned_scan(&snapshot, None, &[], None, true, Default::default())?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
+        table.disable_delta_log()?;
+
+        let plan =
+            super::plan_unpartitioned_scan(&snapshot, None, &[], None, true, Default::default())?;
+
+        assert_unpartitioned_plan_parity(&lazy, &plan);
+        assert_eq!(
+            unpartitioned_tasks(&plan)
+                .map(|task| task.path.as_str())
+                .collect::<Vec<_>>(),
+            ["active.parquet"]
+        );
+        assert_eq!(plan.estimated_input_rows, Some(2));
+        Ok(())
+    }
+
+    #[test]
+    fn eager_metadata_represents_an_empty_table_without_reopening_the_log()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (table, snapshot) = loaded_snapshot("eager-empty-table")?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
+        table.disable_delta_log()?;
+
+        let plan =
+            super::plan_unpartitioned_scan(&snapshot, None, &[], None, true, Default::default())?;
+
+        assert!(snapshot.eager_scan_metadata().is_some());
+        assert!(
+            snapshot
+                .eager_scan_metadata()
+                .unwrap_or_default()
+                .is_empty()
+        );
+        assert!(plan.file_tasks.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn eager_metadata_matches_lazy_partition_pruning_without_the_log()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let table = DeltaLogTable::new_with_metadata_and_adds(
+            "eager-partition-pruning",
+            PARTITIONED_METADATA_JSON,
+            &[
+                add_with_partition("west.parquet", 10, 2, "west"),
+                add_with_partition("east.parquet", 10, 2, "east"),
+            ],
+        )?;
+        let snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &DeltaStorageOptions::new(),
+            DeltaSnapshotSelection::Latest,
+        )?;
+        let predicate = DeltaPredicate::Compare {
+            column: "region".to_owned(),
+            op: DeltaComparison::Eq,
+            value: DeltaScalar::Utf8("west".to_owned()),
+        };
+        let kernel_predicate = kernel_pruning_predicate(&predicate).ok_or("expected predicate")?;
+        let lazy = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(kernel_predicate.clone()),
+            false,
+            Default::default(),
+        )?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
+        table.disable_delta_log()?;
+
+        let plan = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(kernel_predicate),
+            false,
+            Default::default(),
+        )?;
+
+        assert_unpartitioned_plan_parity(&lazy, &plan);
+        assert_eq!(
+            unpartitioned_tasks(&plan)
+                .map(|task| task.path.as_str())
+                .collect::<Vec<_>>(),
+            ["west.parquet"]
+        );
+        assert_eq!(plan.add_actions_excluded_during_planning, Some(1));
+        Ok(())
+    }
+
+    #[test]
+    fn eager_metadata_matches_lazy_statistics_pruning_and_deletion_vectors()
     -> Result<(), Box<dyn std::error::Error>> {
         let adds = [
             dv_add_action(
@@ -4785,7 +4944,30 @@ mod tests {
         validate_predicate(&predicate, snapshot.schema().as_ref())?;
         let kernel_predicate =
             kernel_pruning_predicate(&predicate).ok_or("expected Kernel predicate")?;
-
+        let lazy_high = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(kernel_predicate.clone()),
+            true,
+            Default::default(),
+        )?;
+        let low_predicate = kernel_pruning_predicate(&DeltaPredicate::Compare {
+            column: "id".to_owned(),
+            op: DeltaComparison::LtEq,
+            value: DeltaScalar::Int32(50),
+        })
+        .ok_or("expected second Kernel predicate")?;
+        let lazy_low = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(low_predicate.clone()),
+            true,
+            Default::default(),
+        )?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
+        table.disable_delta_log()?;
         let plan = super::plan_unpartitioned_scan(
             &snapshot,
             None,
@@ -4794,7 +4976,17 @@ mod tests {
             true,
             Default::default(),
         )?;
+        let low_plan = super::plan_unpartitioned_scan(
+            &snapshot,
+            None,
+            &[],
+            Some(low_predicate),
+            true,
+            Default::default(),
+        )?;
 
+        assert_unpartitioned_plan_parity(&lazy_high, &plan);
+        assert_unpartitioned_plan_parity(&lazy_low, &low_plan);
         assert_eq!(
             unpartitioned_tasks(&plan)
                 .map(|task| task.path.as_str())
@@ -4825,6 +5017,17 @@ mod tests {
         assert!(!plain.deletion_vector.is_present());
         assert_eq!(plan.add_actions_excluded_during_planning, Some(2));
         assert_eq!(plan.estimated_input_rows, None);
+        assert_eq!(
+            unpartitioned_tasks(&low_plan)
+                .map(|task| task.path.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "id-dv-impossible.parquet",
+                "id-plain-impossible.parquet",
+                "id-plain-missing-stats.parquet",
+                "id-dv-missing-stats.parquet",
+            ]
+        );
         Ok(())
     }
 

@@ -145,6 +145,32 @@ impl DeltaTableBuilder {
         Ok(DeltaTable::new(snapshot, self.execution_options))
     }
 
+    /// Loads a table and eagerly retains its active Delta scan metadata in memory.
+    ///
+    /// This moves Delta log and checkpoint replay into initialization so later scans of this
+    /// immutable snapshot can plan without reopening the Delta log. It increases initialization
+    /// time and retains active-file metadata and statistics for the lifetime of the table.
+    /// Parquet footer and data reads remain query-time operations. Load a new table to observe a
+    /// newer snapshot. Unlike [`Self::load_table`], unsupported protocols fail during
+    /// initialization because materialization constructs a scan.
+    pub async fn load_table_with_eager_scan_metadata(self) -> Result<DeltaTable, DeltaReaderError> {
+        let snapshot = load_delta_table_snapshot(
+            self.table_location,
+            self.storage_options,
+            self.snapshot_selection,
+        )
+        .await?;
+        validate_protocol(snapshot.protocol())?;
+        let snapshot =
+            tokio::task::spawn_blocking(move || snapshot.materialize_eager_scan_metadata())
+                .await
+                .boxed()
+                .context(ScanPlanningSnafu {
+                    reason: "eager_scan_metadata_task_failed",
+                })??;
+        Ok(DeltaTable::new(snapshot, self.execution_options))
+    }
+
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
     pub async fn load_snapshot(self) -> Result<DeltaTableSnapshot, DeltaReaderError> {
         let snapshot = load_kernel_table_snapshot(
