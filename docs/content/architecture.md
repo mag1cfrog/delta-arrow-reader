@@ -19,6 +19,29 @@ At a high level, the reader does three things:
 Once loaded, a `DeltaTable` always points to the same snapshot. To read a newer
 snapshot, load the table again.
 
+## Remote I/O phases
+
+For a table in remote storage, the read path has three distinct I/O phases.
+Only the first phase changes when you opt into eager Delta scan metadata
+initialization:
+
+| Phase | Lazy initialization | Eager initialization |
+| --- | --- | --- |
+| 1. Delta scan metadata | Every scan build performs Delta log/checkpoint replay and selects active files. | Table initialization performs the replay once. Later scan builds select files from the retained metadata. |
+| 2. Parquet footer | The query reads footers and prunes row groups. | Unchanged. |
+| 3. Parquet data | The query reads the selected row groups. | Unchanged. |
+
+A successful eager load therefore needs no later Delta log/checkpoint reads for
+file discovery from that table. It does not move Parquet footer or Parquet data
+I/O into initialization, and it does not change deletion-vector behavior.
+
+The retained Delta scan metadata contains reconciled active `add` metadata and
+available file statistics, not raw JSON commit files. It belongs to one exact
+snapshot and remains in memory for the lifetime of that loaded table.
+Separately loaded tables do not share this memory. There is no TTL, eviction,
+persistence, incremental update, or background refresh; load another table to
+observe a newer snapshot.
+
 ## Streaming API
 
 With the streaming API, these stages appear as a table, a single-use scan, and a
