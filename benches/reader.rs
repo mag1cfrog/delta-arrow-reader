@@ -29,9 +29,11 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 30;
+const BENCHMARK_SCHEMA_VERSION: u32 = 31;
 const DEFAULT_REPETITIONS: usize = 3;
+const DEFAULT_QUERIES_PER_TABLE: usize = 1;
 const MAX_REPETITIONS: usize = 128;
+const MAX_QUERIES_PER_TABLE: usize = 128;
 const MODIFICATION_TIME_MS: i64 = 1_587_968_586_000;
 const FROZEN_PARQUET_CREATED_BY: &str = "parquet-rs version 58.3.0";
 const PROTOCOL_JSON: &str = r#"{"protocol":{"minReaderVersion":1,"minWriterVersion":2}}"#;
@@ -48,7 +50,7 @@ const EXPECTED_FIXTURE_FINGERPRINTS: [(&str, &str); 4] = [
     ),
 ];
 
-const CSV_HEADER: [&str; 79] = [
+const CSV_HEADER: [&str; 87] = [
     "benchmark_schema_version",
     "benchmark_mode",
     "host_os",
@@ -60,6 +62,7 @@ const CSV_HEADER: [&str; 79] = [
     "provider_exec_storage_profile",
     "query_case",
     "parquet_backend",
+    "scan_metadata_mode",
     "scheduling_mode",
     "scan_target_partitions",
     "max_concurrent_file_reads_per_scan",
@@ -67,6 +70,7 @@ const CSV_HEADER: [&str; 79] = [
     "output_buffer_batches_per_partition",
     "prefetch_files_per_partition",
     "repetitions",
+    "queries_per_table",
     "file_count",
     "row_count",
     "data_file_bytes",
@@ -101,6 +105,12 @@ const CSV_HEADER: [&str; 79] = [
     "produced_batches",
     "process_peak_rss_bytes",
     "process_peak_rss_delta_bytes",
+    "table_initialization_micros_p50",
+    "table_initialization_micros_p95",
+    "table_initialization_micros_p99",
+    "session_total_micros_p50",
+    "session_total_micros_p95",
+    "session_total_micros_p99",
     "planning_micros_p50",
     "planning_micros_p95",
     "planning_micros_p99",
@@ -138,11 +148,19 @@ struct Config {
     workload: Workload,
     query: Query,
     backend: ParquetReaderBackend,
+    scan_metadata_mode: ScanMetadataMode,
+    queries_per_table: usize,
     repetitions: usize,
     metadata_size_hint_bytes: Option<usize>,
     full_file_read_threshold_bytes: Option<usize>,
     retain_fixture: bool,
     seed: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScanMetadataMode {
+    Lazy,
+    Eager,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -204,7 +222,7 @@ struct DelayedHttpServer {
 }
 
 #[derive(Debug)]
-struct Measurement {
+struct QueryMeasurement {
     planning_micros: u64,
     first_batch_micros: u64,
     total_micros: u64,
@@ -215,6 +233,13 @@ struct Measurement {
     process_peak_rss_delta_bytes: Option<u64>,
     batch_latency_micros: Vec<u64>,
     metrics: Vec<ScanMetricsSnapshot>,
+}
+
+#[derive(Debug)]
+struct RepetitionMeasurement {
+    table_initialization_micros: u64,
+    session_total_micros: u64,
+    query_measurements: Vec<QueryMeasurement>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -238,6 +263,8 @@ struct Summary {
     max_total: u64,
     peak_rss: Option<u64>,
     peak_rss_delta: Option<u64>,
+    table_initialization: Percentiles,
+    session_total: Percentiles,
     read: ReadSummary,
 }
 
@@ -302,6 +329,8 @@ impl Config {
             workload: Workload::FewLarger,
             query: Query::FullRows,
             backend: ParquetReaderBackend::Direct,
+            scan_metadata_mode: ScanMetadataMode::Lazy,
+            queries_per_table: DEFAULT_QUERIES_PER_TABLE,
             repetitions: DEFAULT_REPETITIONS,
             metadata_size_hint_bytes: Some(65_536),
             full_file_read_threshold_bytes: None,
@@ -338,6 +367,16 @@ impl Config {
                         "direct_parquet" => ParquetReaderBackend::Direct,
                         "delta_kernel" => ParquetReaderBackend::DeltaKernel,
                         other => return Err(invalid(format!("unknown backend: {other}")).into()),
+                    }
+                }
+                "--provider-exec-scan-metadata-mode" => {
+                    config.scan_metadata_mode =
+                        ScanMetadataMode::parse(&required_arg(&mut args, &argument)?)?
+                }
+                "--provider-exec-queries-per-table" => {
+                    config.queries_per_table = required_arg(&mut args, &argument)?.parse()?;
+                    if !(1..=MAX_QUERIES_PER_TABLE).contains(&config.queries_per_table) {
+                        return Err(invalid("queries per table must be between 1 and 128").into());
                     }
                 }
                 "--provider-exec-scheduling-profile" => {
@@ -458,6 +497,23 @@ fn required_arg(
 ) -> Result<String, io::Error> {
     args.next()
         .ok_or_else(|| invalid(format!("missing value for {argument}")))
+}
+
+impl ScanMetadataMode {
+    fn parse(value: &str) -> Result<Self, io::Error> {
+        match value {
+            "lazy" => Ok(Self::Lazy),
+            "eager" => Ok(Self::Eager),
+            other => Err(invalid(format!("unknown scan metadata mode: {other}"))),
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Lazy => "lazy",
+            Self::Eager => "eager",
+        }
+    }
 }
 
 impl StorageProfile {
@@ -613,7 +669,7 @@ async fn run(config: &Config, output: &mut dyn Write) -> Result<(), Box<dyn Erro
         .map(std::num::NonZeroUsize::get)
         .ok();
     let target_partitions = available_parallelism.unwrap_or(4).max(1);
-    let measurements = benchmark(config, &fixture, target_partitions).await?;
+    let repetitions = benchmark(config, &fixture, target_partitions).await?;
     writeln!(output, "{}", CSV_HEADER.join(","))?;
     writeln!(
         output,
@@ -623,7 +679,7 @@ async fn run(config: &Config, output: &mut dyn Write) -> Result<(), Box<dyn Erro
             &fixture,
             available_parallelism,
             target_partitions,
-            &measurements,
+            &repetitions,
         )
         .join(",")
     )?;
@@ -718,20 +774,7 @@ impl Fixture {
             fixture_files.push(RELATIVE_DV_FILE.to_owned());
         }
         let fingerprint = fixture_fingerprint(&path, fixture_files)?;
-        let expected = EXPECTED_FIXTURE_FINGERPRINTS
-            .iter()
-            .find_map(|(name, fingerprint)| (*name == workload.name()).then_some(*fingerprint))
-            .ok_or_else(|| invalid("frozen workload is missing its fingerprint"))?;
-        if fingerprint != expected {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "fixture {} drifted: expected {expected}, got {fingerprint}",
-                    workload.name()
-                ),
-            )
-            .into());
-        }
+        validate_fixture_fingerprint(workload, &fingerprint)?;
         let server = storage
             .uses_http()
             .then(|| DelayedHttpServer::start(path.clone(), storage))
@@ -883,6 +926,23 @@ fn fixture_fingerprint(root: &Path, mut paths: Vec<String>) -> io::Result<String
         }
     }
     Ok(format!("fnv1a64:{hash:016x}"))
+}
+
+fn validate_fixture_fingerprint(workload: Workload, fingerprint: &str) -> io::Result<()> {
+    let expected = EXPECTED_FIXTURE_FINGERPRINTS
+        .iter()
+        .find_map(|(name, expected)| (*name == workload.name()).then_some(*expected))
+        .ok_or_else(|| invalid("frozen workload is missing its fingerprint"))?;
+    if fingerprint != expected {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "fixture {} drifted: expected {expected}, got {fingerprint}",
+                workload.name()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn fnv1a64_update(hash: &mut u64, bytes: &[u8]) {
@@ -1291,19 +1351,19 @@ async fn benchmark(
     config: &Config,
     fixture: &Fixture,
     target_partitions: usize,
-) -> Result<Vec<Measurement>, Box<dyn Error>> {
-    let mut measurements = Vec::with_capacity(config.repetitions);
+) -> Result<Vec<RepetitionMeasurement>, Box<dyn Error>> {
+    let mut repetitions = Vec::with_capacity(config.repetitions);
     for _ in 0..config.repetitions {
-        measurements.push(run_once(config, fixture, target_partitions).await?);
+        repetitions.push(run_repetition(config, fixture, target_partitions).await?);
     }
-    Ok(measurements)
+    Ok(repetitions)
 }
 
-async fn run_once(
+async fn run_repetition(
     config: &Config,
     fixture: &Fixture,
     target_partitions: usize,
-) -> Result<Measurement, Box<dyn Error>> {
+) -> Result<RepetitionMeasurement, Box<dyn Error>> {
     let context = SessionContext::new();
     let execution_options = DeltaScanExecutionOptions::new()
         .with_parquet_backend(config.backend)
@@ -1313,23 +1373,42 @@ async fn run_once(
         .with_prefetch_files_per_partition(2)
         .with_parquet_metadata_size_hint_bytes(config.metadata_size_hint_bytes)?
         .with_parquet_full_file_read_threshold_bytes(config.full_file_read_threshold_bytes)?;
-    let table = DeltaTableBuilder::new(&fixture.table_uri)
+    let builder = DeltaTableBuilder::new(&fixture.table_uri)
         .with_storage_options(fixture.storage_options.clone())
-        .with_execution_options(execution_options)
-        .load_table()
-        .await?;
-    register_table(
-        &context,
-        "orders",
-        table,
-        ScanOptions {
-            execution_options,
-            target_partitions: Some(target_partitions),
-            intra_file_repartitioning: Default::default(),
-            use_arrow_view_types: true,
-        },
-    )?;
+        .with_execution_options(execution_options);
+    let scan_options = ScanOptions {
+        execution_options,
+        target_partitions: Some(target_partitions),
+        intra_file_repartitioning: Default::default(),
+        use_arrow_view_types: true,
+    };
+    let session_started = Instant::now();
+    let table_initialization_started = session_started;
+    let table = match config.scan_metadata_mode {
+        ScanMetadataMode::Lazy => builder.load_table().await?,
+        ScanMetadataMode::Eager => builder.load_table_with_eager_scan_metadata().await?,
+    };
+    let table_initialization_micros =
+        saturating_u64(table_initialization_started.elapsed().as_micros());
+    register_table(&context, "orders", table, scan_options)?;
 
+    let mut query_measurements = Vec::with_capacity(config.queries_per_table);
+    for _ in 0..config.queries_per_table {
+        query_measurements.push(measure_query(config, fixture, &context).await?);
+    }
+    let session_total_micros = saturating_u64(session_started.elapsed().as_micros());
+    Ok(RepetitionMeasurement {
+        table_initialization_micros,
+        session_total_micros,
+        query_measurements,
+    })
+}
+
+async fn measure_query(
+    config: &Config,
+    fixture: &Fixture,
+    context: &SessionContext,
+) -> Result<QueryMeasurement, Box<dyn Error>> {
     let query_started = Instant::now();
     let planning_started = Instant::now();
     let dataframe = context.sql(config.query.sql()).await?;
@@ -1360,6 +1439,7 @@ async fn run_once(
     }
     let total_micros = saturating_u64(query_started.elapsed().as_micros()).max(1);
     validate_schema(config.query, output_schema.fields())?;
+    validate_fixture_fingerprint(config.workload, &fixture.fingerprint)?;
     let expected_rows = expected_rows(config.workload, config.query, fixture);
     if produced_rows != expected_rows || produced_batches == 0 {
         return Err(io::Error::new(
@@ -1382,7 +1462,8 @@ async fn run_once(
         )
         .into());
     }
-    Ok(Measurement {
+    validate_deletion_vector_metrics(fixture, &metrics)?;
+    Ok(QueryMeasurement {
         planning_micros,
         first_batch_micros: first_batch_micros.unwrap_or(0),
         total_micros,
@@ -1412,6 +1493,39 @@ fn expected_rows(workload: Workload, query: Query, fixture: &Fixture) -> usize {
     }
 }
 
+fn validate_deletion_vector_metrics(
+    fixture: &Fixture,
+    metrics: &[ScanMetricsSnapshot],
+) -> Result<(), Box<dyn Error>> {
+    let total = |select: fn(&delta_arrow_reader::DeltaScanMetricsSnapshot) -> u64| {
+        metrics.iter().fold(0_u64, |sum, snapshot| {
+            sum.saturating_add(select(&snapshot.reader_metrics))
+        })
+    };
+    let expected = (
+        u64::try_from(fixture.deletion_vector_file_count)?,
+        u64::try_from(fixture.deletion_vector_file_count)?,
+        u64::try_from(fixture.deletion_vector_deleted_rows)?,
+        0,
+        0,
+    );
+    let actual = (
+        total(|reader| reader.deletion_vector_payloads_loaded),
+        total(|reader| reader.deletion_vectors_applied),
+        total(|reader| reader.deletion_vector_rows_deleted),
+        total(|reader| reader.deletion_vector_failures),
+        total(|reader| reader.deletion_vector_coordinate_rejections),
+    );
+    if actual != expected {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("deletion-vector metrics drifted: expected {expected:?}, got {actual:?}"),
+        )
+        .into());
+    }
+    Ok(())
+}
+
 fn validate_schema(
     query: Query,
     fields: &datafusion::arrow::datatypes::Fields,
@@ -1438,16 +1552,24 @@ fn validate_schema(
     Ok(())
 }
 
-fn summarize(measurements: &[Measurement]) -> Summary {
-    let values =
-        |select: fn(&Measurement) -> u64| measurements.iter().map(select).collect::<Vec<_>>();
+fn summarize(repetitions: &[RepetitionMeasurement]) -> Summary {
+    let measurements = repetitions
+        .iter()
+        .flat_map(|repetition| &repetition.query_measurements)
+        .collect::<Vec<_>>();
+    let values = |select: fn(&QueryMeasurement) -> u64| {
+        measurements
+            .iter()
+            .map(|measurement| select(measurement))
+            .collect::<Vec<_>>()
+    };
     let totals = values(|measurement| measurement.total_micros);
     let batch_latency = measurements
         .iter()
         .flat_map(|measurement| measurement.batch_latency_micros.iter().copied())
         .collect::<Vec<_>>();
     Summary {
-        repetitions: measurements.len(),
+        repetitions: repetitions.len(),
         produced_rows: measurements
             .iter()
             .map(|measurement| measurement.produced_rows)
@@ -1473,11 +1595,23 @@ fn summarize(measurements: &[Measurement]) -> Summary {
             .iter()
             .filter_map(|measurement| measurement.process_peak_rss_delta_bytes)
             .max(),
-        read: summarize_read(measurements),
+        table_initialization: percentiles(
+            &repetitions
+                .iter()
+                .map(|repetition| repetition.table_initialization_micros)
+                .collect::<Vec<_>>(),
+        ),
+        session_total: percentiles(
+            &repetitions
+                .iter()
+                .map(|repetition| repetition.session_total_micros)
+                .collect::<Vec<_>>(),
+        ),
+        read: summarize_read(&measurements),
     }
 }
 
-fn summarize_read(measurements: &[Measurement]) -> ReadSummary {
+fn summarize_read(measurements: &[&QueryMeasurement]) -> ReadSummary {
     let snapshots = measurements
         .iter()
         .map(|measurement| measurement.metrics.as_slice())
@@ -1595,9 +1729,9 @@ fn csv_row(
     fixture: &Fixture,
     available_parallelism: Option<usize>,
     target_partitions: usize,
-    measurements: &[Measurement],
+    repetitions: &[RepetitionMeasurement],
 ) -> Vec<String> {
-    let summary = summarize(measurements);
+    let summary = summarize(repetitions);
     let read = &summary.read;
     let row = vec![
         BENCHMARK_SCHEMA_VERSION.to_string(),
@@ -1611,6 +1745,7 @@ fn csv_row(
         config.storage.name.to_owned(),
         config.query.name().to_owned(),
         backend_name(config.backend).to_owned(),
+        config.scan_metadata_mode.name().to_owned(),
         "prefetch_2_ap_target_scan_3x".to_owned(),
         target_partitions.to_string(),
         target_partitions.saturating_mul(3).max(1).to_string(),
@@ -1618,6 +1753,7 @@ fn csv_row(
         "1".to_owned(),
         "2".to_owned(),
         summary.repetitions.to_string(),
+        config.queries_per_table.to_string(),
         fixture.file_count.to_string(),
         fixture.row_count.to_string(),
         fixture.data_file_bytes.to_string(),
@@ -1654,6 +1790,12 @@ fn csv_row(
         summary.produced_batches.to_string(),
         optional(summary.peak_rss),
         optional(summary.peak_rss_delta),
+        summary.table_initialization.p50.to_string(),
+        summary.table_initialization.p95.to_string(),
+        summary.table_initialization.p99.to_string(),
+        summary.session_total.p50.to_string(),
+        summary.session_total.p95.to_string(),
+        summary.session_total.p99.to_string(),
         summary.planning.p50.to_string(),
         summary.planning.p95.to_string(),
         summary.planning.p99.to_string(),
@@ -1777,12 +1919,21 @@ mod tests {
             workload,
             query,
             backend,
+            scan_metadata_mode: ScanMetadataMode::Lazy,
+            queries_per_table: DEFAULT_QUERIES_PER_TABLE,
             repetitions: 1,
             metadata_size_hint_bytes,
             full_file_read_threshold_bytes,
             retain_fixture: false,
             seed: 0,
         }
+    }
+
+    fn only_query(repetition: &RepetitionMeasurement) -> Result<&QueryMeasurement, Box<dyn Error>> {
+        let [measurement] = repetition.query_measurements.as_slice() else {
+            return Err(invalid("expected exactly one query measurement").into());
+        };
+        Ok(measurement)
     }
 
     #[test]
@@ -1888,8 +2039,11 @@ mod tests {
             ),
         ];
         assert_eq!(cases.len(), 12);
-        for case in cases {
-            case.validate()?;
+        for mut case in cases {
+            for mode in [ScanMetadataMode::Lazy, ScanMetadataMode::Eager] {
+                case.scan_metadata_mode = mode;
+                case.validate()?;
+            }
         }
         let outside = config(
             Workload::ManySmall,
@@ -1919,6 +2073,10 @@ mod tests {
                 "full_rows",
                 "--provider-exec-backend",
                 "direct_parquet",
+                "--provider-exec-scan-metadata-mode",
+                "eager",
+                "--provider-exec-queries-per-table",
+                "128",
                 "--provider-exec-scheduling-profile",
                 "prefetch_2_ap_target_scan_3x",
                 "--provider-exec-parquet-metadata-size-hint-bytes",
@@ -1940,12 +2098,17 @@ mod tests {
         assert_eq!(parsed.workload.name(), "provider_few_larger_files");
         assert_eq!(parsed.query.name(), "full_rows");
         assert!(matches!(parsed.backend, ParquetReaderBackend::Direct));
+        assert_eq!(parsed.scan_metadata_mode, ScanMetadataMode::Eager);
+        assert_eq!(parsed.queries_per_table, 128);
         assert_eq!(parsed.repetitions, 5);
         assert_eq!(parsed.metadata_size_hint_bytes, Some(65_536));
         assert_eq!(parsed.full_file_read_threshold_bytes, None);
         assert_eq!(parsed.temp_dir, PathBuf::from("target/frozen-fixtures"));
         assert!(parsed.retain_fixture);
         assert_eq!(parsed.output, Some(PathBuf::from("target/frozen.csv")));
+        let debug = format!("{parsed:?}");
+        assert!(debug.contains("scan_metadata_mode: Eager"));
+        assert!(debug.contains("queries_per_table: 128"));
 
         let defaults = Config::parse(Vec::<String>::new())?;
         assert_eq!(defaults.seed, 0);
@@ -1953,6 +2116,8 @@ mod tests {
         assert_eq!(defaults.workload.name(), "provider_few_larger_files");
         assert_eq!(defaults.query.name(), "full_rows");
         assert!(matches!(defaults.backend, ParquetReaderBackend::Direct));
+        assert_eq!(defaults.scan_metadata_mode, ScanMetadataMode::Lazy);
+        assert_eq!(defaults.queries_per_table, DEFAULT_QUERIES_PER_TABLE);
         assert_eq!(defaults.repetitions, DEFAULT_REPETITIONS);
         assert_eq!(defaults.metadata_size_hint_bytes, Some(65_536));
         assert_eq!(defaults.full_file_read_threshold_bytes, None);
@@ -1967,6 +2132,35 @@ mod tests {
             .map(str::to_owned),
         )?;
         assert_eq!(full_read.full_file_read_threshold_bytes, Some(1_000_000));
+        assert_eq!(
+            Config::parse(["--provider-exec-scan-metadata-mode", "lazy"].map(str::to_owned))?
+                .scan_metadata_mode,
+            ScanMetadataMode::Lazy
+        );
+        assert_eq!(
+            Config::parse(["--provider-exec-scan-metadata-mode", "eager"].map(str::to_owned))?
+                .scan_metadata_mode,
+            ScanMetadataMode::Eager
+        );
+        assert!(
+            Config::parse(["--provider-exec-scan-metadata-mode", "automatic"].map(str::to_owned))
+                .is_err()
+        );
+        assert!(Config::parse(["--provider-exec-scan-metadata-mode"].map(str::to_owned)).is_err());
+        for count in ["1", "128"] {
+            assert_eq!(
+                Config::parse(["--provider-exec-queries-per-table", count].map(str::to_owned))?
+                    .queries_per_table,
+                count.parse::<usize>()?
+            );
+        }
+        for count in ["0", "129"] {
+            assert!(
+                Config::parse(["--provider-exec-queries-per-table", count].map(str::to_owned))
+                    .is_err()
+            );
+        }
+        assert!(Config::parse(["--provider-exec-queries-per-table"].map(str::to_owned)).is_err());
         assert!(Config::parse(["--provider-exec-repetitions", "0"].map(str::to_owned)).is_err());
         assert!(Config::parse(["--provider-exec-repetitions"].map(str::to_owned)).is_err());
         assert!(
@@ -2034,7 +2228,8 @@ mod tests {
                 unequal_config.storage,
                 false,
             )?;
-            let unequal_measurement = run_once(&unequal_config, &unequal, 4).await?;
+            let unequal_repetition = run_repetition(&unequal_config, &unequal, 4).await?;
+            let unequal_measurement = only_query(&unequal_repetition)?;
             assert_eq!(unequal_measurement.produced_rows, 68_608);
             assert_eq!(
                 unequal_measurement.metrics[0].reader_metrics.files_planned,
@@ -2055,7 +2250,8 @@ mod tests {
                 http_config.storage,
                 false,
             )?;
-            let http_measurement = run_once(&http_config, &http, 4).await?;
+            let http_repetition = run_repetition(&http_config, &http, 4).await?;
+            let http_measurement = only_query(&http_repetition)?;
             let reader = &http_measurement.metrics[0].reader_metrics;
             assert_eq!(reader.scheduler_rows_emitted, 32_768);
             assert_eq!(reader.parquet_data_file_range_get_operations, Some(8));
@@ -2064,8 +2260,119 @@ mod tests {
     }
 
     #[test]
+    fn one_registered_table_runs_three_fresh_queries_in_both_metadata_modes() -> TestResult {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        runtime.block_on(async {
+            let mut config = config(
+                Workload::FewLarger,
+                Query::FullRows,
+                ParquetReaderBackend::Direct,
+                StorageProfile::local(),
+                Some(65_536),
+                None,
+            );
+            config.queries_per_table = 3;
+            let fixture =
+                Fixture::create(&env::temp_dir(), config.workload, config.storage, false)?;
+            let expected_rows = expected_rows(config.workload, config.query, &fixture);
+
+            for mode in [ScanMetadataMode::Lazy, ScanMetadataMode::Eager] {
+                config.scan_metadata_mode = mode;
+                let repetition = run_repetition(&config, &fixture, 4).await?;
+                let repetitions = [repetition];
+                let summary = summarize(&repetitions);
+                assert_eq!(summary.repetitions, 1);
+                assert_eq!(summary.read.scan_count, 1);
+                assert_eq!(summary.read.files_planned, 4);
+                assert_eq!(repetitions[0].query_measurements.len(), 3);
+                assert!(
+                    repetitions[0].session_total_micros
+                        >= repetitions[0].table_initialization_micros
+                );
+                for measurement in &repetitions[0].query_measurements {
+                    assert_eq!(measurement.produced_rows, expected_rows);
+                    assert!(measurement.produced_batches > 0);
+                    assert!(!measurement.metrics.is_empty());
+                }
+            }
+            Ok::<_, Box<dyn Error>>(())
+        })
+    }
+
+    #[test]
+    fn summaries_keep_repetition_and_query_sample_populations_separate() {
+        let query = |planning_micros| QueryMeasurement {
+            planning_micros,
+            first_batch_micros: planning_micros,
+            total_micros: planning_micros,
+            source_rows_per_second: planning_micros,
+            produced_rows: 1,
+            produced_batches: 1,
+            process_peak_rss_bytes: None,
+            process_peak_rss_delta_bytes: None,
+            batch_latency_micros: vec![planning_micros],
+            metrics: Vec::new(),
+        };
+        let repetitions = [
+            RepetitionMeasurement {
+                table_initialization_micros: 10,
+                session_total_micros: 100,
+                query_measurements: [1, 2, 3].map(query).into(),
+            },
+            RepetitionMeasurement {
+                table_initialization_micros: 30,
+                session_total_micros: 300,
+                query_measurements: [4, 5, 100].map(query).into(),
+            },
+        ];
+
+        let summary = summarize(&repetitions);
+
+        assert_eq!(summary.repetitions, 2);
+        assert_eq!(
+            (
+                summary.table_initialization.p50,
+                summary.table_initialization.p95,
+                summary.table_initialization.p99,
+            ),
+            (10, 30, 30)
+        );
+        assert_eq!(
+            (
+                summary.session_total.p50,
+                summary.session_total.p95,
+                summary.session_total.p99,
+            ),
+            (100, 300, 300)
+        );
+        assert_eq!(
+            (
+                summary.planning.p50,
+                summary.planning.p95,
+                summary.planning.p99,
+            ),
+            (3, 100, 100)
+        );
+    }
+
+    #[test]
     fn csv_and_helpers_preserve_frozen_edge_behavior() -> TestResult {
-        assert_eq!(CSV_HEADER.len(), 79);
+        assert_eq!(CSV_HEADER.len(), 87);
+        assert_eq!(CSV_HEADER[11], "scan_metadata_mode");
+        assert_eq!(CSV_HEADER[19], "queries_per_table");
+        assert_eq!(
+            &CSV_HEADER[54..60],
+            [
+                "table_initialization_micros_p50",
+                "table_initialization_micros_p95",
+                "table_initialization_micros_p99",
+                "session_total_micros_p50",
+                "session_total_micros_p95",
+                "session_total_micros_p99",
+            ]
+        );
         assert_eq!(percentile(&[], 50), 0);
         assert_eq!(percentile(&[10, 20, 30, 40], 50), 20);
         assert_eq!(percentile(&[10, 20, 30, 40], 95), 40);
@@ -2092,7 +2399,7 @@ mod tests {
             .enable_all()
             .build()?;
         runtime.block_on(async {
-            let config = config(
+            let mut config = config(
                 Workload::FewLargerSparseDv,
                 Query::ProjectId,
                 ParquetReaderBackend::DeltaKernel,
@@ -2100,14 +2407,16 @@ mod tests {
                 Some(65_536),
                 None,
             );
+            config.scan_metadata_mode = ScanMetadataMode::Eager;
+            config.queries_per_table = 3;
             let fixture =
                 Fixture::create(&env::temp_dir(), config.workload, config.storage, false)?;
-            let measurement = run_once(&config, &fixture, 4).await?;
-            let measurements = [measurement];
-            let summary = summarize(&measurements);
-            let row = csv_row(&config, &fixture, Some(4), 4, &measurements);
+            let repetition = run_repetition(&config, &fixture, 4).await?;
+            let repetitions = [repetition];
+            let summary = summarize(&repetitions);
+            let row = csv_row(&config, &fixture, Some(4), 4, &repetitions);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "30");
+            assert_eq!(row[0], "31");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);
@@ -2118,50 +2427,58 @@ mod tests {
             assert_eq!(row[8], "local");
             assert_eq!(row[9], "project_id");
             assert_eq!(row[10], "delta_kernel");
-            assert_eq!(row[11], "prefetch_2_ap_target_scan_3x");
-            assert_eq!(&row[12..17], ["4", "12", "3", "1", "2"]);
-            assert_eq!(row[17], "1");
-            assert_eq!(row[18], "4");
-            assert_eq!(row[19], "32768");
-            assert_eq!(row[20], "819772");
-            assert_eq!(row[21], "4");
-            assert_eq!(row[22], "12");
-            assert_eq!(row[23], "3");
-            assert_eq!(row[24], "1");
-            assert_eq!(&row[25..29], ["4", "4", "32768", "819772"]);
-            assert_eq!(&row[29..33], ["4", "4", "4", "4"]);
-            assert!(row[33..41].iter().all(|value| value == "0"));
-            assert_eq!(row[41], "36");
-            assert_eq!(row[42], "32756");
-            assert_eq!(&row[43..48], ["4", "4", "12", "0", "0"]);
-            assert_eq!(row[48], "32756");
-            assert_eq!(row[49], "36");
-            assert_eq!(row[50], optional(summary.peak_rss));
-            assert_eq!(row[51], optional(summary.peak_rss_delta));
-            assert_eq!(row[52], summary.planning.p50.to_string());
-            assert_eq!(row[53], summary.planning.p95.to_string());
-            assert_eq!(row[54], summary.planning.p99.to_string());
-            assert_eq!(row[55], summary.first_batch.p50.to_string());
-            assert_eq!(row[56], summary.first_batch.p95.to_string());
-            assert_eq!(row[57], summary.first_batch.p99.to_string());
-            assert_eq!(row[58], summary.total.p50.to_string());
-            assert_eq!(row[59], summary.total.p95.to_string());
-            assert_eq!(row[60], summary.total.p99.to_string());
-            assert_eq!(row[61], summary.rows_per_second.p50.to_string());
-            assert_eq!(row[62], summary.rows_per_second.p95.to_string());
-            assert_eq!(row[63], summary.rows_per_second.p99.to_string());
-            assert_eq!(row[64], summary.batch_latency.p50.to_string());
-            assert_eq!(row[65], summary.batch_latency.p95.to_string());
-            assert_eq!(row[66], summary.batch_latency.p99.to_string());
-            assert_eq!(row[67], summary.min_total.to_string());
-            assert_eq!(row[68], summary.max_total.to_string());
-            assert_eq!(row[69], "0");
-            assert_eq!(row[70], "0");
-            assert_eq!(row[71], "disabled");
-            assert_eq!(row[72], "65536");
-            assert_eq!(row[73], "");
-            assert_eq!(&row[74..78], ["", "", "", ""]);
-            assert_eq!(row[78], "fnv1a64:e1509da31486f25a");
+            assert_eq!(row[11], "eager");
+            assert_eq!(row[12], "prefetch_2_ap_target_scan_3x");
+            assert_eq!(&row[13..18], ["4", "12", "3", "1", "2"]);
+            assert_eq!(row[18], "1");
+            assert_eq!(row[19], "3");
+            assert_eq!(row[20], "4");
+            assert_eq!(row[21], "32768");
+            assert_eq!(row[22], "819772");
+            assert_eq!(row[23], "4");
+            assert_eq!(row[24], "12");
+            assert_eq!(row[25], "3");
+            assert_eq!(row[26], "1");
+            assert_eq!(&row[27..31], ["4", "4", "32768", "819772"]);
+            assert_eq!(&row[31..35], ["4", "4", "4", "4"]);
+            assert!(row[35..43].iter().all(|value| value == "0"));
+            assert_eq!(row[43], "36");
+            assert_eq!(row[44], "32756");
+            assert_eq!(&row[45..50], ["4", "4", "12", "0", "0"]);
+            assert_eq!(row[50], "32756");
+            assert_eq!(row[51], "36");
+            assert_eq!(row[52], optional(summary.peak_rss));
+            assert_eq!(row[53], optional(summary.peak_rss_delta));
+            assert_eq!(row[54], summary.table_initialization.p50.to_string());
+            assert_eq!(row[55], summary.table_initialization.p95.to_string());
+            assert_eq!(row[56], summary.table_initialization.p99.to_string());
+            assert_eq!(row[57], summary.session_total.p50.to_string());
+            assert_eq!(row[58], summary.session_total.p95.to_string());
+            assert_eq!(row[59], summary.session_total.p99.to_string());
+            assert_eq!(row[60], summary.planning.p50.to_string());
+            assert_eq!(row[61], summary.planning.p95.to_string());
+            assert_eq!(row[62], summary.planning.p99.to_string());
+            assert_eq!(row[63], summary.first_batch.p50.to_string());
+            assert_eq!(row[64], summary.first_batch.p95.to_string());
+            assert_eq!(row[65], summary.first_batch.p99.to_string());
+            assert_eq!(row[66], summary.total.p50.to_string());
+            assert_eq!(row[67], summary.total.p95.to_string());
+            assert_eq!(row[68], summary.total.p99.to_string());
+            assert_eq!(row[69], summary.rows_per_second.p50.to_string());
+            assert_eq!(row[70], summary.rows_per_second.p95.to_string());
+            assert_eq!(row[71], summary.rows_per_second.p99.to_string());
+            assert_eq!(row[72], summary.batch_latency.p50.to_string());
+            assert_eq!(row[73], summary.batch_latency.p95.to_string());
+            assert_eq!(row[74], summary.batch_latency.p99.to_string());
+            assert_eq!(row[75], summary.min_total.to_string());
+            assert_eq!(row[76], summary.max_total.to_string());
+            assert_eq!(row[77], "0");
+            assert_eq!(row[78], "0");
+            assert_eq!(row[79], "disabled");
+            assert_eq!(row[80], "65536");
+            assert_eq!(row[81], "");
+            assert_eq!(&row[82..86], ["", "", "", ""]);
+            assert_eq!(row[86], "fnv1a64:e1509da31486f25a");
             Ok::<_, Box<dyn Error>>(())
         })?;
         Ok(())
