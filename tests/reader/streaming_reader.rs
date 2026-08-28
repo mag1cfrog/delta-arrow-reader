@@ -23,6 +23,10 @@ use delta_arrow_reader::{
 use delta_arrow_reader::{
     DeltaScan, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaTableBuilder,
 };
+use delta_kernel::Snapshot;
+use delta_kernel_default_engine::{
+    DefaultEngineBuilder, executor::tokio::TokioMultiThreadExecutor, storage::store_from_url,
+};
 use futures_util::StreamExt;
 use futures_util::TryStreamExt;
 use parquet::{arrow::ArrowWriter, file::properties::WriterProperties};
@@ -409,6 +413,52 @@ fn eager_scan_metadata_supports_concurrent_planning_without_the_delta_log() -> T
         assert_eq!(sorted_ids(&high_batches), [5, 6, 7, 8]);
         assert_eq!(low_metrics.snapshot().files_planned, 1);
         assert_eq!(high_metrics.snapshot().files_planned, 1);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn eager_scan_metadata_loads_from_a_checkpoint_without_json_logs() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("eager-checkpoint")?;
+        let table_url: url::Url = fixture.normalized_uri()?.parse()?;
+        let engine = DefaultEngineBuilder::new(store_from_url(&table_url)?)
+            .with_task_executor(Arc::new(TokioMultiThreadExecutor::new(
+                tokio::runtime::Handle::current(),
+            )))
+            .build();
+        let snapshot = Snapshot::builder_for(table_url).build(&engine)?;
+        snapshot.checkpoint(&engine, None)?;
+
+        let delta_log = fixture.0.join("_delta_log");
+        fs::remove_file(delta_log.join("00000000000000000000.json"))?;
+        fs::remove_file(delta_log.join("00000000000000000001.json"))?;
+        assert!(
+            delta_log
+                .join("00000000000000000001.checkpoint.parquet")
+                .is_file()
+        );
+
+        let table = DeltaTableBuilder::new(fixture.uri())
+            .load_table_with_eager_scan_metadata()
+            .await?;
+        fixture.disable_delta_log()?;
+        let (batches, metrics) = collect_scan(
+            table
+                .scan()
+                .with_predicate(DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: DeltaComparison::Gt,
+                    value: DeltaScalar::Int32(4),
+                })
+                .build()
+                .await?,
+        )
+        .await?;
+
+        assert_eq!(table.version(), 1);
+        assert_eq!(sorted_ids(&batches), [5, 6, 7, 8]);
+        assert_eq!(metrics.snapshot().files_planned, 1);
         Ok::<_, Box<dyn Error>>(())
     })
 }
