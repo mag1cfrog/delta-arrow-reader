@@ -5934,7 +5934,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_plan_applies_nested_kernel_column_mapping_transform()
+    fn eager_metadata_preserves_nested_kernel_column_mapping_transform_without_the_log()
     -> Result<(), Box<dyn std::error::Error>> {
         let adds = [add("mapped.parquet", 10, Some(2))];
         let table = DeltaLogTable::new_with_protocol_metadata_and_adds(
@@ -5948,10 +5948,20 @@ mod tests {
             &DeltaStorageOptions::new(),
             DeltaSnapshotSelection::Latest,
         )?;
+        let lazy_plan = plan_scan(&snapshot, None, &[], None, false, Default::default())?;
+        let snapshot = snapshot.materialize_eager_scan_metadata()?;
+        table.disable_delta_log()?;
         let plan = plan_scan(&snapshot, None, &[], None, false, Default::default())?;
+        let lazy_task = planned_tasks(&lazy_plan)
+            .next()
+            .ok_or("expected one lazy mapped task")?;
         let task = planned_tasks(&plan)
             .next()
-            .ok_or("expected one mapped task")?;
+            .ok_or("expected one eager mapped task")?;
+
+        assert_eq!(planned_tasks(&lazy_plan).count(), 1);
+        assert_eq!(planned_tasks(&plan).count(), 1);
+        assert_file_task_parity(lazy_task, task);
 
         assert_eq!(
             field_names(&plan.physical_schema),
