@@ -376,6 +376,44 @@ fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestRes
 }
 
 #[test]
+fn eager_scan_metadata_supports_concurrent_planning_without_the_delta_log() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("eager-concurrent-planning")?;
+        let table = DeltaTableBuilder::new(fixture.uri())
+            .load_table_with_eager_scan_metadata()
+            .await?;
+        fixture.disable_delta_log()?;
+
+        let (low_scan, high_scan) = tokio::try_join!(
+            table
+                .scan()
+                .with_predicate(DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: DeltaComparison::LtEq,
+                    value: DeltaScalar::Int32(4),
+                })
+                .build(),
+            table
+                .scan()
+                .with_predicate(DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: DeltaComparison::Gt,
+                    value: DeltaScalar::Int32(4),
+                })
+                .build(),
+        )?;
+        let ((low_batches, low_metrics), (high_batches, high_metrics)) =
+            tokio::try_join!(collect_scan(low_scan), collect_scan(high_scan))?;
+
+        assert_eq!(sorted_ids(&low_batches), [1, 2, 3, 4]);
+        assert_eq!(sorted_ids(&high_batches), [5, 6, 7, 8]);
+        assert_eq!(low_metrics.snapshot().files_planned, 1);
+        assert_eq!(high_metrics.snapshot().files_planned, 1);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
 fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
     let fixture = TestTable::unsupported("unsupported")?;
     let runtime = runtime()?;
