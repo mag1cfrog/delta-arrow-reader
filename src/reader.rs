@@ -54,6 +54,8 @@ use crate::{
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
+const DELTA_LOG_SCAN_METADATA_SOURCE: &str = "delta_log";
+const EAGER_CACHE_SCAN_METADATA_SOURCE: &str = "eager_cache";
 
 /// Configures and loads one immutable Delta table snapshot.
 ///
@@ -389,7 +391,12 @@ impl<'table> DeltaScanBuilder<'table> {
 
         let snapshot_version = self.table.version();
         let backend = self.execution_options.parquet_backend();
-        trace_planning_started(snapshot_version, backend);
+        let scan_metadata_source = if self.table.snapshot.eager_scan_metadata().is_some() {
+            EAGER_CACHE_SCAN_METADATA_SOURCE
+        } else {
+            DELTA_LOG_SCAN_METADATA_SOURCE
+        };
+        trace_planning_started(snapshot_version, backend, scan_metadata_source);
         let snapshot = Arc::clone(&self.table.snapshot);
         let projection = self.projection;
         let predicate = self.predicate;
@@ -426,7 +433,12 @@ impl<'table> DeltaScanBuilder<'table> {
 
         match result {
             Ok(plan) => {
-                trace_planning_completed(snapshot_version, backend, plan.partitions.len());
+                trace_planning_completed(
+                    snapshot_version,
+                    backend,
+                    plan.partitions.len(),
+                    scan_metadata_source,
+                );
                 Ok(DeltaScan {
                     plan: Arc::new(plan),
                     predicate,
@@ -435,7 +447,7 @@ impl<'table> DeltaScanBuilder<'table> {
                 })
             }
             Err(error) => {
-                trace_planning_failed(snapshot_version, backend, &error);
+                trace_planning_failed(snapshot_version, backend, scan_metadata_source, &error);
                 Err(error)
             }
         }
@@ -689,13 +701,18 @@ pub(crate) fn delta_kernel_executor(
     backend::kernel_reader::delta_kernel_file_executor(plan)
 }
 
-fn trace_planning_started(snapshot_version: u64, backend: ParquetReaderBackend) {
+fn trace_planning_started(
+    snapshot_version: u64,
+    backend: ParquetReaderBackend,
+    scan_metadata_source: &'static str,
+) {
     tracing::debug!(
         target: TRACING_TARGET,
         event = "scan_planning.started",
         snapshot_version,
         backend = ?backend,
         partition_count = tracing::field::Empty,
+        scan_metadata_source,
         outcome = "started"
     );
 }
@@ -704,6 +721,7 @@ fn trace_planning_completed(
     snapshot_version: u64,
     backend: ParquetReaderBackend,
     partition_count: usize,
+    scan_metadata_source: &'static str,
 ) {
     tracing::debug!(
         target: TRACING_TARGET,
@@ -711,6 +729,7 @@ fn trace_planning_completed(
         snapshot_version,
         backend = ?backend,
         partition_count,
+        scan_metadata_source,
         outcome = "completed"
     );
 }
@@ -718,6 +737,7 @@ fn trace_planning_completed(
 fn trace_planning_failed(
     snapshot_version: u64,
     backend: ParquetReaderBackend,
+    scan_metadata_source: &'static str,
     error: &DeltaReaderError,
 ) {
     tracing::debug!(
@@ -726,6 +746,7 @@ fn trace_planning_failed(
         snapshot_version,
         backend = ?backend,
         partition_count = tracing::field::Empty,
+        scan_metadata_source,
         outcome = "failed",
         error_code = error.code(),
         error_phase = error.phase().as_str()
@@ -798,10 +819,12 @@ fn trace_execution_dropped(
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::VecDeque,
+        collections::{BTreeMap, VecDeque},
+        fmt, fs,
         future::pending,
-        sync::{Arc, Mutex},
-        time::Duration,
+        path::{Path, PathBuf},
+        sync::{Arc, Mutex, Once},
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     use arrow::{
@@ -813,17 +836,20 @@ mod tests {
     use tokio::{sync::Notify, time::timeout};
     use tracing::{
         Event, Level, Metadata, Subscriber,
+        field::{Field as TracingField, Visit},
         span::{Attributes, Id, Record},
         subscriber::{Interest, with_default},
     };
 
     use super::{
-        DeltaBatchStream, trace_execution_completed, trace_execution_dropped,
+        DeltaBatchStream, DeltaTable, trace_execution_completed, trace_execution_dropped,
         trace_execution_failed, trace_execution_started, trace_planning_completed,
         trace_planning_failed, trace_planning_started,
     };
     use crate::{
-        DeltaScanExecutionOptions, DeltaScanMetrics, ParquetReaderBackend,
+        DeltaScanExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection, DeltaStorageOptions,
+        ParquetReaderBackend,
+        delta::snapshot::load_delta_table_snapshot_blocking,
         error::InvalidConfigurationSnafu,
         reader::{
             metrics::DeltaScanMetricsConfig,
@@ -834,8 +860,11 @@ mod tests {
         },
     };
 
+    static TRACING_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static TRACING_TEST_GLOBAL_SUBSCRIBER: Once = Once::new();
+
     #[derive(Clone, Default)]
-    struct EventFields(Arc<Mutex<Vec<Vec<String>>>>);
+    struct EventFields(Arc<Mutex<Vec<BTreeMap<String, String>>>>);
 
     impl Subscriber for EventFields {
         fn register_callsite(&self, metadata: &'static Metadata<'static>) -> Interest {
@@ -861,18 +890,89 @@ mod tests {
         fn event(&self, event: &Event<'_>) {
             let metadata = event.metadata();
             assert_eq!(metadata.target(), "delta_arrow_reader");
-            self.0.lock().expect("event lock").push(
-                metadata
-                    .fields()
-                    .iter()
-                    .map(|field| field.name().to_owned())
-                    .collect(),
-            );
+            let mut fields = metadata
+                .fields()
+                .iter()
+                .map(|field| (field.name().to_owned(), "<empty>".to_owned()))
+                .collect();
+            event.record(&mut FieldVisitor(&mut fields));
+            self.0.lock().expect("event lock").push(fields);
         }
 
         fn enter(&self, _span: &Id) {}
 
         fn exit(&self, _span: &Id) {}
+    }
+
+    struct FieldVisitor<'fields>(&'fields mut BTreeMap<String, String>);
+
+    impl Visit for FieldVisitor<'_> {
+        fn record_debug(&mut self, field: &TracingField, value: &dyn fmt::Debug) {
+            self.0.insert(field.name().to_owned(), format!("{value:?}"));
+        }
+
+        fn record_str(&mut self, field: &TracingField, value: &str) {
+            self.0.insert(field.name().to_owned(), value.to_owned());
+        }
+
+        fn record_u64(&mut self, field: &TracingField, value: u64) {
+            self.0.insert(field.name().to_owned(), value.to_string());
+        }
+
+        fn record_i64(&mut self, field: &TracingField, value: i64) {
+            self.0.insert(field.name().to_owned(), value.to_string());
+        }
+
+        fn record_u128(&mut self, field: &TracingField, value: u128) {
+            self.0.insert(field.name().to_owned(), value.to_string());
+        }
+    }
+
+    struct DeltaLogTable(PathBuf);
+
+    impl DeltaLogTable {
+        fn new(name: &str) -> Result<Self, Box<dyn std::error::Error>> {
+            let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+            let path = Path::new("target")
+                .join("delta-arrow-reader-tracing-tests")
+                .join(format!("{}-{name}-{nanos}", std::process::id()));
+            fs::create_dir_all(path.join("_delta_log"))?;
+            fs::write(
+                path.join("_delta_log/00000000000000000000.json"),
+                r#"{"protocol":{"minReaderVersion":1,"minWriterVersion":2}}
+{"metaData":{"id":"tracing-test","format":{"provider":"parquet","options":{}},"schemaString":"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"integer\",\"nullable\":true,\"metadata\":{}}]}","partitionColumns":[],"configuration":{},"createdTime":1587968585495}}
+{"add":{"path":"secret-planning-object.parquet","partitionValues":{},"size":10,"modificationTime":1587968586000,"dataChange":true}}
+"#,
+            )?;
+            Ok(Self(path))
+        }
+    }
+
+    impl Drop for DeltaLogTable {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn capture_events<T>(run: impl FnOnce() -> T) -> (T, Vec<BTreeMap<String, String>>) {
+        let _lock = TRACING_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = EventFields(Arc::clone(&events));
+        TRACING_TEST_GLOBAL_SUBSCRIBER.call_once(|| {
+            let _ = tracing::subscriber::set_global_default(EventFields::default());
+        });
+        let result = with_default(subscriber, || {
+            tracing::callsite::rebuild_interest_cache();
+            run()
+        });
+        tracing::callsite::rebuild_interest_cache();
+        let captured = events
+            .lock()
+            .map(|events| events.clone())
+            .unwrap_or_default();
+        (result, captured)
     }
 
     struct ControlledMerge {
@@ -1031,24 +1131,18 @@ mod tests {
 
     #[test]
     fn lifecycle_tracing_has_only_bounded_fields() {
-        let events = Arc::new(Mutex::new(Vec::new()));
-        let subscriber = EventFields(Arc::clone(&events));
         let error = InvalidConfigurationSnafu { reason: "test" }.build();
 
-        let _ = tracing::subscriber::set_global_default(EventFields::default());
-        with_default(subscriber, || {
-            tracing::callsite::rebuild_interest_cache();
-            trace_planning_started(7, ParquetReaderBackend::Direct);
-            trace_planning_completed(7, ParquetReaderBackend::Direct, 2);
-            trace_planning_failed(7, ParquetReaderBackend::Direct, &error);
+        let (_, events) = capture_events(|| {
+            trace_planning_started(7, ParquetReaderBackend::Direct, "eager_cache");
+            trace_planning_completed(7, ParquetReaderBackend::Direct, 2, "eager_cache");
+            trace_planning_failed(7, ParquetReaderBackend::Direct, "eager_cache", &error);
             trace_execution_started(7, ParquetReaderBackend::Direct, 2);
             trace_execution_completed(7, ParquetReaderBackend::Direct, 2);
             trace_execution_failed(7, ParquetReaderBackend::Direct, 2, &error);
             trace_execution_dropped(7, ParquetReaderBackend::Direct, 2);
         });
-        tracing::callsite::rebuild_interest_cache();
 
-        let events = events.lock().expect("event lock");
         assert_eq!(events.len(), 7);
         let allowed = [
             "backend",
@@ -1057,16 +1151,92 @@ mod tests {
             "event",
             "outcome",
             "partition_count",
+            "scan_metadata_source",
             "snapshot_version",
         ];
         for fields in events.iter() {
-            assert!(fields.iter().all(|field| allowed.contains(&field.as_str())));
-            assert!(fields.contains(&"event".to_owned()));
-            assert!(fields.contains(&"snapshot_version".to_owned()));
-            assert!(fields.contains(&"backend".to_owned()));
-            assert!(fields.contains(&"partition_count".to_owned()));
-            assert!(fields.contains(&"outcome".to_owned()));
+            assert!(fields.keys().all(|field| allowed.contains(&field.as_str())));
+            assert!(fields.contains_key("event"));
+            assert!(fields.contains_key("snapshot_version"));
+            assert!(fields.contains_key("backend"));
+            assert!(fields.contains_key("partition_count"));
+            assert!(fields.contains_key("outcome"));
+            if fields
+                .get("event")
+                .is_some_and(|event| event.starts_with("scan_planning."))
+            {
+                assert_eq!(
+                    fields.get("scan_metadata_source").map(String::as_str),
+                    Some("eager_cache")
+                );
+            }
         }
+    }
+
+    #[test]
+    fn planning_tracing_reports_the_table_metadata_source_on_success_and_failure()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const OBJECT_KEY: &str = "secret-planning-object.parquet";
+        const STORAGE_VALUE: &str = "secret-planning-storage-value";
+        let fixture = DeltaLogTable::new("planning-source")?;
+        let mut storage_options = DeltaStorageOptions::new();
+        storage_options.insert("secret-option".to_owned(), STORAGE_VALUE.to_owned());
+        let snapshot = load_delta_table_snapshot_blocking(
+            &fixture.0.to_string_lossy(),
+            &storage_options,
+            DeltaSnapshotSelection::Latest,
+        )?;
+        let eager_snapshot = snapshot.clone().materialize_eager_scan_metadata()?;
+        let lazy = DeltaTable::new(snapshot, DeltaScanExecutionOptions::new());
+        let eager = DeltaTable::new(eager_snapshot, DeltaScanExecutionOptions::new());
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+
+        let (eager_result, eager_events) =
+            capture_events(|| runtime.block_on(eager.scan().build()));
+        let _ = eager_result?;
+        assert_eq!(eager_events.len(), 2);
+        assert_eq!(
+            eager_events[0].get("event").map(String::as_str),
+            Some("scan_planning.started")
+        );
+        assert_eq!(
+            eager_events[1].get("event").map(String::as_str),
+            Some("scan_planning.completed")
+        );
+        assert!(eager_events.iter().all(|event| {
+            event.get("scan_metadata_source").map(String::as_str) == Some("eager_cache")
+        }));
+
+        let (failed_result, failed_events) =
+            capture_events(|| runtime.block_on(eager.scan().with_projection(["missing"]).build()));
+        assert!(failed_result.is_err());
+        assert_eq!(failed_events.len(), 2);
+        assert_eq!(
+            failed_events[0].get("event").map(String::as_str),
+            Some("scan_planning.started")
+        );
+        assert_eq!(
+            failed_events[1].get("event").map(String::as_str),
+            Some("scan_planning.failed")
+        );
+        assert!(failed_events.iter().all(|event| {
+            event.get("scan_metadata_source").map(String::as_str) == Some("eager_cache")
+        }));
+
+        let (lazy_result, lazy_events) = capture_events(|| runtime.block_on(lazy.scan().build()));
+        let _ = lazy_result?;
+        assert_eq!(lazy_events.len(), 2);
+        assert!(lazy_events.iter().all(|event| {
+            event.get("scan_metadata_source").map(String::as_str) == Some("delta_log")
+        }));
+
+        let captured = format!("{eager_events:?}{failed_events:?}{lazy_events:?}");
+        assert!(!captured.contains(&fixture.0.to_string_lossy().into_owned()));
+        assert!(!captured.contains(OBJECT_KEY));
+        assert!(!captured.contains(STORAGE_VALUE));
+        Ok(())
     }
 
     #[tokio::test]
