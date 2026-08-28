@@ -70,6 +70,48 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.10
       - run: cargo test --locked ${{ matrix.features }}
 
+  platform-tests:
+    name: Platform Tests / ${{ matrix.name }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS ARM64
+            os: macos-latest
+            target: aarch64-apple-darwin
+          - name: Windows x64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read Rust version
+        id: rust-version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core-ci
+          cache-targets: false
+          save-if: false
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Verify Rust host
+        shell: bash
+        run: |
+          rustc -vV | grep -F "host: ${{ matrix.target }}"
+      - run: cargo test --locked --all-features
+
   checks:
     name: ${{ matrix.task }}
     needs: changes
@@ -113,7 +155,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, feature-tests, checks]
+    needs: [changes, feature-tests, platform-tests, checks]
     if: always()
     runs-on: ubuntu-latest
 
@@ -132,6 +174,11 @@ jobs:
 
           if [ "${{ needs.feature-tests.result }}" != "success" ]; then
             echo "Feature Tests did not pass: ${{ needs.feature-tests.result }}"
+            exit 1
+          fi
+
+          if [ "${{ needs.platform-tests.result }}" != "success" ]; then
+            echo "Platform Tests did not pass: ${{ needs.platform-tests.result }}"
             exit 1
           fi
 

@@ -22,17 +22,31 @@ concurrency:
 
 jobs:
   core:
-    name: Warm core test caches
-    runs-on: ubuntu-latest
+    name: Warm core test caches / ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_GHA_RW_MODE: READ_WRITE
       RUSTC_WRAPPER: sccache
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - name: macOS ARM64
+            os: macos-latest
+            target: aarch64-apple-darwin
+          - name: Windows x64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v5
       - name: Read Rust version
         id: rust-version
+        shell: bash
         run: |
           version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
           test -n "$version"
@@ -47,6 +61,10 @@ jobs:
           cache-targets: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
+      - name: Verify Rust host
+        shell: bash
+        run: |
+          rustc -vV | grep -F "host: ${{ matrix.target }}"
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -58,11 +76,13 @@ jobs:
       - name: Check sccache writes
         id: sccache-writes
         continue-on-error: true
+        shell: bash
         run: >-
           sccache --show-stats --stats-format json |
           python -c 'import json, sys; errors = json.load(sys.stdin)["stats"]["cache_write_errors"]; sys.exit(f"sccache reported {errors} cache write errors") if errors else None'
       - name: Retry cache writes
         if: steps.sccache-writes.outcome == 'failure'
+        shell: bash
         run: |
           sccache --zero-stats
           cargo clean
@@ -70,6 +90,7 @@ jobs:
           cargo test --locked --all-targets --all-features --no-run
       - name: Verify retried sccache writes
         if: steps.sccache-writes.outcome == 'failure'
+        shell: bash
         run: >-
           sccache --show-stats --stats-format json |
           python -c 'import json, sys; errors = json.load(sys.stdin)["stats"]["cache_write_errors"]; sys.exit(f"sccache reported {errors} cache write errors") if errors else None'
