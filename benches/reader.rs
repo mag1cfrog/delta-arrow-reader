@@ -239,6 +239,12 @@ struct QueryMeasurement {
 struct RepetitionMeasurement {
     table_initialization_micros: u64,
     session_total_micros: u64,
+    #[cfg(test)]
+    #[allow(dead_code)]
+    table_load_count: usize,
+    #[cfg(test)]
+    #[allow(dead_code)]
+    table_registration_count: usize,
     query_measurements: Vec<QueryMeasurement>,
 }
 
@@ -1388,9 +1394,13 @@ async fn run_repetition(
         ScanMetadataMode::Lazy => builder.load_table().await?,
         ScanMetadataMode::Eager => builder.load_table_with_eager_scan_metadata().await?,
     };
+    #[cfg(test)]
+    let table_load_count = 1;
     let table_initialization_micros =
         saturating_u64(table_initialization_started.elapsed().as_micros());
     register_table(&context, "orders", table, scan_options)?;
+    #[cfg(test)]
+    let table_registration_count = 1;
 
     let mut query_measurements = Vec::with_capacity(config.queries_per_table);
     for _ in 0..config.queries_per_table {
@@ -1400,6 +1410,10 @@ async fn run_repetition(
     Ok(RepetitionMeasurement {
         table_initialization_micros,
         session_total_micros,
+        #[cfg(test)]
+        table_load_count,
+        #[cfg(test)]
+        table_registration_count,
         query_measurements,
     })
 }
@@ -2286,15 +2300,25 @@ mod tests {
                 assert_eq!(summary.repetitions, 1);
                 assert_eq!(summary.read.scan_count, 1);
                 assert_eq!(summary.read.files_planned, 4);
+                assert_eq!(repetitions[0].table_load_count, 1);
+                assert_eq!(repetitions[0].table_registration_count, 1);
                 assert_eq!(repetitions[0].query_measurements.len(), 3);
                 assert!(
                     repetitions[0].session_total_micros
                         >= repetitions[0].table_initialization_micros
                 );
                 for measurement in &repetitions[0].query_measurements {
+                    let [metrics] = measurement.metrics.as_slice() else {
+                        return Err("expected one fresh Delta scan per query".into());
+                    };
+                    let reader = &metrics.reader_metrics;
                     assert_eq!(measurement.produced_rows, expected_rows);
                     assert!(measurement.produced_batches > 0);
-                    assert!(!measurement.metrics.is_empty());
+                    assert_eq!(reader.scan_partitions_started, 4);
+                    assert_eq!(reader.scan_partitions_completed, 4);
+                    assert_eq!(reader.file_tasks_started, 4);
+                    assert_eq!(reader.file_tasks_completed, 4);
+                    assert_eq!(reader.scheduler_rows_emitted, expected_rows as u64);
                 }
             }
             Ok::<_, Box<dyn Error>>(())
@@ -2319,11 +2343,15 @@ mod tests {
             RepetitionMeasurement {
                 table_initialization_micros: 10,
                 session_total_micros: 100,
+                table_load_count: 1,
+                table_registration_count: 1,
                 query_measurements: [1, 2, 3].map(query).into(),
             },
             RepetitionMeasurement {
                 table_initialization_micros: 30,
                 session_total_micros: 300,
+                table_load_count: 1,
+                table_registration_count: 1,
                 query_measurements: [4, 5, 100].map(query).into(),
             },
         ];
