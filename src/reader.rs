@@ -151,7 +151,8 @@ impl DeltaTableBuilder {
     /// immutable snapshot can plan without reopening the Delta log. It increases initialization
     /// time and retains active-file metadata and statistics for the lifetime of the table.
     /// Parquet footer and data reads remain query-time operations. Load a new table to observe a
-    /// newer snapshot.
+    /// newer snapshot. Unlike [`Self::load_table`], unsupported protocols fail during
+    /// initialization because materialization constructs a scan.
     pub async fn load_table_with_eager_scan_metadata(self) -> Result<DeltaTable, DeltaReaderError> {
         let snapshot = load_delta_table_snapshot(
             self.table_location,
