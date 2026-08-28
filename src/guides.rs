@@ -21,6 +21,9 @@ pub mod concepts {
     #[doc = include_str!("../docs/content/architecture.md")]
     pub mod architecture {}
 
+    #[doc = include_str!("../docs/content/delta-metadata-lifecycle.md")]
+    pub mod delta_metadata_lifecycle {}
+
     #[doc = include_str!("../docs/content/scan-planning.md")]
     pub mod scan_planning {}
 

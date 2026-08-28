@@ -83,6 +83,9 @@ build still applies its own projection and predicate, and polling the returned
 stream performs the query's Parquet I/O. The loaded table stays pinned to one
 immutable snapshot; load the table again to see a newer version.
 
+To understand what the eager method caches, and why it helps only some
+workloads, read about the [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
+
 ## Filter rows
 
 Once the basic scan works, you can add a predicate before building it:

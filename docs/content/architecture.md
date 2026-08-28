@@ -83,6 +83,9 @@ from Delta Funnel.
 
 ## Go deeper
 
+- [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/) follows one loaded table through
+  several queries and explains when keeping its file metadata in memory can
+  save planning time.
 - [Scan planning](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/) explains how the reader chooses a partition
   target, groups files, and optionally splits large files.
 - [Read scheduling](https://mag1cfrog.github.io/delta-arrow-reader/read-scheduling/) explains concurrency, prefetching,

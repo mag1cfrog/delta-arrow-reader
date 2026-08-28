@@ -95,6 +95,9 @@ table-name registry or choose a mode automatically. To refresh a registered
 table, load a new immutable snapshot and replace the registration with the new
 table.
 
+For a closer look at how one loaded table reuses this cache across queries, see
+the [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
+
 Once the query works, you can read about [how the reader works](https://mag1cfrog.github.io/delta-arrow-reader/architecture/)
 or use the [Rust API reference](https://docs.rs/delta-arrow-reader) to explore
 scan options and metrics.
