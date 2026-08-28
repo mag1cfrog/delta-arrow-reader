@@ -27,8 +27,8 @@ pipelines that read Delta Lake tables. It is a good fit when:
 
 ## Why not...
 
-Most alternatives solve a much bigger problem than reading a Delta table. Their
-Delta path pays for that extra weight.
+Delta Arrow Reader has one job: read Delta tables and stream Arrow batches. The
+alternatives below do much more, and their Delta paths carry that extra weight.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/reader-benchmark-wall-dark.svg">
@@ -38,33 +38,36 @@ Delta path pays for that extra weight.
 
 ### Spark or Trino
 
-Spark is Delta Lake's home ground, and Trino is a proven distributed engine.
-They fit naturally when a cluster is already part of the system. A small,
-single-node read service would still carry their JVM, full query runtime, and
-operational machinery. Running either one just to stream Arrow batches is
-bringing a distributed system to do a library's job.
+Spark is where Delta Lake grew up, and Trino is a proven distributed query
+engine. If a cluster is already part of your system, either can fit well. If
+you only need a small, single-node read service, neither does. You would still
+carry a JVM, a full query runtime, and the operational machinery of a
+distributed system just to stream Arrow batches.
+
+-----
 
 ### The "read everything" engines
 
-DuckDB, Polars, and Daft promise one engine for many formats. Delta Lake becomes
-another compatibility box to check, and the jack-of-all-trades tradeoff showed
-clearly in our benchmarks. DuckDB took 5.8-14.6 times as long as Delta Arrow
-Reader, and Polars took 1.7-20 times as long. Of our four workloads, Daft could
-run only the text projection; it took 2.1 times as long and rejected the
-deletion-vector tables. All three also used more memory in every comparable
-run. See the
+DuckDB, Polars, and Daft aim to be one engine for many formats. For Delta reads,
+the results were poor. DuckDB took 5.8-14.6 times as long as Delta Arrow Reader,
+and Polars took 1.7-20 times as long. Daft managed only the text projection out
+of four workloads; it took 2.1 times as long and rejected the deletion-vector
+tables. All three also used more memory in every comparable run. See the
 [benchmark setup and complete results](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/).
+
+-----
 
 ### delta-rs
 
-delta-rs is the closest alternative and covers the full Delta lifecycle,
-including writes. Delta Arrow Reader concentrates on asynchronous reads,
-bounded memory, Arrow streaming, and efficient deletion vectors. Across the two
-projection workloads, it ranged from roughly even with delta-rs to finishing
-24% sooner. **On deletion-vector tables, delta-rs took three times as long to
-return one live row and seven times as long to scan the full table.**
+delta-rs is the closest alternative, but it also covers the full Delta
+lifecycle, including writes. Delta Arrow Reader narrows that scope to
+asynchronous reads, bounded memory, Arrow streaming, and efficient deletion
+vectors. Across the two projection workloads, Delta Arrow Reader ranged from
+roughly even with delta-rs to finishing 24% sooner. **On deletion-vector tables,
+delta-rs took three times as long to return one live row and seven times as long
+to scan the full table.**
 
-Databricks now
+That gap matters because Databricks now
 [recommends deletion vectors for most tables and is rolling out automatic enablement for new tables](https://docs.databricks.com/aws/en/admin/workspace-settings/deletion-vectors).
 
 ## Installation
