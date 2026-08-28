@@ -73,7 +73,10 @@ mod tests {
 
         assert!(absolute_uri.as_str().starts_with("file://"));
         assert!(absolute_uri.as_str().ends_with('/'));
-        assert_eq!(relative_path, fs::canonicalize(&relative.0)?);
+        assert_eq!(
+            fs::canonicalize(relative_path)?,
+            fs::canonicalize(&relative.0)?
+        );
         assert_eq!(
             normalize_table_location(absolute_uri.as_str())?,
             absolute_uri

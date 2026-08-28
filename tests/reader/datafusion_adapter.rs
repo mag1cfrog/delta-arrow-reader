@@ -246,7 +246,15 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
             .with_target_partitions(4)
             .with_repartition_file_min_size(1),
     );
-    register_table(&context, "orders", table, ScanOptions::default())?;
+    register_table(
+        &context,
+        "orders",
+        table,
+        ScanOptions {
+            target_partitions: Some(4),
+            ..Default::default()
+        },
+    )?;
 
     let plan = context
         .sql("SELECT count(*) AS row_count, sum(id) AS id_sum FROM orders")
