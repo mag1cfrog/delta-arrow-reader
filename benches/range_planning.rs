@@ -379,12 +379,7 @@ impl Fixture {
         Ok(Self {
             path,
             table_uri,
-            // The controlled server closes every HTTP response. Do not return those connections
-            // to the client pool, where they can be reused before the close is observed.
-            storage_options: BTreeMap::from([
-                ("allow_http".to_owned(), "true".to_owned()),
-                ("pool_max_idle_per_host".to_owned(), "0".to_owned()),
-            ]),
+            storage_options: BTreeMap::from([("allow_http".to_owned(), "true".to_owned())]),
             server,
             data_file_bytes,
             retain,
