@@ -15,15 +15,22 @@ exclude = [
     ".github/**",
     ".gitignore",
     "benches/reader.rs",
+    "benches/row_filter.rs",
     "tests/benchmark_harness.rs",
     "tests/reader.rs",
     "tests/reader/**",
+    "tests/row_filter_benchmark_harness.rs",
 ]
 
 [[bench]]
 name = "reader"
 harness = false
 required-features = ["datafusion"]
+test = false
+
+[[bench]]
+name = "row_filter"
+harness = false
 test = false
 
 [features]
