@@ -26,9 +26,9 @@ usable after its batch stream finishes or is dropped.
 | `deletion_vector_rows_deleted` | Rows removed by those masks. |
 | `deletion_vector_failures` | Deletion-vector read or masking failures. |
 | `deletion_vector_coordinate_rejections` | Deletion-vector coordinate operations rejected by safety checks. |
-| `parquet_data_file_range_get_operations` | Direct Parquet data-file GET operations with a range. |
+| `parquet_data_file_range_get_operations` | Ranged operations observed by the Direct Parquet wrapper. A forwarded store-provided multi-range call counts once. |
 | `parquet_data_file_full_get_operations` | Direct Parquet data-file GET operations without a range. |
-| `parquet_data_file_bytes_received` | Bytes delivered successfully through the `Direct` backend's object store. |
+| `parquet_data_file_bytes_received` | Bytes delivered successfully through the `Direct` backend's object-store boundary. |
 | `estimated_parquet_task_bytes_admitted` | Estimated bytes admitted across `Direct` backend tasks. A ranged task contributes its range length. |
 
 `add_actions_excluded_during_planning` is not an exact active-file count. Delta
@@ -66,10 +66,14 @@ The I/O counters observe calls made through the `Direct` backend's data-file
 `object_store` wrapper. They are useful for comparing scan choices, but they
 are not network billing counters.
 
-- Range and full GET counters advance immediately before the request is passed
-  to the underlying store, so failed requests still count.
-- Received bytes count successful response chunks delivered by the store. They
-  can include footers, column data, coalesced gaps, and repeated reads.
+- Range and full GET counters advance immediately before an operation is passed
+  to the underlying store, so failed operations still count. A forwarded
+  store-provided multi-range call counts once because the wrapper cannot see
+  how the store performs that call.
+- Received bytes count successful response chunks delivered through the
+  wrapper. Fixed-gap remote reads can include footers, column data, coalesced
+  gaps, and repeated reads. A store-provided multi-range call reports the bytes
+  returned to Parquet; any extra work inside the store is not visible.
 - Admitted task bytes add the estimated span of each task. A whole-file task
   contributes its file size, while a ranged task contributes its range length.
 

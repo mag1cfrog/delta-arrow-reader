@@ -1202,6 +1202,7 @@ version = "0.4.2"
 dependencies = [
  "arrow",
  "async-trait",
+ "bytes",
  "chrono",
  "datafusion",
  "delta_kernel",

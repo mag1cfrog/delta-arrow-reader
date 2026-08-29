@@ -32,7 +32,7 @@ use snafu::{IntoError, ResultExt};
 use tokio::sync::OnceCell;
 
 use self::{
-    metered_object_store::MeteredParquetObjectStore,
+    metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
     row_group_pruning::pruned_row_groups,
     schema_alignment::{ParquetSchemaAlignment, build_schema_alignment},
 };
@@ -142,6 +142,7 @@ impl DirectParquetReader {
         let store = Arc::new(MeteredParquetObjectStore::new(
             engine_context.object_store(),
             metrics.clone(),
+            MultiRangeReadStrategy::for_table_url(engine_context.table_url()),
         ));
         Self {
             engine_context,
@@ -854,7 +855,9 @@ mod tests {
         },
         delta::snapshot::load_delta_table_snapshot_blocking,
         reader::{
-            backend::direct_parquet::metered_object_store::MeteredParquetObjectStore,
+            backend::direct_parquet::metered_object_store::{
+                MeteredParquetObjectStore, MultiRangeReadStrategy,
+            },
             metrics::DeltaScanMetricsConfig,
             planning::{DeltaScanFileTask, DeltaScanPartitionTargetOptions, plan_scan},
             scheduling::{
@@ -1623,6 +1626,7 @@ mod tests {
         reader.store = Arc::new(MeteredParquetObjectStore::new(
             Arc::clone(&gated) as Arc<dyn ObjectStore>,
             plan.metrics.clone(),
+            MultiRangeReadStrategy::UseStoreImplementation,
         ));
         Ok((Arc::new(reader), gated, task))
     }
@@ -1653,6 +1657,7 @@ mod tests {
         reader.store = Arc::new(MeteredParquetObjectStore::new(
             Arc::clone(&gated) as Arc<dyn ObjectStore>,
             metrics,
+            MultiRangeReadStrategy::UseStoreImplementation,
         ));
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
