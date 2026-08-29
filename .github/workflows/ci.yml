@@ -101,8 +101,8 @@ jobs:
       - name: Cache Cargo registry
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: core-ci
-          cache-targets: false
+          shared-key: ${{ matrix.os == 'windows-2022' && 'core-ci-targets' || 'core-ci' }}
+          cache-targets: ${{ matrix.os == 'windows-2022' }}
           save-if: false
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
