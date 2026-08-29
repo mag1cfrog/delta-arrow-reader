@@ -12,9 +12,9 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::{StreamExt, stream, stream::BoxStream};
 use object_store::{
-    CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload, ObjectMeta,
-    ObjectStore, ObjectStoreScheme, PutMultipartOptions, PutOptions, PutPayload, PutResult,
-    RenameOptions, Result, path::Path,
+    CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload,
+    OBJECT_STORE_COALESCE_DEFAULT, ObjectMeta, ObjectStore, ObjectStoreScheme, PutMultipartOptions,
+    PutOptions, PutPayload, PutResult, RenameOptions, Result, path::Path,
 };
 use tracing::Instrument;
 use url::Url;
@@ -23,7 +23,7 @@ use super::range_planning::{
     ChosenRangePlan, RangePlanDecision, TransportEstimate, choose_range_plan, execute_range_plan,
     merge_ranges, range_bytes,
 };
-use crate::DeltaScanMetrics;
+use crate::{DeltaScanMetrics, reader::ParquetRangeReadPolicy};
 
 const TRANSPORT_SAMPLE_WINDOW: usize = 9;
 const MIN_TRANSPORT_SAMPLES: usize = 3;
@@ -47,11 +47,26 @@ struct CompletedRangeRead {
 pub(crate) enum MultiRangeReadStrategy {
     /// Pass the original range list to the store's `get_ranges` implementation.
     UseStoreImplementation,
+    /// Read only the normalized ranges requested by Parquet.
+    ReadExactRanges,
+    /// Merge ranges separated by at most one MiB before reading them.
+    MergeRangesWithinOneMegabyte,
     /// Choose a physical range plan from recent remote transport observations.
     ChooseAutomatically,
 }
 
 impl MultiRangeReadStrategy {
+    pub(crate) fn for_policy(policy: ParquetRangeReadPolicy, table_url: &Url) -> Self {
+        match policy {
+            ParquetRangeReadPolicy::Automatic => Self::for_table_url(table_url),
+            ParquetRangeReadPolicy::ExactRanges => Self::ReadExactRanges,
+            ParquetRangeReadPolicy::MergeRangesWithinOneMegabyte => {
+                Self::MergeRangesWithinOneMegabyte
+            }
+            ParquetRangeReadPolicy::StoreImplementation => Self::UseStoreImplementation,
+        }
+    }
+
     /// Uses the store implementation for local, memory, and custom URL schemes. Built-in remote
     /// stores choose their physical range plan automatically.
     pub(crate) fn for_table_url(table_url: &Url) -> Self {
@@ -179,6 +194,34 @@ impl MeteredParquetObjectStore {
                 .metrics
                 .record_parquet_data_file_cost_based_merged_range_plan(),
         }
+    }
+
+    /// Reads one physical plan and restores the caller's original ranges and order.
+    async fn read_physical_ranges(
+        &self,
+        location: &Path,
+        requested_ranges: &[Range<u64>],
+        physical_ranges: &[Range<u64>],
+    ) -> Result<Vec<Bytes>> {
+        let completed_reads = Arc::new(Mutex::new(Vec::with_capacity(physical_ranges.len())));
+        let results = execute_range_plan(requested_ranges, physical_ranges, |range| {
+            let completed_reads = Arc::clone(&completed_reads);
+            async move {
+                let (bytes, completed_read) = self.read_range_with_timing(location, range).await?;
+                completed_reads
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(completed_read);
+                Ok::<Bytes, object_store::Error>(bytes)
+            }
+        })
+        .await?;
+        self.record_completed_range_reads(
+            &completed_reads
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        Ok(results)
     }
 }
 
@@ -317,31 +360,32 @@ impl ObjectStore for MeteredParquetObjectStore {
                 }
                 Ok(results)
             }
+            strategy @ (MultiRangeReadStrategy::ReadExactRanges
+            | MultiRangeReadStrategy::MergeRangesWithinOneMegabyte) => {
+                let exact_ranges = merge_ranges(ranges, 0);
+                let max_gap = if strategy == MultiRangeReadStrategy::MergeRangesWithinOneMegabyte {
+                    OBJECT_STORE_COALESCE_DEFAULT
+                } else {
+                    0
+                };
+                let physical_ranges = merge_ranges(ranges, max_gap);
+                self.metrics
+                    .record_parquet_data_file_exact_ranges_requested(
+                        exact_ranges.len(),
+                        range_bytes(&exact_ranges),
+                    );
+                self.metrics.record_parquet_data_file_physical_range_plan(
+                    physical_ranges.len(),
+                    range_bytes(&physical_ranges),
+                );
+                self.read_physical_ranges(location, ranges, &physical_ranges)
+                    .await
+            }
             MultiRangeReadStrategy::ChooseAutomatically => {
                 let plan = choose_range_plan(ranges, self.current_transport_estimate());
                 self.record_chosen_range_plan_metrics(&plan);
-                let physical_ranges = plan.physical_ranges;
-                let completed_reads =
-                    Arc::new(Mutex::new(Vec::with_capacity(physical_ranges.len())));
-                let results = execute_range_plan(ranges, &physical_ranges, |range| {
-                    let completed_reads = Arc::clone(&completed_reads);
-                    async move {
-                        let (bytes, completed_read) =
-                            self.read_range_with_timing(location, range).await?;
-                        completed_reads
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .push(completed_read);
-                        Ok::<Bytes, object_store::Error>(bytes)
-                    }
-                })
-                .await?;
-                self.record_completed_range_reads(
-                    &completed_reads
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner),
-                );
-                Ok(results)
+                self.read_physical_ranges(location, ranges, &plan.physical_ranges)
+                    .await
             }
         }
     }
@@ -456,7 +500,10 @@ mod tests {
         ChosenRangePlan, CompletedRangeRead, MeteredParquetObjectStore, MultiRangeReadStrategy,
         RangePlanDecision, TransportEstimate,
     };
-    use crate::{DeltaScanMetrics, ParquetReaderBackend, reader::metrics::DeltaScanMetricsConfig};
+    use crate::{
+        DeltaScanMetrics, ParquetReaderBackend,
+        reader::{ParquetRangeReadPolicy, metrics::DeltaScanMetricsConfig},
+    };
 
     fn direct_metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
@@ -521,6 +568,36 @@ mod tests {
                 MultiRangeReadStrategy::for_table_url(&url::Url::parse(location)?),
                 MultiRangeReadStrategy::ChooseAutomatically,
                 "{location}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn diagnostic_policy_names_map_directly_to_range_strategies()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let remote_url = url::Url::parse("https://example.com/table")?;
+        for (policy, strategy) in [
+            (
+                ParquetRangeReadPolicy::Automatic,
+                MultiRangeReadStrategy::ChooseAutomatically,
+            ),
+            (
+                ParquetRangeReadPolicy::ExactRanges,
+                MultiRangeReadStrategy::ReadExactRanges,
+            ),
+            (
+                ParquetRangeReadPolicy::MergeRangesWithinOneMegabyte,
+                MultiRangeReadStrategy::MergeRangesWithinOneMegabyte,
+            ),
+            (
+                ParquetRangeReadPolicy::StoreImplementation,
+                MultiRangeReadStrategy::UseStoreImplementation,
+            ),
+        ] {
+            assert_eq!(
+                MultiRangeReadStrategy::for_policy(policy, &remote_url),
+                strategy
             );
         }
         Ok(())
@@ -668,6 +745,42 @@ mod tests {
         );
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(8));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn diagnostic_range_strategies_preserve_bytes_and_apply_their_plans() -> Result<()> {
+        let requested_ranges = [10..14, 0..4, 2..6, 10..14];
+        let expected = [b"abcd".as_slice(), b"0123", b"2345", b"abcd"];
+
+        for (strategy, expected_planned_requests, expected_planned_bytes) in [
+            (MultiRangeReadStrategy::ReadExactRanges, 2, 10),
+            (MultiRangeReadStrategy::MergeRangesWithinOneMegabyte, 1, 14),
+            (MultiRangeReadStrategy::ChooseAutomatically, 2, 10),
+            (MultiRangeReadStrategy::UseStoreImplementation, 0, 0),
+        ] {
+            let metrics = direct_metrics();
+            let store = memory_store_with_strategy(metrics.clone(), strategy).await?;
+            let actual = store
+                .get_ranges(&Path::from("data.parquet"), &requested_ranges)
+                .await?;
+            assert_eq!(
+                actual.iter().map(Bytes::as_ref).collect::<Vec<_>>(),
+                expected,
+                "{strategy:?}"
+            );
+            let snapshot = metrics.snapshot();
+            assert_eq!(
+                snapshot.parquet_data_file_physical_range_requests_planned,
+                Some(expected_planned_requests),
+                "{strategy:?}"
+            );
+            assert_eq!(
+                snapshot.parquet_data_file_physical_range_bytes_planned,
+                Some(expected_planned_bytes),
+                "{strategy:?}"
+            );
+        }
         Ok(())
     }
 

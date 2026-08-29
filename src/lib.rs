@@ -14,6 +14,10 @@ pub use delta::DeltaProtocol;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
 #[doc(hidden)]
 pub mod diagnostics {
+    pub mod parquet_range_planning {
+        pub use crate::reader::ParquetRangeReadPolicy as Policy;
+    }
+
     pub mod partition_target {
         pub use crate::reader::partition_target::{
             DeltaScanPartitionTargetDiagnosticInput as Input,

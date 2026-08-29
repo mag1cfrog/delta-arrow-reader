@@ -8,6 +8,7 @@ use delta_arrow_reader::{
     DeltaReaderPhase, DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaScanExecutionOptions,
     DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection, DeltaStorageOptions,
     DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
+    diagnostics::parquet_range_planning::Policy as ParquetRangeReadPolicy,
     diagnostics::partition_target::{
         Input, LocalEnvironment, Output, Source, UnixFileDescriptorLimitStatus,
         collect_local_environment, derive,
@@ -66,6 +67,7 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
 
     let options = DeltaScanExecutionOptions::new()
         .with_parquet_backend(ParquetReaderBackend::DeltaKernel)
+        .with_parquet_range_read_policy(ParquetRangeReadPolicy::Automatic)
         .with_max_concurrent_file_reads_per_scan(Some(6))?
         .with_max_concurrent_file_reads_per_partition(3)?
         .with_output_buffer_batches_per_partition(1)?
@@ -74,6 +76,12 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
         .with_parquet_full_file_read_threshold_bytes(None)?;
 
     assert_eq!(options.parquet_backend(), ParquetReaderBackend::DeltaKernel);
+    let _ = [
+        ParquetRangeReadPolicy::Automatic,
+        ParquetRangeReadPolicy::ExactRanges,
+        ParquetRangeReadPolicy::MergeRangesWithinOneMegabyte,
+        ParquetRangeReadPolicy::StoreImplementation,
+    ];
 
     let error = DeltaScanExecutionOptions::new()
         .with_output_buffer_batches_per_partition(0)
