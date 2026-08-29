@@ -1,6 +1,7 @@
 //! Direct asynchronous Parquet data-file reader.
 
 mod metered_object_store;
+mod range_planning;
 mod row_group_pruning;
 mod schema_alignment;
 

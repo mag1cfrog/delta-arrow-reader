@@ -8,12 +8,12 @@ use futures_util::{StreamExt, stream, stream::BoxStream};
 use object_store::{
     CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload,
     OBJECT_STORE_COALESCE_DEFAULT, ObjectMeta, ObjectStore, ObjectStoreExt, ObjectStoreScheme,
-    PutMultipartOptions, PutOptions, PutPayload, PutResult, RenameOptions, Result, coalesce_ranges,
-    path::Path,
+    PutMultipartOptions, PutOptions, PutPayload, PutResult, RenameOptions, Result, path::Path,
 };
 use tracing::Instrument;
 use url::Url;
 
+use super::range_planning::{execute_range_plan, merge_ranges};
 use crate::DeltaScanMetrics;
 
 pub(crate) struct MeteredParquetObjectStore {
@@ -135,11 +135,10 @@ impl ObjectStore for MeteredParquetObjectStore {
                 Ok(results)
             }
             MultiRangeReadStrategy::CoalesceWithDefaultGap => {
-                coalesce_ranges(
-                    ranges,
-                    |range| self.get_range(location, range),
-                    OBJECT_STORE_COALESCE_DEFAULT,
-                )
+                let physical_ranges = merge_ranges(ranges, OBJECT_STORE_COALESCE_DEFAULT);
+                execute_range_plan(ranges, &physical_ranges, |range| {
+                    self.get_range(location, range)
+                })
                 .await
             }
         }
