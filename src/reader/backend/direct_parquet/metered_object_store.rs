@@ -1,25 +1,43 @@
 //! Object-store metering for direct Parquet data-file reads.
 
-use std::{fmt, ops::Range, sync::Arc};
+use std::{
+    collections::VecDeque,
+    fmt,
+    ops::Range,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::{StreamExt, stream, stream::BoxStream};
 use object_store::{
     CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload, ObjectMeta,
-    ObjectStore, ObjectStoreExt, ObjectStoreScheme, PutMultipartOptions, PutOptions, PutPayload,
-    PutResult, RenameOptions, Result, path::Path,
+    ObjectStore, ObjectStoreScheme, PutMultipartOptions, PutOptions, PutPayload, PutResult,
+    RenameOptions, Result, path::Path,
 };
 use tracing::Instrument;
 use url::Url;
 
-use super::range_planning::{choose_range_plan, execute_range_plan};
+use super::range_planning::{TransportEstimate, choose_range_plan, execute_range_plan};
 use crate::DeltaScanMetrics;
+
+const TRANSPORT_SAMPLE_WINDOW: usize = 9;
+const MIN_TRANSPORT_SAMPLES: usize = 3;
 
 pub(crate) struct MeteredParquetObjectStore {
     inner: Arc<dyn ObjectStore>,
     metrics: DeltaScanMetrics,
     multi_range_read_strategy: MultiRangeReadStrategy,
+    transport_samples: Mutex<VecDeque<TransportEstimate>>,
+}
+
+/// Timing and byte count for one fully consumed physical range read.
+struct CompletedRangeRead {
+    request_latency: Duration,
+    payload_started: Instant,
+    payload_finished: Instant,
+    bytes_received: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,8 +71,126 @@ impl MeteredParquetObjectStore {
             inner,
             metrics,
             multi_range_read_strategy,
+            transport_samples: Mutex::new(VecDeque::with_capacity(TRANSPORT_SAMPLE_WINDOW)),
         }
     }
+
+    /// Reads one physical range and measures request latency separately from payload delivery.
+    async fn read_range_with_timing(
+        &self,
+        location: &Path,
+        range: Range<u64>,
+    ) -> Result<(Bytes, CompletedRangeRead)> {
+        let request_started = Instant::now();
+        let result = self
+            .get_opts(location, GetOptions::new().with_range(Some(range)))
+            .await?;
+        let payload_started = Instant::now();
+        let bytes = result.bytes().await?;
+        let payload_finished = Instant::now();
+        let completed_read = CompletedRangeRead {
+            request_latency: payload_started.saturating_duration_since(request_started),
+            payload_started,
+            payload_finished,
+            bytes_received: bytes.len(),
+        };
+        Ok((bytes, completed_read))
+    }
+
+    /// Returns robust latency and shared-throughput estimates after enough plans have completed.
+    fn current_transport_estimate(&self) -> Option<TransportEstimate> {
+        let samples = self
+            .transport_samples
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if samples.len() < MIN_TRANSPORT_SAMPLES {
+            return None;
+        }
+
+        let mut latencies = samples
+            .iter()
+            .map(|sample| sample.request_latency)
+            .collect::<Vec<_>>();
+        let mut throughputs = samples
+            .iter()
+            .map(|sample| sample.shared_throughput_bytes_per_second)
+            .collect::<Vec<_>>();
+        latencies.sort_unstable();
+        throughputs.sort_unstable();
+        let middle = samples.len() / 2;
+        Some(TransportEstimate {
+            request_latency: latencies[middle],
+            shared_throughput_bytes_per_second: throughputs[middle],
+        })
+    }
+
+    /// Adds one sample after every physical range in a chosen plan finishes successfully.
+    ///
+    /// Overlapping payload intervals count once when calculating delivery time. This produces
+    /// one aggregate throughput sample instead of assigning full bandwidth to each request.
+    fn record_completed_range_reads(&self, completed_reads: &[CompletedRangeRead]) {
+        let Some(sample) = transport_sample(completed_reads) else {
+            return;
+        };
+
+        let mut samples = self
+            .transport_samples
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if samples.len() == TRANSPORT_SAMPLE_WINDOW {
+            samples.pop_front();
+        }
+        samples.push_back(sample);
+    }
+}
+
+/// Summarizes one fully completed physical plan without double-counting concurrent delivery time.
+fn transport_sample(completed_reads: &[CompletedRangeRead]) -> Option<TransportEstimate> {
+    if completed_reads.is_empty() {
+        return None;
+    }
+
+    let mut latencies = completed_reads
+        .iter()
+        .map(|read| read.request_latency)
+        .collect::<Vec<_>>();
+    latencies.sort_unstable();
+    let request_latency = latencies[latencies.len() / 2];
+
+    let mut delivery_intervals = completed_reads
+        .iter()
+        .map(|read| (read.payload_started, read.payload_finished))
+        .collect::<Vec<_>>();
+    delivery_intervals.sort_unstable();
+    let (mut interval_start, mut interval_end) = delivery_intervals[0];
+    let mut delivery_time = Duration::ZERO;
+    for (next_start, next_end) in delivery_intervals.into_iter().skip(1) {
+        if next_start <= interval_end {
+            interval_end = interval_end.max(next_end);
+        } else {
+            delivery_time = delivery_time
+                .saturating_add(interval_end.saturating_duration_since(interval_start));
+            (interval_start, interval_end) = (next_start, next_end);
+        }
+    }
+    delivery_time =
+        delivery_time.saturating_add(interval_end.saturating_duration_since(interval_start));
+
+    let delivery_nanos = delivery_time.as_nanos();
+    let bytes_received = completed_reads.iter().fold(0_u128, |total, read| {
+        total.saturating_add(read.bytes_received as u128)
+    });
+    if delivery_nanos == 0 || bytes_received == 0 {
+        return None;
+    }
+    let throughput = bytes_received
+        .saturating_mul(1_000_000_000)
+        .checked_div(delivery_nanos)
+        .unwrap_or(0);
+    Some(TransportEstimate {
+        request_latency,
+        shared_throughput_bytes_per_second: u64::try_from(throughput).unwrap_or(u64::MAX),
+    })
 }
 
 impl fmt::Debug for MeteredParquetObjectStore {
@@ -135,11 +271,28 @@ impl ObjectStore for MeteredParquetObjectStore {
                 Ok(results)
             }
             MultiRangeReadStrategy::ChooseAutomatically => {
-                let physical_ranges = choose_range_plan(ranges, None);
-                execute_range_plan(ranges, &physical_ranges, |range| {
-                    self.get_range(location, range)
+                let physical_ranges = choose_range_plan(ranges, self.current_transport_estimate());
+                let completed_reads =
+                    Arc::new(Mutex::new(Vec::with_capacity(physical_ranges.len())));
+                let results = execute_range_plan(ranges, &physical_ranges, |range| {
+                    let completed_reads = Arc::clone(&completed_reads);
+                    async move {
+                        let (bytes, completed_read) =
+                            self.read_range_with_timing(location, range).await?;
+                        completed_reads
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .push(completed_read);
+                        Ok::<Bytes, object_store::Error>(bytes)
+                    }
                 })
-                .await
+                .await?;
+                self.record_completed_range_reads(
+                    &completed_reads
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner),
+                );
+                Ok(results)
             }
         }
     }
@@ -234,6 +387,7 @@ mod tests {
             Arc, Mutex,
             atomic::{AtomicU64, Ordering},
         },
+        time::{Duration, Instant},
     };
 
     use async_trait::async_trait;
@@ -242,10 +396,15 @@ mod tests {
     use object_store::{
         Attributes, CopyOptions, Error, GetOptions, GetResult, GetResultPayload, ListResult,
         MultipartUpload, ObjectMeta, ObjectStore, ObjectStoreExt, PutMultipartOptions, PutOptions,
-        PutPayload, PutResult, RenameOptions, Result, memory::InMemory, path::Path,
+        PutPayload, PutResult, RenameOptions, Result,
+        memory::InMemory,
+        path::Path,
+        throttle::{ThrottleConfig, ThrottledStore},
     };
 
-    use super::{MeteredParquetObjectStore, MultiRangeReadStrategy};
+    use super::{
+        CompletedRangeRead, MeteredParquetObjectStore, MultiRangeReadStrategy, TransportEstimate,
+    };
     use crate::{DeltaScanMetrics, ParquetReaderBackend, reader::metrics::DeltaScanMetricsConfig};
 
     fn direct_metrics() -> DeltaScanMetrics {
@@ -258,6 +417,20 @@ mod tests {
             estimated_input_rows: Some(1),
             estimated_input_bytes: Some(1),
         })
+    }
+
+    /// Creates a one-second payload observation for estimator tests.
+    fn completed_read(
+        payload_started: Instant,
+        latency_millis: u64,
+        bytes_received: usize,
+    ) -> CompletedRangeRead {
+        CompletedRangeRead {
+            request_latency: Duration::from_millis(latency_millis),
+            payload_started,
+            payload_finished: payload_started + Duration::from_secs(1),
+            bytes_received,
+        }
     }
 
     async fn memory_store(metrics: DeltaScanMetrics) -> Result<MeteredParquetObjectStore> {
@@ -391,6 +564,117 @@ mod tests {
         let snapshot = delegated_metrics.snapshot();
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(8));
+        Ok(())
+    }
+
+    #[test]
+    fn transport_estimate_uses_bounded_medians_after_three_plans() {
+        let store = MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            direct_metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        let started = Instant::now();
+
+        for (latency_millis, bytes_received) in [(10, 1_000), (100, 9_000)] {
+            store.record_completed_range_reads(&[completed_read(
+                started,
+                latency_millis,
+                bytes_received,
+            )]);
+        }
+        assert_eq!(store.current_transport_estimate(), None);
+
+        store.record_completed_range_reads(&[completed_read(started, 20, 5_000)]);
+        assert_eq!(
+            store.current_transport_estimate(),
+            Some(TransportEstimate {
+                request_latency: Duration::from_millis(20),
+                shared_throughput_bytes_per_second: 5_000,
+            })
+        );
+
+        for latency_millis in 1..=12 {
+            store.record_completed_range_reads(&[completed_read(started, latency_millis, 1_000)]);
+        }
+        assert_eq!(
+            store
+                .current_transport_estimate()
+                .map(|estimate| estimate.request_latency),
+            Some(Duration::from_millis(8))
+        );
+    }
+
+    #[test]
+    fn concurrent_payloads_produce_one_shared_throughput_sample() {
+        let store = MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            direct_metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        let started = Instant::now();
+        for _ in 0..3 {
+            store.record_completed_range_reads(&[
+                completed_read(started, 10, 500),
+                completed_read(started, 10, 500),
+            ]);
+        }
+
+        assert_eq!(
+            store
+                .current_transport_estimate()
+                .map(|estimate| estimate.shared_throughput_bytes_per_second),
+            Some(1_000)
+        );
+    }
+
+    #[tokio::test]
+    async fn only_successful_automatic_plans_update_transport_estimates() -> Result<()> {
+        let inner = InMemory::new();
+        inner
+            .put(
+                &Path::from("data.parquet"),
+                PutPayload::from_static(b"0123456789abcdef"),
+            )
+            .await?;
+        let throttled = ThrottledStore::new(
+            inner,
+            ThrottleConfig {
+                wait_get_per_call: Duration::from_millis(1),
+                wait_get_per_byte: Duration::from_micros(10),
+                ..Default::default()
+            },
+        );
+        let store = MeteredParquetObjectStore::new(
+            Arc::new(throttled),
+            direct_metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        for _ in 0..3 {
+            let results = store
+                .get_ranges(&Path::from("data.parquet"), &[0..4, 8..12])
+                .await?;
+            assert_eq!(results[0].as_ref(), b"0123");
+            assert_eq!(results[1].as_ref(), b"89ab");
+        }
+        assert!(store.current_transport_estimate().is_some());
+
+        let failed_store = MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            direct_metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        let started = Instant::now();
+        for _ in 0..2 {
+            failed_store.record_completed_range_reads(&[completed_read(started, 10, 1_000)]);
+        }
+        assert!(
+            failed_store
+                .get_ranges(&Path::from("missing.parquet"), &[0..4, 8..12])
+                .await
+                .is_err()
+        );
+        assert_eq!(failed_store.current_transport_estimate(), None);
         Ok(())
     }
 
