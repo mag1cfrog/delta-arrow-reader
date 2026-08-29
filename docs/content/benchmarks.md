@@ -159,3 +159,5 @@ change.
   decoding only predicate columns with decoding unrelated columns as well.
 - [Parquet page-index range reads](benchmarks/page-index.md) measures page-level
   reads for localized and scattered row-filter matches.
+- [Adaptive Parquet range planning](benchmarks/range-planning.md) compares
+  exact and merged byte-range reads under controlled transport conditions.
