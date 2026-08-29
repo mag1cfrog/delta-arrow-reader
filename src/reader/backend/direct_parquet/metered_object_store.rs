@@ -419,6 +419,7 @@ mod tests {
     };
 
     use async_trait::async_trait;
+    use bytes::Bytes;
     use chrono::{DateTime, Utc};
     use futures_util::{StreamExt, stream, stream::BoxStream};
     use object_store::{
@@ -588,6 +589,7 @@ mod tests {
             Some(0)
         );
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(2));
+        assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(8));
 
         let delegated_metrics = direct_metrics();
@@ -765,6 +767,49 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_range_requests_planned, Some(2));
         assert_eq!(snapshot.parquet_data_file_range_bytes_planned, Some(8));
         assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(1));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancelled_partial_automatic_plan_does_not_update_transport_estimates()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let first = PutPayload::from_static(b"abc")
+            .into_iter()
+            .next()
+            .ok_or_else(missing_chunk)?;
+        let payload = stream::iter([Ok(first)])
+            .chain(stream::pending::<Result<Bytes>>())
+            .boxed();
+        let metrics = direct_metrics();
+        let store = Arc::new(MeteredParquetObjectStore::new(
+            Arc::new(ScriptedGetStore::new(test_get_result(
+                GetResultPayload::Stream(payload),
+                0..8,
+            ))),
+            metrics.clone(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        ));
+        let started = Instant::now();
+        for _ in 0..2 {
+            store.record_completed_range_reads(&[completed_read(started, 10, 1_000)]);
+        }
+
+        let task_store = Arc::clone(&store);
+        let task = tokio::spawn(async move {
+            task_store
+                .get_ranges(&Path::from("data.parquet"), &[0..4, 4..8])
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while metrics.snapshot().parquet_data_file_bytes_received != Some(3) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+
+        task.abort();
+        assert!(task.await.is_err_and(|error| error.is_cancelled()));
+        assert_eq!(store.current_transport_estimate(), None);
         Ok(())
     }
 

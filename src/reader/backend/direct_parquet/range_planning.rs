@@ -272,7 +272,7 @@ mod tests {
 
     use super::{
         RangePlanDecision, TransportEstimate, candidate_range_plans, choose_range_plan,
-        execute_range_plan, merge_ranges, range_bytes,
+        execute_range_plan, merge_ranges, plan_score, range_bytes,
     };
 
     #[test]
@@ -332,6 +332,20 @@ mod tests {
         let merged_plan = choose_range_plan(&requested_ranges, Some(high_bandwidth));
         assert_eq!(merged_plan.physical_ranges.len(), 10);
         assert_eq!(merged_plan.decision, RangePlanDecision::Merged);
+    }
+
+    #[test]
+    fn concurrency_changes_the_request_wave_cost() {
+        let candidates = candidate_range_plans(&spaced_ranges(&[900; 10]), 10);
+        let exact_plan = &candidates[0];
+        let merged_plan = &candidates[1];
+        let estimate = TransportEstimate {
+            request_latency: Duration::from_secs(1),
+            shared_throughput_bytes_per_second: 1_000,
+        };
+
+        assert!(plan_score(exact_plan, estimate, 10) > plan_score(merged_plan, estimate, 10));
+        assert!(plan_score(exact_plan, estimate, 11) < plan_score(merged_plan, estimate, 11));
     }
 
     #[test]
