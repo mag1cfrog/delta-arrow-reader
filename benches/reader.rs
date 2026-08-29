@@ -17,8 +17,8 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaScanExecutionOptions, DeltaStorageOptions, DeltaTableBuilder,
-    ParquetMetadataPreparationLimits, ParquetMetadataPreparationReport, ParquetReaderBackend,
+    DeltaScanExecutionOptions, DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend,
+    ParquetWarmupReport, WarmupMode,
     datafusion::{ScanMetricsSnapshot, ScanOptions, collect_scan_metrics, register_table},
 };
 use delta_kernel::actions::deletion_vector::{DeletionVectorDescriptor, DeletionVectorStorageType};
@@ -271,7 +271,7 @@ struct RepetitionMeasurement {
 #[derive(Debug)]
 struct ParquetMetadataPreparationMeasurement {
     micros: u64,
-    prepared: ParquetMetadataPreparationReport,
+    prepared: ParquetWarmupReport,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1478,14 +1478,18 @@ async fn run_repetition(
     let table = match (config.scan_metadata_mode, config.parquet_metadata_mode) {
         (ScanMetadataMode::Lazy, ParquetMetadataMode::OnDemand) => builder.load_table().await?,
         (ScanMetadataMode::Eager, ParquetMetadataMode::OnDemand) => {
-            builder.load_table_with_eager_scan_metadata().await?
+            builder
+                .with_warmup(WarmupMode::QueryPlanning)
+                .load_table()
+                .await?
         }
         (ScanMetadataMode::Eager, ParquetMetadataMode::Prepared) => {
             builder
-                .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+                .with_warmup(WarmupMode::ParquetMetadata {
                     max_files: fixture.file_count,
-                    max_retained_metadata_bytes: usize::MAX,
+                    max_memory_bytes: usize::MAX,
                 })
+                .load_table()
                 .await?
         }
         (ScanMetadataMode::Lazy, ParquetMetadataMode::Prepared) => {
@@ -1496,14 +1500,12 @@ async fn run_repetition(
     let table_load_count = 1;
     let table_initialization_micros =
         saturating_u64(table_initialization_started.elapsed().as_micros());
-    let parquet_metadata_preparation =
-        table
-            .parquet_metadata_preparation_report()
-            .cloned()
-            .map(|prepared| ParquetMetadataPreparationMeasurement {
-                micros: saturating_u64(prepared.preparation_duration.as_micros()),
-                prepared,
-            });
+    let parquet_metadata_preparation = table.parquet_warmup_report().cloned().map(|prepared| {
+        ParquetMetadataPreparationMeasurement {
+            micros: saturating_u64(prepared.duration.as_micros()),
+            prepared,
+        }
+    });
     register_table(&context, "orders", table, scan_options)?;
     #[cfg(test)]
     let table_registration_count = 1;
@@ -1760,7 +1762,7 @@ fn summarize_parquet_metadata_preparation(
         file_count: Some(percentile(
             &measurements
                 .iter()
-                .map(|measurement| saturating_u64(measurement.prepared.files_prepared as u128))
+                .map(|measurement| saturating_u64(measurement.prepared.file_count as u128))
                 .collect::<Vec<_>>(),
             50,
         )),
@@ -1768,7 +1770,7 @@ fn summarize_parquet_metadata_preparation(
             &measurements
                 .iter()
                 .map(|measurement| {
-                    saturating_u64(measurement.prepared.estimated_retained_metadata_bytes as u128)
+                    saturating_u64(measurement.prepared.estimated_memory_bytes as u128)
                 })
                 .collect::<Vec<_>>(),
             50,
@@ -2579,8 +2581,8 @@ mod tests {
                             .parquet_metadata_preparation
                             .as_ref()
                             .ok_or("prepared mode did not report metadata preparation")?;
-                        assert_eq!(preparation.prepared.files_prepared, fixture.file_count);
-                        assert!(preparation.prepared.estimated_retained_metadata_bytes > 0);
+                        assert_eq!(preparation.prepared.file_count, fixture.file_count);
+                        assert!(preparation.prepared.estimated_memory_bytes > 0);
                         assert!(
                             preparation
                                 .prepared

@@ -11,8 +11,8 @@ use arrow::{
     record_batch::RecordBatch,
     util::display::array_value_to_string,
 };
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
-use delta_arrow_reader::ParquetMetadataPreparationLimits;
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
+use delta_arrow_reader::WarmupMode;
 use delta_arrow_reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderPhase,
     DeltaScalar, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaTable,
@@ -609,7 +609,7 @@ async fn scan_table(
     }
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 #[test]
 fn prepared_parquet_metadata_preserves_streaming_scan_results() -> TestResult {
     runtime()?.block_on(async {
@@ -620,13 +620,15 @@ fn prepared_parquet_metadata_preserves_streaming_scan_results() -> TestResult {
         )?;
         let location = fixture.path().to_string_lossy().into_owned();
         let eager = DeltaTableBuilder::new(location.clone())
-            .load_table_with_eager_scan_metadata()
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
             .await?;
         let prepared = DeltaTableBuilder::new(location)
-            .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+            .with_warmup(WarmupMode::ParquetMetadata {
                 max_files: 1,
-                max_retained_metadata_bytes: 1024 * 1024,
+                max_memory_bytes: 1024 * 1024,
             })
+            .load_table()
             .await?;
 
         let cases = [

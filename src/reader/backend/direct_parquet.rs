@@ -8,7 +8,7 @@ mod schema_alignment;
 
 use std::{ops::Range, sync::Arc};
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 use std::collections::HashSet;
 
 use arrow::{
@@ -58,7 +58,7 @@ use crate::{
     },
 };
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 use crate::reader::ParquetMetadataPreparationLimits;
 
 struct DirectParquetReader {
@@ -69,7 +69,7 @@ struct DirectParquetReader {
     metadata_cache: Option<Arc<ParquetMetadataCache>>,
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PreparedParquetMetadataSummary {
     pub(crate) file_count: usize,
@@ -176,7 +176,7 @@ impl DirectParquetReader {
         })
     }
 
-    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[cfg(feature = "experimental-parquet-metadata-warmup")]
     async fn prepare_task_parquet_metadata(
         &self,
         task: &DeltaScanFileTask,
@@ -697,7 +697,7 @@ pub(crate) fn direct_parquet_file_executor(
     })
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 pub(crate) async fn prepare_parquet_metadata(
     plan: &DeltaScanPlan,
     metadata_cache: Arc<ParquetMetadataCache>,
@@ -714,7 +714,7 @@ pub(crate) async fn prepare_parquet_metadata(
         .collect::<Vec<_>>();
     if tasks.len() > limits.max_files {
         return Err(DeltaReaderError::InvalidConfiguration {
-            reason: "parquet_metadata_preparation_file_limit_exceeded",
+            reason: "parquet_metadata_warmup_file_limit_exceeded",
         });
     }
 
@@ -745,7 +745,7 @@ pub(crate) async fn prepare_parquet_metadata(
             .checked_add(result?)
             .filter(|bytes| *bytes <= limits.max_retained_metadata_bytes)
             .ok_or(DeltaReaderError::InvalidConfiguration {
-                reason: "parquet_metadata_preparation_memory_limit_exceeded",
+                reason: "parquet_metadata_warmup_memory_limit_exceeded",
             })?;
     }
 
@@ -920,14 +920,14 @@ mod tests {
     use parquet::file::metadata::ParquetMetaDataReader;
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
-    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[cfg(feature = "experimental-parquet-metadata-warmup")]
     use super::prepare_parquet_metadata;
     use super::{
         DirectParquetReader, LogicalDataFileReadRequest, ParquetMetadataCache,
         PhysicalParquetStreamOptions, RowFilterInput, arrow_reader_options, data_file_error,
         direct_parquet_file_executor,
     };
-    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[cfg(feature = "experimental-parquet-metadata-warmup")]
     use crate::reader::ParquetMetadataPreparationLimits;
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
@@ -1991,7 +1991,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[cfg(feature = "experimental-parquet-metadata-warmup")]
     #[tokio::test]
     async fn prepared_metadata_is_reused_by_a_whole_file_read()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -2033,7 +2033,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[cfg(feature = "experimental-parquet-metadata-warmup")]
     #[tokio::test]
     async fn cancelled_metadata_preparation_leaves_the_cache_retryable()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -2071,7 +2071,7 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[cfg(feature = "experimental-parquet-metadata-warmup")]
     #[tokio::test]
     async fn preparation_checks_the_file_limit_before_reading_parquet_metadata()
     -> Result<(), Box<dyn std::error::Error>> {

@@ -2,7 +2,7 @@
 
 #![cfg(all(
     feature = "datafusion",
-    feature = "experimental-parquet-metadata-preparation"
+    feature = "experimental-parquet-metadata-warmup"
 ))]
 
 #[allow(dead_code)]

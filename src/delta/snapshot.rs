@@ -114,7 +114,7 @@ impl ArrowTableSnapshot {
             .and_then(|scan| scan.materialize_scan_metadata(self.engine_context.as_ref()))
             .boxed()
             .context(ScanPlanningSnafu {
-                reason: "eager_scan_metadata_materialization_failed",
+                reason: "query_planning_warmup_materialization_failed",
             });
 
         match result {

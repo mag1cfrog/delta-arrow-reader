@@ -6,10 +6,11 @@ values, and file statistics. The Delta log or checkpoint supplies the file
 list. The list and the information used to prune it are the table's scan
 metadata.
 
-Delta Arrow Reader has three loading modes. The default lazy mode prepares
-Delta scan metadata when each scan is built. Eager mode prepares the reusable
-part when the table loads. Experimental Parquet metadata preparation adds the
-parsed footers and offset indexes for every active file.
+`WarmupMode` controls how much reusable metadata `load_table` prepares. The
+default `None` mode waits until each scan is built. `QueryPlanning` prepares the
+reusable Delta metadata while the table loads. The experimental
+`ParquetMetadata` mode also loads parsed footers and offset indexes for every
+active file.
 
 Each query still gets its own file, row-group, and page selection. The caches
 do not reuse one query's selection for another query or change query results.
@@ -28,10 +29,10 @@ A query against remote storage can involve three rounds of I/O:
 
 The first round mixes work that can be reused with work that belongs to one
 query. Replaying the Delta history and reconciling the active files can be
-reused for a loaded table version. Applying a predicate cannot. Eager mode
-moves only that reusable work to table initialization. Experimental Parquet
-metadata preparation also moves the reusable part of the second round while
-leaving row-group and page selection with each query.
+reused for a loaded table version. Applying a predicate cannot.
+`WarmupMode::QueryPlanning` moves only that reusable work to table
+initialization. `WarmupMode::ParquetMetadata` also moves the reusable part of
+the second round while leaving row-group and page selection with each query.
 
 This difference matters most for a selective query. Statistics may reduce a
 large table to a few Parquet row groups, making the data read small, while
@@ -39,9 +40,9 @@ Delta replay remains a fixed planning cost. On remote storage, that planning
 cost can take longer than reading the result. Reusing active-file metadata
 removes the repeated replay without changing the later pruning or Parquet I/O.
 
-## Lazy mode
+## No warmup
 
-`DeltaTableBuilder::load_table()` uses lazy mode:
+`DeltaTableBuilder::load_table()` uses `WarmupMode::None` by default:
 
 ```text
 table load -> table version and schema
@@ -56,13 +57,13 @@ Kernel to prune it for that scan.
 
 This keeps table loading quick and avoids retaining an active-file cache. The
 tradeoff is that every scan against the loaded table repeats the Delta replay.
-Lazy mode usually fits tables that are queried once, queried occasionally, or
+No warmup usually fits tables that are queried once, queried occasionally, or
 loaded in a process with tight memory limits.
 
-## Eager mode
+## Query-planning warmup
 
-`DeltaTableBuilder::load_table_with_eager_scan_metadata()` prepares the same
-reusable metadata while loading the table:
+`DeltaTableBuilder::with_warmup(WarmupMode::QueryPlanning)` prepares the same
+reusable metadata before `load_table()` returns:
 
 ```text
 table initialization -> Delta replay -> metadata cache
@@ -86,11 +87,11 @@ The cache belongs to one loaded table. If the same location is loaded twice,
 the two table objects have separate caches. Both also stay fixed at the exact
 table version they loaded.
 
-## Prepared Parquet metadata mode
+## Parquet metadata warmup
 
-`DeltaTableBuilder::load_table_with_prepared_parquet_metadata()` first performs
-eager Delta scan metadata initialization. It then fetches and parses the
-Parquet footer and optional offset indexes for every unique active file:
+`DeltaTableBuilder::with_warmup(WarmupMode::ParquetMetadata { .. })` first
+performs query-planning warmup. It then fetches and parses the Parquet footer
+and optional offset indexes for every unique active file:
 
 ```text
 table initialization -> Delta replay -> active-file cache -> Parquet metadata cache
@@ -100,14 +101,14 @@ query 2 -> pruning -------------------------------------------------+-> Parquet 
 query 3 -> pruning -------------------------------------------------+-> Parquet data
 ```
 
-The experimental Cargo feature is disabled by default, and the loading method
+The experimental Cargo feature is disabled by default, and this warmup mode
 requires explicit file-count and estimated-memory limits. It supports only the
 direct Parquet backend. The returned table and its clones share one immutable
 cache through both the streaming API and DataFusion.
 
-Preparation does not read Parquet data pages. A query still decides which
+Warmup does not read Parquet data pages. A query still decides which
 files, row groups, pages, and columns it needs. See
-[Prepare Parquet metadata for repeated queries](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
+[Warm Parquet metadata for repeated queries](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
 for setup, limits, failure behavior, and report fields.
 
 ## Which mode should you use?
@@ -115,18 +116,18 @@ for setup, limits, failure behavior, and report fields.
 This choice applies to the loaded table, whether you query it through the
 streaming API or DataFusion SQL. Both APIs support all three modes.
 
-| Consideration | Lazy | Eager Delta metadata | Prepared Parquet metadata |
+| Consideration | No warmup | Query planning | Parquet metadata |
 | --- | --- | --- | --- |
 | Typical use | One query, occasional queries, or tight memory limits | Repeated queries where Delta replay is costly | Repeated remote queries where footer reads are also costly |
 | Table loading | Returns without building reusable scan caches | Waits for Delta replay and cache creation | Also fetches and parses metadata for every active Parquet file |
 | Memory while loaded | No reusable active-file cache | Keeps active-file metadata and statistics | Also keeps parsed Parquet footers and offset indexes |
 | Each later scan | Replays Delta metadata, then prunes | Reuses Delta metadata, then prunes | Reuses both caches, then performs query-specific pruning |
-| Seeing a newer version | Load a new table | Load a new table | Load and prepare a new table |
+| Seeing a newer version | Load a new table | Load a new table | Load and warm a new table |
 | Parquet data reads | Per query | Per query | Per query |
 
-Use lazy mode unless you know the table will serve repeated queries and the
+Use no warmup unless you know the table will serve repeated queries and the
 saved planning time justifies slower initialization and higher memory use. Add
-Parquet metadata preparation only when measurements show that repeated footer
+Parquet metadata warmup only when measurements show that repeated footer
 reads matter. No single query count is a reliable break-even point. The result
 depends on the table history, checkpoint shape, file count, available
 statistics, storage latency, query selectivity, and memory pressure.
@@ -136,7 +137,7 @@ statistics, storage latency, query selectivity, and memory pressure.
 On August 27, 2026, a real-S3 benchmark loaded two production-shaped tables
 and ran six queries:
 
-| Measurement | Lazy | Eager |
+| Measurement | No warmup | Query-planning warmup |
 | --- | ---: | ---: |
 | Table initialization | 1.196 s | 4.089 s |
 | HIP physical planning | 2.097 s | 5.1 ms |
@@ -145,7 +146,7 @@ and ran six queries:
 | Resident memory after initialization | 38.5 MiB | 68.7 MiB |
 | Full-session peak resident memory | 233.9 MiB | 248.9 MiB |
 
-The eager run spent more time and memory during initialization. After that,
+The warmed run spent more time and memory during initialization. After that,
 physical planning fell from seconds to milliseconds, and the six-query
 session finished sooner. Both runs returned the same results and performed the
 same Parquet I/O.
@@ -153,8 +154,8 @@ same Parquet I/O.
 These numbers come from one workload. They are not a performance guarantee or
 a general break-even point. The [benchmark methodology, environment, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/#representative-real-s3-result)
 describe how the measurements were collected and what can affect them.
-This case study compares lazy and eager Delta scan metadata; it does not include
-experimental Parquet metadata preparation.
+This case study compares no warmup with query-planning warmup; it does not
+include experimental Parquet metadata warmup.
 
 ## Version and refresh behavior
 
@@ -163,7 +164,7 @@ version. Commits written later do not change what existing queries see. To use
 a newer version, load the table again and replace the old table or DataFusion
 registration.
 
-The in-memory loading modes do not provide:
+The in-memory warmup modes do not provide:
 
 - incremental refresh;
 - background polling;
@@ -171,7 +172,7 @@ The in-memory loading modes do not provide:
 - persistence across processes;
 - sharing between independently loaded tables;
 - Parquet data-page or decoded-batch caching; or
-- automatic selection of which tables to prepare.
+- automatic selection of which tables to warm.
 
 ## Related guides
 
@@ -179,5 +180,5 @@ The in-memory loading modes do not provide:
 - [Register and query a table with DataFusion](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
 - [Understand how scans are planned](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/)
 - [Review the benchmark methodology](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/)
-- [Prepare Parquet metadata for repeated queries](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
-- [Open the eager-loading Rust API](https://docs.rs/delta-arrow-reader/latest/delta_arrow_reader/struct.DeltaTableBuilder.html#method.load_table_with_eager_scan_metadata)
+- [Warm Parquet metadata for repeated queries](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
+- [Open the warmup Rust API](https://docs.rs/delta-arrow-reader/latest/delta_arrow_reader/struct.DeltaTableBuilder.html#method.with_warmup)

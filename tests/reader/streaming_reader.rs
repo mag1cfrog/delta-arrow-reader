@@ -15,14 +15,12 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 use delta_arrow_reader::DeltaReaderError;
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
-use delta_arrow_reader::ParquetMetadataPreparationLimits;
 use delta_arrow_reader::ParquetReaderBackend;
 use delta_arrow_reader::{
     DeltaComparison, DeltaPredicate, DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection,
-    DeltaStorageOptions,
+    DeltaStorageOptions, WarmupMode,
 };
 use delta_arrow_reader::{
     DeltaScan, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaTableBuilder,
@@ -140,7 +138,7 @@ impl TestTable {
         Ok(())
     }
 
-    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[cfg(feature = "experimental-parquet-metadata-warmup")]
     fn corrupt_parquet_footer(&self, name: &str) -> TestResult {
         let path = self.0.join(name);
         let mut bytes = fs::read(&path)?;
@@ -345,6 +343,25 @@ fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
 }
 
 #[test]
+fn snapshot_loading_rejects_table_warmup() -> TestResult {
+    let error = runtime()?
+        .block_on(
+            DeltaTableBuilder::new("file:///tmp/table")
+                .with_warmup(WarmupMode::QueryPlanning)
+                .load_snapshot(),
+        )
+        .expect_err("snapshot loading must not silently ignore table warmup");
+
+    assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
+    assert!(
+        error
+            .to_string()
+            .contains("snapshot_load_does_not_support_table_warmup")
+    );
+    Ok(())
+}
+
+#[test]
 fn local_end_to_end_example_reads_without_sql() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("local-example")?;
@@ -371,11 +388,13 @@ fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestRes
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("eager-scan-metadata")?;
         let eager = DeltaTableBuilder::new(fixture.uri())
-            .load_table_with_eager_scan_metadata()
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
             .await?;
         let fixed = DeltaTableBuilder::new(fixture.uri())
             .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
-            .load_table_with_eager_scan_metadata()
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
             .await?;
         let lazy = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let low_ids = DeltaPredicate::Compare {
@@ -413,34 +432,36 @@ fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestRes
     })
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 #[test]
 fn prepared_parquet_metadata_supports_repeated_streaming_scans_without_the_delta_log() -> TestResult
 {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("prepared-parquet-metadata")?;
         let table = DeltaTableBuilder::new(fixture.uri())
-            .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+            .with_warmup(WarmupMode::ParquetMetadata {
                 max_files: 2,
-                max_retained_metadata_bytes: 1024 * 1024,
+                max_memory_bytes: 1024 * 1024,
             })
+            .load_table()
             .await?;
         let eager_only = DeltaTableBuilder::new(fixture.uri())
-            .load_table_with_eager_scan_metadata()
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
             .await?;
         let cloned = table.clone();
         let report = table
-            .parquet_metadata_preparation_report()
-            .ok_or("prepared table must expose its preparation report")?;
+            .parquet_warmup_report()
+            .ok_or("warmed table must expose its warmup report")?;
 
-        assert_eq!(report.files_prepared, 2);
-        assert!(report.estimated_retained_metadata_bytes > 0);
+        assert_eq!(report.file_count, 2);
+        assert!(report.estimated_memory_bytes > 0);
         assert_eq!(report.read_metrics.files_planned, 2);
         assert!(std::ptr::eq(
             report,
             cloned
-                .parquet_metadata_preparation_report()
-                .ok_or("cloned table must share its preparation report")?
+                .parquet_warmup_report()
+                .ok_or("cloned table must share its warmup report")?
         ));
 
         fixture.corrupt_parquet_footer("part-0.parquet")?;
@@ -486,42 +507,39 @@ fn prepared_parquet_metadata_supports_repeated_streaming_scans_without_the_delta
     })
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 #[test]
 fn prepared_parquet_metadata_rejects_unsafe_or_unsupported_requests() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("prepared-parquet-limits")?;
-        for limits in [
-            ParquetMetadataPreparationLimits {
-                max_files: 0,
-                max_retained_metadata_bytes: 1024 * 1024,
-            },
-            ParquetMetadataPreparationLimits {
-                max_files: 2,
-                max_retained_metadata_bytes: 0,
-            },
-        ] {
+        for (max_files, max_memory_bytes) in [(0, 1024 * 1024), (2, 0)] {
             let error = DeltaTableBuilder::new(fixture.uri())
-                .load_table_with_prepared_parquet_metadata(limits)
+                .with_warmup(WarmupMode::ParquetMetadata {
+                    max_files,
+                    max_memory_bytes,
+                })
+                .load_table()
                 .await
                 .expect_err("zero preparation limits must be rejected");
             assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
         }
 
         let file_limit_error = DeltaTableBuilder::new(fixture.uri())
-            .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+            .with_warmup(WarmupMode::ParquetMetadata {
                 max_files: 1,
-                max_retained_metadata_bytes: usize::MAX,
+                max_memory_bytes: usize::MAX,
             })
+            .load_table()
             .await
             .expect_err("two active files must exceed the one-file limit");
         assert_eq!(file_limit_error.phase(), DeltaReaderPhase::Configuration);
 
         let memory_limit_error = DeltaTableBuilder::new(fixture.uri())
-            .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+            .with_warmup(WarmupMode::ParquetMetadata {
                 max_files: 2,
-                max_retained_metadata_bytes: 1,
+                max_memory_bytes: 1,
             })
+            .load_table()
             .await
             .expect_err("one byte cannot retain two Parquet metadata objects");
         assert_eq!(memory_limit_error.phase(), DeltaReaderPhase::Configuration);
@@ -531,20 +549,22 @@ fn prepared_parquet_metadata_rejects_unsafe_or_unsupported_requests() -> TestRes
                 DeltaScanExecutionOptions::new()
                     .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
             )
-            .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+            .with_warmup(WarmupMode::ParquetMetadata {
                 max_files: 2,
-                max_retained_metadata_bytes: 1024 * 1024,
+                max_memory_bytes: 1024 * 1024,
             })
+            .load_table()
             .await
             .expect_err("the Delta Kernel backend cannot prepare direct-reader metadata");
         assert_eq!(kernel_error.phase(), DeltaReaderPhase::Configuration);
 
         let missing = TestTable::missing_data_file("prepared-parquet-missing")?;
         let missing_error = DeltaTableBuilder::new(missing.uri())
-            .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+            .with_warmup(WarmupMode::ParquetMetadata {
                 max_files: 1,
-                max_retained_metadata_bytes: 1024 * 1024,
+                max_memory_bytes: 1024 * 1024,
             })
+            .load_table()
             .await
             .expect_err("missing Parquet metadata must fail table preparation");
         assert_eq!(missing_error.phase(), DeltaReaderPhase::DataFileRead);
@@ -558,7 +578,8 @@ fn eager_scan_metadata_supports_concurrent_planning_without_the_delta_log() -> T
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("eager-concurrent-planning")?;
         let table = DeltaTableBuilder::new(fixture.uri())
-            .load_table_with_eager_scan_metadata()
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
             .await?;
         fixture.disable_delta_log()?;
 
@@ -615,7 +636,8 @@ fn eager_scan_metadata_preserves_pruning_from_a_parsed_stats_only_checkpoint() -
         );
 
         let table = DeltaTableBuilder::new(fixture.uri())
-            .load_table_with_eager_scan_metadata()
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
             .await?;
         fixture.disable_delta_log()?;
         let (batches, metrics) = collect_scan(
@@ -660,8 +682,11 @@ fn unsupported_protocol_is_inspectable_but_never_scannable() -> TestResult {
         Err(error) => error,
     };
     assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
-    let eager = runtime
-        .block_on(DeltaTableBuilder::new(fixture.uri()).load_table_with_eager_scan_metadata());
+    let eager = runtime.block_on(
+        DeltaTableBuilder::new(fixture.uri())
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table(),
+    );
     let error = match eager {
         Ok(_) => panic!("unsupported protocol eagerly loaded a table"),
         Err(error) => error,
@@ -679,9 +704,11 @@ fn eager_metadata_failure_returns_no_table_and_redacts_the_source() -> TestResul
 
     let lazy = runtime.block_on(DeltaTableBuilder::new(fixture.uri()).load_table())?;
     assert_eq!(lazy.version(), 0);
-    let error = match runtime
-        .block_on(DeltaTableBuilder::new(fixture.uri()).load_table_with_eager_scan_metadata())
-    {
+    let error = match runtime.block_on(
+        DeltaTableBuilder::new(fixture.uri())
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table(),
+    ) {
         Ok(_) => return Err("malformed eager metadata should not return a table".into()),
         Err(error) => error,
     };
@@ -691,7 +718,7 @@ fn eager_metadata_failure_returns_no_table_and_redacts_the_source() -> TestResul
     assert!(
         error
             .to_string()
-            .contains("eager_scan_metadata_materialization_failed")
+            .contains("query_planning_warmup_materialization_failed")
     );
     assert!(
         error
@@ -950,14 +977,16 @@ fn eager_metadata_preserves_direct_and_delta_kernel_results_without_the_log() ->
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("backend-parity")?;
         let direct = DeltaTableBuilder::new(fixture.uri())
-            .load_table_with_eager_scan_metadata()
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
             .await?;
         let kernel = DeltaTableBuilder::new(fixture.uri())
             .with_execution_options(
                 DeltaScanExecutionOptions::new()
                     .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
             )
-            .load_table_with_eager_scan_metadata()
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
             .await?;
         fixture.disable_delta_log()?;
         let kernel_options = DeltaScanExecutionOptions::new()

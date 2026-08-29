@@ -48,13 +48,14 @@ occasionally. If one process will run several queries against the same loaded
 table, you can cache its reusable scan metadata during table loading:
 
 ```no_run
-use delta_arrow_reader::DeltaTableBuilder;
+use delta_arrow_reader::{DeltaTableBuilder, WarmupMode};
 use futures_util::TryStreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-        .load_table_with_eager_scan_metadata()
+        .with_warmup(WarmupMode::QueryPlanning)
+        .load_table()
         .await?;
 
     let scan = table
@@ -73,12 +74,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`load_table_with_eager_scan_metadata` returns after it has built the cache. The
-cache holds active-file metadata and available file statistics in memory.
-Later scan builds reuse it instead of replaying the Delta log or checkpoint.
-This reduces repeated planning work when metadata accounts for much of a
-selective query's latency. The cache remains in memory as long as the loaded
-table does.
+`WarmupMode::QueryPlanning` tells `load_table` to build the cache before it
+returns. The cache holds active-file metadata and available file statistics in
+memory. Later scan builds reuse it instead of replaying the Delta log or
+checkpoint. This reduces repeated planning work when metadata accounts for
+much of a selective query's latency. The cache remains in memory as long as
+the loaded table does.
 
 The cache does not contain Parquet footers or Parquet data. Each scan still
 applies its own projection and predicate, then performs its Parquet I/O when
@@ -86,11 +87,11 @@ you poll the returned stream. Load the table again when you want to read a
 newer Delta version.
 
 The [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/)
-explains what the eager method caches and when the tradeoff is worthwhile.
+explains what query-planning warmup caches and when the tradeoff is worthwhile.
 
 For a long-lived process that repeatedly queries Parquet files on remote
 storage, the experimental
-[Parquet metadata preparation guide](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
+[Parquet metadata warmup guide](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
 describes a second opt-in cache for file footers and offset indexes.
 
 ## Filter rows
