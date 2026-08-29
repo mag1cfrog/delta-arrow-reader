@@ -210,6 +210,7 @@ impl DirectParquetReader {
                 task.parquet_byte_range.as_ref(),
                 target_schema,
                 options.include_original_row_index,
+                options.row_filter.is_some(),
             )
             .await?;
         let schema_alignment = build_schema_alignment(
@@ -260,6 +261,7 @@ impl DirectParquetReader {
         parquet_byte_range: Option<&Range<u64>>,
         target_schema: &SchemaRef,
         include_original_row_index: bool,
+        has_row_filter: bool,
     ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
         let file_size = object.file_size;
         let path = &object.path;
@@ -269,7 +271,7 @@ impl DirectParquetReader {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
         };
-        let reader_options = arrow_reader_options(include_original_row_index)
+        let reader_options = arrow_reader_options(include_original_row_index, has_row_filter)
             .boxed()
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
@@ -763,10 +765,18 @@ impl LogicalDataFileStream {
 
 fn arrow_reader_options(
     include_original_row_index: bool,
+    has_row_filter: bool,
 ) -> parquet::errors::Result<ArrowReaderOptions> {
-    // Offset indexes let parquet-rs turn row-filter selections into page-range reads. Treat them
-    // as optional so files without an offset index fall back to reading complete column chunks.
-    let options = ArrowReaderOptions::new().with_offset_index_policy(PageIndexPolicy::Optional);
+    // A row filter turns the predicate result into a selection of row numbers. When an offset
+    // index is available, parquet-rs can map that selection to data-page byte ranges and avoid
+    // fetching pages that contain no selected rows. Without a row filter, there is no
+    // predicate-derived selection, so the offset index is not loaded.
+    let offset_index_policy = if has_row_filter {
+        PageIndexPolicy::Optional
+    } else {
+        PageIndexPolicy::Skip
+    };
+    let options = ArrowReaderOptions::new().with_offset_index_policy(offset_index_policy);
     if !include_original_row_index {
         return Ok(options);
     }
@@ -858,18 +868,20 @@ mod tests {
     const DV_FILE: &str = "deletion_vector_61d16c75-6994-46b7-a15b-8b538852e50e.bin";
 
     #[test]
-    fn arrow_reader_options_load_optional_offset_indexes() -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn arrow_reader_options_load_offset_indexes_only_for_row_filters()
+    -> Result<(), Box<dyn std::error::Error>> {
         for include_original_row_index in [false, true] {
-            let options = arrow_reader_options(include_original_row_index)?;
-            assert_eq!(
-                options.offset_index_policy(),
-                parquet::file::metadata::PageIndexPolicy::Optional
-            );
-            assert_eq!(
-                options.column_index_policy(),
-                parquet::file::metadata::PageIndexPolicy::Skip
-            );
+            for (has_row_filter, expected_offset_policy) in [
+                (false, parquet::file::metadata::PageIndexPolicy::Skip),
+                (true, parquet::file::metadata::PageIndexPolicy::Optional),
+            ] {
+                let options = arrow_reader_options(include_original_row_index, has_row_filter)?;
+                assert_eq!(options.offset_index_policy(), expected_offset_policy);
+                assert_eq!(
+                    options.column_index_policy(),
+                    parquet::file::metadata::PageIndexPolicy::Skip
+                );
+            }
         }
         Ok(())
     }
@@ -2165,8 +2177,9 @@ mod tests {
             snapshots[0].parquet_data_file_bytes_received,
             Some(file_size)
         );
-        assert_eq!(snapshots[1].parquet_data_file_range_get_operations, Some(3));
-        assert_eq!(snapshots[2].parquet_data_file_range_get_operations, Some(3));
+        // No row filter is attached, so neither fallback path loads the offset index.
+        assert_eq!(snapshots[1].parquet_data_file_range_get_operations, Some(2));
+        assert_eq!(snapshots[2].parquet_data_file_range_get_operations, Some(2));
         assert_eq!(
             snapshots[2].parquet_data_file_bytes_received,
             snapshots[1]

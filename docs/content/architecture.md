@@ -74,12 +74,12 @@ predicate as a Parquet row filter before decoding the output columns. The row
 filter reads only the columns used by the predicate, so a wide projection does
 not make it decode unrelated data.
 
-The backend also requests the Parquet offset index, the part of page-index
-metadata that maps row ranges to the byte locations of their data pages. When
-a file contains a usable offset index, the row selection produced by the filter
-lets the reader fetch only the relevant pages from the output columns. Files
-without a usable offset index still work; the reader falls back to reading
-complete column chunks.
+For those filtered reads, the backend also requests the Parquet offset index,
+the part of page-index metadata that maps row ranges to the byte locations of
+their data pages. When a file contains a usable offset index, the row selection
+produced by the filter lets the reader fetch only the relevant pages from the
+output columns. Files without a usable offset index still work; the reader
+falls back to reading complete column chunks.
 
 Both optimizations are automatic for the `Direct` backend and behave the same
 through the streaming API and the DataFusion adapter.
