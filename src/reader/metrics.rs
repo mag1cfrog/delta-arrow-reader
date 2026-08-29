@@ -23,7 +23,11 @@ pub struct ParquetRangePlanningDiagnosticSnapshot {
     pub successful_plan_time_micros: u64,
 }
 
-/// Immutable point-in-time metrics for one Delta scan.
+/// Immutable point-in-time copy of one Delta scan's metrics.
+///
+/// A snapshot taken while the scan is running may contain partial progress. It does not change
+/// after creation; call [`DeltaScanMetrics::snapshot`] again to observe later progress.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeltaScanMetricsSnapshot {
     /// Delta snapshot version selected for the scan.
