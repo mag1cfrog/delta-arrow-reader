@@ -6,6 +6,7 @@ mod schema_alignment;
 
 use std::{
     collections::HashMap,
+    ops::Range,
     sync::{Arc, Mutex},
 };
 
@@ -14,6 +15,7 @@ use arrow::{
     datatypes::{DataType, Field, Schema, SchemaRef},
     record_batch::RecordBatch,
 };
+use delta_kernel::expressions::ColumnName;
 use futures_util::{StreamExt, stream};
 use object_store::{ObjectStore, ObjectStoreExt, memory::InMemory, path::Path};
 use parquet::arrow::{
@@ -95,6 +97,19 @@ struct PhysicalParquetStream {
     include_original_row_index: bool,
 }
 
+#[derive(Default)]
+struct PhysicalParquetStreamOptions<'a> {
+    output_batch_size_rows: Option<usize>,
+    row_group_predicate: Option<&'a DeltaKernelPredicate>,
+    row_filter: Option<RowFilterInput<'a>>,
+    include_original_row_index: bool,
+}
+
+struct RowFilterInput<'a> {
+    predicate: &'a DeltaKernelPredicate,
+    kernel_schemas: &'a KernelScanSchemas,
+}
+
 struct LogicalDataFileStream {
     physical_stream: PhysicalParquetStream,
     engine_context: Arc<DeltaKernelEngineContext>,
@@ -173,107 +188,52 @@ impl DirectParquetReader {
         self.buffer_small_parquet_object(object).await
     }
 
-    #[allow(clippy::too_many_arguments)]
+    /// Opens the physical Parquet stream for one file task.
+    ///
+    /// The stream reads batches in `target_schema`. Setup resolves the data object, buffers it when
+    /// configured, loads the Parquet metadata needed for the read, matches the file schema to the
+    /// target schema, and configures row-group pruning, row filtering, and batch size from
+    /// `options`.
+    ///
+    /// This function stops at the physical read boundary. The caller applies the
+    /// physical-to-logical transform and deletion-vector mask.
     async fn open_physical_parquet_stream(
         &self,
         task: &DeltaScanFileTask,
-        target_schema: SchemaRef,
-        output_batch_size_rows: Option<usize>,
-        physical_predicate: Option<&DeltaKernelPredicate>,
-        row_predicate: Option<(&DeltaKernelPredicate, &KernelScanSchemas)>,
-        include_original_row_index: bool,
+        target_schema: &SchemaRef,
+        options: PhysicalParquetStreamOptions<'_>,
     ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
-        let file_size = object.file_size;
-        let path = object.path;
-        let reader = ParquetObjectReader::new(object.store, path.clone()).with_file_size(file_size);
-        let mut reader = match self.execution_options.parquet_metadata_size_hint_bytes() {
-            Some(hint) => reader.with_footer_size_hint(hint),
-            None => reader,
-        };
-        let reader_options = arrow_reader_options(include_original_row_index)
-            .boxed()
-            .context(DataFileReadSnafu {
-                reason: "parquet_row_index_setup_failed",
-            })?;
-        let builder = if task.parquet_byte_range.is_some() {
-            // Ranged tasks need explicit footer metadata to select row groups.
-            // Sharing it avoids one footer read for every range of the same file.
-            let metadata = self
-                .load_ranged_parquet_metadata(&path, file_size, &mut reader, &reader_options)
-                .await?;
-            let metadata = ArrowReaderMetadata::try_new(metadata, reader_options.clone())
-                .boxed()
-                .context(DataFileReadSnafu {
-                    reason: "parquet_read_setup_failed",
-                })?;
-            let metadata = if schema_uses_view_types(&target_schema) {
-                metadata_with_view_types(metadata, reader_options)?
-            } else {
-                metadata
-            };
-            ParquetRecordBatchStreamBuilder::new_with_metadata(reader, metadata)
-        } else if schema_uses_view_types(&target_schema) {
-            // View arrays require rewriting the Arrow schema stored in the
-            // metadata before constructing the stream builder.
-            let mut metadata_reader = reader.clone();
-            let metadata =
-                ArrowReaderMetadata::load_async(&mut metadata_reader, reader_options.clone())
-                    .await
-                    .boxed()
-                    .context(DataFileReadSnafu {
-                        reason: "parquet_read_setup_failed",
-                    })?;
-            ParquetRecordBatchStreamBuilder::new_with_metadata(
-                reader,
-                metadata_with_view_types(metadata, reader_options)?,
+        let builder = self
+            .create_stream_builder(
+                &object,
+                task.parquet_byte_range.as_ref(),
+                target_schema,
+                options.include_original_row_index,
             )
-        } else {
-            // Ordinary whole-file scans can let the builder load its metadata.
-            ParquetRecordBatchStreamBuilder::new_with_options(reader, reader_options)
-                .await
-                .boxed()
-                .context(DataFileReadSnafu {
-                    reason: "parquet_read_setup_failed",
-                })?
-        };
-        let schema_alignment =
-            build_schema_alignment(builder.parquet_schema(), builder.schema(), target_schema)
-                .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
+            .await?;
+        let schema_alignment = build_schema_alignment(
+            builder.parquet_schema(),
+            builder.schema(),
+            Arc::clone(target_schema),
+        )
+        .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
         let projection =
             ProjectionMask::roots(builder.parquet_schema(), schema_alignment.projected_roots());
-        let row_groups = pruned_row_groups(
-            builder.metadata(),
-            file_size,
+        let mut builder = Self::apply_row_group_selection(
+            builder,
             task.parquet_byte_range.as_ref(),
-            physical_predicate,
-        )
-        .boxed()
-        .context(DataFileReadSnafu {
-            reason: "parquet_row_group_range_invalid",
-        })?;
-        let builder = match row_groups {
-            // This is where approximate byte ranges become complete Parquet
-            // row-group reads; the reader never slices through a row group.
-            Some(row_groups) => builder.with_row_groups(row_groups),
-            None => builder,
-        };
-        let row_filter = row_predicate.map(|(predicate, kernel_schemas)| {
-            self.row_filter(
-                predicate,
-                kernel_schemas,
-                &schema_alignment,
-                builder.parquet_schema(),
-            )
-        });
-        let builder = match row_filter {
-            Some(row_filter) => builder.with_row_filter(row_filter),
-            None => builder,
-        };
-        let builder = match output_batch_size_rows {
-            Some(batch_size) => builder.with_batch_size(batch_size),
-            None => builder,
-        };
+            object.file_size,
+            options.row_group_predicate,
+        )?;
+
+        // When a row predicate is present, build its filter with a projection limited to the
+        // columns that predicate references.
+        builder = self.apply_row_filter(builder, target_schema, options.row_filter)?;
+
+        if let Some(batch_size) = options.output_batch_size_rows {
+            builder = builder.with_batch_size(batch_size);
+        }
 
         let stream = builder
             .with_projection(projection)
@@ -286,28 +246,183 @@ impl DirectParquetReader {
         Ok(PhysicalParquetStream {
             stream,
             schema_alignment,
-            include_original_row_index,
+            include_original_row_index: options.include_original_row_index,
         })
+    }
+
+    /// Creates a stream builder for the resolved Parquet object.
+    ///
+    /// This chooses the metadata-loading path for a ranged or whole-file read. It also rewrites
+    /// the Arrow schema before creating the builder when `target_schema` uses view types.
+    async fn create_stream_builder(
+        &self,
+        object: &ParquetFileObject,
+        parquet_byte_range: Option<&Range<u64>>,
+        target_schema: &SchemaRef,
+        include_original_row_index: bool,
+    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
+        let file_size = object.file_size;
+        let path = &object.path;
+        let reader = ParquetObjectReader::new(Arc::clone(&object.store), path.clone())
+            .with_file_size(file_size);
+        let reader = match self.execution_options.parquet_metadata_size_hint_bytes() {
+            Some(hint) => reader.with_footer_size_hint(hint),
+            None => reader,
+        };
+        let reader_options = arrow_reader_options(include_original_row_index)
+            .boxed()
+            .context(DataFileReadSnafu {
+                reason: "parquet_row_index_setup_failed",
+            })?;
+        if parquet_byte_range.is_some() {
+            self.create_ranged_stream_builder(
+                path,
+                file_size,
+                reader,
+                reader_options,
+                target_schema,
+            )
+            .await
+        } else if schema_uses_view_types(target_schema) {
+            Self::create_view_type_stream_builder(reader, reader_options).await
+        } else {
+            ParquetRecordBatchStreamBuilder::new_with_options(reader, reader_options)
+                .await
+                .boxed()
+                .context(DataFileReadSnafu {
+                    reason: "parquet_read_setup_failed",
+                })
+        }
+    }
+
+    /// Creates a stream builder for a ranged Parquet read.
+    ///
+    /// Ranged tasks load footer metadata explicitly so tasks for the same file can share it. The
+    /// metadata schema is rewritten first when `target_schema` uses view types.
+    async fn create_ranged_stream_builder(
+        &self,
+        path: &Path,
+        file_size: u64,
+        mut reader: ParquetObjectReader,
+        reader_options: ArrowReaderOptions,
+        target_schema: &SchemaRef,
+    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
+        let metadata = self
+            .load_ranged_parquet_metadata(path, file_size, &mut reader, &reader_options)
+            .await?;
+        let metadata = ArrowReaderMetadata::try_new(metadata, reader_options.clone())
+            .boxed()
+            .context(DataFileReadSnafu {
+                reason: "parquet_read_setup_failed",
+            })?;
+        let metadata = if schema_uses_view_types(target_schema) {
+            metadata_with_view_types(metadata, reader_options)?
+        } else {
+            metadata
+        };
+
+        Ok(ParquetRecordBatchStreamBuilder::new_with_metadata(
+            reader, metadata,
+        ))
+    }
+
+    /// Creates a stream builder whose Arrow schema uses view types.
+    ///
+    /// The metadata schema must be rewritten before the builder is created. Rewriting it later
+    /// would leave the stream configured with the original Arrow types.
+    async fn create_view_type_stream_builder(
+        reader: ParquetObjectReader,
+        reader_options: ArrowReaderOptions,
+    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
+        let mut metadata_reader = reader.clone();
+        let metadata =
+            ArrowReaderMetadata::load_async(&mut metadata_reader, reader_options.clone())
+                .await
+                .boxed()
+                .context(DataFileReadSnafu {
+                    reason: "parquet_read_setup_failed",
+                })?;
+
+        Ok(ParquetRecordBatchStreamBuilder::new_with_metadata(
+            reader,
+            metadata_with_view_types(metadata, reader_options)?,
+        ))
+    }
+
+    /// Applies row-group selection to a stream builder.
+    ///
+    /// Selection combines the task's approximate byte range with metadata pruning. A selected
+    /// range always expands to complete Parquet row groups.
+    fn apply_row_group_selection(
+        builder: ParquetRecordBatchStreamBuilder<ParquetObjectReader>,
+        parquet_byte_range: Option<&Range<u64>>,
+        file_size: u64,
+        row_group_predicate: Option<&DeltaKernelPredicate>,
+    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
+        let row_groups = pruned_row_groups(
+            builder.metadata(),
+            file_size,
+            parquet_byte_range,
+            row_group_predicate,
+        )
+        .boxed()
+        .context(DataFileReadSnafu {
+            reason: "parquet_row_group_range_invalid",
+        })?;
+        Ok(match row_groups {
+            Some(row_groups) => builder.with_row_groups(row_groups),
+            None => builder,
+        })
+    }
+
+    /// Builds and attaches the requested row filter.
+    ///
+    /// When no filter was requested, this returns the builder unchanged.
+    fn apply_row_filter(
+        &self,
+        builder: ParquetRecordBatchStreamBuilder<ParquetObjectReader>,
+        target_schema: &SchemaRef,
+        row_filter: Option<RowFilterInput<'_>>,
+    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
+        let Some(row_filter) = row_filter else {
+            return Ok(builder);
+        };
+        let row_filter = self
+            .build_row_filter(
+                row_filter.predicate,
+                row_filter.kernel_schemas,
+                target_schema,
+                builder.parquet_schema(),
+                builder.schema(),
+            )
+            .map_err(|error| data_file_error("parquet_schema_match_failed", error))?;
+
+        Ok(builder.with_row_filter(row_filter))
     }
 
     async fn open_logical_data_file_stream(
         self: &Arc<Self>,
         request: LogicalDataFileReadRequest,
     ) -> Result<LogicalDataFileStream, DeltaReaderError> {
-        let include_original_row_index = request.task.deletion_vector.is_present();
+        let stream_options = PhysicalParquetStreamOptions {
+            output_batch_size_rows: request.output_batch_size_rows,
+            row_group_predicate: request.physical_predicate.as_ref(),
+            row_filter: request
+                .row_predicate
+                .as_ref()
+                .map(|predicate| RowFilterInput {
+                    predicate,
+                    kernel_schemas: &request.kernel_schemas,
+                }),
+            include_original_row_index: request.task.deletion_vector.is_present(),
+        };
         let physical_stream = tokio::select! {
             biased;
             () = request.cancellation.cancelled() => return Err(cancelled_error()),
             result = self.open_physical_parquet_stream(
                 &request.task,
-                request.physical_schema,
-                request.output_batch_size_rows,
-                request.physical_predicate.as_ref(),
-                request
-                    .row_predicate
-                    .as_ref()
-                    .map(|predicate| (predicate, &request.kernel_schemas)),
-                include_original_row_index,
+                &request.physical_schema,
+                stream_options,
             ) => result?,
         };
         if request.cancellation.is_cancelled() {
@@ -335,18 +450,34 @@ impl DirectParquetReader {
         })
     }
 
-    fn row_filter(
+    /// Builds a Parquet row filter for an exact kernel predicate.
+    ///
+    /// The filter projects only the top-level columns referenced by the predicate. Its input
+    /// batches are reshaped to that narrow target schema before the kernel evaluates them.
+    fn build_row_filter(
         &self,
         predicate: &DeltaKernelPredicate,
         kernel_schemas: &KernelScanSchemas,
-        schema_alignment: &ParquetSchemaAlignment,
+        target_schema: &SchemaRef,
         parquet_schema: &SchemaDescriptor,
-    ) -> RowFilter {
+        parquet_arrow_schema: &SchemaRef,
+    ) -> Result<RowFilter, delta_kernel::Error> {
+        let mut target_indices = predicate
+            .as_ref()
+            .references()
+            .into_iter()
+            .map(|column| predicate_root_index(column, target_schema))
+            .collect::<Result<Vec<_>, _>>()?;
+        // References are unordered, and nested paths can share the same root.
+        target_indices.sort_unstable();
+        target_indices.dedup();
+        let predicate_schema = Arc::new(target_schema.project(&target_indices)?);
+        let schema_alignment =
+            build_schema_alignment(parquet_schema, parquet_arrow_schema, predicate_schema)?;
         let projection = ProjectionMask::roots(parquet_schema, schema_alignment.projected_roots());
         let engine_context = Arc::clone(&self.engine_context);
         let predicate = predicate.clone();
         let kernel_schemas = kernel_schemas.clone();
-        let schema_alignment = schema_alignment.clone();
         let predicate = ArrowPredicateFn::new(projection, move |batch| {
             let batch = schema_alignment
                 .reshape_batch_to_target_schema(batch)
@@ -356,7 +487,7 @@ impl DirectParquetReader {
                 .map_err(|error| arrow::error::ArrowError::ExternalError(Box::new(error)))
         });
 
-        RowFilter::new(vec![Box::new(predicate)])
+        Ok(RowFilter::new(vec![Box::new(predicate)]))
     }
 
     fn resolve_parquet_object(
@@ -428,6 +559,28 @@ impl DirectParquetReader {
         object.store = store;
         Ok(object)
     }
+}
+
+/// Finds the target-schema index for a predicate column's top-level field.
+///
+/// Nested predicate paths use their first segment because Parquet row-filter projections select
+/// complete top-level roots.
+fn predicate_root_index(
+    column: &ColumnName,
+    target_schema: &Schema,
+) -> Result<usize, delta_kernel::Error> {
+    let root = column
+        .path()
+        .first()
+        .ok_or_else(|| delta_kernel::Error::generic("empty predicate column path"))?;
+
+    target_schema
+        .fields()
+        .find(root)
+        .map(|(index, _)| index)
+        .ok_or_else(|| {
+            delta_kernel::Error::generic("predicate column is missing from the target schema")
+        })
 }
 
 fn metadata_with_view_types(
@@ -656,12 +809,12 @@ mod tests {
         PutOptions, PutPayload, PutResult, RenameOptions, Result as ObjectStoreResult,
         memory::InMemory, path::Path,
     };
-    use parquet::arrow::{ArrowWriter, PARQUET_FIELD_ID_META_KEY};
+    use parquet::arrow::{ArrowSchemaConverter, ArrowWriter, PARQUET_FIELD_ID_META_KEY};
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
-        DirectParquetReader, LogicalDataFileReadRequest, RangedParquetMetadataCache,
-        data_file_error, direct_parquet_file_executor,
+        DirectParquetReader, LogicalDataFileReadRequest, PhysicalParquetStreamOptions,
+        RangedParquetMetadataCache, RowFilterInput, data_file_error, direct_parquet_file_executor,
     };
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
@@ -1509,7 +1662,7 @@ mod tests {
             Field::new("name", DataType::Utf8, true),
         ]));
         let mut stream = reader
-            .open_physical_parquet_stream(&task, schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, &schema, Default::default())
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let ids = batch
@@ -1539,7 +1692,7 @@ mod tests {
         ]));
 
         let error = match reader
-            .open_physical_parquet_stream(&task, schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, &schema, Default::default())
             .await
         {
             Ok(_) => return Err("invalid Parquet range unexpectedly succeeded".into()),
@@ -1572,7 +1725,7 @@ mod tests {
         let first_schema = Arc::clone(&schema);
         let first = tokio::spawn(async move {
             first_reader
-                .open_physical_parquet_stream(&first_task, first_schema, None, None, None, false)
+                .open_physical_parquet_stream(&first_task, &first_schema, Default::default())
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
@@ -1580,7 +1733,7 @@ mod tests {
         let second_reader = Arc::clone(&reader);
         let second = tokio::spawn(async move {
             second_reader
-                .open_physical_parquet_stream(&second_task, schema, None, None, None, false)
+                .open_physical_parquet_stream(&second_task, &schema, Default::default())
                 .await
         });
         tokio::task::yield_now().await;
@@ -1611,7 +1764,7 @@ mod tests {
         gated.fail_next_range();
 
         let error = match reader
-            .open_physical_parquet_stream(&task, Arc::clone(&schema), None, None, None, false)
+            .open_physical_parquet_stream(&task, &schema, Default::default())
             .await
         {
             Ok(_) => return Err("injected metadata failure must fail the first split task".into()),
@@ -1619,7 +1772,7 @@ mod tests {
         };
         assert_eq!(error.code(), "data_file_read");
         reader
-            .open_physical_parquet_stream(&task, schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, &schema, Default::default())
             .await?;
 
         assert_eq!(gated.range_calls.load(Ordering::Acquire), 2);
@@ -1647,7 +1800,7 @@ mod tests {
         let first_schema = Arc::clone(&schema);
         let first = tokio::spawn(async move {
             first_reader
-                .open_physical_parquet_stream(&first_task, first_schema, None, None, None, false)
+                .open_physical_parquet_stream(&first_task, &first_schema, Default::default())
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
@@ -1663,7 +1816,7 @@ mod tests {
         let second_reader = Arc::clone(&reader);
         let second = tokio::spawn(async move {
             second_reader
-                .open_physical_parquet_stream(&task, schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, &schema, Default::default())
                 .await
         });
         tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
@@ -1819,7 +1972,14 @@ mod tests {
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let target_schema = Arc::new(Schema::new(vec![Field::new("name", DataType::Utf8, true)]));
         let mut stream = reader
-            .open_physical_parquet_stream(&task, target_schema, Some(2), None, None, false)
+            .open_physical_parquet_stream(
+                &task,
+                &target_schema,
+                PhysicalParquetStreamOptions {
+                    output_batch_size_rows: Some(2),
+                    ..Default::default()
+                },
+            )
             .await?;
         let mut batches = Vec::new();
         while let Some(batch) = stream.next_batch().await? {
@@ -1878,7 +2038,7 @@ mod tests {
             (Arc::new(Schema::empty()), Vec::new(), 0),
         ] {
             let mut stream = reader
-                .open_physical_parquet_stream(&task, schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, &schema, Default::default())
                 .await?;
             let mut rows = 0;
             while let Some(batch) = stream.next_batch().await? {
@@ -1921,7 +2081,7 @@ mod tests {
                 Field::new("name", DataType::Utf8, true),
             ]));
             let _stream = reader
-                .open_physical_parquet_stream(&task, target_schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, &target_schema, Default::default())
                 .await?;
             snapshots.push(metrics.snapshot());
         }
@@ -2001,11 +2161,11 @@ mod tests {
             let mut stream = reader
                 .open_physical_parquet_stream(
                     &task,
-                    Arc::clone(&schema),
-                    None,
-                    predicate,
-                    None,
-                    false,
+                    &schema,
+                    PhysicalParquetStreamOptions {
+                        row_group_predicate: predicate,
+                        ..Default::default()
+                    },
                 )
                 .await?;
             let mut ids = Vec::new();
@@ -2026,11 +2186,12 @@ mod tests {
         let mut stream = reader
             .open_physical_parquet_stream(
                 &task,
-                Arc::clone(&schema),
-                None,
-                Some(&predicate),
-                None,
-                true,
+                &schema,
+                PhysicalParquetStreamOptions {
+                    row_group_predicate: Some(&predicate),
+                    include_original_row_index: true,
+                    ..Default::default()
+                },
             )
             .await?;
         let mut original_indexes = Vec::new();
@@ -2073,7 +2234,14 @@ mod tests {
         let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
-            .open_physical_parquet_stream(&task, schema, None, Some(&predicate), None, false)
+            .open_physical_parquet_stream(
+                &task,
+                &schema,
+                PhysicalParquetStreamOptions {
+                    row_group_predicate: Some(&predicate),
+                    ..Default::default()
+                },
+            )
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let amounts = batch
@@ -2229,6 +2397,138 @@ mod tests {
             assert_eq!(metrics.scheduler_rows_emitted, u64::try_from(ids.len())?);
             assert_eq!(metrics.deletion_vector_rows_deleted, expected_deleted);
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn row_filter_projects_only_predicate_roots_and_preserves_wide_output()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = TestDir::new("direct-row-filter-projection")?;
+        let mut fields = vec![Field::new("id", DataType::Int32, false)];
+        fields.extend(
+            (0..64).map(|index| Field::new(format!("payload_{index:03}"), DataType::Utf8, true)),
+        );
+        let schema = Arc::new(Schema::new(fields));
+        let mut columns = vec![Arc::new(Int32Array::from(vec![1, 2, 3, 4])) as ArrayRef];
+        columns.extend((0..64).map(|index| {
+            Arc::new(StringArray::from(vec![
+                format!("{index}-a"),
+                format!("{index}-b"),
+                format!("{index}-c"),
+                format!("{index}-d"),
+            ])) as ArrayRef
+        }));
+        let parquet_bytes = parquet_bytes_for(Arc::clone(&schema), columns)?;
+        write_partitioned_non_dv_table(&root, &parquet_bytes)?;
+        let plan = pipeline_plan_for_backend(
+            &root,
+            None,
+            Some(64 * 1024),
+            ParquetReaderBackend::Direct,
+            false,
+        )?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
+        let predicate = DeltaKernelPredicate::from_test_predicate(Predicate::gt(
+            Expression::Column(ColumnName::new(["id"])),
+            Expression::Literal(Scalar::Integer(2)),
+        ));
+        let parquet_schema = ArrowSchemaConverter::new().convert(schema.as_ref())?;
+        let row_filter = reader.build_row_filter(
+            &predicate,
+            &plan.kernel_schemas,
+            &schema,
+            &parquet_schema,
+            &schema,
+        )?;
+        let projection = row_filter.predicates()[0].projection();
+        assert!(projection.leaf_included(0));
+        assert!((1..65).all(|index| !projection.leaf_included(index)));
+
+        let nested_schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new(
+                "profile",
+                DataType::Struct(
+                    vec![
+                        Field::new("age", DataType::Int32, true),
+                        Field::new("label", DataType::Utf8, true),
+                    ]
+                    .into(),
+                ),
+                true,
+            ),
+            Field::new("payload", DataType::Utf8, true),
+        ]));
+        let nested_parquet_schema = ArrowSchemaConverter::new().convert(nested_schema.as_ref())?;
+        let nested_predicate = DeltaKernelPredicate::from_test_predicate(Predicate::gt(
+            Expression::Column(ColumnName::new(["profile", "age"])),
+            Expression::Literal(Scalar::Integer(18)),
+        ));
+        let nested_filter = reader.build_row_filter(
+            &nested_predicate,
+            &plan.kernel_schemas,
+            &nested_schema,
+            &nested_parquet_schema,
+            &nested_schema,
+        )?;
+        let nested_projection = nested_filter.predicates()[0].projection();
+        assert!(!nested_projection.leaf_included(0));
+        assert!(nested_projection.leaf_included(1));
+        assert!(nested_projection.leaf_included(2));
+        assert!(!nested_projection.leaf_included(3));
+
+        let field_id =
+            |id: i32| HashMap::from([(PARQUET_FIELD_ID_META_KEY.to_owned(), id.to_string())]);
+        let file_schema = Arc::new(Schema::new(vec![
+            Field::new("stale_id", DataType::Int32, false).with_metadata(field_id(1)),
+            Field::new("payload", DataType::Utf8, true).with_metadata(field_id(2)),
+        ]));
+        let mapped_schema = Arc::new(Schema::new(vec![
+            Field::new("physical_id", DataType::Int32, false).with_metadata(field_id(1)),
+            Field::new("payload", DataType::Utf8, true).with_metadata(field_id(2)),
+        ]));
+        let mapped_parquet_schema = ArrowSchemaConverter::new().convert(file_schema.as_ref())?;
+        let mapped_predicate = DeltaKernelPredicate::from_test_predicate(Predicate::gt(
+            Expression::Column(ColumnName::new(["physical_id"])),
+            Expression::Literal(Scalar::Integer(2)),
+        ));
+        let mapped_filter = reader.build_row_filter(
+            &mapped_predicate,
+            &plan.kernel_schemas,
+            &mapped_schema,
+            &mapped_parquet_schema,
+            &file_schema,
+        )?;
+        let mapped_projection = mapped_filter.predicates()[0].projection();
+        assert!(mapped_projection.leaf_included(0));
+        assert!(!mapped_projection.leaf_included(1));
+
+        let task = task("part.parquet", Some(u64::try_from(parquet_bytes.len())?))?;
+        let narrow_schema = Arc::new(schema.project(&[0, 1])?);
+        let mut qualifying_ids = Vec::new();
+        for target_schema in [narrow_schema, schema] {
+            let mut stream = reader
+                .open_physical_parquet_stream(
+                    &task,
+                    &target_schema,
+                    PhysicalParquetStreamOptions {
+                        row_filter: Some(RowFilterInput {
+                            predicate: &predicate,
+                            kernel_schemas: &plan.kernel_schemas,
+                        }),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            let mut batches = Vec::new();
+            while let Some(batch) = stream.next_batch().await? {
+                assert_eq!(batch.schema(), target_schema);
+                batches.push(batch);
+            }
+            qualifying_ids.push(int32_ids(&batches)?);
+        }
+
+        assert_eq!(qualifying_ids, [vec![3, 4], vec![3, 4]]);
         Ok(())
     }
 
@@ -3083,15 +3383,9 @@ mod tests {
             corrupt_metrics.clone(),
         )?;
         let corrupt_task = task("secret.parquet", Some(11))?;
+        let empty_schema = Arc::new(Schema::empty());
         let error = match corrupt_reader
-            .open_physical_parquet_stream(
-                &corrupt_task,
-                Arc::new(Schema::empty()),
-                None,
-                None,
-                None,
-                false,
-            )
+            .open_physical_parquet_stream(&corrupt_task, &empty_schema, Default::default())
             .await
         {
             Ok(_) => return Err("corrupt Parquet setup must fail".into()),

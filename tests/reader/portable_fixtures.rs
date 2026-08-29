@@ -5,7 +5,10 @@ use std::{error::Error, path::Path};
 use std::{fs, fs::File, sync::Arc};
 
 use arrow::{
-    array::Int32Array, compute::concat_batches, datatypes::SchemaRef, record_batch::RecordBatch,
+    array::{Int32Array, StringArray},
+    compute::concat_batches,
+    datatypes::SchemaRef,
+    record_batch::RecordBatch,
     util::display::array_value_to_string,
 };
 use delta_arrow_reader::{
@@ -828,6 +831,103 @@ fn direct_exact_predicates_preserve_deletion_vector_row_indexes() -> TestResult 
         assert_eq!(metrics.scheduler_rows_emitted, 0);
         assert_eq!(metrics.deletion_vector_failures, 0);
         assert_eq!(metrics.deletion_vector_coordinate_rejections, 0);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn direct_exact_predicates_cover_hidden_null_and_match_edges() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = RealParquetDeltaTable::new_default("direct-predicate-edges")?;
+        for (name, predicate, expected_ids) in [
+            (
+                "null predicate",
+                DeltaPredicate::IsNull {
+                    column: "customer_name".to_owned(),
+                },
+                vec![3],
+            ),
+            (
+                "all matches",
+                DeltaPredicate::Compare {
+                    column: "id".to_owned(),
+                    op: DeltaComparison::Gt,
+                    value: DeltaScalar::Int32(0),
+                },
+                vec![1, 2, 3],
+            ),
+        ] {
+            assert_success(
+                name,
+                ParquetReaderBackend::Direct,
+                scan_fixture(
+                    &fixture,
+                    ParquetReaderBackend::Direct,
+                    projection(&["id"]),
+                    Some(predicate),
+                )
+                .await?,
+                &expected_ids,
+            )?;
+        }
+
+        let missing = RealParquetDeltaTable::new_with_missing_nullable_column(
+            "direct-missing-predicate-column",
+        )?;
+        for (name, predicate, expected_ids) in [
+            (
+                "missing nullable column is null",
+                DeltaPredicate::IsNull {
+                    column: "loyalty_tier".to_owned(),
+                },
+                vec![1, 2, 3],
+            ),
+            (
+                "missing nullable column is not null",
+                DeltaPredicate::IsNotNull {
+                    column: "loyalty_tier".to_owned(),
+                },
+                Vec::new(),
+            ),
+        ] {
+            assert_success(
+                name,
+                ParquetReaderBackend::Direct,
+                scan_fixture(
+                    &missing,
+                    ParquetReaderBackend::Direct,
+                    projection(&["id"]),
+                    Some(predicate),
+                )
+                .await?,
+                &expected_ids,
+            )?;
+        }
+
+        let mapped =
+            RealParquetDeltaTable::new_with_column_mapping("direct-hidden-mapped-predicate")?;
+        let attempt = scan_fixture(
+            &mapped,
+            ParquetReaderBackend::Direct,
+            projection(&["customer_name"]),
+            Some(DeltaPredicate::Compare {
+                column: "id".to_owned(),
+                op: DeltaComparison::Gt,
+                value: DeltaScalar::Int32(1),
+            }),
+        )
+        .await?;
+        let ScanAttempt::Success { batch, .. } = attempt else {
+            return Err("hidden mapped predicate unexpectedly failed".into());
+        };
+        assert_eq!(batch.schema().fields().len(), 1);
+        assert_eq!(batch.schema().field(0).name(), "customer_name");
+        let names = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or("customer_name column must be StringArray")?;
+        assert_eq!(names.iter().collect::<Vec<_>>(), [Some("bob"), None]);
         Ok::<_, Box<dyn Error>>(())
     })
 }

@@ -2581,7 +2581,7 @@ mod tests {
         let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
         let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
         let mut stream = reader
-            .open_physical_parquet_stream(&task, target_schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, &target_schema, Default::default())
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
 
@@ -2633,7 +2633,7 @@ mod tests {
             true,
         )]));
         let mut stream = reader
-            .open_physical_parquet_stream(&task, timestamp_schema, None, None, None, false)
+            .open_physical_parquet_stream(&task, &timestamp_schema, Default::default())
             .await?;
         let batch = stream.next_batch().await?.ok_or("expected one batch")?;
         let timestamps = batch
@@ -2658,7 +2658,7 @@ mod tests {
             )])),
         ] {
             let error = match reader
-                .open_physical_parquet_stream(&task, target_schema, None, None, None, false)
+                .open_physical_parquet_stream(&task, &target_schema, Default::default())
                 .await
             {
                 Ok(_) => return Err("unsupported schema must fail".into()),
