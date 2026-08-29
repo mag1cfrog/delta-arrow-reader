@@ -7,7 +7,10 @@ use std::{
     fs::{self, File},
     io,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -36,6 +39,7 @@ const MATCH_VALUE: &str = "match";
 const OTHER_VALUE: &str = "other";
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
+static NEXT_FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
 const BENCHMARK_SHAPE: FixtureShape = FixtureShape {
     data_files: 4,
     row_groups: 2,
@@ -332,11 +336,10 @@ impl Fixture {
         retain: bool,
     ) -> Result<Self, Box<dyn Error>> {
         shape.validate()?;
-        let path = temp_root.join(format!(
-            "delta-arrow-reader-range-planning-{}-{}",
-            std::process::id(),
+        let path = fixture_path(
+            temp_root,
             SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
-        ));
+        );
         fs::create_dir_all(path.join("_delta_log"))?;
 
         let schema = benchmark_schema(shape.payload_columns);
@@ -385,6 +388,14 @@ impl Fixture {
             retain,
         })
     }
+}
+
+fn fixture_path(temp_root: &Path, created_at_nanos: u128) -> PathBuf {
+    let sequence = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
+    temp_root.join(format!(
+        "delta-arrow-reader-range-planning-{}-{created_at_nanos}-{sequence}",
+        std::process::id(),
+    ))
 }
 
 impl Drop for Fixture {
@@ -929,20 +940,15 @@ mod tests {
                 .await?;
             let mut measurements = Vec::new();
             for policy in BenchmarkPolicy::ALL {
-                measurements.push(
-                    measure_case(
-                        &fixture,
-                        &table,
-                        TEST_SHAPE,
-                        BenchmarkCase {
-                            profile: TEST_PROFILE,
-                            density: ProjectionDensity::Sparse,
-                            policy,
-                        },
-                        1,
-                    )
-                    .await?,
-                );
+                let case = BenchmarkCase {
+                    profile: TEST_PROFILE,
+                    density: ProjectionDensity::Sparse,
+                    policy,
+                };
+                let measurement = measure_case(&fixture, &table, TEST_SHAPE, case, 1)
+                    .await
+                    .map_err(|error| benchmark_test_error(case, error.as_ref()))?;
+                measurements.push(measurement);
             }
             let first = measurements
                 .first()
@@ -994,5 +1000,50 @@ mod tests {
                 "high_latency_high_throughput"
             ]
         );
+    }
+
+    #[test]
+    fn fixture_paths_are_unique_when_the_clock_does_not_advance() {
+        let temp_root = Path::new("benchmark-fixtures");
+        let first = fixture_path(temp_root, 123);
+        let second = fixture_path(temp_root, 123);
+
+        assert_ne!(first, second);
+        assert_eq!(first.parent(), Some(temp_root));
+        assert_eq!(second.parent(), Some(temp_root));
+    }
+
+    fn benchmark_test_error(case: BenchmarkCase, error: &(dyn Error + 'static)) -> io::Error {
+        let mut message = format!(
+            "range benchmark failed: profile={} projection={} policy={}: {error}",
+            case.profile.name,
+            case.density.name(),
+            case.policy.name(),
+        );
+        let mut source = error.source();
+        while let Some(error) = source {
+            message.push_str("\ncaused by: ");
+            message.push_str(&error.to_string());
+            source = error.source();
+        }
+        io::Error::other(message)
+    }
+
+    #[test]
+    fn benchmark_test_errors_include_the_case_and_source_chain() {
+        let source = io::Error::new(io::ErrorKind::ConnectionReset, "connection reset by peer");
+        let error = parquet::errors::ParquetError::External(Box::new(source));
+        let reported = benchmark_test_error(
+            BenchmarkCase {
+                profile: TEST_PROFILE,
+                density: ProjectionDensity::Sparse,
+                policy: BenchmarkPolicy::ExactRanges,
+            },
+            &error,
+        )
+        .to_string();
+
+        assert!(reported.contains("profile=test projection=sparse policy=exact_ranges"));
+        assert!(reported.contains("\ncaused by: connection reset by peer"));
     }
 }
