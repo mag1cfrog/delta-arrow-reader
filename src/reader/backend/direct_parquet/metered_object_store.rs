@@ -149,7 +149,7 @@ impl MeteredParquetObjectStore {
         Ok((bytes, completed_read))
     }
 
-    /// Returns robust latency and shared-throughput estimates after enough plans have completed.
+    /// Returns the sample count and robust estimate from the same estimator view.
     fn current_transport_estimate(&self) -> (usize, Option<TransportEstimate>) {
         self.range_read_estimator.current_transport_estimate()
     }
@@ -196,8 +196,8 @@ impl MeteredParquetObjectStore {
         requested_ranges: &[Range<u64>],
         physical_ranges: &[Range<u64>],
     ) -> Result<(Vec<Bytes>, Duration)> {
-        let completed_reads = Arc::new(Mutex::new(Vec::with_capacity(physical_ranges.len())));
         let plan_started = Instant::now();
+        let completed_reads = Arc::new(Mutex::new(Vec::with_capacity(physical_ranges.len())));
         let results = execute_range_plan(requested_ranges, physical_ranges, |range| {
             let completed_reads = Arc::clone(&completed_reads);
             async move {
@@ -210,15 +210,15 @@ impl MeteredParquetObjectStore {
             }
         })
         .await?;
-        let plan_time = plan_started.elapsed();
+        let observed_plan_time = plan_started.elapsed();
         self.record_completed_range_reads(
             &completed_reads
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         );
         self.metrics
-            .record_parquet_range_successful_plan_time(plan_time);
-        Ok((results, plan_time))
+            .record_parquet_range_successful_plan_time(plan_started.elapsed());
+        Ok((results, observed_plan_time))
     }
 }
 
@@ -303,8 +303,8 @@ fn trace_completed_automatic_range_plan(
             MAX_CONCURRENT_PARQUET_RANGE_READS,
         ))
         .unwrap_or(u64::MAX),
-        baseline_predicted_score = plan.baseline_predicted_score,
-        selected_predicted_score = plan.selected_predicted_score,
+        baseline_predicted_cost_bytes = plan.baseline_predicted_cost_bytes,
+        selected_predicted_cost_bytes = plan.selected_predicted_cost_bytes,
         observed_selected_plan_micros = observed_plan_time.as_micros(),
         decision = plan.decision.as_str(),
         "Automatic Parquet range plan completed"
@@ -607,6 +607,10 @@ mod tests {
         ParquetRangeReadEstimator, RANGE_PLANNING_DIAGNOSTIC_TARGET, RangePlanDecision,
         TransportEstimate,
     };
+    use crate::{
+        DeltaScanMetrics, ParquetReaderBackend,
+        reader::{ParquetRangeReadPolicy, metrics::DeltaScanMetricsConfig},
+    };
 
     static TRACING_TEST_LOCK: Mutex<()> = Mutex::new(());
     static TRACING_TEST_GLOBAL_SUBSCRIBER: Once = Once::new();
@@ -699,10 +703,19 @@ mod tests {
             .unwrap_or_default();
         (result, captured)
     }
-    use crate::{
-        DeltaScanMetrics, ParquetReaderBackend,
-        reader::{ParquetRangeReadPolicy, metrics::DeltaScanMetricsConfig},
-    };
+
+    fn event_field<'event>(
+        event: &'event BTreeMap<String, String>,
+        field: &str,
+    ) -> Option<&'event str> {
+        event.get(field).map(String::as_str)
+    }
+
+    fn assert_event_fields(event: &BTreeMap<String, String>, expected_fields: &[(&str, &str)]) {
+        for (field, expected) in expected_fields {
+            assert_eq!(event_field(event, field), Some(*expected), "{field}");
+        }
+    }
 
     fn direct_metrics() -> DeltaScanMetrics {
         DeltaScanMetrics::new(DeltaScanMetricsConfig {
@@ -766,57 +779,130 @@ mod tests {
 
         assert_eq!(events.len(), 1);
         let event = &events[0];
-        assert_eq!(
-            event.get("event").map(String::as_str),
-            Some("automatic_parquet_range_plan_completed")
-        );
-        assert_eq!(
-            event.get("transport_sample_count").map(String::as_str),
-            Some("0")
-        );
-        assert_eq!(
-            event
-                .get("estimated_request_latency_micros")
-                .map(String::as_str),
-            Some("<empty>")
-        );
-        assert_eq!(
-            event.get("exact_range_count").map(String::as_str),
-            Some("2")
-        );
-        assert_eq!(event.get("exact_bytes").map(String::as_str), Some("8"));
-        assert_eq!(
-            event.get("exact_request_waves").map(String::as_str),
-            Some("1")
-        );
-        assert_eq!(
-            event.get("baseline_range_count").map(String::as_str),
-            Some("2")
-        );
-        assert_eq!(event.get("baseline_bytes").map(String::as_str), Some("8"));
-        assert_eq!(
-            event.get("selected_range_count").map(String::as_str),
-            Some("2")
-        );
-        assert_eq!(event.get("selected_bytes").map(String::as_str), Some("8"));
-        assert_eq!(
-            event.get("baseline_predicted_score").map(String::as_str),
-            Some("<empty>")
-        );
-        assert_eq!(
-            event.get("selected_predicted_score").map(String::as_str),
-            Some("<empty>")
-        );
-        assert_eq!(
-            event.get("decision").map(String::as_str),
-            Some("cold_start")
+        assert_event_fields(
+            event,
+            &[
+                ("event", "automatic_parquet_range_plan_completed"),
+                ("transport_sample_count", "0"),
+                ("estimated_request_latency_micros", "<empty>"),
+                ("estimated_shared_throughput_bytes_per_second", "<empty>"),
+                ("estimated_bandwidth_delay_bytes", "<empty>"),
+                ("exact_range_count", "2"),
+                ("exact_bytes", "8"),
+                ("exact_request_waves", "1"),
+                ("baseline_range_count", "2"),
+                ("baseline_bytes", "8"),
+                ("baseline_request_waves", "1"),
+                ("selected_range_count", "2"),
+                ("selected_bytes", "8"),
+                ("selected_request_waves", "1"),
+                ("baseline_predicted_cost_bytes", "<empty>"),
+                ("selected_predicted_cost_bytes", "<empty>"),
+                ("decision", "cold_start"),
+            ],
         );
         assert_ne!(
-            event
-                .get("observed_selected_plan_micros")
-                .map(String::as_str),
+            event_field(event, "observed_selected_plan_micros"),
             Some("<empty>")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn warmed_completions_report_the_estimate_and_exact_candidate_scores()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let location =
+            Path::from("private-bucket/credential-secret/schema-secret/predicate-secret.parquet");
+        let requested_ranges = (0..=10)
+            .map(|index| {
+                let start = index * 1_000;
+                start..start + 100
+            })
+            .collect::<Vec<_>>();
+
+        for (throughput, expected_fields) in [
+            (
+                1_000,
+                [
+                    ("estimated_shared_throughput_bytes_per_second", "1000"),
+                    ("estimated_bandwidth_delay_bytes", "100"),
+                    ("selected_range_count", "11"),
+                    ("selected_bytes", "1100"),
+                    ("selected_request_waves", "2"),
+                    ("baseline_predicted_cost_bytes", "1300"),
+                    ("selected_predicted_cost_bytes", "1300"),
+                    ("decision", "cost_based_exact"),
+                ],
+            ),
+            (
+                1_000_000_000,
+                [
+                    ("estimated_shared_throughput_bytes_per_second", "1000000000"),
+                    ("estimated_bandwidth_delay_bytes", "100000000"),
+                    ("selected_range_count", "10"),
+                    ("selected_bytes", "2000"),
+                    ("selected_request_waves", "1"),
+                    ("baseline_predicted_cost_bytes", "200001100"),
+                    ("selected_predicted_cost_bytes", "100002000"),
+                    ("decision", "cost_based_merged"),
+                ],
+            ),
+        ] {
+            let (result, events) = capture_range_planning_events(|| {
+                runtime.block_on(async {
+                    let inner = Arc::new(InMemory::new());
+                    inner
+                        .put(&location, PutPayload::from(vec![0_u8; 10_100]))
+                        .await?;
+                    let store = MeteredParquetObjectStore::new(
+                        inner,
+                        direct_metrics(),
+                        MultiRangeReadStrategy::ChooseAutomatically,
+                    );
+                    let started = Instant::now();
+                    for _ in 0..3 {
+                        store.record_completed_range_reads(&[completed_read(
+                            started, 100, throughput,
+                        )]);
+                    }
+                    store.get_ranges(&location, &requested_ranges).await
+                })
+            });
+            assert!(result?.iter().all(|bytes| bytes.len() == 100));
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_event_fields(
+                event,
+                &[
+                    ("transport_sample_count", "3"),
+                    ("estimated_request_latency_micros", "100000"),
+                    ("exact_range_count", "11"),
+                    ("exact_bytes", "1100"),
+                    ("exact_request_waves", "2"),
+                    ("baseline_range_count", "11"),
+                    ("baseline_bytes", "1100"),
+                    ("baseline_request_waves", "2"),
+                ],
+            );
+            assert_event_fields(event, &expected_fields);
+            assert_ne!(
+                event_field(event, "observed_selected_plan_micros"),
+                Some("<empty>")
+            );
+
+            let diagnostic = format!("{event:?}");
+            for private_value in [
+                "private-bucket",
+                "credential-secret",
+                "schema-secret",
+                "predicate-secret",
+            ] {
+                assert!(!diagnostic.contains(private_value));
+            }
+        }
         Ok(())
     }
 
@@ -1089,8 +1175,8 @@ mod tests {
                 physical_ranges,
                 planned_bytes,
                 transport_estimate: None,
-                baseline_predicted_score: None,
-                selected_predicted_score: None,
+                baseline_predicted_cost_bytes: None,
+                selected_predicted_cost_bytes: None,
                 decision,
             });
         }
@@ -1324,46 +1410,85 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn cancelled_partial_automatic_plan_does_not_update_transport_estimates()
-    -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let first = PutPayload::from_static(b"abc")
-            .into_iter()
-            .next()
-            .ok_or_else(missing_chunk)?;
-        let payload = stream::iter([Ok(first)])
-            .chain(stream::pending::<Result<Bytes>>())
-            .boxed();
-        let metrics = direct_metrics();
-        let store = Arc::new(MeteredParquetObjectStore::new(
-            Arc::new(ScriptedGetStore::new(test_get_result(
-                GetResultPayload::Stream(payload),
-                0..8,
-            ))),
-            metrics.clone(),
-            MultiRangeReadStrategy::ChooseAutomatically,
-        ));
-        let started = Instant::now();
-        for _ in 0..2 {
-            store.record_completed_range_reads(&[completed_read(started, 10, 1_000)]);
-        }
-
-        let task_store = Arc::clone(&store);
-        let task = tokio::spawn(async move {
-            task_store
-                .get_ranges(&Path::from("data.parquet"), &[0..4, 4..8])
-                .await
+    #[test]
+    fn failed_automatic_plan_emits_no_completion_and_adds_no_sample() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime");
+        let ((result, estimate), events) = capture_range_planning_events(|| {
+            runtime.block_on(async {
+                let store = MeteredParquetObjectStore::new(
+                    Arc::new(InMemory::new()),
+                    direct_metrics(),
+                    MultiRangeReadStrategy::ChooseAutomatically,
+                );
+                let started = Instant::now();
+                for _ in 0..2 {
+                    store.record_completed_range_reads(&[completed_read(started, 10, 1_000)]);
+                }
+                let result = store
+                    .get_ranges(&Path::from("private-missing.parquet"), &[0..4, 8..12])
+                    .await;
+                (result, store.current_transport_estimate())
+            })
         });
-        tokio::time::timeout(Duration::from_secs(5), async {
-            while metrics.snapshot().parquet_data_file_bytes_received != Some(3) {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await?;
 
-        task.abort();
-        assert!(task.await.is_err_and(|error| error.is_cancelled()));
-        assert_eq!(store.current_transport_estimate(), (2, None));
+        assert!(result.is_err());
+        assert_eq!(estimate, (2, None));
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn cancelled_partial_automatic_plan_emits_no_completion_and_adds_no_sample()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let (result, events) = capture_range_planning_events(|| {
+            runtime.block_on(async {
+                let first = PutPayload::from_static(b"abc")
+                    .into_iter()
+                    .next()
+                    .ok_or_else(missing_chunk)?;
+                let payload = stream::iter([Ok(first)])
+                    .chain(stream::pending::<Result<Bytes>>())
+                    .boxed();
+                let metrics = direct_metrics();
+                let store = Arc::new(MeteredParquetObjectStore::new(
+                    Arc::new(ScriptedGetStore::new(test_get_result(
+                        GetResultPayload::Stream(payload),
+                        0..8,
+                    ))),
+                    metrics.clone(),
+                    MultiRangeReadStrategy::ChooseAutomatically,
+                ));
+                let started = Instant::now();
+                for _ in 0..2 {
+                    store.record_completed_range_reads(&[completed_read(started, 10, 1_000)]);
+                }
+
+                let task_store = Arc::clone(&store);
+                let task = tokio::spawn(async move {
+                    task_store
+                        .get_ranges(&Path::from("data.parquet"), &[0..4, 4..8])
+                        .await
+                });
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    while metrics.snapshot().parquet_data_file_bytes_received != Some(3) {
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await?;
+
+                task.abort();
+                assert!(task.await.is_err_and(|error| error.is_cancelled()));
+                assert_eq!(store.current_transport_estimate(), (2, None));
+                Ok::<_, Box<dyn std::error::Error>>(())
+            })
+        });
+        result?;
+        assert!(events.is_empty());
         Ok(())
     }
 
