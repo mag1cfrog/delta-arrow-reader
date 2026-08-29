@@ -110,11 +110,16 @@ fn serve_http(
                 let root = root.clone();
                 let shutdown = Arc::clone(&shutdown);
                 let state = Arc::clone(&state);
-                let _ = thread::Builder::new()
+                if let Err(error) = thread::Builder::new()
                     .name("delta-arrow-reader-range-bench-http".to_owned())
                     .spawn(move || {
-                        let _ = handle_http(stream, &root, &shutdown, &state);
-                    });
+                        if let Err(error) = handle_http(stream, &root, &shutdown, &state) {
+                            eprintln!("controlled HTTP handler failed: {error}");
+                        }
+                    })
+                {
+                    eprintln!("controlled HTTP handler could not start: {error}");
+                }
             }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(1));
@@ -167,6 +172,7 @@ fn handle_http(
             ),
         }?;
         if close {
+            eprintln!("controlled HTTP peer requested connection close");
             return Ok(());
         }
     }
@@ -500,12 +506,6 @@ fn invalid(message: impl Into<String>) -> io::Error {
 mod tests {
     use super::*;
 
-    const TEST_PROFILE: TransportProfile = TransportProfile {
-        name: "test",
-        request_latency: Duration::ZERO,
-        shared_throughput_bytes_per_second: u64::MAX,
-    };
-
     #[test]
     fn transfer_delay_and_range_parser_are_deterministic() -> io::Result<()> {
         assert_eq!(
@@ -519,7 +519,14 @@ mod tests {
 
     #[test]
     fn server_handles_multiple_requests_on_one_connection() -> Result<(), Box<dyn Error>> {
-        let mut server = ControlledHttpServer::start(PathBuf::new(), TEST_PROFILE)?;
+        let mut server = ControlledHttpServer::start(
+            PathBuf::new(),
+            TransportProfile {
+                name: "test",
+                request_latency: Duration::ZERO,
+                shared_throughput_bytes_per_second: u64::MAX,
+            },
+        )?;
         let address = server
             .url()
             .strip_prefix("http://")
