@@ -697,6 +697,7 @@ pub(crate) fn direct_parquet_executor(
         plan,
         output_batch_size_rows,
         row_predicate,
+        Arc::default(),
         None,
     )
 }

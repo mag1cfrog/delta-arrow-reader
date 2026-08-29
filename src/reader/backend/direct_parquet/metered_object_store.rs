@@ -102,6 +102,15 @@ impl MeteredParquetObjectStore {
         }
     }
 
+    /// Reuses transport measurements collected by other readers in the same store context.
+    pub(crate) fn with_range_read_estimator(
+        mut self,
+        range_read_estimator: Arc<ParquetRangeReadEstimator>,
+    ) -> Self {
+        self.range_read_estimator = range_read_estimator;
+        self
+    }
+
     /// Reads one physical range and measures request latency separately from payload delivery.
     async fn read_range_with_timing(
         &self,
@@ -880,18 +889,18 @@ mod tests {
             )
             .await?;
         let estimator = Arc::new(ParquetRangeReadEstimator::default());
-        let mut first = MeteredParquetObjectStore::new(
+        let first = MeteredParquetObjectStore::new(
             inner.clone(),
             direct_metrics(),
             MultiRangeReadStrategy::ChooseAutomatically,
-        );
-        first.range_read_estimator = Arc::clone(&estimator);
-        let mut second = MeteredParquetObjectStore::new(
+        )
+        .with_range_read_estimator(Arc::clone(&estimator));
+        let second = MeteredParquetObjectStore::new(
             inner.clone(),
             direct_metrics(),
             MultiRangeReadStrategy::ChooseAutomatically,
-        );
-        second.range_read_estimator = Arc::clone(&estimator);
+        )
+        .with_range_read_estimator(Arc::clone(&estimator));
         let started = Instant::now();
 
         first.record_completed_range_reads(&[completed_read(started, 10, 1_000)]);
@@ -901,12 +910,12 @@ mod tests {
         assert!(second.current_transport_estimate().is_some());
 
         let warm_metrics = direct_metrics();
-        let mut warm = MeteredParquetObjectStore::new(
+        let warm = MeteredParquetObjectStore::new(
             inner.clone(),
             warm_metrics.clone(),
             MultiRangeReadStrategy::ChooseAutomatically,
-        );
-        warm.range_read_estimator = estimator;
+        )
+        .with_range_read_estimator(estimator);
         let ranges = [0..4, 8..12];
         let warm_bytes = warm
             .get_ranges(&Path::from("data.parquet"), &ranges)

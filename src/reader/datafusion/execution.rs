@@ -58,7 +58,7 @@ use super::{
 };
 
 use crate::reader::backend::direct_parquet::{
-    RangedParquetMetadataCache, direct_parquet_file_executor,
+    ParquetRangeReadEstimator, RangedParquetMetadataCache, direct_parquet_file_executor,
 };
 use crate::{
     DeltaReaderError, DeltaScanMetrics, DeltaScanMetricsSnapshot, ParquetReaderBackend,
@@ -309,6 +309,7 @@ pub(crate) fn create_datafusion_execution_plan(
     reader_plan: DeltaScanPlan,
     datafusion_plan: DataFusionScanPlan,
     exact_row_predicate: Option<DeltaKernelPredicate>,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
     registration_name: Option<String>,
     use_arrow_view_types: bool,
     intra_file_repartitioning: IntraFileRepartitioning,
@@ -317,6 +318,7 @@ pub(crate) fn create_datafusion_execution_plan(
         reader_plan,
         datafusion_plan,
         exact_row_predicate,
+        range_read_estimator,
         registration_name,
         use_arrow_view_types,
         intra_file_repartitioning,
@@ -334,6 +336,7 @@ struct DeltaScanExec {
     limiter: Arc<ScanReadLimiter>,
     dynamic_filters: Arc<[RetainedDynamicFilter]>,
     intra_file_repartitioning: IntraFileRepartitioning,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
     parquet_metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 }
 
@@ -343,6 +346,7 @@ impl DeltaScanExec {
         reader_plan: DeltaScanPlan,
         datafusion_plan: DataFusionScanPlan,
         exact_row_predicate: Option<DeltaKernelPredicate>,
+        range_read_estimator: Arc<ParquetRangeReadEstimator>,
         registration_name: Option<String>,
         use_arrow_view_types: bool,
         intra_file_repartitioning: IntraFileRepartitioning,
@@ -371,6 +375,7 @@ impl DeltaScanExec {
             limiter,
             dynamic_filters: Arc::from([]),
             intra_file_repartitioning,
+            range_read_estimator,
             parquet_metadata_cache: None,
         }
     }
@@ -641,6 +646,7 @@ impl ExecutionPlan for DeltaScanExec {
                 &self.reader_plan,
                 Some(configured_batch_size_rows),
                 self.exact_row_predicate.clone(),
+                Arc::clone(&self.range_read_estimator),
                 self.parquet_metadata_cache.clone(),
             ),
             ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.reader_plan),
@@ -851,7 +857,10 @@ mod tests {
     use crate::{
         DeltaScanExecutionOptions, DeltaTable, DeltaTableBuilder,
         delta::kernel::kernel_pruning_predicate,
-        reader::datafusion::planning::{FilterCapabilities, plan_datafusion_scan},
+        reader::datafusion::{
+            DeltaTableProvider, ScanOptions,
+            planning::{FilterCapabilities, plan_datafusion_scan},
+        },
         reader::planning::{
             DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan,
         },
@@ -1078,6 +1087,7 @@ mod tests {
             reader_plan,
             datafusion_plan,
             exact_row_predicate,
+            Arc::default(),
             registration_name,
             true,
             intra_file_repartitioning,
@@ -1086,6 +1096,51 @@ mod tests {
 
     fn session(batch_size: usize) -> SessionContext {
         SessionContext::new_with_config(SessionConfig::new().with_batch_size(batch_size))
+    }
+
+    #[tokio::test]
+    async fn provider_reuses_one_range_read_estimator_across_physical_plans() -> TestResult {
+        let fixture = TestTable::partitioned("shared-range-read-estimator")?;
+        let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+        let provider = DeltaTableProvider::try_new(table.clone(), ScanOptions::default())?;
+        let separate_provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
+        let context = SessionContext::new();
+
+        let first = provider.plan(&context.state(), None, &[])?.0;
+        let second = provider.plan(&context.state(), None, &[])?.0;
+        let separate = separate_provider.plan(&context.state(), None, &[])?.0;
+        let first = first
+            .as_ref()
+            .downcast_ref::<DeltaScanExec>()
+            .ok_or("first plan was not DeltaScanExec")?;
+        let second = second
+            .as_ref()
+            .downcast_ref::<DeltaScanExec>()
+            .ok_or("second plan was not DeltaScanExec")?;
+        let separate = separate
+            .as_ref()
+            .downcast_ref::<DeltaScanExec>()
+            .ok_or("separate provider plan was not DeltaScanExec")?;
+        let repartitioned =
+            first.with_repartitioned_partitions(first.reader_plan.partitions.clone());
+        let repartitioned = repartitioned
+            .as_ref()
+            .downcast_ref::<DeltaScanExec>()
+            .ok_or("repartitioned plan was not DeltaScanExec")?;
+
+        assert!(Arc::ptr_eq(
+            &first.range_read_estimator,
+            &second.range_read_estimator
+        ));
+        assert!(Arc::ptr_eq(
+            &first.range_read_estimator,
+            &repartitioned.range_read_estimator
+        ));
+        assert!(!Arc::ptr_eq(
+            &first.range_read_estimator,
+            &separate.range_read_estimator
+        ));
+        Ok(())
     }
 
     fn sized_file_task(path: &str, size: Option<u64>) -> DeltaScanFileTask {

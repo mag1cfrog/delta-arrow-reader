@@ -32,6 +32,7 @@ use parquet::schema::types::SchemaDescriptor;
 use snafu::{IntoError, ResultExt};
 use tokio::sync::OnceCell;
 
+pub(crate) use self::metered_object_store::ParquetRangeReadEstimator;
 use self::{
     metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
     row_group_pruning::pruned_row_groups,
@@ -139,15 +140,19 @@ impl DirectParquetReader {
         engine_context: Arc<DeltaKernelEngineContext>,
         execution_options: DeltaScanExecutionOptions,
         metrics: DeltaScanMetrics,
+        range_read_estimator: Arc<ParquetRangeReadEstimator>,
     ) -> Self {
-        let store = Arc::new(MeteredParquetObjectStore::new(
-            engine_context.object_store(),
-            metrics.clone(),
-            MultiRangeReadStrategy::for_policy(
-                execution_options.parquet_range_read_policy(),
-                engine_context.table_url(),
-            ),
-        ));
+        let store = Arc::new(
+            MeteredParquetObjectStore::new(
+                engine_context.object_store(),
+                metrics.clone(),
+                MultiRangeReadStrategy::for_policy(
+                    execution_options.parquet_range_read_policy(),
+                    engine_context.table_url(),
+                ),
+            )
+            .with_range_read_estimator(range_read_estimator),
+        );
         Self {
             engine_context,
             store,
@@ -628,12 +633,14 @@ pub(crate) fn direct_parquet_file_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
     metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let reader = DirectParquetReader::new(
         Arc::clone(&plan.engine_context),
         plan.execution_options,
         plan.metrics.clone(),
+        range_read_estimator,
     );
     let reader = Arc::new(match metadata_cache {
         Some(cache) => reader.with_metadata_cache(cache),
@@ -1192,7 +1199,12 @@ mod tests {
             table_url,
             &DeltaStorageOptions::default(),
         )?);
-        Ok(DirectParquetReader::new(engine_context, options, metrics))
+        Ok(DirectParquetReader::new(
+            engine_context,
+            options,
+            metrics,
+            Arc::default(),
+        ))
     }
 
     pub(super) fn task(
@@ -1578,7 +1590,8 @@ mod tests {
         row_predicate: Option<DeltaKernelPredicate>,
     ) -> Result<Vec<RecordBatch>, DeltaReaderError> {
         let scheduler = DeltaScanScheduler::new(Arc::clone(&plan));
-        let executor = direct_parquet_file_executor(&plan, Some(2), row_predicate, None);
+        let executor =
+            direct_parquet_file_executor(&plan, Some(2), row_predicate, Arc::default(), None);
         let mut batches = Vec::new();
         for partition in 0..plan.partitions.len() {
             let mut stream = scheduler.partition_stream(
@@ -1644,6 +1657,7 @@ mod tests {
             Arc::clone(&plan.engine_context),
             plan.execution_options,
             plan.metrics.clone(),
+            Arc::default(),
         );
         let object = reader.resolve_parquet_object(&task)?;
         let inner = Arc::new(InMemory::new());
@@ -1772,6 +1786,7 @@ mod tests {
             engine_context,
             DeltaScanExecutionOptions::new(),
             metrics.clone(),
+            Arc::default(),
         );
         let tracked_store = GatedObjectStore::ungated(Arc::clone(&store));
         reader.store = Arc::new(MeteredParquetObjectStore::new(
@@ -2084,6 +2099,7 @@ mod tests {
             Arc::clone(&plan.engine_context),
             plan.execution_options,
             plan.metrics.clone(),
+            Arc::default(),
         ));
         let limiter = one_file_limiter(plan.execution_options)?;
         let partition = limiter.partition(0)?;
