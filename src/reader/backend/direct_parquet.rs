@@ -462,15 +462,7 @@ impl DirectParquetReader {
         parquet_schema: &SchemaDescriptor,
         parquet_arrow_schema: &SchemaRef,
     ) -> Result<RowFilter, delta_kernel::Error> {
-        let mut target_indices = predicate
-            .as_ref()
-            .references()
-            .into_iter()
-            .map(|column| predicate_root_index(column, target_schema))
-            .collect::<Result<Vec<_>, _>>()?;
-        // References are unordered, and nested paths can share the same root.
-        target_indices.sort_unstable();
-        target_indices.dedup();
+        let target_indices = predicate_root_indices(predicate, target_schema)?;
         let predicate_schema = Arc::new(target_schema.project(&target_indices)?);
         let schema_alignment =
             build_schema_alignment(parquet_schema, parquet_arrow_schema, predicate_schema)?;
@@ -559,6 +551,24 @@ impl DirectParquetReader {
         object.store = store;
         Ok(object)
     }
+}
+
+/// Returns the sorted, unique target-schema indices needed by a predicate.
+///
+/// Predicate references are unordered, and separate nested paths can use the same top-level root.
+fn predicate_root_indices(
+    predicate: &DeltaKernelPredicate,
+    target_schema: &Schema,
+) -> Result<Vec<usize>, delta_kernel::Error> {
+    let mut indices = predicate
+        .as_ref()
+        .references()
+        .into_iter()
+        .map(|column| predicate_root_index(column, target_schema))
+        .collect::<Result<Vec<_>, _>>()?;
+    indices.sort_unstable();
+    indices.dedup();
+    Ok(indices)
 }
 
 /// Finds the target-schema index for a predicate column's top-level field.
@@ -2432,9 +2442,23 @@ mod tests {
             Expression::Column(ColumnName::new(["id"])),
             Expression::Literal(Scalar::Integer(2)),
         ));
+        let multi_root_predicate = DeltaKernelPredicate::from_test_predicate(Predicate::and(
+            Predicate::eq(
+                Expression::Column(ColumnName::new(["payload_063"])),
+                Expression::Literal(Scalar::String("63-c".to_owned())),
+            ),
+            Predicate::gt(
+                Expression::Column(ColumnName::new(["id"])),
+                Expression::Literal(Scalar::Integer(2)),
+            ),
+        ));
+        assert_eq!(
+            super::predicate_root_indices(&multi_root_predicate, &schema)?,
+            [0, 64]
+        );
         let parquet_schema = ArrowSchemaConverter::new().convert(schema.as_ref())?;
         let row_filter = reader.build_row_filter(
-            &predicate,
+            &multi_root_predicate,
             &plan.kernel_schemas,
             &schema,
             &parquet_schema,
@@ -2442,7 +2466,8 @@ mod tests {
         )?;
         let projection = row_filter.predicates()[0].projection();
         assert!(projection.leaf_included(0));
-        assert!((1..65).all(|index| !projection.leaf_included(index)));
+        assert!((1..64).all(|index| !projection.leaf_included(index)));
+        assert!(projection.leaf_included(64));
 
         let nested_schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
@@ -2460,10 +2485,20 @@ mod tests {
             Field::new("payload", DataType::Utf8, true),
         ]));
         let nested_parquet_schema = ArrowSchemaConverter::new().convert(nested_schema.as_ref())?;
-        let nested_predicate = DeltaKernelPredicate::from_test_predicate(Predicate::gt(
-            Expression::Column(ColumnName::new(["profile", "age"])),
-            Expression::Literal(Scalar::Integer(18)),
+        let nested_predicate = DeltaKernelPredicate::from_test_predicate(Predicate::and(
+            Predicate::gt(
+                Expression::Column(ColumnName::new(["profile", "age"])),
+                Expression::Literal(Scalar::Integer(18)),
+            ),
+            Predicate::eq(
+                Expression::Column(ColumnName::new(["profile", "label"])),
+                Expression::Literal(Scalar::String("adult".to_owned())),
+            ),
         ));
+        assert_eq!(
+            super::predicate_root_indices(&nested_predicate, &nested_schema)?,
+            [1]
+        );
         let nested_filter = reader.build_row_filter(
             &nested_predicate,
             &plan.kernel_schemas,
