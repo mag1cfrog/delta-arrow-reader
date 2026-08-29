@@ -309,7 +309,6 @@ pub(crate) fn create_datafusion_execution_plan(
     datafusion_plan: DataFusionScanPlan,
     exact_row_predicate: Option<DeltaKernelPredicate>,
     range_read_estimator: Arc<ParquetRangeReadEstimator>,
-    parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
     metrics: ScanMetrics,
     intra_file_repartitioning: IntraFileRepartitioning,
 ) -> Arc<dyn ExecutionPlan> {
@@ -318,7 +317,6 @@ pub(crate) fn create_datafusion_execution_plan(
         datafusion_plan,
         exact_row_predicate,
         range_read_estimator,
-        parquet_metadata_cache,
         metrics,
         intra_file_repartitioning,
     ))
@@ -348,7 +346,6 @@ impl DeltaScanExec {
         datafusion_plan: DataFusionScanPlan,
         exact_row_predicate: Option<DeltaKernelPredicate>,
         range_read_estimator: Arc<ParquetRangeReadEstimator>,
-        parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
         metrics: ScanMetrics,
         intra_file_repartitioning: IntraFileRepartitioning,
     ) -> Self {
@@ -372,7 +369,7 @@ impl DeltaScanExec {
             dynamic_filters: Arc::from([]),
             intra_file_repartitioning,
             range_read_estimator,
-            parquet_metadata_cache,
+            parquet_metadata_cache: None,
             file_tasks_repartitioned: false,
         }
     }
@@ -403,17 +400,12 @@ impl DeltaScanExec {
             target_partitions,
             partition_count,
         );
-        // Preserve a table-prepared cache. Otherwise, give the ranged tasks created here an empty
-        // cache so they share their first metadata load.
-        let parquet_metadata_cache = self
-            .parquet_metadata_cache
-            .clone()
-            .unwrap_or_else(|| Arc::new(ParquetMetadataCache::default()));
         Arc::new(Self {
             reader_plan: Arc::new(reader_plan),
             properties: scan_properties(&self.schema, partition_count),
             limiter,
-            parquet_metadata_cache: Some(parquet_metadata_cache),
+            // Ranged tasks within this plan share their first metadata load.
+            parquet_metadata_cache: Some(Arc::new(ParquetMetadataCache::default())),
             file_tasks_repartitioned: true,
             ..self.clone()
         })

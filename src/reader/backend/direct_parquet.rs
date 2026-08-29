@@ -8,9 +8,6 @@ mod schema_alignment;
 
 use std::{ops::Range, sync::Arc};
 
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-use std::collections::HashSet;
-
 use arrow::{
     array::Int64Array,
     datatypes::{DataType, Field, Schema, SchemaRef},
@@ -58,22 +55,12 @@ use crate::{
     },
 };
 
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-use crate::reader::ParquetMetadataPreparationLimits;
-
 struct DirectParquetReader {
     engine_context: Arc<DeltaKernelEngineContext>,
     store: Arc<dyn ObjectStore>,
     execution_options: DeltaScanExecutionOptions,
     metrics: DeltaScanMetrics,
     metadata_cache: Option<Arc<ParquetMetadataCache>>,
-}
-
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct PreparedParquetMetadataSummary {
-    pub(crate) file_count: usize,
-    pub(crate) memory_bytes: usize,
 }
 
 struct ParquetFileObject {
@@ -174,28 +161,6 @@ impl DirectParquetReader {
         metadata.boxed().context(DataFileReadSnafu {
             reason: "parquet_read_setup_failed",
         })
-    }
-
-    #[cfg(feature = "experimental-parquet-metadata-warmup")]
-    async fn prepare_task_parquet_metadata(
-        &self,
-        task: &DeltaScanFileTask,
-    ) -> Result<usize, DeltaReaderError> {
-        let object = self.resolve_parquet_object(task)?;
-        let mut reader = ParquetObjectReader::new(Arc::clone(&object.store), object.path.clone())
-            .with_file_size(object.file_size);
-        if let Some(hint) = self.execution_options.parquet_metadata_size_hint_bytes() {
-            reader = reader.with_footer_size_hint(hint);
-        }
-        let options = arrow_reader_options(false, true)
-            .boxed()
-            .context(DataFileReadSnafu {
-                reason: "parquet_row_index_setup_failed",
-            })?;
-        let metadata = self
-            .load_parquet_metadata(&object.path, object.file_size, &mut reader, &options)
-            .await?;
-        Ok(metadata.memory_size())
     }
 
     async fn parquet_object_for_task(
@@ -694,64 +659,6 @@ pub(crate) fn direct_parquet_file_executor(
             });
             Ok(Box::pin(batches) as FileBatchStream)
         })
-    })
-}
-
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-pub(crate) async fn prepare_parquet_metadata(
-    plan: &DeltaScanPlan,
-    metadata_cache: Arc<ParquetMetadataCache>,
-    range_read_estimator: Arc<ParquetRangeReadEstimator>,
-    limits: ParquetMetadataPreparationLimits,
-) -> Result<PreparedParquetMetadataSummary, DeltaReaderError> {
-    let mut seen = HashSet::new();
-    let tasks = plan
-        .partitions
-        .iter()
-        .flat_map(|partition| &partition.file_tasks)
-        .filter(|task| seen.insert((task.path.clone(), task.file_size)))
-        .cloned()
-        .collect::<Vec<_>>();
-    if tasks.len() > limits.max_files {
-        return Err(DeltaReaderError::InvalidConfiguration {
-            reason: "parquet_metadata_warmup_file_limit_exceeded",
-        });
-    }
-
-    let file_count = tasks.len();
-    let reader = Arc::new(
-        DirectParquetReader::new(
-            Arc::clone(&plan.engine_context),
-            plan.execution_options,
-            plan.metrics.clone(),
-            range_read_estimator,
-        )
-        .with_metadata_cache(metadata_cache),
-    );
-    let concurrency = plan
-        .execution_options
-        .resolved_max_concurrent_file_reads_per_scan(
-            plan.partition_target_diagnostic.target_partitions,
-        );
-    let mut loads = stream::iter(tasks)
-        .map(|task| {
-            let reader = Arc::clone(&reader);
-            async move { reader.prepare_task_parquet_metadata(&task).await }
-        })
-        .buffer_unordered(concurrency);
-    let mut memory_bytes = 0_usize;
-    while let Some(result) = loads.next().await {
-        memory_bytes = memory_bytes
-            .checked_add(result?)
-            .filter(|bytes| *bytes <= limits.max_retained_metadata_bytes)
-            .ok_or(DeltaReaderError::InvalidConfiguration {
-                reason: "parquet_metadata_warmup_memory_limit_exceeded",
-            })?;
-    }
-
-    Ok(PreparedParquetMetadataSummary {
-        file_count,
-        memory_bytes,
     })
 }
 
