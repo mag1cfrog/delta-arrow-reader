@@ -823,6 +823,7 @@ mod tests {
         memory::InMemory, path::Path,
     };
     use parquet::arrow::{ArrowSchemaConverter, ArrowWriter, PARQUET_FIELD_ID_META_KEY};
+    use parquet::basic::Compression;
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
@@ -2122,8 +2123,8 @@ mod tests {
             snapshots[0].parquet_data_file_bytes_received,
             Some(file_size)
         );
-        assert_eq!(snapshots[1].parquet_data_file_range_get_operations, Some(2));
-        assert_eq!(snapshots[2].parquet_data_file_range_get_operations, Some(2));
+        assert_eq!(snapshots[1].parquet_data_file_range_get_operations, Some(3));
+        assert_eq!(snapshots[2].parquet_data_file_range_get_operations, Some(3));
         assert_eq!(
             snapshots[2].parquet_data_file_bytes_received,
             snapshots[1]
@@ -2585,6 +2586,98 @@ mod tests {
         }
 
         assert_eq!(qualifying_ids, [vec![3, 4], vec![3, 4]]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn optional_offset_indexes_reduce_localized_row_filter_reads()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const ROWS: usize = 2_048;
+        const PAYLOAD_COLUMNS: usize = 4;
+
+        let indexed_root = TestDir::new("direct-row-filter-indexed")?;
+        let unindexed_root = TestDir::new("direct-row-filter-unindexed")?;
+        let mut fields = vec![Field::new("id", DataType::Int32, false)];
+        fields.extend(
+            (0..PAYLOAD_COLUMNS)
+                .map(|index| Field::new(format!("payload_{index:03}"), DataType::Utf8, true)),
+        );
+        let schema = Arc::new(Schema::new(fields));
+        let mut columns = vec![Arc::new(Int32Array::from_iter_values(0..ROWS as i32)) as ArrayRef];
+        let payload_body = "abcdefghijklmnopqrstuvwxyz0123456789".repeat(64);
+        columns.extend((0..PAYLOAD_COLUMNS).map(|column| {
+            Arc::new(StringArray::from_iter((0..ROWS).map(|row| {
+                ((row + column) % 3 != 0)
+                    .then(|| format!("payload-{column:03}-{row:08}-{payload_body}"))
+            }))) as ArrayRef
+        }));
+        let properties = |offset_index_disabled| {
+            WriterProperties::builder()
+                .set_max_row_group_row_count(Some(1_024))
+                .set_write_batch_size(64)
+                .set_data_page_row_count_limit(64)
+                .set_dictionary_enabled(false)
+                .set_compression(Compression::UNCOMPRESSED)
+                .set_offset_index_disabled(offset_index_disabled)
+                .build()
+        };
+        let indexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns.clone(), properties(false))?;
+        let unindexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns, properties(true))?;
+        write_partitioned_non_dv_table(&indexed_root, &indexed_bytes)?;
+        write_partitioned_non_dv_table(&unindexed_root, &unindexed_bytes)?;
+
+        let predicate = DeltaKernelPredicate::from_test_predicate(Predicate::eq(
+            Expression::Column(ColumnName::new(["id"])),
+            Expression::Literal(Scalar::Integer(42)),
+        ));
+        let mut results = Vec::new();
+        for (root, parquet_bytes) in [
+            (&indexed_root, &indexed_bytes),
+            (&unindexed_root, &unindexed_bytes),
+        ] {
+            let plan =
+                pipeline_plan_for_backend(root, None, None, ParquetReaderBackend::Direct, false)?;
+            let metrics = metrics();
+            let reader = reader(
+                root,
+                DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(None)?,
+                metrics.clone(),
+            )?;
+            let task = task("part.parquet", Some(u64::try_from(parquet_bytes.len())?))?;
+            let mut stream = reader
+                .open_physical_parquet_stream(
+                    &task,
+                    &schema,
+                    PhysicalParquetStreamOptions {
+                        row_filter: Some(RowFilterInput {
+                            predicate: &predicate,
+                            kernel_schemas: &plan.kernel_schemas,
+                        }),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            let mut batches = Vec::new();
+            while let Some(batch) = stream.next_batch().await? {
+                batches.push(batch);
+            }
+            let bytes_received = metrics
+                .snapshot()
+                .parquet_data_file_bytes_received
+                .ok_or("direct reader did not report Parquet bytes")?;
+            results.push((batches, bytes_received));
+        }
+
+        assert_eq!(results[0].0, results[1].0);
+        assert_eq!(int32_ids(&results[0].0)?, [42]);
+        assert!(
+            results[0].1.saturating_mul(2) < results[1].1,
+            "indexed read used {} bytes; unindexed read used {} bytes",
+            results[0].1,
+            results[1].1
+        );
         Ok(())
     }
 
