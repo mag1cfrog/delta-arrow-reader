@@ -11,9 +11,11 @@ use arrow::{
     record_batch::RecordBatch,
     util::display::array_value_to_string,
 };
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+use delta_arrow_reader::ParquetMetadataPreparationLimits;
 use delta_arrow_reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderPhase,
-    DeltaScalar, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot,
+    DeltaScalar, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaTable,
     DeltaTableBuilder, ParquetReaderBackend,
 };
 use futures_util::{StreamExt, TryStreamExt};
@@ -562,6 +564,14 @@ async fn scan_fixture(
         .with_execution_options(options)
         .load_table()
         .await?;
+    scan_table(&table, projection, predicate).await
+}
+
+async fn scan_table(
+    table: &DeltaTable,
+    projection: Option<Vec<String>>,
+    predicate: Option<DeltaPredicate>,
+) -> TestResult<ScanAttempt> {
     let scan = table.scan().with_target_partitions(1)?;
     let scan = match projection {
         Some(projection) => scan.with_projection(projection),
@@ -597,6 +607,74 @@ async fn scan_fixture(
             metrics: metrics.snapshot(),
         }),
     }
+}
+
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[test]
+fn prepared_parquet_metadata_preserves_streaming_scan_results() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
+            "prepared-streaming-equivalence",
+            3,
+            &[1, 4],
+        )?;
+        let location = fixture.path().to_string_lossy().into_owned();
+        let eager = DeltaTableBuilder::new(location.clone())
+            .load_table_with_eager_scan_metadata()
+            .await?;
+        let prepared = DeltaTableBuilder::new(location)
+            .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+                max_files: 1,
+                max_retained_metadata_bytes: 1024 * 1024,
+            })
+            .await?;
+
+        let cases = [
+            ("full scan", None, None, vec![1, 3, 4, 6]),
+            ("projection", projection(&["id"]), None, vec![1, 3, 4, 6]),
+            (
+                "exact row filter",
+                projection(&["id"]),
+                Some(DeltaPredicate::Compare {
+                    column: "id".into(),
+                    op: DeltaComparison::Gt,
+                    value: DeltaScalar::Int32(3),
+                }),
+                vec![4, 6],
+            ),
+        ];
+
+        for (name, projection, predicate, expected_ids) in cases {
+            let (eager_batch, eager_metrics, _) = assert_success(
+                name,
+                ParquetReaderBackend::Direct,
+                scan_table(&eager, projection.clone(), predicate.clone()).await?,
+                &expected_ids,
+            )?;
+            let (prepared_batch, prepared_metrics, _) = assert_success(
+                name,
+                ParquetReaderBackend::Direct,
+                scan_table(&prepared, projection, predicate).await?,
+                &expected_ids,
+            )?;
+
+            assert_eq!(prepared_batch, eager_batch, "{name}");
+            assert_eq!(
+                (
+                    prepared_metrics.deletion_vector_payloads_loaded,
+                    prepared_metrics.deletion_vectors_applied,
+                    prepared_metrics.deletion_vector_rows_deleted,
+                ),
+                (
+                    eager_metrics.deletion_vector_payloads_loaded,
+                    eager_metrics.deletion_vectors_applied,
+                    eager_metrics.deletion_vector_rows_deleted,
+                ),
+                "{name}"
+            );
+        }
+        Ok::<_, Box<dyn Error>>(())
+    })
 }
 
 fn batch_ids(batch: &RecordBatch) -> TestResult<Vec<i32>> {

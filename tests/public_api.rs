@@ -305,6 +305,30 @@ fn streaming_reader_contract_is_public() {
     let _ = (stream_schema, metrics);
 }
 
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[test]
+fn prepared_parquet_metadata_contract_is_public() {
+    use delta_arrow_reader::{ParquetMetadataPreparationLimits, ParquetMetadataPreparationReport};
+
+    fn assert_debug<T: std::fmt::Debug>() {}
+    fn assert_clone<T: Clone>() {}
+    fn assert_future<T>(_: impl Future<Output = T>) {}
+
+    assert_debug::<ParquetMetadataPreparationLimits>();
+    assert_clone::<ParquetMetadataPreparationReport>();
+    let limits = ParquetMetadataPreparationLimits {
+        max_files: 10,
+        max_retained_metadata_bytes: 1024 * 1024,
+    };
+    assert_future::<Result<DeltaTable, DeltaReaderError>>(
+        DeltaTableBuilder::new("file:///tmp/table")
+            .load_table_with_prepared_parquet_metadata(limits),
+    );
+    let report: for<'a> fn(&'a DeltaTable) -> Option<&'a ParquetMetadataPreparationReport> =
+        DeltaTable::parquet_metadata_preparation_report;
+    let _ = report;
+}
+
 #[cfg(feature = "datafusion")]
 #[test]
 fn datafusion_metrics_contract_is_public() {
