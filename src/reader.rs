@@ -31,20 +31,10 @@ use std::{
     task::{Context, Poll},
 };
 
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-use std::time::{Duration, Instant};
-
 use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use futures_util::Stream;
 use snafu::ResultExt;
 
-#[cfg(any(
-    feature = "datafusion",
-    feature = "experimental-parquet-metadata-warmup"
-))]
-use self::backend::direct_parquet::ParquetMetadataCache;
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-use self::backend::direct_parquet::prepare_parquet_metadata;
 use self::{
     planning::{DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan},
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
@@ -83,46 +73,6 @@ pub enum WarmupMode {
     None,
     /// Loads and retains the active-file metadata used during query planning.
     QueryPlanning,
-    /// Also loads and retains Parquet footers and optional offset indexes for every active file.
-    ///
-    /// Both limits must be greater than zero. `max_memory_bytes` applies to the reader's estimate
-    /// of parsed metadata size, not allocator-level resident memory.
-    #[cfg(feature = "experimental-parquet-metadata-warmup")]
-    ParquetMetadata {
-        /// Maximum number of active Parquet files to warm.
-        max_files: usize,
-        /// Maximum estimated bytes of parsed Parquet metadata to retain.
-        max_memory_bytes: usize,
-    },
-}
-
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ParquetMetadataPreparationLimits {
-    pub(crate) max_files: usize,
-    pub(crate) max_retained_metadata_bytes: usize,
-}
-
-/// Measurements recorded while warming one table's Parquet metadata.
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-#[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParquetWarmupReport {
-    /// Number of active Parquet files included in the warmup.
-    pub file_count: usize,
-    /// Estimated bytes retained by parsed Parquet metadata.
-    pub estimated_memory_bytes: usize,
-    /// Time spent fetching and parsing Parquet metadata.
-    pub duration: Duration,
-    /// Reader metrics collected during the warmup.
-    pub read_metrics: DeltaScanMetricsSnapshot,
-}
-
-/// Table-owned prepared cache and the report describing how it was built.
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-struct PreparedParquetMetadata {
-    cache: Arc<ParquetMetadataCache>,
-    report: ParquetWarmupReport,
 }
 
 /// Configures and loads one immutable Delta table snapshot.
@@ -221,39 +171,14 @@ impl DeltaTableBuilder {
     /// scan.
     ///
     /// A warmup mode validates the protocol while loading because it builds reusable query-planning
-    /// state. Query-planning warmup retains active-file metadata. When its experimental feature is
-    /// enabled, Parquet metadata warmup also reads and retains footers and offset indexes within the
-    /// configured file and memory limits.
+    /// state. Query-planning warmup retains active-file metadata.
     ///
     /// # Errors
     ///
     /// Returns an error if the table location, storage, snapshot, or schema cannot be loaded. A
     /// warmup can also fail if the table protocol is unsupported or its reusable metadata cannot be
-    /// built. Parquet metadata warmup additionally validates its limits and direct-backend
-    /// requirement, and returns an error if any required Parquet metadata cannot be read.
+    /// built.
     pub async fn load_table(self) -> Result<DeltaTable, DeltaReaderError> {
-        #[cfg(feature = "experimental-parquet-metadata-warmup")]
-        let parquet_limits = match self.warmup {
-            WarmupMode::ParquetMetadata {
-                max_files,
-                max_memory_bytes,
-            } => {
-                let limits = ParquetMetadataPreparationLimits {
-                    max_files,
-                    max_retained_metadata_bytes: max_memory_bytes,
-                };
-                limits.validate()?;
-                if self.execution_options.parquet_backend() != ParquetReaderBackend::Direct {
-                    return InvalidConfigurationSnafu {
-                        reason: "parquet_metadata_warmup_requires_direct_backend",
-                    }
-                    .fail();
-                }
-                Some(limits)
-            }
-            _ => None,
-        };
-
         let snapshot = load_delta_table_snapshot(
             self.table_location,
             self.storage_options,
@@ -266,13 +191,7 @@ impl DeltaTableBuilder {
             validate_protocol(snapshot.protocol())?;
             materialize_eager_scan_metadata(snapshot).await?
         };
-        let table = DeltaTable::new(snapshot, self.execution_options);
-
-        #[cfg(feature = "experimental-parquet-metadata-warmup")]
-        if let Some(limits) = parquet_limits {
-            return table.prepare_parquet_metadata(limits).await;
-        }
-        Ok(table)
+        Ok(DeltaTable::new(snapshot, self.execution_options))
     }
 
     /// Loads a Delta Kernel snapshot without converting its logical Arrow schema.
@@ -311,25 +230,6 @@ async fn materialize_eager_scan_metadata(
         .context(ScanPlanningSnafu {
             reason: "query_planning_warmup_task_failed",
         })?
-}
-
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-impl ParquetMetadataPreparationLimits {
-    fn validate(self) -> Result<(), DeltaReaderError> {
-        if self.max_files == 0 {
-            return InvalidConfigurationSnafu {
-                reason: "parquet_metadata_warmup_max_files_must_be_positive",
-            }
-            .fail();
-        }
-        if self.max_retained_metadata_bytes == 0 {
-            return InvalidConfigurationSnafu {
-                reason: "parquet_metadata_warmup_memory_limit_must_be_positive",
-            }
-            .fail();
-        }
-        Ok(())
-    }
 }
 
 impl fmt::Debug for DeltaTableBuilder {
@@ -404,8 +304,6 @@ impl fmt::Debug for DeltaTableSnapshot {
 pub struct DeltaTable {
     snapshot: Arc<ArrowTableSnapshot>,
     execution_options: DeltaScanExecutionOptions,
-    #[cfg(feature = "experimental-parquet-metadata-warmup")]
-    prepared_parquet_metadata: Option<Arc<PreparedParquetMetadata>>,
 }
 
 impl DeltaTable {
@@ -413,52 +311,7 @@ impl DeltaTable {
         Self {
             snapshot: Arc::new(snapshot),
             execution_options,
-            #[cfg(feature = "experimental-parquet-metadata-warmup")]
-            prepared_parquet_metadata: None,
         }
-    }
-
-    #[cfg(feature = "experimental-parquet-metadata-warmup")]
-    async fn prepare_parquet_metadata(
-        mut self,
-        limits: ParquetMetadataPreparationLimits,
-    ) -> Result<Self, DeltaReaderError> {
-        let snapshot = Arc::clone(&self.snapshot);
-        let execution_options = self.execution_options;
-        let plan = tokio::task::spawn_blocking(move || {
-            plan_scan(
-                snapshot.as_ref(),
-                None,
-                &[],
-                None,
-                false,
-                execution_options,
-                DeltaScanPartitionTargetOptions {
-                    explicit_target_partitions: None,
-                    datafusion_target_partitions: None,
-                },
-            )
-        })
-        .await
-        .boxed()
-        .context(ScanPlanningSnafu {
-            reason: "parquet_metadata_warmup_planning_task_failed",
-        })??;
-        let metadata_cache = Arc::new(ParquetMetadataCache::default());
-        let started = Instant::now();
-        let prepared =
-            prepare_parquet_metadata(&plan, Arc::clone(&metadata_cache), Arc::default(), limits)
-                .await?;
-        self.prepared_parquet_metadata = Some(Arc::new(PreparedParquetMetadata {
-            cache: metadata_cache,
-            report: ParquetWarmupReport {
-                file_count: prepared.file_count,
-                estimated_memory_bytes: prepared.memory_bytes,
-                duration: started.elapsed(),
-                read_metrics: plan.metrics.snapshot(),
-            },
-        }));
-        Ok(self)
     }
 
     /// Returns the loaded Delta snapshot version.
@@ -496,29 +349,6 @@ impl DeltaTable {
     /// Validates the loaded snapshot against the supported reader protocol.
     pub fn validate_protocol(&self) -> Result<(), DeltaReaderError> {
         validate_protocol(self.protocol())
-    }
-
-    /// Returns measurements from experimental Parquet metadata warmup, when enabled for this
-    /// table.
-    #[cfg(feature = "experimental-parquet-metadata-warmup")]
-    pub fn parquet_warmup_report(&self) -> Option<&ParquetWarmupReport> {
-        self.prepared_parquet_metadata
-            .as_deref()
-            .map(|prepared| &prepared.report)
-    }
-
-    #[cfg(feature = "datafusion")]
-    pub(crate) fn prepared_parquet_metadata_cache(&self) -> Option<Arc<ParquetMetadataCache>> {
-        #[cfg(feature = "experimental-parquet-metadata-warmup")]
-        {
-            self.prepared_parquet_metadata
-                .as_ref()
-                .map(|prepared| Arc::clone(&prepared.cache))
-        }
-        #[cfg(not(feature = "experimental-parquet-metadata-warmup"))]
-        {
-            None
-        }
     }
 
     /// Starts configuring a new single-use scan.
@@ -662,12 +492,6 @@ impl<'table> DeltaScanBuilder<'table> {
                     predicate,
                     limit: self.limit,
                     enforce_physical_predicate_rows,
-                    #[cfg(feature = "experimental-parquet-metadata-warmup")]
-                    parquet_metadata_cache: self
-                        .table
-                        .prepared_parquet_metadata
-                        .as_ref()
-                        .map(|prepared| Arc::clone(&prepared.cache)),
                 })
             }
             Err(error) => {
@@ -704,8 +528,6 @@ pub struct DeltaScan {
     predicate: Option<DeltaPredicate>,
     limit: Option<usize>,
     enforce_physical_predicate_rows: bool,
-    #[cfg(feature = "experimental-parquet-metadata-warmup")]
-    parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
 }
 
 impl DeltaScan {
@@ -730,16 +552,6 @@ impl DeltaScan {
         let backend = self.plan.execution_options.parquet_backend();
         let projection = (self.plan.logical_schema.as_ref() != schema.as_ref())
             .then(|| (0..schema.fields().len()).collect::<Vec<_>>());
-        let parquet_metadata_cache = {
-            #[cfg(feature = "experimental-parquet-metadata-warmup")]
-            {
-                self.parquet_metadata_cache
-            }
-            #[cfg(not(feature = "experimental-parquet-metadata-warmup"))]
-            {
-                None
-            }
-        };
         let partitions = if self.limit == Some(0) {
             VecDeque::new()
         } else {
@@ -752,7 +564,6 @@ impl DeltaScan {
                     self.enforce_physical_predicate_rows
                         .then(|| self.plan.physical_predicate.clone())
                         .flatten(),
-                    parquet_metadata_cache,
                 ),
                 ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
             };
@@ -923,14 +734,13 @@ pub(crate) fn direct_parquet_executor(
     plan: &Arc<DeltaScanPlan>,
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<crate::delta::kernel::DeltaKernelPredicate>,
-    metadata_cache: Option<Arc<backend::direct_parquet::ParquetMetadataCache>>,
 ) -> FileExecutor<planning::DeltaScanFileTask, FileBatchStream> {
     backend::direct_parquet::direct_parquet_file_executor(
         plan,
         output_batch_size_rows,
         row_predicate,
         Arc::default(),
-        metadata_cache,
+        None,
     )
 }
 

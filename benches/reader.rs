@@ -18,7 +18,7 @@ use arrow::record_batch::RecordBatch;
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
     DeltaScanExecutionOptions, DeltaStorageOptions, DeltaTableBuilder, ParquetReaderBackend,
-    ParquetWarmupReport, WarmupMode,
+    WarmupMode,
     datafusion::{ScanMetricsSnapshot, ScanOptions, collect_scan_metrics, register_table},
 };
 use delta_kernel::actions::deletion_vector::{DeletionVectorDescriptor, DeletionVectorStorageType};
@@ -30,7 +30,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const MIB: u64 = 1024 * 1024;
-const BENCHMARK_SCHEMA_VERSION: u32 = 32;
+const BENCHMARK_SCHEMA_VERSION: u32 = 33;
 const DEFAULT_REPETITIONS: usize = 3;
 const DEFAULT_QUERIES_PER_TABLE: usize = 1;
 const MAX_REPETITIONS: usize = 128;
@@ -52,7 +52,7 @@ const EXPECTED_FIXTURE_FINGERPRINTS: [(&str, &str); 5] = [
     ("provider_4096_tiny_files", "fnv1a64:25e64f77ded44bc9"),
 ];
 
-const CSV_HEADER: [&str; 96] = [
+const CSV_HEADER: [&str; 87] = [
     "benchmark_schema_version",
     "benchmark_mode",
     "host_os",
@@ -65,7 +65,6 @@ const CSV_HEADER: [&str; 96] = [
     "query_case",
     "parquet_backend",
     "scan_metadata_mode",
-    "parquet_metadata_mode",
     "scheduling_mode",
     "scan_target_partitions",
     "max_concurrent_file_reads_per_scan",
@@ -111,14 +110,6 @@ const CSV_HEADER: [&str; 96] = [
     "table_initialization_micros_p50",
     "table_initialization_micros_p95",
     "table_initialization_micros_p99",
-    "parquet_metadata_preparation_micros_p50",
-    "parquet_metadata_preparation_micros_p95",
-    "parquet_metadata_preparation_micros_p99",
-    "prepared_parquet_metadata_file_count_p50",
-    "prepared_parquet_metadata_memory_bytes_p50",
-    "parquet_metadata_preparation_range_get_operations_p50",
-    "parquet_metadata_preparation_full_get_operations_p50",
-    "parquet_metadata_preparation_bytes_received_p50",
     "session_total_micros_p50",
     "session_total_micros_p95",
     "session_total_micros_p99",
@@ -160,7 +151,6 @@ struct Config {
     query: Query,
     backend: ParquetReaderBackend,
     scan_metadata_mode: ScanMetadataMode,
-    parquet_metadata_mode: ParquetMetadataMode,
     queries_per_table: usize,
     repetitions: usize,
     metadata_size_hint_bytes: Option<usize>,
@@ -173,12 +163,6 @@ struct Config {
 enum ScanMetadataMode {
     Lazy,
     Eager,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ParquetMetadataMode {
-    OnDemand,
-    Prepared,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -257,7 +241,6 @@ struct QueryMeasurement {
 #[derive(Debug)]
 struct RepetitionMeasurement {
     table_initialization_micros: u64,
-    parquet_metadata_preparation: Option<ParquetMetadataPreparationMeasurement>,
     session_total_micros: u64,
     #[cfg(test)]
     #[allow(dead_code)]
@@ -266,12 +249,6 @@ struct RepetitionMeasurement {
     #[allow(dead_code)]
     table_registration_count: usize,
     query_measurements: Vec<QueryMeasurement>,
-}
-
-#[derive(Debug)]
-struct ParquetMetadataPreparationMeasurement {
-    micros: u64,
-    prepared: ParquetWarmupReport,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -296,19 +273,8 @@ struct Summary {
     peak_rss: Option<u64>,
     peak_rss_delta: Option<u64>,
     table_initialization: Percentiles,
-    parquet_metadata_preparation: ParquetMetadataPreparationSummary,
     session_total: Percentiles,
     read: ReadSummary,
-}
-
-#[derive(Debug)]
-struct ParquetMetadataPreparationSummary {
-    micros: Option<Percentiles>,
-    file_count: Option<u64>,
-    memory_bytes: Option<u64>,
-    range_gets: Option<u64>,
-    full_gets: Option<u64>,
-    bytes_received: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -373,7 +339,6 @@ impl Config {
             query: Query::FullRows,
             backend: ParquetReaderBackend::Direct,
             scan_metadata_mode: ScanMetadataMode::Lazy,
-            parquet_metadata_mode: ParquetMetadataMode::OnDemand,
             queries_per_table: DEFAULT_QUERIES_PER_TABLE,
             repetitions: DEFAULT_REPETITIONS,
             metadata_size_hint_bytes: Some(65_536),
@@ -416,10 +381,6 @@ impl Config {
                 "--provider-exec-scan-metadata-mode" => {
                     config.scan_metadata_mode =
                         ScanMetadataMode::parse(&required_arg(&mut args, &argument)?)?
-                }
-                "--provider-exec-parquet-metadata-mode" => {
-                    config.parquet_metadata_mode =
-                        ParquetMetadataMode::parse(&required_arg(&mut args, &argument)?)?
                 }
                 "--provider-exec-queries-per-table" => {
                     config.queries_per_table = required_arg(&mut args, &argument)?.parse()?;
@@ -464,15 +425,6 @@ impl Config {
     }
 
     fn validate(&self) -> Result<(), Box<dyn Error>> {
-        if self.parquet_metadata_mode == ParquetMetadataMode::Prepared
-            && (self.backend != ParquetReaderBackend::Direct
-                || self.scan_metadata_mode != ScanMetadataMode::Eager)
-        {
-            return Err(invalid(
-                "prepared Parquet metadata requires the direct backend and eager scan metadata",
-            )
-            .into());
-        }
         if matches!(self.workload, Workload::FourThousandTinyFiles)
             && self.scan_metadata_mode != ScanMetadataMode::Eager
         {
@@ -581,23 +533,6 @@ impl ScanMetadataMode {
         match self {
             Self::Lazy => "lazy",
             Self::Eager => "eager",
-        }
-    }
-}
-
-impl ParquetMetadataMode {
-    fn parse(value: &str) -> Result<Self, io::Error> {
-        match value.replace('-', "_").as_str() {
-            "on_demand" => Ok(Self::OnDemand),
-            "prepared" => Ok(Self::Prepared),
-            other => Err(invalid(format!("unknown Parquet metadata mode: {other}"))),
-        }
-    }
-
-    const fn name(self) -> &'static str {
-        match self {
-            Self::OnDemand => "on_demand",
-            Self::Prepared => "prepared",
         }
     }
 }
@@ -1475,37 +1410,19 @@ async fn run_repetition(
     };
     let session_started = Instant::now();
     let table_initialization_started = session_started;
-    let table = match (config.scan_metadata_mode, config.parquet_metadata_mode) {
-        (ScanMetadataMode::Lazy, ParquetMetadataMode::OnDemand) => builder.load_table().await?,
-        (ScanMetadataMode::Eager, ParquetMetadataMode::OnDemand) => {
+    let table = match config.scan_metadata_mode {
+        ScanMetadataMode::Lazy => builder.load_table().await?,
+        ScanMetadataMode::Eager => {
             builder
                 .with_warmup(WarmupMode::QueryPlanning)
                 .load_table()
                 .await?
-        }
-        (ScanMetadataMode::Eager, ParquetMetadataMode::Prepared) => {
-            builder
-                .with_warmup(WarmupMode::ParquetMetadata {
-                    max_files: fixture.file_count,
-                    max_memory_bytes: usize::MAX,
-                })
-                .load_table()
-                .await?
-        }
-        (ScanMetadataMode::Lazy, ParquetMetadataMode::Prepared) => {
-            return Err("prepared Parquet metadata requires eager scan metadata".into());
         }
     };
     #[cfg(test)]
     let table_load_count = 1;
     let table_initialization_micros =
         saturating_u64(table_initialization_started.elapsed().as_micros());
-    let parquet_metadata_preparation = table.parquet_warmup_report().cloned().map(|prepared| {
-        ParquetMetadataPreparationMeasurement {
-            micros: saturating_u64(prepared.duration.as_micros()),
-            prepared,
-        }
-    });
     register_table(&context, "orders", table, scan_options)?;
     #[cfg(test)]
     let table_registration_count = 1;
@@ -1517,7 +1434,6 @@ async fn run_repetition(
     let session_total_micros = saturating_u64(session_started.elapsed().as_micros());
     Ok(RepetitionMeasurement {
         table_initialization_micros,
-        parquet_metadata_preparation,
         session_total_micros,
         #[cfg(test)]
         table_load_count,
@@ -1724,7 +1640,6 @@ fn summarize(repetitions: &[RepetitionMeasurement]) -> Summary {
                 .map(|repetition| repetition.table_initialization_micros)
                 .collect::<Vec<_>>(),
         ),
-        parquet_metadata_preparation: summarize_parquet_metadata_preparation(repetitions),
         session_total: percentiles(
             &repetitions
                 .iter()
@@ -1732,76 +1647,6 @@ fn summarize(repetitions: &[RepetitionMeasurement]) -> Summary {
                 .collect::<Vec<_>>(),
         ),
         read: summarize_read(&measurements),
-    }
-}
-
-fn summarize_parquet_metadata_preparation(
-    repetitions: &[RepetitionMeasurement],
-) -> ParquetMetadataPreparationSummary {
-    let Some(measurements) = repetitions
-        .iter()
-        .map(|repetition| repetition.parquet_metadata_preparation.as_ref())
-        .collect::<Option<Vec<_>>>()
-    else {
-        return ParquetMetadataPreparationSummary {
-            micros: None,
-            file_count: None,
-            memory_bytes: None,
-            range_gets: None,
-            full_gets: None,
-            bytes_received: None,
-        };
-    };
-    ParquetMetadataPreparationSummary {
-        micros: Some(percentiles(
-            &measurements
-                .iter()
-                .map(|measurement| measurement.micros)
-                .collect::<Vec<_>>(),
-        )),
-        file_count: Some(percentile(
-            &measurements
-                .iter()
-                .map(|measurement| saturating_u64(measurement.prepared.file_count as u128))
-                .collect::<Vec<_>>(),
-            50,
-        )),
-        memory_bytes: Some(percentile(
-            &measurements
-                .iter()
-                .map(|measurement| {
-                    saturating_u64(measurement.prepared.estimated_memory_bytes as u128)
-                })
-                .collect::<Vec<_>>(),
-            50,
-        )),
-        range_gets: optional_percentile(
-            measurements.iter().map(|measurement| {
-                measurement
-                    .prepared
-                    .read_metrics
-                    .parquet_data_file_range_get_operations
-            }),
-            50,
-        ),
-        full_gets: optional_percentile(
-            measurements.iter().map(|measurement| {
-                measurement
-                    .prepared
-                    .read_metrics
-                    .parquet_data_file_full_get_operations
-            }),
-            50,
-        ),
-        bytes_received: optional_percentile(
-            measurements.iter().map(|measurement| {
-                measurement
-                    .prepared
-                    .read_metrics
-                    .parquet_data_file_bytes_received
-            }),
-            50,
-        ),
     }
 }
 
@@ -1927,7 +1772,6 @@ fn csv_row(
 ) -> Vec<String> {
     let summary = summarize(repetitions);
     let read = &summary.read;
-    let preparation = &summary.parquet_metadata_preparation;
     let row = vec![
         BENCHMARK_SCHEMA_VERSION.to_string(),
         "provider_exec".to_owned(),
@@ -1941,7 +1785,6 @@ fn csv_row(
         config.query.name().to_owned(),
         backend_name(config.backend).to_owned(),
         config.scan_metadata_mode.name().to_owned(),
-        config.parquet_metadata_mode.name().to_owned(),
         "prefetch_2_ap_target_scan_3x".to_owned(),
         target_partitions.to_string(),
         target_partitions.saturating_mul(3).max(1).to_string(),
@@ -1989,14 +1832,6 @@ fn csv_row(
         summary.table_initialization.p50.to_string(),
         summary.table_initialization.p95.to_string(),
         summary.table_initialization.p99.to_string(),
-        optional(preparation.micros.map(|micros| micros.p50)),
-        optional(preparation.micros.map(|micros| micros.p95)),
-        optional(preparation.micros.map(|micros| micros.p99)),
-        optional(preparation.file_count),
-        optional(preparation.memory_bytes),
-        optional(preparation.range_gets),
-        optional(preparation.full_gets),
-        optional(preparation.bytes_received),
         summary.session_total.p50.to_string(),
         summary.session_total.p95.to_string(),
         summary.session_total.p99.to_string(),
@@ -2124,7 +1959,6 @@ mod tests {
             query,
             backend,
             scan_metadata_mode: ScanMetadataMode::Lazy,
-            parquet_metadata_mode: ParquetMetadataMode::OnDemand,
             queries_per_table: DEFAULT_QUERIES_PER_TABLE,
             repetitions: 1,
             metadata_size_hint_bytes,
@@ -2288,19 +2122,6 @@ mod tests {
             None,
         );
         assert!(outside.validate().is_err());
-        let mut prepared = config(
-            Workload::FewLarger,
-            Query::FullRows,
-            ParquetReaderBackend::Direct,
-            local,
-            Some(65_536),
-            None,
-        );
-        prepared.scan_metadata_mode = ScanMetadataMode::Eager;
-        prepared.parquet_metadata_mode = ParquetMetadataMode::Prepared;
-        prepared.validate()?;
-        prepared.scan_metadata_mode = ScanMetadataMode::Lazy;
-        assert!(prepared.validate().is_err());
         Ok(())
     }
 
@@ -2322,8 +2143,6 @@ mod tests {
                 "direct_parquet",
                 "--provider-exec-scan-metadata-mode",
                 "eager",
-                "--provider-exec-parquet-metadata-mode",
-                "prepared",
                 "--provider-exec-queries-per-table",
                 "128",
                 "--provider-exec-scheduling-profile",
@@ -2348,7 +2167,6 @@ mod tests {
         assert_eq!(parsed.query.name(), "full_rows");
         assert!(matches!(parsed.backend, ParquetReaderBackend::Direct));
         assert_eq!(parsed.scan_metadata_mode, ScanMetadataMode::Eager);
-        assert_eq!(parsed.parquet_metadata_mode, ParquetMetadataMode::Prepared);
         assert_eq!(parsed.queries_per_table, 128);
         assert_eq!(parsed.repetitions, 5);
         assert_eq!(parsed.metadata_size_hint_bytes, Some(65_536));
@@ -2367,10 +2185,6 @@ mod tests {
         assert_eq!(defaults.query.name(), "full_rows");
         assert!(matches!(defaults.backend, ParquetReaderBackend::Direct));
         assert_eq!(defaults.scan_metadata_mode, ScanMetadataMode::Lazy);
-        assert_eq!(
-            defaults.parquet_metadata_mode,
-            ParquetMetadataMode::OnDemand
-        );
         assert_eq!(defaults.queries_per_table, DEFAULT_QUERIES_PER_TABLE);
         assert_eq!(defaults.repetitions, DEFAULT_REPETITIONS);
         assert_eq!(defaults.metadata_size_hint_bytes, Some(65_536));
@@ -2401,29 +2215,6 @@ mod tests {
                 .is_err()
         );
         assert!(Config::parse(["--provider-exec-scan-metadata-mode"].map(str::to_owned)).is_err());
-        assert_eq!(
-            Config::parse(
-                [
-                    "--provider-exec-scan-metadata-mode",
-                    "eager",
-                    "--provider-exec-parquet-metadata-mode",
-                    "prepared",
-                ]
-                .map(str::to_owned),
-            )?
-            .parquet_metadata_mode,
-            ParquetMetadataMode::Prepared
-        );
-        assert!(
-            Config::parse(["--provider-exec-parquet-metadata-mode", "prepared"].map(str::to_owned))
-                .is_err()
-        );
-        assert!(
-            Config::parse(
-                ["--provider-exec-parquet-metadata-mode", "automatic"].map(str::to_owned)
-            )
-            .is_err()
-        );
         for count in ["1", "128"] {
             assert_eq!(
                 Config::parse(["--provider-exec-queries-per-table", count].map(str::to_owned))?
@@ -2538,7 +2329,7 @@ mod tests {
     }
 
     #[test]
-    fn one_registered_table_runs_three_queries_with_on_demand_or_prepared_metadata() -> TestResult {
+    fn one_registered_table_runs_three_queries_with_lazy_or_eager_scan_metadata() -> TestResult {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
@@ -2556,13 +2347,8 @@ mod tests {
                 Fixture::create(&env::temp_dir(), config.workload, config.storage, false)?;
             let expected_rows = expected_rows(config.workload, config.query, &fixture);
 
-            for (scan_metadata_mode, parquet_metadata_mode) in [
-                (ScanMetadataMode::Lazy, ParquetMetadataMode::OnDemand),
-                (ScanMetadataMode::Eager, ParquetMetadataMode::OnDemand),
-                (ScanMetadataMode::Eager, ParquetMetadataMode::Prepared),
-            ] {
+            for scan_metadata_mode in [ScanMetadataMode::Lazy, ScanMetadataMode::Eager] {
                 config.scan_metadata_mode = scan_metadata_mode;
-                config.parquet_metadata_mode = parquet_metadata_mode;
                 let repetition = run_repetition(&config, &fixture, 4).await?;
                 let repetitions = [repetition];
                 let summary = summarize(&repetitions);
@@ -2572,26 +2358,6 @@ mod tests {
                 assert_eq!(repetitions[0].table_load_count, 1);
                 assert_eq!(repetitions[0].table_registration_count, 1);
                 assert_eq!(repetitions[0].query_measurements.len(), 3);
-                match parquet_metadata_mode {
-                    ParquetMetadataMode::OnDemand => {
-                        assert!(repetitions[0].parquet_metadata_preparation.is_none());
-                    }
-                    ParquetMetadataMode::Prepared => {
-                        let preparation = repetitions[0]
-                            .parquet_metadata_preparation
-                            .as_ref()
-                            .ok_or("prepared mode did not report metadata preparation")?;
-                        assert_eq!(preparation.prepared.file_count, fixture.file_count);
-                        assert!(preparation.prepared.estimated_memory_bytes > 0);
-                        assert!(
-                            preparation
-                                .prepared
-                                .read_metrics
-                                .parquet_data_file_range_get_operations
-                                .is_some_and(|operations| operations > 0)
-                        );
-                    }
-                }
                 assert!(
                     repetitions[0].session_total_micros
                         >= repetitions[0].table_initialization_micros
@@ -2631,7 +2397,6 @@ mod tests {
         let repetitions = [
             RepetitionMeasurement {
                 table_initialization_micros: 10,
-                parquet_metadata_preparation: None,
                 session_total_micros: 100,
                 table_load_count: 1,
                 table_registration_count: 1,
@@ -2639,7 +2404,6 @@ mod tests {
             },
             RepetitionMeasurement {
                 table_initialization_micros: 30,
-                parquet_metadata_preparation: None,
                 session_total_micros: 300,
                 table_load_count: 1,
                 table_registration_count: 1,
@@ -2678,24 +2442,15 @@ mod tests {
 
     #[test]
     fn csv_and_helpers_preserve_frozen_edge_behavior() -> TestResult {
-        assert_eq!(CSV_HEADER.len(), 96);
+        assert_eq!(CSV_HEADER.len(), 87);
         assert_eq!(CSV_HEADER[11], "scan_metadata_mode");
-        assert_eq!(CSV_HEADER[12], "parquet_metadata_mode");
-        assert_eq!(CSV_HEADER[20], "queries_per_table");
+        assert_eq!(CSV_HEADER[19], "queries_per_table");
         assert_eq!(
-            &CSV_HEADER[55..69],
+            &CSV_HEADER[54..60],
             [
                 "table_initialization_micros_p50",
                 "table_initialization_micros_p95",
                 "table_initialization_micros_p99",
-                "parquet_metadata_preparation_micros_p50",
-                "parquet_metadata_preparation_micros_p95",
-                "parquet_metadata_preparation_micros_p99",
-                "prepared_parquet_metadata_file_count_p50",
-                "prepared_parquet_metadata_memory_bytes_p50",
-                "parquet_metadata_preparation_range_get_operations_p50",
-                "parquet_metadata_preparation_full_get_operations_p50",
-                "parquet_metadata_preparation_bytes_received_p50",
                 "session_total_micros_p50",
                 "session_total_micros_p95",
                 "session_total_micros_p99",
@@ -2744,7 +2499,7 @@ mod tests {
             let summary = summarize(&repetitions);
             let row = csv_row(&config, &fixture, Some(4), 4, &repetitions);
             assert_eq!(row.len(), CSV_HEADER.len());
-            assert_eq!(row[0], "32");
+            assert_eq!(row[0], "33");
             assert_eq!(row[1], "provider_exec");
             assert_eq!(row[2], env::consts::OS);
             assert_eq!(row[3], env::consts::ARCH);
@@ -2756,59 +2511,57 @@ mod tests {
             assert_eq!(row[9], "project_id");
             assert_eq!(row[10], "delta_kernel");
             assert_eq!(row[11], "eager");
-            assert_eq!(row[12], "on_demand");
-            assert_eq!(row[13], "prefetch_2_ap_target_scan_3x");
-            assert_eq!(&row[14..19], ["4", "12", "3", "1", "2"]);
-            assert_eq!(row[19], "1");
-            assert_eq!(row[20], "3");
-            assert_eq!(row[21], "4");
-            assert_eq!(row[22], "32768");
-            assert_eq!(row[23], "819772");
-            assert_eq!(row[24], "4");
-            assert_eq!(row[25], "12");
-            assert_eq!(row[26], "3");
-            assert_eq!(row[27], "1");
-            assert_eq!(&row[28..32], ["4", "4", "32768", "819772"]);
-            assert_eq!(&row[32..36], ["4", "4", "4", "4"]);
-            assert!(row[36..44].iter().all(|value| value == "0"));
-            assert_eq!(row[44], "36");
-            assert_eq!(row[45], "32756");
-            assert_eq!(&row[46..51], ["4", "4", "12", "0", "0"]);
-            assert_eq!(row[51], "32756");
-            assert_eq!(row[52], "36");
-            assert_eq!(row[53], optional(summary.peak_rss));
-            assert_eq!(row[54], optional(summary.peak_rss_delta));
-            assert_eq!(row[55], summary.table_initialization.p50.to_string());
-            assert_eq!(row[56], summary.table_initialization.p95.to_string());
-            assert_eq!(row[57], summary.table_initialization.p99.to_string());
-            assert!(row[58..66].iter().all(String::is_empty));
-            assert_eq!(row[66], summary.session_total.p50.to_string());
-            assert_eq!(row[67], summary.session_total.p95.to_string());
-            assert_eq!(row[68], summary.session_total.p99.to_string());
-            assert_eq!(row[69], summary.planning.p50.to_string());
-            assert_eq!(row[70], summary.planning.p95.to_string());
-            assert_eq!(row[71], summary.planning.p99.to_string());
-            assert_eq!(row[72], summary.first_batch.p50.to_string());
-            assert_eq!(row[73], summary.first_batch.p95.to_string());
-            assert_eq!(row[74], summary.first_batch.p99.to_string());
-            assert_eq!(row[75], summary.total.p50.to_string());
-            assert_eq!(row[76], summary.total.p95.to_string());
-            assert_eq!(row[77], summary.total.p99.to_string());
-            assert_eq!(row[78], summary.rows_per_second.p50.to_string());
-            assert_eq!(row[79], summary.rows_per_second.p95.to_string());
-            assert_eq!(row[80], summary.rows_per_second.p99.to_string());
-            assert_eq!(row[81], summary.batch_latency.p50.to_string());
-            assert_eq!(row[82], summary.batch_latency.p95.to_string());
-            assert_eq!(row[83], summary.batch_latency.p99.to_string());
-            assert_eq!(row[84], summary.min_total.to_string());
-            assert_eq!(row[85], summary.max_total.to_string());
-            assert_eq!(row[86], "0");
-            assert_eq!(row[87], "0");
-            assert_eq!(row[88], "disabled");
-            assert_eq!(row[89], "65536");
-            assert_eq!(row[90], "");
-            assert_eq!(&row[91..95], ["", "", "", ""]);
-            assert_eq!(row[95], "fnv1a64:e1509da31486f25a");
+            assert_eq!(row[12], "prefetch_2_ap_target_scan_3x");
+            assert_eq!(&row[13..18], ["4", "12", "3", "1", "2"]);
+            assert_eq!(row[18], "1");
+            assert_eq!(row[19], "3");
+            assert_eq!(row[20], "4");
+            assert_eq!(row[21], "32768");
+            assert_eq!(row[22], "819772");
+            assert_eq!(row[23], "4");
+            assert_eq!(row[24], "12");
+            assert_eq!(row[25], "3");
+            assert_eq!(row[26], "1");
+            assert_eq!(&row[27..31], ["4", "4", "32768", "819772"]);
+            assert_eq!(&row[31..35], ["4", "4", "4", "4"]);
+            assert!(row[35..43].iter().all(|value| value == "0"));
+            assert_eq!(row[43], "36");
+            assert_eq!(row[44], "32756");
+            assert_eq!(&row[45..50], ["4", "4", "12", "0", "0"]);
+            assert_eq!(row[50], "32756");
+            assert_eq!(row[51], "36");
+            assert_eq!(row[52], optional(summary.peak_rss));
+            assert_eq!(row[53], optional(summary.peak_rss_delta));
+            assert_eq!(row[54], summary.table_initialization.p50.to_string());
+            assert_eq!(row[55], summary.table_initialization.p95.to_string());
+            assert_eq!(row[56], summary.table_initialization.p99.to_string());
+            assert_eq!(row[57], summary.session_total.p50.to_string());
+            assert_eq!(row[58], summary.session_total.p95.to_string());
+            assert_eq!(row[59], summary.session_total.p99.to_string());
+            assert_eq!(row[60], summary.planning.p50.to_string());
+            assert_eq!(row[61], summary.planning.p95.to_string());
+            assert_eq!(row[62], summary.planning.p99.to_string());
+            assert_eq!(row[63], summary.first_batch.p50.to_string());
+            assert_eq!(row[64], summary.first_batch.p95.to_string());
+            assert_eq!(row[65], summary.first_batch.p99.to_string());
+            assert_eq!(row[66], summary.total.p50.to_string());
+            assert_eq!(row[67], summary.total.p95.to_string());
+            assert_eq!(row[68], summary.total.p99.to_string());
+            assert_eq!(row[69], summary.rows_per_second.p50.to_string());
+            assert_eq!(row[70], summary.rows_per_second.p95.to_string());
+            assert_eq!(row[71], summary.rows_per_second.p99.to_string());
+            assert_eq!(row[72], summary.batch_latency.p50.to_string());
+            assert_eq!(row[73], summary.batch_latency.p95.to_string());
+            assert_eq!(row[74], summary.batch_latency.p99.to_string());
+            assert_eq!(row[75], summary.min_total.to_string());
+            assert_eq!(row[76], summary.max_total.to_string());
+            assert_eq!(row[77], "0");
+            assert_eq!(row[78], "0");
+            assert_eq!(row[79], "disabled");
+            assert_eq!(row[80], "65536");
+            assert_eq!(row[81], "");
+            assert_eq!(&row[82..86], ["", "", "", ""]);
+            assert_eq!(row[86], "fnv1a64:e1509da31486f25a");
             Ok::<_, Box<dyn Error>>(())
         })?;
         Ok(())

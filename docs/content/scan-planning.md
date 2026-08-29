@@ -21,14 +21,8 @@ retained metadata to Delta Kernel through `Scan::scan_metadata_from`; Delta
 Kernel remains responsible for applying the query predicate and selecting
 files.
 
-The experimental `WarmupMode::ParquetMetadata` mode includes query-planning
-warmup and then loads parsed metadata for every active Parquet file. Later scans
-reuse that metadata, but each scan still makes its own row-group and page
-selections.
-
-All three modes produce the same file tasks. Partition values, schema
-transforms, and deletion-vector information follow the selected files in every
-mode.
+Both modes produce the same file tasks. Partition values, schema transforms,
+and deletion-vector information follow the selected files in either mode.
 
 In one dated real-S3 case study, query-planning warmup reduced the median time
 for a six-query session by 15.4% while adding 30.2 MiB of resident memory after
@@ -38,9 +32,6 @@ before applying those measurements to another table or workload.
 
 To see how this initialization choice plays out across several queries, follow
 the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
-For the experimental Parquet metadata mode, see the
-[Parquet metadata warmup guide](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
-and its [controlled benchmark](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/prepared-parquet-metadata/).
 
 ## Choose a partition target
 

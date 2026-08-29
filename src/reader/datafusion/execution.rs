@@ -309,7 +309,6 @@ pub(crate) fn create_datafusion_execution_plan(
     datafusion_plan: DataFusionScanPlan,
     exact_row_predicate: Option<DeltaKernelPredicate>,
     range_read_estimator: Arc<ParquetRangeReadEstimator>,
-    parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
     metrics: ScanMetrics,
     intra_file_repartitioning: IntraFileRepartitioning,
 ) -> Arc<dyn ExecutionPlan> {
@@ -318,7 +317,6 @@ pub(crate) fn create_datafusion_execution_plan(
         datafusion_plan,
         exact_row_predicate,
         range_read_estimator,
-        parquet_metadata_cache,
         metrics,
         intra_file_repartitioning,
     ))
@@ -336,8 +334,8 @@ struct DeltaScanExec {
     dynamic_filters: Arc<[RetainedDynamicFilter]>,
     intra_file_repartitioning: IntraFileRepartitioning,
     range_read_estimator: Arc<ParquetRangeReadEstimator>,
+    // Created only when DataFusion repartitions files into ranged tasks.
     parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
-    // A prepared table can supply a cache before DataFusion repartitions this plan.
     file_tasks_repartitioned: bool,
 }
 
@@ -348,7 +346,6 @@ impl DeltaScanExec {
         datafusion_plan: DataFusionScanPlan,
         exact_row_predicate: Option<DeltaKernelPredicate>,
         range_read_estimator: Arc<ParquetRangeReadEstimator>,
-        parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
         metrics: ScanMetrics,
         intra_file_repartitioning: IntraFileRepartitioning,
     ) -> Self {
@@ -372,7 +369,7 @@ impl DeltaScanExec {
             dynamic_filters: Arc::from([]),
             intra_file_repartitioning,
             range_read_estimator,
-            parquet_metadata_cache,
+            parquet_metadata_cache: None,
             file_tasks_repartitioned: false,
         }
     }
@@ -403,17 +400,12 @@ impl DeltaScanExec {
             target_partitions,
             partition_count,
         );
-        // Preserve a table-prepared cache. Otherwise, give the ranged tasks created here an empty
-        // cache so they share their first metadata load.
-        let parquet_metadata_cache = self
-            .parquet_metadata_cache
-            .clone()
-            .unwrap_or_else(|| Arc::new(ParquetMetadataCache::default()));
         Arc::new(Self {
             reader_plan: Arc::new(reader_plan),
             properties: scan_properties(&self.schema, partition_count),
             limiter,
-            parquet_metadata_cache: Some(parquet_metadata_cache),
+            // Ranged tasks within this plan share their first metadata load.
+            parquet_metadata_cache: Some(Arc::new(ParquetMetadataCache::default())),
             file_tasks_repartitioned: true,
             ..self.clone()
         })
@@ -1093,7 +1085,6 @@ mod tests {
             datafusion_plan,
             exact_row_predicate,
             Arc::default(),
-            table.prepared_parquet_metadata_cache(),
             metrics,
             intra_file_repartitioning,
         ))
@@ -1104,7 +1095,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_scopes_the_range_estimator_and_repartitioning_preserves_the_metadata_cache()
+    async fn provider_scopes_the_range_estimator_and_repartitioning_creates_a_metadata_cache()
     -> TestResult {
         let fixture = TestTable::partitioned("shared-range-read-estimator")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -1133,18 +1124,6 @@ mod tests {
             .as_ref()
             .downcast_ref::<DeltaScanExec>()
             .ok_or("repartitioned plan was not DeltaScanExec")?;
-        let prepared_cache = Arc::new(ParquetMetadataCache::default());
-        let prepared = DeltaScanExec {
-            parquet_metadata_cache: Some(Arc::clone(&prepared_cache)),
-            ..first.clone()
-        };
-        let prepared_repartitioned =
-            prepared.with_repartitioned_partitions(prepared.reader_plan.partitions.clone());
-        let prepared_repartitioned = prepared_repartitioned
-            .as_ref()
-            .downcast_ref::<DeltaScanExec>()
-            .ok_or("prepared plan was not repartitioned")?;
-
         assert!(Arc::ptr_eq(
             &first.range_read_estimator,
             &second.range_read_estimator
@@ -1158,14 +1137,7 @@ mod tests {
             &separate.range_read_estimator
         ));
         assert!(repartitioned.file_tasks_repartitioned);
-        assert!(prepared_repartitioned.file_tasks_repartitioned);
-        assert!(Arc::ptr_eq(
-            prepared_repartitioned
-                .parquet_metadata_cache
-                .as_ref()
-                .ok_or("repartitioned plan lost its prepared metadata cache")?,
-            &prepared_cache,
-        ));
+        assert!(repartitioned.parquet_metadata_cache.is_some());
         Ok(())
     }
 

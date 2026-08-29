@@ -155,9 +155,6 @@ change.
 
 - [Lazy and eager scan metadata](benchmarks/eager-metadata.md) compares when
   Delta scan metadata is loaded and reused across repeated queries.
-- [Prepared Parquet metadata](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/prepared-parquet-metadata/)
-  compares on-demand footer reads with preparing parsed metadata during table
-  loading.
 - [Parquet row-filter predicate decoding](benchmarks/row-filter.md) compares
   decoding only predicate columns with decoding unrelated columns as well.
 - [Parquet page-index range reads](benchmarks/page-index.md) measures page-level

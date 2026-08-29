@@ -242,7 +242,6 @@ impl DeltaTableProvider {
                 datafusion_plan,
                 exact_row_predicate,
                 Arc::clone(&self.range_read_estimator),
-                self.table.prepared_parquet_metadata_cache(),
                 metrics,
                 self.options.intra_file_repartitioning,
             )

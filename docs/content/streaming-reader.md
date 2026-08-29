@@ -89,11 +89,6 @@ newer Delta version.
 The [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/)
 explains what query-planning warmup caches and when the tradeoff is worthwhile.
 
-For a long-lived process that repeatedly queries Parquet files on remote
-storage, the experimental
-[Parquet metadata warmup guide](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
-describes a second opt-in cache for file footers and offset indexes.
-
 ## Filter rows
 
 Add a predicate before building the scan to filter its rows:
