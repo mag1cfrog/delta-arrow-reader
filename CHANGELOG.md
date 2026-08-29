@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## [0.5.3](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.2...v0.5.3) - 2026-08-29
+
+### Added
+
+- add opt-in Parquet metadata preparation for faster repeated queries
+
+### Fixed
+
+- prevent tiny Parquet reads from distorting adaptive range planning
+
 ## [0.5.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.1...v0.5.2) - 2026-08-29
 
 ### Added
