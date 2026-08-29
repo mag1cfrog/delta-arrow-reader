@@ -929,20 +929,15 @@ mod tests {
                 .await?;
             let mut measurements = Vec::new();
             for policy in BenchmarkPolicy::ALL {
-                measurements.push(
-                    measure_case(
-                        &fixture,
-                        &table,
-                        TEST_SHAPE,
-                        BenchmarkCase {
-                            profile: TEST_PROFILE,
-                            density: ProjectionDensity::Sparse,
-                            policy,
-                        },
-                        1,
-                    )
-                    .await?,
-                );
+                let case = BenchmarkCase {
+                    profile: TEST_PROFILE,
+                    density: ProjectionDensity::Sparse,
+                    policy,
+                };
+                let measurement = measure_case(&fixture, &table, TEST_SHAPE, case, 1)
+                    .await
+                    .map_err(|error| benchmark_test_error(case, error.as_ref()))?;
+                measurements.push(measurement);
             }
             let first = measurements
                 .first()
@@ -994,5 +989,39 @@ mod tests {
                 "high_latency_high_throughput"
             ]
         );
+    }
+
+    fn benchmark_test_error(case: BenchmarkCase, error: &(dyn Error + 'static)) -> io::Error {
+        let mut message = format!(
+            "range benchmark failed: profile={} projection={} policy={}: {error}",
+            case.profile.name,
+            case.density.name(),
+            case.policy.name(),
+        );
+        let mut source = error.source();
+        while let Some(error) = source {
+            message.push_str("\ncaused by: ");
+            message.push_str(&error.to_string());
+            source = error.source();
+        }
+        io::Error::other(message)
+    }
+
+    #[test]
+    fn benchmark_test_errors_include_the_case_and_source_chain() {
+        let source = io::Error::new(io::ErrorKind::ConnectionReset, "connection reset by peer");
+        let error = parquet::errors::ParquetError::External(Box::new(source));
+        let reported = benchmark_test_error(
+            BenchmarkCase {
+                profile: TEST_PROFILE,
+                density: ProjectionDensity::Sparse,
+                policy: BenchmarkPolicy::ExactRanges,
+            },
+            &error,
+        )
+        .to_string();
+
+        assert!(reported.contains("profile=test projection=sparse policy=exact_ranges"));
+        assert!(reported.contains("\ncaused by: connection reset by peer"));
     }
 }

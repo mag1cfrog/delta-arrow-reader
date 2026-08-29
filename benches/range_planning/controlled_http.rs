@@ -107,14 +107,25 @@ fn serve_http(
     while !shutdown.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((stream, _)) => {
+                // The listener is nonblocking so shutdown can be polled. Request handlers use
+                // blocking I/O, and Windows can return accepted sockets in nonblocking mode.
+                if let Err(error) = stream.set_nonblocking(false) {
+                    eprintln!("controlled HTTP connection could not enter blocking mode: {error}");
+                    continue;
+                }
                 let root = root.clone();
                 let shutdown = Arc::clone(&shutdown);
                 let state = Arc::clone(&state);
-                let _ = thread::Builder::new()
+                if let Err(error) = thread::Builder::new()
                     .name("delta-arrow-reader-range-bench-http".to_owned())
                     .spawn(move || {
-                        let _ = handle_http(stream, &root, &shutdown, &state);
-                    });
+                        if let Err(error) = handle_http(stream, &root, &shutdown, &state) {
+                            eprintln!("controlled HTTP handler failed: {error}");
+                        }
+                    })
+                {
+                    eprintln!("controlled HTTP handler could not start: {error}");
+                }
             }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                 thread::sleep(Duration::from_millis(1));
@@ -501,6 +512,33 @@ mod tests {
         );
         assert_eq!(parse_range(Some("bytes=2-5"), 10)?, Some((2, 6)));
         assert_eq!(parse_range(Some("bytes=-4"), 10)?, Some((6, 10)));
+        Ok(())
+    }
+
+    #[test]
+    fn server_waits_for_a_request_after_accepting_a_connection() -> Result<(), Box<dyn Error>> {
+        let mut server = ControlledHttpServer::start(
+            PathBuf::new(),
+            TransportProfile {
+                name: "test",
+                request_latency: Duration::ZERO,
+                shared_throughput_bytes_per_second: u64::MAX,
+            },
+        )?;
+        let address = server
+            .url()
+            .strip_prefix("http://")
+            .and_then(|url| url.strip_suffix('/'))
+            .ok_or_else(|| io::Error::other("unexpected controlled server URL"))?;
+        let mut stream = TcpStream::connect(address)?;
+        stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+        thread::sleep(Duration::from_millis(100));
+        stream.write_all(b"HEAD /missing HTTP/1.1\r\nHost: localhost\r\n\r\n")?;
+        let mut responses = String::new();
+        stream.read_to_string(&mut responses)?;
+
+        assert!(responses.starts_with("HTTP/1.1 404 Not Found\r\n"));
+        server.stop();
         Ok(())
     }
 }
