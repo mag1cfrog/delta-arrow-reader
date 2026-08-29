@@ -69,10 +69,10 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Warm default test cache
-        run: cargo test --locked --no-run
       - name: Warm all-features test cache
         run: cargo test --locked --all-features --no-run
+      - name: Warm default test cache
+        run: cargo test --locked --no-run
       - name: Check sccache writes
         id: sccache-writes
         continue-on-error: true
@@ -86,8 +86,8 @@ jobs:
         run: |
           sccache --zero-stats
           cargo clean
-          cargo test --locked --no-run
           cargo test --locked --all-features --no-run
+          cargo test --locked --no-run
       - name: Verify retried sccache writes
         if: steps.sccache-writes.outcome == 'failure'
         shell: bash
