@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.5.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.0...v0.5.1) - 2026-08-29
+
+### Fixed
+
+- preserve adaptive Parquet range learning across DataFusion scans
+
 ## [0.5.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.4.2...v0.5.0) - 2026-08-29
 
 ### Fixed
