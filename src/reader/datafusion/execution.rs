@@ -58,7 +58,7 @@ use super::{
 };
 
 use crate::reader::backend::direct_parquet::{
-    ParquetRangeReadEstimator, RangedParquetMetadataCache, direct_parquet_file_executor,
+    ParquetMetadataCache, ParquetRangeReadEstimator, direct_parquet_file_executor,
 };
 use crate::{
     DeltaReaderError, DeltaScanMetrics, DeltaScanMetricsSnapshot, ParquetReaderBackend,
@@ -337,7 +337,9 @@ struct DeltaScanExec {
     dynamic_filters: Arc<[RetainedDynamicFilter]>,
     intra_file_repartitioning: IntraFileRepartitioning,
     range_read_estimator: Arc<ParquetRangeReadEstimator>,
-    parquet_metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
+    parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
+    // A prepared table can supply a cache before DataFusion repartitions this plan.
+    file_tasks_repartitioned: bool,
 }
 
 impl DeltaScanExec {
@@ -377,6 +379,7 @@ impl DeltaScanExec {
             intra_file_repartitioning,
             range_read_estimator,
             parquet_metadata_cache: None,
+            file_tasks_repartitioned: false,
         }
     }
 
@@ -406,11 +409,18 @@ impl DeltaScanExec {
             target_partitions,
             partition_count,
         );
+        // Preserve a table-prepared cache. Otherwise, give the ranged tasks created here an empty
+        // cache so they share their first metadata load.
+        let parquet_metadata_cache = self
+            .parquet_metadata_cache
+            .clone()
+            .unwrap_or_else(|| Arc::new(ParquetMetadataCache::default()));
         Arc::new(Self {
             reader_plan: Arc::new(reader_plan),
             properties: scan_properties(&self.schema, partition_count),
             limiter,
-            parquet_metadata_cache: Some(Arc::new(RangedParquetMetadataCache::default())),
+            parquet_metadata_cache: Some(parquet_metadata_cache),
+            file_tasks_repartitioned: true,
             ..self.clone()
         })
     }
@@ -603,7 +613,7 @@ impl ExecutionPlan for DeltaScanExec {
         _datafusion_target_partitions: usize,
         config: &ConfigOptions,
     ) -> DataFusionResult<Option<Arc<dyn ExecutionPlan>>> {
-        if self.parquet_metadata_cache.is_some()
+        if self.file_tasks_repartitioned
             || self.reader_plan.execution_options.parquet_backend() != ParquetReaderBackend::Direct
         {
             return Ok(None);
@@ -1099,7 +1109,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_reuses_one_range_read_estimator_across_physical_plans() -> TestResult {
+    async fn provider_scopes_the_range_estimator_and_repartitioning_preserves_the_metadata_cache()
+    -> TestResult {
         let fixture = TestTable::partitioned("shared-range-read-estimator")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
         let provider = DeltaTableProvider::try_new(table.clone(), ScanOptions::default())?;
@@ -1127,6 +1138,17 @@ mod tests {
             .as_ref()
             .downcast_ref::<DeltaScanExec>()
             .ok_or("repartitioned plan was not DeltaScanExec")?;
+        let prepared_cache = Arc::new(ParquetMetadataCache::default());
+        let prepared = DeltaScanExec {
+            parquet_metadata_cache: Some(Arc::clone(&prepared_cache)),
+            ..first.clone()
+        };
+        let prepared_repartitioned =
+            prepared.with_repartitioned_partitions(prepared.reader_plan.partitions.clone());
+        let prepared_repartitioned = prepared_repartitioned
+            .as_ref()
+            .downcast_ref::<DeltaScanExec>()
+            .ok_or("prepared plan was not repartitioned")?;
 
         assert!(Arc::ptr_eq(
             &first.range_read_estimator,
@@ -1139,6 +1161,15 @@ mod tests {
         assert!(!Arc::ptr_eq(
             &first.range_read_estimator,
             &separate.range_read_estimator
+        ));
+        assert!(repartitioned.file_tasks_repartitioned);
+        assert!(prepared_repartitioned.file_tasks_repartitioned);
+        assert!(Arc::ptr_eq(
+            prepared_repartitioned
+                .parquet_metadata_cache
+                .as_ref()
+                .ok_or("repartitioned plan lost its prepared metadata cache")?,
+            &prepared_cache,
         ));
         Ok(())
     }

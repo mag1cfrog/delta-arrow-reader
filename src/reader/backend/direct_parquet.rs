@@ -1,15 +1,15 @@
 //! Direct asynchronous Parquet data-file reader.
 
+mod metadata_cache;
 mod metered_object_store;
 mod range_planning;
 mod row_group_pruning;
 mod schema_alignment;
 
-use std::{
-    collections::HashMap,
-    ops::Range,
-    sync::{Arc, Mutex},
-};
+use std::{ops::Range, sync::Arc};
+
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+use std::collections::HashSet;
 
 use arrow::{
     array::Int64Array,
@@ -30,8 +30,8 @@ use parquet::arrow::{
 use parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
 use parquet::schema::types::SchemaDescriptor;
 use snafu::{IntoError, ResultExt};
-use tokio::sync::OnceCell;
 
+pub(crate) use self::metadata_cache::ParquetMetadataCache;
 pub(crate) use self::metered_object_store::ParquetRangeReadEstimator;
 use self::{
     metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
@@ -58,33 +58,22 @@ use crate::{
     },
 };
 
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+use crate::reader::ParquetMetadataPreparationLimits;
+
 struct DirectParquetReader {
     engine_context: Arc<DeltaKernelEngineContext>,
     store: Arc<dyn ObjectStore>,
     execution_options: DeltaScanExecutionOptions,
     metrics: DeltaScanMetrics,
-    metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
+    metadata_cache: Option<Arc<ParquetMetadataCache>>,
 }
 
-/// Parquet footer metadata shared by ranged tasks within one physical scan.
-#[derive(Default)]
-pub(crate) struct RangedParquetMetadataCache {
-    /// In-flight or completed footer loads keyed by file path and planned size.
-    entries: Mutex<HashMap<(Path, u64), Arc<ParquetMetadataCell>>>,
-}
-
-type ParquetMetadataCell = OnceCell<Arc<ParquetMetaData>>;
-
-impl RangedParquetMetadataCache {
-    fn entry(&self, path: &Path, file_size: u64) -> Arc<ParquetMetadataCell> {
-        Arc::clone(
-            self.entries
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .entry((path.clone(), file_size))
-                .or_insert_with(|| Arc::new(OnceCell::new())),
-        )
-    }
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PreparedParquetMetadataSummary {
+    pub(crate) file_count: usize,
+    pub(crate) memory_bytes: usize,
 }
 
 struct ParquetFileObject {
@@ -162,12 +151,12 @@ impl DirectParquetReader {
         }
     }
 
-    fn with_metadata_cache(mut self, metadata_cache: Arc<RangedParquetMetadataCache>) -> Self {
+    fn with_metadata_cache(mut self, metadata_cache: Arc<ParquetMetadataCache>) -> Self {
         self.metadata_cache = Some(metadata_cache);
         self
     }
 
-    async fn load_ranged_parquet_metadata(
+    async fn load_parquet_metadata(
         &self,
         path: &Path,
         file_size: u64,
@@ -185,6 +174,28 @@ impl DirectParquetReader {
         metadata.boxed().context(DataFileReadSnafu {
             reason: "parquet_read_setup_failed",
         })
+    }
+
+    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    async fn prepare_task_parquet_metadata(
+        &self,
+        task: &DeltaScanFileTask,
+    ) -> Result<usize, DeltaReaderError> {
+        let object = self.resolve_parquet_object(task)?;
+        let mut reader = ParquetObjectReader::new(Arc::clone(&object.store), object.path.clone())
+            .with_file_size(object.file_size);
+        if let Some(hint) = self.execution_options.parquet_metadata_size_hint_bytes() {
+            reader = reader.with_footer_size_hint(hint);
+        }
+        let options = arrow_reader_options(false, true)
+            .boxed()
+            .context(DataFileReadSnafu {
+                reason: "parquet_row_index_setup_failed",
+            })?;
+        let metadata = self
+            .load_parquet_metadata(&object.path, object.file_size, &mut reader, &options)
+            .await?;
+        Ok(metadata.memory_size())
     }
 
     async fn parquet_object_for_task(
@@ -286,8 +297,8 @@ impl DirectParquetReader {
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
             })?;
-        if parquet_byte_range.is_some() {
-            self.create_ranged_stream_builder(
+        if parquet_byte_range.is_some() || self.metadata_cache.is_some() {
+            self.create_stream_builder_from_metadata(
                 path,
                 file_size,
                 reader,
@@ -307,11 +318,11 @@ impl DirectParquetReader {
         }
     }
 
-    /// Creates a stream builder for a ranged Parquet read.
+    /// Creates a stream builder from explicitly loaded Parquet metadata.
     ///
-    /// Ranged tasks load footer metadata explicitly so tasks for the same file can share it. The
-    /// metadata schema is rewritten first when `target_schema` uses view types.
-    async fn create_ranged_stream_builder(
+    /// Ranged tasks and prepared whole-file reads use this path so their metadata can be shared.
+    /// The metadata schema is rewritten first when `target_schema` uses view types.
+    async fn create_stream_builder_from_metadata(
         &self,
         path: &Path,
         file_size: u64,
@@ -320,7 +331,7 @@ impl DirectParquetReader {
         target_schema: &SchemaRef,
     ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
         let metadata = self
-            .load_ranged_parquet_metadata(path, file_size, &mut reader, &reader_options)
+            .load_parquet_metadata(path, file_size, &mut reader, &reader_options)
             .await?;
         let metadata = ArrowReaderMetadata::try_new(metadata, reader_options.clone())
             .boxed()
@@ -634,7 +645,7 @@ pub(crate) fn direct_parquet_file_executor(
     output_batch_size_rows: Option<usize>,
     row_predicate: Option<DeltaKernelPredicate>,
     range_read_estimator: Arc<ParquetRangeReadEstimator>,
-    metadata_cache: Option<Arc<RangedParquetMetadataCache>>,
+    metadata_cache: Option<Arc<ParquetMetadataCache>>,
 ) -> FileExecutor<DeltaScanFileTask, FileBatchStream> {
     let reader = DirectParquetReader::new(
         Arc::clone(&plan.engine_context),
@@ -683,6 +694,64 @@ pub(crate) fn direct_parquet_file_executor(
             });
             Ok(Box::pin(batches) as FileBatchStream)
         })
+    })
+}
+
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+pub(crate) async fn prepare_parquet_metadata(
+    plan: &DeltaScanPlan,
+    metadata_cache: Arc<ParquetMetadataCache>,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
+    limits: ParquetMetadataPreparationLimits,
+) -> Result<PreparedParquetMetadataSummary, DeltaReaderError> {
+    let mut seen = HashSet::new();
+    let tasks = plan
+        .partitions
+        .iter()
+        .flat_map(|partition| &partition.file_tasks)
+        .filter(|task| seen.insert((task.path.clone(), task.file_size)))
+        .cloned()
+        .collect::<Vec<_>>();
+    if tasks.len() > limits.max_files {
+        return Err(DeltaReaderError::InvalidConfiguration {
+            reason: "parquet_metadata_preparation_file_limit_exceeded",
+        });
+    }
+
+    let file_count = tasks.len();
+    let reader = Arc::new(
+        DirectParquetReader::new(
+            Arc::clone(&plan.engine_context),
+            plan.execution_options,
+            plan.metrics.clone(),
+            range_read_estimator,
+        )
+        .with_metadata_cache(metadata_cache),
+    );
+    let concurrency = plan
+        .execution_options
+        .resolved_max_concurrent_file_reads_per_scan(
+            plan.partition_target_diagnostic.target_partitions,
+        );
+    let mut loads = stream::iter(tasks)
+        .map(|task| {
+            let reader = Arc::clone(&reader);
+            async move { reader.prepare_task_parquet_metadata(&task).await }
+        })
+        .buffer_unordered(concurrency);
+    let mut memory_bytes = 0_usize;
+    while let Some(result) = loads.next().await {
+        memory_bytes = memory_bytes
+            .checked_add(result?)
+            .filter(|bytes| *bytes <= limits.max_retained_metadata_bytes)
+            .ok_or(DeltaReaderError::InvalidConfiguration {
+                reason: "parquet_metadata_preparation_memory_limit_exceeded",
+            })?;
+    }
+
+    Ok(PreparedParquetMetadataSummary {
+        file_count,
+        memory_bytes,
     })
 }
 
@@ -851,11 +920,15 @@ mod tests {
     use parquet::file::metadata::ParquetMetaDataReader;
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
+    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    use super::prepare_parquet_metadata;
     use super::{
-        DirectParquetReader, LogicalDataFileReadRequest, PhysicalParquetStreamOptions,
-        RangedParquetMetadataCache, RowFilterInput, arrow_reader_options, data_file_error,
+        DirectParquetReader, LogicalDataFileReadRequest, ParquetMetadataCache,
+        PhysicalParquetStreamOptions, RowFilterInput, arrow_reader_options, data_file_error,
         direct_parquet_file_executor,
     };
+    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    use crate::reader::ParquetMetadataPreparationLimits;
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
         DeltaReaderError, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaSnapshotSelection,
@@ -1705,7 +1778,7 @@ mod tests {
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, true),
         ]));
-        reader = reader.with_metadata_cache(Arc::new(RangedParquetMetadataCache::default()));
+        reader = reader.with_metadata_cache(Arc::new(ParquetMetadataCache::default()));
         Ok((Arc::new(reader), gated, task, schema))
     }
 
@@ -1914,6 +1987,80 @@ mod tests {
                 .snapshot()
                 .parquet_data_file_range_get_operations,
             Some(1)
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[tokio::test]
+    async fn prepared_metadata_is_reused_by_a_whole_file_read()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (reader, gated, mut task, schema) = gated_ranged_metadata_reader(
+            "direct-prepared-metadata-whole-file",
+            GateRequest::Range(1),
+        )
+        .await?;
+        task.parquet_byte_range = None;
+
+        let prepare_reader = Arc::clone(&reader);
+        let prepare_task = task.clone();
+        let prepare = tokio::spawn(async move {
+            prepare_reader
+                .prepare_task_parquet_metadata(&prepare_task)
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
+        gated.release.add_permits(1);
+        tokio::time::timeout(std::time::Duration::from_secs(5), prepare).await???;
+
+        let range_calls_after_prepare = gated.range_calls.load(Ordering::Acquire);
+        assert!(range_calls_after_prepare > 0);
+        let object = reader.resolve_parquet_object(&task)?;
+        let cached = reader
+            .metadata_cache
+            .as_ref()
+            .ok_or("prepared reader must retain its metadata cache")?
+            .entry(&object.path, object.file_size);
+        assert!(cached.get().is_some());
+
+        reader
+            .create_stream_builder(&object, None, &schema, false, true)
+            .await?;
+        assert_eq!(
+            gated.range_calls.load(Ordering::Acquire),
+            range_calls_after_prepare
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[tokio::test]
+    async fn preparation_checks_the_file_limit_before_reading_parquet_metadata()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = TestDir::new("direct-prepare-file-limit")?;
+        let parquet_bytes = parquet_bytes()?;
+        write_partitioned_non_dv_table(&root, &parquet_bytes)?;
+        add_second_partition_file(&root, &parquet_bytes)?;
+        let plan = non_dv_plan(&root, None)?;
+
+        let error = prepare_parquet_metadata(
+            plan.as_ref(),
+            Arc::new(ParquetMetadataCache::default()),
+            Arc::default(),
+            ParquetMetadataPreparationLimits {
+                max_files: 1,
+                max_retained_metadata_bytes: usize::MAX,
+            },
+        )
+        .await
+        .expect_err("two files must exceed a one-file preparation limit");
+
+        assert_eq!(error.code(), "invalid_configuration");
+        assert_eq!(
+            plan.metrics
+                .snapshot()
+                .parquet_data_file_range_get_operations,
+            Some(0)
         );
         Ok(())
     }

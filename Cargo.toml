@@ -50,6 +50,7 @@ test = false
 
 [features]
 datafusion = ["dep:datafusion"]
+experimental-parquet-metadata-preparation = []
 
 [package.metadata.docs.rs]
 all-features = true

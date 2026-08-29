@@ -42,5 +42,7 @@ pub use reader::{
     DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection,
     DeltaStorageOptions, DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
 };
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+pub use reader::{ParquetMetadataPreparationLimits, ParquetMetadataPreparationReport};
 /// The crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
