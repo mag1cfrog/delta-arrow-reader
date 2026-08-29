@@ -11,7 +11,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 use arrow::compute::concat_batches;
 use arrow::{
     array::{
@@ -28,11 +28,9 @@ use datafusion::{
     physical_plan::{ExecutionPlan, displayable},
     prelude::{SessionConfig, SessionContext},
 };
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
-use delta_arrow_reader::ParquetMetadataPreparationLimits;
 use delta_arrow_reader::{
     DeltaReaderError, DeltaReaderPhase, DeltaScanExecutionOptions, DeltaTableBuilder,
-    ParquetReaderBackend,
+    ParquetReaderBackend, WarmupMode,
     datafusion::{
         DeltaTableProvider, IntraFileRepartitioning, ScanOptions, collect_scan_metrics,
         register_table,
@@ -135,7 +133,7 @@ impl TestTable {
         Ok(())
     }
 
-    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[cfg(feature = "experimental-parquet-metadata-warmup")]
     fn corrupt_parquet_footer(&self, name: &str) -> TestResult {
         let path = self.0.join(name);
         let mut bytes = fs::read(&path)?;
@@ -254,7 +252,7 @@ async fn collect_plan(
     Ok(datafusion::physical_plan::collect(plan, context.task_ctx()).await?)
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 async fn collect_query(context: &SessionContext, query: &str) -> TestResult<RecordBatch> {
     let batches = context.sql(query).await?.collect().await?;
     let schema = batches.first().ok_or("query returned no batches")?.schema();
@@ -324,7 +322,8 @@ async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> T
 async fn registered_eager_table_reuses_metadata_across_sql_queries_without_the_log() -> TestResult {
     let fixture = TestTable::partitioned("eager-metadata-registration")?;
     let table = DeltaTableBuilder::new(fixture.uri())
-        .load_table_with_eager_scan_metadata()
+        .with_warmup(WarmupMode::QueryPlanning)
+        .load_table()
         .await?;
     let context = SessionContext::new();
     register_table(&context, "orders", table, ScanOptions::default())?;
@@ -348,15 +347,16 @@ async fn registered_eager_table_reuses_metadata_across_sql_queries_without_the_l
     Ok(())
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 #[tokio::test]
 async fn datafusion_reuses_table_prepared_parquet_metadata_after_repartitioning() -> TestResult {
     let fixture = TestTable::partitioned("prepared-parquet-metadata-datafusion")?;
     let table = DeltaTableBuilder::new(fixture.uri())
-        .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+        .with_warmup(WarmupMode::ParquetMetadata {
             max_files: 2,
-            max_retained_metadata_bytes: 1024 * 1024,
+            max_memory_bytes: 1024 * 1024,
         })
+        .load_table()
         .await?;
     fixture.corrupt_parquet_footer("west.parquet")?;
     for _ in 0..2 {
@@ -392,7 +392,7 @@ async fn datafusion_reuses_table_prepared_parquet_metadata_after_repartitioning(
     Ok(())
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 #[tokio::test]
 async fn prepared_parquet_metadata_preserves_datafusion_results() -> TestResult {
     let fixture = RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
@@ -402,13 +402,15 @@ async fn prepared_parquet_metadata_preserves_datafusion_results() -> TestResult 
     )?;
     let location = fixture.path().to_string_lossy().into_owned();
     let eager = DeltaTableBuilder::new(location.clone())
-        .load_table_with_eager_scan_metadata()
+        .with_warmup(WarmupMode::QueryPlanning)
+        .load_table()
         .await?;
     let prepared = DeltaTableBuilder::new(location)
-        .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+        .with_warmup(WarmupMode::ParquetMetadata {
             max_files: 1,
-            max_retained_metadata_bytes: 1024 * 1024,
+            max_memory_bytes: 1024 * 1024,
         })
+        .load_table()
         .await?;
     let context = SessionContext::new();
     register_table(&context, "eager", eager, ScanOptions::default())?;

@@ -7,7 +7,7 @@ use delta_arrow_reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaProtocol, DeltaReaderError,
     DeltaReaderPhase, DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaScanExecutionOptions,
     DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection, DeltaStorageOptions,
-    DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
+    DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend, WarmupMode,
     diagnostics::parquet_range_planning::{
         Policy as ParquetRangeReadPolicy, Snapshot as ParquetRangePlanningSnapshot,
         snapshot as parquet_range_planning_snapshot,
@@ -228,6 +228,8 @@ fn streaming_reader_contract_is_public() {
     assert_send_sync::<DeltaTable>();
     assert_clone::<DeltaTable>();
     assert_debug::<DeltaScanMetrics>();
+    assert_debug::<WarmupMode>();
+    assert_eq!(WarmupMode::default(), WarmupMode::None);
     assert_send::<DeltaBatchStream>();
     assert_batch_stream::<DeltaBatchStream>();
 
@@ -238,7 +240,9 @@ fn streaming_reader_contract_is_public() {
     assert_future::<Result<DeltaTable, DeltaReaderError>>(builder.load_table());
     let eager_builder = DeltaTableBuilder::new("file:///tmp/table");
     assert_future::<Result<DeltaTable, DeltaReaderError>>(
-        eager_builder.load_table_with_eager_scan_metadata(),
+        eager_builder
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table(),
     );
     let snapshot_builder = DeltaTableBuilder::new("file:///tmp/table");
     assert_future::<Result<DeltaTableSnapshot, DeltaReaderError>>(snapshot_builder.load_snapshot());
@@ -305,27 +309,25 @@ fn streaming_reader_contract_is_public() {
     let _ = (stream_schema, metrics);
 }
 
-#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[cfg(feature = "experimental-parquet-metadata-warmup")]
 #[test]
-fn prepared_parquet_metadata_contract_is_public() {
-    use delta_arrow_reader::{ParquetMetadataPreparationLimits, ParquetMetadataPreparationReport};
+fn parquet_metadata_warmup_contract_is_public() {
+    use delta_arrow_reader::ParquetWarmupReport;
 
-    fn assert_debug<T: std::fmt::Debug>() {}
     fn assert_clone<T: Clone>() {}
     fn assert_future<T>(_: impl Future<Output = T>) {}
 
-    assert_debug::<ParquetMetadataPreparationLimits>();
-    assert_clone::<ParquetMetadataPreparationReport>();
-    let limits = ParquetMetadataPreparationLimits {
-        max_files: 10,
-        max_retained_metadata_bytes: 1024 * 1024,
-    };
+    assert_clone::<ParquetWarmupReport>();
     assert_future::<Result<DeltaTable, DeltaReaderError>>(
         DeltaTableBuilder::new("file:///tmp/table")
-            .load_table_with_prepared_parquet_metadata(limits),
+            .with_warmup(WarmupMode::ParquetMetadata {
+                max_files: 10,
+                max_memory_bytes: 1024 * 1024,
+            })
+            .load_table(),
     );
-    let report: for<'a> fn(&'a DeltaTable) -> Option<&'a ParquetMetadataPreparationReport> =
-        DeltaTable::parquet_metadata_preparation_report;
+    let report: for<'a> fn(&'a DeltaTable) -> Option<&'a ParquetWarmupReport> =
+        DeltaTable::parquet_warmup_report;
     let _ = report;
 }
 

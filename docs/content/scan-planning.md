@@ -7,40 +7,39 @@ before it opens any Parquet data files.
 If you only need to run a query, the defaults are a good place to start. This
 page is for readers who want to understand or tune how the work is divided.
 
-## Choose a metadata initialization mode
+## Choose a warmup mode
 
-`DeltaTableBuilder::load_table` uses lazy Delta scan metadata initialization.
-Each scan build performs Delta log/checkpoint replay before Delta Kernel applies
-the query predicate and selects active files.
+`DeltaTableBuilder::load_table` uses `WarmupMode::None` by default. Each scan
+build performs Delta log/checkpoint replay before Delta Kernel applies the query
+predicate and selects active files.
 
-`DeltaTableBuilder::load_table_with_eager_scan_metadata` instead materializes a
-query-unfiltered set of reconciled active `add` metadata during table
+`DeltaTableBuilder::with_warmup(WarmupMode::QueryPlanning)` instead materializes
+a query-unfiltered set of reconciled active `add` metadata during table
 initialization. It retains all available file statistics, so later scan builds
 can still make query-specific data-skipping decisions. Those builds pass the
 retained metadata to Delta Kernel through `Scan::scan_metadata_from`; Delta
 Kernel remains responsible for applying the query predicate and selecting
 files.
 
-The experimental
-`DeltaTableBuilder::load_table_with_prepared_parquet_metadata` method performs
-the eager work and then prepares parsed metadata for every active Parquet file.
-Later scans reuse that metadata, but each scan still makes its own row-group and
-page selections.
+The experimental `WarmupMode::ParquetMetadata` mode includes query-planning
+warmup and then loads parsed metadata for every active Parquet file. Later scans
+reuse that metadata, but each scan still makes its own row-group and page
+selections.
 
 All three modes produce the same file tasks. Partition values, schema
 transforms, and deletion-vector information follow the selected files in every
 mode.
 
-In one dated real-S3 case study, eager initialization reduced the median time
+In one dated real-S3 case study, query-planning warmup reduced the median time
 for a six-query session by 15.4% while adding 30.2 MiB of resident memory after
 initialization and 15.0 MiB to full-session peak memory. See the
 [methodology, results, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/#representative-real-s3-result)
 before applying those measurements to another table or workload.
 
 To see how this initialization choice plays out across several queries, follow
-the [lazy and eager metadata lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
-For the experimental loading mode, see the
-[Parquet metadata preparation guide](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
+the [metadata warmup lifecycles](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/).
+For the experimental Parquet metadata mode, see the
+[Parquet metadata warmup guide](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
 and its [controlled benchmark](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/prepared-parquet-metadata/).
 
 ## Choose a partition target
@@ -70,12 +69,12 @@ storage, or stress probes while planning a scan.
 
 ## Select the files
 
-Delta Kernel consumes the table's Delta scan metadata. Lazy Delta
-log/checkpoint replay reconciles the active `add` metadata for that scan; eager
-mode starts from the retained reconciled result. Delta Kernel then applies
-partition and data-statistics pruning. Each selected file becomes a scan task
-with its path, size and row estimates when available, partition values, schema
-transforms, and deletion-vector information.
+Delta Kernel consumes the table's Delta scan metadata. With no warmup, Delta
+log/checkpoint replay reconciles the active `add` metadata for that scan;
+query-planning warmup starts from the retained reconciled result. Delta Kernel
+then applies partition and data-statistics pruning. Each selected file becomes
+a scan task with its path, size and row estimates when available, partition
+values, schema transforms, and deletion-vector information.
 
 Choosing the partition target before this step keeps host policy separate from
 table shape. Parquet file size is not a reliable estimate of decoded Arrow

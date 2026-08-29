@@ -159,13 +159,15 @@ fn public_eager_initialization_emits_complete_structured_lifecycle_events() -> T
     let table = runtime.block_on(
         DeltaTableBuilder::new(success.uri())
             .with_storage_options(storage_options())
-            .load_table_with_eager_scan_metadata(),
+            .with_warmup(delta_arrow_reader::WarmupMode::QueryPlanning)
+            .load_table(),
     )?;
     assert_eq!(table.version(), 0);
     let error = match runtime.block_on(
         DeltaTableBuilder::new(failure.uri())
             .with_storage_options(storage_options())
-            .load_table_with_eager_scan_metadata(),
+            .with_warmup(delta_arrow_reader::WarmupMode::QueryPlanning)
+            .load_table(),
     ) {
         Ok(_) => return Err("malformed eager metadata should fail".into()),
         Err(error) => error,

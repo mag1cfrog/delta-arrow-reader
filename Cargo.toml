@@ -30,7 +30,7 @@ exclude = [
 [[bench]]
 name = "reader"
 harness = false
-required-features = ["datafusion", "experimental-parquet-metadata-preparation"]
+required-features = ["datafusion", "experimental-parquet-metadata-warmup"]
 test = false
 
 [[bench]]
@@ -50,7 +50,7 @@ test = false
 
 [features]
 datafusion = ["dep:datafusion"]
-experimental-parquet-metadata-preparation = []
+experimental-parquet-metadata-warmup = []
 
 [package.metadata.docs.rs]
 all-features = true

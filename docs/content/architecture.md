@@ -22,19 +22,19 @@ snapshot, load the table again.
 ## Remote I/O phases
 
 For a table in remote storage, the read path has three distinct I/O phases.
-The loading mode controls whether the first two phases happen during table
+The warmup mode controls whether the first two phases happen during table
 initialization or during each query:
 
-| Phase | Lazy | Eager Delta metadata | Prepared Parquet metadata |
+| Phase | No warmup | Query planning | Parquet metadata |
 | --- | --- | --- | --- |
-| 1. Delta scan metadata | Every scan build performs Delta log/checkpoint replay and selects active files. | Table initialization performs the replay once. Later scan builds select files from the retained metadata. | Same as eager Delta metadata. |
+| 1. Delta scan metadata | Every scan build performs Delta log/checkpoint replay and selects active files. | Table initialization performs the replay once. Later scan builds select files from the retained metadata. | Same as query-planning warmup. |
 | 2. Parquet metadata | The query reads footers and prunes row groups. | The query reads footers and prunes row groups. | Table initialization reads and parses footers and offset indexes for all active files. Each query still performs its own row-group pruning. |
 | 3. Parquet data | The query reads the selected row groups. | Unchanged. | Unchanged. |
 
-A successful eager Delta metadata load needs no later Delta log/checkpoint reads
-for file discovery from that table. Experimental Parquet metadata preparation
-also removes later footer and offset-index reads for the prepared files. Neither
-mode moves Parquet data-page reads into initialization or changes
+A successful query-planning warmup needs no later Delta log/checkpoint reads
+for file discovery from that table. Experimental Parquet metadata warmup also
+removes later footer and offset-index reads for the warmed files. Neither mode
+moves Parquet data-page reads into initialization or changes
 deletion-vector behavior.
 
 The retained Delta scan metadata contains reconciled active `add` metadata and
@@ -44,8 +44,8 @@ Separately loaded tables do not share this memory. There is no TTL, eviction,
 persistence, incremental update, or background refresh; load another table to
 observe a newer snapshot.
 
-Prepared Parquet metadata has the same snapshot lifetime and belongs to the
-loaded table. The [preparation guide](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
+Warmed Parquet metadata has the same snapshot lifetime and belongs to the
+loaded table. The [warmup guide](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
 explains its resource limits and direct-backend requirement.
 
 ## Streaming API

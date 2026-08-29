@@ -56,7 +56,7 @@ metadata before registration:
 ```no_run
 use datafusion::prelude::SessionContext;
 use delta_arrow_reader::{
-    DeltaTableBuilder,
+    DeltaTableBuilder, WarmupMode,
     datafusion::{ScanOptions, register_table},
 };
 
@@ -64,7 +64,8 @@ use delta_arrow_reader::{
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = SessionContext::new();
     let table = DeltaTableBuilder::new("/tmp/example-delta-table")
-        .load_table_with_eager_scan_metadata()
+        .with_warmup(WarmupMode::QueryPlanning)
+        .load_table()
         .await?;
 
     register_table(
@@ -84,15 +85,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`load_table_with_eager_scan_metadata` builds the cache while loading the table.
-`register_table` uses that same loaded table and does not build another cache.
-All SQL queries through the registered provider can therefore reuse the cached
-metadata without replaying the Delta log or checkpoint. Each query still
-applies its own projection and predicate and reads its own Parquet footers and
-data.
+`WarmupMode::QueryPlanning` builds the cache while `load_table` loads the
+table. `register_table` uses that same loaded table and does not build another
+cache. All SQL queries through the registered provider can therefore reuse the
+cached metadata without replaying the Delta log or checkpoint. Each query
+still applies its own projection and predicate and reads its own Parquet
+footers and data.
 
-Use eager loading for a named table that will be queried repeatedly. Keep a
-table on the default `load_table` path when you will query it only once or
+Use query-planning warmup for a named table that will be queried repeatedly.
+Keep the default `WarmupMode::None` when you will query it only once or
 occasionally. The crate does not maintain a table-name registry or choose a
 mode automatically.
 
@@ -106,7 +107,7 @@ The [Rust API reference](https://docs.rs/delta-arrow-reader) documents the
 available scan options and metrics.
 
 The experimental
-[Parquet metadata preparation mode](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
+[Parquet metadata warmup mode](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
 can also move footer and offset-index reads into table initialization. Configure
 it on `DeltaTableBuilder` before registration; DataFusion needs no separate
 cache option.
