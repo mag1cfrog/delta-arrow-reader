@@ -29,8 +29,11 @@ use serde_json::json;
 
 #[path = "range_planning/controlled_http.rs"]
 mod controlled_http;
+#[path = "range_planning/plan_diagnostics.rs"]
+mod plan_diagnostics;
 
 use controlled_http::ControlledHttpServer;
+use plan_diagnostics::{AutomaticRangePlanCollector, AutomaticRangePlanDiagnostic};
 
 const MATCH_VALUE: &str = "match";
 const OTHER_VALUE: &str = "other";
@@ -218,7 +221,7 @@ impl TransportProfile {
     const HIGH_LATENCY_HIGH_THROUGHPUT: Self = Self {
         name: "high_latency_high_throughput",
         request_latency: Duration::from_millis(20),
-        shared_throughput_bytes_per_second: 512 * 1024 * 1024,
+        shared_throughput_bytes_per_second: 128 * 1024 * 1024,
     };
 
     const ALL: [Self; 3] = [
@@ -228,7 +231,7 @@ impl TransportProfile {
     ];
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct Measurement {
     case: BenchmarkCase,
     repetition: usize,
@@ -252,17 +255,23 @@ struct Measurement {
     cost_based_exact_plans: u64,
     cost_based_merged_plans: u64,
     store_delegated_plans: u64,
+    automatic_range_plans: Vec<AutomaticRangePlanDiagnostic>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config = Config::parse(env::args().skip(1))?;
+    let automatic_range_plans = AutomaticRangePlanCollector::install()?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    runtime.block_on(run(&config, BENCHMARK_SHAPE))
+    runtime.block_on(run(&config, BENCHMARK_SHAPE, &automatic_range_plans))
 }
 
-async fn run(config: &Config, shape: FixtureShape) -> Result<(), Box<dyn Error>> {
+async fn run(
+    config: &Config,
+    shape: FixtureShape,
+    automatic_range_plans: &AutomaticRangePlanCollector,
+) -> Result<(), Box<dyn Error>> {
     let mut measurements = Vec::new();
     for profile in TransportProfile::ALL {
         let fixture = Fixture::create(&config.temp_dir, shape, profile, config.retain_fixtures)?;
@@ -294,6 +303,7 @@ async fn run(config: &Config, shape: FixtureShape) -> Result<(), Box<dyn Error>>
                                 policy,
                             },
                             repetition,
+                            automatic_range_plans,
                         )
                         .await?,
                     );
@@ -311,6 +321,7 @@ async fn run(config: &Config, shape: FixtureShape) -> Result<(), Box<dyn Error>>
         )
     });
     print_measurements(&measurements);
+    print_automatic_range_plans(&measurements);
     Ok(())
 }
 
@@ -402,7 +413,9 @@ async fn measure_case(
     shape: FixtureShape,
     case: BenchmarkCase,
     repetition: usize,
+    automatic_range_plans: &AutomaticRangePlanCollector,
 ) -> Result<Measurement, Box<dyn Error>> {
+    drop(automatic_range_plans.take());
     let payload_indices = case
         .density
         .payload_indices(shape.payload_columns)
@@ -436,6 +449,7 @@ async fn measure_case(
         validate_batch(&batch?, &payload_indices, &mut row_ids)?;
     }
     let total_micros = saturating_u64(started.elapsed().as_micros());
+    let automatic_range_plans = automatic_range_plans.take();
     row_ids.sort_unstable();
     if row_ids != shape.expected_row_ids() {
         return Err(io::Error::other("benchmark scan returned unexpected row IDs").into());
@@ -515,6 +529,7 @@ async fn measure_case(
         cost_based_exact_plans,
         cost_based_merged_plans,
         store_delegated_plans,
+        automatic_range_plans,
     })
 }
 
@@ -601,7 +616,11 @@ fn benchmark_batch(
 fn payload_value(row_id: i32, payload_index: usize) -> Option<String> {
     let row_id_usize = usize::try_from(row_id).ok()?;
     (!(row_id_usize + payload_index).is_multiple_of(17))
-        .then(|| format!("payload-{payload_index:03}-{row_id:08}-{PAYLOAD_FILLER}"))
+        .then(|| {
+            format!(
+                "payload-{payload_index:03}-{row_id:08}-{PAYLOAD_FILLER}{PAYLOAD_FILLER}{PAYLOAD_FILLER}{PAYLOAD_FILLER}"
+            )
+        })
 }
 
 fn payload_name(index: usize) -> String {
@@ -704,13 +723,27 @@ fn validate_measurements(measurements: &[Measurement]) -> Result<(), io::Error> 
         let decisions = automatic
             .iter()
             .map(|measurement| {
+                let max_selected_bytes = measurement
+                    .automatic_range_plans
+                    .iter()
+                    .map(|plan| plan.selected_bytes)
+                    .max()
+                    .unwrap_or(0);
+                let max_throughput_samples = measurement
+                    .automatic_range_plans
+                    .iter()
+                    .map(|plan| plan.throughput_sample_count)
+                    .max()
+                    .unwrap_or(0);
                 format!(
-                    "{}/{}:cold={},exact={},merged={}",
+                    "{}/{}:cold={},exact={},merged={},max_selected_bytes={},max_throughput_samples={}",
                     measurement.case.profile.name,
                     measurement.case.density.name(),
                     measurement.cold_start_plans,
                     measurement.cost_based_exact_plans,
                     measurement.cost_based_merged_plans,
+                    max_selected_bytes,
+                    max_throughput_samples,
                 )
             })
             .collect::<Vec<_>>()
@@ -800,6 +833,57 @@ fn print_measurements(measurements: &[Measurement]) {
             measurement.cost_based_merged_plans,
             measurement.store_delegated_plans,
         );
+    }
+}
+
+fn print_automatic_range_plans(measurements: &[Measurement]) {
+    println!();
+    println!(
+        "transport_profile,projection_density,repetition,plan_index,latency_sample_count,throughput_sample_count,estimated_request_latency_micros,estimated_shared_throughput_bytes_per_second,estimated_bandwidth_delay_bytes,decision,exact_range_count,exact_request_waves,exact_bytes,baseline_range_count,baseline_request_waves,baseline_bytes,selected_range_count,selected_request_waves,selected_bytes,estimated_selected_plan_micros,observed_selected_plan_micros,prediction_error_micros"
+    );
+    for measurement in measurements {
+        for (plan_index, plan) in measurement.automatic_range_plans.iter().enumerate() {
+            let predicted_micros = plan.predicted_micros();
+            println!(
+                "{}",
+                [
+                    measurement.case.profile.name.to_owned(),
+                    measurement.case.density.name().to_owned(),
+                    measurement.repetition.to_string(),
+                    plan_index.saturating_add(1).to_string(),
+                    plan.latency_sample_count.to_string(),
+                    plan.throughput_sample_count.to_string(),
+                    optional(plan.estimated_request_latency_micros),
+                    optional(plan.estimated_shared_throughput_bytes_per_second),
+                    optional(plan.estimated_bandwidth_delay_bytes),
+                    plan.decision.clone(),
+                    plan.exact_range_count.to_string(),
+                    plan.exact_request_waves.to_string(),
+                    plan.exact_bytes.to_string(),
+                    plan.baseline_range_count.to_string(),
+                    plan.baseline_request_waves.to_string(),
+                    plan.baseline_bytes.to_string(),
+                    plan.selected_range_count.to_string(),
+                    plan.selected_request_waves.to_string(),
+                    plan.selected_bytes.to_string(),
+                    optional(predicted_micros),
+                    plan.observed_selected_plan_micros.to_string(),
+                    optional(predicted_micros.map(|predicted| signed_difference(
+                        plan.observed_selected_plan_micros,
+                        predicted,
+                    ))),
+                ]
+                .join(",")
+            );
+        }
+    }
+}
+
+fn signed_difference(left: u128, right: u128) -> i128 {
+    if left >= right {
+        i128::try_from(left - right).unwrap_or(i128::MAX)
+    } else {
+        -i128::try_from(right - left).unwrap_or(i128::MAX)
     }
 }
 
@@ -918,6 +1002,7 @@ mod tests {
 
     #[test]
     fn all_range_policies_return_identical_remote_query_results() -> TestResult {
+        let automatic_range_plans = AutomaticRangePlanCollector::install()?;
         let fixture = Fixture::create(&std::env::temp_dir(), TEST_SHAPE, TEST_PROFILE, false)?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -934,9 +1019,16 @@ mod tests {
                     density: ProjectionDensity::Sparse,
                     policy,
                 };
-                let measurement = measure_case(&fixture, &table, TEST_SHAPE, case, 1)
-                    .await
-                    .map_err(|error| benchmark_test_error(case, error.as_ref()))?;
+                let measurement = measure_case(
+                    &fixture,
+                    &table,
+                    TEST_SHAPE,
+                    case,
+                    1,
+                    &automatic_range_plans,
+                )
+                .await
+                .map_err(|error| benchmark_test_error(case, error.as_ref()))?;
                 measurements.push(measurement);
             }
             let first = measurements
@@ -953,6 +1045,13 @@ mod tests {
                     measurement.planned_request_waves == 0 && measurement.predicted_micros.is_none()
                 } else {
                     measurement.planned_request_waves != 0 && measurement.predicted_micros.is_some()
+                }
+            }));
+            assert!(measurements.iter().all(|measurement| {
+                if measurement.case.policy == BenchmarkPolicy::Automatic {
+                    !measurement.automatic_range_plans.is_empty()
+                } else {
+                    measurement.automatic_range_plans.is_empty()
                 }
             }));
             Ok::<_, Box<dyn Error>>(())
