@@ -309,28 +309,6 @@ fn streaming_reader_contract_is_public() {
     let _ = (stream_schema, metrics);
 }
 
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-#[test]
-fn parquet_metadata_warmup_contract_is_public() {
-    use delta_arrow_reader::ParquetWarmupReport;
-
-    fn assert_clone<T: Clone>() {}
-    fn assert_future<T>(_: impl Future<Output = T>) {}
-
-    assert_clone::<ParquetWarmupReport>();
-    assert_future::<Result<DeltaTable, DeltaReaderError>>(
-        DeltaTableBuilder::new("file:///tmp/table")
-            .with_warmup(WarmupMode::ParquetMetadata {
-                max_files: 10,
-                max_memory_bytes: 1024 * 1024,
-            })
-            .load_table(),
-    );
-    let report: for<'a> fn(&'a DeltaTable) -> Option<&'a ParquetWarmupReport> =
-        DeltaTable::parquet_warmup_report;
-    let _ = report;
-}
-
 #[cfg(feature = "datafusion")]
 #[test]
 fn datafusion_metrics_contract_is_public() {

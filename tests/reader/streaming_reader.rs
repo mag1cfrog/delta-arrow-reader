@@ -15,8 +15,6 @@ use arrow::{
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
 };
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-use delta_arrow_reader::DeltaReaderError;
 use delta_arrow_reader::ParquetReaderBackend;
 use delta_arrow_reader::{
     DeltaComparison, DeltaPredicate, DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection,
@@ -135,19 +133,6 @@ impl TestTable {
 
     fn disable_delta_log(&self) -> TestResult {
         fs::rename(self.0.join("_delta_log"), self.0.join("disabled-log"))?;
-        Ok(())
-    }
-
-    #[cfg(feature = "experimental-parquet-metadata-warmup")]
-    fn corrupt_parquet_footer(&self, name: &str) -> TestResult {
-        let path = self.0.join(name);
-        let mut bytes = fs::read(&path)?;
-        let footer_start = bytes
-            .len()
-            .checked_sub(8)
-            .ok_or("test Parquet file is too small to contain a footer")?;
-        bytes[footer_start..].fill(0);
-        fs::write(path, bytes)?;
         Ok(())
     }
 
@@ -428,147 +413,6 @@ fn eager_scan_metadata_plans_repeated_queries_without_the_delta_log() -> TestRes
         assert_eq!(low_metrics.snapshot().files_planned, 1);
         assert_eq!(high_metrics.snapshot().files_planned, 1);
         assert_eq!(fixed_metrics.snapshot().files_planned, 1);
-        Ok::<_, Box<dyn Error>>(())
-    })
-}
-
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-#[test]
-fn prepared_parquet_metadata_supports_repeated_streaming_scans_without_the_delta_log() -> TestResult
-{
-    runtime()?.block_on(async {
-        let fixture = TestTable::two_versions("prepared-parquet-metadata")?;
-        let table = DeltaTableBuilder::new(fixture.uri())
-            .with_warmup(WarmupMode::ParquetMetadata {
-                max_files: 2,
-                max_memory_bytes: 1024 * 1024,
-            })
-            .load_table()
-            .await?;
-        let eager_only = DeltaTableBuilder::new(fixture.uri())
-            .with_warmup(WarmupMode::QueryPlanning)
-            .load_table()
-            .await?;
-        let cloned = table.clone();
-        let report = table
-            .parquet_warmup_report()
-            .ok_or("warmed table must expose its warmup report")?;
-
-        assert_eq!(report.file_count, 2);
-        assert!(report.estimated_memory_bytes > 0);
-        assert_eq!(report.read_metrics.files_planned, 2);
-        assert!(std::ptr::eq(
-            report,
-            cloned
-                .parquet_warmup_report()
-                .ok_or("cloned table must share its warmup report")?
-        ));
-
-        fixture.corrupt_parquet_footer("part-0.parquet")?;
-        fixture.disable_delta_log()?;
-        let low_ids = DeltaPredicate::Compare {
-            column: "id".into(),
-            op: DeltaComparison::LtEq,
-            value: DeltaScalar::Int32(4),
-        };
-        let high_ids = DeltaPredicate::Compare {
-            column: "id".into(),
-            op: DeltaComparison::Gt,
-            value: DeltaScalar::Int32(4),
-        };
-        let ((low_batches, _), (high_batches, _)) = tokio::try_join!(
-            collect_scan(table.scan().with_predicate(low_ids).build().await?),
-            collect_scan(cloned.scan().with_predicate(high_ids).build().await?),
-        )?;
-
-        assert_eq!(sorted_ids(&low_batches), [1, 2, 3, 4]);
-        assert_eq!(sorted_ids(&high_batches), [5, 6, 7, 8]);
-        let eager_only_error = collect_scan(
-            eager_only
-                .scan()
-                .with_predicate(DeltaPredicate::Compare {
-                    column: "id".into(),
-                    op: DeltaComparison::LtEq,
-                    value: DeltaScalar::Int32(4),
-                })
-                .build()
-                .await?,
-        )
-        .await
-        .expect_err("the eager-only control must read the corrupted Parquet footer");
-        assert_eq!(
-            eager_only_error
-                .downcast_ref::<DeltaReaderError>()
-                .ok_or("the eager-only control returned an unexpected error type")?
-                .phase(),
-            DeltaReaderPhase::DataFileRead
-        );
-        Ok::<_, Box<dyn Error>>(())
-    })
-}
-
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-#[test]
-fn prepared_parquet_metadata_rejects_unsafe_or_unsupported_requests() -> TestResult {
-    runtime()?.block_on(async {
-        let fixture = TestTable::two_versions("prepared-parquet-limits")?;
-        for (max_files, max_memory_bytes) in [(0, 1024 * 1024), (2, 0)] {
-            let error = DeltaTableBuilder::new(fixture.uri())
-                .with_warmup(WarmupMode::ParquetMetadata {
-                    max_files,
-                    max_memory_bytes,
-                })
-                .load_table()
-                .await
-                .expect_err("zero preparation limits must be rejected");
-            assert_eq!(error.phase(), DeltaReaderPhase::Configuration);
-        }
-
-        let file_limit_error = DeltaTableBuilder::new(fixture.uri())
-            .with_warmup(WarmupMode::ParquetMetadata {
-                max_files: 1,
-                max_memory_bytes: usize::MAX,
-            })
-            .load_table()
-            .await
-            .expect_err("two active files must exceed the one-file limit");
-        assert_eq!(file_limit_error.phase(), DeltaReaderPhase::Configuration);
-
-        let memory_limit_error = DeltaTableBuilder::new(fixture.uri())
-            .with_warmup(WarmupMode::ParquetMetadata {
-                max_files: 2,
-                max_memory_bytes: 1,
-            })
-            .load_table()
-            .await
-            .expect_err("one byte cannot retain two Parquet metadata objects");
-        assert_eq!(memory_limit_error.phase(), DeltaReaderPhase::Configuration);
-
-        let kernel_error = DeltaTableBuilder::new(fixture.uri())
-            .with_execution_options(
-                DeltaScanExecutionOptions::new()
-                    .with_parquet_backend(ParquetReaderBackend::DeltaKernel),
-            )
-            .with_warmup(WarmupMode::ParquetMetadata {
-                max_files: 2,
-                max_memory_bytes: 1024 * 1024,
-            })
-            .load_table()
-            .await
-            .expect_err("the Delta Kernel backend cannot prepare direct-reader metadata");
-        assert_eq!(kernel_error.phase(), DeltaReaderPhase::Configuration);
-
-        let missing = TestTable::missing_data_file("prepared-parquet-missing")?;
-        let missing_error = DeltaTableBuilder::new(missing.uri())
-            .with_warmup(WarmupMode::ParquetMetadata {
-                max_files: 1,
-                max_memory_bytes: 1024 * 1024,
-            })
-            .load_table()
-            .await
-            .expect_err("missing Parquet metadata must fail table preparation");
-        assert_eq!(missing_error.phase(), DeltaReaderPhase::DataFileRead);
-        assert!(!missing_error.to_string().contains("missing.parquet"));
         Ok::<_, Box<dyn Error>>(())
     })
 }

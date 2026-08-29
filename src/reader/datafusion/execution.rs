@@ -1085,7 +1085,6 @@ mod tests {
             datafusion_plan,
             exact_row_predicate,
             Arc::default(),
-            table.prepared_parquet_metadata_cache(),
             metrics,
             intra_file_repartitioning,
         ))
@@ -1096,7 +1095,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_scopes_the_range_estimator_and_repartitioning_preserves_the_metadata_cache()
+    async fn provider_scopes_the_range_estimator_and_repartitioning_creates_a_metadata_cache()
     -> TestResult {
         let fixture = TestTable::partitioned("shared-range-read-estimator")?;
         let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
@@ -1125,18 +1124,6 @@ mod tests {
             .as_ref()
             .downcast_ref::<DeltaScanExec>()
             .ok_or("repartitioned plan was not DeltaScanExec")?;
-        let prepared_cache = Arc::new(ParquetMetadataCache::default());
-        let prepared = DeltaScanExec {
-            parquet_metadata_cache: Some(Arc::clone(&prepared_cache)),
-            ..first.clone()
-        };
-        let prepared_repartitioned =
-            prepared.with_repartitioned_partitions(prepared.reader_plan.partitions.clone());
-        let prepared_repartitioned = prepared_repartitioned
-            .as_ref()
-            .downcast_ref::<DeltaScanExec>()
-            .ok_or("prepared plan was not repartitioned")?;
-
         assert!(Arc::ptr_eq(
             &first.range_read_estimator,
             &second.range_read_estimator
@@ -1150,14 +1137,7 @@ mod tests {
             &separate.range_read_estimator
         ));
         assert!(repartitioned.file_tasks_repartitioned);
-        assert!(prepared_repartitioned.file_tasks_repartitioned);
-        assert!(Arc::ptr_eq(
-            prepared_repartitioned
-                .parquet_metadata_cache
-                .as_ref()
-                .ok_or("repartitioned plan lost its prepared metadata cache")?,
-            &prepared_cache,
-        ));
+        assert!(repartitioned.parquet_metadata_cache.is_some());
         Ok(())
     }
 

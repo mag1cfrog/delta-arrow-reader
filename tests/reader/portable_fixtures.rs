@@ -11,8 +11,6 @@ use arrow::{
     record_batch::RecordBatch,
     util::display::array_value_to_string,
 };
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-use delta_arrow_reader::WarmupMode;
 use delta_arrow_reader::{
     DeltaBatchStream, DeltaComparison, DeltaPredicate, DeltaReaderError, DeltaReaderPhase,
     DeltaScalar, DeltaScanExecutionOptions, DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaTable,
@@ -607,76 +605,6 @@ async fn scan_table(
             metrics: metrics.snapshot(),
         }),
     }
-}
-
-#[cfg(feature = "experimental-parquet-metadata-warmup")]
-#[test]
-fn prepared_parquet_metadata_preserves_streaming_scan_results() -> TestResult {
-    runtime()?.block_on(async {
-        let fixture = RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
-            "prepared-streaming-equivalence",
-            3,
-            &[1, 4],
-        )?;
-        let location = fixture.path().to_string_lossy().into_owned();
-        let eager = DeltaTableBuilder::new(location.clone())
-            .with_warmup(WarmupMode::QueryPlanning)
-            .load_table()
-            .await?;
-        let prepared = DeltaTableBuilder::new(location)
-            .with_warmup(WarmupMode::ParquetMetadata {
-                max_files: 1,
-                max_memory_bytes: 1024 * 1024,
-            })
-            .load_table()
-            .await?;
-
-        let cases = [
-            ("full scan", None, None, vec![1, 3, 4, 6]),
-            ("projection", projection(&["id"]), None, vec![1, 3, 4, 6]),
-            (
-                "exact row filter",
-                projection(&["id"]),
-                Some(DeltaPredicate::Compare {
-                    column: "id".into(),
-                    op: DeltaComparison::Gt,
-                    value: DeltaScalar::Int32(3),
-                }),
-                vec![4, 6],
-            ),
-        ];
-
-        for (name, projection, predicate, expected_ids) in cases {
-            let (eager_batch, eager_metrics, _) = assert_success(
-                name,
-                ParquetReaderBackend::Direct,
-                scan_table(&eager, projection.clone(), predicate.clone()).await?,
-                &expected_ids,
-            )?;
-            let (prepared_batch, prepared_metrics, _) = assert_success(
-                name,
-                ParquetReaderBackend::Direct,
-                scan_table(&prepared, projection, predicate).await?,
-                &expected_ids,
-            )?;
-
-            assert_eq!(prepared_batch, eager_batch, "{name}");
-            assert_eq!(
-                (
-                    prepared_metrics.deletion_vector_payloads_loaded,
-                    prepared_metrics.deletion_vectors_applied,
-                    prepared_metrics.deletion_vector_rows_deleted,
-                ),
-                (
-                    eager_metrics.deletion_vector_payloads_loaded,
-                    eager_metrics.deletion_vectors_applied,
-                    eager_metrics.deletion_vector_rows_deleted,
-                ),
-                "{name}"
-            );
-        }
-        Ok::<_, Box<dyn Error>>(())
-    })
 }
 
 fn batch_ids(batch: &RecordBatch) -> TestResult<Vec<i32>> {
