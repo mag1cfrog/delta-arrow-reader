@@ -158,17 +158,26 @@ impl MeteredParquetObjectStore {
     }
 
     /// Records the exact request and chosen physical plan before its reads start.
-    fn record_chosen_range_plan(&self, plan: &ChosenRangePlan) {
+    fn record_chosen_range_plan_metrics(&self, plan: &ChosenRangePlan) {
         self.metrics
-            .record_parquet_data_file_ranges_requested(plan.exact_range_count, plan.exact_bytes);
-        self.metrics
-            .record_parquet_data_file_range_plan(plan.physical_ranges.len(), plan.planned_bytes);
+            .record_parquet_data_file_exact_ranges_requested(
+                plan.exact_range_count,
+                plan.exact_bytes,
+            );
+        self.metrics.record_parquet_data_file_physical_range_plan(
+            plan.physical_ranges.len(),
+            plan.planned_bytes,
+        );
         match plan.decision {
             RangePlanDecision::ColdStart => self
                 .metrics
                 .record_parquet_data_file_cold_start_range_plan(),
-            RangePlanDecision::Exact => self.metrics.record_parquet_data_file_exact_range_plan(),
-            RangePlanDecision::Merged => self.metrics.record_parquet_data_file_merged_range_plan(),
+            RangePlanDecision::CostBasedExact => self
+                .metrics
+                .record_parquet_data_file_cost_based_exact_range_plan(),
+            RangePlanDecision::CostBasedMerged => self
+                .metrics
+                .record_parquet_data_file_cost_based_merged_range_plan(),
         }
     }
 }
@@ -286,12 +295,13 @@ impl ObjectStore for MeteredParquetObjectStore {
         match self.multi_range_read_strategy {
             MultiRangeReadStrategy::UseStoreImplementation => {
                 let exact_ranges = merge_ranges(ranges, 0);
-                self.metrics.record_parquet_data_file_ranges_requested(
-                    exact_ranges.len(),
-                    range_bytes(&exact_ranges),
-                );
                 self.metrics
-                    .record_parquet_data_file_store_delegated_range_call();
+                    .record_parquet_data_file_exact_ranges_requested(
+                        exact_ranges.len(),
+                        range_bytes(&exact_ranges),
+                    );
+                self.metrics
+                    .record_parquet_data_file_store_delegated_range_plan();
                 self.metrics.record_parquet_data_file_range_get_operation();
                 let results = self
                     .inner
@@ -309,7 +319,7 @@ impl ObjectStore for MeteredParquetObjectStore {
             }
             MultiRangeReadStrategy::ChooseAutomatically => {
                 let plan = choose_range_plan(ranges, self.current_transport_estimate());
-                self.record_chosen_range_plan(&plan);
+                self.record_chosen_range_plan_metrics(&plan);
                 let physical_ranges = plan.physical_ranges;
                 let completed_reads =
                     Arc::new(Mutex::new(Vec::with_capacity(physical_ranges.len())));
@@ -588,15 +598,30 @@ mod tests {
         assert_eq!(bytes[0].as_ref(), b"0123");
         assert_eq!(bytes[1].as_ref(), b"89ab");
         let snapshot = automatic_metrics.snapshot();
-        assert_eq!(snapshot.parquet_data_file_ranges_requested, Some(2));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_requested, Some(8));
-        assert_eq!(snapshot.parquet_data_file_range_requests_planned, Some(2));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_planned, Some(8));
-        assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(1));
-        assert_eq!(snapshot.parquet_data_file_exact_range_plans, Some(0));
-        assert_eq!(snapshot.parquet_data_file_merged_range_plans, Some(0));
+        assert_eq!(snapshot.parquet_data_file_exact_ranges_requested, Some(2));
         assert_eq!(
-            snapshot.parquet_data_file_store_delegated_range_calls,
+            snapshot.parquet_data_file_exact_range_bytes_requested,
+            Some(8)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_requests_planned,
+            Some(2)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_bytes_planned,
+            Some(8)
+        );
+        assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(1));
+        assert_eq!(
+            snapshot.parquet_data_file_cost_based_exact_range_plans,
+            Some(0)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_cost_based_merged_range_plans,
+            Some(0)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_store_delegated_range_plans,
             Some(0)
         );
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(2));
@@ -615,15 +640,30 @@ mod tests {
         assert_eq!(bytes[0].as_ref(), b"0123");
         assert_eq!(bytes[1].as_ref(), b"89ab");
         let snapshot = delegated_metrics.snapshot();
-        assert_eq!(snapshot.parquet_data_file_ranges_requested, Some(2));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_requested, Some(8));
-        assert_eq!(snapshot.parquet_data_file_range_requests_planned, Some(0));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_planned, Some(0));
-        assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(0));
-        assert_eq!(snapshot.parquet_data_file_exact_range_plans, Some(0));
-        assert_eq!(snapshot.parquet_data_file_merged_range_plans, Some(0));
+        assert_eq!(snapshot.parquet_data_file_exact_ranges_requested, Some(2));
         assert_eq!(
-            snapshot.parquet_data_file_store_delegated_range_calls,
+            snapshot.parquet_data_file_exact_range_bytes_requested,
+            Some(8)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_requests_planned,
+            Some(0)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_bytes_planned,
+            Some(0)
+        );
+        assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(0));
+        assert_eq!(
+            snapshot.parquet_data_file_cost_based_exact_range_plans,
+            Some(0)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_cost_based_merged_range_plans,
+            Some(0)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_store_delegated_range_plans,
             Some(1)
         );
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
@@ -641,10 +681,14 @@ mod tests {
         );
         for (physical_ranges, planned_bytes, decision) in [
             (vec![0..2, 4..6, 8..10], 6, RangePlanDecision::ColdStart),
-            (vec![0..2, 4..6, 8..10], 6, RangePlanDecision::Exact),
-            (vec![0..6, 8..10], 8, RangePlanDecision::Merged),
+            (
+                vec![0..2, 4..6, 8..10],
+                6,
+                RangePlanDecision::CostBasedExact,
+            ),
+            (vec![0..6, 8..10], 8, RangePlanDecision::CostBasedMerged),
         ] {
-            store.record_chosen_range_plan(&ChosenRangePlan {
+            store.record_chosen_range_plan_metrics(&ChosenRangePlan {
                 exact_range_count: 3,
                 exact_bytes: 6,
                 physical_ranges,
@@ -654,13 +698,28 @@ mod tests {
         }
 
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.parquet_data_file_ranges_requested, Some(9));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_requested, Some(18));
-        assert_eq!(snapshot.parquet_data_file_range_requests_planned, Some(8));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_planned, Some(20));
+        assert_eq!(snapshot.parquet_data_file_exact_ranges_requested, Some(9));
+        assert_eq!(
+            snapshot.parquet_data_file_exact_range_bytes_requested,
+            Some(18)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_requests_planned,
+            Some(8)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_bytes_planned,
+            Some(20)
+        );
         assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(1));
-        assert_eq!(snapshot.parquet_data_file_exact_range_plans, Some(1));
-        assert_eq!(snapshot.parquet_data_file_merged_range_plans, Some(1));
+        assert_eq!(
+            snapshot.parquet_data_file_cost_based_exact_range_plans,
+            Some(1)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_cost_based_merged_range_plans,
+            Some(1)
+        );
     }
 
     #[test]
@@ -773,10 +832,19 @@ mod tests {
         );
         assert_eq!(failed_store.current_transport_estimate(), None);
         let snapshot = failed_metrics.snapshot();
-        assert_eq!(snapshot.parquet_data_file_ranges_requested, Some(2));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_requested, Some(8));
-        assert_eq!(snapshot.parquet_data_file_range_requests_planned, Some(2));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_planned, Some(8));
+        assert_eq!(snapshot.parquet_data_file_exact_ranges_requested, Some(2));
+        assert_eq!(
+            snapshot.parquet_data_file_exact_range_bytes_requested,
+            Some(8)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_requests_planned,
+            Some(2)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_bytes_planned,
+            Some(8)
+        );
         assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(1));
         Ok(())
     }
@@ -877,7 +945,7 @@ mod tests {
         assert_eq!(
             metrics
                 .snapshot()
-                .parquet_data_file_store_delegated_range_calls,
+                .parquet_data_file_store_delegated_range_plans,
             Some(0)
         );
 
@@ -888,10 +956,13 @@ mod tests {
                 .is_err()
         );
         let snapshot = metrics.snapshot();
-        assert_eq!(snapshot.parquet_data_file_ranges_requested, Some(2));
-        assert_eq!(snapshot.parquet_data_file_range_bytes_requested, Some(8));
+        assert_eq!(snapshot.parquet_data_file_exact_ranges_requested, Some(2));
         assert_eq!(
-            snapshot.parquet_data_file_store_delegated_range_calls,
+            snapshot.parquet_data_file_exact_range_bytes_requested,
+            Some(8)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_store_delegated_range_plans,
             Some(1)
         );
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));

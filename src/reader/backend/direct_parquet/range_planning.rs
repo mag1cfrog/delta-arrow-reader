@@ -25,9 +25,9 @@ pub(super) enum RangePlanDecision {
     /// No usable transport estimate was available, so only safety bounds guided the plan.
     ColdStart,
     /// A usable transport estimate favored the normalized minimum-byte plan.
-    Exact,
+    CostBasedExact,
     /// A usable transport estimate favored including gaps to reduce physical requests.
-    Merged,
+    CostBasedMerged,
 }
 
 /// The exact request summary and physical ranges selected by the automatic planner.
@@ -127,9 +127,9 @@ pub(super) fn choose_range_plan(
                     .cloned()
                     .unwrap_or_else(|| exact_plan.clone());
                 let decision = if plan == *exact_plan {
-                    RangePlanDecision::Exact
+                    RangePlanDecision::CostBasedExact
                 } else {
-                    RangePlanDecision::Merged
+                    RangePlanDecision::CostBasedMerged
                 };
                 (plan, decision)
             }
@@ -322,7 +322,7 @@ mod tests {
         assert_eq!(cold_plan.decision, RangePlanDecision::ColdStart);
         let exact_plan = choose_range_plan(&requested_ranges, Some(low_bandwidth));
         assert_eq!(exact_plan.physical_ranges.len(), 11);
-        assert_eq!(exact_plan.decision, RangePlanDecision::Exact);
+        assert_eq!(exact_plan.decision, RangePlanDecision::CostBasedExact);
         assert_eq!(
             choose_range_plan(&requested_ranges, Some(near_boundary))
                 .physical_ranges
@@ -331,7 +331,7 @@ mod tests {
         );
         let merged_plan = choose_range_plan(&requested_ranges, Some(high_bandwidth));
         assert_eq!(merged_plan.physical_ranges.len(), 10);
-        assert_eq!(merged_plan.decision, RangePlanDecision::Merged);
+        assert_eq!(merged_plan.decision, RangePlanDecision::CostBasedMerged);
     }
 
     #[test]

@@ -26,14 +26,14 @@ usable after its batch stream finishes or is dropped.
 | `deletion_vector_rows_deleted` | Rows removed by those masks. |
 | `deletion_vector_failures` | Deletion-vector read or masking failures. |
 | `deletion_vector_coordinate_rejections` | Deletion-vector coordinate operations rejected by safety checks. |
-| `parquet_data_file_ranges_requested` | Normalized, non-overlapping exact ranges requested through Direct Parquet multi-range calls. |
-| `parquet_data_file_range_bytes_requested` | Bytes covered by those normalized exact ranges. |
-| `parquet_data_file_range_requests_planned` | Physical range requests selected by the automatic planner. Store-delegated calls do not contribute because their physical plan is not visible. |
-| `parquet_data_file_range_bytes_planned` | Bytes covered by the automatically planned physical requests. |
+| `parquet_data_file_exact_ranges_requested` | Normalized, non-overlapping exact ranges requested through Direct Parquet multi-range calls. |
+| `parquet_data_file_exact_range_bytes_requested` | Bytes covered by those normalized exact ranges. |
+| `parquet_data_file_physical_range_requests_planned` | Physical range requests selected by the automatic planner. Store-delegated calls do not contribute because their physical plan is not visible. |
+| `parquet_data_file_physical_range_bytes_planned` | Bytes covered by the automatically planned physical requests. |
 | `parquet_data_file_cold_start_range_plans` | Automatic plans selected without a usable transport estimate. Safety bounds may still merge a large exact plan. |
-| `parquet_data_file_exact_range_plans` | Automatic plans where a usable estimate favored the normalized minimum-byte ranges. |
-| `parquet_data_file_merged_range_plans` | Automatic plans where a usable estimate favored including gaps to reduce physical requests. |
-| `parquet_data_file_store_delegated_range_calls` | Multi-range calls passed to the store's own implementation. |
+| `parquet_data_file_cost_based_exact_range_plans` | Automatic plans where a usable estimate favored the normalized minimum-byte ranges. |
+| `parquet_data_file_cost_based_merged_range_plans` | Automatic plans where a usable estimate favored including gaps to reduce physical requests. |
+| `parquet_data_file_store_delegated_range_plans` | Range-planning decisions passed to the store's own multi-range implementation. |
 | `parquet_data_file_range_get_operations` | Ranged operations observed by the Direct Parquet wrapper. A forwarded store-provided multi-range call counts once. |
 | `parquet_data_file_full_get_operations` | Direct Parquet data-file GET operations without a range. |
 | `parquet_data_file_bytes_received` | Bytes delivered successfully through the `Direct` backend's object-store boundary. |
@@ -83,12 +83,13 @@ are not network billing counters.
   built-in remote stores. These counters advance before the physical reads
   start, so they also include plans whose reads later fail.
 - Exactly one decision counter advances for each non-empty multi-range call.
-  Automatic calls count as cold start, exact, or merged. Calls that use the
-  store's own multi-range implementation count as store-delegated; their
-  internal physical request count and planned bytes are not observable here.
+  Automatic calls count as cold start, cost-based exact, or cost-based merged.
+  Calls that use the store's own multi-range implementation count as
+  store-delegated; their internal physical request count and planned bytes are
+  not observable here.
 - For automatic plans with requested bytes, aggregate byte amplification is
-  `parquet_data_file_range_bytes_planned` divided by
-  `parquet_data_file_range_bytes_requested`. Calculate the ratio from the
+  `parquet_data_file_physical_range_bytes_planned` divided by
+  `parquet_data_file_exact_range_bytes_requested`. Calculate the ratio from the
   aggregate counters rather than averaging ratios from individual calls.
 - Received bytes count successful response chunks delivered through the
   wrapper. Merged reads can include unrequested gaps. A store-provided
