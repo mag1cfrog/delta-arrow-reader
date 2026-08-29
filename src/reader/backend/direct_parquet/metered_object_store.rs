@@ -32,6 +32,15 @@ pub(crate) struct MeteredParquetObjectStore {
     inner: Arc<dyn ObjectStore>,
     metrics: DeltaScanMetrics,
     multi_range_read_strategy: MultiRangeReadStrategy,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
+}
+
+/// Recent transport measurements shared by Parquet readers in one store context.
+///
+/// The estimator retains only latency and throughput samples. It does not retain object paths,
+/// credentials, table identifiers, or query text.
+#[derive(Default)]
+pub(crate) struct ParquetRangeReadEstimator {
     transport_samples: Mutex<VecDeque<TransportEstimate>>,
 }
 
@@ -89,8 +98,17 @@ impl MeteredParquetObjectStore {
             inner,
             metrics,
             multi_range_read_strategy,
-            transport_samples: Mutex::new(VecDeque::with_capacity(TRANSPORT_SAMPLE_WINDOW)),
+            range_read_estimator: Arc::new(ParquetRangeReadEstimator::default()),
         }
+    }
+
+    /// Reuses transport measurements collected by other readers in the same store context.
+    pub(crate) fn with_range_read_estimator(
+        mut self,
+        range_read_estimator: Arc<ParquetRangeReadEstimator>,
+    ) -> Self {
+        self.range_read_estimator = range_read_estimator;
+        self
     }
 
     /// Reads one physical range and measures request latency separately from payload delivery.
@@ -128,29 +146,7 @@ impl MeteredParquetObjectStore {
 
     /// Returns robust latency and shared-throughput estimates after enough plans have completed.
     fn current_transport_estimate(&self) -> Option<TransportEstimate> {
-        let samples = self
-            .transport_samples
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if samples.len() < MIN_TRANSPORT_SAMPLES {
-            return None;
-        }
-
-        let mut latencies = samples
-            .iter()
-            .map(|sample| sample.request_latency)
-            .collect::<Vec<_>>();
-        let mut throughputs = samples
-            .iter()
-            .map(|sample| sample.shared_throughput_bytes_per_second)
-            .collect::<Vec<_>>();
-        latencies.sort_unstable();
-        throughputs.sort_unstable();
-        let middle = samples.len() / 2;
-        Some(TransportEstimate {
-            request_latency: latencies[middle],
-            shared_throughput_bytes_per_second: throughputs[middle],
-        })
+        self.range_read_estimator.current_transport_estimate()
     }
 
     /// Adds one sample after every physical range in a chosen plan finishes successfully.
@@ -161,15 +157,7 @@ impl MeteredParquetObjectStore {
         let Some(sample) = transport_sample(completed_reads) else {
             return;
         };
-
-        let mut samples = self
-            .transport_samples
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if samples.len() == TRANSPORT_SAMPLE_WINDOW {
-            samples.pop_front();
-        }
-        samples.push_back(sample);
+        self.range_read_estimator.record(sample);
     }
 
     /// Records the exact request and chosen physical plan before its reads start.
@@ -225,6 +213,47 @@ impl MeteredParquetObjectStore {
         self.metrics
             .record_parquet_range_successful_plan_time(plan_started.elapsed());
         Ok(results)
+    }
+}
+
+impl ParquetRangeReadEstimator {
+    /// Returns median latency and throughput after the shared window has enough samples.
+    fn current_transport_estimate(&self) -> Option<TransportEstimate> {
+        let samples = self
+            .transport_samples
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if samples.len() < MIN_TRANSPORT_SAMPLES {
+            return None;
+        }
+
+        let mut latencies = samples
+            .iter()
+            .map(|sample| sample.request_latency)
+            .collect::<Vec<_>>();
+        let mut throughputs = samples
+            .iter()
+            .map(|sample| sample.shared_throughput_bytes_per_second)
+            .collect::<Vec<_>>();
+        latencies.sort_unstable();
+        throughputs.sort_unstable();
+        let middle = samples.len() / 2;
+        Some(TransportEstimate {
+            request_latency: latencies[middle],
+            shared_throughput_bytes_per_second: throughputs[middle],
+        })
+    }
+
+    /// Adds one completed-plan sample and discards the oldest sample when the window is full.
+    fn record(&self, sample: TransportEstimate) {
+        let mut samples = self
+            .transport_samples
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if samples.len() == TRANSPORT_SAMPLE_WINDOW {
+            samples.pop_front();
+        }
+        samples.push_back(sample);
     }
 }
 
@@ -504,7 +533,7 @@ mod tests {
 
     use super::{
         ChosenRangePlan, CompletedRangeRead, MeteredParquetObjectStore, MultiRangeReadStrategy,
-        RangePlanDecision, TransportEstimate,
+        ParquetRangeReadEstimator, RangePlanDecision, TransportEstimate,
     };
     use crate::{
         DeltaScanMetrics, ParquetReaderBackend,
@@ -848,6 +877,78 @@ mod tests {
             snapshot.parquet_data_file_cost_based_merged_range_plans,
             Some(1)
         );
+    }
+
+    #[tokio::test]
+    async fn separate_stores_share_only_an_explicitly_reused_estimator() -> Result<()> {
+        let inner = Arc::new(InMemory::new());
+        inner
+            .put(
+                &Path::from("data.parquet"),
+                PutPayload::from_static(b"0123456789abcdef"),
+            )
+            .await?;
+        let estimator = Arc::new(ParquetRangeReadEstimator::default());
+        let first = MeteredParquetObjectStore::new(
+            inner.clone(),
+            direct_metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        )
+        .with_range_read_estimator(Arc::clone(&estimator));
+        let second = MeteredParquetObjectStore::new(
+            inner.clone(),
+            direct_metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        )
+        .with_range_read_estimator(Arc::clone(&estimator));
+        let started = Instant::now();
+
+        first.record_completed_range_reads(&[completed_read(started, 10, 1_000)]);
+        first.record_completed_range_reads(&[completed_read(started, 20, 2_000)]);
+        assert_eq!(first.current_transport_estimate(), None);
+        second.record_completed_range_reads(&[completed_read(started, 30, 3_000)]);
+        assert!(second.current_transport_estimate().is_some());
+
+        let warm_metrics = direct_metrics();
+        let warm = MeteredParquetObjectStore::new(
+            inner.clone(),
+            warm_metrics.clone(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        )
+        .with_range_read_estimator(estimator);
+        let ranges = [0..4, 8..12];
+        let warm_bytes = warm
+            .get_ranges(&Path::from("data.parquet"), &ranges)
+            .await?;
+        let snapshot = warm_metrics.snapshot();
+        assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(0));
+        assert_eq!(
+            snapshot
+                .parquet_data_file_cost_based_exact_range_plans
+                .unwrap_or_default()
+                + snapshot
+                    .parquet_data_file_cost_based_merged_range_plans
+                    .unwrap_or_default(),
+            1
+        );
+
+        let cold_metrics = direct_metrics();
+        let cold = MeteredParquetObjectStore::new(
+            inner,
+            cold_metrics.clone(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        let cold_bytes = cold
+            .get_ranges(&Path::from("data.parquet"), &ranges)
+            .await?;
+        assert_eq!(cold_bytes, warm_bytes);
+        assert_eq!(
+            cold_metrics
+                .snapshot()
+                .parquet_data_file_cold_start_range_plans,
+            Some(1)
+        );
+        Ok(())
     }
 
     #[test]

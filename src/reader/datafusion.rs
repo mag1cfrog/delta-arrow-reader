@@ -30,8 +30,11 @@ use self::{
 use crate::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
     delta::kernel::kernel_pruning_predicate,
-    reader::planning::{DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan},
-    reader::transform::schema_with_view_types,
+    reader::{
+        backend::direct_parquet::ParquetRangeReadEstimator,
+        planning::{DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan},
+        transform::schema_with_view_types,
+    },
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader::datafusion";
@@ -89,6 +92,7 @@ pub struct DeltaTableProvider {
     schema: SchemaRef,
     options: ScanOptions,
     registration_name: Option<String>,
+    range_read_estimator: Arc<ParquetRangeReadEstimator>,
 }
 
 impl DeltaTableProvider {
@@ -119,6 +123,7 @@ impl DeltaTableProvider {
             schema,
             options,
             registration_name,
+            range_read_estimator: Arc::default(),
         })
     }
 
@@ -231,6 +236,7 @@ impl DeltaTableProvider {
                 reader_plan,
                 datafusion_plan,
                 exact_row_predicate,
+                Arc::clone(&self.range_read_estimator),
                 self.registration_name.clone(),
                 self.options.use_arrow_view_types,
                 self.options.intra_file_repartitioning,
