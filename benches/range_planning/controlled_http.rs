@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -22,6 +22,26 @@ pub(super) struct ControlledHttpServer {
     shutdown: Arc<AtomicBool>,
     handle: Option<thread::JoinHandle<()>>,
     url: String,
+    state: Arc<ServerState>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct ServerStatsSnapshot {
+    pub(super) range_requests: u64,
+    pub(super) range_bytes: u64,
+}
+
+#[derive(Debug, Default)]
+struct ServerStats {
+    range_requests: AtomicU64,
+    range_bytes: AtomicU64,
+}
+
+#[derive(Debug)]
+struct ServerState {
+    profile: TransportProfile,
+    shared_bandwidth: Mutex<()>,
+    stats: ServerStats,
 }
 
 impl ControlledHttpServer {
@@ -31,14 +51,20 @@ impl ControlledHttpServer {
         let url = format!("http://{}/", listener.local_addr()?);
         let shutdown = Arc::new(AtomicBool::new(false));
         let worker_shutdown = Arc::clone(&shutdown);
-        let shared_bandwidth = Arc::new(Mutex::new(()));
+        let state = Arc::new(ServerState {
+            profile,
+            shared_bandwidth: Mutex::new(()),
+            stats: ServerStats::default(),
+        });
+        let worker_state = Arc::clone(&state);
         let handle = thread::spawn(move || {
-            serve_http(listener, root, profile, worker_shutdown, shared_bandwidth);
+            serve_http(listener, root, worker_shutdown, worker_state);
         });
         Ok(Self {
             shutdown,
             handle: Some(handle),
             url,
+            state,
         })
     }
 
@@ -52,6 +78,18 @@ impl ControlledHttpServer {
             let _ = handle.join();
         }
     }
+
+    pub(super) fn reset_stats(&self) {
+        self.state.stats.range_requests.store(0, Ordering::Relaxed);
+        self.state.stats.range_bytes.store(0, Ordering::Relaxed);
+    }
+
+    pub(super) fn stats(&self) -> ServerStatsSnapshot {
+        ServerStatsSnapshot {
+            range_requests: self.state.stats.range_requests.load(Ordering::Relaxed),
+            range_bytes: self.state.stats.range_bytes.load(Ordering::Relaxed),
+        }
+    }
 }
 
 impl Drop for ControlledHttpServer {
@@ -63,20 +101,19 @@ impl Drop for ControlledHttpServer {
 fn serve_http(
     listener: TcpListener,
     root: PathBuf,
-    profile: TransportProfile,
     shutdown: Arc<AtomicBool>,
-    shared_bandwidth: Arc<Mutex<()>>,
+    state: Arc<ServerState>,
 ) {
     while !shutdown.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((stream, _)) => {
                 let root = root.clone();
                 let shutdown = Arc::clone(&shutdown);
-                let shared_bandwidth = Arc::clone(&shared_bandwidth);
+                let state = Arc::clone(&state);
                 let _ = thread::Builder::new()
                     .name("delta-arrow-reader-range-bench-http".to_owned())
                     .spawn(move || {
-                        let _ = handle_http(stream, &root, profile, &shutdown, &shared_bandwidth);
+                        let _ = handle_http(stream, &root, &shutdown, &state);
                     });
             }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
@@ -90,9 +127,8 @@ fn serve_http(
 fn handle_http(
     mut stream: TcpStream,
     root: &Path,
-    profile: TransportProfile,
     shutdown: &AtomicBool,
-    shared_bandwidth: &Mutex<()>,
+    state: &ServerState,
 ) -> io::Result<()> {
     let Some(request) = read_http_request(&stream)? else {
         return Ok(());
@@ -109,8 +145,7 @@ fn handle_http(
             &request.path,
             request.headers.get("range").map(String::as_str),
             true,
-            profile,
-            shared_bandwidth,
+            state,
         ),
         "GET" => file_response(
             &mut stream,
@@ -118,8 +153,7 @@ fn handle_http(
             &request.path,
             request.headers.get("range").map(String::as_str),
             false,
-            profile,
-            shared_bandwidth,
+            state,
         ),
         _ => write_response_headers(
             &mut stream,
@@ -271,8 +305,7 @@ fn file_response(
     request_path: &str,
     range_header: Option<&str>,
     head_only: bool,
-    profile: TransportProfile,
-    shared_bandwidth: &Mutex<()>,
+    state: &ServerState,
 ) -> io::Result<()> {
     let path = root.join(request_path);
     let metadata = match fs::metadata(&path) {
@@ -306,8 +339,11 @@ fn file_response(
             format!("bytes {start}-{}/{}", end.saturating_sub(1), size),
         ));
     }
+    if !head_only && range.is_some() {
+        state.stats.range_requests.fetch_add(1, Ordering::Relaxed);
+    }
 
-    thread::sleep(profile.request_latency);
+    thread::sleep(state.profile.request_latency);
     write_response_headers(stream, status, text, &headers)?;
     stream.flush()?;
     if head_only {
@@ -323,15 +359,22 @@ fn file_response(
         file.read_exact(&mut buffer[..chunk_len])?;
         // Keep the throughput limit shared across concurrent responses. Sending the headers
         // before taking this lock keeps request latency separate from payload delivery time.
-        let _bandwidth = shared_bandwidth
+        let _bandwidth = state
+            .shared_bandwidth
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         thread::sleep(transfer_delay(
             chunk_len,
-            profile.shared_throughput_bytes_per_second,
+            state.profile.shared_throughput_bytes_per_second,
         ));
         stream.write_all(&buffer[..chunk_len])?;
         stream.flush()?;
+        if range.is_some() {
+            state
+                .stats
+                .range_bytes
+                .fetch_add(chunk_len as u64, Ordering::Relaxed);
+        }
         remaining = remaining.saturating_sub(chunk_len as u64);
     }
     Ok(())
@@ -446,6 +489,7 @@ fn invalid(message: impl Into<String>) -> io::Error {
 }
 
 #[cfg(test)]
+#[allow(unused_imports)]
 mod tests {
     use super::*;
 

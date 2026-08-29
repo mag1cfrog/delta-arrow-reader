@@ -203,6 +203,7 @@ impl MeteredParquetObjectStore {
         requested_ranges: &[Range<u64>],
         physical_ranges: &[Range<u64>],
     ) -> Result<Vec<Bytes>> {
+        let plan_started = Instant::now();
         let completed_reads = Arc::new(Mutex::new(Vec::with_capacity(physical_ranges.len())));
         let results = execute_range_plan(requested_ranges, physical_ranges, |range| {
             let completed_reads = Arc::clone(&completed_reads);
@@ -221,6 +222,8 @@ impl MeteredParquetObjectStore {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         );
+        self.metrics
+            .record_parquet_range_successful_plan_time(plan_started.elapsed());
         Ok(results)
     }
 }
@@ -337,6 +340,7 @@ impl ObjectStore for MeteredParquetObjectStore {
 
         match self.multi_range_read_strategy {
             MultiRangeReadStrategy::UseStoreImplementation => {
+                let plan_started = Instant::now();
                 let exact_ranges = merge_ranges(ranges, 0);
                 self.metrics
                     .record_parquet_data_file_exact_ranges_requested(
@@ -358,6 +362,8 @@ impl ObjectStore for MeteredParquetObjectStore {
                     self.metrics
                         .record_parquet_data_file_bytes_received(bytes.len());
                 }
+                self.metrics
+                    .record_parquet_range_successful_plan_time(plan_started.elapsed());
                 Ok(results)
             }
             strategy @ (MultiRangeReadStrategy::ReadExactRanges
@@ -704,6 +710,9 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(2));
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(8));
+        let diagnostic = automatic_metrics.parquet_range_planning_diagnostic_snapshot();
+        assert_eq!(diagnostic.max_concurrent_physical_range_requests, 10);
+        assert_eq!(diagnostic.physical_range_request_waves_planned, 1);
 
         let delegated_metrics = direct_metrics();
         let delegated_store = memory_store_with_strategy(
@@ -745,6 +754,12 @@ mod tests {
         );
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(8));
+        assert_eq!(
+            delegated_metrics
+                .parquet_range_planning_diagnostic_snapshot()
+                .physical_range_request_waves_planned,
+            0
+        );
         Ok(())
     }
 

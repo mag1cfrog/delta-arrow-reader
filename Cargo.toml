@@ -43,6 +43,11 @@ name = "page_index"
 harness = false
 test = false
 
+[[bench]]
+name = "range_planning"
+harness = false
+test = false
+
 [features]
 datafusion = ["dep:datafusion"]
 

@@ -8,6 +8,7 @@ const DEFAULT_MAX_CONCURRENT_FILE_READS_PER_PARTITION: usize = 3;
 const DEFAULT_OUTPUT_BUFFER_BATCHES_PER_PARTITION: usize = 1;
 const DEFAULT_PREFETCH_FILES_PER_PARTITION: usize = 2;
 const DEFAULT_PARQUET_METADATA_SIZE_HINT_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_CONCURRENT_PARQUET_RANGE_READS: usize = 10;
 
 /// Storage options forwarded to Delta object-store construction.
 pub type DeltaStorageOptions = BTreeMap<String, String>;

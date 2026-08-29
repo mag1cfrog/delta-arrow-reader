@@ -5,7 +5,8 @@ use std::{future::Future, ops::Range, time::Duration};
 use bytes::Bytes;
 use futures_util::{StreamExt, TryStreamExt, stream};
 
-const MAX_CONCURRENT_RANGE_READS: usize = 10;
+use crate::reader::options::MAX_CONCURRENT_PARQUET_RANGE_READS;
+
 const MAX_RANGE_READ_REQUESTS: usize = 64;
 const MAX_BYTE_AMPLIFICATION: u128 = 4;
 const DECISION_MARGIN_PERCENT: u128 = 10;
@@ -92,7 +93,7 @@ pub(super) fn choose_range_plan(
     requested_ranges: &[Range<u64>],
     estimate: Option<TransportEstimate>,
 ) -> ChosenRangePlan {
-    let candidates = candidate_range_plans(requested_ranges, MAX_CONCURRENT_RANGE_READS);
+    let candidates = candidate_range_plans(requested_ranges, MAX_CONCURRENT_PARQUET_RANGE_READS);
     let Some(exact_plan) = candidates.first() else {
         return ChosenRangePlan {
             exact_range_count: 0,
@@ -113,7 +114,7 @@ pub(super) fn choose_range_plan(
             Some(estimate) => {
                 let best_score = eligible_candidates
                     .iter()
-                    .map(|plan| plan_score(plan, estimate, MAX_CONCURRENT_RANGE_READS))
+                    .map(|plan| plan_score(plan, estimate, MAX_CONCURRENT_PARQUET_RANGE_READS))
                     .min()
                     .unwrap_or(0);
                 let competitive_score = best_score
@@ -121,7 +122,8 @@ pub(super) fn choose_range_plan(
                 let plan = eligible_candidates
                     .iter()
                     .filter(|plan| {
-                        plan_score(plan, estimate, MAX_CONCURRENT_RANGE_READS) <= competitive_score
+                        plan_score(plan, estimate, MAX_CONCURRENT_PARQUET_RANGE_READS)
+                            <= competitive_score
                     })
                     .min_by_key(|plan| (range_bytes(plan), plan.len()))
                     .cloned()
@@ -246,7 +248,7 @@ where
 {
     let bytes: Vec<_> = stream::iter(physical_ranges.iter().cloned())
         .map(read)
-        .buffered(MAX_CONCURRENT_RANGE_READS)
+        .buffered(MAX_CONCURRENT_PARQUET_RANGE_READS)
         .try_collect()
         .await?;
 

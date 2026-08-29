@@ -8,7 +8,10 @@ use delta_arrow_reader::{
     DeltaReaderPhase, DeltaScalar, DeltaScan, DeltaScanBuilder, DeltaScanExecutionOptions,
     DeltaScanMetrics, DeltaScanMetricsSnapshot, DeltaSnapshotSelection, DeltaStorageOptions,
     DeltaTable, DeltaTableBuilder, DeltaTableSnapshot, ParquetReaderBackend,
-    diagnostics::parquet_range_planning::Policy as ParquetRangeReadPolicy,
+    diagnostics::parquet_range_planning::{
+        Policy as ParquetRangeReadPolicy, Snapshot as ParquetRangePlanningSnapshot,
+        snapshot as parquet_range_planning_snapshot,
+    },
     diagnostics::partition_target::{
         Input, LocalEnvironment, Output, Source, UnixFileDescriptorLimitStatus,
         collect_local_environment, derive,
@@ -19,6 +22,8 @@ use futures_util::Stream;
 #[test]
 fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> {
     let snapshot: fn(&DeltaScanMetrics) -> DeltaScanMetricsSnapshot = DeltaScanMetrics::snapshot;
+    let range_planning_snapshot: fn(&DeltaScanMetrics) -> ParquetRangePlanningSnapshot =
+        parquet_range_planning_snapshot;
     fn inspect_scan_metrics(snapshot: DeltaScanMetricsSnapshot) {
         let _: Option<u64> = snapshot.add_actions_excluded_during_planning;
         let _: Option<u64> = snapshot.estimated_input_rows;
@@ -38,7 +43,12 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
         let _: Option<u64> = snapshot.parquet_data_file_store_delegated_range_plans;
         let _: Option<u64> = snapshot.estimated_parquet_task_bytes_admitted;
     }
-    let _ = snapshot;
+    fn inspect_range_planning(snapshot: ParquetRangePlanningSnapshot) {
+        let _: u64 = snapshot.max_concurrent_physical_range_requests;
+        let _: u64 = snapshot.physical_range_request_waves_planned;
+        let _: u64 = snapshot.successful_plan_time_micros;
+    }
+    let _ = (snapshot, range_planning_snapshot, inspect_range_planning);
     let _ = inspect_scan_metrics;
     let min_reader_version: fn(&DeltaProtocol) -> i32 = DeltaProtocol::min_reader_version;
     let min_writer_version: fn(&DeltaProtocol) -> i32 = DeltaProtocol::min_writer_version;
