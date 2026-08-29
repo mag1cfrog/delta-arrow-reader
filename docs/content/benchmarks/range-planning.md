@@ -40,13 +40,45 @@ total, and the 10% stability margin deliberately prefers lower byte usage when
 two estimates are close. The goal is to avoid a consistently poor fixed choice,
 not to predict the fastest plan perfectly for every file.
 
+## How the planner chooses a range plan
+
+The planner begins with the exact Parquet ranges after combining overlaps and
+duplicates. It then builds alternatives that reduce the number of request
+waves. Each alternative merges the smallest gaps needed to remove at least one
+wave. Alternatives that transfer more than four times the exact bytes are
+discarded.
+
+One plan can run up to 10 range requests concurrently, so its estimated time is:
+
+```text
+request_waves = ceil(request_count / 10)
+estimated_time = request_waves * typical_request_latency
+               + planned_bytes / typical_shared_throughput
+```
+
+Request latency is the time until response data becomes available. Shared
+throughput is the aggregate payload rate across concurrent requests, not a
+separate bandwidth estimate for each request. After three successful plans,
+the planner uses the median latency and throughput from up to nine recent
+samples. Failed, truncated, and cancelled plans do not update the estimate.
+
+The planner finds the candidate with the lowest estimated time, then keeps all
+candidates whose estimate is within 10% of that result. Among those candidates,
+it chooses the one that transfers the fewest bytes, using request count as the
+final tie breaker. This stability margin prevents small changes in the estimate
+from repeatedly switching plans for a minor predicted gain.
+
+Before enough samples exist, the planner uses exact ranges. There is one safety
+bound: if the exact plan needs more than 64 requests, the planner uses a
+lower-request candidate when it stays within the four-times byte limit. This
+prevents an untrained scan from issuing an unusually large number of separate
+requests.
+
 ## Model accuracy
 
-The benchmark also applies the planner's cost model to the chosen automatic
-plans using the server's configured latency and throughput. Predicted plan time
-is request waves multiplied by request latency, plus planned bytes divided by
-shared throughput. Observed plan time measures the successful multi-range plan
-executions and excludes the rest of the scan.
+The benchmark applies this equation to the chosen automatic plans using the
+server's configured latency and throughput. Observed plan time measures the
+successful multi-range plan executions and excludes the rest of the scan.
 
 | Transport profile | Projection | Predicted plan | Observed plan | Difference |
 | --- | --- | ---: | ---: | ---: |
