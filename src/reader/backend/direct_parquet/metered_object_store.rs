@@ -6,14 +6,14 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::{StreamExt, stream, stream::BoxStream};
 use object_store::{
-    CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload,
-    OBJECT_STORE_COALESCE_DEFAULT, ObjectMeta, ObjectStore, ObjectStoreExt, ObjectStoreScheme,
-    PutMultipartOptions, PutOptions, PutPayload, PutResult, RenameOptions, Result, path::Path,
+    CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload, ObjectMeta,
+    ObjectStore, ObjectStoreExt, ObjectStoreScheme, PutMultipartOptions, PutOptions, PutPayload,
+    PutResult, RenameOptions, Result, path::Path,
 };
 use tracing::Instrument;
 use url::Url;
 
-use super::range_planning::{execute_range_plan, merge_ranges};
+use super::range_planning::{choose_range_plan, execute_range_plan};
 use crate::DeltaScanMetrics;
 
 pub(crate) struct MeteredParquetObjectStore {
@@ -26,19 +26,19 @@ pub(crate) struct MeteredParquetObjectStore {
 pub(crate) enum MultiRangeReadStrategy {
     /// Pass the original range list to the store's `get_ranges` implementation.
     UseStoreImplementation,
-    /// Apply the object-store default 1 MiB gap before calling the inner store.
-    CoalesceWithDefaultGap,
+    /// Choose a physical range plan from recent remote transport observations.
+    ChooseAutomatically,
 }
 
 impl MultiRangeReadStrategy {
     /// Uses the store implementation for local, memory, and custom URL schemes. Built-in remote
-    /// stores keep the current default-gap coalescing behavior.
+    /// stores choose their physical range plan automatically.
     pub(crate) fn for_table_url(table_url: &Url) -> Self {
         match ObjectStoreScheme::parse(table_url) {
             Ok((ObjectStoreScheme::Local | ObjectStoreScheme::Memory, _)) | Err(_) => {
                 Self::UseStoreImplementation
             }
-            Ok(_) => Self::CoalesceWithDefaultGap,
+            Ok(_) => Self::ChooseAutomatically,
         }
     }
 }
@@ -134,8 +134,8 @@ impl ObjectStore for MeteredParquetObjectStore {
                 }
                 Ok(results)
             }
-            MultiRangeReadStrategy::CoalesceWithDefaultGap => {
-                let physical_ranges = merge_ranges(ranges, OBJECT_STORE_COALESCE_DEFAULT);
+            MultiRangeReadStrategy::ChooseAutomatically => {
+                let physical_ranges = choose_range_plan(ranges, None);
                 execute_range_plan(ranges, &physical_ranges, |range| {
                     self.get_range(location, range)
                 })
@@ -261,7 +261,7 @@ mod tests {
     }
 
     async fn memory_store(metrics: DeltaScanMetrics) -> Result<MeteredParquetObjectStore> {
-        memory_store_with_strategy(metrics, MultiRangeReadStrategy::CoalesceWithDefaultGap).await
+        memory_store_with_strategy(metrics, MultiRangeReadStrategy::ChooseAutomatically).await
     }
 
     async fn memory_store_with_strategy(
@@ -295,7 +295,7 @@ mod tests {
         ] {
             assert_eq!(
                 MultiRangeReadStrategy::for_table_url(&url::Url::parse(location)?),
-                MultiRangeReadStrategy::CoalesceWithDefaultGap,
+                MultiRangeReadStrategy::ChooseAutomatically,
                 "{location}"
             );
         }
@@ -347,7 +347,7 @@ mod tests {
         let failure_store = MeteredParquetObjectStore::new(
             Arc::new(InMemory::new()),
             failure_metrics.clone(),
-            MultiRangeReadStrategy::CoalesceWithDefaultGap,
+            MultiRangeReadStrategy::ChooseAutomatically,
         );
         let result = failure_store
             .get_opts(
@@ -366,16 +366,16 @@ mod tests {
 
     #[tokio::test]
     async fn multi_range_strategies_preserve_results_and_expose_metrics() -> Result<()> {
-        let coalesced_metrics = direct_metrics();
-        let coalesced_store = memory_store(coalesced_metrics.clone()).await?;
-        let bytes = coalesced_store
+        let automatic_metrics = direct_metrics();
+        let automatic_store = memory_store(automatic_metrics.clone()).await?;
+        let bytes = automatic_store
             .get_ranges(&Path::from("data.parquet"), &[0..4, 8..12])
             .await?;
         assert_eq!(bytes[0].as_ref(), b"0123");
         assert_eq!(bytes[1].as_ref(), b"89ab");
-        let snapshot = coalesced_metrics.snapshot();
-        assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
-        assert_eq!(snapshot.parquet_data_file_bytes_received, Some(12));
+        let snapshot = automatic_metrics.snapshot();
+        assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(2));
+        assert_eq!(snapshot.parquet_data_file_bytes_received, Some(8));
 
         let delegated_metrics = direct_metrics();
         let delegated_store = memory_store_with_strategy(
