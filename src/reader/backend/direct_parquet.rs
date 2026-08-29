@@ -26,7 +26,7 @@ use parquet::arrow::{
         ParquetRecordBatchStreamBuilder,
     },
 };
-use parquet::file::metadata::ParquetMetaData;
+use parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
 use parquet::schema::types::SchemaDescriptor;
 use snafu::{IntoError, ResultExt};
 use tokio::sync::OnceCell;
@@ -764,14 +764,17 @@ impl LogicalDataFileStream {
 fn arrow_reader_options(
     include_original_row_index: bool,
 ) -> parquet::errors::Result<ArrowReaderOptions> {
+    // Offset indexes let parquet-rs turn row-filter selections into page-range reads. Treat them
+    // as optional so files without an offset index fall back to reading complete column chunks.
+    let options = ArrowReaderOptions::new().with_offset_index_policy(PageIndexPolicy::Optional);
     if !include_original_row_index {
-        return Ok(ArrowReaderOptions::new());
+        return Ok(options);
     }
     let row_number_field = Arc::new(
         Field::new(ORIGINAL_ROW_INDEX_COLUMN, DataType::Int64, false)
             .with_extension_type(RowNumber),
     );
-    ArrowReaderOptions::new().with_virtual_columns(vec![row_number_field])
+    options.with_virtual_columns(vec![row_number_field])
 }
 
 fn cancelled_error() -> DeltaReaderError {
@@ -824,7 +827,8 @@ mod tests {
 
     use super::{
         DirectParquetReader, LogicalDataFileReadRequest, PhysicalParquetStreamOptions,
-        RangedParquetMetadataCache, RowFilterInput, data_file_error, direct_parquet_file_executor,
+        RangedParquetMetadataCache, RowFilterInput, arrow_reader_options, data_file_error,
+        direct_parquet_file_executor,
     };
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
@@ -848,6 +852,23 @@ mod tests {
 
     const DV_ID: &str = "vBn[lx{q8@P<9BNH/isA";
     const DV_FILE: &str = "deletion_vector_61d16c75-6994-46b7-a15b-8b538852e50e.bin";
+
+    #[test]
+    fn arrow_reader_options_load_optional_offset_indexes() -> Result<(), Box<dyn std::error::Error>>
+    {
+        for include_original_row_index in [false, true] {
+            let options = arrow_reader_options(include_original_row_index)?;
+            assert_eq!(
+                options.offset_index_policy(),
+                parquet::file::metadata::PageIndexPolicy::Optional
+            );
+            assert_eq!(
+                options.column_index_policy(),
+                parquet::file::metadata::PageIndexPolicy::Skip
+            );
+        }
+        Ok(())
+    }
 
     pub(super) struct TestDir(PathBuf);
 
