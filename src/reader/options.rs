@@ -8,6 +8,7 @@ const DEFAULT_MAX_CONCURRENT_FILE_READS_PER_PARTITION: usize = 3;
 const DEFAULT_OUTPUT_BUFFER_BATCHES_PER_PARTITION: usize = 1;
 const DEFAULT_PREFETCH_FILES_PER_PARTITION: usize = 2;
 const DEFAULT_PARQUET_METADATA_SIZE_HINT_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_CONCURRENT_PARQUET_RANGE_READS: usize = 10;
 
 /// Storage options forwarded to Delta object-store construction.
 pub type DeltaStorageOptions = BTreeMap<String, String>;
@@ -32,6 +33,21 @@ pub enum ParquetReaderBackend {
     Direct,
 }
 
+/// Parquet range-read policy used by internal diagnostics and benchmarks.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ParquetRangeReadPolicy {
+    /// Choose automatically for built-in remote stores and preserve other store implementations.
+    #[default]
+    Automatic,
+    /// Read only the normalized ranges requested by Parquet.
+    ExactRanges,
+    /// Merge ranges separated by at most one MiB before reading them.
+    MergeRangesWithinOneMegabyte,
+    /// Pass the requested ranges to the object store's own multi-range implementation.
+    StoreImplementation,
+}
+
 /// Bounded execution settings for one Delta scan.
 #[must_use = "execution options do nothing unless passed to a table or scan"]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +59,7 @@ pub struct DeltaScanExecutionOptions {
     prefetch_files_per_partition: usize,
     parquet_metadata_size_hint_bytes: Option<usize>,
     parquet_full_file_read_threshold_bytes: Option<usize>,
+    parquet_range_read_policy: ParquetRangeReadPolicy,
 }
 
 impl DeltaScanExecutionOptions {
@@ -57,6 +74,7 @@ impl DeltaScanExecutionOptions {
             prefetch_files_per_partition: DEFAULT_PREFETCH_FILES_PER_PARTITION,
             parquet_metadata_size_hint_bytes: Some(DEFAULT_PARQUET_METADATA_SIZE_HINT_BYTES),
             parquet_full_file_read_threshold_bytes: None,
+            parquet_range_read_policy: ParquetRangeReadPolicy::Automatic,
         }
     }
 
@@ -95,9 +113,20 @@ impl DeltaScanExecutionOptions {
         self.parquet_full_file_read_threshold_bytes
     }
 
+    pub(crate) const fn parquet_range_read_policy(&self) -> ParquetRangeReadPolicy {
+        self.parquet_range_read_policy
+    }
+
     /// Selects a Parquet reader backend.
     pub const fn with_parquet_backend(mut self, parquet_backend: ParquetReaderBackend) -> Self {
         self.parquet_backend = parquet_backend;
+        self
+    }
+
+    /// Selects a Parquet range-read policy for diagnostics and benchmarks.
+    #[doc(hidden)]
+    pub const fn with_parquet_range_read_policy(mut self, policy: ParquetRangeReadPolicy) -> Self {
+        self.parquet_range_read_policy = policy;
         self
     }
 

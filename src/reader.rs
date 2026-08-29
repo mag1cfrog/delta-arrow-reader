@@ -13,7 +13,11 @@ pub(crate) mod predicate;
 pub(crate) mod scheduling;
 pub(crate) mod transform;
 
+#[doc(hidden)]
+pub use metrics::ParquetRangePlanningDiagnosticSnapshot;
 pub use metrics::{DeltaScanMetrics, DeltaScanMetricsSnapshot};
+#[doc(hidden)]
+pub use options::ParquetRangeReadPolicy;
 pub use options::{
     DeltaScanExecutionOptions, DeltaSnapshotSelection, DeltaStorageOptions, ParquetReaderBackend,
 };

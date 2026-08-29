@@ -143,7 +143,10 @@ impl DirectParquetReader {
         let store = Arc::new(MeteredParquetObjectStore::new(
             engine_context.object_store(),
             metrics.clone(),
-            MultiRangeReadStrategy::for_table_url(engine_context.table_url()),
+            MultiRangeReadStrategy::for_policy(
+                execution_options.parquet_range_read_policy(),
+                engine_context.table_url(),
+            ),
         ));
         Self {
             engine_context,

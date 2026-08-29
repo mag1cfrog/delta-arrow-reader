@@ -14,6 +14,17 @@ pub use delta::DeltaProtocol;
 pub use error::{DeltaReaderError, DeltaReaderPhase};
 #[doc(hidden)]
 pub mod diagnostics {
+    pub mod parquet_range_planning {
+        pub use crate::reader::{
+            ParquetRangePlanningDiagnosticSnapshot as Snapshot, ParquetRangeReadPolicy as Policy,
+        };
+
+        /// Returns internal measurements used by the range-planning benchmark.
+        pub fn snapshot(metrics: &crate::DeltaScanMetrics) -> Snapshot {
+            metrics.parquet_range_planning_diagnostic_snapshot()
+        }
+    }
+
     pub mod partition_target {
         pub use crate::reader::partition_target::{
             DeltaScanPartitionTargetDiagnosticInput as Input,
