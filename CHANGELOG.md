@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## [0.5.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.4.2...v0.5.0) - 2026-08-29
+
+### Fixed
+
+- keep scan metric snapshots extensible
+- stabilize Parquet range benchmark tests on Windows
+
+### Performance
+
+- validate adaptive Parquet range reads across transport conditions
+- adapt Parquet range reads to observed transport costs
+- preserve native Parquet multi-range reads ([#65](https://github.com/mag1cfrog/delta-arrow-reader/pull/65))
+
 ## [0.4.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.4.1...v0.4.2) - 2026-08-29
 
 ### Performance
