@@ -11,6 +11,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+use arrow::compute::concat_batches;
 use arrow::{
     array::{
         Array, BinaryArray, BinaryViewArray, DictionaryArray, Int32Array, Int64Array, MapArray,
@@ -252,6 +254,13 @@ async fn collect_plan(
     Ok(datafusion::physical_plan::collect(plan, context.task_ctx()).await?)
 }
 
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+async fn collect_query(context: &SessionContext, query: &str) -> TestResult<RecordBatch> {
+    let batches = context.sql(query).await?.collect().await?;
+    let schema = batches.first().ok_or("query returned no batches")?.schema();
+    Ok(concat_batches(&schema, &batches)?)
+}
+
 #[tokio::test]
 async fn optimizer_repartitions_parquet_files_through_normal_sql_planning() -> TestResult {
     let fixture = TestTable::partitioned("optimizer-file-repartitioning")?;
@@ -349,35 +358,71 @@ async fn datafusion_reuses_table_prepared_parquet_metadata_after_repartitioning(
             max_retained_metadata_bytes: 1024 * 1024,
         })
         .await?;
-    let context = SessionContext::new_with_config(
-        SessionConfig::new()
-            .with_target_partitions(4)
-            .with_repartition_file_min_size(1),
-    );
-    register_table(
-        &context,
-        "orders",
-        table,
-        ScanOptions {
-            target_partitions: Some(4),
-            ..Default::default()
-        },
-    )?;
-
     fixture.corrupt_parquet_footer("west.parquet")?;
-    let plan = context
-        .sql("SELECT id FROM orders ORDER BY id")
-        .await?
-        .create_physical_plan()
-        .await?;
-    let display = displayable(plan.as_ref()).indent(true).to_string();
-    assert!(
-        display.contains("DeltaScanExec: snapshot_version=0, partitions=4"),
-        "{display}"
-    );
+    for _ in 0..2 {
+        let context = SessionContext::new_with_config(
+            SessionConfig::new()
+                .with_target_partitions(4)
+                .with_repartition_file_min_size(1),
+        );
+        register_table(
+            &context,
+            "orders",
+            table.clone(),
+            ScanOptions {
+                target_partitions: Some(4),
+                ..Default::default()
+            },
+        )?;
 
-    let batches = collect_plan(&context, plan).await?;
-    assert_eq!(ids(&batches), [1, 2, 3, 4]);
+        let plan = context
+            .sql("SELECT id FROM orders ORDER BY id")
+            .await?
+            .create_physical_plan()
+            .await?;
+        let display = displayable(plan.as_ref()).indent(true).to_string();
+        assert!(
+            display.contains("DeltaScanExec: snapshot_version=0, partitions=4"),
+            "{display}"
+        );
+
+        let batches = collect_plan(&context, plan).await?;
+        assert_eq!(ids(&batches), [1, 2, 3, 4]);
+    }
+    Ok(())
+}
+
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[tokio::test]
+async fn prepared_parquet_metadata_preserves_datafusion_results() -> TestResult {
+    let fixture = RealParquetDeltaTable::new_with_two_row_groups_and_deletion_vector(
+        "prepared-datafusion-equivalence",
+        3,
+        &[1, 4],
+    )?;
+    let location = fixture.path().to_string_lossy().into_owned();
+    let eager = DeltaTableBuilder::new(location.clone())
+        .load_table_with_eager_scan_metadata()
+        .await?;
+    let prepared = DeltaTableBuilder::new(location)
+        .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+            max_files: 1,
+            max_retained_metadata_bytes: 1024 * 1024,
+        })
+        .await?;
+    let context = SessionContext::new();
+    register_table(&context, "eager", eager, ScanOptions::default())?;
+    register_table(&context, "prepared", prepared, ScanOptions::default())?;
+
+    for query in [
+        "SELECT id, customer_name FROM {table} ORDER BY id",
+        "SELECT id FROM {table} ORDER BY id",
+        "SELECT id FROM {table} WHERE id > 3 ORDER BY id",
+    ] {
+        let eager = collect_query(&context, &query.replace("{table}", "eager")).await?;
+        let prepared = collect_query(&context, &query.replace("{table}", "prepared")).await?;
+        assert_eq!(prepared, eager, "{query}");
+    }
     Ok(())
 }
 

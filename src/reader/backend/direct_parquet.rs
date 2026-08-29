@@ -2035,6 +2035,44 @@ mod tests {
 
     #[cfg(feature = "experimental-parquet-metadata-preparation")]
     #[tokio::test]
+    async fn cancelled_metadata_preparation_leaves_the_cache_retryable()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (reader, gated, task, _) = gated_ranged_metadata_reader(
+            "direct-prepared-metadata-cancellation",
+            GateRequest::Range(1),
+        )
+        .await?;
+        let object = reader.resolve_parquet_object(&task)?;
+        let cached = reader
+            .metadata_cache
+            .as_ref()
+            .ok_or("prepared reader must retain its metadata cache")?
+            .entry(&object.path, object.file_size);
+
+        let prepare_reader = Arc::clone(&reader);
+        let prepare_task = task.clone();
+        let prepare = tokio::spawn(async move {
+            prepare_reader
+                .prepare_task_parquet_metadata(&prepare_task)
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), gated.wait_started()).await?;
+        prepare.abort();
+        let join_error = prepare
+            .await
+            .expect_err("aborted metadata preparation unexpectedly completed");
+        assert!(join_error.is_cancelled());
+        assert!(gated.was_cancelled());
+        assert!(cached.get().is_none());
+
+        reader.prepare_task_parquet_metadata(&task).await?;
+        assert!(cached.get().is_some());
+        assert_eq!(gated.range_calls.load(Ordering::Acquire), 2);
+        Ok(())
+    }
+
+    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    #[tokio::test]
     async fn preparation_checks_the_file_limit_before_reading_parquet_metadata()
     -> Result<(), Box<dyn std::error::Error>> {
         let root = TestDir::new("direct-prepare-file-limit")?;
