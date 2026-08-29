@@ -2,7 +2,7 @@
 
 use std::{
     collections::VecDeque,
-    fmt,
+    fmt, io,
     ops::Range,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -84,12 +84,23 @@ impl MeteredParquetObjectStore {
         location: &Path,
         range: Range<u64>,
     ) -> Result<(Bytes, CompletedRangeRead)> {
+        let expected_bytes = range.end - range.start;
         let request_started = Instant::now();
         let result = self
             .get_opts(location, GetOptions::new().with_range(Some(range)))
             .await?;
         let payload_started = Instant::now();
         let bytes = result.bytes().await?;
+        if u64::try_from(bytes.len()).unwrap_or(u64::MAX) != expected_bytes {
+            return Err(object_store::Error::Generic {
+                store: "delta-arrow-reader",
+                source: io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "object store returned a byte range with an unexpected length",
+                )
+                .into(),
+            });
+        }
         let payload_finished = Instant::now();
         let completed_read = CompletedRangeRead {
             request_latency: payload_started.saturating_duration_since(request_started),
@@ -809,6 +820,37 @@ mod tests {
 
         task.abort();
         assert!(task.await.is_err_and(|error| error.is_cancelled()));
+        assert_eq!(store.current_transport_estimate(), None);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn truncated_automatic_plan_does_not_update_transport_estimates()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let truncated = PutPayload::from_static(b"abc")
+            .into_iter()
+            .next()
+            .ok_or_else(missing_chunk)?;
+        let metrics = direct_metrics();
+        let store = MeteredParquetObjectStore::new(
+            Arc::new(ScriptedGetStore::new(test_get_result(
+                GetResultPayload::Stream(stream::iter([Ok(truncated)]).boxed()),
+                0..8,
+            ))),
+            metrics.clone(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        let started = Instant::now();
+        for _ in 0..2 {
+            store.record_completed_range_reads(&[completed_read(started, 10, 1_000)]);
+        }
+
+        let error = store
+            .get_ranges(&Path::from("data.parquet"), &[0..4, 4..8])
+            .await
+            .expect_err("truncated range unexpectedly succeeded");
+        assert!(error.to_string().contains("unexpected length"));
+        assert_eq!(metrics.snapshot().parquet_data_file_bytes_received, Some(3));
         assert_eq!(store.current_transport_estimate(), None);
         Ok(())
     }
