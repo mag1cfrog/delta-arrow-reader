@@ -15,8 +15,10 @@ exclude = [
     ".github/**",
     ".gitignore",
     "benches/reader.rs",
+    "benches/page_index.rs",
     "benches/row_filter.rs",
     "tests/benchmark_harness.rs",
+    "tests/page_index_benchmark_harness.rs",
     "tests/reader.rs",
     "tests/reader/**",
     "tests/row_filter_benchmark_harness.rs",
@@ -30,6 +32,11 @@ test = false
 
 [[bench]]
 name = "row_filter"
+harness = false
+test = false
+
+[[bench]]
+name = "page_index"
 harness = false
 test = false
 
