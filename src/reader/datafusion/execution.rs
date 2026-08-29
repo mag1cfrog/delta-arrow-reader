@@ -334,8 +334,8 @@ struct DeltaScanExec {
     dynamic_filters: Arc<[RetainedDynamicFilter]>,
     intra_file_repartitioning: IntraFileRepartitioning,
     range_read_estimator: Arc<ParquetRangeReadEstimator>,
+    // Created only when DataFusion repartitions files into ranged tasks.
     parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
-    // A prepared table can supply a cache before DataFusion repartitions this plan.
     file_tasks_repartitioned: bool,
 }
 
