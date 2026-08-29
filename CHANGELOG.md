@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.5.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.1...v0.5.2) - 2026-08-29
+
+### Added
+
+- add debug diagnostics for automatic Parquet range-plan decisions
+
 ## [0.5.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.0...v0.5.1) - 2026-08-29
 
 ### Fixed
