@@ -7,10 +7,7 @@ use std::{
     fs::{self, File},
     io,
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -39,7 +36,6 @@ const MATCH_VALUE: &str = "match";
 const OTHER_VALUE: &str = "other";
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
-static NEXT_FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
 const BENCHMARK_SHAPE: FixtureShape = FixtureShape {
     data_files: 4,
     row_groups: 2,
@@ -336,10 +332,11 @@ impl Fixture {
         retain: bool,
     ) -> Result<Self, Box<dyn Error>> {
         shape.validate()?;
-        let path = fixture_path(
-            temp_root,
+        let path = temp_root.join(format!(
+            "delta-arrow-reader-range-planning-{}-{}",
+            std::process::id(),
             SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
-        );
+        ));
         fs::create_dir_all(path.join("_delta_log"))?;
 
         let schema = benchmark_schema(shape.payload_columns);
@@ -382,20 +379,17 @@ impl Fixture {
         Ok(Self {
             path,
             table_uri,
-            storage_options: BTreeMap::from([("allow_http".to_owned(), "true".to_owned())]),
+            // The controlled server closes every HTTP response. Do not return those connections
+            // to the client pool, where they can be reused before the close is observed.
+            storage_options: BTreeMap::from([
+                ("allow_http".to_owned(), "true".to_owned()),
+                ("pool_max_idle_per_host".to_owned(), "0".to_owned()),
+            ]),
             server,
             data_file_bytes,
             retain,
         })
     }
-}
-
-fn fixture_path(temp_root: &Path, created_at_nanos: u128) -> PathBuf {
-    let sequence = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
-    temp_root.join(format!(
-        "delta-arrow-reader-range-planning-{}-{created_at_nanos}-{sequence}",
-        std::process::id(),
-    ))
 }
 
 impl Drop for Fixture {
@@ -1000,17 +994,6 @@ mod tests {
                 "high_latency_high_throughput"
             ]
         );
-    }
-
-    #[test]
-    fn fixture_paths_are_unique_when_the_clock_does_not_advance() {
-        let temp_root = Path::new("benchmark-fixtures");
-        let first = fixture_path(temp_root, 123);
-        let second = fixture_path(temp_root, 123);
-
-        assert_ne!(first, second);
-        assert_eq!(first.parent(), Some(temp_root));
-        assert_eq!(second.parent(), Some(temp_root));
     }
 
     fn benchmark_test_error(case: BenchmarkCase, error: &(dyn Error + 'static)) -> io::Error {
