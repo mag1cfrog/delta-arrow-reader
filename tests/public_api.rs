@@ -27,6 +27,14 @@ fn configuration_and_error_contract_is_public() -> Result<(), DeltaReaderError> 
         let _: u64 = snapshot.scheduler_batches_emitted;
         let _: u64 = snapshot.scheduler_rows_emitted;
         let _: u64 = snapshot.deletion_vector_coordinate_rejections;
+        let _: Option<u64> = snapshot.parquet_data_file_ranges_requested;
+        let _: Option<u64> = snapshot.parquet_data_file_range_bytes_requested;
+        let _: Option<u64> = snapshot.parquet_data_file_range_requests_planned;
+        let _: Option<u64> = snapshot.parquet_data_file_range_bytes_planned;
+        let _: Option<u64> = snapshot.parquet_data_file_cold_start_range_plans;
+        let _: Option<u64> = snapshot.parquet_data_file_exact_range_plans;
+        let _: Option<u64> = snapshot.parquet_data_file_merged_range_plans;
+        let _: Option<u64> = snapshot.parquet_data_file_store_delegated_range_calls;
         let _: Option<u64> = snapshot.estimated_parquet_task_bytes_admitted;
     }
     let _ = snapshot;

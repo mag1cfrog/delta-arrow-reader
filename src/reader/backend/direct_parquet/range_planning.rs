@@ -19,6 +19,31 @@ pub(super) struct TransportEstimate {
     pub(super) shared_throughput_bytes_per_second: u64,
 }
 
+/// Why the automatic planner selected its physical range plan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RangePlanDecision {
+    /// No usable transport estimate was available, so only safety bounds guided the plan.
+    ColdStart,
+    /// A usable transport estimate favored the normalized minimum-byte plan.
+    Exact,
+    /// A usable transport estimate favored including gaps to reduce physical requests.
+    Merged,
+}
+
+/// The exact request summary and physical ranges selected by the automatic planner.
+pub(super) struct ChosenRangePlan {
+    /// Number of ranges in the normalized minimum-byte plan.
+    pub(super) exact_range_count: usize,
+    /// Bytes covered by the normalized minimum-byte plan.
+    pub(super) exact_bytes: u128,
+    /// Physical ranges to read.
+    pub(super) physical_ranges: Vec<Range<u64>>,
+    /// Bytes covered by the physical ranges.
+    pub(super) planned_bytes: u128,
+    /// Reason the physical plan was selected.
+    pub(super) decision: RangePlanDecision,
+}
+
 /// Combines overlapping ranges and ranges separated by at most `max_gap` bytes.
 ///
 /// The returned ranges are sorted, non-overlapping physical reads. Keeping this
@@ -57,43 +82,67 @@ pub(super) fn merge_ranges(requested_ranges: &[Range<u64>], max_gap: u64) -> Vec
 
 /// Chooses the physical ranges predicted to finish fastest.
 ///
-/// Without a usable transport estimate, this returns the normalized minimum-byte
-/// plan. With an estimate, plans within ten percent of the best predicted score
-/// prefer fewer transferred bytes so small estimate changes do not cause churn.
-/// If the exact plan exceeds 64 requests, the cold plan uses at most 64 requests
-/// when that merge transfers no more than four times the exact bytes. Otherwise,
-/// it keeps the exact plan and relies on the execution concurrency bound.
+/// With an estimate, plans within ten percent of the best predicted score prefer
+/// fewer transferred bytes so small estimate changes do not cause churn. Without
+/// an estimate, this keeps the normalized minimum-byte plan unless it exceeds 64
+/// requests and a plan of at most 64 requests transfers no more than four times
+/// the exact bytes. Otherwise, execution keeps the exact plan and relies on its
+/// concurrency bound.
 pub(super) fn choose_range_plan(
     requested_ranges: &[Range<u64>],
     estimate: Option<TransportEstimate>,
-) -> Vec<Range<u64>> {
+) -> ChosenRangePlan {
     let candidates = candidate_range_plans(requested_ranges, MAX_CONCURRENT_RANGE_READS);
     let Some(exact_plan) = candidates.first() else {
-        return Vec::new();
+        return ChosenRangePlan {
+            exact_range_count: 0,
+            exact_bytes: 0,
+            physical_ranges: Vec::new(),
+            planned_bytes: 0,
+            decision: RangePlanDecision::ColdStart,
+        };
     };
+    let exact_range_count = exact_plan.len();
+    let exact_bytes = range_bytes(exact_plan);
     let candidate_start =
         usize::from(exact_plan.len() > MAX_RANGE_READ_REQUESTS && candidates.len() > 1);
     let eligible_candidates = &candidates[candidate_start..];
-    let Some(estimate) =
-        estimate.filter(|estimate| estimate.shared_throughput_bytes_per_second > 0)
-    else {
-        return eligible_candidates[0].clone();
-    };
+    let (physical_ranges, decision) =
+        match estimate.filter(|estimate| estimate.shared_throughput_bytes_per_second > 0) {
+            None => (eligible_candidates[0].clone(), RangePlanDecision::ColdStart),
+            Some(estimate) => {
+                let best_score = eligible_candidates
+                    .iter()
+                    .map(|plan| plan_score(plan, estimate, MAX_CONCURRENT_RANGE_READS))
+                    .min()
+                    .unwrap_or(0);
+                let competitive_score = best_score
+                    .saturating_add(best_score.saturating_mul(DECISION_MARGIN_PERCENT) / 100);
+                let plan = eligible_candidates
+                    .iter()
+                    .filter(|plan| {
+                        plan_score(plan, estimate, MAX_CONCURRENT_RANGE_READS) <= competitive_score
+                    })
+                    .min_by_key(|plan| (range_bytes(plan), plan.len()))
+                    .cloned()
+                    .unwrap_or_else(|| exact_plan.clone());
+                let decision = if plan == *exact_plan {
+                    RangePlanDecision::Exact
+                } else {
+                    RangePlanDecision::Merged
+                };
+                (plan, decision)
+            }
+        };
+    let planned_bytes = range_bytes(&physical_ranges);
 
-    let best_score = eligible_candidates
-        .iter()
-        .map(|plan| plan_score(plan, estimate, MAX_CONCURRENT_RANGE_READS))
-        .min()
-        .unwrap_or(0);
-    let competitive_score =
-        best_score.saturating_add(best_score.saturating_mul(DECISION_MARGIN_PERCENT) / 100);
-
-    eligible_candidates
-        .iter()
-        .filter(|plan| plan_score(plan, estimate, MAX_CONCURRENT_RANGE_READS) <= competitive_score)
-        .min_by_key(|plan| (planned_bytes(plan), plan.len()))
-        .cloned()
-        .unwrap_or_else(|| exact_plan.clone())
+    ChosenRangePlan {
+        exact_range_count,
+        exact_bytes,
+        physical_ranges,
+        planned_bytes,
+        decision,
+    }
 }
 
 /// Builds only plans that reduce the number of request waves.
@@ -113,7 +162,7 @@ fn candidate_range_plans(
     let max_concurrent_reads = max_concurrent_reads.max(1);
     let exact_waves = request_waves(exact_plan.len(), max_concurrent_reads);
     let mut candidates = vec![exact_plan.clone()];
-    let max_planned_bytes = planned_bytes(&exact_plan).saturating_mul(MAX_BYTE_AMPLIFICATION);
+    let max_planned_bytes = range_bytes(&exact_plan).saturating_mul(MAX_BYTE_AMPLIFICATION);
     let mut gaps = exact_plan
         .windows(2)
         .enumerate()
@@ -142,7 +191,7 @@ fn candidate_range_plans(
             }
         }
         plan.push(current_range);
-        if planned_bytes(&plan) > max_planned_bytes {
+        if range_bytes(&plan) > max_planned_bytes {
             break;
         }
         candidates.push(plan);
@@ -152,7 +201,7 @@ fn candidate_range_plans(
 }
 
 /// Returns the bytes covered by a physical range plan.
-fn planned_bytes(plan: &[Range<u64>]) -> u128 {
+pub(super) fn range_bytes(plan: &[Range<u64>]) -> u128 {
     plan.iter()
         .map(|range| u128::from(range.end - range.start))
         .sum()
@@ -174,7 +223,7 @@ fn plan_score(
         .as_nanos()
         .saturating_mul(u128::from(estimate.shared_throughput_bytes_per_second))
         / 1_000_000_000;
-    planned_bytes(plan).saturating_add(
+    range_bytes(plan).saturating_add(
         (request_waves(plan.len(), max_concurrent_reads) as u128)
             .saturating_mul(bandwidth_delay_bytes),
     )
@@ -222,8 +271,8 @@ mod tests {
     use bytes::Bytes;
 
     use super::{
-        TransportEstimate, candidate_range_plans, choose_range_plan, execute_range_plan,
-        merge_ranges, planned_bytes,
+        RangePlanDecision, TransportEstimate, candidate_range_plans, choose_range_plan,
+        execute_range_plan, merge_ranges, range_bytes,
     };
 
     #[test]
@@ -247,9 +296,9 @@ mod tests {
             candidates.iter().map(Vec::len).collect::<Vec<_>>(),
             vec![11, 10, 5]
         );
-        let exact_bytes = planned_bytes(&candidates[0]);
-        assert_eq!(planned_bytes(&candidates[1]), exact_bytes + 1);
-        assert_eq!(planned_bytes(&candidates[2]), exact_bytes + 21);
+        let exact_bytes = range_bytes(&candidates[0]);
+        assert_eq!(range_bytes(&candidates[1]), exact_bytes + 1);
+        assert_eq!(range_bytes(&candidates[2]), exact_bytes + 21);
     }
 
     #[test]
@@ -268,28 +317,38 @@ mod tests {
             shared_throughput_bytes_per_second: 1_000_000_000,
         };
 
-        assert_eq!(choose_range_plan(&requested_ranges, None).len(), 11);
+        let cold_plan = choose_range_plan(&requested_ranges, None);
+        assert_eq!(cold_plan.physical_ranges.len(), 11);
+        assert_eq!(cold_plan.decision, RangePlanDecision::ColdStart);
+        let exact_plan = choose_range_plan(&requested_ranges, Some(low_bandwidth));
+        assert_eq!(exact_plan.physical_ranges.len(), 11);
+        assert_eq!(exact_plan.decision, RangePlanDecision::Exact);
         assert_eq!(
-            choose_range_plan(&requested_ranges, Some(low_bandwidth)).len(),
+            choose_range_plan(&requested_ranges, Some(near_boundary))
+                .physical_ranges
+                .len(),
             11
         );
-        assert_eq!(
-            choose_range_plan(&requested_ranges, Some(near_boundary)).len(),
-            11
-        );
-        assert_eq!(
-            choose_range_plan(&requested_ranges, Some(high_bandwidth)).len(),
-            10
-        );
+        let merged_plan = choose_range_plan(&requested_ranges, Some(high_bandwidth));
+        assert_eq!(merged_plan.physical_ranges.len(), 10);
+        assert_eq!(merged_plan.decision, RangePlanDecision::Merged);
     }
 
     #[test]
     fn cold_plan_limits_requests_without_exceeding_byte_amplification() {
         let dense_ranges = spaced_ranges(&[1; 99]);
-        assert_eq!(choose_range_plan(&dense_ranges, None).len(), 60);
+        assert_eq!(
+            choose_range_plan(&dense_ranges, None).physical_ranges.len(),
+            60
+        );
 
         let sparse_ranges = spaced_ranges(&[1_000_000; 99]);
-        assert_eq!(choose_range_plan(&sparse_ranges, None).len(), 100);
+        assert_eq!(
+            choose_range_plan(&sparse_ranges, None)
+                .physical_ranges
+                .len(),
+            100
+        );
         assert_eq!(candidate_range_plans(&sparse_ranges, 10).len(), 1);
     }
 
