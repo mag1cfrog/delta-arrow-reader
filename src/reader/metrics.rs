@@ -49,6 +49,22 @@ pub struct DeltaScanMetricsSnapshot {
     pub deletion_vector_failures: u64,
     /// Deletion-vector coordinate operations rejected by safety checks.
     pub deletion_vector_coordinate_rejections: u64,
+    /// Normalized exact Parquet ranges requested through direct multi-range calls.
+    pub parquet_data_file_exact_ranges_requested: Option<u64>,
+    /// Bytes in those normalized exact Parquet ranges.
+    pub parquet_data_file_exact_range_bytes_requested: Option<u64>,
+    /// Physical range requests selected by the automatic planner.
+    pub parquet_data_file_physical_range_requests_planned: Option<u64>,
+    /// Bytes covered by those automatically planned physical range requests.
+    pub parquet_data_file_physical_range_bytes_planned: Option<u64>,
+    /// Automatic range plans selected without a usable transport estimate.
+    pub parquet_data_file_cold_start_range_plans: Option<u64>,
+    /// Automatic range plans where an estimate favored the normalized exact ranges.
+    pub parquet_data_file_cost_based_exact_range_plans: Option<u64>,
+    /// Automatic range plans where an estimate favored merging gaps between exact ranges.
+    pub parquet_data_file_cost_based_merged_range_plans: Option<u64>,
+    /// Range-planning decisions delegated to the store's own implementation.
+    pub parquet_data_file_store_delegated_range_plans: Option<u64>,
     /// Direct Parquet ranged GET operations, or `None` for another backend.
     pub parquet_data_file_range_get_operations: Option<u64>,
     /// Direct Parquet full GET operations, or `None` for another backend.
@@ -92,6 +108,14 @@ struct DeltaScanMetricsInner {
     deletion_vector_rows_deleted: AtomicU64,
     deletion_vector_failures: AtomicU64,
     deletion_vector_coordinate_rejections: AtomicU64,
+    parquet_data_file_exact_ranges_requested: AtomicU64,
+    parquet_data_file_exact_range_bytes_requested: AtomicU64,
+    parquet_data_file_physical_range_requests_planned: AtomicU64,
+    parquet_data_file_physical_range_bytes_planned: AtomicU64,
+    parquet_data_file_cold_start_range_plans: AtomicU64,
+    parquet_data_file_cost_based_exact_range_plans: AtomicU64,
+    parquet_data_file_cost_based_merged_range_plans: AtomicU64,
+    parquet_data_file_store_delegated_range_plans: AtomicU64,
     parquet_data_file_range_get_operations: AtomicU64,
     parquet_data_file_full_get_operations: AtomicU64,
     parquet_data_file_bytes_received: AtomicU64,
@@ -134,6 +158,14 @@ impl DeltaScanMetrics {
                 deletion_vector_rows_deleted: AtomicU64::new(0),
                 deletion_vector_failures: AtomicU64::new(0),
                 deletion_vector_coordinate_rejections: AtomicU64::new(0),
+                parquet_data_file_exact_ranges_requested: AtomicU64::new(0),
+                parquet_data_file_exact_range_bytes_requested: AtomicU64::new(0),
+                parquet_data_file_physical_range_requests_planned: AtomicU64::new(0),
+                parquet_data_file_physical_range_bytes_planned: AtomicU64::new(0),
+                parquet_data_file_cold_start_range_plans: AtomicU64::new(0),
+                parquet_data_file_cost_based_exact_range_plans: AtomicU64::new(0),
+                parquet_data_file_cost_based_merged_range_plans: AtomicU64::new(0),
+                parquet_data_file_store_delegated_range_plans: AtomicU64::new(0),
                 parquet_data_file_range_get_operations: AtomicU64::new(0),
                 parquet_data_file_full_get_operations: AtomicU64::new(0),
                 parquet_data_file_bytes_received: AtomicU64::new(0),
@@ -166,6 +198,22 @@ impl DeltaScanMetrics {
             deletion_vector_coordinate_rejections: load(
                 &inner.deletion_vector_coordinate_rejections,
             ),
+            parquet_data_file_exact_ranges_requested: self
+                .parquet_metric(&inner.parquet_data_file_exact_ranges_requested),
+            parquet_data_file_exact_range_bytes_requested: self
+                .parquet_metric(&inner.parquet_data_file_exact_range_bytes_requested),
+            parquet_data_file_physical_range_requests_planned: self
+                .parquet_metric(&inner.parquet_data_file_physical_range_requests_planned),
+            parquet_data_file_physical_range_bytes_planned: self
+                .parquet_metric(&inner.parquet_data_file_physical_range_bytes_planned),
+            parquet_data_file_cold_start_range_plans: self
+                .parquet_metric(&inner.parquet_data_file_cold_start_range_plans),
+            parquet_data_file_cost_based_exact_range_plans: self
+                .parquet_metric(&inner.parquet_data_file_cost_based_exact_range_plans),
+            parquet_data_file_cost_based_merged_range_plans: self
+                .parquet_metric(&inner.parquet_data_file_cost_based_merged_range_plans),
+            parquet_data_file_store_delegated_range_plans: self
+                .parquet_metric(&inner.parquet_data_file_store_delegated_range_plans),
             parquet_data_file_range_get_operations: self
                 .parquet_metric(&inner.parquet_data_file_range_get_operations),
             parquet_data_file_full_get_operations: self
@@ -248,6 +296,58 @@ impl DeltaScanMetrics {
         saturating_fetch_add(&self.inner.deletion_vector_coordinate_rejections, 1);
     }
 
+    pub(crate) fn record_parquet_data_file_exact_ranges_requested(
+        &self,
+        range_count: usize,
+        bytes: u128,
+    ) {
+        saturating_fetch_add(
+            &self.inner.parquet_data_file_exact_ranges_requested,
+            usize_to_u64_saturating(range_count),
+        );
+        saturating_fetch_add(
+            &self.inner.parquet_data_file_exact_range_bytes_requested,
+            u128_to_u64_saturating(bytes),
+        );
+    }
+
+    pub(crate) fn record_parquet_data_file_physical_range_plan(
+        &self,
+        request_count: usize,
+        bytes: u128,
+    ) {
+        saturating_fetch_add(
+            &self.inner.parquet_data_file_physical_range_requests_planned,
+            usize_to_u64_saturating(request_count),
+        );
+        saturating_fetch_add(
+            &self.inner.parquet_data_file_physical_range_bytes_planned,
+            u128_to_u64_saturating(bytes),
+        );
+    }
+
+    pub(crate) fn record_parquet_data_file_cold_start_range_plan(&self) {
+        saturating_fetch_add(&self.inner.parquet_data_file_cold_start_range_plans, 1);
+    }
+
+    pub(crate) fn record_parquet_data_file_cost_based_exact_range_plan(&self) {
+        saturating_fetch_add(
+            &self.inner.parquet_data_file_cost_based_exact_range_plans,
+            1,
+        );
+    }
+
+    pub(crate) fn record_parquet_data_file_cost_based_merged_range_plan(&self) {
+        saturating_fetch_add(
+            &self.inner.parquet_data_file_cost_based_merged_range_plans,
+            1,
+        );
+    }
+
+    pub(crate) fn record_parquet_data_file_store_delegated_range_plan(&self) {
+        saturating_fetch_add(&self.inner.parquet_data_file_store_delegated_range_plans, 1);
+    }
+
     pub(crate) fn record_parquet_data_file_range_get_operation(&self) {
         saturating_fetch_add(&self.inner.parquet_data_file_range_get_operations, 1);
     }
@@ -280,6 +380,10 @@ pub(crate) fn saturating_fetch_add(counter: &AtomicU64, value: u64) {
 }
 
 fn usize_to_u64_saturating(value: usize) -> u64 {
+    u64::try_from(value).unwrap_or(u64::MAX)
+}
+
+fn u128_to_u64_saturating(value: u128) -> u64 {
     u64::try_from(value).unwrap_or(u64::MAX)
 }
 
@@ -323,12 +427,49 @@ mod tests {
         assert_eq!(direct.deletion_vector_rows_deleted, 0);
         assert_eq!(direct.deletion_vector_failures, 0);
         assert_eq!(direct.deletion_vector_coordinate_rejections, 0);
+        assert_eq!(direct.parquet_data_file_exact_ranges_requested, Some(0));
+        assert_eq!(
+            direct.parquet_data_file_exact_range_bytes_requested,
+            Some(0)
+        );
+        assert_eq!(
+            direct.parquet_data_file_physical_range_requests_planned,
+            Some(0)
+        );
+        assert_eq!(
+            direct.parquet_data_file_physical_range_bytes_planned,
+            Some(0)
+        );
+        assert_eq!(direct.parquet_data_file_cold_start_range_plans, Some(0));
+        assert_eq!(
+            direct.parquet_data_file_cost_based_exact_range_plans,
+            Some(0)
+        );
+        assert_eq!(
+            direct.parquet_data_file_cost_based_merged_range_plans,
+            Some(0)
+        );
+        assert_eq!(
+            direct.parquet_data_file_store_delegated_range_plans,
+            Some(0)
+        );
         assert_eq!(direct.parquet_data_file_range_get_operations, Some(0));
         assert_eq!(direct.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(direct.parquet_data_file_bytes_received, Some(0));
         assert_eq!(direct.estimated_parquet_task_bytes_admitted, Some(0));
 
         let kernel = metrics(ParquetReaderBackend::DeltaKernel).snapshot();
+        assert_eq!(kernel.parquet_data_file_exact_ranges_requested, None);
+        assert_eq!(kernel.parquet_data_file_exact_range_bytes_requested, None);
+        assert_eq!(
+            kernel.parquet_data_file_physical_range_requests_planned,
+            None
+        );
+        assert_eq!(kernel.parquet_data_file_physical_range_bytes_planned, None);
+        assert_eq!(kernel.parquet_data_file_cold_start_range_plans, None);
+        assert_eq!(kernel.parquet_data_file_cost_based_exact_range_plans, None);
+        assert_eq!(kernel.parquet_data_file_cost_based_merged_range_plans, None);
+        assert_eq!(kernel.parquet_data_file_store_delegated_range_plans, None);
         assert_eq!(kernel.parquet_data_file_range_get_operations, None);
         assert_eq!(kernel.parquet_data_file_full_get_operations, None);
         assert_eq!(kernel.parquet_data_file_bytes_received, None);
@@ -359,6 +500,18 @@ mod tests {
             &metrics.inner.deletion_vector_rows_deleted,
             &metrics.inner.deletion_vector_failures,
             &metrics.inner.deletion_vector_coordinate_rejections,
+            &metrics.inner.parquet_data_file_exact_ranges_requested,
+            &metrics.inner.parquet_data_file_exact_range_bytes_requested,
+            &metrics
+                .inner
+                .parquet_data_file_physical_range_requests_planned,
+            &metrics.inner.parquet_data_file_physical_range_bytes_planned,
+            &metrics.inner.parquet_data_file_cold_start_range_plans,
+            &metrics.inner.parquet_data_file_cost_based_exact_range_plans,
+            &metrics
+                .inner
+                .parquet_data_file_cost_based_merged_range_plans,
+            &metrics.inner.parquet_data_file_store_delegated_range_plans,
             &metrics.inner.parquet_data_file_range_get_operations,
             &metrics.inner.parquet_data_file_full_get_operations,
             &metrics.inner.parquet_data_file_bytes_received,
@@ -381,10 +534,36 @@ mod tests {
         assert_eq!(snapshot.deletion_vector_rows_deleted, 9);
         assert_eq!(snapshot.deletion_vector_failures, 10);
         assert_eq!(snapshot.deletion_vector_coordinate_rejections, 11);
-        assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(12));
-        assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(13));
-        assert_eq!(snapshot.parquet_data_file_bytes_received, Some(14));
-        assert_eq!(snapshot.estimated_parquet_task_bytes_admitted, Some(15));
+        assert_eq!(snapshot.parquet_data_file_exact_ranges_requested, Some(12));
+        assert_eq!(
+            snapshot.parquet_data_file_exact_range_bytes_requested,
+            Some(13)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_requests_planned,
+            Some(14)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_physical_range_bytes_planned,
+            Some(15)
+        );
+        assert_eq!(snapshot.parquet_data_file_cold_start_range_plans, Some(16));
+        assert_eq!(
+            snapshot.parquet_data_file_cost_based_exact_range_plans,
+            Some(17)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_cost_based_merged_range_plans,
+            Some(18)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_store_delegated_range_plans,
+            Some(19)
+        );
+        assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(20));
+        assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(21));
+        assert_eq!(snapshot.parquet_data_file_bytes_received, Some(22));
+        assert_eq!(snapshot.estimated_parquet_task_bytes_admitted, Some(23));
     }
 
     #[test]

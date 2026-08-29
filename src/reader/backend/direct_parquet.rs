@@ -1,6 +1,7 @@
 //! Direct asynchronous Parquet data-file reader.
 
 mod metered_object_store;
+mod range_planning;
 mod row_group_pruning;
 mod schema_alignment;
 
@@ -926,6 +927,7 @@ mod tests {
         fail_range_target: AtomicUsize,
         corrupt_range_target: AtomicUsize,
         range_calls: AtomicUsize,
+        multi_range_calls: AtomicUsize,
         started: tokio::sync::Semaphore,
         release: tokio::sync::Semaphore,
         cancelled: Arc<AtomicBool>,
@@ -944,10 +946,15 @@ mod tests {
                 fail_range_target: AtomicUsize::new(0),
                 corrupt_range_target: AtomicUsize::new(0),
                 range_calls: AtomicUsize::new(0),
+                multi_range_calls: AtomicUsize::new(0),
                 started: tokio::sync::Semaphore::new(0),
                 release: tokio::sync::Semaphore::new(0),
                 cancelled: Arc::new(AtomicBool::new(false)),
             })
+        }
+
+        fn ungated(inner: Arc<dyn ObjectStore>) -> Arc<Self> {
+            Self::new(inner, GateRequest::Range(0))
         }
 
         async fn wait_started(&self) {
@@ -960,6 +967,10 @@ mod tests {
 
         fn was_cancelled(&self) -> bool {
             self.cancelled.load(Ordering::Acquire)
+        }
+
+        fn multi_range_call_count(&self) -> usize {
+            self.multi_range_calls.load(Ordering::Acquire)
         }
 
         fn gate_next_range(&self) {
@@ -1094,6 +1105,20 @@ mod tests {
                 range,
                 attributes,
             })
+        }
+
+        async fn get_ranges(
+            &self,
+            location: &Path,
+            ranges: &[std::ops::Range<u64>],
+        ) -> ObjectStoreResult<Vec<bytes::Bytes>> {
+            self.multi_range_calls.fetch_add(1, Ordering::AcqRel);
+            object_store::coalesce_ranges(
+                ranges,
+                |range| self.get_range(location, range),
+                object_store::OBJECT_STORE_COALESCE_DEFAULT,
+            )
+            .await
         }
 
         fn delete_stream(
@@ -1731,7 +1756,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resolves_and_reads_remote_like_memory_object_store_path()
+    async fn automatic_range_planning_reads_parquet_without_inner_multi_range_calls()
     -> Result<(), Box<dyn std::error::Error>> {
         let table_url = url::Url::parse("memory:///table/root/")?;
         let engine_context = Arc::new(DeltaKernelEngineContext::try_new(
@@ -1739,8 +1764,18 @@ mod tests {
             &DeltaStorageOptions::default(),
         )?);
         let store = engine_context.object_store();
-        let reader =
-            DirectParquetReader::new(engine_context, DeltaScanExecutionOptions::new(), metrics());
+        let metrics = metrics();
+        let mut reader = DirectParquetReader::new(
+            engine_context,
+            DeltaScanExecutionOptions::new(),
+            metrics.clone(),
+        );
+        let tracked_store = GatedObjectStore::ungated(Arc::clone(&store));
+        reader.store = Arc::new(MeteredParquetObjectStore::new(
+            Arc::clone(&tracked_store) as Arc<dyn ObjectStore>,
+            metrics.clone(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        ));
         let bytes = parquet_bytes()?;
         let task = task("part-00000.parquet", Some(u64::try_from(bytes.len())?))?;
         let object = reader.resolve_parquet_object(&task)?;
@@ -1764,6 +1799,27 @@ mod tests {
 
         assert_eq!(ids.values(), &[1, 2, 3]);
         assert!(stream.next_batch().await?.is_none());
+        let snapshot = metrics.snapshot();
+        assert!(
+            snapshot
+                .parquet_data_file_exact_ranges_requested
+                .is_some_and(|ranges| ranges > 0)
+        );
+        assert!(
+            snapshot
+                .parquet_data_file_physical_range_requests_planned
+                .is_some_and(|requests| requests > 0)
+        );
+        assert!(
+            snapshot
+                .parquet_data_file_cold_start_range_plans
+                .is_some_and(|plans| plans > 0)
+        );
+        assert_eq!(
+            snapshot.parquet_data_file_store_delegated_range_plans,
+            Some(0)
+        );
+        assert_eq!(tracked_store.multi_range_call_count(), 0);
         Ok(())
     }
 
