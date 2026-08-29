@@ -39,6 +39,7 @@ const MATCH_VALUE: &str = "match";
 const OTHER_VALUE: &str = "other";
 const DEFAULT_REPETITIONS: usize = 3;
 const MAX_REPETITIONS: usize = 128;
+const THROUGHPUT_SAMPLE_BYTE_FLOOR: u128 = 1024 * 1024;
 const BENCHMARK_SHAPE: FixtureShape = FixtureShape {
     data_files: 4,
     row_groups: 2,
@@ -676,6 +677,19 @@ fn write_delta_log(
 }
 
 fn validate_measurements(measurements: &[Measurement]) -> Result<(), io::Error> {
+    for measurement in measurements {
+        if measurement.case.policy == BenchmarkPolicy::Automatic {
+            validate_automatic_range_plans(measurement)?;
+        } else if !measurement.automatic_range_plans.is_empty() {
+            return Err(io::Error::other(format!(
+                "non-automatic benchmark case captured automatic plan diagnostics: profile={} projection={} policy={}",
+                measurement.case.profile.name,
+                measurement.case.density.name(),
+                measurement.case.policy.name(),
+            )));
+        }
+    }
+
     for profile in TransportProfile::ALL {
         for density in ProjectionDensity::ALL {
             for repetition in 1..=measurements
@@ -713,11 +727,23 @@ fn validate_measurements(measurements: &[Measurement]) -> Result<(), io::Error> 
         .iter()
         .filter(|measurement| measurement.case.policy == BenchmarkPolicy::Automatic)
         .collect::<Vec<_>>();
-    if !automatic
+    if automatic
         .iter()
-        .any(|measurement| measurement.cost_based_exact_plans != 0)
+        .filter(|measurement| {
+            measurement.case.profile == TransportProfile::LOW_LATENCY_LOW_THROUGHPUT
+        })
+        .any(|measurement| measurement.cost_based_merged_plans != 0)
         || !automatic
             .iter()
+            .filter(|measurement| {
+                measurement.case.profile == TransportProfile::LOW_LATENCY_LOW_THROUGHPUT
+            })
+            .any(|measurement| measurement.cost_based_exact_plans != 0)
+        || !automatic
+            .iter()
+            .filter(|measurement| {
+                measurement.case.profile == TransportProfile::HIGH_LATENCY_HIGH_THROUGHPUT
+            })
             .any(|measurement| measurement.cost_based_merged_plans != 0)
     {
         let decisions = automatic
@@ -749,8 +775,94 @@ fn validate_measurements(measurements: &[Measurement]) -> Result<(), io::Error> 
             .collect::<Vec<_>>()
             .join("; ");
         return Err(io::Error::other(format!(
-            "automatic benchmark cases did not exercise both exact and merged decisions: {decisions}"
+            "automatic benchmark decisions did not preserve low-throughput exact plans and high-throughput merged plans: {decisions}"
         )));
+    }
+    Ok(())
+}
+
+fn validate_automatic_range_plans(measurement: &Measurement) -> Result<(), io::Error> {
+    let plans = &measurement.automatic_range_plans;
+    let context = || {
+        format!(
+            "profile={} projection={} repetition={}",
+            measurement.case.profile.name,
+            measurement.case.density.name(),
+            measurement.repetition,
+        )
+    };
+    if plans.is_empty() {
+        return Err(io::Error::other(format!(
+            "automatic benchmark captured no plan diagnostics: {}",
+            context()
+        )));
+    }
+
+    let tiny_plan_count = plans
+        .iter()
+        .filter(|plan| plan.selected_bytes < THROUGHPUT_SAMPLE_BYTE_FLOOR)
+        .count();
+    let representative_plan_count = plans.len().saturating_sub(tiny_plan_count);
+    if tiny_plan_count < 4 || representative_plan_count < 4 {
+        return Err(io::Error::other(format!(
+            "benchmark fixture did not produce enough tiny and representative plans: {}, tiny={}, representative={}",
+            context(),
+            tiny_plan_count,
+            representative_plan_count,
+        )));
+    }
+
+    for (plan_index, pair) in plans.windows(2).enumerate() {
+        let (current, next) = (&pair[0], &pair[1]);
+        if current.selected_bytes < THROUGHPUT_SAMPLE_BYTE_FLOOR
+            && current.throughput_sample_count != next.throughput_sample_count
+        {
+            return Err(io::Error::other(format!(
+                "tiny plan changed the throughput sample count: {}, plan={}",
+                context(),
+                plan_index.saturating_add(1),
+            )));
+        }
+    }
+
+    for (plan_index, plan) in plans.iter().enumerate() {
+        let has_estimate = plan.estimated_request_latency_micros.is_some()
+            && plan.estimated_shared_throughput_bytes_per_second.is_some()
+            && plan.estimated_bandwidth_delay_bytes.is_some()
+            && plan.predicted_micros().is_some();
+        if has_estimate != (plan.throughput_sample_count >= 3) {
+            return Err(io::Error::other(format!(
+                "plan estimate did not match its throughput evidence: {}, plan={}, throughput_samples={}",
+                context(),
+                plan_index.saturating_add(1),
+                plan.throughput_sample_count,
+            )));
+        }
+        if !has_estimate
+            && (plan.decision != "cold_start"
+                || plan.selected_range_count != plan.baseline_range_count
+                || plan.selected_request_waves != plan.baseline_request_waves
+                || plan.selected_bytes != plan.baseline_bytes)
+        {
+            return Err(io::Error::other(format!(
+                "latency-only plan did not preserve the cold-start baseline: {}, plan={}",
+                context(),
+                plan_index.saturating_add(1),
+            )));
+        }
+        if plan
+            .estimated_shared_throughput_bytes_per_second
+            .is_some_and(|estimate| {
+                u128::from(estimate)
+                    > u128::from(measurement.case.profile.shared_throughput_bytes_per_second) * 2
+            })
+        {
+            return Err(io::Error::other(format!(
+                "controlled throughput estimate exceeded twice the configured rate: {}, plan={}",
+                context(),
+                plan_index.saturating_add(1),
+            )));
+        }
     }
     Ok(())
 }
