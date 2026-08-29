@@ -93,7 +93,11 @@ impl IntraFileRepartitioning {
     }
 }
 
-/// Immutable point-in-time DataFusion scan metrics.
+/// Immutable point-in-time copy of one DataFusion scan's metrics.
+///
+/// A snapshot taken while the scan is running may contain partial progress. It does not change
+/// after creation; call [`ScanMetrics::snapshot`] again to observe later progress.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanMetricsSnapshot {
     /// Delta reader planning and execution metrics.
