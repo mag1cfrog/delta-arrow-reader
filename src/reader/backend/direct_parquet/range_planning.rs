@@ -103,9 +103,10 @@ pub(super) fn merge_ranges(requested_ranges: &[Range<u64>], max_gap: u64) -> Vec
 
 /// Chooses the physical ranges predicted to finish fastest.
 ///
-/// With an estimate, plans within ten percent of the best predicted score prefer
-/// fewer transferred bytes so small estimate changes do not cause churn. Without
-/// an estimate, this keeps the normalized minimum-byte plan unless it exceeds 64
+/// With a valid estimate, all plans, including the exact plan, compete on
+/// predicted cost. Plans within ten percent of the best score prefer fewer
+/// transferred bytes so small estimate changes do not cause churn. Without an
+/// estimate, this keeps the normalized minimum-byte plan unless it exceeds 64
 /// requests and a plan of at most 64 requests transfers no more than four times
 /// the exact bytes. Otherwise, execution keeps the exact plan and relies on its
 /// concurrency bound.
@@ -130,14 +131,18 @@ pub(super) fn choose_range_plan(
     };
     let exact_range_count = exact_plan.len();
     let exact_bytes = range_bytes(exact_plan);
-    let candidate_start =
+    let cold_start_candidate_index =
         usize::from(exact_plan.len() > MAX_RANGE_READ_REQUESTS && candidates.len() > 1);
-    let eligible_candidates = &candidates[candidate_start..];
-    let baseline_plan = &eligible_candidates[0];
+    let baseline_plan = &candidates[cold_start_candidate_index];
     let baseline_range_count = baseline_plan.len();
     let baseline_bytes = range_bytes(baseline_plan);
     let transport_estimate =
         estimate.filter(|estimate| estimate.shared_throughput_bytes_per_second > 0);
+    let eligible_candidates = if transport_estimate.is_some() {
+        candidates.as_slice()
+    } else {
+        &candidates[cold_start_candidate_index..]
+    };
     let (physical_ranges, decision) = match transport_estimate {
         None => (eligible_candidates[0].clone(), RangePlanDecision::ColdStart),
         Some(estimate) => {
@@ -436,6 +441,47 @@ mod tests {
             100
         );
         assert_eq!(candidate_range_plans(&sparse_ranges, 10).len(), 1);
+    }
+
+    #[test]
+    fn request_bound_only_limits_plans_without_a_valid_estimate() {
+        let requested_ranges = spaced_ranges(&[1_000; 67]);
+        let low_throughput = TransportEstimate {
+            request_latency: Duration::from_millis(100),
+            shared_throughput_bytes_per_second: 1_000,
+        };
+        let high_throughput = TransportEstimate {
+            request_latency: Duration::from_millis(100),
+            shared_throughput_bytes_per_second: 1_000_000_000,
+        };
+
+        let cold_plan = choose_range_plan(&requested_ranges, None);
+        assert_eq!(cold_plan.exact_range_count, 68);
+        assert_eq!(cold_plan.baseline_range_count, 60);
+        assert_eq!(cold_plan.physical_ranges.len(), 60);
+        assert_eq!(cold_plan.decision, RangePlanDecision::ColdStart);
+
+        let invalid_estimate = choose_range_plan(
+            &requested_ranges,
+            Some(TransportEstimate {
+                request_latency: Duration::from_millis(100),
+                shared_throughput_bytes_per_second: 0,
+            }),
+        );
+        assert_eq!(invalid_estimate.physical_ranges, cold_plan.physical_ranges);
+        assert_eq!(invalid_estimate.transport_estimate, None);
+
+        let exact_plan = choose_range_plan(&requested_ranges, Some(low_throughput));
+        assert_eq!(exact_plan.baseline_range_count, 60);
+        assert_eq!(exact_plan.physical_ranges.len(), 68);
+        assert_eq!(exact_plan.decision, RangePlanDecision::CostBasedExact);
+        assert_eq!(exact_plan.selected_predicted_cost_bytes, Some(7_500));
+        assert_eq!(exact_plan.baseline_predicted_cost_bytes, Some(15_400));
+
+        let merged_plan = choose_range_plan(&requested_ranges, Some(high_throughput));
+        assert_eq!(merged_plan.baseline_range_count, 60);
+        assert_eq!(merged_plan.physical_ranges.len(), 50);
+        assert_eq!(merged_plan.decision, RangePlanDecision::CostBasedMerged);
     }
 
     fn spaced_ranges(gaps: &[u64]) -> Vec<std::ops::Range<u64>> {
