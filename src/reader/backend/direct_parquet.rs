@@ -1172,6 +1172,45 @@ mod tests {
         Ok(task)
     }
 
+    async fn read_with_row_filter(
+        root: &TestDir,
+        parquet_file_size: usize,
+        target_schema: &Arc<Schema>,
+        predicate: &DeltaKernelPredicate,
+    ) -> Result<(Vec<RecordBatch>, u64), Box<dyn std::error::Error>> {
+        let plan =
+            pipeline_plan_for_backend(root, None, None, ParquetReaderBackend::Direct, false)?;
+        let metrics = metrics();
+        let reader = reader(
+            root,
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(None)?,
+            metrics.clone(),
+        )?;
+        let task = task("part.parquet", Some(u64::try_from(parquet_file_size)?))?;
+        let mut stream = reader
+            .open_physical_parquet_stream(
+                &task,
+                target_schema,
+                PhysicalParquetStreamOptions {
+                    row_filter: Some(RowFilterInput {
+                        predicate,
+                        kernel_schemas: &plan.kernel_schemas,
+                    }),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        let mut batches = Vec::new();
+        while let Some(batch) = stream.next_batch().await? {
+            batches.push(batch);
+        }
+        let bytes_received = metrics
+            .snapshot()
+            .parquet_data_file_bytes_received
+            .ok_or("direct reader did not report Parquet bytes")?;
+        Ok((batches, bytes_received))
+    }
+
     pub(super) fn parquet_bytes_for(
         schema: Arc<Schema>,
         columns: Vec<ArrayRef>,
@@ -2637,37 +2676,8 @@ mod tests {
             (&indexed_root, &indexed_bytes),
             (&unindexed_root, &unindexed_bytes),
         ] {
-            let plan =
-                pipeline_plan_for_backend(root, None, None, ParquetReaderBackend::Direct, false)?;
-            let metrics = metrics();
-            let reader = reader(
-                root,
-                DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(None)?,
-                metrics.clone(),
-            )?;
-            let task = task("part.parquet", Some(u64::try_from(parquet_bytes.len())?))?;
-            let mut stream = reader
-                .open_physical_parquet_stream(
-                    &task,
-                    &schema,
-                    PhysicalParquetStreamOptions {
-                        row_filter: Some(RowFilterInput {
-                            predicate: &predicate,
-                            kernel_schemas: &plan.kernel_schemas,
-                        }),
-                        ..Default::default()
-                    },
-                )
-                .await?;
-            let mut batches = Vec::new();
-            while let Some(batch) = stream.next_batch().await? {
-                batches.push(batch);
-            }
-            let bytes_received = metrics
-                .snapshot()
-                .parquet_data_file_bytes_received
-                .ok_or("direct reader did not report Parquet bytes")?;
-            results.push((batches, bytes_received));
+            results
+                .push(read_with_row_filter(root, parquet_bytes.len(), &schema, &predicate).await?);
         }
 
         assert_eq!(results[0].0, results[1].0);
@@ -2678,6 +2688,82 @@ mod tests {
             results[0].1,
             results[1].1
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn optional_offset_indexes_preserve_adversarial_row_selections()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const ROWS: usize = 512;
+
+        let indexed_root = TestDir::new("direct-row-selection-indexed")?;
+        let unindexed_root = TestDir::new("direct-row-selection-unindexed")?;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("payload", DataType::Utf8, true),
+        ]));
+        let columns = vec![
+            Arc::new(Int32Array::from_iter_values(0..ROWS as i32)) as ArrayRef,
+            Arc::new(StringArray::from_iter(
+                (0..ROWS).map(|row| (row % 5 != 0).then(|| format!("payload-{row:08}"))),
+            )),
+        ];
+        let properties = |offset_index_disabled| {
+            WriterProperties::builder()
+                .set_max_row_group_row_count(Some(256))
+                .set_write_batch_size(64)
+                .set_data_page_row_count_limit(64)
+                .set_offset_index_disabled(offset_index_disabled)
+                .build()
+        };
+        let indexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns.clone(), properties(false))?;
+        let unindexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns, properties(true))?;
+        write_partitioned_non_dv_table(&indexed_root, &indexed_bytes)?;
+        write_partitioned_non_dv_table(&unindexed_root, &unindexed_bytes)?;
+
+        let id = || Expression::Column(ColumnName::new(["id"]));
+        let literal = |value| Expression::Literal(Scalar::Integer(value));
+        let all_ids = (0..ROWS)
+            .map(i32::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let scattered_ids = all_ids.iter().copied().step_by(64).collect::<Vec<_>>();
+        let cases = [
+            ("no matches", Predicate::eq(id(), literal(-1)), Vec::new()),
+            ("all matches", Predicate::gt(id(), literal(-1)), all_ids),
+            (
+                "cross-page matches",
+                Predicate::and(
+                    Predicate::gt(id(), literal(61)),
+                    Predicate::lt(id(), literal(66)),
+                ),
+                vec![62, 63, 64, 65],
+            ),
+            (
+                "scattered matches",
+                Predicate::or_from(
+                    scattered_ids
+                        .iter()
+                        .copied()
+                        .map(|value| Predicate::eq(id(), literal(value))),
+                ),
+                scattered_ids,
+            ),
+        ];
+
+        for (name, predicate, expected_ids) in cases {
+            let predicate = DeltaKernelPredicate::from_test_predicate(predicate);
+            let (indexed, _) =
+                read_with_row_filter(&indexed_root, indexed_bytes.len(), &schema, &predicate)
+                    .await?;
+            let (unindexed, _) =
+                read_with_row_filter(&unindexed_root, unindexed_bytes.len(), &schema, &predicate)
+                    .await?;
+
+            assert_eq!(indexed, unindexed, "{name}");
+            assert_eq!(int32_ids(&indexed)?, expected_ids, "{name}");
+        }
         Ok(())
     }
 
