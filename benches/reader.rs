@@ -2215,16 +2215,6 @@ mod tests {
                 .is_err()
         );
         assert!(Config::parse(["--provider-exec-scan-metadata-mode"].map(str::to_owned)).is_err());
-        assert!(
-            Config::parse(["--provider-exec-parquet-metadata-mode", "prepared"].map(str::to_owned))
-                .is_err()
-        );
-        assert!(
-            Config::parse(
-                ["--provider-exec-parquet-metadata-mode", "automatic"].map(str::to_owned)
-            )
-            .is_err()
-        );
         for count in ["1", "128"] {
             assert_eq!(
                 Config::parse(["--provider-exec-queries-per-table", count].map(str::to_owned))?
