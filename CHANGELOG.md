@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## [0.4.2](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.4.1...v0.4.2) - 2026-08-29
+
+### Performance
+
+- quantify Parquet page-index range-read savings
+- reduce Parquet I/O by reading only pages selected by row filters
+- quantify Parquet row-filter savings from predicate-only decoding
+- speed up Parquet row filtering by limiting filter reads to predicate columns
+
 ## [0.4.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.4.0...v0.4.1) - 2026-08-28
 
 ### Documentation
