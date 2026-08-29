@@ -26,7 +26,7 @@ use parquet::arrow::{
         ParquetRecordBatchStreamBuilder,
     },
 };
-use parquet::file::metadata::ParquetMetaData;
+use parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
 use parquet::schema::types::SchemaDescriptor;
 use snafu::{IntoError, ResultExt};
 use tokio::sync::OnceCell;
@@ -210,6 +210,7 @@ impl DirectParquetReader {
                 task.parquet_byte_range.as_ref(),
                 target_schema,
                 options.include_original_row_index,
+                options.row_filter.is_some(),
             )
             .await?;
         let schema_alignment = build_schema_alignment(
@@ -260,6 +261,7 @@ impl DirectParquetReader {
         parquet_byte_range: Option<&Range<u64>>,
         target_schema: &SchemaRef,
         include_original_row_index: bool,
+        has_row_filter: bool,
     ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
         let file_size = object.file_size;
         let path = &object.path;
@@ -269,7 +271,7 @@ impl DirectParquetReader {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
         };
-        let reader_options = arrow_reader_options(include_original_row_index)
+        let reader_options = arrow_reader_options(include_original_row_index, has_row_filter)
             .boxed()
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
@@ -763,15 +765,26 @@ impl LogicalDataFileStream {
 
 fn arrow_reader_options(
     include_original_row_index: bool,
+    has_row_filter: bool,
 ) -> parquet::errors::Result<ArrowReaderOptions> {
+    // A row filter turns the predicate result into a selection of row numbers. When an offset
+    // index is available, parquet-rs can map that selection to data-page byte ranges and avoid
+    // fetching pages that contain no selected rows. Without a row filter, there is no
+    // predicate-derived selection, so the offset index is not loaded.
+    let offset_index_policy = if has_row_filter {
+        PageIndexPolicy::Optional
+    } else {
+        PageIndexPolicy::Skip
+    };
+    let options = ArrowReaderOptions::new().with_offset_index_policy(offset_index_policy);
     if !include_original_row_index {
-        return Ok(ArrowReaderOptions::new());
+        return Ok(options);
     }
     let row_number_field = Arc::new(
         Field::new(ORIGINAL_ROW_INDEX_COLUMN, DataType::Int64, false)
             .with_extension_type(RowNumber),
     );
-    ArrowReaderOptions::new().with_virtual_columns(vec![row_number_field])
+    options.with_virtual_columns(vec![row_number_field])
 }
 
 fn cancelled_error() -> DeltaReaderError {
@@ -792,7 +805,9 @@ fn data_file_error(
 mod tests {
     use std::{
         collections::HashMap,
-        fmt, fs, io,
+        fmt,
+        fs::{self, File},
+        io,
         path::{Path as FsPath, PathBuf},
         sync::{
             Arc,
@@ -820,11 +835,14 @@ mod tests {
         memory::InMemory, path::Path,
     };
     use parquet::arrow::{ArrowSchemaConverter, ArrowWriter, PARQUET_FIELD_ID_META_KEY};
+    use parquet::basic::Compression;
+    use parquet::file::metadata::ParquetMetaDataReader;
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
         DirectParquetReader, LogicalDataFileReadRequest, PhysicalParquetStreamOptions,
-        RangedParquetMetadataCache, RowFilterInput, data_file_error, direct_parquet_file_executor,
+        RangedParquetMetadataCache, RowFilterInput, arrow_reader_options, data_file_error,
+        direct_parquet_file_executor,
     };
     use crate::reader::backend::kernel_reader::delta_kernel_file_executor;
     use crate::{
@@ -848,6 +866,25 @@ mod tests {
 
     const DV_ID: &str = "vBn[lx{q8@P<9BNH/isA";
     const DV_FILE: &str = "deletion_vector_61d16c75-6994-46b7-a15b-8b538852e50e.bin";
+
+    #[test]
+    fn arrow_reader_options_load_offset_indexes_only_for_row_filters()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for include_original_row_index in [false, true] {
+            for (has_row_filter, expected_offset_policy) in [
+                (false, parquet::file::metadata::PageIndexPolicy::Skip),
+                (true, parquet::file::metadata::PageIndexPolicy::Optional),
+            ] {
+                let options = arrow_reader_options(include_original_row_index, has_row_filter)?;
+                assert_eq!(options.offset_index_policy(), expected_offset_policy);
+                assert_eq!(
+                    options.column_index_policy(),
+                    parquet::file::metadata::PageIndexPolicy::Skip
+                );
+            }
+        }
+        Ok(())
+    }
 
     pub(super) struct TestDir(PathBuf);
 
@@ -1148,6 +1185,45 @@ mod tests {
             }))?;
         task.file_size = file_size;
         Ok(task)
+    }
+
+    async fn read_with_row_filter(
+        root: &TestDir,
+        parquet_file_size: usize,
+        target_schema: &Arc<Schema>,
+        predicate: &DeltaKernelPredicate,
+    ) -> Result<(Vec<RecordBatch>, u64), Box<dyn std::error::Error>> {
+        let plan =
+            pipeline_plan_for_backend(root, None, None, ParquetReaderBackend::Direct, false)?;
+        let metrics = metrics();
+        let reader = reader(
+            root,
+            DeltaScanExecutionOptions::new().with_parquet_metadata_size_hint_bytes(None)?,
+            metrics.clone(),
+        )?;
+        let task = task("part.parquet", Some(u64::try_from(parquet_file_size)?))?;
+        let mut stream = reader
+            .open_physical_parquet_stream(
+                &task,
+                target_schema,
+                PhysicalParquetStreamOptions {
+                    row_filter: Some(RowFilterInput {
+                        predicate,
+                        kernel_schemas: &plan.kernel_schemas,
+                    }),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        let mut batches = Vec::new();
+        while let Some(batch) = stream.next_batch().await? {
+            batches.push(batch);
+        }
+        let bytes_received = metrics
+            .snapshot()
+            .parquet_data_file_bytes_received
+            .ok_or("direct reader did not report Parquet bytes")?;
+        Ok((batches, bytes_received))
     }
 
     pub(super) fn parquet_bytes_for(
@@ -2101,6 +2177,7 @@ mod tests {
             snapshots[0].parquet_data_file_bytes_received,
             Some(file_size)
         );
+        // No row filter is attached, so neither fallback path loads the offset index.
         assert_eq!(snapshots[1].parquet_data_file_range_get_operations, Some(2));
         assert_eq!(snapshots[2].parquet_data_file_range_get_operations, Some(2));
         assert_eq!(
@@ -2564,6 +2641,211 @@ mod tests {
         }
 
         assert_eq!(qualifying_ids, [vec![3, 4], vec![3, 4]]);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn optional_offset_indexes_reduce_localized_row_filter_reads()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const ROWS: usize = 2_048;
+        const PAYLOAD_COLUMNS: usize = 4;
+
+        let indexed_root = TestDir::new("direct-row-filter-indexed")?;
+        let unindexed_root = TestDir::new("direct-row-filter-unindexed")?;
+        let mut fields = vec![Field::new("id", DataType::Int32, false)];
+        fields.extend(
+            (0..PAYLOAD_COLUMNS)
+                .map(|index| Field::new(format!("payload_{index:03}"), DataType::Utf8, true)),
+        );
+        let schema = Arc::new(Schema::new(fields));
+        let mut columns = vec![Arc::new(Int32Array::from_iter_values(0..ROWS as i32)) as ArrayRef];
+        let payload_body = "abcdefghijklmnopqrstuvwxyz0123456789".repeat(64);
+        columns.extend((0..PAYLOAD_COLUMNS).map(|column| {
+            Arc::new(StringArray::from_iter((0..ROWS).map(|row| {
+                ((row + column) % 3 != 0)
+                    .then(|| format!("payload-{column:03}-{row:08}-{payload_body}"))
+            }))) as ArrayRef
+        }));
+        let properties = |offset_index_disabled| {
+            WriterProperties::builder()
+                .set_max_row_group_row_count(Some(1_024))
+                .set_write_batch_size(64)
+                .set_data_page_row_count_limit(64)
+                .set_dictionary_enabled(false)
+                .set_compression(Compression::UNCOMPRESSED)
+                .set_offset_index_disabled(offset_index_disabled)
+                .build()
+        };
+        let indexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns.clone(), properties(false))?;
+        let unindexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns, properties(true))?;
+        write_partitioned_non_dv_table(&indexed_root, &indexed_bytes)?;
+        write_partitioned_non_dv_table(&unindexed_root, &unindexed_bytes)?;
+
+        let predicate = DeltaKernelPredicate::from_test_predicate(Predicate::eq(
+            Expression::Column(ColumnName::new(["id"])),
+            Expression::Literal(Scalar::Integer(42)),
+        ));
+        let mut results = Vec::new();
+        for (root, parquet_bytes) in [
+            (&indexed_root, &indexed_bytes),
+            (&unindexed_root, &unindexed_bytes),
+        ] {
+            results
+                .push(read_with_row_filter(root, parquet_bytes.len(), &schema, &predicate).await?);
+        }
+
+        assert_eq!(results[0].0, results[1].0);
+        assert_eq!(int32_ids(&results[0].0)?, [42]);
+        assert!(
+            results[0].1.saturating_mul(2) < results[1].1,
+            "indexed read used {} bytes; unindexed read used {} bytes",
+            results[0].1,
+            results[1].1
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn optional_offset_indexes_preserve_adversarial_row_selections()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const ROWS: usize = 512;
+
+        let indexed_root = TestDir::new("direct-row-selection-indexed")?;
+        let unindexed_root = TestDir::new("direct-row-selection-unindexed")?;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("payload", DataType::Utf8, true),
+        ]));
+        let columns = vec![
+            Arc::new(Int32Array::from_iter_values(0..ROWS as i32)) as ArrayRef,
+            Arc::new(StringArray::from_iter(
+                (0..ROWS).map(|row| (row % 5 != 0).then(|| format!("payload-{row:08}"))),
+            )),
+        ];
+        let properties = |offset_index_disabled| {
+            WriterProperties::builder()
+                .set_max_row_group_row_count(Some(256))
+                .set_write_batch_size(64)
+                .set_data_page_row_count_limit(64)
+                .set_offset_index_disabled(offset_index_disabled)
+                .build()
+        };
+        let indexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns.clone(), properties(false))?;
+        let unindexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns, properties(true))?;
+        write_partitioned_non_dv_table(&indexed_root, &indexed_bytes)?;
+        write_partitioned_non_dv_table(&unindexed_root, &unindexed_bytes)?;
+
+        let id = || Expression::Column(ColumnName::new(["id"]));
+        let literal = |value| Expression::Literal(Scalar::Integer(value));
+        let all_ids = (0..ROWS)
+            .map(i32::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let scattered_ids = all_ids.iter().copied().step_by(64).collect::<Vec<_>>();
+        let cases = [
+            ("no matches", Predicate::eq(id(), literal(-1)), Vec::new()),
+            ("all matches", Predicate::gt(id(), literal(-1)), all_ids),
+            (
+                "cross-page matches",
+                Predicate::and(
+                    Predicate::gt(id(), literal(61)),
+                    Predicate::lt(id(), literal(66)),
+                ),
+                vec![62, 63, 64, 65],
+            ),
+            (
+                "scattered matches",
+                Predicate::or_from(
+                    scattered_ids
+                        .iter()
+                        .copied()
+                        .map(|value| Predicate::eq(id(), literal(value))),
+                ),
+                scattered_ids,
+            ),
+        ];
+
+        for (name, predicate, expected_ids) in cases {
+            let predicate = DeltaKernelPredicate::from_test_predicate(predicate);
+            let (indexed, _) =
+                read_with_row_filter(&indexed_root, indexed_bytes.len(), &schema, &predicate)
+                    .await?;
+            let (unindexed, _) =
+                read_with_row_filter(&unindexed_root, unindexed_bytes.len(), &schema, &predicate)
+                    .await?;
+
+            assert_eq!(indexed, unindexed, "{name}");
+            assert_eq!(int32_ids(&indexed)?, expected_ids, "{name}");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn malformed_optional_offset_index_falls_back_without_losing_rows()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const ROWS: usize = 128;
+
+        let corrupt_root = TestDir::new("direct-row-selection-corrupt-index")?;
+        let unindexed_root = TestDir::new("direct-row-selection-missing-index")?;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("payload", DataType::Utf8, true),
+        ]));
+        let columns = vec![
+            Arc::new(Int32Array::from_iter_values(0..ROWS as i32)) as ArrayRef,
+            Arc::new(StringArray::from_iter(
+                (0..ROWS).map(|row| (row % 5 != 0).then(|| format!("payload-{row:08}"))),
+            )),
+        ];
+        let properties = |offset_index_disabled| {
+            WriterProperties::builder()
+                .set_max_row_group_row_count(Some(64))
+                .set_write_batch_size(32)
+                .set_data_page_row_count_limit(32)
+                .set_offset_index_disabled(offset_index_disabled)
+                .build()
+        };
+        let mut corrupt_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns.clone(), properties(false))?;
+        let unindexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns, properties(true))?;
+        write_partitioned_non_dv_table(&corrupt_root, &corrupt_bytes)?;
+        write_partitioned_non_dv_table(&unindexed_root, &unindexed_bytes)?;
+
+        let metadata = ParquetMetaDataReader::new()
+            .parse_and_finish(&File::open(corrupt_root.path().join("part.parquet"))?)?;
+        let payload = metadata.row_group(0).column(1);
+        let index_start = usize::try_from(
+            payload
+                .offset_index_offset()
+                .ok_or("test fixture did not contain a payload offset index")?,
+        )?;
+        let index_length = usize::try_from(
+            payload
+                .offset_index_length()
+                .ok_or("test fixture did not contain a payload offset-index length")?,
+        )?;
+        let index_range = index_start..index_start.saturating_add(index_length);
+        // Damage only one column's offset index. The data pages and footer remain valid, so the
+        // optional policy must discard the unusable indexes and read the column chunks normally.
+        corrupt_bytes[index_range].fill(0xff);
+        fs::write(corrupt_root.path().join("part.parquet"), &corrupt_bytes)?;
+
+        let predicate = DeltaKernelPredicate::from_test_predicate(Predicate::eq(
+            Expression::Column(ColumnName::new(["id"])),
+            Expression::Literal(Scalar::Integer(42)),
+        ));
+        let (corrupt, _) =
+            read_with_row_filter(&corrupt_root, corrupt_bytes.len(), &schema, &predicate).await?;
+        let (unindexed, _) =
+            read_with_row_filter(&unindexed_root, unindexed_bytes.len(), &schema, &predicate)
+                .await?;
+
+        assert_eq!(corrupt, unindexed);
+        assert_eq!(int32_ids(&corrupt)?, [42]);
         Ok(())
     }
 
