@@ -1,26 +1,59 @@
 //! Object-store metering for direct Parquet data-file reads.
 
-use std::{fmt, sync::Arc};
+use std::{fmt, ops::Range, sync::Arc};
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use futures_util::{StreamExt, stream, stream::BoxStream};
 use object_store::{
-    CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload, ObjectMeta,
-    ObjectStore, PutMultipartOptions, PutOptions, PutPayload, PutResult, RenameOptions, Result,
+    CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload,
+    OBJECT_STORE_COALESCE_DEFAULT, ObjectMeta, ObjectStore, ObjectStoreExt, ObjectStoreScheme,
+    PutMultipartOptions, PutOptions, PutPayload, PutResult, RenameOptions, Result, coalesce_ranges,
     path::Path,
 };
 use tracing::Instrument;
+use url::Url;
 
 use crate::DeltaScanMetrics;
 
 pub(crate) struct MeteredParquetObjectStore {
     inner: Arc<dyn ObjectStore>,
     metrics: DeltaScanMetrics,
+    multi_range_read_strategy: MultiRangeReadStrategy,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MultiRangeReadStrategy {
+    /// Pass the original range list to the store's `get_ranges` implementation.
+    UseStoreImplementation,
+    /// Apply the object-store default 1 MiB gap before calling the inner store.
+    CoalesceWithDefaultGap,
+}
+
+impl MultiRangeReadStrategy {
+    /// Uses the store implementation for local, memory, and custom URL schemes. Built-in remote
+    /// stores keep the current default-gap coalescing behavior.
+    pub(crate) fn for_table_url(table_url: &Url) -> Self {
+        match ObjectStoreScheme::parse(table_url) {
+            Ok((ObjectStoreScheme::Local | ObjectStoreScheme::Memory, _)) | Err(_) => {
+                Self::UseStoreImplementation
+            }
+            Ok(_) => Self::CoalesceWithDefaultGap,
+        }
+    }
 }
 
 impl MeteredParquetObjectStore {
-    pub(crate) fn new(inner: Arc<dyn ObjectStore>, metrics: DeltaScanMetrics) -> Self {
-        Self { inner, metrics }
+    pub(crate) fn new(
+        inner: Arc<dyn ObjectStore>,
+        metrics: DeltaScanMetrics,
+        multi_range_read_strategy: MultiRangeReadStrategy,
+    ) -> Self {
+        Self {
+            inner,
+            metrics,
+            multi_range_read_strategy,
+        }
     }
 }
 
@@ -77,6 +110,38 @@ impl ObjectStore for MeteredParquetObjectStore {
             Ok(meter_get_result(result, self.metrics.clone()))
         } else {
             Ok(result)
+        }
+    }
+
+    async fn get_ranges(&self, location: &Path, ranges: &[Range<u64>]) -> Result<Vec<Bytes>> {
+        match self.multi_range_read_strategy {
+            MultiRangeReadStrategy::UseStoreImplementation => {
+                if ranges.is_empty() {
+                    return Ok(Vec::new());
+                }
+                self.metrics.record_parquet_data_file_range_get_operation();
+                let results = self
+                    .inner
+                    .get_ranges(location, ranges)
+                    .instrument(tracing::debug_span!(
+                        target: "delta_arrow_reader::profile",
+                        "Object store transport"
+                    ))
+                    .await?;
+                for bytes in &results {
+                    self.metrics
+                        .record_parquet_data_file_bytes_received(bytes.len());
+                }
+                Ok(results)
+            }
+            MultiRangeReadStrategy::CoalesceWithDefaultGap => {
+                coalesce_ranges(
+                    ranges,
+                    |range| self.get_range(location, range),
+                    OBJECT_STORE_COALESCE_DEFAULT,
+                )
+                .await
+            }
         }
     }
 
@@ -181,7 +246,7 @@ mod tests {
         PutPayload, PutResult, RenameOptions, Result, memory::InMemory, path::Path,
     };
 
-    use super::MeteredParquetObjectStore;
+    use super::{MeteredParquetObjectStore, MultiRangeReadStrategy};
     use crate::{DeltaScanMetrics, ParquetReaderBackend, reader::metrics::DeltaScanMetricsConfig};
 
     fn direct_metrics() -> DeltaScanMetrics {
@@ -197,6 +262,13 @@ mod tests {
     }
 
     async fn memory_store(metrics: DeltaScanMetrics) -> Result<MeteredParquetObjectStore> {
+        memory_store_with_strategy(metrics, MultiRangeReadStrategy::CoalesceWithDefaultGap).await
+    }
+
+    async fn memory_store_with_strategy(
+        metrics: DeltaScanMetrics,
+        strategy: MultiRangeReadStrategy,
+    ) -> Result<MeteredParquetObjectStore> {
         let inner = Arc::new(InMemory::new());
         inner
             .put(
@@ -204,7 +276,31 @@ mod tests {
                 PutPayload::from_static(b"0123456789abcdef"),
             )
             .await?;
-        Ok(MeteredParquetObjectStore::new(inner, metrics))
+        Ok(MeteredParquetObjectStore::new(inner, metrics, strategy))
+    }
+
+    #[test]
+    fn range_strategy_follows_table_store_kind()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        for location in ["file:///tmp/table", "memory:///table", "hdfs://host/table"] {
+            assert_eq!(
+                MultiRangeReadStrategy::for_table_url(&url::Url::parse(location)?),
+                MultiRangeReadStrategy::UseStoreImplementation,
+                "{location}"
+            );
+        }
+        for location in [
+            "s3://bucket/table",
+            "gs://bucket/table",
+            "https://example.com/table",
+        ] {
+            assert_eq!(
+                MultiRangeReadStrategy::for_table_url(&url::Url::parse(location)?),
+                MultiRangeReadStrategy::CoalesceWithDefaultGap,
+                "{location}"
+            );
+        }
+        Ok(())
     }
 
     #[tokio::test]
@@ -236,7 +332,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn head_failure_and_coalescing_match_frozen_attempt_semantics() -> Result<()> {
+    async fn head_and_failed_gets_preserve_attempt_metrics() -> Result<()> {
         let head_metrics = direct_metrics();
         let head_store = memory_store(head_metrics.clone()).await?;
         let options = GetOptions::new().with_range(Some(1_u64..4)).with_head(true);
@@ -249,8 +345,11 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(0));
 
         let failure_metrics = direct_metrics();
-        let failure_store =
-            MeteredParquetObjectStore::new(Arc::new(InMemory::new()), failure_metrics.clone());
+        let failure_store = MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            failure_metrics.clone(),
+            MultiRangeReadStrategy::CoalesceWithDefaultGap,
+        );
         let result = failure_store
             .get_opts(
                 &Path::from("missing.parquet"),
@@ -263,6 +362,11 @@ mod tests {
         assert_eq!(snapshot.parquet_data_file_full_get_operations, Some(0));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(0));
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn multi_range_strategies_preserve_results_and_expose_metrics() -> Result<()> {
         let coalesced_metrics = direct_metrics();
         let coalesced_store = memory_store(coalesced_metrics.clone()).await?;
         let bytes = coalesced_store
@@ -273,6 +377,53 @@ mod tests {
         let snapshot = coalesced_metrics.snapshot();
         assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
         assert_eq!(snapshot.parquet_data_file_bytes_received, Some(12));
+
+        let delegated_metrics = direct_metrics();
+        let delegated_store = memory_store_with_strategy(
+            delegated_metrics.clone(),
+            MultiRangeReadStrategy::UseStoreImplementation,
+        )
+        .await?;
+        let bytes = delegated_store
+            .get_ranges(&Path::from("data.parquet"), &[0..4, 8..12])
+            .await?;
+        assert_eq!(bytes[0].as_ref(), b"0123");
+        assert_eq!(bytes[1].as_ref(), b"89ab");
+        let snapshot = delegated_metrics.snapshot();
+        assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
+        assert_eq!(snapshot.parquet_data_file_bytes_received, Some(8));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn store_multi_range_handles_empty_and_failed_calls() -> Result<()> {
+        let metrics = direct_metrics();
+        let store = MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            metrics.clone(),
+            MultiRangeReadStrategy::UseStoreImplementation,
+        );
+
+        assert!(
+            store
+                .get_ranges(&Path::from("missing.parquet"), &[])
+                .await?
+                .is_empty()
+        );
+        assert_eq!(
+            metrics.snapshot().parquet_data_file_range_get_operations,
+            Some(0)
+        );
+
+        assert!(
+            store
+                .get_ranges(&Path::from("missing.parquet"), &[0..4, 8..12])
+                .await
+                .is_err()
+        );
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.parquet_data_file_range_get_operations, Some(1));
+        assert_eq!(snapshot.parquet_data_file_bytes_received, Some(0));
         Ok(())
     }
 
@@ -413,7 +564,11 @@ mod tests {
     #[tokio::test]
     async fn delegated_operations_and_diagnostics_do_not_leak_or_meter() -> Result<()> {
         let metrics = direct_metrics();
-        let store = MeteredParquetObjectStore::new(Arc::new(InMemory::new()), metrics.clone());
+        let store = MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            metrics.clone(),
+            MultiRangeReadStrategy::UseStoreImplementation,
+        );
         let first = Path::from("first.parquet");
         let second = Path::from("second.parquet");
         let third = Path::from("third.parquet");
@@ -465,7 +620,11 @@ mod tests {
     }
 
     fn scripted_store(result: GetResult, metrics: DeltaScanMetrics) -> MeteredParquetObjectStore {
-        MeteredParquetObjectStore::new(Arc::new(ScriptedGetStore::new(result)), metrics)
+        MeteredParquetObjectStore::new(
+            Arc::new(ScriptedGetStore::new(result)),
+            metrics,
+            MultiRangeReadStrategy::UseStoreImplementation,
+        )
     }
 
     fn test_get_result(payload: GetResultPayload, range: Range<u64>) -> GetResult {
