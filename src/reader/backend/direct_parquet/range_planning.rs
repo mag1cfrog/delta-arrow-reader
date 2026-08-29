@@ -6,6 +6,8 @@ use bytes::Bytes;
 use futures_util::{StreamExt, TryStreamExt, stream};
 
 const MAX_CONCURRENT_RANGE_READS: usize = 10;
+const MAX_RANGE_READ_REQUESTS: usize = 64;
+const MAX_BYTE_AMPLIFICATION: u128 = 4;
 const DECISION_MARGIN_PERCENT: u128 = 10;
 
 /// Recent transport conditions used to compare physical range-read plans.
@@ -58,6 +60,9 @@ pub(super) fn merge_ranges(requested_ranges: &[Range<u64>], max_gap: u64) -> Vec
 /// Without a usable transport estimate, this returns the normalized minimum-byte
 /// plan. With an estimate, plans within ten percent of the best predicted score
 /// prefer fewer transferred bytes so small estimate changes do not cause churn.
+/// If the exact plan exceeds 64 requests, the cold plan uses at most 64 requests
+/// when that merge transfers no more than four times the exact bytes. Otherwise,
+/// it keeps the exact plan and relies on the execution concurrency bound.
 pub(super) fn choose_range_plan(
     requested_ranges: &[Range<u64>],
     estimate: Option<TransportEstimate>,
@@ -66,13 +71,16 @@ pub(super) fn choose_range_plan(
     let Some(exact_plan) = candidates.first() else {
         return Vec::new();
     };
+    let candidate_start =
+        usize::from(exact_plan.len() > MAX_RANGE_READ_REQUESTS && candidates.len() > 1);
+    let eligible_candidates = &candidates[candidate_start..];
     let Some(estimate) =
         estimate.filter(|estimate| estimate.shared_throughput_bytes_per_second > 0)
     else {
-        return exact_plan.clone();
+        return eligible_candidates[0].clone();
     };
 
-    let best_score = candidates
+    let best_score = eligible_candidates
         .iter()
         .map(|plan| plan_score(plan, estimate, MAX_CONCURRENT_RANGE_READS))
         .min()
@@ -80,7 +88,7 @@ pub(super) fn choose_range_plan(
     let competitive_score =
         best_score.saturating_add(best_score.saturating_mul(DECISION_MARGIN_PERCENT) / 100);
 
-    candidates
+    eligible_candidates
         .iter()
         .filter(|plan| plan_score(plan, estimate, MAX_CONCURRENT_RANGE_READS) <= competitive_score)
         .min_by_key(|plan| (planned_bytes(plan), plan.len()))
@@ -91,7 +99,8 @@ pub(super) fn choose_range_plan(
 /// Builds only plans that reduce the number of request waves.
 ///
 /// Each lower-wave candidate merges the smallest gaps required to reach that
-/// wave count. Plans that add bytes without removing a wave are omitted.
+/// wave count. Plans that add bytes without removing a wave or exceed the byte
+/// amplification limit are omitted.
 fn candidate_range_plans(
     requested_ranges: &[Range<u64>],
     max_concurrent_reads: usize,
@@ -104,6 +113,7 @@ fn candidate_range_plans(
     let max_concurrent_reads = max_concurrent_reads.max(1);
     let exact_waves = request_waves(exact_plan.len(), max_concurrent_reads);
     let mut candidates = vec![exact_plan.clone()];
+    let max_planned_bytes = planned_bytes(&exact_plan).saturating_mul(MAX_BYTE_AMPLIFICATION);
     let mut gaps = exact_plan
         .windows(2)
         .enumerate()
@@ -111,7 +121,10 @@ fn candidate_range_plans(
         .collect::<Vec<_>>();
     gaps.sort_unstable();
 
-    for target_waves in (1..exact_waves).rev() {
+    let highest_target_wave = exact_waves
+        .saturating_sub(1)
+        .min(MAX_RANGE_READ_REQUESTS / max_concurrent_reads);
+    for target_waves in (1..=highest_target_wave).rev() {
         let target_count = target_waves * max_concurrent_reads;
         let mut merge_gap = vec![false; exact_plan.len() - 1];
         for (_, index) in gaps.iter().take(exact_plan.len() - target_count) {
@@ -129,6 +142,9 @@ fn candidate_range_plans(
             }
         }
         plan.push(current_range);
+        if planned_bytes(&plan) > max_planned_bytes {
+            break;
+        }
         candidates.push(plan);
     }
 
@@ -265,6 +281,16 @@ mod tests {
             choose_range_plan(&requested_ranges, Some(high_bandwidth)).len(),
             10
         );
+    }
+
+    #[test]
+    fn cold_plan_limits_requests_without_exceeding_byte_amplification() {
+        let dense_ranges = spaced_ranges(&[1; 99]);
+        assert_eq!(choose_range_plan(&dense_ranges, None).len(), 60);
+
+        let sparse_ranges = spaced_ranges(&[1_000_000; 99]);
+        assert_eq!(choose_range_plan(&sparse_ranges, None).len(), 100);
+        assert_eq!(candidate_range_plans(&sparse_ranges, 10).len(), 1);
     }
 
     fn spaced_ranges(gaps: &[u64]) -> Vec<std::ops::Range<u64>> {
