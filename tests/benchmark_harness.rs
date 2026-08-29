@@ -1,6 +1,9 @@
 //! Test target for the frozen reader benchmark harness.
 
-#![cfg(feature = "datafusion")]
+#![cfg(all(
+    feature = "datafusion",
+    feature = "experimental-parquet-metadata-preparation"
+))]
 
 #[allow(dead_code)]
 #[path = "../benches/reader.rs"]

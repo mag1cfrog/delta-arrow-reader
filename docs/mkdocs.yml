@@ -37,6 +37,7 @@ nav:
       - Installation: installation.md
       - Streaming reader quickstart: streaming-reader.md
       - DataFusion quickstart: datafusion.md
+      - Prepare Parquet metadata: prepared-parquet-metadata.md
   - How it works:
       - Architecture: architecture.md
       - Delta metadata lifecycle: delta-metadata-lifecycle.md
@@ -46,6 +47,7 @@ nav:
       - Reader benchmarks: benchmarks.md
       - Focused benchmarks:
           - Lazy and eager scan metadata: benchmarks/eager-metadata.md
+          - Prepared Parquet metadata: benchmarks/prepared-parquet-metadata.md
           - Parquet row-filter predicate decoding: benchmarks/row-filter.md
           - Parquet page-index range reads: benchmarks/page-index.md
           - Adaptive Parquet range planning: benchmarks/range-planning.md

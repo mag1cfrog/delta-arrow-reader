@@ -30,7 +30,7 @@ exclude = [
 [[bench]]
 name = "reader"
 harness = false
-required-features = ["datafusion"]
+required-features = ["datafusion", "experimental-parquet-metadata-preparation"]
 test = false
 
 [[bench]]

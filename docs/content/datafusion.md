@@ -104,3 +104,9 @@ follows this cache across several queries. For the rest of the read path, see
 [how the reader works](https://mag1cfrog.github.io/delta-arrow-reader/architecture/).
 The [Rust API reference](https://docs.rs/delta-arrow-reader) documents the
 available scan options and metrics.
+
+The experimental
+[Parquet metadata preparation mode](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
+can also move footer and offset-index reads into table initialization. Configure
+it on `DeltaTableBuilder` before registration; DataFusion needs no separate
+cache option.
