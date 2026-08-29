@@ -38,8 +38,13 @@ use arrow::{datatypes::SchemaRef, record_batch::RecordBatch};
 use futures_util::Stream;
 use snafu::ResultExt;
 
+#[cfg(any(
+    feature = "datafusion",
+    feature = "experimental-parquet-metadata-preparation"
+))]
+use self::backend::direct_parquet::ParquetMetadataCache;
 #[cfg(feature = "experimental-parquet-metadata-preparation")]
-use self::backend::direct_parquet::{ParquetMetadataCache, prepare_parquet_metadata};
+use self::backend::direct_parquet::prepare_parquet_metadata;
 use self::{
     planning::{DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan},
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
@@ -452,6 +457,20 @@ impl DeltaTable {
         self.prepared_parquet_metadata
             .as_deref()
             .map(|prepared| &prepared.report)
+    }
+
+    #[cfg(feature = "datafusion")]
+    pub(crate) fn prepared_parquet_metadata_cache(&self) -> Option<Arc<ParquetMetadataCache>> {
+        #[cfg(feature = "experimental-parquet-metadata-preparation")]
+        {
+            self.prepared_parquet_metadata
+                .as_ref()
+                .map(|prepared| Arc::clone(&prepared.cache))
+        }
+        #[cfg(not(feature = "experimental-parquet-metadata-preparation"))]
+        {
+            None
+        }
     }
 
     /// Starts configuring a new single-use scan.

@@ -26,6 +26,8 @@ use datafusion::{
     physical_plan::{ExecutionPlan, displayable},
     prelude::{SessionConfig, SessionContext},
 };
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+use delta_arrow_reader::ParquetMetadataPreparationLimits;
 use delta_arrow_reader::{
     DeltaReaderError, DeltaReaderPhase, DeltaScanExecutionOptions, DeltaTableBuilder,
     ParquetReaderBackend,
@@ -128,6 +130,19 @@ impl TestTable {
 
     fn disable_delta_log(&self) -> TestResult {
         fs::rename(self.0.join("_delta_log"), self.0.join("disabled-log"))?;
+        Ok(())
+    }
+
+    #[cfg(feature = "experimental-parquet-metadata-preparation")]
+    fn corrupt_parquet_footer(&self, name: &str) -> TestResult {
+        let path = self.0.join(name);
+        let mut bytes = fs::read(&path)?;
+        let footer_start = bytes
+            .len()
+            .checked_sub(8)
+            .ok_or("test Parquet file is too small to contain a footer")?;
+        bytes[footer_start..].fill(0);
+        fs::write(path, bytes)?;
         Ok(())
     }
 }
@@ -321,6 +336,48 @@ async fn registered_eager_table_reuses_metadata_across_sql_queries_without_the_l
         assert_eq!(metrics.len(), 1);
         assert_eq!(metrics[0].snapshot().reader_metrics.files_planned, 1);
     }
+    Ok(())
+}
+
+#[cfg(feature = "experimental-parquet-metadata-preparation")]
+#[tokio::test]
+async fn datafusion_reuses_table_prepared_parquet_metadata_after_repartitioning() -> TestResult {
+    let fixture = TestTable::partitioned("prepared-parquet-metadata-datafusion")?;
+    let table = DeltaTableBuilder::new(fixture.uri())
+        .load_table_with_prepared_parquet_metadata(ParquetMetadataPreparationLimits {
+            max_files: 2,
+            max_retained_metadata_bytes: 1024 * 1024,
+        })
+        .await?;
+    let context = SessionContext::new_with_config(
+        SessionConfig::new()
+            .with_target_partitions(4)
+            .with_repartition_file_min_size(1),
+    );
+    register_table(
+        &context,
+        "orders",
+        table,
+        ScanOptions {
+            target_partitions: Some(4),
+            ..Default::default()
+        },
+    )?;
+
+    fixture.corrupt_parquet_footer("west.parquet")?;
+    let plan = context
+        .sql("SELECT id FROM orders ORDER BY id")
+        .await?
+        .create_physical_plan()
+        .await?;
+    let display = displayable(plan.as_ref()).indent(true).to_string();
+    assert!(
+        display.contains("DeltaScanExec: snapshot_version=0, partitions=4"),
+        "{display}"
+    );
+
+    let batches = collect_plan(&context, plan).await?;
+    assert_eq!(ids(&batches), [1, 2, 3, 4]);
     Ok(())
 }
 

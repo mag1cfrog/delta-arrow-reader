@@ -32,3 +32,22 @@ impl ParquetMetadataCache {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entries_are_reused_only_for_the_same_path_and_size() {
+        let cache = ParquetMetadataCache::default();
+        let path = Path::from("part.parquet");
+        let entry = cache.entry(&path, 100);
+
+        assert!(Arc::ptr_eq(&entry, &cache.entry(&path, 100)));
+        assert!(!Arc::ptr_eq(&entry, &cache.entry(&path, 101)));
+        assert!(!Arc::ptr_eq(
+            &entry,
+            &cache.entry(&Path::from("other.parquet"), 100)
+        ));
+    }
+}

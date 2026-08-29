@@ -232,13 +232,18 @@ impl DeltaTableProvider {
                 "Delta scan execution setup"
             )
             .entered();
+            let metrics = ScanMetrics::new(
+                self.registration_name.clone(),
+                reader_plan.metrics.clone(),
+                self.options.use_arrow_view_types,
+            );
             create_datafusion_execution_plan(
                 reader_plan,
                 datafusion_plan,
                 exact_row_predicate,
                 Arc::clone(&self.range_read_estimator),
-                self.registration_name.clone(),
-                self.options.use_arrow_view_types,
+                self.table.prepared_parquet_metadata_cache(),
+                metrics,
                 self.options.intra_file_repartitioning,
             )
         };

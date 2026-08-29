@@ -148,8 +148,7 @@ struct MetricsInner {
 }
 
 impl ScanMetrics {
-    #[allow(dead_code)]
-    fn new(
+    pub(super) fn new(
         registration_name: Option<String>,
         reader_metrics: DeltaScanMetrics,
         use_arrow_view_types: bool,
@@ -310,8 +309,8 @@ pub(crate) fn create_datafusion_execution_plan(
     datafusion_plan: DataFusionScanPlan,
     exact_row_predicate: Option<DeltaKernelPredicate>,
     range_read_estimator: Arc<ParquetRangeReadEstimator>,
-    registration_name: Option<String>,
-    use_arrow_view_types: bool,
+    parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
+    metrics: ScanMetrics,
     intra_file_repartitioning: IntraFileRepartitioning,
 ) -> Arc<dyn ExecutionPlan> {
     Arc::new(DeltaScanExec::new(
@@ -319,8 +318,8 @@ pub(crate) fn create_datafusion_execution_plan(
         datafusion_plan,
         exact_row_predicate,
         range_read_estimator,
-        registration_name,
-        use_arrow_view_types,
+        parquet_metadata_cache,
+        metrics,
         intra_file_repartitioning,
     ))
 }
@@ -349,18 +348,13 @@ impl DeltaScanExec {
         datafusion_plan: DataFusionScanPlan,
         exact_row_predicate: Option<DeltaKernelPredicate>,
         range_read_estimator: Arc<ParquetRangeReadEstimator>,
-        registration_name: Option<String>,
-        use_arrow_view_types: bool,
+        parquet_metadata_cache: Option<Arc<ParquetMetadataCache>>,
+        metrics: ScanMetrics,
         intra_file_repartitioning: IntraFileRepartitioning,
     ) -> Self {
         let schema = datafusion_plan.projection.output_schema;
         let output_projection = datafusion_plan.projection.output_projection.map(Arc::from);
         let properties = scan_properties(&schema, reader_plan.partitions.len());
-        let metrics = ScanMetrics::new(
-            registration_name,
-            reader_plan.metrics.clone(),
-            use_arrow_view_types,
-        );
         let limiter = ScanReadLimiter::new(
             reader_plan.execution_options,
             reader_plan.partition_target_diagnostic.target_partitions,
@@ -378,7 +372,7 @@ impl DeltaScanExec {
             dynamic_filters: Arc::from([]),
             intra_file_repartitioning,
             range_read_estimator,
-            parquet_metadata_cache: None,
+            parquet_metadata_cache,
             file_tasks_repartitioned: false,
         }
     }
@@ -1093,13 +1087,14 @@ mod tests {
                 datafusion_target_partitions: None,
             },
         )?;
+        let metrics = ScanMetrics::new(registration_name, reader_plan.metrics.clone(), true);
         Ok(create_datafusion_execution_plan(
             reader_plan,
             datafusion_plan,
             exact_row_predicate,
             Arc::default(),
-            registration_name,
-            true,
+            table.prepared_parquet_metadata_cache(),
+            metrics,
             intra_file_repartitioning,
         ))
     }
