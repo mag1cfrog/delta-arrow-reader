@@ -8,12 +8,10 @@ metadata.
 
 `WarmupMode` controls how much reusable metadata `load_table` prepares. The
 default `None` mode waits until each scan is built. `QueryPlanning` prepares the
-reusable Delta metadata while the table loads. The experimental
-`ParquetMetadata` mode also loads parsed footers and offset indexes for every
-active file.
+reusable Delta metadata while the table loads.
 
-Each query still gets its own file, row-group, and page selection. The caches
-do not reuse one query's selection for another query or change query results.
+Each query still gets its own file, row-group, and page selection. The cache
+does not reuse one query's selection for another query or change query results.
 
 ## What happens before rows are read
 
@@ -31,8 +29,7 @@ The first round mixes work that can be reused with work that belongs to one
 query. Replaying the Delta history and reconciling the active files can be
 reused for a loaded table version. Applying a predicate cannot.
 `WarmupMode::QueryPlanning` moves only that reusable work to table
-initialization. `WarmupMode::ParquetMetadata` also moves the reusable part of
-the second round while leaving row-group and page selection with each query.
+initialization. Parquet metadata and data remain part of each query.
 
 This difference matters most for a selective query. Statistics may reduce a
 large table to a few Parquet row groups, making the data read small, while
@@ -87,50 +84,26 @@ The cache belongs to one loaded table. If the same location is loaded twice,
 the two table objects have separate caches. Both also stay fixed at the exact
 table version they loaded.
 
-## Parquet metadata warmup
-
-`DeltaTableBuilder::with_warmup(WarmupMode::ParquetMetadata { .. })` first
-performs query-planning warmup. It then fetches and parses the Parquet footer
-and optional offset indexes for every unique active file:
-
-```text
-table initialization -> Delta replay -> active-file cache -> Parquet metadata cache
-                                                                    |
-query 1 -> pruning -------------------------------------------------+-> Parquet data
-query 2 -> pruning -------------------------------------------------+-> Parquet data
-query 3 -> pruning -------------------------------------------------+-> Parquet data
-```
-
-The experimental Cargo feature is disabled by default, and this warmup mode
-requires explicit file-count and estimated-memory limits. It supports only the
-direct Parquet backend. The returned table and its clones share one immutable
-cache through both the streaming API and DataFusion.
-
-Warmup does not read Parquet data pages. A query still decides which
-files, row groups, pages, and columns it needs. See
-[Warm Parquet metadata for repeated queries](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
-for setup, limits, failure behavior, and report fields.
-
 ## Which mode should you use?
 
 This choice applies to the loaded table, whether you query it through the
-streaming API or DataFusion SQL. Both APIs support all three modes.
+streaming API or DataFusion SQL. The warmup behavior is the same through both
+APIs.
 
-| Consideration | No warmup | Query planning | Parquet metadata |
-| --- | --- | --- | --- |
-| Typical use | One query, occasional queries, or tight memory limits | Repeated queries where Delta replay is costly | Repeated remote queries where footer reads are also costly |
-| Table loading | Returns without building reusable scan caches | Waits for Delta replay and cache creation | Also fetches and parses metadata for every active Parquet file |
-| Memory while loaded | No reusable active-file cache | Keeps active-file metadata and statistics | Also keeps parsed Parquet footers and offset indexes |
-| Each later scan | Replays Delta metadata, then prunes | Reuses Delta metadata, then prunes | Reuses both caches, then performs query-specific pruning |
-| Seeing a newer version | Load a new table | Load a new table | Load and warm a new table |
-| Parquet data reads | Per query | Per query | Per query |
+| Consideration | No warmup | Query planning |
+| --- | --- | --- |
+| Typical use | One query, occasional queries, or tight memory limits | Repeated queries where Delta replay is costly |
+| Table loading | Returns without building a reusable scan cache | Waits for Delta replay and cache creation |
+| Memory while loaded | No reusable active-file cache | Keeps active-file metadata and statistics |
+| Each later scan | Replays Delta metadata, then prunes | Reuses Delta metadata, then prunes |
+| Seeing a newer version | Load a new table | Load a new table |
+| Parquet metadata and data reads | Per query | Per query |
 
 Use no warmup unless you know the table will serve repeated queries and the
-saved planning time justifies slower initialization and higher memory use. Add
-Parquet metadata warmup only when measurements show that repeated footer
-reads matter. No single query count is a reliable break-even point. The result
-depends on the table history, checkpoint shape, file count, available
-statistics, storage latency, query selectivity, and memory pressure.
+saved planning time justifies slower initialization and higher memory use. No
+single query count is a reliable break-even point. The result depends on the
+table history, checkpoint shape, file count, available statistics, storage
+latency, query selectivity, and memory pressure.
 
 ## Results from a real S3 workload
 
@@ -154,8 +127,6 @@ same Parquet I/O.
 These numbers come from one workload. They are not a performance guarantee or
 a general break-even point. The [benchmark methodology, environment, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/#representative-real-s3-result)
 describe how the measurements were collected and what can affect them.
-This case study compares no warmup with query-planning warmup; it does not
-include experimental Parquet metadata warmup.
 
 ## Version and refresh behavior
 
@@ -164,7 +135,7 @@ version. Commits written later do not change what existing queries see. To use
 a newer version, load the table again and replace the old table or DataFusion
 registration.
 
-The in-memory warmup modes do not provide:
+The in-memory cache does not provide:
 
 - incremental refresh;
 - background polling;
@@ -180,5 +151,4 @@ The in-memory warmup modes do not provide:
 - [Register and query a table with DataFusion](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
 - [Understand how scans are planned](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/)
 - [Review the benchmark methodology](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/)
-- [Warm Parquet metadata for repeated queries](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
 - [Open the warmup Rust API](https://docs.rs/delta-arrow-reader/latest/delta_arrow_reader/struct.DeltaTableBuilder.html#method.with_warmup)

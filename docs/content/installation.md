@@ -29,23 +29,15 @@ cargo add tokio --features macros,rt-multi-thread
 The [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
 shows how to register a table and query it with SQL.
 
-## Optional features
+## Optional Cargo feature
 
-The streaming API and both Parquet backends are always available.
-
-| Feature | Default | Purpose |
-| --- | --- | --- |
-| `datafusion` | No | Register Delta tables with DataFusion and expose execution metrics. |
-| `experimental-parquet-metadata-warmup` | No | Warm and retain Parquet metadata while loading a table. |
+The streaming API and both Parquet backends are always available. Enable the
+optional `datafusion` feature to register Delta tables with DataFusion and
+expose execution metrics.
 
 The direct Parquet backend is selected by default. Rust callers can choose the
 Delta Kernel backend through `DeltaScanExecutionOptions` without changing
 Cargo features.
-
-Parquet metadata warmup works with the streaming API by itself. Enable both
-optional features to reuse warmed metadata through DataFusion. See
-[Warm Parquet metadata for repeated queries](https://mag1cfrog.github.io/delta-arrow-reader/prepared-parquet-metadata/)
-before enabling it for a table.
 
 Both APIs run on your application's Tokio runtime. Delta Arrow Reader does not
 create a separate runtime.
