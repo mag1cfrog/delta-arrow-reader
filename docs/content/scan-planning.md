@@ -29,7 +29,7 @@ choice.
 In one dated real-S3 case study, eager initialization reduced the median time
 for a six-query session by 15.4% while adding 30.2 MiB of resident memory after
 initialization and 15.0 MiB to full-session peak memory. See the
-[methodology, results, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/#representative-real-s3-result)
+[methodology, results, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/#representative-real-s3-result)
 before applying those measurements to another table or workload.
 
 To see how this initialization choice plays out across several queries, follow

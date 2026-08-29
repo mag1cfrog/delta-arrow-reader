@@ -125,7 +125,7 @@ session finished sooner. Both runs returned the same results and performed the
 same Parquet I/O.
 
 These numbers come from one workload. They are not a performance guarantee or
-a general break-even point. The [benchmark methodology, environment, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/#representative-real-s3-result)
+a general break-even point. The [benchmark methodology, environment, and limitations](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/#representative-real-s3-result)
 describe how the measurements were collected and what can affect them.
 
 ## Version and refresh behavior
@@ -149,5 +149,5 @@ Eager loading does not provide:
 - [Read a table with the streaming API](https://mag1cfrog.github.io/delta-arrow-reader/streaming-reader/)
 - [Register and query a table with DataFusion](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
 - [Understand how scans are planned](https://mag1cfrog.github.io/delta-arrow-reader/scan-planning/)
-- [Review the benchmark methodology](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/#compare-lazy-and-eager-scan-metadata)
+- [Review the benchmark methodology](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/eager-metadata/)
 - [Open the eager-loading Rust API](https://docs.rs/delta-arrow-reader/latest/delta_arrow_reader/struct.DeltaTableBuilder.html#method.load_table_with_eager_scan_metadata)

@@ -44,6 +44,10 @@ nav:
       - Read scheduling: read-scheduling.md
   - Performance:
       - Reader benchmarks: benchmarks.md
+      - Focused benchmarks:
+          - Lazy and eager scan metadata: benchmarks/eager-metadata.md
+          - Parquet row-filter predicate decoding: benchmarks/row-filter.md
+          - Parquet page-index range reads: benchmarks/page-index.md
   - Reference:
       - Execution options: reference/execution-options.md
       - Scan metrics: reference/metrics.md
