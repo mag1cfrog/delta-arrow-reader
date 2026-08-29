@@ -657,9 +657,10 @@ mod tests {
     };
 
     use super::{
-        ChosenRangePlan, CompletedRangeRead, CurrentTransportEstimate, MeteredParquetObjectStore,
-        MultiRangeReadStrategy, ParquetRangeReadEstimator, RANGE_PLANNING_DIAGNOSTIC_TARGET,
-        RangePlanDecision, TransportEstimate,
+        ChosenRangePlan, CompletedRangeRead, CurrentTransportEstimate, MIN_THROUGHPUT_SAMPLE_BYTES,
+        MIN_THROUGHPUT_SAMPLE_DELIVERY_TIME, MeteredParquetObjectStore, MultiRangeReadStrategy,
+        ParquetRangeReadEstimator, RANGE_PLANNING_DIAGNOSTIC_TARGET, RangePlanDecision,
+        TransportEstimate,
     };
     use crate::{
         DeltaScanMetrics, ParquetReaderBackend,
@@ -1449,6 +1450,97 @@ mod tests {
                 .estimate
                 .map(|estimate| estimate.shared_throughput_bytes_per_second),
             Some(8 * 1024 * 1024)
+        );
+    }
+
+    #[test]
+    fn throughput_requires_enough_bytes_and_delivery_time() {
+        let store = MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            direct_metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        let started = Instant::now();
+        let minimum_bytes = usize::try_from(MIN_THROUGHPUT_SAMPLE_BYTES)
+            .expect("throughput threshold must fit usize");
+
+        store.record_completed_range_reads(&[completed_read(started, 10, minimum_bytes - 1)]);
+        store.record_completed_range_reads(&[completed_read_with_delivery(
+            started,
+            20,
+            MIN_THROUGHPUT_SAMPLE_DELIVERY_TIME - Duration::from_nanos(1),
+            minimum_bytes,
+        )]);
+        assert_eq!(
+            store.current_transport_estimate(),
+            CurrentTransportEstimate {
+                latency_sample_count: 2,
+                throughput_sample_count: 0,
+                estimate: None,
+            }
+        );
+
+        store.record_completed_range_reads(&[completed_read_with_delivery(
+            started,
+            30,
+            MIN_THROUGHPUT_SAMPLE_DELIVERY_TIME,
+            minimum_bytes,
+        )]);
+        assert_eq!(
+            store.current_transport_estimate(),
+            CurrentTransportEstimate {
+                latency_sample_count: 3,
+                throughput_sample_count: 1,
+                estimate: None,
+            }
+        );
+    }
+
+    #[test]
+    fn interleaved_tiny_reads_do_not_block_new_transport_evidence() {
+        let store = MeteredParquetObjectStore::new(
+            Arc::new(InMemory::new()),
+            direct_metrics(),
+            MultiRangeReadStrategy::ChooseAutomatically,
+        );
+        let started = Instant::now();
+        let representative_bytes = 2 * 1024 * 1024;
+
+        for _ in 0..6 {
+            store.record_completed_range_reads(&[completed_read_at_throughput(
+                started,
+                20,
+                representative_bytes,
+                2 * 1024 * 1024,
+            )]);
+            store.record_completed_range_reads(&[completed_read(started, 5, 15_000)]);
+        }
+        let estimate = store.current_transport_estimate();
+        assert_eq!(estimate.latency_sample_count, 9);
+        assert_eq!(estimate.throughput_sample_count, 6);
+        assert_eq!(
+            estimate
+                .estimate
+                .map(|value| value.shared_throughput_bytes_per_second),
+            Some(2 * 1024 * 1024)
+        );
+
+        for _ in 0..9 {
+            store.record_completed_range_reads(&[completed_read_at_throughput(
+                started,
+                20,
+                representative_bytes,
+                64 * 1024 * 1024,
+            )]);
+        }
+        let estimate = store.current_transport_estimate();
+        assert_eq!(estimate.latency_sample_count, 9);
+        assert_eq!(estimate.throughput_sample_count, 9);
+        assert_eq!(
+            estimate
+                .estimate
+                .map(|value| value.shared_throughput_bytes_per_second),
+            Some(64 * 1024 * 1024)
         );
     }
 
