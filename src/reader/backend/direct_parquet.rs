@@ -795,7 +795,9 @@ fn data_file_error(
 mod tests {
     use std::{
         collections::HashMap,
-        fmt, fs, io,
+        fmt,
+        fs::{self, File},
+        io,
         path::{Path as FsPath, PathBuf},
         sync::{
             Arc,
@@ -824,6 +826,7 @@ mod tests {
     };
     use parquet::arrow::{ArrowSchemaConverter, ArrowWriter, PARQUET_FIELD_ID_META_KEY};
     use parquet::basic::Compression;
+    use parquet::file::metadata::ParquetMetaDataReader;
     use parquet::file::properties::{EnabledStatistics, WriterProperties};
 
     use super::{
@@ -2764,6 +2767,72 @@ mod tests {
             assert_eq!(indexed, unindexed, "{name}");
             assert_eq!(int32_ids(&indexed)?, expected_ids, "{name}");
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn malformed_optional_offset_index_falls_back_without_losing_rows()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const ROWS: usize = 128;
+
+        let corrupt_root = TestDir::new("direct-row-selection-corrupt-index")?;
+        let unindexed_root = TestDir::new("direct-row-selection-missing-index")?;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("payload", DataType::Utf8, true),
+        ]));
+        let columns = vec![
+            Arc::new(Int32Array::from_iter_values(0..ROWS as i32)) as ArrayRef,
+            Arc::new(StringArray::from_iter(
+                (0..ROWS).map(|row| (row % 5 != 0).then(|| format!("payload-{row:08}"))),
+            )),
+        ];
+        let properties = |offset_index_disabled| {
+            WriterProperties::builder()
+                .set_max_row_group_row_count(Some(64))
+                .set_write_batch_size(32)
+                .set_data_page_row_count_limit(32)
+                .set_offset_index_disabled(offset_index_disabled)
+                .build()
+        };
+        let mut corrupt_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns.clone(), properties(false))?;
+        let unindexed_bytes =
+            parquet_bytes_with_properties(Arc::clone(&schema), columns, properties(true))?;
+        write_partitioned_non_dv_table(&corrupt_root, &corrupt_bytes)?;
+        write_partitioned_non_dv_table(&unindexed_root, &unindexed_bytes)?;
+
+        let metadata = ParquetMetaDataReader::new()
+            .parse_and_finish(&File::open(corrupt_root.path().join("part.parquet"))?)?;
+        let payload = metadata.row_group(0).column(1);
+        let index_start = usize::try_from(
+            payload
+                .offset_index_offset()
+                .ok_or("test fixture did not contain a payload offset index")?,
+        )?;
+        let index_length = usize::try_from(
+            payload
+                .offset_index_length()
+                .ok_or("test fixture did not contain a payload offset-index length")?,
+        )?;
+        let index_range = index_start..index_start.saturating_add(index_length);
+        // Damage only one column's offset index. The data pages and footer remain valid, so the
+        // optional policy must discard the unusable indexes and read the column chunks normally.
+        corrupt_bytes[index_range].fill(0xff);
+        fs::write(corrupt_root.path().join("part.parquet"), &corrupt_bytes)?;
+
+        let predicate = DeltaKernelPredicate::from_test_predicate(Predicate::eq(
+            Expression::Column(ColumnName::new(["id"])),
+            Expression::Literal(Scalar::Integer(42)),
+        ));
+        let (corrupt, _) =
+            read_with_row_filter(&corrupt_root, corrupt_bytes.len(), &schema, &predicate).await?;
+        let (unindexed, _) =
+            read_with_row_filter(&unindexed_root, unindexed_bytes.len(), &schema, &predicate)
+                .await?;
+
+        assert_eq!(corrupt, unindexed);
+        assert_eq!(int32_ids(&corrupt)?, [42]);
         Ok(())
     }
 
