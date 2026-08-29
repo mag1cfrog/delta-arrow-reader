@@ -107,6 +107,12 @@ fn serve_http(
     while !shutdown.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((stream, _)) => {
+                // The listener is nonblocking so shutdown can be polled. Request handlers use
+                // blocking I/O, and Windows can return accepted sockets in nonblocking mode.
+                if let Err(error) = stream.set_nonblocking(false) {
+                    eprintln!("controlled HTTP connection could not enter blocking mode: {error}");
+                    continue;
+                }
                 let root = root.clone();
                 let shutdown = Arc::clone(&shutdown);
                 let state = Arc::clone(&state);
@@ -130,51 +136,42 @@ fn serve_http(
 }
 
 fn handle_http(
-    stream: TcpStream,
+    mut stream: TcpStream,
     root: &Path,
     shutdown: &AtomicBool,
     state: &ServerState,
 ) -> io::Result<()> {
-    let mut reader = BufReader::new(stream);
-    loop {
-        let Some(request) = read_http_request(&mut reader)? else {
-            return Ok(());
-        };
-        if shutdown.load(Ordering::Relaxed) {
-            let _ = reader.get_mut().shutdown(Shutdown::Both);
-            return Ok(());
-        }
-        let close = request.headers.get("connection").map(String::as_str) == Some("close");
-        let stream = reader.get_mut();
-        match request.method.as_str() {
-            "PROPFIND" => propfind(stream, root, &request),
-            "HEAD" => file_response(
-                stream,
-                root,
-                &request.path,
-                request.headers.get("range").map(String::as_str),
-                true,
-                state,
-            ),
-            "GET" => file_response(
-                stream,
-                root,
-                &request.path,
-                request.headers.get("range").map(String::as_str),
-                false,
-                state,
-            ),
-            _ => write_response_headers(
-                stream,
-                405,
-                "Method Not Allowed",
-                &[("Content-Length", "0".to_owned())],
-            ),
-        }?;
-        if close {
-            eprintln!("controlled HTTP peer requested connection close");
-            return Ok(());
-        }
+    let Some(request) = read_http_request(&stream)? else {
+        return Ok(());
+    };
+    if shutdown.load(Ordering::Relaxed) {
+        let _ = stream.shutdown(Shutdown::Both);
+        return Ok(());
+    }
+    match request.method.as_str() {
+        "PROPFIND" => propfind(&mut stream, root, &request),
+        "HEAD" => file_response(
+            &mut stream,
+            root,
+            &request.path,
+            request.headers.get("range").map(String::as_str),
+            true,
+            state,
+        ),
+        "GET" => file_response(
+            &mut stream,
+            root,
+            &request.path,
+            request.headers.get("range").map(String::as_str),
+            false,
+            state,
+        ),
+        _ => write_response_headers(
+            &mut stream,
+            405,
+            "Method Not Allowed",
+            &[("Content-Length", "0".to_owned())],
+        ),
     }
 }
 
@@ -184,7 +181,8 @@ struct HttpRequest {
     headers: BTreeMap<String, String>,
 }
 
-fn read_http_request(reader: &mut impl BufRead) -> io::Result<Option<HttpRequest>> {
+fn read_http_request(stream: &TcpStream) -> io::Result<Option<HttpRequest>> {
+    let mut reader = BufReader::new(stream.try_clone()?);
     let mut request_line = String::new();
     if reader.read_line(&mut request_line)? == 0 {
         return Ok(None);
@@ -427,7 +425,7 @@ fn write_response_headers(
     text: &str,
     headers: &[(&str, String)],
 ) -> io::Result<()> {
-    write!(stream, "HTTP/1.1 {status} {text}\r\n")?;
+    write!(stream, "HTTP/1.1 {status} {text}\r\nConnection: close\r\n")?;
     for (key, value) in headers {
         write!(stream, "{key}: {value}\r\n")?;
     }
@@ -518,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn server_handles_multiple_requests_on_one_connection() -> Result<(), Box<dyn Error>> {
+    fn server_waits_for_a_request_after_accepting_a_connection() -> Result<(), Box<dyn Error>> {
         let mut server = ControlledHttpServer::start(
             PathBuf::new(),
             TransportProfile {
@@ -533,14 +531,13 @@ mod tests {
             .and_then(|url| url.strip_suffix('/'))
             .ok_or_else(|| io::Error::other("unexpected controlled server URL"))?;
         let mut stream = TcpStream::connect(address)?;
-        stream.write_all(
-            b"HEAD /missing HTTP/1.1\r\nHost: localhost\r\n\r\n\
-              HEAD /missing HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-        )?;
+        stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+        thread::sleep(Duration::from_millis(100));
+        stream.write_all(b"HEAD /missing HTTP/1.1\r\nHost: localhost\r\n\r\n")?;
         let mut responses = String::new();
         stream.read_to_string(&mut responses)?;
 
-        assert_eq!(responses.matches("HTTP/1.1 404 Not Found").count(), 2);
+        assert!(responses.starts_with("HTTP/1.1 404 Not Found\r\n"));
         server.stop();
         Ok(())
     }
