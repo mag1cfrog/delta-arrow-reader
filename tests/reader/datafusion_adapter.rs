@@ -114,13 +114,19 @@ impl TestTable {
     }
 
     fn write_log(&self, actions: &[Value]) -> TestResult {
+        self.write_log_version(0, actions)
+    }
+
+    fn write_log_version(&self, version: u64, actions: &[Value]) -> TestResult {
         let contents = actions
             .iter()
             .map(Value::to_string)
             .collect::<Vec<_>>()
             .join("\n");
         fs::write(
-            self.0.join("_delta_log/00000000000000000000.json"),
+            self.0
+                .join("_delta_log")
+                .join(format!("{version:020}.json")),
             format!("{contents}\n"),
         )?;
         Ok(())
@@ -165,6 +171,20 @@ fn metadata() -> Value {
             "createdTime": 1587968585495_i64
         }
     })
+}
+
+fn metadata_with_note() -> Value {
+    let mut action = metadata();
+    let schema = json!({
+        "type": "struct",
+        "fields": [
+            {"name": "id", "type": "integer", "nullable": false, "metadata": {}},
+            {"name": "region", "type": "string", "nullable": true, "metadata": {}},
+            {"name": "note", "type": "string", "nullable": true, "metadata": {}}
+        ]
+    });
+    action["metaData"]["schemaString"] = Value::String(schema.to_string());
+    action
 }
 
 fn add(path: &str, size: u64, region: &str, num_records: u64, min_id: i32, max_id: i32) -> Value {
@@ -881,6 +901,72 @@ async fn options_protocol_schema_pushdown_and_debug_match_the_provider_contract(
     let error = DeltaTableProvider::try_new(unsupported, Default::default())
         .expect_err("unsupported protocol must fail");
     assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+    Ok(())
+}
+
+#[tokio::test]
+async fn provider_refresh_returns_a_new_version_and_keeps_the_original_immutable() -> TestResult {
+    let fixture = TestTable::partitioned("provider-refresh")?;
+    let table = DeltaTableBuilder::new(fixture.uri())
+        .with_warmup(WarmupMode::QueryPlanning)
+        .load_table()
+        .await?;
+    let provider = DeltaTableProvider::try_new(
+        table,
+        ScanOptions {
+            target_partitions: Some(1),
+            ..Default::default()
+        },
+    )?;
+    let north = fixture.write_parquet("north.parquet", &[5, 6])?;
+    fixture.write_log_version(
+        1,
+        &[
+            metadata_with_note(),
+            add("north.parquet", north, "north", 2, 5, 6),
+        ],
+    )?;
+
+    let refreshed = provider.refresh().await?;
+    fixture.disable_delta_log()?;
+
+    let context = SessionContext::new();
+    let original_plan = provider.scan(&context.state(), None, &[], None).await?;
+    let refreshed_plan = refreshed.scan(&context.state(), None, &[], None).await?;
+    let mut original_ids = ids(&collect_plan(&context, original_plan).await?);
+    let mut refreshed_ids = ids(&collect_plan(&context, refreshed_plan).await?);
+    original_ids.sort_unstable();
+    refreshed_ids.sort_unstable();
+
+    assert_eq!(original_ids, [1, 2, 3, 4]);
+    assert_eq!(refreshed_ids, [1, 2, 3, 4, 5, 6]);
+    assert_eq!(provider.schema().fields().len(), 2);
+    assert_eq!(refreshed.schema().fields().len(), 3);
+    assert!(format!("{provider:?}").contains("snapshot_version: 0"));
+    assert!(format!("{refreshed:?}").contains("snapshot_version: 1"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn provider_refresh_rejects_a_new_unsupported_protocol_without_changing_the_original()
+-> TestResult {
+    let fixture = TestTable::partitioned("provider-refresh-protocol")?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+    let provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
+    fixture.write_log_version(1, &[protocol(4)])?;
+
+    let error = provider
+        .refresh()
+        .await
+        .expect_err("unsupported refreshed protocol must fail");
+
+    assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+    let context = SessionContext::new();
+    let plan = provider.scan(&context.state(), None, &[], None).await?;
+    let mut original_ids = ids(&collect_plan(&context, plan).await?);
+    original_ids.sort_unstable();
+    assert_eq!(original_ids, [1, 2, 3, 4]);
+    assert!(format!("{provider:?}").contains("snapshot_version: 0"));
     Ok(())
 }
 

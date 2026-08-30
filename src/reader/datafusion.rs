@@ -101,6 +101,30 @@ impl DeltaTableProvider {
         Self::try_new_with_registration_name(table, options, None)
     }
 
+    /// Returns a new provider backed by the latest Delta table version.
+    ///
+    /// The existing provider and any DataFusion registration that refers to it
+    /// remain unchanged. Scan options and range-read estimates are retained by
+    /// the returned provider.
+    pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
+        let table = self.table.refresh().await?;
+        table.validate_protocol()?;
+        if table.version() == self.table.version() {
+            return Ok(self.clone());
+        }
+
+        let partition_columns = table.partition_columns().iter().cloned().collect();
+        let schema = build_provider_schema(
+            &table.schema(),
+            &partition_columns,
+            self.options.use_arrow_view_types,
+        );
+        let mut provider = self.clone();
+        provider.table = table;
+        provider.schema = schema;
+        Ok(provider)
+    }
+
     fn try_new_with_registration_name(
         table: DeltaTable,
         options: ScanOptions,
