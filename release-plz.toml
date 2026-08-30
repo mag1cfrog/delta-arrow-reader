@@ -9,5 +9,5 @@ commit_parsers = [
     { message = "^security", group = "security" },
     { message = "^(build|chore|style)", group = "maintenance" },
     { message = "^(ci|test)", skip = true },
-    { message = "^.*", group = "other" },
+    { message = "^.*", skip = true },
 ]
