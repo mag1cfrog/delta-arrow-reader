@@ -384,6 +384,35 @@ fn refresh_returns_a_new_latest_table_and_keeps_the_original_immutable() -> Test
 }
 
 #[test]
+fn lazy_refresh_keeps_a_new_unsupported_protocol_inspectable() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::empty("refresh-unsupported-protocol")?;
+        fixture.write_log(0, &[protocol(1), metadata()])?;
+        fixture.write_log(1, &[protocol(4)])?;
+        let original = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
+            .load_table()
+            .await?;
+
+        let refreshed = original.refresh().await?;
+        let error = refreshed
+            .validate_protocol()
+            .expect_err("the refreshed protocol must remain unsupported");
+
+        assert_eq!(original.version(), 0);
+        assert_eq!(refreshed.version(), 1);
+        assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+        let _ = original.scan().build().await?;
+        let error = match refreshed.scan().build().await {
+            Ok(_) => return Err("scans must reject the refreshed protocol".into()),
+            Err(error) => error,
+        };
+        assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
 fn refresh_updates_and_reuses_query_planning_metadata() -> TestResult {
     runtime()?.block_on(async {
         let fixture = TestTable::two_versions("refresh-query-planning")?;
