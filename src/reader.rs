@@ -359,8 +359,8 @@ impl DeltaTable {
     ///
     /// # Errors
     ///
-    /// Returns an error if the newer snapshot, schema, protocol, or retained query-planning
-    /// metadata cannot be loaded. No partially refreshed table is returned.
+    /// Returns an error if the newer snapshot, schema, or retained query-planning metadata cannot
+    /// be loaded. No partially refreshed table is returned.
     pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
         let snapshot = Arc::clone(&self.snapshot);
         let snapshot = tokio::task::spawn_blocking(move || snapshot.refresh())

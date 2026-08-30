@@ -83,11 +83,38 @@ the loaded table does.
 
 The cache does not contain Parquet footers or Parquet data. Each scan still
 applies its own projection and predicate, then performs its Parquet I/O when
-you poll the returned stream. Load the table again when you want to read a
-newer Delta version.
+you poll the returned stream.
 
 The [Delta metadata lifecycle](https://mag1cfrog.github.io/delta-arrow-reader/delta-metadata-lifecycle/)
 explains what query-planning warmup caches and when the tradeoff is worthwhile.
+
+## Refresh a loaded table
+
+Call `refresh` when a long-running process is ready to use the latest Delta
+version:
+
+```no_run
+use delta_arrow_reader::{DeltaReaderError, DeltaTable};
+
+async fn refresh_table(table: &mut DeltaTable) -> Result<(), DeltaReaderError> {
+    *table = table.refresh().await?;
+    Ok(())
+}
+```
+
+`refresh` returns a new immutable table. The original table and scans already
+built from it stay on their original version. If the refresh fails, the
+assignment does not run and the original table remains available.
+
+With `WarmupMode::None`, the new table remains lazy. With
+`WarmupMode::QueryPlanning`, refresh updates the retained active-file metadata
+from the previous version. If the table has not changed, the new table reuses
+the same cache. A checkpoint written after the previous version may require a
+full metadata replay instead.
+
+The crate does not refresh tables on a timer. Call `refresh` from the polling
+or scheduling code that owns the table, then publish the returned table when
+your application is ready for new scans to see it.
 
 ## Filter rows
 
