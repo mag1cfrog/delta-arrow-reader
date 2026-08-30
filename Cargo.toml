@@ -14,12 +14,14 @@ categories = ["asynchronous", "database"]
 exclude = [
     ".github/**",
     ".gitignore",
+    "benches/incremental_refresh.rs",
     "benches/reader.rs",
     "benches/page_index.rs",
     "benches/range_planning.rs",
     "benches/range_planning/**",
     "benches/row_filter.rs",
     "tests/benchmark_harness.rs",
+    "tests/incremental_refresh_benchmark_harness.rs",
     "tests/page_index_benchmark_harness.rs",
     "tests/range_planning_benchmark_harness.rs",
     "tests/reader.rs",
@@ -45,6 +47,11 @@ test = false
 
 [[bench]]
 name = "range_planning"
+harness = false
+test = false
+
+[[bench]]
+name = "incremental_refresh"
 harness = false
 test = false
 
