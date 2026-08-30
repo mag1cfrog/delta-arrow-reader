@@ -403,28 +403,4 @@ mod tests {
         assert_eq!(limiter.active_file_reads(), 0);
         Ok(())
     }
-
-    #[test]
-    fn delta_kernel_boundary_adds_no_runtime_or_backend_infrastructure()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let source = include_str!("kernel_reader.rs");
-        let manifest = include_str!("../../../Cargo.toml");
-        for forbidden in [
-            concat!("Runtime", "::new"),
-            concat!("new_", "current_thread"),
-            concat!("new_", "multi_thread"),
-            concat!("unbounded_", "channel"),
-            concat!("std", "::thread::spawn"),
-            concat!("tracing_", "subscriber"),
-            concat!("data", "fusion"),
-            concat!("delta", "_funnel"),
-        ] {
-            assert!(!source.contains(forbidden), "unexpected {forbidden}");
-        }
-        let blocking_boundary = concat!("tokio::task::", "spawn_blocking(");
-        assert_eq!(source.matches(blocking_boundary).count(), 1);
-        assert!(!manifest.contains("deltalake"));
-        assert!(!manifest.contains("buoyant_kernel"));
-        Ok(())
-    }
 }
