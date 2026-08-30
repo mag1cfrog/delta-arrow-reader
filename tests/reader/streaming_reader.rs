@@ -76,6 +76,39 @@ impl TestTable {
         Ok(table)
     }
 
+    fn three_versions_with_remove(name: &str) -> TestResult<Self> {
+        let table = Self::two_versions(name)?;
+        table.write_log(
+            2,
+            &[json!({
+                "remove": {
+                    "path": "part-0.parquet",
+                    "deletionTimestamp": 0,
+                    "dataChange": true
+                }
+            })],
+        )?;
+        Ok(table)
+    }
+
+    fn malformed_refresh(name: &str, invalid_size: &str) -> TestResult<Self> {
+        let table = Self::empty(name)?;
+        table.write_log(0, &[protocol(1), metadata()])?;
+        table.write_log(
+            1,
+            &[json!({
+                "add": {
+                    "path": "secret-refresh.parquet",
+                    "partitionValues": {},
+                    "size": invalid_size,
+                    "modificationTime": 1587968586000_i64,
+                    "dataChange": true
+                }
+            })],
+        )?;
+        Ok(table)
+    }
+
     fn unsupported(name: &str) -> TestResult<Self> {
         let table = Self::empty(name)?;
         table.write_log(0, &[protocol(4), metadata()])?;
@@ -325,6 +358,178 @@ fn table_loads_versions_and_public_state_is_redacted() -> TestResult {
     latest.validate_protocol()?;
     assert!(!format!("{latest:?}").contains(&secret_uri));
     Ok(())
+}
+
+#[test]
+fn refresh_returns_a_new_latest_table_and_keeps_the_original_immutable() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("refresh-lazy")?;
+        let original = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
+            .load_table()
+            .await?;
+        let refreshed = original.refresh().await?;
+        let unchanged = refreshed.refresh().await?;
+
+        assert_eq!(original.version(), 0);
+        assert_eq!(refreshed.version(), 1);
+        assert_eq!(unchanged.version(), 1);
+
+        let (original_batches, _) = collect_scan(original.scan().build().await?).await?;
+        let (refreshed_batches, _) = collect_scan(refreshed.scan().build().await?).await?;
+        assert_eq!(sorted_ids(&original_batches), [1, 2, 3, 4]);
+        assert_eq!(sorted_ids(&refreshed_batches), [1, 2, 3, 4, 5, 6, 7, 8]);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn lazy_refresh_keeps_a_new_unsupported_protocol_inspectable() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::empty("refresh-unsupported-protocol")?;
+        fixture.write_log(0, &[protocol(1), metadata()])?;
+        fixture.write_log(1, &[protocol(4)])?;
+        let original = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
+            .load_table()
+            .await?;
+
+        let refreshed = original.refresh().await?;
+        let error = refreshed
+            .validate_protocol()
+            .expect_err("the refreshed protocol must remain unsupported");
+
+        assert_eq!(original.version(), 0);
+        assert_eq!(refreshed.version(), 1);
+        assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+        let _ = original.scan().build().await?;
+        let error = match refreshed.scan().build().await {
+            Ok(_) => return Err("scans must reject the refreshed protocol".into()),
+            Err(error) => error,
+        };
+        assert_eq!(error.phase(), DeltaReaderPhase::Protocol);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn refresh_updates_and_reuses_query_planning_metadata() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("refresh-query-planning")?;
+        let original = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
+            .await?;
+        let refreshed = original.refresh().await?;
+        let unchanged = refreshed.refresh().await?;
+
+        fixture.disable_delta_log()?;
+
+        let (original_batches, original_metrics) =
+            collect_scan(original.scan().build().await?).await?;
+        let (refreshed_batches, refreshed_metrics) =
+            collect_scan(refreshed.scan().build().await?).await?;
+        let (unchanged_batches, unchanged_metrics) =
+            collect_scan(unchanged.scan().build().await?).await?;
+
+        assert_eq!(sorted_ids(&original_batches), [1, 2, 3, 4]);
+        assert_eq!(sorted_ids(&refreshed_batches), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(sorted_ids(&unchanged_batches), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(original_metrics.snapshot().files_planned, 1);
+        assert_eq!(refreshed_metrics.snapshot().files_planned, 2);
+        assert_eq!(unchanged_metrics.snapshot().files_planned, 2);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn refresh_rebuilds_query_planning_metadata_across_a_new_checkpoint() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::two_versions("refresh-checkpoint")?;
+        let table_url: url::Url = fixture.normalized_uri()?.parse()?;
+        let engine = DefaultEngineBuilder::new(store_from_url(&table_url)?)
+            .with_task_executor(Arc::new(TokioMultiThreadExecutor::new(
+                tokio::runtime::Handle::current(),
+            )))
+            .build();
+        let latest_snapshot = Snapshot::builder_for(table_url).build(&engine)?;
+        latest_snapshot.checkpoint(&engine, None)?;
+
+        let original = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
+            .await?;
+        let refreshed = original.refresh().await?;
+
+        fixture.disable_delta_log()?;
+
+        let (batches, metrics) = collect_scan(refreshed.scan().build().await?).await?;
+        assert_eq!(original.version(), 0);
+        assert_eq!(refreshed.version(), 1);
+        assert_eq!(sorted_ids(&batches), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(metrics.snapshot().files_planned, 2);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn refresh_reconciles_removed_files_without_changing_the_original_table() -> TestResult {
+    runtime()?.block_on(async {
+        let fixture = TestTable::three_versions_with_remove("refresh-remove")?;
+        let original = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(1))
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
+            .await?;
+        let refreshed = original.refresh().await?;
+
+        fixture.disable_delta_log()?;
+
+        let (original_batches, _) = collect_scan(original.scan().build().await?).await?;
+        let (refreshed_batches, _) = collect_scan(refreshed.scan().build().await?).await?;
+        assert_eq!(original.version(), 1);
+        assert_eq!(refreshed.version(), 2);
+        assert_eq!(sorted_ids(&original_batches), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert_eq!(sorted_ids(&refreshed_batches), [5, 6, 7, 8]);
+        Ok::<_, Box<dyn Error>>(())
+    })
+}
+
+#[test]
+fn failed_query_planning_refresh_returns_no_table_and_keeps_the_original_usable() -> TestResult {
+    const INVALID_SIZE: &str = "secret-refresh-size";
+    runtime()?.block_on(async {
+        let fixture = TestTable::malformed_refresh("refresh-failure", INVALID_SIZE)?;
+        let original = DeltaTableBuilder::new(fixture.uri())
+            .with_snapshot_selection(DeltaSnapshotSelection::Version(0))
+            .with_warmup(WarmupMode::QueryPlanning)
+            .load_table()
+            .await?;
+
+        let error = original
+            .refresh()
+            .await
+            .expect_err("malformed refreshed metadata must fail");
+
+        assert_eq!(original.version(), 0);
+        assert_eq!(error.code(), "scan_planning");
+        assert_eq!(error.phase(), DeltaReaderPhase::ScanPlanning);
+        assert!(
+            error
+                .to_string()
+                .contains("query_planning_cache_refresh_failed")
+        );
+        assert!(!error.to_string().contains(INVALID_SIZE));
+        assert!(!format!("{error:?}").contains(INVALID_SIZE));
+
+        fixture.disable_delta_log()?;
+        let (batches, metrics) = collect_scan(original.scan().build().await?).await?;
+        assert!(batches.is_empty());
+        assert_eq!(metrics.snapshot().files_planned, 0);
+        Ok::<_, Box<dyn Error>>(())
+    })
 }
 
 #[test]

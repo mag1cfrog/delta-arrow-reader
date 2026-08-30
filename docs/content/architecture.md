@@ -16,8 +16,9 @@ At a high level, the reader does three things:
    vectors and Delta schema changes, and returns batches as the application
    asks for them.
 
-Once loaded, a `DeltaTable` always points to the same snapshot. To read a newer
-snapshot, load the table again.
+Once loaded, a `DeltaTable` always points to the same snapshot. Its `refresh`
+method loads the latest snapshot into a new table and leaves the original
+unchanged.
 
 ## Remote I/O phases
 
@@ -39,8 +40,9 @@ The retained Delta scan metadata contains reconciled active `add` metadata and
 available file statistics, not raw JSON commit files. It belongs to one exact
 snapshot and remains in memory for the lifetime of that loaded table.
 Separately loaded tables do not share this memory. There is no TTL, eviction,
-persistence, incremental update, or background refresh; load another table to
-observe a newer snapshot.
+persistence, or background refresh. An explicit refresh can update the retained
+metadata from commits written after its version. If a newer checkpoint makes
+that impossible, Delta Kernel rebuilds the metadata from the checkpoint.
 
 ## Streaming API
 

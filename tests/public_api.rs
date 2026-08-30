@@ -370,6 +370,11 @@ fn datafusion_provider_contract_is_public() {
     }
     let construct: fn(DeltaTable, ScanOptions) -> Result<DeltaTableProvider, DeltaReaderError> =
         DeltaTableProvider::try_new;
+    async fn refresh(
+        provider: &DeltaTableProvider,
+    ) -> Result<DeltaTableProvider, DeltaReaderError> {
+        provider.refresh().await
+    }
     fn register(
         context: &datafusion::execution::context::SessionContext,
         name: String,
@@ -378,5 +383,5 @@ fn datafusion_provider_contract_is_public() {
     ) -> Result<TableRegistration, DeltaReaderError> {
         register_table(context, name, table, options)
     }
-    let _ = (construct, register, inspect_registration);
+    let _ = (construct, refresh, register, inspect_registration);
 }

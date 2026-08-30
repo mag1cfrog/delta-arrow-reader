@@ -81,8 +81,9 @@ and statistics pruning. Different queries can therefore select different
 files while sharing the result of Delta replay.
 
 The cache belongs to one loaded table. If the same location is loaded twice,
-the two table objects have separate caches. Both also stay fixed at the exact
-table version they loaded.
+the two table objects have separate caches. Each table stays fixed at its
+loaded version. Calling `refresh` creates another table instead of changing the
+existing one.
 
 ## Which mode should you use?
 
@@ -96,7 +97,7 @@ APIs.
 | Table loading | Returns without building a reusable scan cache | Waits for Delta replay and cache creation |
 | Memory while loaded | No reusable active-file cache | Keeps active-file metadata and statistics |
 | Each later scan | Replays Delta metadata, then prunes | Reuses Delta metadata, then prunes |
-| Seeing a newer version | Load a new table | Load a new table |
+| Seeing a newer version | `refresh` returns a new lazy table | `refresh` updates or reuses the retained cache |
 | Parquet metadata and data reads | Per query | Per query |
 
 Use no warmup unless you know the table will serve repeated queries and the
@@ -130,14 +131,32 @@ describe how the measurements were collected and what can affect them.
 
 ## Version and refresh behavior
 
-The cache lasts as long as its loaded table and represents one exact Delta
-version. Commits written later do not change what existing queries see. To use
-a newer version, load the table again and replace the old table or DataFusion
-registration.
+Every loaded table and cache represents one exact Delta version. Commits
+written later do not change that table or any scan already built from it.
+`DeltaTable::refresh` checks for the latest version and returns another
+immutable table. If no newer version exists, it reuses the existing snapshot,
+schema, and query-planning cache.
+
+With no warmup, the returned table has no retained active-file cache. Its scans
+continue to assemble scan metadata when they are built. With query-planning
+warmup, refresh passes the old version and retained active-file metadata to
+Delta Kernel. Delta Kernel reconciles commits written after that version. If a
+newer checkpoint prevents incremental reconciliation, it performs a full
+metadata replay from that checkpoint instead.
+
+Refresh returns an error rather than a partially updated table when the latest
+snapshot, schema, or retained query-planning metadata cannot be loaded. The
+caller can keep using the original table after such an error. A lazy table may
+load a newer unsupported protocol for inspection, but its scans still reject
+that protocol. Refreshing a warmed table fails if the newer protocol cannot be
+used to rebuild its query-planning cache.
+
+`DeltaTableProvider::refresh` applies the same table refresh and rebuilds its
+DataFusion schema when needed. It returns a new provider but does not replace a
+provider already registered in a `SessionContext`.
 
 The in-memory cache does not provide:
 
-- incremental refresh;
 - background polling;
 - TTL or eviction;
 - persistence across processes;
