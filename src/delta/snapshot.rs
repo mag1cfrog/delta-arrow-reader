@@ -21,6 +21,9 @@ const TRACING_TARGET: &str = "delta_arrow_reader";
 const SNAPSHOT_LOAD_STARTED_EVENT: &str = "snapshot_load.started";
 const SNAPSHOT_LOAD_COMPLETED_EVENT: &str = "snapshot_load.completed";
 const SNAPSHOT_LOAD_FAILED_EVENT: &str = "snapshot_load.failed";
+const SNAPSHOT_REFRESH_STARTED_EVENT: &str = "snapshot_refresh.started";
+const SNAPSHOT_REFRESH_COMPLETED_EVENT: &str = "snapshot_refresh.completed";
+const SNAPSHOT_REFRESH_FAILED_EVENT: &str = "snapshot_refresh.failed";
 const SCAN_METADATA_CACHE_BUILD_STARTED_EVENT: &str = "scan_metadata_cache_build.started";
 const SCAN_METADATA_CACHE_BUILD_COMPLETED_EVENT: &str = "scan_metadata_cache_build.completed";
 const SCAN_METADATA_CACHE_BUILD_FAILED_EVENT: &str = "scan_metadata_cache_build.failed";
@@ -139,6 +142,27 @@ impl ArrowTableSnapshot {
     }
 
     pub(crate) fn refresh(&self) -> Result<Self, DeltaReaderError> {
+        let previous_snapshot_version = self.version();
+        trace_snapshot_refresh_started(previous_snapshot_version);
+        let started_at = Instant::now();
+        let result = self.build_refreshed_snapshot();
+
+        match &result {
+            Ok(snapshot) => trace_snapshot_refresh_completed(
+                previous_snapshot_version,
+                snapshot,
+                started_at.elapsed().as_micros(),
+            ),
+            Err(error) => trace_snapshot_refresh_failed(
+                previous_snapshot_version,
+                started_at.elapsed().as_micros(),
+                error,
+            ),
+        }
+        result
+    }
+
+    fn build_refreshed_snapshot(&self) -> Result<Self, DeltaReaderError> {
         let snapshot = self
             .engine_context
             .refresh_snapshot(&self.snapshot)
@@ -344,6 +368,52 @@ fn trace_snapshot_load_failed(selection: &'static str, error: &DeltaReaderError)
         target: TRACING_TARGET,
         event = SNAPSHOT_LOAD_FAILED_EVENT,
         selection,
+        error_code = error.code(),
+        error_phase = error.phase().as_str()
+    );
+}
+
+fn trace_snapshot_refresh_started(previous_snapshot_version: u64) {
+    tracing::debug!(
+        target: TRACING_TARGET,
+        event = SNAPSHOT_REFRESH_STARTED_EVENT,
+        previous_snapshot_version
+    );
+}
+
+fn trace_snapshot_refresh_completed(
+    previous_snapshot_version: u64,
+    snapshot: &ArrowTableSnapshot,
+    elapsed_micros: u128,
+) {
+    let query_planning_cache_action = match (
+        snapshot.eager_scan_metadata.is_some(),
+        snapshot.version() == previous_snapshot_version,
+    ) {
+        (false, _) => "not_loaded",
+        (true, true) => "reused",
+        (true, false) => "refreshed",
+    };
+    tracing::debug!(
+        target: TRACING_TARGET,
+        event = SNAPSHOT_REFRESH_COMPLETED_EVENT,
+        previous_snapshot_version,
+        snapshot_version = snapshot.version(),
+        query_planning_cache_action,
+        elapsed_micros
+    );
+}
+
+fn trace_snapshot_refresh_failed(
+    previous_snapshot_version: u64,
+    elapsed_micros: u128,
+    error: &DeltaReaderError,
+) {
+    tracing::debug!(
+        target: TRACING_TARGET,
+        event = SNAPSHOT_REFRESH_FAILED_EVENT,
+        previous_snapshot_version,
+        elapsed_micros,
         error_code = error.code(),
         error_phase = error.phase().as_str()
     );
@@ -596,7 +666,9 @@ mod tests {
             let mut visitor = FieldVisitor::default();
             event.record(&mut visitor);
             if visitor.0.get("event").is_some_and(|name| {
-                name.starts_with("snapshot_load.") || name.starts_with("scan_metadata_cache_build.")
+                name.starts_with("snapshot_load.")
+                    || name.starts_with("snapshot_refresh.")
+                    || name.starts_with("scan_metadata_cache_build.")
             }) && let Some(events) = &self.0
                 && let Ok(mut events) = events.lock()
             {
@@ -1038,30 +1110,114 @@ mod tests {
     }
 
     #[test]
-    fn unchanged_refresh_reuses_the_same_query_planning_cache()
+    fn refresh_tracing_reports_cache_loading_refresh_and_reuse()
     -> Result<(), Box<dyn std::error::Error>> {
-        let table = DeltaLogTable::new("unchanged-refresh-cache")?;
+        let table = DeltaLogTable::new("refresh-cache-tracing")?;
+        let lazy_snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &DeltaStorageOptions::new(),
+            DeltaSnapshotSelection::Latest,
+        )?;
+        let warm_snapshot = lazy_snapshot.clone().materialize_eager_scan_metadata()?;
+        table.write_log(
+            2,
+            r#"{"add":{"path":"secret-refresh-object.parquet","partitionValues":{},"size":10,"modificationTime":1587968586000,"dataChange":true}}"#,
+        )?;
+
+        let (result, events) = capture_events(|| {
+            let refreshed_lazy = lazy_snapshot.refresh()?;
+            let refreshed_warm = warm_snapshot.refresh()?;
+            let unchanged_warm = refreshed_warm.refresh()?;
+            Ok::<_, DeltaReaderError>((refreshed_lazy, refreshed_warm, unchanged_warm))
+        });
+        let (refreshed_lazy, refreshed_warm, unchanged_warm) = result?;
+        let refreshed_cache = refreshed_warm
+            .eager_scan_metadata
+            .as_ref()
+            .ok_or("refreshed eager metadata missing")?;
+        let unchanged_cache = unchanged_warm
+            .eager_scan_metadata
+            .as_ref()
+            .ok_or("unchanged eager metadata missing")?;
+
+        assert_eq!(refreshed_lazy.version(), 2);
+        assert_eq!(refreshed_warm.version(), 2);
+        assert_eq!(unchanged_warm.version(), 2);
+        assert!(Arc::ptr_eq(refreshed_cache, unchanged_cache));
+        assert_eq!(events.len(), 6);
+        assert_eq!(
+            events
+                .iter()
+                .filter_map(|event| event.fields.get("query_planning_cache_action"))
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["not_loaded", "refreshed", "reused"]
+        );
+        assert!(events.chunks_exact(2).all(|events| {
+            events[0].fields.get("event").map(String::as_str) == Some("snapshot_refresh.started")
+                && events[1].fields.get("event").map(String::as_str)
+                    == Some("snapshot_refresh.completed")
+                && events[1]
+                    .fields
+                    .get("elapsed_micros")
+                    .is_some_and(|elapsed| elapsed.parse::<u128>().is_ok())
+        }));
+        let captured = format!("{events:?}");
+        assert!(!captured.contains("secret-refresh-object.parquet"));
+        Ok(())
+    }
+
+    #[test]
+    fn refresh_tracing_reports_bounded_failure_fields() -> Result<(), Box<dyn std::error::Error>> {
+        const INVALID_SIZE: &str = "secret-refresh-size";
+        const OBJECT_KEY: &str = "secret-refresh-object.parquet";
+        let table = DeltaLogTable::new("failed-refresh-tracing")?;
         let snapshot = load_delta_table_snapshot_blocking(
             &table.0.to_string_lossy(),
             &DeltaStorageOptions::new(),
             DeltaSnapshotSelection::Latest,
         )?
         .materialize_eager_scan_metadata()?;
-        let existing = Arc::clone(
-            snapshot
-                .eager_scan_metadata
-                .as_ref()
-                .ok_or("eager metadata missing")?,
+        table.write_log(
+            2,
+            &format!(
+                r#"{{"add":{{"path":"{OBJECT_KEY}","partitionValues":{{}},"size":"{INVALID_SIZE}","modificationTime":1587968586000,"dataChange":true}}}}"#,
+            ),
+        )?;
+
+        let (result, events) = capture_events(|| snapshot.refresh());
+        let error = match result {
+            Ok(_) => return Err("malformed refreshed metadata must fail".into()),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), "scan_planning");
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events[0].fields.get("event").map(String::as_str),
+            Some("snapshot_refresh.started")
         );
-
-        let refreshed_snapshot = snapshot.refresh()?;
-        let refreshed = refreshed_snapshot
-            .eager_scan_metadata
-            .as_ref()
-            .ok_or("refreshed eager metadata missing")?;
-
-        assert_eq!(refreshed_snapshot.version(), snapshot.version());
-        assert!(Arc::ptr_eq(&existing, refreshed));
+        assert_eq!(
+            events[1].fields.get("event").map(String::as_str),
+            Some("snapshot_refresh.failed")
+        );
+        assert_eq!(
+            events[1].fields.get("error_code").map(String::as_str),
+            Some("scan_planning")
+        );
+        assert_eq!(
+            events[1].fields.get("error_phase").map(String::as_str),
+            Some("scan_planning")
+        );
+        assert_eq!(events[1].fields.len(), 5);
+        events[1]
+            .fields
+            .get("elapsed_micros")
+            .ok_or("elapsed time missing")?
+            .parse::<u128>()?;
+        let captured = format!("{events:?}");
+        assert!(!captured.contains(INVALID_SIZE));
+        assert!(!captured.contains(OBJECT_KEY));
         Ok(())
     }
 
