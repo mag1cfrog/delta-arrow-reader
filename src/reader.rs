@@ -54,7 +54,7 @@ use crate::{
             load_kernel_table_snapshot,
         },
     },
-    error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu},
+    error::{DataFileReadSnafu, InvalidConfigurationSnafu, ScanPlanningSnafu, SnapshotLoadSnafu},
 };
 
 const TRACING_TARGET: &str = "delta_arrow_reader";
@@ -349,6 +349,28 @@ impl DeltaTable {
     /// Validates the loaded snapshot against the supported reader protocol.
     pub fn validate_protocol(&self) -> Result<(), DeltaReaderError> {
         validate_protocol(self.protocol())
+    }
+
+    /// Loads the latest version from this table and returns it as a new immutable table.
+    ///
+    /// The current table and any scans built from it remain fixed at their original version. A
+    /// query-planning metadata cache is refreshed for the new version and reused directly when the
+    /// version has not changed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the newer snapshot, schema, protocol, or retained query-planning
+    /// metadata cannot be loaded. No partially refreshed table is returned.
+    pub async fn refresh(&self) -> Result<Self, DeltaReaderError> {
+        let snapshot = Arc::clone(&self.snapshot);
+        let snapshot = tokio::task::spawn_blocking(move || snapshot.refresh())
+            .await
+            .boxed()
+            .context(SnapshotLoadSnafu {
+                reason: "snapshot_refresh_task_failed",
+            })
+            .and_then(|result| result)?;
+        Ok(Self::new(snapshot, self.execution_options))
     }
 
     /// Starts configuring a new single-use scan.

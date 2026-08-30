@@ -187,22 +187,47 @@ impl KernelScan {
         &self,
         engine_context: &DeltaKernelEngineContext,
     ) -> delta_kernel::DeltaResult<Arc<[RecordBatch]>> {
-        let mut batches = Vec::new();
-        for metadata in self.scan.scan_metadata(engine_context.engine.as_ref())? {
-            let metadata = metadata?;
-            let data = metadata.scan_files.apply_selection_vector()?;
-            let mut batch: RecordBatch = ArrowEngineData::try_from_engine_data(data)?.into();
-            // Cached replay rebuilds typed stats from JSON `stats`, so retaining
-            // `stats_parsed` would only duplicate the same statistics in memory.
-            if let Ok(index) = batch.schema().index_of("stats_parsed") {
-                batch.remove_column(index);
-            }
-            if batch.num_rows() > 0 {
-                batches.push(batch);
-            }
-        }
-        Ok(batches.into())
+        materialize_scan_metadata(self.scan.scan_metadata(engine_context.engine.as_ref())?)
     }
+
+    pub(crate) fn materialize_scan_metadata_from(
+        &self,
+        engine_context: &DeltaKernelEngineContext,
+        existing_version: u64,
+        existing_metadata: &[RecordBatch],
+    ) -> delta_kernel::DeltaResult<Arc<[RecordBatch]>> {
+        let existing_data = existing_metadata
+            .iter()
+            .cloned()
+            .map(|batch| Box::new(ArrowEngineData::new(batch)) as Box<dyn EngineData>)
+            .collect::<Vec<_>>();
+        materialize_scan_metadata(self.scan.scan_metadata_from(
+            engine_context.engine.as_ref(),
+            existing_version,
+            existing_data,
+            None,
+        )?)
+    }
+}
+
+fn materialize_scan_metadata(
+    metadata: impl Iterator<Item = delta_kernel::DeltaResult<ScanMetadata>>,
+) -> delta_kernel::DeltaResult<Arc<[RecordBatch]>> {
+    let mut batches = Vec::new();
+    for metadata in metadata {
+        let metadata = metadata?;
+        let data = metadata.scan_files.apply_selection_vector()?;
+        let mut batch: RecordBatch = ArrowEngineData::try_from_engine_data(data)?.into();
+        // Cached replay rebuilds typed stats from JSON `stats`, so retaining
+        // `stats_parsed` would only duplicate the same statistics in memory.
+        if let Ok(index) = batch.schema().index_of("stats_parsed") {
+            batch.remove_column(index);
+        }
+        if batch.num_rows() > 0 {
+            batches.push(batch);
+        }
+    }
+    Ok(batches.into())
 }
 
 fn collect_scan_files(
@@ -500,6 +525,15 @@ impl DeltaKernelEngineContext {
             builder = builder.at_version(version);
         }
         builder.build(self.engine.as_ref()).map(KernelSnapshot)
+    }
+
+    pub(crate) fn refresh_snapshot(
+        &self,
+        existing_snapshot: &KernelSnapshot,
+    ) -> delta_kernel::DeltaResult<KernelSnapshot> {
+        Snapshot::builder_from(Arc::clone(&existing_snapshot.0))
+            .build(self.engine.as_ref())
+            .map(KernelSnapshot)
     }
 
     #[allow(dead_code)]

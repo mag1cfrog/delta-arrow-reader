@@ -8,7 +8,7 @@ use snafu::ResultExt;
 use super::{
     kernel::{DeltaKernelEngineContext, KernelSnapshot, snapshot_arrow_schema},
     location::normalize_table_location,
-    protocol::DeltaProtocol,
+    protocol::{DeltaProtocol, validate_protocol},
 };
 use crate::{
     DeltaReaderError, DeltaSnapshotSelection, DeltaStorageOptions,
@@ -136,6 +136,53 @@ impl ArrowTableSnapshot {
                 Err(error)
             }
         }
+    }
+
+    pub(crate) fn refresh(&self) -> Result<Self, DeltaReaderError> {
+        let snapshot = self
+            .engine_context
+            .refresh_snapshot(&self.snapshot)
+            .boxed()
+            .context(SnapshotLoadSnafu {
+                reason: "snapshot_refresh_failed",
+            })?;
+        if snapshot.version() == self.version() {
+            return Ok(self.clone());
+        }
+        let protocol = DeltaProtocol::from_snapshot(&snapshot);
+        let schema = snapshot_arrow_schema(&snapshot)
+            .boxed()
+            .context(SchemaConversionSnafu {
+                reason: "schema_conversion_failed",
+            })?;
+        let eager_scan_metadata = match self.eager_scan_metadata.as_ref() {
+            None => None,
+            Some(metadata) => {
+                validate_protocol(&protocol)?;
+                let refreshed = snapshot
+                    .build_scan(None, None, true)
+                    .and_then(|scan| {
+                        scan.materialize_scan_metadata_from(
+                            self.engine_context.as_ref(),
+                            self.version(),
+                            metadata,
+                        )
+                    })
+                    .boxed()
+                    .context(ScanPlanningSnafu {
+                        reason: "query_planning_cache_refresh_failed",
+                    })?;
+                Some(refreshed)
+            }
+        };
+
+        Ok(Self {
+            snapshot,
+            protocol,
+            schema,
+            engine_context: Arc::clone(&self.engine_context),
+            eager_scan_metadata,
+        })
     }
 }
 
@@ -987,6 +1034,34 @@ mod tests {
         assert!(!captured.contains(OBJECT_KEY));
         assert!(!captured.contains(SECOND_OBJECT_KEY));
         assert!(!captured.contains(STORAGE_VALUE));
+        Ok(())
+    }
+
+    #[test]
+    fn unchanged_refresh_reuses_the_same_query_planning_cache()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let table = DeltaLogTable::new("unchanged-refresh-cache")?;
+        let snapshot = load_delta_table_snapshot_blocking(
+            &table.0.to_string_lossy(),
+            &DeltaStorageOptions::new(),
+            DeltaSnapshotSelection::Latest,
+        )?
+        .materialize_eager_scan_metadata()?;
+        let existing = Arc::clone(
+            snapshot
+                .eager_scan_metadata
+                .as_ref()
+                .ok_or("eager metadata missing")?,
+        );
+
+        let refreshed_snapshot = snapshot.refresh()?;
+        let refreshed = refreshed_snapshot
+            .eager_scan_metadata
+            .as_ref()
+            .ok_or("refreshed eager metadata missing")?;
+
+        assert_eq!(refreshed_snapshot.version(), snapshot.version());
+        assert!(Arc::ptr_eq(&existing, refreshed));
         Ok(())
     }
 
