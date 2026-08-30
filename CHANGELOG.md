@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## [0.6.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.3...v0.6.0) - 2026-08-30
+
+### Added
+
+- refresh loaded Delta tables and DataFusion providers without mutating active scans
+
+### Changed
+
+- [**breaking**] remove table-wide Parquet metadata warmup after production evaluation
+- [**breaking**] configure table metadata warmup through one builder API
+
+### Fixed
+
+- let adaptive Parquet planning choose exact ranges after estimation
+
+### Performance
+
+- benchmark incremental Delta metadata refresh strategies
+
 ## [0.5.3](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.2...v0.5.3) - 2026-08-29
 
 ### Added
