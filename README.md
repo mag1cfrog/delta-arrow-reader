@@ -25,6 +25,14 @@ pipelines that read Delta Lake tables. It is a good fit when:
 - Your application already works with Arrow data.
 - You want to run SQL through DataFusion.
 
+## Selective S3 performance
+
+On four pre-existing selective S3 queries, Delta Arrow Reader on a laptop beat
+Databricks Serverless SQL Small every time. It also beat Lakehouse//RT Small
+once and came within 33.8% on two more, while the same-machine delta-rs runs
+were up to 71.75 times slower. Read the
+[anonymized case study and inspect every measured run](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-s3/).
+
 ## Why not...
 
 Delta Arrow Reader has one job: read Delta tables and stream Arrow batches. The
