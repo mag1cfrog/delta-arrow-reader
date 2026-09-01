@@ -176,10 +176,9 @@ Delta pruning. "S3 bytes received" is Delta Arrow Reader's median instrumented
 data-file traffic. The reader did not download each selected file in full.
 
 Q2 makes the difference concrete. Delta statistics reduced an 18,287-file,
-1.19-TiB table to five files. Those files totaled 418.6 MiB, but column, row,
-page, and byte-range pruning reduced the observed data transfer to 23.5 MiB.
-The query returned 718 rows. Q4 reduced 3,471 files to six and transferred
-25.9 MiB from a 208-GiB table.
+1.19-TiB table to five files. Those files totaled 418.6 MiB, but the reader
+fetched only 23.5 MiB of data-file bytes. The query returned 718 rows. Q4
+reduced 3,471 files to six and transferred 25.9 MiB from a 208-GiB table.
 
 ## What each engine ran
 
@@ -213,10 +212,11 @@ reader had no query-result cache, Parquet data cache, or local disk cache.
 
 Databricks does not expose a SQL setting that disables its managed I/O cache on
 these warehouses. The benchmark therefore stopped and restarted each warehouse
-before every four-query round. Query History matched all 72 managed executions,
-including warmups, and reported `result_from_cache=false` and
-`read_cache_bytes=0` for every one. Warehouse restart, startup, and connection
-time remained outside the query timer.
+before every four-query round. Each new SQL Connector session set and verified
+`use_cached_result=false`. The private audit rejected statements with a missing
+cache field, `result_from_cache=true`, or nonzero `read_cache_bytes`. All 72
+managed executions, including warmups, passed these checks. Warehouse restart,
+startup, and connection time remained outside the query timer.
 
 Measurements collected after the managed I/O cache had been populated were
 excluded from the comparison. Comparing those warm-cache timings with local
@@ -229,10 +229,13 @@ The local benchmark ran inside WSL2 on a Dell laptop:
 | Component | Local configuration |
 | --- | --- |
 | CPU | Intel Core Ultra 7 265H, 6 performance cores, 8 efficiency cores, 2 low-power efficiency cores, 16 threads |
+| Host OS | Windows 11 Enterprise |
 | Memory | 32 GiB installed; WSL limited to 20 GB and reported 19 GiB usable |
-| WSL | Ubuntu 24.04 LTS, kernel `6.6.87.2-microsoft-standard-WSL2` |
+| Swap | WSL configured with 20 GB; neither local engine used swap |
+| Guest | Ubuntu 24.04 LTS, kernel `6.6.87.2-microsoft-standard-WSL2` |
+| Rust | 1.97.1 |
 | Storage | 512 GB NVMe; no local table-data cache used |
-| Network control | 140.392 Mbit/s public-S3 range probe, 0.257 s median time to first byte |
+| Network control | 140.392 Mbit/s public-S3 range probe, 0.257 s median time to first byte, measured immediately before the final local runs |
 
 "Small" is only a service label unless its scale is explained. Databricks'
 [published sizing table](https://docs.databricks.com/aws/en/compute/sql-warehouse/warehouse-behavior)
@@ -271,8 +274,8 @@ twice placed every query in every position exactly twice, so first-query costs
 did not stay attached to one workload.
 
 The two managed warehouses restarted before every round and opened a new SQL
-Connector kernel session. Each local engine ran its complete nine-round session
-in a fresh process. Within that process, the four loaded tables stayed alive,
+Connector session. Each local engine ran its complete nine-round session in a
+fresh process. Within that process, the four loaded tables stayed alive,
 matching a service that initializes its tables once and runs repeated queries.
 
 All 144 executions, including warmups, produced the same normalized logical
@@ -303,15 +306,16 @@ metadata snapshot.
 
 Serverless SQL Small lost all four queries to an Apache-2.0 reader running in
 WSL on a laptop with 19 GiB of usable memory. It also reported more remote bytes
-on all four. A managed warehouse was neither necessary nor faster for this
-selective workload.
+on all four. Serverless SQL's managed warehouse was neither necessary nor
+faster for this selective workload.
 
 RT won three queries and the aggregate comparison, but it did not win by
 selecting fewer files or reading materially less data. Delta Arrow Reader
 matched its file selection, moved comparable or fewer reported bytes, and
-still paid for public-WAN S3 access. The evidence points to network and storage
-placement as the clearest measured asymmetry, not a clearly superior selective
-read path.
+still reached S3 over a measured public-WAN path. RT's network and storage
+placement are undisclosed, but equal file selection and comparable transfer
+make network topology the most plausible explanation for much of the remaining
+gap, not a clearly superior selective read path.
 
 delta-rs was not competitive on the same machine. Delta Arrow Reader was
 faster on every query, up to 71.75 times faster, while delta-rs used 6.4 times
@@ -333,7 +337,8 @@ exclusive to a closed runtime.
 - The exact Serverless and RT hardware, storage path, runtime build, and Delta
   metadata lifecycle are not exposed.
 - Local table initialization was measured separately and excluded from query
-  latency. A one-shot caller would pay that 12.033-second cost.
+  latency. A one-shot caller that loads all four tables would pay that
+  12.033-second cost.
 - The local runs crossed a public WAN to S3, and Q2 showed substantial network
   variability.
 - The local engines used different DataFusion, Arrow, and Parquet versions.
@@ -348,10 +353,12 @@ query, and round, including the discarded warmups. It contains enough data to
 recompute every median, range, and aggregate ratio on this page without
 revealing SQL, names, paths, literals, identifiers, or result fingerprints.
 
-Validate the measurements and confirm that both SVGs match the CSV:
+Validate the measurements and confirm that all six generated SVG files match
+the CSV:
 
 ```console
 python benches/render_selective_s3_chart.py --check
 ```
 
-Run the script without `--check` to regenerate the light and dark charts.
+Run the script without `--check` to regenerate all three charts in light and
+dark themes.

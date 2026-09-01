@@ -5,11 +5,11 @@
 <rect width="840" height="400" fill="#111417"/>
 <text x="32" y="40" fill="#edf0f2" font-size="26" font-weight="500">RT did not read materially less</text>
 <text x="32" y="66" fill="#a2abb3" font-size="14">Median reported remote bytes per query, MiB</text>
-<circle cx="250" cy="99" r="4" fill="#5ecdb7"/>
+<circle cx="250" cy="99" r="4" fill="#7dd3fc"/>
 <text x="262" y="104" fill="#edf0f2" font-size="14" font-weight="400">Delta Arrow Reader</text>
-<polygon points="480,95 484,99 480,103 476,99" fill="#c0c7ce"/>
+<polygon points="480,95 484,99 480,103 476,99" fill="#a5b4fc"/>
 <text x="492" y="104" fill="#edf0f2" font-size="14" font-weight="400">Lakehouse//RT</text>
-<rect x="656" y="95" width="8" height="8" fill="#111417" stroke="#87929a" stroke-width="2"/>
+<rect x="656" y="95" width="8" height="8" fill="#111417" stroke="#94a3b8" stroke-width="2"/>
 <text x="672" y="104" fill="#edf0f2" font-size="14" font-weight="400">Serverless SQL</text>
 <line x1="95.00" y1="121" x2="95.00" y2="343" stroke="#2a3035"/>
 <text x="95.00" y="368" text-anchor="middle" fill="#a2abb3" font-size="13">0</text>
@@ -23,19 +23,19 @@
 <line x1="32" y1="232.00" x2="805" y2="232.00" stroke="#2a3035" stroke-dasharray="4 6"/>
 <line x1="32" y1="290.00" x2="805" y2="290.00" stroke="#2a3035" stroke-dasharray="4 6"/>
 <text x="32" y="151" fill="#edf0f2" font-size="18" font-weight="500">Q1</text>
-<circle cx="294.65" cy="135" r="5" fill="#5ecdb7"/>
-<polygon points="513.44,140 518.44,145 513.44,150 508.44000000000005,145" fill="#c0c7ce"/>
-<rect x="540.82" y="150" width="10" height="10" fill="#111417" stroke="#87929a" stroke-width="2"/>
+<circle cx="294.65" cy="135" r="5" fill="#7dd3fc"/>
+<polygon points="513.44,140 518.44,145 513.44,150 508.44000000000005,145" fill="#a5b4fc"/>
+<rect x="540.82" y="150" width="10" height="10" fill="#111417" stroke="#94a3b8" stroke-width="2"/>
 <text x="32" y="209" fill="#edf0f2" font-size="18" font-weight="500">Q2</text>
-<circle cx="650.19" cy="193" r="5" fill="#5ecdb7"/>
-<polygon points="632.24,198 637.24,203 632.24,208 627.24,203" fill="#c0c7ce"/>
-<rect x="683.62" y="208" width="10" height="10" fill="#111417" stroke="#87929a" stroke-width="2"/>
+<circle cx="650.19" cy="193" r="5" fill="#7dd3fc"/>
+<polygon points="632.24,198 637.24,203 632.24,208 627.24,203" fill="#a5b4fc"/>
+<rect x="683.62" y="208" width="10" height="10" fill="#111417" stroke="#94a3b8" stroke-width="2"/>
 <text x="32" y="267" fill="#edf0f2" font-size="18" font-weight="500">Q3</text>
-<circle cx="173.17" cy="251" r="5" fill="#5ecdb7"/>
-<polygon points="163.64,256 168.64,261 163.64,266 158.64,261" fill="#c0c7ce"/>
-<rect x="176.67" y="266" width="10" height="10" fill="#111417" stroke="#87929a" stroke-width="2"/>
+<circle cx="173.17" cy="251" r="5" fill="#7dd3fc"/>
+<polygon points="163.64,256 168.64,261 163.64,266 158.64,261" fill="#a5b4fc"/>
+<rect x="176.67" y="266" width="10" height="10" fill="#111417" stroke="#94a3b8" stroke-width="2"/>
 <text x="32" y="325" fill="#edf0f2" font-size="18" font-weight="500">Q4</text>
-<circle cx="707.62" cy="309" r="5" fill="#5ecdb7"/>
-<polygon points="698.75,314 703.75,319 698.75,324 693.75,319" fill="#c0c7ce"/>
-<rect x="729.13" y="324" width="10" height="10" fill="#111417" stroke="#87929a" stroke-width="2"/>
+<circle cx="707.62" cy="309" r="5" fill="#7dd3fc"/>
+<polygon points="698.75,314 703.75,319 698.75,324 693.75,319" fill="#a5b4fc"/>
+<rect x="729.13" y="324" width="10" height="10" fill="#111417" stroke="#94a3b8" stroke-width="2"/>
 </svg>

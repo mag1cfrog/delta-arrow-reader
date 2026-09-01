@@ -49,6 +49,17 @@ ENGINES = {
     ),
 }
 QUERIES = ("Q1", "Q2", "Q3", "Q4")
+EXPECTED_ORDERS = (
+    "Q1-Q2-Q4-Q3",
+    "Q1-Q2-Q4-Q3",
+    "Q2-Q3-Q1-Q4",
+    "Q3-Q4-Q2-Q1",
+    "Q4-Q1-Q3-Q2",
+    "Q1-Q2-Q4-Q3",
+    "Q2-Q3-Q1-Q4",
+    "Q3-Q4-Q2-Q1",
+    "Q4-Q1-Q3-Q2",
+)
 LATENCY_ENGINES = ("delta_arrow_reader", "lakehouse_rt", "serverless_sql")
 LATENCY_TICKS = (0.3, 1, 3, 10, 30)
 REMOTE_TICKS = (0, 10, 20, 30)
@@ -98,10 +109,10 @@ THEMES = {
         "muted": "#a2abb3",
         "grid": "#2a3035",
         "engines": {
-            "lakehouse_rt": "#c0c7ce",
-            "serverless_sql": "#87929a",
-            "delta_arrow_reader": "#5ecdb7",
-            "delta_rs": "#899198",
+            "lakehouse_rt": "#a5b4fc",
+            "serverless_sql": "#94a3b8",
+            "delta_arrow_reader": "#7dd3fc",
+            "delta_rs": "#94a3b8",
         },
     },
     "light": {
@@ -110,10 +121,10 @@ THEMES = {
         "muted": "#68737d",
         "grid": "#e7e9e7",
         "engines": {
-            "lakehouse_rt": "#3f4b59",
-            "serverless_sql": "#a0a7ad",
-            "delta_arrow_reader": "#0f766e",
-            "delta_rs": "#737b82",
+            "lakehouse_rt": "#7187a7",
+            "serverless_sql": "#8793a3",
+            "delta_arrow_reader": "#4c8fa8",
+            "delta_rs": "#8793a3",
         },
     },
 }
@@ -154,6 +165,7 @@ def validate(rows: list[dict[str, str]]) -> None:
         order = row["order"].split("-")
         assert 0 <= round_number <= 8
         assert row["included"] == str(round_number > 0).lower()
+        assert row["order"] == EXPECTED_ORDERS[round_number]
         assert sorted(order) == list(QUERIES)
         assert 1 <= position <= 4
         assert query == order[position - 1]
@@ -381,7 +393,9 @@ def legend(theme_name: str, y: float) -> list[str]:
     return parts
 
 
-def render(theme_name: str, values: dict[tuple[str, str], list[float]]) -> str:
+def render_wall_time(
+    theme_name: str, values: dict[tuple[str, str], list[float]]
+) -> str:
     theme = THEMES[theme_name]
     width = 840
     height = 425
@@ -707,7 +721,7 @@ def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for theme in THEMES:
         outputs = {
-            OUTPUT / f"selective-s3-wall-{theme}.svg": render(theme, values),
+            OUTPUT / f"selective-s3-wall-{theme}.svg": render_wall_time(theme, values),
             OUTPUT / f"selective-s3-remote-bytes-{theme}.svg": render_remote_bytes(
                 theme, remote_values
             ),

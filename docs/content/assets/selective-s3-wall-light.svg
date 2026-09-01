@@ -5,11 +5,11 @@
 <rect width="840" height="425" fill="#ffffff"/>
 <text x="32" y="40" fill="#20252b" font-size="26" font-weight="500">Selective S3 latency</text>
 <text x="32" y="66" fill="#68737d" font-size="14">p50 and min-max over 8 measured runs, seconds (log scale). Lower is faster.</text>
-<circle cx="250" cy="99" r="4" fill="#0f766e"/>
+<circle cx="250" cy="99" r="4" fill="#4c8fa8"/>
 <text x="262" y="104" fill="#20252b" font-size="14" font-weight="400">Delta Arrow Reader</text>
-<polygon points="480,95 484,99 480,103 476,99" fill="#3f4b59"/>
+<polygon points="480,95 484,99 480,103 476,99" fill="#7187a7"/>
 <text x="492" y="104" fill="#20252b" font-size="14" font-weight="400">Lakehouse//RT</text>
-<rect x="656" y="95" width="8" height="8" fill="#ffffff" stroke="#a0a7ad" stroke-width="2"/>
+<rect x="656" y="95" width="8" height="8" fill="#ffffff" stroke="#8793a3" stroke-width="2"/>
 <text x="672" y="104" fill="#20252b" font-size="14" font-weight="400">Serverless SQL</text>
 <line x1="95.00" y1="121" x2="95.00" y2="361" stroke="#e7e9e7"/>
 <text x="95.00" y="386" text-anchor="middle" fill="#68737d" font-size="13">0.3</text>
@@ -22,55 +22,55 @@
 <line x1="805.00" y1="121" x2="805.00" y2="361" stroke="#e7e9e7"/>
 <text x="805.00" y="386" text-anchor="middle" fill="#68737d" font-size="13">30</text>
 <text x="32" y="151" fill="#20252b" font-size="18" font-weight="500">Q1</text>
-<line x1="247.76" y1="134" x2="370.21" y2="134" stroke="#0f766e" stroke-width="1.5"/>
-<line x1="247.76" y1="131" x2="247.76" y2="137" stroke="#0f766e" stroke-width="1.5"/>
-<line x1="370.21" y1="131" x2="370.21" y2="137" stroke="#0f766e" stroke-width="1.5"/>
-<circle cx="289.45" cy="134" r="5" fill="#0f766e"/>
-<line x1="259.12" y1="145" x2="300.53" y2="145" stroke="#3f4b59" stroke-width="1.5"/>
-<line x1="259.12" y1="142" x2="259.12" y2="148" stroke="#3f4b59" stroke-width="1.5"/>
-<line x1="300.53" y1="142" x2="300.53" y2="148" stroke="#3f4b59" stroke-width="1.5"/>
-<polygon points="274.18,140 279.18,145 274.18,150 269.18,145" fill="#3f4b59"/>
-<line x1="311.40" y1="156" x2="497.90" y2="156" stroke="#a0a7ad" stroke-width="1.5"/>
-<line x1="311.40" y1="153" x2="311.40" y2="159" stroke="#a0a7ad" stroke-width="1.5"/>
-<line x1="497.90" y1="153" x2="497.90" y2="159" stroke="#a0a7ad" stroke-width="1.5"/>
-<rect x="332.69" y="151" width="10" height="10" fill="#ffffff" stroke="#a0a7ad" stroke-width="2"/>
+<line x1="247.76" y1="134" x2="370.21" y2="134" stroke="#4c8fa8" stroke-width="1.5"/>
+<line x1="247.76" y1="131" x2="247.76" y2="137" stroke="#4c8fa8" stroke-width="1.5"/>
+<line x1="370.21" y1="131" x2="370.21" y2="137" stroke="#4c8fa8" stroke-width="1.5"/>
+<circle cx="289.45" cy="134" r="5" fill="#4c8fa8"/>
+<line x1="259.12" y1="145" x2="300.53" y2="145" stroke="#7187a7" stroke-width="1.5"/>
+<line x1="259.12" y1="142" x2="259.12" y2="148" stroke="#7187a7" stroke-width="1.5"/>
+<line x1="300.53" y1="142" x2="300.53" y2="148" stroke="#7187a7" stroke-width="1.5"/>
+<polygon points="274.18,140 279.18,145 274.18,150 269.18,145" fill="#7187a7"/>
+<line x1="311.40" y1="156" x2="497.90" y2="156" stroke="#8793a3" stroke-width="1.5"/>
+<line x1="311.40" y1="153" x2="311.40" y2="159" stroke="#8793a3" stroke-width="1.5"/>
+<line x1="497.90" y1="153" x2="497.90" y2="159" stroke="#8793a3" stroke-width="1.5"/>
+<rect x="332.69" y="151" width="10" height="10" fill="#ffffff" stroke="#8793a3" stroke-width="2"/>
 <text x="32" y="215" fill="#20252b" font-size="18" font-weight="500">Q2</text>
-<line x1="373.86" y1="198" x2="745.43" y2="198" stroke="#0f766e" stroke-width="1.5"/>
-<line x1="373.86" y1="195" x2="373.86" y2="201" stroke="#0f766e" stroke-width="1.5"/>
-<line x1="745.43" y1="195" x2="745.43" y2="201" stroke="#0f766e" stroke-width="1.5"/>
-<circle cx="483.7" cy="198" r="5" fill="#0f766e"/>
-<line x1="339.84" y1="209" x2="383.51" y2="209" stroke="#3f4b59" stroke-width="1.5"/>
-<line x1="339.84" y1="206" x2="339.84" y2="212" stroke="#3f4b59" stroke-width="1.5"/>
-<line x1="383.51" y1="206" x2="383.51" y2="212" stroke="#3f4b59" stroke-width="1.5"/>
-<polygon points="353.19,204 358.19,209 353.19,214 348.19,209" fill="#3f4b59"/>
-<line x1="428.37" y1="220" x2="561.93" y2="220" stroke="#a0a7ad" stroke-width="1.5"/>
-<line x1="428.37" y1="217" x2="428.37" y2="223" stroke="#a0a7ad" stroke-width="1.5"/>
-<line x1="561.93" y1="217" x2="561.93" y2="223" stroke="#a0a7ad" stroke-width="1.5"/>
-<rect x="484.64" y="215" width="10" height="10" fill="#ffffff" stroke="#a0a7ad" stroke-width="2"/>
+<line x1="373.86" y1="198" x2="745.43" y2="198" stroke="#4c8fa8" stroke-width="1.5"/>
+<line x1="373.86" y1="195" x2="373.86" y2="201" stroke="#4c8fa8" stroke-width="1.5"/>
+<line x1="745.43" y1="195" x2="745.43" y2="201" stroke="#4c8fa8" stroke-width="1.5"/>
+<circle cx="483.7" cy="198" r="5" fill="#4c8fa8"/>
+<line x1="339.84" y1="209" x2="383.51" y2="209" stroke="#7187a7" stroke-width="1.5"/>
+<line x1="339.84" y1="206" x2="339.84" y2="212" stroke="#7187a7" stroke-width="1.5"/>
+<line x1="383.51" y1="206" x2="383.51" y2="212" stroke="#7187a7" stroke-width="1.5"/>
+<polygon points="353.19,204 358.19,209 353.19,214 348.19,209" fill="#7187a7"/>
+<line x1="428.37" y1="220" x2="561.93" y2="220" stroke="#8793a3" stroke-width="1.5"/>
+<line x1="428.37" y1="217" x2="428.37" y2="223" stroke="#8793a3" stroke-width="1.5"/>
+<line x1="561.93" y1="217" x2="561.93" y2="223" stroke="#8793a3" stroke-width="1.5"/>
+<rect x="484.64" y="215" width="10" height="10" fill="#ffffff" stroke="#8793a3" stroke-width="2"/>
 <text x="32" y="279" fill="#20252b" font-size="18" font-weight="500">Q3</text>
-<line x1="136.49" y1="262" x2="280.28" y2="262" stroke="#0f766e" stroke-width="1.5"/>
-<line x1="136.49" y1="259" x2="136.49" y2="265" stroke="#0f766e" stroke-width="1.5"/>
-<line x1="280.28" y1="259" x2="280.28" y2="265" stroke="#0f766e" stroke-width="1.5"/>
-<circle cx="247.41" cy="262" r="5" fill="#0f766e"/>
-<line x1="250.05" y1="273" x2="305.99" y2="273" stroke="#3f4b59" stroke-width="1.5"/>
-<line x1="250.05" y1="270" x2="250.05" y2="276" stroke="#3f4b59" stroke-width="1.5"/>
-<line x1="305.99" y1="270" x2="305.99" y2="276" stroke="#3f4b59" stroke-width="1.5"/>
-<polygon points="281.24,268 286.24,273 281.24,278 276.24,273" fill="#3f4b59"/>
-<line x1="305.99" y1="284" x2="503.16" y2="284" stroke="#a0a7ad" stroke-width="1.5"/>
-<line x1="305.99" y1="281" x2="305.99" y2="287" stroke="#a0a7ad" stroke-width="1.5"/>
-<line x1="503.16" y1="281" x2="503.16" y2="287" stroke="#a0a7ad" stroke-width="1.5"/>
-<rect x="322.96" y="279" width="10" height="10" fill="#ffffff" stroke="#a0a7ad" stroke-width="2"/>
+<line x1="136.49" y1="262" x2="280.28" y2="262" stroke="#4c8fa8" stroke-width="1.5"/>
+<line x1="136.49" y1="259" x2="136.49" y2="265" stroke="#4c8fa8" stroke-width="1.5"/>
+<line x1="280.28" y1="259" x2="280.28" y2="265" stroke="#4c8fa8" stroke-width="1.5"/>
+<circle cx="247.41" cy="262" r="5" fill="#4c8fa8"/>
+<line x1="250.05" y1="273" x2="305.99" y2="273" stroke="#7187a7" stroke-width="1.5"/>
+<line x1="250.05" y1="270" x2="250.05" y2="276" stroke="#7187a7" stroke-width="1.5"/>
+<line x1="305.99" y1="270" x2="305.99" y2="276" stroke="#7187a7" stroke-width="1.5"/>
+<polygon points="281.24,268 286.24,273 281.24,278 276.24,273" fill="#7187a7"/>
+<line x1="305.99" y1="284" x2="503.16" y2="284" stroke="#8793a3" stroke-width="1.5"/>
+<line x1="305.99" y1="281" x2="305.99" y2="287" stroke="#8793a3" stroke-width="1.5"/>
+<line x1="503.16" y1="281" x2="503.16" y2="287" stroke="#8793a3" stroke-width="1.5"/>
+<rect x="322.96" y="279" width="10" height="10" fill="#ffffff" stroke="#8793a3" stroke-width="2"/>
 <text x="32" y="343" fill="#20252b" font-size="18" font-weight="500">Q4</text>
-<line x1="274.99" y1="326" x2="515.58" y2="326" stroke="#0f766e" stroke-width="1.5"/>
-<line x1="274.99" y1="323" x2="274.99" y2="329" stroke="#0f766e" stroke-width="1.5"/>
-<line x1="515.58" y1="323" x2="515.58" y2="329" stroke="#0f766e" stroke-width="1.5"/>
-<circle cx="365.62" cy="326" r="5" fill="#0f766e"/>
-<line x1="290.40" y1="337" x2="368.92" y2="337" stroke="#3f4b59" stroke-width="1.5"/>
-<line x1="290.40" y1="334" x2="290.40" y2="340" stroke="#3f4b59" stroke-width="1.5"/>
-<line x1="368.92" y1="334" x2="368.92" y2="340" stroke="#3f4b59" stroke-width="1.5"/>
-<polygon points="320.71,332 325.71,337 320.71,342 315.71,337" fill="#3f4b59"/>
-<line x1="397.67" y1="348" x2="567.41" y2="348" stroke="#a0a7ad" stroke-width="1.5"/>
-<line x1="397.67" y1="345" x2="397.67" y2="351" stroke="#a0a7ad" stroke-width="1.5"/>
-<line x1="567.41" y1="345" x2="567.41" y2="351" stroke="#a0a7ad" stroke-width="1.5"/>
-<rect x="435.52" y="343" width="10" height="10" fill="#ffffff" stroke="#a0a7ad" stroke-width="2"/>
+<line x1="274.99" y1="326" x2="515.58" y2="326" stroke="#4c8fa8" stroke-width="1.5"/>
+<line x1="274.99" y1="323" x2="274.99" y2="329" stroke="#4c8fa8" stroke-width="1.5"/>
+<line x1="515.58" y1="323" x2="515.58" y2="329" stroke="#4c8fa8" stroke-width="1.5"/>
+<circle cx="365.62" cy="326" r="5" fill="#4c8fa8"/>
+<line x1="290.40" y1="337" x2="368.92" y2="337" stroke="#7187a7" stroke-width="1.5"/>
+<line x1="290.40" y1="334" x2="290.40" y2="340" stroke="#7187a7" stroke-width="1.5"/>
+<line x1="368.92" y1="334" x2="368.92" y2="340" stroke="#7187a7" stroke-width="1.5"/>
+<polygon points="320.71,332 325.71,337 320.71,342 315.71,337" fill="#7187a7"/>
+<line x1="397.67" y1="348" x2="567.41" y2="348" stroke="#8793a3" stroke-width="1.5"/>
+<line x1="397.67" y1="345" x2="397.67" y2="351" stroke="#8793a3" stroke-width="1.5"/>
+<line x1="567.41" y1="345" x2="567.41" y2="351" stroke="#8793a3" stroke-width="1.5"/>
+<rect x="435.52" y="343" width="10" height="10" fill="#ffffff" stroke="#8793a3" stroke-width="2"/>
 </svg>
