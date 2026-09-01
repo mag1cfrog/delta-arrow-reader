@@ -113,16 +113,23 @@ is checked in.
 Delta Arrow Reader and delta-rs used two builds of the same Rust harness. Each
 reader kept the DataFusion version from its released dependency graph: 54.1.0
 for Delta Arrow Reader and 53.1.0 for delta-rs. Both builds used Arrow and
-Parquet 58.4.0. DuckDB, Polars, and Daft each ran in a separate Python process.
-Their measured time covers the path from opening the Delta table to producing
-Arrow batches through PyArrow 25.0.1, but not interpreter startup or imports.
-Linux process accounting recorded wall time, CPU use, memory use, page faults,
-and context switches.
+Parquet 58.4.0. DuckDB, Polars, and Daft each ran in a separate Python process
+and returned batches through PyArrow 25.0.1.
+
+Wall time covers table opening through consumption of the final Arrow batch.
+The timer starts after process startup and, for the Python readers, after
+imports. CPU time and peak RSS come from Linux process accounting around the
+whole child process, so those figures include startup and imports.
 
 All 146 measured processes completed successfully. Their row counts and logical
 schemas matched the frozen workload expectations. Both deletion vectors in the
 reference table removed the same 43 rows, and the generated table removed the
 expected 200 rows.
+
+The [anonymized per-run results](benchmarks/reader-results.csv) include the
+timing, resource use, and parity outcome for all 146 measured processes, along
+with the three unsupported Daft probes. The chart generator validates the file
+and computes the plotted medians.
 
 The readers did not always represent values in memory in exactly the same way.
 We allowed differences in string encoding, timestamp units, dictionary

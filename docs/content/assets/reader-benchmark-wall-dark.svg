@@ -53,5 +53,5 @@
 <rect x="1014.9000000000001" y="384" width="24" height="116" rx="4" fill="#69727e"/>
 <line x1="92" y1="500" x2="1148" y2="500" stroke="#29303a"/>
 <text x="1148" y="144" text-anchor="end" fill="#98a2b0" font-size="13">Seconds</text>
-<text x="44" y="586" fill="#98a2b0" font-size="13">Local MinIO | 16 logical CPUs | process startup excluded</text>
+<text x="44" y="586" fill="#98a2b0" font-size="13">Local MinIO | 16 logical CPUs | Wall timing excludes process startup and Python imports</text>
 </svg>

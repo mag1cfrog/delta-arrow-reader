@@ -34,24 +34,24 @@
 <rect x="201.1" y="497" width="24" height="3" rx="4" fill="#bae6fd"/>
 <rect x="232.1" y="493" width="24" height="7" rx="4" fill="#a7f3d0"/>
 <text x="408.79999999999995" y="530" text-anchor="middle" fill="#1f2328" font-size="16" font-weight="500">delta-rs</text>
-<rect x="350.29999999999995" y="458" width="24" height="42" rx="4" fill="#c5cbd3"/>
-<rect x="381.29999999999995" y="405" width="24" height="95" rx="4" fill="#c5cbd3"/>
-<rect x="412.29999999999995" y="497" width="24" height="3" rx="4" fill="#c5cbd3"/>
-<rect x="443.29999999999995" y="487" width="24" height="13" rx="4" fill="#c5cbd3"/>
+<rect x="350.29999999999995" y="458" width="24" height="42" rx="4" fill="#87909a"/>
+<rect x="381.29999999999995" y="405" width="24" height="95" rx="4" fill="#87909a"/>
+<rect x="412.29999999999995" y="497" width="24" height="3" rx="4" fill="#87909a"/>
+<rect x="443.29999999999995" y="487" width="24" height="13" rx="4" fill="#87909a"/>
 <text x="620.0" y="530" text-anchor="middle" fill="#1f2328" font-size="16" font-weight="500">DuckDB</text>
-<rect x="561.5" y="438" width="24" height="62" rx="4" fill="#89929d"/>
-<rect x="592.5" y="284" width="24" height="216" rx="4" fill="#89929d"/>
-<rect x="623.5" y="495" width="24" height="5" rx="4" fill="#89929d"/>
-<rect x="654.5" y="491" width="24" height="9" rx="4" fill="#89929d"/>
+<rect x="561.5" y="438" width="24" height="62" rx="4" fill="#69727e"/>
+<rect x="592.5" y="284" width="24" height="216" rx="4" fill="#69727e"/>
+<rect x="623.5" y="495" width="24" height="5" rx="4" fill="#69727e"/>
+<rect x="654.5" y="491" width="24" height="9" rx="4" fill="#69727e"/>
 <text x="831.1999999999999" y="530" text-anchor="middle" fill="#1f2328" font-size="16" font-weight="500">Polars</text>
-<rect x="772.6999999999999" y="411" width="24" height="89" rx="4" fill="#89929d"/>
-<rect x="803.6999999999999" y="373" width="24" height="127" rx="4" fill="#89929d"/>
-<rect x="834.6999999999999" y="494" width="24" height="6" rx="4" fill="#89929d"/>
-<rect x="865.6999999999999" y="488" width="24" height="12" rx="4" fill="#89929d"/>
+<rect x="772.6999999999999" y="411" width="24" height="89" rx="4" fill="#69727e"/>
+<rect x="803.6999999999999" y="373" width="24" height="127" rx="4" fill="#69727e"/>
+<rect x="834.6999999999999" y="494" width="24" height="6" rx="4" fill="#69727e"/>
+<rect x="865.6999999999999" y="488" width="24" height="12" rx="4" fill="#69727e"/>
 <text x="1042.4" y="530" text-anchor="middle" fill="#1f2328" font-size="16" font-weight="500">Daft</text>
 <text x="1042.4" y="549" text-anchor="middle" fill="#68707d" font-size="12">3 workloads not supported</text>
-<rect x="1014.9000000000001" y="185" width="24" height="315" rx="4" fill="#89929d"/>
+<rect x="1014.9000000000001" y="185" width="24" height="315" rx="4" fill="#69727e"/>
 <line x1="92" y1="500" x2="1148" y2="500" stroke="#d9dee6"/>
 <text x="1148" y="144" text-anchor="end" fill="#68707d" font-size="13">CPU seconds</text>
-<text x="44" y="586" fill="#68707d" font-size="13">Local MinIO | 16 logical CPUs | process startup excluded</text>
+<text x="44" y="586" fill="#68707d" font-size="13">Local MinIO | 16 logical CPUs | Whole-process CPU includes startup and Python imports</text>
 </svg>

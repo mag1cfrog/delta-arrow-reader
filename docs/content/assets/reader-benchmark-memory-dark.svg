@@ -36,7 +36,7 @@
 <text x="408.79999999999995" y="530" text-anchor="middle" fill="#f0f2f5" font-size="16" font-weight="500">delta-rs</text>
 <rect x="350.29999999999995" y="485" width="24" height="15" rx="4" fill="#c2c8d0"/>
 <rect x="381.29999999999995" y="432" width="24" height="68" rx="4" fill="#c2c8d0"/>
-<rect x="412.29999999999995" y="486" width="24" height="14" rx="4" fill="#c2c8d0"/>
+<rect x="412.29999999999995" y="487" width="24" height="13" rx="4" fill="#c2c8d0"/>
 <rect x="443.29999999999995" y="487" width="24" height="13" rx="4" fill="#c2c8d0"/>
 <text x="620.0" y="530" text-anchor="middle" fill="#f0f2f5" font-size="16" font-weight="500">DuckDB</text>
 <rect x="561.5" y="464" width="24" height="36" rx="4" fill="#69727e"/>
@@ -53,5 +53,5 @@
 <rect x="1014.9000000000001" y="191" width="24" height="309" rx="4" fill="#69727e"/>
 <line x1="92" y1="500" x2="1148" y2="500" stroke="#29303a"/>
 <text x="1148" y="144" text-anchor="end" fill="#98a2b0" font-size="13">Peak RSS (MiB)</text>
-<text x="44" y="586" fill="#98a2b0" font-size="13">Local MinIO | 16 logical CPUs | process startup excluded</text>
+<text x="44" y="586" fill="#98a2b0" font-size="13">Local MinIO | 16 logical CPUs | Whole-process RSS includes startup and Python imports</text>
 </svg>
