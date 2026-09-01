@@ -37,6 +37,8 @@ THEMES = {
         "muted": "#98a2b0",
         "grid": "#29303a",
         "series": ("#a5b4fc", "#c4b5fd", "#7dd3fc", "#6ee7b7"),
+        "delta_rs": "#c2c8d0",
+        "other": "#69727e",
     },
     "light": {
         "background": "#ffffff",
@@ -45,6 +47,8 @@ THEMES = {
         "muted": "#68707d",
         "grid": "#d9dee6",
         "series": ("#c7d2fe", "#ddd6fe", "#bae6fd", "#a7f3d0"),
+        "delta_rs": "#c5cbd3",
+        "other": "#89929d",
     },
 }
 
@@ -124,8 +128,9 @@ def render(
         '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="610" '
         'viewBox="0 0 1200 610" role="img" aria-labelledby="title description">',
         f'<title id="title">Delta reader {escape(title.lower())} comparison</title>',
-        f'<desc id="description">{escape(guidance)}. Delta Arrow Reader is '
-        'highlighted. Each color represents one workload.</desc>',
+        f'<desc id="description">{escape(guidance)}. Delta Arrow Reader keeps '
+        'the workload colors shown in the legend. delta-rs is light gray and '
+        'the other candidates are darker gray. Bars remain in legend order.</desc>',
         '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
         'BlinkMacSystemFont,"Segoe UI",sans-serif}</style>',
         '<defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1">'
@@ -199,7 +204,12 @@ def render(
                 - cluster_width / 2
                 + workload_index * (bar_width + bar_gap)
             )
-            color = theme["series"][workload_index]
+            if reader == "Delta Arrow Reader":
+                color = theme["series"][workload_index]
+            elif reader == "delta-rs":
+                color = theme["delta_rs"]
+            else:
+                color = theme["other"]
             parts.append(
                 f'<rect x="{bar_x}" y="{plot_bottom - height}" '
                 f'width="{bar_width}" height="{height}" rx="4" fill="{color}"/>'

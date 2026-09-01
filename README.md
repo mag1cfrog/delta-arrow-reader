@@ -57,9 +57,9 @@ distributed system just to stream Arrow batches.
 ### The "read everything" engines
 
 DuckDB, Polars, and Daft aim to be one engine for many formats. For Delta reads,
-the results were poor. DuckDB took 5.8-14.6 times as long as Delta Arrow Reader,
-and Polars took 1.7-20 times as long. Daft managed only the text projection out
-of four workloads; it took 2.1 times as long and rejected the deletion-vector
+the results were poor. DuckDB took 5.1-13.1 times as long as Delta Arrow Reader,
+and Polars took 1.6-22.7 times as long. Daft managed only the text projection out
+of four workloads; it took 2.0 times as long and rejected the deletion-vector
 tables. All three also used more memory in every comparable run. See the
 [benchmark setup and complete results](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/).
 
@@ -71,9 +71,9 @@ delta-rs is the closest alternative, but it also covers the full Delta
 lifecycle, including writes. Delta Arrow Reader narrows that scope to
 asynchronous reads, bounded memory, Arrow streaming, and efficient deletion
 vectors. Across the two projection workloads, Delta Arrow Reader ranged from
-roughly even with delta-rs to finishing 24% sooner. **On deletion-vector tables,
-delta-rs took three times as long to return one live row and seven times as long
-to scan the full table.**
+roughly even with delta-rs to finishing 25% sooner. **On deletion-vector tables,
+delta-rs took 3.7 times as long to return one live row and 4.8 times as long to
+scan the full table.**
 
 That gap matters because Databricks now
 [recommends deletion vectors for most tables and is rolling out automatic enablement for new tables](https://docs.databricks.com/aws/en/admin/workspace-settings/deletion-vectors).

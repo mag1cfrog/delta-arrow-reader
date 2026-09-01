@@ -23,19 +23,23 @@ Each value is the median after one warmup run.
 
 | Workload | Delta Arrow Reader | delta-rs | DuckDB | Polars | Daft |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Mixed-column projection | 0.873 s | 1.143 s | 12.246 s | 3.152 s | Unsupported |
-| 3 GB text projection | 2.254 s | 2.584 s | 13.063 s | 3.866 s | 4.750 s |
-| Read one row from a table with deletion vectors | 0.0269 s | 0.0820 s | 0.3920 s | 0.5371 s | Unsupported |
-| Scan a full table with deletion vectors | 0.1548 s | 1.0834 s | 1.0818 s | 0.8838 s | Unsupported |
+| Mixed-column projection | 0.809 s | 1.084 s | 10.580 s | 2.742 s | Unsupported |
+| 3 GB text projection | 2.555 s | 2.736 s | 13.003 s | 3.971 s | 4.984 s |
+| Read one row from a table with deletion vectors | 0.0220 s | 0.0820 s | 0.2612 s | 0.4991 s | Unsupported |
+| Scan a full table with deletion vectors | 0.1161 s | 0.5572 s | 0.8777 s | 0.8578 s | Unsupported |
 
-Compared with Delta Arrow Reader, Polars took 3.61 times as long on the
-mixed-column projection, 1.71 times as long on the text projection, 19.95 times
-as long on the one-row deletion-vector read, and 5.71 times as long on the full
-deletion-vector scan. Daft took 2.11 times as long on the one workload it could
+delta-rs took 1.34 times as long on the mixed-column projection, 3.73 times as
+long on the one-row deletion-vector read, and 4.80 times as long on the full
+deletion-vector scan.
+
+Compared with Delta Arrow Reader, Polars took 3.39 times as long on the
+mixed-column projection, 1.55 times as long on the text projection, 22.7 times
+as long on the one-row deletion-vector read, and 7.39 times as long on the full
+deletion-vector scan. Daft took 1.95 times as long on the one workload it could
 run.
 
-On the text projection, Delta Arrow Reader took 2.206-2.791 seconds and delta-rs
-took 2.239-4.902 seconds. Because those ranges overlap, we do not treat the
+On the text projection, Delta Arrow Reader took 2.252-2.739 seconds and delta-rs
+took 2.447-2.969 seconds. Because those ranges overlap, we do not treat the
 difference between their medians as conclusive. The Delta Arrow Reader range
 did not overlap the Polars or Daft range on that workload.
 
@@ -56,10 +60,10 @@ time and median peak memory use:
 
 | Workload | Delta Arrow Reader | delta-rs | DuckDB | Polars | Daft |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Mixed-column projection | 6.53 s / 334 MiB | 6.09 s / 293 MiB | 10.25 s / 721 MiB | 13.72 s / 1,359 MiB | Unsupported |
-| 3 GB text projection | 18.17 s / 1,760 MiB | 16.33 s / 1,677 MiB | 31.07 s / 5,186 MiB | 18.87 s / 3,209 MiB | 43.65 s / 6,263 MiB |
-| Read one row with deletion vectors | 0.051 s / 58 MiB | 0.275 s / 266 MiB | 0.816 s / 306 MiB | 0.942 s / 447 MiB | Unsupported |
-| Full deletion-vector scan | 1.04 s / 67 MiB | 2.27 s / 266 MiB | 1.39 s / 316 MiB | 1.81 s / 580 MiB | Unsupported |
+| Mixed-column projection | 6.42 s / 325 MiB | 5.95 s / 303 MiB | 8.87 s / 716 MiB | 12.77 s / 1,339 MiB | Unsupported |
+| 3 GB text projection | 15.59 s / 1,539 MiB | 13.55 s / 1,362 MiB | 30.92 s / 5,201 MiB | 18.12 s / 3,146 MiB | 44.98 s / 6,186 MiB |
+| Read one row with deletion vectors | 0.046 s / 57 MiB | 0.292 s / 270 MiB | 0.730 s / 306 MiB | 0.869 s / 445 MiB | Unsupported |
+| Full deletion-vector scan | 1.02 s / 64 MiB | 1.86 s / 269 MiB | 1.24 s / 315 MiB | 1.66 s / 561 MiB | Unsupported |
 
 Each cell shows CPU time followed by peak memory. Delta Arrow Reader used
 slightly more CPU and memory than delta-rs on the two projection workloads. It
@@ -106,12 +110,14 @@ every ordered pair of adjacent readers appeared twice. The exact
 [run-order generator](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/benches/run_order.py)
 is checked in.
 
-Delta Arrow Reader and delta-rs used the same Rust harness with DataFusion
-54.1.0 and Arrow/Parquet 58.4.0. DuckDB, Polars, and Daft each ran in a separate
-Python process. Their measured time covers the path from opening the Delta
-table to producing Arrow batches, but not interpreter startup or imports. Linux
-process accounting recorded wall time, CPU use, memory use, page faults, and
-context switches.
+Delta Arrow Reader and delta-rs used two builds of the same Rust harness. Each
+reader kept the DataFusion version from its released dependency graph: 54.1.0
+for Delta Arrow Reader and 53.1.0 for delta-rs. Both builds used Arrow and
+Parquet 58.4.0. DuckDB, Polars, and Daft each ran in a separate Python process.
+Their measured time covers the path from opening the Delta table to producing
+Arrow batches through PyArrow 25.0.1, but not interpreter startup or imports.
+Linux process accounting recorded wall time, CPU use, memory use, page faults,
+and context switches.
 
 All 146 measured processes completed successfully. Their row counts and logical
 schemas matched the frozen workload expectations. Both deletion vectors in the
@@ -130,7 +136,7 @@ to ignore deleted rows.
 
 ## Environment
 
-We ran the benchmark on August 27, 2026, using one machine with the following
+We ran the benchmark on September 1, 2026, using one machine with the following
 hardware and software:
 
 - AMD Ryzen 7 8845HS, with 8 cores and 16 threads
@@ -140,8 +146,8 @@ hardware and software:
 
 | Reader | Version tested |
 | --- | --- |
-| Delta Arrow Reader | 0.3.0 (`aaf6699`) |
-| delta-rs | `fd7e96910243f9e67b4eae994d52ef246cfcea38` |
+| Delta Arrow Reader | 0.6.0 (`7a1168e`) |
+| delta-rs | 0.32.4 |
 | DuckDB | 1.5.5, Delta extension `45c4087` |
 | Polars | 1.44.1, with deltalake 1.6.3 |
 | Daft | 0.7.24, with deltalake 1.6.3 |
