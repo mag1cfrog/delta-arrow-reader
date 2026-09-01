@@ -45,6 +45,7 @@ nav:
   - Performance:
       - Reader benchmarks: benchmarks.md
       - Focused benchmarks:
+          - Selective S3 case study: benchmarks/selective-s3.md
           - Lazy and eager scan metadata: benchmarks/eager-metadata.md
           - Parquet row-filter predicate decoding: benchmarks/row-filter.md
           - Parquet page-index range reads: benchmarks/page-index.md

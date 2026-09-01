@@ -153,6 +153,9 @@ change.
 
 ## Focused benchmarks
 
+- [Selective S3 case study](benchmarks/selective-s3.md) compares four existing
+  selective queries across Lakehouse//RT Small, Serverless SQL Small, Delta
+  Arrow Reader, and delta-rs, with every anonymized repetition available.
 - [Lazy and eager scan metadata](benchmarks/eager-metadata.md) compares when
   Delta scan metadata is loaded and reused across repeated queries.
 - [Parquet row-filter predicate decoding](benchmarks/row-filter.md) compares
