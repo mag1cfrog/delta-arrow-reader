@@ -129,6 +129,33 @@ THEMES = {
     },
 }
 TICKS = (0.3, 1, 3, 10, 30, 100, 300)
+README_TICKS = (0, 1, 2, 3, 4)
+README_THEMES = {
+    "dark": {
+        "background": "#0b0d10",
+        "background_end": "#11151a",
+        "text": "#f0f2f5",
+        "muted": "#98a2b0",
+        "grid": "#29303a",
+        "engines": {
+            "delta_arrow_reader": "#7dd3fc",
+            "lakehouse_rt": "#53606e",
+            "serverless_sql": "#333c47",
+        },
+    },
+    "light": {
+        "background": "#ffffff",
+        "background_end": "#f7f8fa",
+        "text": "#1f2328",
+        "muted": "#68707d",
+        "grid": "#d9dee6",
+        "engines": {
+            "delta_arrow_reader": "#7dd3fc",
+            "lakehouse_rt": "#e1e5ea",
+            "serverless_sql": "#b9c0c8",
+        },
+    },
+}
 
 
 def load_rows() -> list[dict[str, str]]:
@@ -475,6 +502,117 @@ def render_wall_time(
     return "\n".join(parts) + "\n"
 
 
+def render_readme_latency(
+    theme_name: str, values: dict[tuple[str, str], list[float]]
+) -> str:
+    theme = README_THEMES[theme_name]
+    width = 1200
+    height = 610
+    plot_left = 150
+    plot_width = 900
+    plot_top = 190
+    group_height = 96
+    bar_height = 14
+    bar_gap = 8
+    domain = (README_TICKS[0], README_TICKS[-1])
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
+        '<title id="title">Laptop Delta reads compared with managed warehouses</title>',
+        '<desc id="description">Median query time for four existing selective Delta '
+        'queries. Delta Arrow Reader ran from a laptop and was faster than Databricks '
+        'Serverless SQL Small on all four. It was faster than Lakehouse RT Small on Q3. '
+        'Lower is better.</desc>',
+        '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
+        'BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>',
+        '<defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1">'
+        f'<stop offset="0" stop-color="{theme["background"]}"/>'
+        f'<stop offset="1" stop-color="{theme["background_end"]}"/>'
+        '</linearGradient></defs>',
+        f'<rect width="{width}" height="{height}" fill="url(#page)"/>',
+        f'<text x="44" y="32" fill="{theme["muted"]}" font-size="12" '
+        'font-weight="700" letter-spacing="2">SELECTIVE DELTA READS FROM S3</text>',
+        f'<text x="44" y="70" fill="{theme["text"]}" font-size="32" '
+        'font-weight="700">Laptop vs managed warehouses</text>',
+        f'<text x="44" y="99" fill="{theme["muted"]}" font-size="16">'
+        'Median query time over eight measured runs. Lower is faster.</text>',
+    ]
+
+    legend_x = 44
+    for engine in LATENCY_ENGINES:
+        label = ENGINES[engine][0]
+        color = theme["engines"][engine]
+        label_color = (
+            theme["text"] if engine == "delta_arrow_reader" else theme["muted"]
+        )
+        parts.extend(
+            [
+                f'<rect x="{legend_x}" y="121" width="10" height="10" rx="3" '
+                f'fill="{color}"/>',
+                f'<text x="{legend_x + 18}" y="131" fill="{label_color}" '
+                f'font-size="14">{escape(label)}</text>',
+            ]
+        )
+        legend_x += 275
+
+    for tick in README_TICKS:
+        x = linear_position(tick, plot_left, plot_width, domain)
+        parts.extend(
+            [
+                f'<line x1="{x:.2f}" y1="{plot_top - 28}" x2="{x:.2f}" '
+                f'y2="{plot_top + group_height * len(QUERIES) - 22}" '
+                f'stroke="{theme["grid"]}" stroke-dasharray="3 6"/>',
+                f'<text x="{x:.2f}" y="{plot_top - 39}" text-anchor="middle" '
+                f'fill="{theme["muted"]}" font-size="13">{tick}</text>',
+            ]
+        )
+    parts.append(
+        f'<text x="1156" y="{plot_top - 39}" text-anchor="end" '
+        f'fill="{theme["muted"]}" font-size="13">Seconds</text>'
+    )
+
+    for query_index, query in enumerate(QUERIES):
+        group_top = plot_top + query_index * group_height
+        query_y = group_top + 25
+        if query_index:
+            separator_y = group_top - 15
+            parts.append(
+                f'<line x1="44" y1="{separator_y}" x2="1156" y2="{separator_y}" '
+                f'stroke="{theme["grid"]}" stroke-dasharray="4 7"/>'
+            )
+        parts.append(
+            f'<text x="44" y="{query_y + 5}" fill="{theme["text"]}" '
+            f'font-size="18" font-weight="500">{query}</text>'
+        )
+        for engine_index, engine in enumerate(LATENCY_ENGINES):
+            median = statistics.median(values[engine, query])
+            bar_y = group_top + engine_index * (bar_height + bar_gap)
+            bar_width = linear_position(median, 0, plot_width, domain)
+            color = theme["engines"][engine]
+            label_color = (
+                theme["text"] if engine == "delta_arrow_reader" else theme["muted"]
+            )
+            parts.extend(
+                [
+                    f'<rect x="{plot_left}" y="{bar_y}" width="{bar_width:.2f}" '
+                    f'height="{bar_height}" rx="5" fill="{color}"/>',
+                    f'<text x="{plot_left + bar_width + 8:.2f}" '
+                    f'y="{bar_y + bar_height - 2}" fill="{label_color}" '
+                    f'font-size="13">{median:.3f} s</text>',
+                ]
+            )
+
+    parts.extend(
+        [
+            f'<text x="44" y="584" fill="{theme["muted"]}" font-size="13">'
+            'Laptop over public WAN | 8 measured runs per query | result parity verified'
+            '</text>',
+            '</svg>',
+        ]
+    )
+    return "\n".join(parts) + "\n"
+
+
 def render_remote_bytes(
     theme_name: str, values: dict[tuple[str, str], list[float]]
 ) -> str:
@@ -722,6 +860,9 @@ def main() -> None:
     for theme in THEMES:
         outputs = {
             OUTPUT / f"selective-s3-wall-{theme}.svg": render_wall_time(theme, values),
+            OUTPUT / f"selective-s3-readme-{theme}.svg": render_readme_latency(
+                theme, values
+            ),
             OUTPUT / f"selective-s3-remote-bytes-{theme}.svg": render_remote_bytes(
                 theme, remote_values
             ),

@@ -25,13 +25,29 @@ pipelines that read Delta Lake tables. It is a good fit when:
 - Your application already works with Arrow data.
 - You want to run SQL through DataFusion.
 
-## Selective S3 performance
+## A laptop beat Databricks Serverless SQL on all four queries
 
-On four pre-existing selective S3 queries, Delta Arrow Reader on a laptop beat
-Databricks Serverless SQL Small on all four. It also beat Lakehouse//RT Small
-once and came within 33.8% on two more. On the same machine, Delta Arrow Reader
-was up to 71.75 times faster than delta-rs. Read the
-[anonymized case study and inspect every measured run](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-s3/).
+These were ordinary application reads: each query pulled a small result from a
+much larger Delta table in S3. We reused an existing production sample instead
+of designing a workload around this reader.
+
+Running from a laptop over the public internet, Delta Arrow Reader beat
+Databricks Serverless SQL Small on all four queries. It also beat Lakehouse//RT
+Small once and finished within 33.8% on two more.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg">
+  <img alt="Median query time for four existing selective Delta queries. Delta Arrow Reader ran from a laptop and beat Databricks Serverless SQL Small on all four." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg" width="1000">
+</picture>
+
+The same-machine comparison was not close. Delta Arrow Reader beat delta-rs on
+all four queries, by as much as 71.75 times, while delta-rs used 6.4 times as
+much peak memory.
+
+The [anonymized case study](https://mag1cfrog.github.io/delta-arrow-reader/benchmarks/selective-s3/)
+publishes every measured run, the query shapes, remote byte counts, cache
+checks, and limitations.
 
 ## Why not...
 
