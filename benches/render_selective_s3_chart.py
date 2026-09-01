@@ -40,7 +40,7 @@ HEADER = (
     "correctness_parity",
 )
 ENGINES = {
-    "lakehouse_rt": ("Lakehouse RT Small", "Small"),
+    "lakehouse_rt": ("Lakehouse//RT Small", "Small"),
     "serverless_sql": ("Serverless SQL Small", "Small"),
     "delta_arrow_reader": ("Delta Arrow Reader", "0.6.0"),
     "delta_rs": (
@@ -49,6 +49,8 @@ ENGINES = {
     ),
 }
 QUERIES = ("Q1", "Q2", "Q3", "Q4")
+LATENCY_ENGINES = ("delta_arrow_reader", "lakehouse_rt", "serverless_sql")
+LATENCY_TICKS = (0.3, 1, 3, 10, 30)
 OUTPUT_ROWS = {"Q1": 20, "Q2": 718, "Q3": 1, "Q4": 668}
 PLANNED_FILES = {"Q1": 5, "Q2": 5, "Q3": 4, "Q4": 6}
 EXPECTED_MEDIANS = {
@@ -89,29 +91,27 @@ EXPECTED_RESOURCES = {
 }
 THEMES = {
     "dark": {
-        "background": "#0b0d10",
-        "background_end": "#11151a",
-        "text": "#f0f2f5",
-        "muted": "#aab3c0",
-        "grid": "#343b46",
+        "background": "#111417",
+        "text": "#edf0f2",
+        "muted": "#a2abb3",
+        "grid": "#2a3035",
         "engines": {
-            "lakehouse_rt": "#a78bfa",
-            "serverless_sql": "#38bdf8",
-            "delta_arrow_reader": "#4ade80",
-            "delta_rs": "#fbbf24",
+            "lakehouse_rt": "#c0c7ce",
+            "serverless_sql": "#87929a",
+            "delta_arrow_reader": "#5ecdb7",
+            "delta_rs": "#899198",
         },
     },
     "light": {
         "background": "#ffffff",
-        "background_end": "#f7f8fa",
-        "text": "#1f2328",
-        "muted": "#59636f",
-        "grid": "#d2d8e0",
+        "text": "#20252b",
+        "muted": "#68737d",
+        "grid": "#e7e9e7",
         "engines": {
-            "lakehouse_rt": "#6d28d9",
-            "serverless_sql": "#0369a1",
-            "delta_arrow_reader": "#15803d",
-            "delta_rs": "#a16207",
+            "lakehouse_rt": "#3f4b59",
+            "serverless_sql": "#a0a7ad",
+            "delta_arrow_reader": "#0f766e",
+            "delta_rs": "#737b82",
         },
     },
 }
@@ -317,127 +317,120 @@ def measurements(rows: list[dict[str, str]]) -> dict[tuple[str, str], list[float
     return values
 
 
-def x_position(value: float, left: float, width: float) -> float:
-    minimum = math.log10(TICKS[0])
-    maximum = math.log10(TICKS[-1])
+def x_position(
+    value: float, left: float, width: float, domain: tuple[float, float]
+) -> float:
+    minimum = math.log10(domain[0])
+    maximum = math.log10(domain[1])
     return left + (math.log10(value) - minimum) / (maximum - minimum) * width
+
+
+def marker(
+    engine: str, x: float, y: float, color: str, background: str, size: float = 5
+) -> str:
+    if engine == "delta_arrow_reader":
+        return f'<circle cx="{x}" cy="{y}" r="{size}" fill="{color}"/>'
+    if engine == "lakehouse_rt":
+        points = f"{x},{y - size} {x + size},{y} {x},{y + size} {x - size},{y}"
+        return f'<polygon points="{points}" fill="{color}"/>'
+    return (
+        f'<rect x="{x - size}" y="{y - size}" width="{size * 2}" '
+        f'height="{size * 2}" fill="{background}" stroke="{color}" stroke-width="2"/>'
+    )
 
 
 def render(theme_name: str, values: dict[tuple[str, str], list[float]]) -> str:
     theme = THEMES[theme_name]
-    width = 1200
-    height = 875
-    plot_left = 305
-    plot_width = 835
-    plot_top = 155
-    row_height = 27
-    group_gap = 25
-    group_height = row_height * len(ENGINES) + group_gap
-    plot_bottom = plot_top + group_height * len(QUERIES) - group_gap
+    width = 840
+    height = 425
+    plot_left = 95
+    plot_width = 710
+    plot_top = 145
+    group_height = 64
+    plot_bottom = plot_top + group_height * (len(QUERIES) - 1)
+    domain = (LATENCY_TICKS[0], LATENCY_TICKS[-1])
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
-        '<title id="title">Selective S3 query wall time across four Delta engines</title>',
-        '<desc id="description">Each query has one row per engine. Horizontal lines '
-        'show the minimum and maximum over eight measured rounds, and circles show '
-        'the median. The horizontal axis uses a logarithmic scale. Lower is faster. '
-        'The local reader used a Core Ultra 7 265H with 16 heterogeneous cores and '
-        '19 GiB of usable RAM. A published Pro or Classic Small warehouse has 24 '
-        'Broadwell physical cores, 48 virtual CPUs, and 366 GiB of RAM. An AWS '
-        'virtual CPU is one hardware thread, so the CPU counts are not equivalent '
-        'compute measurements. The tested serverless hardware is not published.</desc>',
+        '<title id="title">Selective S3 latency</title>',
+        '<desc id="description">Four selective S3 queries compare Lakehouse RT '
+        'Small, Serverless SQL Small, and Delta Arrow Reader on a laptop. Thin '
+        'horizontal whiskers show the minimum and maximum over eight measured rounds. '
+        'The circle, diamond, and square show each median. The horizontal axis is '
+        'logarithmic and lower is faster.</desc>',
         '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
-        'BlinkMacSystemFont,"Segoe UI",sans-serif}</style>',
-        '<defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1">'
-        f'<stop offset="0" stop-color="{theme["background"]}"/>'
-        f'<stop offset="1" stop-color="{theme["background_end"]}"/>'
-        '</linearGradient></defs>',
-        f'<rect width="{width}" height="{height}" fill="url(#page)"/>',
-        f'<text x="44" y="35" fill="{theme["muted"]}" font-size="12" '
-        'font-weight="700" letter-spacing="2">SELECTIVE S3 CASE STUDY</text>',
-        f'<text x="44" y="72" fill="{theme["text"]}" font-size="30" '
-        'font-weight="700">Open source on a laptop vs managed Small warehouses</text>',
-        f'<text x="44" y="101" fill="{theme["muted"]}" font-size="16">'
-        'Median and measured range over eight rounds. Lower is faster.</text>',
-        f'<text x="{plot_left}" y="130" fill="{theme["muted"]}" font-size="12" '
-        'font-weight="700" letter-spacing="1.4">WALL TIME (SECONDS, LOG SCALE)</text>',
+        'BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>',
+        f'<rect width="{width}" height="{height}" fill="{theme["background"]}"/>',
+        f'<text x="32" y="40" fill="{theme["text"]}" font-size="26" '
+        'font-weight="500">Selective S3 latency</text>',
+        f'<text x="32" y="66" fill="{theme["muted"]}" font-size="14">'
+        'p50 and min-max over 8 measured runs, seconds (log scale). Lower is faster.</text>',
     ]
 
-    for tick in TICKS:
-        x = x_position(tick, plot_left, plot_width)
+    legend_x = {
+        "delta_arrow_reader": 250,
+        "lakehouse_rt": 480,
+        "serverless_sql": 660,
+    }
+    for engine in LATENCY_ENGINES:
+        x = legend_x[engine]
+        color = theme["engines"][engine]
+        label = ENGINES[engine][0].replace(" Small", "")
         parts.extend(
             [
-                f'<line x1="{x:.2f}" y1="{plot_top - 8}" x2="{x:.2f}" '
-                f'y2="{plot_bottom + 8}" stroke="{theme["grid"]}" '
-                'stroke-dasharray="3 6"/>',
-                f'<text x="{x:.2f}" y="{plot_bottom + 30}" text-anchor="middle" '
+                marker(engine, x, 99, color, theme["background"], 4),
+                f'<text x="{x + 12}" y="104" fill="{theme["text"]}" '
+                f'font-size="14" font-weight="400">{escape(label)}</text>',
+            ]
+        )
+
+    for tick in LATENCY_TICKS:
+        x = x_position(tick, plot_left, plot_width, domain)
+        parts.extend(
+            [
+                f'<line x1="{x:.2f}" y1="{plot_top - 24}" x2="{x:.2f}" '
+                f'y2="{plot_bottom + 24}" stroke="{theme["grid"]}"/>',
+                f'<text x="{x:.2f}" y="{plot_bottom + 49}" text-anchor="middle" '
                 f'fill="{theme["muted"]}" font-size="13">{tick:g}</text>',
             ]
         )
 
     for query_index, query in enumerate(QUERIES):
-        group_top = plot_top + query_index * group_height
-        parts.extend(
-            [
-                f'<text x="44" y="{group_top + 46}" fill="{theme["text"]}" '
-                f'font-size="24" font-weight="700">{query}</text>',
-                f'<text x="44" y="{group_top + 67}" fill="{theme["muted"]}" '
-                f'font-size="13">Table {chr(ord("A") + query_index)}</text>',
-            ]
+        query_y = plot_top + query_index * group_height
+        parts.append(
+            f'<text x="32" y="{query_y + 6}" fill="{theme["text"]}" '
+            f'font-size="18" font-weight="500">{query}</text>'
         )
-        for engine_index, (engine, (label, _)) in enumerate(ENGINES.items()):
-            y = group_top + engine_index * row_height
+        offsets = (-11, 0, 11)
+        for engine_index, engine in enumerate(LATENCY_ENGINES):
+            y = query_y + offsets[engine_index]
             color = theme["engines"][engine]
             samples = values[engine, query]
             low = min(samples)
             high = max(samples)
             median = statistics.median(samples)
-            low_x = x_position(low, plot_left, plot_width)
-            high_x = x_position(high, plot_left, plot_width)
-            median_x = x_position(median, plot_left, plot_width)
-            label_x = median_x + 12
-            label_anchor = "start"
-            if median_x > plot_left + plot_width - 62:
-                label_x = median_x - 12
-                label_anchor = "end"
-            weight = "700" if engine == "delta_arrow_reader" else "500"
+            low_x = x_position(low, plot_left, plot_width, domain)
+            high_x = x_position(high, plot_left, plot_width, domain)
+            median_x = x_position(median, plot_left, plot_width, domain)
             parts.extend(
                 [
-                    f'<text x="280" y="{y + 5}" text-anchor="end" fill="{color}" '
-                    f'font-size="14" font-weight="{weight}">{escape(label)}</text>',
                     f'<line x1="{low_x:.2f}" y1="{y}" x2="{high_x:.2f}" y2="{y}" '
-                    f'stroke="{color}" stroke-width="5" stroke-linecap="round" '
-                    'stroke-opacity="0.68"/>',
-                    f'<circle cx="{low_x:.2f}" cy="{y}" r="3" fill="{color}"/>',
-                    f'<circle cx="{high_x:.2f}" cy="{y}" r="3" fill="{color}"/>',
-                    f'<circle cx="{median_x:.2f}" cy="{y}" r="7" fill="{color}" '
-                    f'stroke="{theme["background"]}" stroke-width="2"/>',
-                    f'<text x="{label_x:.2f}" y="{y + 5}" text-anchor="{label_anchor}" '
-                    f'fill="{theme["text"]}" font-size="13" font-weight="700">'
-                    f'{median:.3f}s</text>',
+                    f'stroke="{color}" stroke-width="1.5"/>',
+                    f'<line x1="{low_x:.2f}" y1="{y - 3}" x2="{low_x:.2f}" '
+                    f'y2="{y + 3}" stroke="{color}" stroke-width="1.5"/>',
+                    f'<line x1="{high_x:.2f}" y1="{y - 3}" x2="{high_x:.2f}" '
+                    f'y2="{y + 3}" stroke="{color}" stroke-width="1.5"/>',
+                    marker(
+                        engine,
+                        round(median_x, 2),
+                        y,
+                        color,
+                        theme["background"],
+                    ),
                 ]
             )
 
-    parts.extend(
-        [
-            f'<text x="44" y="730" fill="{theme["muted"]}" font-size="13">'
-            'Local WSL2: Core Ultra 7 265H, 16 heterogeneous cores / 16 threads, '
-            '19 GiB usable RAM</text>',
-            f'<text x="44" y="754" fill="{theme["muted"]}" font-size="13">'
-            'Published Pro/Classic Small reference: 24 Broadwell cores / 48 vCPUs, '
-            '366 GiB total; workers: 16 cores / 32 vCPUs, 244 GiB</text>',
-            f'<text x="44" y="778" fill="{theme["muted"]}" font-size="13">'
-            'One AWS vCPU is one hardware thread; cross-generation CPU counts are not '
-            'compute-equivalent</text>',
-            f'<text x="44" y="802" fill="{theme["muted"]}" font-size="13">'
-            'The backing hardware for Serverless and RT is not published; the Small '
-            'configuration is sizing context</text>',
-            f'<text x="44" y="842" fill="{theme["muted"]}" font-size="13">'
-            '8 measured rounds after 1 discarded warmup | table initialization excluded | '
-            'managed result cache disabled and I/O cache verified empty</text>',
-            '</svg>',
-        ]
-    )
+    parts.append('</svg>')
     return "\n".join(parts) + "\n"
 
 

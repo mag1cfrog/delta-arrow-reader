@@ -41,7 +41,7 @@ Lower is faster.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-wall-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-wall-light.svg">
-  <img alt="Wall-time comparison for four selective S3 queries across Lakehouse RT Small, Serverless SQL Small, Delta Arrow Reader, and delta-rs. Each row shows the median and measured range on a logarithmic scale." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-wall-light.svg">
+  <img alt="Wall-time comparison for four selective S3 queries across Lakehouse RT Small, Serverless SQL Small, and Delta Arrow Reader. Each row shows the median and measured range on a logarithmic scale." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-wall-light.svg">
 </picture>
 
 | Query | Lakehouse//RT Small | Serverless SQL Small | Delta Arrow Reader 0.6.0 | delta-rs `main` |
