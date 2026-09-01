@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="875" viewBox="0 0 1200 875" role="img" aria-labelledby="title description">
+<title id="title">Selective S3 query wall time across four Delta engines</title>
+<desc id="description">Each query has one row per engine. Horizontal lines show the minimum and maximum over eight measured rounds, and circles show the median. The horizontal axis uses a logarithmic scale. Lower is faster. The local reader used a Core Ultra 7 265H with 16 heterogeneous cores and 19 GiB of usable RAM. A published Pro or Classic Small warehouse has 24 Broadwell physical cores, 48 virtual CPUs, and 366 GiB of RAM. An AWS virtual CPU is one hardware thread, so the CPU counts are not equivalent compute measurements. The tested serverless hardware is not published.</desc>
+<style>text{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}</style>
+<defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b0d10"/><stop offset="1" stop-color="#11151a"/></linearGradient></defs>
+<rect width="1200" height="875" fill="url(#page)"/>
+<text x="44" y="35" fill="#aab3c0" font-size="12" font-weight="700" letter-spacing="2">SELECTIVE S3 CASE STUDY</text>
+<text x="44" y="72" fill="#f0f2f5" font-size="30" font-weight="700">Open source on a laptop vs managed Small warehouses</text>
+<text x="44" y="101" fill="#aab3c0" font-size="16">Median and measured range over eight rounds. Lower is faster.</text>
+<text x="305" y="130" fill="#aab3c0" font-size="12" font-weight="700" letter-spacing="1.4">WALL TIME (SECONDS, LOG SCALE)</text>
+<line x1="305.00" y1="147" x2="305.00" y2="670" stroke="#343b46" stroke-dasharray="3 6"/>
+<text x="305.00" y="692" text-anchor="middle" fill="#aab3c0" font-size="13">0.3</text>
+<line x1="450.53" y1="147" x2="450.53" y2="670" stroke="#343b46" stroke-dasharray="3 6"/>
+<text x="450.53" y="692" text-anchor="middle" fill="#aab3c0" font-size="13">1</text>
+<line x1="583.33" y1="147" x2="583.33" y2="670" stroke="#343b46" stroke-dasharray="3 6"/>
+<text x="583.33" y="692" text-anchor="middle" fill="#aab3c0" font-size="13">3</text>
+<line x1="728.87" y1="147" x2="728.87" y2="670" stroke="#343b46" stroke-dasharray="3 6"/>
+<text x="728.87" y="692" text-anchor="middle" fill="#aab3c0" font-size="13">10</text>
+<line x1="861.67" y1="147" x2="861.67" y2="670" stroke="#343b46" stroke-dasharray="3 6"/>
+<text x="861.67" y="692" text-anchor="middle" fill="#aab3c0" font-size="13">30</text>
+<line x1="1007.20" y1="147" x2="1007.20" y2="670" stroke="#343b46" stroke-dasharray="3 6"/>
+<text x="1007.20" y="692" text-anchor="middle" fill="#aab3c0" font-size="13">100</text>
+<line x1="1140.00" y1="147" x2="1140.00" y2="670" stroke="#343b46" stroke-dasharray="3 6"/>
+<text x="1140.00" y="692" text-anchor="middle" fill="#aab3c0" font-size="13">300</text>
+<text x="44" y="201" fill="#f0f2f5" font-size="24" font-weight="700">Q1</text>
+<text x="44" y="222" fill="#aab3c0" font-size="13">Table A</text>
+<text x="280" y="160" text-anchor="end" fill="#a78bfa" font-size="14" font-weight="500">Lakehouse RT Small</text>
+<line x1="433.68" y1="155" x2="466.14" y2="155" stroke="#a78bfa" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="433.68" cy="155" r="3" fill="#a78bfa"/>
+<circle cx="466.14" cy="155" r="3" fill="#a78bfa"/>
+<circle cx="445.48" cy="155" r="7" fill="#a78bfa" stroke="#0b0d10" stroke-width="2"/>
+<text x="457.48" y="160" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">0.959s</text>
+<text x="280" y="187" text-anchor="end" fill="#38bdf8" font-size="14" font-weight="500">Serverless SQL Small</text>
+<line x1="474.67" y1="182" x2="620.89" y2="182" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="474.67" cy="182" r="3" fill="#38bdf8"/>
+<circle cx="620.89" cy="182" r="3" fill="#38bdf8"/>
+<circle cx="495.28" cy="182" r="7" fill="#38bdf8" stroke="#0b0d10" stroke-width="2"/>
+<text x="507.28" y="187" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">1.448s</text>
+<text x="280" y="214" text-anchor="end" fill="#4ade80" font-size="14" font-weight="700">Delta Arrow Reader</text>
+<line x1="424.77" y1="209" x2="520.77" y2="209" stroke="#4ade80" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="424.77" cy="209" r="3" fill="#4ade80"/>
+<circle cx="520.77" cy="209" r="3" fill="#4ade80"/>
+<circle cx="457.46" cy="209" r="7" fill="#4ade80" stroke="#0b0d10" stroke-width="2"/>
+<text x="469.46" y="214" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">1.059s</text>
+<text x="280" y="241" text-anchor="end" fill="#fbbf24" font-size="14" font-weight="500">delta-rs</text>
+<line x1="571.58" y1="236" x2="695.04" y2="236" stroke="#fbbf24" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="571.58" cy="236" r="3" fill="#fbbf24"/>
+<circle cx="695.04" cy="236" r="3" fill="#fbbf24"/>
+<circle cx="643.86" cy="236" r="7" fill="#fbbf24" stroke="#0b0d10" stroke-width="2"/>
+<text x="655.86" y="241" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">4.950s</text>
+<text x="44" y="334" fill="#f0f2f5" font-size="24" font-weight="700">Q2</text>
+<text x="44" y="355" fill="#aab3c0" font-size="13">Table B</text>
+<text x="280" y="293" text-anchor="end" fill="#a78bfa" font-size="14" font-weight="500">Lakehouse RT Small</text>
+<line x1="496.96" y1="288" x2="531.20" y2="288" stroke="#a78bfa" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="496.96" cy="288" r="3" fill="#a78bfa"/>
+<circle cx="531.20" cy="288" r="3" fill="#a78bfa"/>
+<circle cx="507.43" cy="288" r="7" fill="#a78bfa" stroke="#0b0d10" stroke-width="2"/>
+<text x="519.43" y="293" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">1.601s</text>
+<text x="280" y="320" text-anchor="end" fill="#38bdf8" font-size="14" font-weight="500">Serverless SQL Small</text>
+<line x1="566.37" y1="315" x2="671.09" y2="315" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="566.37" cy="315" r="3" fill="#38bdf8"/>
+<circle cx="671.09" cy="315" r="3" fill="#38bdf8"/>
+<circle cx="614.41" cy="315" r="7" fill="#38bdf8" stroke="#0b0d10" stroke-width="2"/>
+<text x="626.41" y="320" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">3.880s</text>
+<text x="280" y="347" text-anchor="end" fill="#4ade80" font-size="14" font-weight="700">Delta Arrow Reader</text>
+<line x1="523.63" y1="342" x2="814.96" y2="342" stroke="#4ade80" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="523.63" cy="342" r="3" fill="#4ade80"/>
+<circle cx="814.96" cy="342" r="3" fill="#4ade80"/>
+<circle cx="609.76" cy="342" r="7" fill="#4ade80" stroke="#0b0d10" stroke-width="2"/>
+<text x="621.76" y="347" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">3.733s</text>
+<text x="280" y="374" text-anchor="end" fill="#fbbf24" font-size="14" font-weight="500">delta-rs</text>
+<line x1="1121.77" y1="369" x2="1129.43" y2="369" stroke="#fbbf24" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="1121.77" cy="369" r="3" fill="#fbbf24"/>
+<circle cx="1129.43" cy="369" r="3" fill="#fbbf24"/>
+<circle cx="1126.30" cy="369" r="7" fill="#fbbf24" stroke="#0b0d10" stroke-width="2"/>
+<text x="1114.30" y="374" text-anchor="end" fill="#f0f2f5" font-size="13" font-weight="700">267.860s</text>
+<text x="44" y="467" fill="#f0f2f5" font-size="24" font-weight="700">Q3</text>
+<text x="44" y="488" fill="#aab3c0" font-size="13">Table C</text>
+<text x="280" y="426" text-anchor="end" fill="#a78bfa" font-size="14" font-weight="500">Lakehouse RT Small</text>
+<line x1="426.56" y1="421" x2="470.42" y2="421" stroke="#a78bfa" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="426.56" cy="421" r="3" fill="#a78bfa"/>
+<circle cx="470.42" cy="421" r="3" fill="#a78bfa"/>
+<circle cx="451.02" cy="421" r="7" fill="#a78bfa" stroke="#0b0d10" stroke-width="2"/>
+<text x="463.02" y="426" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">1.004s</text>
+<text x="280" y="453" text-anchor="end" fill="#38bdf8" font-size="14" font-weight="500">Serverless SQL Small</text>
+<line x1="470.43" y1="448" x2="625.01" y2="448" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="470.43" cy="448" r="3" fill="#38bdf8"/>
+<circle cx="625.01" cy="448" r="3" fill="#38bdf8"/>
+<circle cx="487.65" cy="448" r="7" fill="#38bdf8" stroke="#0b0d10" stroke-width="2"/>
+<text x="499.65" y="453" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">1.359s</text>
+<text x="280" y="480" text-anchor="end" fill="#4ade80" font-size="14" font-weight="700">Delta Arrow Reader</text>
+<line x1="337.53" y1="475" x2="450.27" y2="475" stroke="#4ade80" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="337.53" cy="475" r="3" fill="#4ade80"/>
+<circle cx="450.27" cy="475" r="3" fill="#4ade80"/>
+<circle cx="424.49" cy="475" r="7" fill="#4ade80" stroke="#0b0d10" stroke-width="2"/>
+<text x="436.49" y="480" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">0.806s</text>
+<text x="280" y="507" text-anchor="end" fill="#fbbf24" font-size="14" font-weight="500">delta-rs</text>
+<line x1="435.26" y1="502" x2="533.20" y2="502" stroke="#fbbf24" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="435.26" cy="502" r="3" fill="#fbbf24"/>
+<circle cx="533.20" cy="502" r="3" fill="#fbbf24"/>
+<circle cx="452.40" cy="502" r="7" fill="#fbbf24" stroke="#0b0d10" stroke-width="2"/>
+<text x="464.40" y="507" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">1.016s</text>
+<text x="44" y="600" fill="#f0f2f5" font-size="24" font-weight="700">Q4</text>
+<text x="44" y="621" fill="#aab3c0" font-size="13">Table D</text>
+<text x="280" y="559" text-anchor="end" fill="#a78bfa" font-size="14" font-weight="500">Lakehouse RT Small</text>
+<line x1="458.20" y1="554" x2="519.76" y2="554" stroke="#a78bfa" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="458.20" cy="554" r="3" fill="#a78bfa"/>
+<circle cx="519.76" cy="554" r="3" fill="#a78bfa"/>
+<circle cx="481.97" cy="554" r="7" fill="#a78bfa" stroke="#0b0d10" stroke-width="2"/>
+<text x="493.97" y="559" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">1.297s</text>
+<text x="280" y="586" text-anchor="end" fill="#38bdf8" font-size="14" font-weight="500">Serverless SQL Small</text>
+<line x1="542.30" y1="581" x2="675.39" y2="581" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="542.30" cy="581" r="3" fill="#38bdf8"/>
+<circle cx="675.39" cy="581" r="3" fill="#38bdf8"/>
+<circle cx="575.90" cy="581" r="7" fill="#38bdf8" stroke="#0b0d10" stroke-width="2"/>
+<text x="587.90" y="586" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">2.821s</text>
+<text x="280" y="613" text-anchor="end" fill="#4ade80" font-size="14" font-weight="700">Delta Arrow Reader</text>
+<line x1="446.12" y1="608" x2="634.75" y2="608" stroke="#4ade80" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="446.12" cy="608" r="3" fill="#4ade80"/>
+<circle cx="634.75" cy="608" r="3" fill="#4ade80"/>
+<circle cx="517.18" cy="608" r="7" fill="#4ade80" stroke="#0b0d10" stroke-width="2"/>
+<text x="529.18" y="613" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">1.736s</text>
+<text x="280" y="640" text-anchor="end" fill="#fbbf24" font-size="14" font-weight="500">delta-rs</text>
+<line x1="921.48" y1="635" x2="937.77" y2="635" stroke="#fbbf24" stroke-width="5" stroke-linecap="round" stroke-opacity="0.68"/>
+<circle cx="921.48" cy="635" r="3" fill="#fbbf24"/>
+<circle cx="937.77" cy="635" r="3" fill="#fbbf24"/>
+<circle cx="930.23" cy="635" r="7" fill="#fbbf24" stroke="#0b0d10" stroke-width="2"/>
+<text x="942.23" y="640" text-anchor="start" fill="#f0f2f5" font-size="13" font-weight="700">52.899s</text>
+<text x="44" y="730" fill="#aab3c0" font-size="13">Local WSL2: Core Ultra 7 265H, 16 heterogeneous cores / 16 threads, 19 GiB usable RAM</text>
+<text x="44" y="754" fill="#aab3c0" font-size="13">Published Pro/Classic Small reference: 24 Broadwell cores / 48 vCPUs, 366 GiB total; workers: 16 cores / 32 vCPUs, 244 GiB</text>
+<text x="44" y="778" fill="#aab3c0" font-size="13">One AWS vCPU is one hardware thread; cross-generation CPU counts are not compute-equivalent</text>
+<text x="44" y="802" fill="#aab3c0" font-size="13">The backing hardware for Serverless and RT is not published; the Small configuration is sizing context</text>
+<text x="44" y="842" fill="#aab3c0" font-size="13">8 measured rounds after 1 discarded warmup | table initialization excluded | managed result cache disabled and I/O cache verified empty</text>
+</svg>
