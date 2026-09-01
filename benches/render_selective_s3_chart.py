@@ -52,6 +52,7 @@ QUERIES = ("Q1", "Q2", "Q3", "Q4")
 LATENCY_ENGINES = ("delta_arrow_reader", "lakehouse_rt", "serverless_sql")
 LATENCY_TICKS = (0.3, 1, 3, 10, 30)
 REMOTE_TICKS = (0, 10, 20, 30)
+MEMORY_TICKS = (0, 1000, 2000, 3000)
 OUTPUT_ROWS = {"Q1": 20, "Q2": 718, "Q3": 1, "Q4": 668}
 PLANNED_FILES = {"Q1": 5, "Q2": 5, "Q3": 4, "Q4": 6}
 EXPECTED_MEDIANS = {
@@ -526,6 +527,173 @@ def render_remote_bytes(
     return "\n".join(parts) + "\n"
 
 
+def render_delta_rs_comparison(
+    theme_name: str, values: dict[tuple[str, str], list[float]]
+) -> str:
+    theme = THEMES[theme_name]
+    width = 840
+    height = 500
+    plot_left = 95
+    plot_width = 710
+    plot_top = 160
+    group_height = 44
+    plot_bottom = plot_top + group_height * (len(QUERIES) - 1)
+    time_domain = (TICKS[0], TICKS[-1])
+    memory_y = 410
+    memory_domain = (MEMORY_TICKS[0], MEMORY_TICKS[-1])
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
+        '<title id="title">Same laptop: Delta Arrow Reader and delta-rs</title>',
+        '<desc id="description">Median query time and peak process memory for '
+        'Delta Arrow Reader and delta-rs on the same laptop. Delta Arrow Reader '
+        'was faster on all four queries and used less peak memory. Lower is better.</desc>',
+        '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
+        'BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>',
+        f'<rect width="{width}" height="{height}" fill="{theme["background"]}"/>',
+        f'<text x="32" y="40" fill="{theme["text"]}" font-size="26" '
+        'font-weight="500">Same laptop: Delta Arrow Reader vs delta-rs</text>',
+        f'<text x="32" y="66" fill="{theme["muted"]}" font-size="14">'
+        'Median query time and peak process RSS. Lower is better.</text>',
+        marker(
+            "delta_arrow_reader",
+            410,
+            99,
+            theme["engines"]["delta_arrow_reader"],
+            theme["background"],
+            4,
+        ),
+        f'<text x="422" y="104" fill="{theme["text"]}" font-size="14">'
+        'Delta Arrow Reader</text>',
+        marker(
+            "delta_rs",
+            650,
+            99,
+            theme["engines"]["delta_rs"],
+            theme["background"],
+            4,
+        ),
+        f'<text x="662" y="104" fill="{theme["text"]}" font-size="14">'
+        'delta-rs</text>',
+        f'<text x="32" y="130" fill="{theme["muted"]}" font-size="14">'
+        'Median query time, seconds (log scale)</text>',
+    ]
+
+    for tick in TICKS:
+        x = x_position(tick, plot_left, plot_width, time_domain)
+        parts.extend(
+            [
+                f'<line x1="{x:.2f}" y1="{plot_top - 16}" x2="{x:.2f}" '
+                f'y2="{plot_bottom + 24}" stroke="{theme["grid"]}"/>',
+                f'<text x="{x:.2f}" y="{plot_bottom + 49}" text-anchor="middle" '
+                f'fill="{theme["muted"]}" font-size="13">{tick:g}</text>',
+            ]
+        )
+
+    for query_index in range(1, len(QUERIES)):
+        y = plot_top + (query_index - 0.5) * group_height
+        parts.append(
+            f'<line x1="32" y1="{y:.2f}" x2="805" y2="{y:.2f}" '
+            f'stroke="{theme["grid"]}" stroke-dasharray="4 6"/>'
+        )
+
+    for query_index, query in enumerate(QUERIES):
+        y = plot_top + query_index * group_height
+        dar_x = x_position(
+            statistics.median(values["delta_arrow_reader", query]),
+            plot_left,
+            plot_width,
+            time_domain,
+        )
+        delta_rs_x = x_position(
+            statistics.median(values["delta_rs", query]),
+            plot_left,
+            plot_width,
+            time_domain,
+        )
+        parts.extend(
+            [
+                f'<text x="32" y="{y + 6}" fill="{theme["text"]}" '
+                f'font-size="18" font-weight="500">{query}</text>',
+                f'<line x1="{dar_x:.2f}" y1="{y}" x2="{delta_rs_x:.2f}" '
+                f'y2="{y}" stroke="{theme["grid"]}" stroke-width="2"/>',
+                marker(
+                    "delta_arrow_reader",
+                    round(dar_x, 2),
+                    y,
+                    theme["engines"]["delta_arrow_reader"],
+                    theme["background"],
+                    5,
+                ),
+                marker(
+                    "delta_rs",
+                    round(delta_rs_x, 2),
+                    y,
+                    theme["engines"]["delta_rs"],
+                    theme["background"],
+                    5,
+                ),
+            ]
+        )
+
+    parts.append(
+        f'<text x="32" y="375" fill="{theme["muted"]}" font-size="14">'
+        'Peak process RSS, MiB</text>'
+    )
+    for tick in MEMORY_TICKS:
+        x = linear_position(tick, plot_left, plot_width, memory_domain)
+        parts.extend(
+            [
+                f'<line x1="{x:.2f}" y1="{memory_y - 16}" x2="{x:.2f}" '
+                f'y2="{memory_y + 16}" stroke="{theme["grid"]}"/>',
+                f'<text x="{x:.2f}" y="{memory_y + 44}" text-anchor="middle" '
+                f'fill="{theme["muted"]}" font-size="13">'
+                f'{tick // 1000 if tick else 0}{"k" if tick else ""}</text>',
+            ]
+        )
+
+    dar_memory_x = linear_position(
+        EXPECTED_RESOURCES["delta_arrow_reader"][2],
+        plot_left,
+        plot_width,
+        memory_domain,
+    )
+    delta_rs_memory_x = linear_position(
+        EXPECTED_RESOURCES["delta_rs"][2],
+        plot_left,
+        plot_width,
+        memory_domain,
+    )
+    parts.extend(
+        [
+            f'<text x="32" y="{memory_y + 6}" fill="{theme["text"]}" '
+            'font-size="18" font-weight="500">RSS</text>',
+            f'<line x1="{dar_memory_x:.2f}" y1="{memory_y}" '
+            f'x2="{delta_rs_memory_x:.2f}" y2="{memory_y}" '
+            f'stroke="{theme["grid"]}" stroke-width="2"/>',
+            marker(
+                "delta_arrow_reader",
+                round(dar_memory_x, 2),
+                memory_y,
+                theme["engines"]["delta_arrow_reader"],
+                theme["background"],
+                5,
+            ),
+            marker(
+                "delta_rs",
+                round(delta_rs_memory_x, 2),
+                memory_y,
+                theme["engines"]["delta_rs"],
+                theme["background"],
+                5,
+            ),
+        ]
+    )
+
+    parts.append('</svg>')
+    return "\n".join(parts) + "\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -542,6 +710,9 @@ def main() -> None:
             OUTPUT / f"selective-s3-wall-{theme}.svg": render(theme, values),
             OUTPUT / f"selective-s3-remote-bytes-{theme}.svg": render_remote_bytes(
                 theme, remote_values
+            ),
+            OUTPUT / f"selective-s3-delta-rs-comparison-{theme}.svg": (
+                render_delta_rs_comparison(theme, values)
             ),
         }
         for target, rendered in outputs.items():

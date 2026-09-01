@@ -111,6 +111,12 @@ objects and pinned Delta snapshots. It executed the same query shapes and
 returned the same results. That removes the managed-service infrastructure
 advantage from the comparison.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-delta-rs-comparison-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-delta-rs-comparison-light.svg">
+  <img alt="Median query time and peak process memory for Delta Arrow Reader and delta-rs on the same laptop. Delta Arrow Reader was faster on all four queries and used less peak memory." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-delta-rs-comparison-light.svg">
+</picture>
+
 | Query | Delta Arrow Reader | delta-rs | DAR speedup |
 | --- | ---: | ---: | ---: |
 | Q1 | 1.059 s | 4.950 s | **4.67x** |
