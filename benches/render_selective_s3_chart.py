@@ -50,6 +50,7 @@ ENGINES = {
 }
 QUERIES = ("Q1", "Q2", "Q3", "Q4")
 OUTPUT_ROWS = {"Q1": 20, "Q2": 718, "Q3": 1, "Q4": 668}
+PLANNED_FILES = {"Q1": 5, "Q2": 5, "Q3": 4, "Q4": 6}
 EXPECTED_MEDIANS = {
     ("lakehouse_rt", "Q1"): 0.959055,
     ("lakehouse_rt", "Q2"): 1.601068,
@@ -67,6 +68,20 @@ EXPECTED_MEDIANS = {
     ("delta_rs", "Q2"): 267.859799,
     ("delta_rs", "Q3"): 1.015567,
     ("delta_rs", "Q4"): 52.899171,
+}
+EXPECTED_REMOTE_MIB = {
+    ("lakehouse_rt", "Q1"): 17.681,
+    ("lakehouse_rt", "Q2"): 22.700,
+    ("lakehouse_rt", "Q3"): 2.900,
+    ("lakehouse_rt", "Q4"): 25.510,
+    ("serverless_sql", "Q1"): 19.049,
+    ("serverless_sql", "Q2"): 25.082,
+    ("serverless_sql", "Q3"): 3.662,
+    ("serverless_sql", "Q4"): 27.005,
+    ("delta_arrow_reader", "Q1"): 8.436,
+    ("delta_arrow_reader", "Q2"): 23.459,
+    ("delta_arrow_reader", "Q3"): 3.303,
+    ("delta_arrow_reader", "Q4"): 25.885,
 }
 EXPECTED_RESOURCES = {
     "delta_arrow_reader": (12.033261, 116.972656, 431.144531),
@@ -120,6 +135,7 @@ def optional_float(row: dict[str, str], field: str) -> float | None:
 def validate(rows: list[dict[str, str]]) -> None:
     grouped = defaultdict(list)
     rounds = defaultdict(list)
+    remote_medians = {}
 
     for row in rows:
         engine = row["engine"]
@@ -204,6 +220,20 @@ def validate(rows: list[dict[str, str]]) -> None:
         )
         median = statistics.median(float(row["wall_seconds"]) for row in measured)
         assert math.isclose(median, EXPECTED_MEDIANS[key], abs_tol=0.000001)
+        if key in EXPECTED_REMOTE_MIB:
+            remote_mib = statistics.median(
+                int(row["reported_remote_bytes"]) for row in measured
+            ) / (1024 * 1024)
+            assert round(remote_mib, 3) == EXPECTED_REMOTE_MIB[key]
+            remote_medians[key] = remote_mib
+
+    for engine in ("delta_arrow_reader", "lakehouse_rt"):
+        for query in QUERIES:
+            assert {
+                int(row["reported_files_read"])
+                for row in grouped[engine, query]
+                if row["included"] == "true"
+            } == {PLANNED_FILES[query]}
 
     for engine, expected in EXPECTED_RESOURCES.items():
         values = grouped[engine, "Q1"]
@@ -245,8 +275,31 @@ def validate(rows: list[dict[str, str]]) -> None:
     delta_rs_speedups = [
         baseline / value for baseline, value in zip(delta_rs, dar, strict=True)
     ]
-    assert round(min(delta_rs_speedups), 2) == 1.26
-    assert round(max(delta_rs_speedups), 2) == 71.75
+    assert [round(value, 2) for value in delta_rs_speedups] == [
+        4.67,
+        71.75,
+        1.26,
+        30.48,
+    ]
+    delta_rs_peak = EXPECTED_RESOURCES["delta_rs"][2]
+    dar_peak = EXPECTED_RESOURCES["delta_arrow_reader"][2]
+    assert round(delta_rs_peak / dar_peak, 1) == 6.4
+
+    dar_remote = [
+        remote_medians["delta_arrow_reader", query] for query in QUERIES
+    ]
+    rt_remote = [remote_medians["lakehouse_rt", query] for query in QUERIES]
+    serverless_remote = [
+        remote_medians["serverless_sql", query] for query in QUERIES
+    ]
+    assert [
+        round((value / baseline - 1) * 100, 1)
+        for value, baseline in zip(dar_remote, rt_remote, strict=True)
+    ] == [-52.3, 3.3, 13.9, 1.5]
+    assert [
+        round((value / baseline - 1) * 100, 1)
+        for value, baseline in zip(dar_remote, serverless_remote, strict=True)
+    ] == [-55.7, -6.5, -9.8, -4.1]
     q2_dar = [
         float(row["wall_seconds"])
         for row in grouped["delta_arrow_reader", "Q2"]

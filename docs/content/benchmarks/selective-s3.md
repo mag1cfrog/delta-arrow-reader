@@ -7,8 +7,8 @@ on another and 33.8% on a third, and was 2.33 times slower on the fourth. All
 four engines returned the same results.
 
 The same-machine comparison was not close. Delta Arrow Reader ran the four
-queries 4.67, 71.75, 1.26, and 30.48 times faster than delta-rs while using
-6.4 times less peak memory.
+queries 4.67, 71.75, 1.26, and 30.48 times faster than delta-rs, which used 6.4
+times as much peak memory.
 
 The latency table also understates the result against RT. Delta Arrow Reader
 selected the same files, transferred half as many reported bytes on Q1, and
@@ -72,9 +72,9 @@ storage work. The scan counters rule out that simple explanation:
 | Query | Delta Arrow Reader | Lakehouse//RT | Serverless SQL | DAR vs RT | DAR vs Serverless |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Q1 | **8.436 MiB** | 17.681 MiB | 19.049 MiB | **52.3% less** | **55.7% less** |
-| Q2 | **23.459 MiB** | 22.700 MiB | 25.082 MiB | 3.3% more | **6.5% less** |
-| Q3 | **3.303 MiB** | 2.900 MiB | 3.662 MiB | 13.9% more | **9.8% less** |
-| Q4 | **25.885 MiB** | 25.510 MiB | 27.005 MiB | 1.5% more | **4.1% less** |
+| Q2 | 23.459 MiB | **22.700 MiB** | 25.082 MiB | 3.3% more | **6.5% less** |
+| Q3 | 3.303 MiB | **2.900 MiB** | 3.662 MiB | 13.9% more | **9.8% less** |
+| Q4 | 25.885 MiB | **25.510 MiB** | 27.005 MiB | 1.5% more | **4.1% less** |
 
 Delta Arrow Reader transferred fewer reported bytes than Serverless SQL on
 every query. Against RT, it transferred less than half as much on Q1 and was
@@ -113,7 +113,8 @@ advantage from the comparison.
 | Q4 | 1.736 s | 52.899 s | **30.48x** |
 
 The memory result was just as clear: Delta Arrow Reader peaked at 431.1 MiB,
-while delta-rs reached 2,751.6 MiB. That is 6.4 times more memory for delta-rs.
+while delta-rs reached 2,751.6 MiB. That is 6.4 times as much memory for
+delta-rs.
 
 This is the strongest evidence that the reader itself matters. Rust,
 DataFusion, and Delta support did not produce comparable performance by
@@ -301,10 +302,10 @@ placement as the clearest measured asymmetry, not a clearly superior selective
 read path.
 
 delta-rs was not competitive on the same machine. Delta Arrow Reader was
-faster on every query, up to 71.75 times faster, and used 6.4 times less peak
-memory. Supporting Delta Lake and DataFusion is not enough by itself; the read
-path determines whether a selective query takes milliseconds, seconds, or
-minutes.
+faster on every query, up to 71.75 times faster, while delta-rs used 6.4 times
+as much peak memory. Supporting Delta Lake and DataFusion is not enough by
+itself; the read path determines whether a selective query takes milliseconds,
+seconds, or minutes.
 
 Databricks keeps RT's implementation inside its service. Delta Arrow Reader's
 implementation, raw anonymized measurements, and chart generator are public.
