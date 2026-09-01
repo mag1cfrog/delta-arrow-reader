@@ -69,6 +69,12 @@ shows that range rather than reducing a WAN-sensitive result to one clean dot.
 RT won three rows in the wall-time table. That does not mean it did less
 storage work. The scan counters rule out that simple explanation:
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-remote-bytes-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-remote-bytes-light.svg">
+  <img alt="Median reported remote bytes for four selective S3 queries across Delta Arrow Reader, Lakehouse RT, and Serverless SQL. Delta Arrow Reader reports fewer bytes than Serverless SQL on every query, half as many bytes as Lakehouse RT on Q1, and similar amounts on Q2 through Q4." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-remote-bytes-light.svg">
+</picture>
+
 | Query | Delta Arrow Reader | Lakehouse//RT | Serverless SQL | DAR vs RT | DAR vs Serverless |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Q1 | **8.436 MiB** | 17.681 MiB | 19.049 MiB | **52.3% less** | **55.7% less** |

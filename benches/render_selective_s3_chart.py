@@ -51,6 +51,7 @@ ENGINES = {
 QUERIES = ("Q1", "Q2", "Q3", "Q4")
 LATENCY_ENGINES = ("delta_arrow_reader", "lakehouse_rt", "serverless_sql")
 LATENCY_TICKS = (0.3, 1, 3, 10, 30)
+REMOTE_TICKS = (0, 10, 20, 30)
 OUTPUT_ROWS = {"Q1": 20, "Q2": 718, "Q3": 1, "Q4": 668}
 PLANNED_FILES = {"Q1": 5, "Q2": 5, "Q3": 4, "Q4": 6}
 EXPECTED_MEDIANS = {
@@ -317,12 +318,30 @@ def measurements(rows: list[dict[str, str]]) -> dict[tuple[str, str], list[float
     return values
 
 
+def remote_measurements(
+    rows: list[dict[str, str]],
+) -> dict[tuple[str, str], list[float]]:
+    values = defaultdict(list)
+    for row in rows:
+        if row["included"] == "true" and row["reported_remote_bytes"]:
+            values[row["engine"], row["query"]].append(
+                int(row["reported_remote_bytes"]) / (1024 * 1024)
+            )
+    return values
+
+
 def x_position(
     value: float, left: float, width: float, domain: tuple[float, float]
 ) -> float:
     minimum = math.log10(domain[0])
     maximum = math.log10(domain[1])
     return left + (math.log10(value) - minimum) / (maximum - minimum) * width
+
+
+def linear_position(
+    value: float, left: float, width: float, domain: tuple[float, float]
+) -> float:
+    return left + (value - domain[0]) / (domain[1] - domain[0]) * width
 
 
 def marker(
@@ -337,6 +356,28 @@ def marker(
         f'<rect x="{x - size}" y="{y - size}" width="{size * 2}" '
         f'height="{size * 2}" fill="{background}" stroke="{color}" stroke-width="2"/>'
     )
+
+
+def legend(theme_name: str, y: float) -> list[str]:
+    theme = THEMES[theme_name]
+    legend_x = {
+        "delta_arrow_reader": 250,
+        "lakehouse_rt": 480,
+        "serverless_sql": 660,
+    }
+    parts = []
+    for engine in LATENCY_ENGINES:
+        x = legend_x[engine]
+        color = theme["engines"][engine]
+        label = ENGINES[engine][0].replace(" Small", "")
+        parts.extend(
+            [
+                marker(engine, x, y, color, theme["background"], 4),
+                f'<text x="{x + 12}" y="{y + 5}" fill="{theme["text"]}" '
+                f'font-size="14" font-weight="400">{escape(label)}</text>',
+            ]
+        )
+    return parts
 
 
 def render(theme_name: str, values: dict[tuple[str, str], list[float]]) -> str:
@@ -367,22 +408,7 @@ def render(theme_name: str, values: dict[tuple[str, str], list[float]]) -> str:
         'p50 and min-max over 8 measured runs, seconds (log scale). Lower is faster.</text>',
     ]
 
-    legend_x = {
-        "delta_arrow_reader": 250,
-        "lakehouse_rt": 480,
-        "serverless_sql": 660,
-    }
-    for engine in LATENCY_ENGINES:
-        x = legend_x[engine]
-        color = theme["engines"][engine]
-        label = ENGINES[engine][0].replace(" Small", "")
-        parts.extend(
-            [
-                marker(engine, x, 99, color, theme["background"], 4),
-                f'<text x="{x + 12}" y="104" fill="{theme["text"]}" '
-                f'font-size="14" font-weight="400">{escape(label)}</text>',
-            ]
-        )
+    parts.extend(legend(theme_name, 99))
 
     for tick in LATENCY_TICKS:
         x = x_position(tick, plot_left, plot_width, domain)
@@ -434,6 +460,72 @@ def render(theme_name: str, values: dict[tuple[str, str], list[float]]) -> str:
     return "\n".join(parts) + "\n"
 
 
+def render_remote_bytes(
+    theme_name: str, values: dict[tuple[str, str], list[float]]
+) -> str:
+    theme = THEMES[theme_name]
+    width = 840
+    height = 400
+    plot_left = 95
+    plot_width = 710
+    plot_top = 145
+    group_height = 58
+    plot_bottom = plot_top + group_height * (len(QUERIES) - 1)
+    domain = (REMOTE_TICKS[0], REMOTE_TICKS[-1])
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
+        '<title id="title">RT did not read materially less</title>',
+        '<desc id="description">Median reported remote bytes for four selective S3 '
+        'queries. Delta Arrow Reader reports fewer bytes than Serverless SQL on every '
+        'query. It reports half as many bytes as Lakehouse RT on Q1 and similar amounts '
+        'on the other three queries.</desc>',
+        '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
+        'BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>',
+        f'<rect width="{width}" height="{height}" fill="{theme["background"]}"/>',
+        f'<text x="32" y="40" fill="{theme["text"]}" font-size="26" '
+        'font-weight="500">RT did not read materially less</text>',
+        f'<text x="32" y="66" fill="{theme["muted"]}" font-size="14">'
+        'Median reported remote bytes per query, MiB</text>',
+    ]
+    parts.extend(legend(theme_name, 99))
+
+    for tick in REMOTE_TICKS:
+        x = linear_position(tick, plot_left, plot_width, domain)
+        parts.extend(
+            [
+                f'<line x1="{x:.2f}" y1="{plot_top - 24}" x2="{x:.2f}" '
+                f'y2="{plot_bottom + 24}" stroke="{theme["grid"]}"/>',
+                f'<text x="{x:.2f}" y="{plot_bottom + 49}" text-anchor="middle" '
+                f'fill="{theme["muted"]}" font-size="13">{tick:g}</text>',
+            ]
+        )
+
+    for query_index in range(1, len(QUERIES)):
+        y = plot_top + (query_index - 0.5) * group_height
+        parts.append(
+            f'<line x1="32" y1="{y:.2f}" x2="805" y2="{y:.2f}" '
+            f'stroke="{theme["grid"]}" stroke-dasharray="4 6"/>'
+        )
+
+    offsets = (-10, 0, 10)
+    for query_index, query in enumerate(QUERIES):
+        query_y = plot_top + query_index * group_height
+        parts.append(
+            f'<text x="32" y="{query_y + 6}" fill="{theme["text"]}" '
+            f'font-size="18" font-weight="500">{query}</text>'
+        )
+        for engine_index, engine in enumerate(LATENCY_ENGINES):
+            y = query_y + offsets[engine_index]
+            color = theme["engines"][engine]
+            median = statistics.median(values[engine, query])
+            x = linear_position(median, plot_left, plot_width, domain)
+            parts.append(marker(engine, round(x, 2), y, color, theme["background"]))
+
+    parts.append('</svg>')
+    return "\n".join(parts) + "\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -443,15 +535,21 @@ def main() -> None:
     rows = load_rows()
     validate(rows)
     values = measurements(rows)
+    remote_values = remote_measurements(rows)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     for theme in THEMES:
-        target = OUTPUT / f"selective-s3-wall-{theme}.svg"
-        rendered = render(theme, values)
-        if args.check:
-            assert target.read_text() == rendered
-        else:
-            target.write_text(rendered)
-            print(target.relative_to(ROOT))
+        outputs = {
+            OUTPUT / f"selective-s3-wall-{theme}.svg": render(theme, values),
+            OUTPUT / f"selective-s3-remote-bytes-{theme}.svg": render_remote_bytes(
+                theme, remote_values
+            ),
+        }
+        for target, rendered in outputs.items():
+            if args.check:
+                assert target.read_text() == rendered
+            else:
+                target.write_text(rendered)
+                print(target.relative_to(ROOT))
     print("validated 144 anonymized benchmark measurements")
 
 
