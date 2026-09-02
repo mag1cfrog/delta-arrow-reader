@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="840" height="425" viewBox="0 0 840 425" role="img" aria-labelledby="title description">
 <title id="title">Selective S3 latency</title>
-<desc id="description">Four selective S3 queries compare Lakehouse RT Small, Serverless SQL Small, and Delta Arrow Reader on a laptop. Thin horizontal whiskers show the minimum and maximum over eight measured rounds. The circle, diamond, and square show each median. The horizontal axis is logarithmic and lower is faster.</desc>
+<desc id="description">Four selective S3 queries compare Lakehouse RT Small (Beta), Serverless SQL Small, and Delta Arrow Reader on a laptop. Thin horizontal whiskers show the minimum and maximum over eight measured rounds. The circle, diamond, and square show each median. The horizontal axis is logarithmic and lower is faster.</desc>
 <style>text{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>
 <rect width="840" height="425" fill="#111417"/>
 <text x="32" y="40" fill="#edf0f2" font-size="26" font-weight="500">Selective S3 latency</text>
@@ -8,7 +8,7 @@
 <circle cx="250" cy="99" r="4" fill="#7dd3fc"/>
 <text x="262" y="104" fill="#edf0f2" font-size="14" font-weight="400">Delta Arrow Reader</text>
 <polygon points="480,95 484,99 480,103 476,99" fill="#a5b4fc"/>
-<text x="492" y="104" fill="#edf0f2" font-size="14" font-weight="400">Lakehouse//RT</text>
+<text x="492" y="104" fill="#edf0f2" font-size="14" font-weight="400">Lakehouse//RT (Beta)</text>
 <rect x="656" y="95" width="8" height="8" fill="#111417" stroke="#94a3b8" stroke-width="2"/>
 <text x="672" y="104" fill="#edf0f2" font-size="14" font-weight="400">Serverless SQL</text>
 <line x1="95.00" y1="121" x2="95.00" y2="361" stroke="#2a3035"/>

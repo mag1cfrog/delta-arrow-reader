@@ -33,12 +33,12 @@ of designing a workload around this reader.
 
 Running from a laptop over the public internet, Delta Arrow Reader beat
 Databricks Serverless SQL Small on all four queries. It also beat Lakehouse//RT
-Small once and finished within 33.8% on two more.
+Small (Beta) once and finished within 33.8% on two more.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg">
-  <img alt="Median query time for four existing selective Delta queries. Delta Arrow Reader ran from a laptop and beat Databricks Serverless SQL Small on all four." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg" width="1000">
+  <img alt="Median query time for four existing selective Delta queries across Delta Arrow Reader on a laptop, Lakehouse RT Small (Beta), and Databricks Serverless SQL Small. Delta Arrow Reader beat Serverless SQL on all four." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-readme-light.svg" width="1000">
 </picture>
 
 The same-machine comparison was not close. Delta Arrow Reader beat delta-rs on
@@ -49,8 +49,9 @@ The [anonymized case study](https://mag1cfrog.github.io/delta-arrow-reader/bench
 publishes every measured run, the query shapes, remote byte counts, cache
 checks, and limitations.
 
-*Benchmark context: Lakehouse//RT was in Beta when tested on August 31, 2026.
-Its performance and supported features may change before general availability.*
+*Tested August 31, 2026. [Databricks notes](https://docs.databricks.com/aws/en/compute/sql-warehouse/real-time)
+that the performance and supported features of Lakehouse//RT (Beta) may change
+before general availability.*
 
 ## Why not...
 

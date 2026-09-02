@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="610" viewBox="0 0 1200 610" role="img" aria-labelledby="title description">
 <title id="title">Laptop Delta reads compared with managed warehouses</title>
-<desc id="description">Median query time for four existing selective Delta queries. Delta Arrow Reader ran from a laptop and was faster than Databricks Serverless SQL Small on all four. It was faster than Lakehouse RT Small on Q3. Lower is better.</desc>
+<desc id="description">Median query time for four existing selective Delta queries. Delta Arrow Reader ran from a laptop and was faster than Databricks Serverless SQL Small on all four. It was faster than Lakehouse RT Small (Beta) on Q3. Lower is better.</desc>
 <style>text{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>
 <defs><linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b0d10"/><stop offset="1" stop-color="#11151a"/></linearGradient></defs>
 <rect width="1200" height="610" fill="url(#page)"/>
@@ -10,7 +10,7 @@
 <rect x="44" y="121" width="10" height="10" rx="3" fill="#7dd3fc"/>
 <text x="62" y="131" fill="#f0f2f5" font-size="14">Delta Arrow Reader</text>
 <rect x="319" y="121" width="10" height="10" rx="3" fill="#53606e"/>
-<text x="337" y="131" fill="#98a2b0" font-size="14">Lakehouse//RT Small</text>
+<text x="337" y="131" fill="#98a2b0" font-size="14">Lakehouse//RT Small (Beta)</text>
 <rect x="594" y="121" width="10" height="10" rx="3" fill="#333c47"/>
 <text x="612" y="131" fill="#98a2b0" font-size="14">Serverless SQL Small</text>
 <line x1="150.00" y1="162" x2="150.00" y2="552" stroke="#29303a" stroke-dasharray="3 6"/>

@@ -40,7 +40,7 @@ HEADER = (
     "correctness_parity",
 )
 ENGINES = {
-    "lakehouse_rt": ("Lakehouse//RT Small", "Small"),
+    "lakehouse_rt": ("Lakehouse//RT Small (Beta)", "Small"),
     "serverless_sql": ("Serverless SQL Small", "Small"),
     "delta_arrow_reader": ("Delta Arrow Reader", "0.6.0"),
     "delta_rs": (
@@ -437,7 +437,7 @@ def render_wall_time(
         f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
         '<title id="title">Selective S3 latency</title>',
         '<desc id="description">Four selective S3 queries compare Lakehouse RT '
-        'Small, Serverless SQL Small, and Delta Arrow Reader on a laptop. Thin '
+        'Small (Beta), Serverless SQL Small, and Delta Arrow Reader on a laptop. Thin '
         'horizontal whiskers show the minimum and maximum over eight measured rounds. '
         'The circle, diamond, and square show each median. The horizontal axis is '
         'logarithmic and lower is faster.</desc>',
@@ -521,7 +521,8 @@ def render_readme_latency(
         '<title id="title">Laptop Delta reads compared with managed warehouses</title>',
         '<desc id="description">Median query time for four existing selective Delta '
         'queries. Delta Arrow Reader ran from a laptop and was faster than Databricks '
-        'Serverless SQL Small on all four. It was faster than Lakehouse RT Small on Q3. '
+        'Serverless SQL Small on all four. It was faster than Lakehouse RT Small '
+        '(Beta) on Q3. '
         'Lower is better.</desc>',
         '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
         'BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>',
@@ -628,16 +629,16 @@ def render_remote_bytes(
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
-        '<title id="title">RT did not read materially less</title>',
+        '<title id="title">RT (Beta) did not read materially less</title>',
         '<desc id="description">Median reported remote bytes for four selective S3 '
         'queries. Delta Arrow Reader reports fewer bytes than Serverless SQL on every '
-        'query. It reports half as many bytes as Lakehouse RT on Q1 and similar amounts '
-        'on the other three queries.</desc>',
+        'query. It reports half as many bytes as Lakehouse RT (Beta) on Q1 and '
+        'similar amounts on the other three queries.</desc>',
         '<style>text{font-family:Inter,ui-sans-serif,-apple-system,'
         'BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}</style>',
         f'<rect width="{width}" height="{height}" fill="{theme["background"]}"/>',
         f'<text x="32" y="40" fill="{theme["text"]}" font-size="26" '
-        'font-weight="500">RT did not read materially less</text>',
+        'font-weight="500">RT (Beta) did not read materially less</text>',
         f'<text x="32" y="66" fill="{theme["muted"]}" font-size="14">'
         'Median reported remote bytes per query, MiB</text>',
     ]
