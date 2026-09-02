@@ -2,9 +2,9 @@
 
 Delta Arrow Reader ran four pre-existing selective queries from a laptop
 against private Delta tables in S3. It beat Databricks Serverless SQL Small on
-all four. Against Lakehouse//RT Small, it won one query, finished within 10.4%
-on another and 33.8% on a third, and was 2.33 times slower on the fourth. All
-four engines returned the same results.
+all four. Against Lakehouse//RT Small (Beta), it won one query, finished within
+10.4% on another and 33.8% on a third, and was 2.33 times slower on the fourth.
+All four engines returned the same results.
 
 The same-machine comparison was not close. Delta Arrow Reader ran the four
 queries 4.67, 71.75, 1.26, and 30.48 times faster than delta-rs, which used 6.4
@@ -20,7 +20,7 @@ a meaningful part of the remaining gap, but these measurements cannot tell us
 how much or separate that effect from differences between the engines.
 
 Databricks positions
-[Lakehouse//RT](https://docs.databricks.com/aws/en/compute/sql-warehouse/real-time)
+[Lakehouse//RT (Beta)](https://docs.databricks.com/aws/en/compute/sql-warehouse/real-time)
 for low-latency application serving over Delta and Iceberg tables in cloud
 storage, but keeps its implementation inside a managed service. Delta Arrow
 Reader puts its read path in an
@@ -42,10 +42,10 @@ Lower is faster.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-wall-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-wall-light.svg">
-  <img alt="Wall-time comparison for four selective S3 queries across Lakehouse RT Small, Serverless SQL Small, and Delta Arrow Reader. Each row shows the median and measured range on a logarithmic scale." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-wall-light.svg">
+  <img alt="Wall-time comparison for four selective S3 queries across Lakehouse RT Small (Beta), Serverless SQL Small, and Delta Arrow Reader. Each row shows the median and measured range on a logarithmic scale." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-wall-light.svg">
 </picture>
 
-| Query | Lakehouse//RT Small | Serverless SQL Small | Delta Arrow Reader 0.6.0 | delta-rs `main` |
+| Query | Lakehouse//RT Small (Beta) | Serverless SQL Small | Delta Arrow Reader 0.6.0 | delta-rs `main` |
 | --- | ---: | ---: | ---: | ---: |
 | Q1 | **0.959 s** | 1.448 s | 1.059 s | 4.950 s |
 | Q2 | **1.601 s** | 3.880 s | 3.733 s | 267.860 s |
@@ -73,10 +73,10 @@ storage work. The scan counters rule out that simple explanation:
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-remote-bytes-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-remote-bytes-light.svg">
-  <img alt="Median reported remote bytes for four selective S3 queries across Delta Arrow Reader, Lakehouse RT, and Serverless SQL. Delta Arrow Reader reports fewer bytes than Serverless SQL on every query, half as many bytes as Lakehouse RT on Q1, and similar amounts on Q2 through Q4." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-remote-bytes-light.svg">
+  <img alt="Median reported remote bytes for four selective S3 queries across Delta Arrow Reader, Lakehouse RT (Beta), and Serverless SQL. Delta Arrow Reader reports fewer bytes than Serverless SQL on every query, half as many bytes as Lakehouse RT on Q1, and similar amounts on Q2 through Q4." src="https://raw.githubusercontent.com/mag1cfrog/delta-arrow-reader/main/docs/content/assets/selective-s3-remote-bytes-light.svg">
 </picture>
 
-| Query | Delta Arrow Reader | Lakehouse//RT | Serverless SQL | DAR vs RT | DAR vs Serverless |
+| Query | Delta Arrow Reader | Lakehouse//RT (Beta) | Serverless SQL | DAR vs RT | DAR vs Serverless |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Q1 | **8.436 MiB** | 17.681 MiB | 19.049 MiB | **52.3% less** | **55.7% less** |
 | Q2 | 23.459 MiB | **22.700 MiB** | 25.082 MiB | 3.3% more | **6.5% less** |
@@ -188,7 +188,7 @@ with roughly 200 GiB of active data.
 
 | Engine | Version | Execution location | Query timer |
 | --- | --- | --- | --- |
-| Lakehouse//RT | Small (Beta), one cluster, Photon enabled | Databricks managed | SQL Connector `execute` through complete `fetchall` |
+| Lakehouse//RT (Beta) | Small, one cluster, Photon enabled | Databricks managed | SQL Connector `execute` through complete `fetchall` |
 | Serverless SQL | Small, one cluster, Photon enabled | Databricks managed | SQL Connector `execute` through complete `fetchall` |
 | Delta Arrow Reader | 0.6.0, DataFusion 54.1.0, Arrow/Parquet 58.4.0 | Local WSL2 process | DataFusion planning through complete stream consumption |
 | delta-rs | `365fd2c`, DataFusion 55.0.0, Arrow/Parquet 59.2.0 | Local WSL2 process | DataFusion planning through complete stream consumption |
