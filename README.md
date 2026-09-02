@@ -49,6 +49,9 @@ The [anonymized case study](https://mag1cfrog.github.io/delta-arrow-reader/bench
 publishes every measured run, the query shapes, remote byte counts, cache
 checks, and limitations.
 
+*Benchmark context: Lakehouse//RT was in Beta when tested on August 31, 2026.
+Its performance and supported features may change before general availability.*
+
 ## Why not...
 
 Delta Arrow Reader has one job: read Delta tables and stream Arrow batches. The
