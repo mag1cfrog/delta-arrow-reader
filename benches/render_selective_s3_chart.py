@@ -84,6 +84,16 @@ EXPECTED_MEDIANS = {
     ("delta_rs", "Q3"): 1.015567,
     ("delta_rs", "Q4"): 52.899171,
 }
+EXPECTED_SERVER_MEDIANS = {
+    ("lakehouse_rt", "Q1"): 0.887,
+    ("lakehouse_rt", "Q2"): 1.0825,
+    ("lakehouse_rt", "Q3"): 0.8885,
+    ("lakehouse_rt", "Q4"): 0.763,
+    ("serverless_sql", "Q1"): 1.2635,
+    ("serverless_sql", "Q2"): 3.114,
+    ("serverless_sql", "Q3"): 1.219,
+    ("serverless_sql", "Q4"): 2.5215,
+}
 EXPECTED_REMOTE_MIB = {
     ("lakehouse_rt", "Q1"): 17.681,
     ("lakehouse_rt", "Q2"): 22.700,
@@ -261,6 +271,13 @@ def validate(rows: list[dict[str, str]]) -> None:
         )
         median = statistics.median(float(row["wall_seconds"]) for row in measured)
         assert math.isclose(median, EXPECTED_MEDIANS[key], abs_tol=0.000001)
+        if key in EXPECTED_SERVER_MEDIANS:
+            server_median = statistics.median(
+                float(row["server_seconds"]) for row in measured
+            )
+            assert math.isclose(
+                server_median, EXPECTED_SERVER_MEDIANS[key], abs_tol=0.000001
+            )
         if key in EXPECTED_REMOTE_MIB:
             remote_mib = statistics.median(
                 int(row["reported_remote_bytes"]) for row in measured

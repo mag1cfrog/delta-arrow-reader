@@ -65,6 +65,26 @@ Q2 is the weakest and noisiest Delta Arrow Reader result. Its eight measured
 runs ranged from 1.831 to 20.386 seconds around a 3.733-second median. The chart
 shows that range rather than reducing a WAN-sensitive result to one clean dot.
 
+### Databricks-reported server time
+
+Databricks Query History also reported `total_duration_ms` for each managed
+statement, recorded as `server_seconds` in the
+[public CSV](selective-s3-results.csv). These are the medians from the same
+eight measured rounds:
+
+| Query | Lakehouse//RT (Beta) server | Serverless SQL server |
+| --- | ---: | ---: |
+| Q1 | 0.887 s | 1.264 s |
+| Q2 | 1.083 s | 3.114 s |
+| Q3 | 0.889 s | 1.219 s |
+| Q4 | 0.763 s | 2.522 s |
+
+The server metric has a narrower boundary. Databricks defines it as total
+statement duration excluding result fetch. It does not include client transport
+or Arrow decoding. Delta Arrow Reader's timer includes planning and complete
+stream consumption. Because those boundaries differ, the connector wall time
+above remains the primary application-facing comparison.
+
 ## The byte counts change the RT comparison
 
 RT won three rows in the wall-time table. That does not mean it did less
@@ -308,10 +328,9 @@ metadata snapshot.
 
 ## What the numbers say
 
-Serverless SQL Small lost all four queries to an Apache-2.0 reader running in
-WSL on a laptop with 19 GiB of usable memory. It also reported more remote bytes
-on all four. Serverless SQL's managed warehouse was neither necessary nor
-faster for this selective workload.
+An Apache-2.0 reader running in WSL on a laptop with 19 GiB of usable memory
+beat Serverless SQL Small on application-facing latency for all four selective
+reads. It also reported fewer remote bytes on every query.
 
 RT won three queries and the aggregate comparison, but it did not win by
 selecting fewer files or reading materially less data. Delta Arrow Reader
