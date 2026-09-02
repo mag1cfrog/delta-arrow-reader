@@ -15,9 +15,9 @@ selected the same files, transferred half as many reported bytes on Q1, and
 stayed within 14% of RT's reported bytes on Q2 through Q4. RT was faster
 overall, but not because Delta Arrow Reader pruned less effectively or moved
 materially more data. The local process crossed a public WAN to S3; RT's
-storage topology is not disclosed. That makes storage placement and network
-latency the leading explanation for the remaining gap, though these
-measurements cannot assign a causal percentage to it.
+storage topology is not disclosed. The different network paths may account for
+a meaningful part of the remaining gap, but these measurements cannot tell us
+how much or separate that effect from differences between the engines.
 
 Databricks positions
 [Lakehouse//RT](https://docs.databricks.com/aws/en/compute/sql-warehouse/real-time)
@@ -27,9 +27,10 @@ Reader puts its read path in an
 [Apache-2.0 Rust crate](https://github.com/mag1cfrog/delta-arrow-reader/blob/main/LICENSE)
 that applications can embed, inspect, and change.
 
-Because the source sample is private, this page cannot hand readers a runnable
-copy of the workload. It publishes every anonymized repetition, the workload
-shape, timing boundaries, cache checks, and limitations instead.
+The source tables and SQL are private, so readers cannot rerun the complete
+workload. They can still audit the comparison: this page publishes every
+anonymized repetition, the workload shape, timing boundaries, cache checks,
+and limitations.
 
 ## Results
 
@@ -88,14 +89,13 @@ within 14% on the other three. Both readers selected exactly the same files.
 The remaining RT advantage therefore does not point to better file pruning or
 materially lower data transfer.
 
-The obvious difference is where the readers ran. Delta Arrow Reader reached S3
-from a laptop over a public connection measured at 140.392 Mbit/s with a
+One important difference is where the readers ran. Delta Arrow Reader reached
+S3 from a laptop over a public connection measured at 140.392 Mbit/s with a
 0.257-second median time to first byte. RT ran inside Databricks, which does not
-publish its tested warehouse's network path or storage placement. Remote-read
-latency and throughput are the most plausible explanation for much of the
-remaining wall-time gap, especially for noisy Q2. The counters cannot prove
-how many milliseconds came from the network, so this is an inference, not a
-causal measurement.
+publish its tested warehouse's network path or storage placement. Network
+latency and throughput could account for a meaningful part of the remaining
+wall-time gap, especially for noisy Q2. The counters cannot tell us how much of
+that gap came from the network rather than the engines themselves.
 
 These counters are also not identical wire measurements. Delta Arrow Reader
 counts bytes returned through instrumented object-store reads. The managed
@@ -154,12 +154,15 @@ clustering, statistics, row distribution, compression, or Parquet page layout.
 
 ### Table shape
 
-| Table | Active size | Active files | Columns | Logical type counts |
+| Table | Active size | Active files | Columns | Column profile |
 | --- | ---: | ---: | ---: | --- |
-| A | 243 MiB | 6 | 119 | 16 boolean, 1 date, 60 double, 10 integer, 5 long, 27 string |
-| B | 1.19 TiB | 18,287 | 426 | 1 date, 418 double, 1 integer, 2 long, 4 string |
-| C | 790 MiB | 21 | 293 | 287 double, 2 long, 4 string |
-| D | 208 GiB | 3,471 | 91 | 84 double, 1 integer, 2 long, 4 string |
+| A | About 240 MiB | Fewer than 10 | About 120 | Mixed |
+| B | About 1.2 TiB | Over 18K | Over 400 | Mostly numeric |
+| C | About 800 MiB | About 20 | About 290 | Mostly numeric |
+| D | About 200 GiB | Over 3K | About 90 | Mostly numeric |
+
+These source-level figures are rounded to make the private tables harder to
+identify. The query measurements below remain exact.
 
 All four queries apply two equality filters and one membership filter. The
 projection and selected-input shape are shown without names or literal values:
@@ -175,16 +178,17 @@ projection and selected-input shape are shown without names or literal values:
 Delta pruning. "S3 bytes received" is Delta Arrow Reader's median instrumented
 data-file traffic. The reader did not download each selected file in full.
 
-Q2 makes the difference concrete. Delta statistics reduced an 18,287-file,
-1.19-TiB table to five files. Those files totaled 418.6 MiB, but the reader
-fetched only 23.5 MiB of data-file bytes. The query returned 718 rows. Q4
-reduced 3,471 files to six and transferred 25.9 MiB from a 208-GiB table.
+Q2 makes the difference concrete. Delta statistics reduced a roughly 1.2-TiB
+table with over 18,000 files to five files. Those files totaled 418.6 MiB, but
+the reader fetched only 23.5 MiB of data-file bytes. The query returned 718
+rows. Q4 reduced over 3,000 files to six and transferred 25.9 MiB from a table
+with roughly 200 GiB of active data.
 
 ## What each engine ran
 
 | Engine | Version | Execution location | Query timer |
 | --- | --- | --- | --- |
-| Lakehouse//RT | Small, one cluster, Photon enabled | Databricks managed | SQL Connector `execute` through complete `fetchall` |
+| Lakehouse//RT | Small (Beta), one cluster, Photon enabled | Databricks managed | SQL Connector `execute` through complete `fetchall` |
 | Serverless SQL | Small, one cluster, Photon enabled | Databricks managed | SQL Connector `execute` through complete `fetchall` |
 | Delta Arrow Reader | 0.6.0, DataFusion 54.1.0, Arrow/Parquet 58.4.0 | Local WSL2 process | DataFusion planning through complete stream consumption |
 | delta-rs | `365fd2c`, DataFusion 55.0.0, Arrow/Parquet 59.2.0 | Local WSL2 process | DataFusion planning through complete stream consumption |
@@ -313,9 +317,9 @@ RT won three queries and the aggregate comparison, but it did not win by
 selecting fewer files or reading materially less data. Delta Arrow Reader
 matched its file selection, moved comparable or fewer reported bytes, and
 still reached S3 over a measured public-WAN path. RT's network and storage
-placement are undisclosed, but equal file selection and comparable transfer
-make network topology the most plausible explanation for much of the remaining
-gap, not a clearly superior selective read path.
+placement are undisclosed. The different network paths may account for a
+meaningful part of the remaining gap, but the benchmark cannot separate that
+effect from differences between the engines.
 
 delta-rs was not competitive on the same machine. Delta Arrow Reader was
 faster on every query, up to 71.75 times faster, while delta-rs used 6.4 times
@@ -336,6 +340,10 @@ exclusive to a closed runtime.
   concurrent clients, joins, writes, ETL, or full-table analytics.
 - The exact Serverless and RT hardware, storage path, runtime build, and Delta
   metadata lifecycle are not exposed.
+- Lakehouse//RT was in Beta when tested on August 31, 2026. Databricks
+  [notes](https://docs.databricks.com/aws/en/compute/sql-warehouse/real-time)
+  that its performance and supported features may change before general
+  availability.
 - Local table initialization was measured separately and excluded from query
   latency. A one-shot caller that loads all four tables would pay that
   12.033-second cost.
@@ -353,12 +361,17 @@ query, and round, including the discarded warmups. It contains enough data to
 recompute every median, range, and aggregate ratio on this page without
 revealing SQL, names, paths, literals, identifiers, or result fingerprints.
 
-Validate the measurements and confirm that all six generated SVG files match
+Validate the measurements and confirm that all eight generated SVG files match
 the CSV:
 
 ```console
 python benches/render_selective_s3_chart.py --check
 ```
 
-Run the script without `--check` to regenerate all three charts in light and
+Run the script without `--check` to regenerate all four charts in light and
 dark themes.
+
+## Independence
+
+Delta Arrow Reader is an independent open-source project. It is not affiliated
+with or endorsed by Databricks.
