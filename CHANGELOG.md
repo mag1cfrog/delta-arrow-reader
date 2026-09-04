@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## [0.6.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.0...v0.6.1) - 2026-09-04
+
+### Documentation
+
+- add Search Console verification and benchmark metadata
+- add Databricks server timings to selective S3 benchmark
+- label Lakehouse RT benchmark comparisons as Beta
+- clarify evidence and Beta context for selective S3 benchmark
+- highlight selective S3 performance in the README
+- refresh Delta reader benchmarks with auditable results
+- publish an anonymized four-engine selective S3 case study
+
 ## [0.6.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.3...v0.6.0) - 2026-08-30
 
 ### Added
