@@ -1,3 +1,8 @@
+---
+title: "Databricks Serverless SQL vs a laptop on selective Delta reads"
+description: "An anonymized S3 benchmark comparing four selective Delta Lake queries across Delta Arrow Reader on a laptop, Databricks Serverless SQL, Lakehouse RT, and delta-rs."
+---
+
 # A laptop beat Serverless Small on selective Delta reads
 
 Delta Arrow Reader ran four pre-existing selective queries from a laptop
