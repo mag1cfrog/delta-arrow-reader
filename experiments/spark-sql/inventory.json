@@ -1,5 +1,5 @@
 {
-  "source_sha256": "e6c64c1bbd996884671269f2c2ebb9446fc823f70821c01718e49efd332ef75d",
+  "source_sha256": "6ed3775c1ca97373ee1662b97d4f1938f9844747f46e4e389f918ba56954273e",
   "crates": [
     {
       "crate": "sail-common",
@@ -13,20 +13,20 @@
     {
       "crate": "sail-common-datafusion",
       "rust_files": 14,
-      "gross_lines": 2981,
-      "nonblank_lines": 2679,
-      "test_lines": 333,
+      "gross_lines": 2171,
+      "nonblank_lines": 1934,
+      "test_lines": 217,
       "build_script_lines": 0,
-      "production_lines": 2648
+      "production_lines": 1954
     },
     {
       "crate": "sail-function",
       "rust_files": 192,
-      "gross_lines": 58384,
-      "nonblank_lines": 53078,
+      "gross_lines": 58371,
+      "nonblank_lines": 53068,
       "test_lines": 6446,
       "build_script_lines": 0,
-      "production_lines": 51938
+      "production_lines": 51925
     },
     {
       "crate": "sail-logical-plan",
@@ -40,11 +40,11 @@
     {
       "crate": "sail-plan",
       "rust_files": 78,
-      "gross_lines": 19671,
-      "nonblank_lines": 18427,
+      "gross_lines": 19672,
+      "nonblank_lines": 18428,
       "test_lines": 779,
       "build_script_lines": 0,
-      "production_lines": 18892
+      "production_lines": 18893
     },
     {
       "crate": "sail-sql-analyzer",
@@ -76,15 +76,15 @@
   ],
   "totals": {
     "rust_files": 357,
-    "gross_lines": 95376,
-    "nonblank_lines": 87625,
-    "test_lines": 7932,
+    "gross_lines": 94554,
+    "nonblank_lines": 86871,
+    "test_lines": 7816,
     "build_script_lines": 80,
-    "production_lines": 87364
+    "production_lines": 86658
   },
-  "lock_packages": 543,
-  "resolved_packages_all_targets_including_dev": 543,
-  "linux_normal_build_packages_including_runner": 477,
+  "lock_packages": 540,
+  "resolved_packages_all_targets_including_dev": 540,
+  "linux_normal_build_packages_including_runner": 474,
   "python_packages_in_linux_build": [],
   "build_generated_rust": {
     "sail-sql-parser": {

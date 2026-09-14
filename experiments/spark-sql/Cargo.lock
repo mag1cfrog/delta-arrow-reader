@@ -166,30 +166,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arrow-avro"
-version = "58.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8108cbcae32141577bc55ab490449944c63cfc93d47384906b475d13d89d43d"
-dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-schema",
- "bytes",
- "bzip2",
- "crc",
- "flate2",
- "indexmap",
- "liblzma",
- "rand 0.9.5",
- "serde",
- "serde_json",
- "snap",
- "strum_macros 0.28.0",
- "uuid",
- "zstd 0.13.3",
-]
-
-[[package]]
 name = "arrow-buffer"
 version = "58.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -955,7 +931,6 @@ dependencies = [
  "datafusion-common-runtime",
  "datafusion-datasource",
  "datafusion-datasource-arrow",
- "datafusion-datasource-avro",
  "datafusion-datasource-csv",
  "datafusion-datasource-json",
  "datafusion-datasource-parquet",
@@ -984,7 +959,6 @@ dependencies = [
  "object_store",
  "parking_lot",
  "parquet",
- "serde",
  "sqlparser",
  "tempfile",
  "tokio",
@@ -1136,25 +1110,6 @@ dependencies = [
  "itertools",
  "object_store",
  "tokio",
-]
-
-[[package]]
-name = "datafusion-datasource-avro"
-version = "54.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f26a312bb06528c17b4bb86b798b0c4321e7656d85e0ef65c2e9adf07b0a518d"
-dependencies = [
- "arrow",
- "arrow-avro",
- "async-trait",
- "bytes",
- "datafusion-common",
- "datafusion-datasource",
- "datafusion-physical-expr-adapter",
- "datafusion-physical-plan",
- "datafusion-session",
- "futures",
- "object_store",
 ]
 
 [[package]]
@@ -4415,11 +4370,9 @@ dependencies = [
  "datafusion-expr",
  "either",
  "lexical-core",
- "parquet-variant",
  "parquet-variant-compute",
  "parquet-variant-json",
  "ryu",
- "serde",
 ]
 
 [[package]]
@@ -4834,7 +4787,7 @@ version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 dependencies = [
- "strum_macros 0.27.2",
+ "strum_macros",
 ]
 
 [[package]]
@@ -4842,18 +4795,6 @@ name = "strum_macros"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
 dependencies = [
  "heck",
  "proc-macro2",

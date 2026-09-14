@@ -184,6 +184,42 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn variant_sql_survives_storage_removal() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        let named = resolve(
+            &ctx,
+            r#"SELECT
+            variant_get(parse_json('{"a":7}'), '$.a', 'int'),
+            is_variant_null(parse_json('null')),
+            variant_to_json(to_variant_object(named_struct('a', 7))),
+            try_parse_json('{broken') IS NULL,
+            CAST(parse_json('{"a":[1,null]}') AS STRING)"#,
+            &settings,
+        )
+        .await?;
+        let batches = ctx
+            .execute_logical_plan(named.plan)
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        let values = batches[0]
+            .columns()
+            .iter()
+            .map(|column| array_value_to_string(column.as_ref(), 0))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            values,
+            ["7", "true", r#"{"a":7}"#, "true", r#"{"a":[1,null]}"#]
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn rejects_dataframe_transforms_while_sql_paths_remain() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));

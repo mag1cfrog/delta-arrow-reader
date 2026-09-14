@@ -72,8 +72,6 @@ datafusion = { version = "54.1.0", default-features = false, features = [
     "unicode_expressions",
     "compression",
     "parquet",
-    "serde",
-    "avro",
     "recursive_protection",
 ] }
 datafusion-common = { version = "54.1.0", features = ["object_store"] }

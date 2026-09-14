@@ -17,8 +17,6 @@ datafusion-expr = { workspace = true }
 arrow-schema = { workspace = true }
 either = { workspace = true }
 lexical-core = { workspace = true }
-serde = { workspace = true }
 async-trait = { workspace = true }
 parquet-variant-compute = { workspace = true }
-parquet-variant = { workspace = true }
 parquet-variant-json = { workspace = true }
