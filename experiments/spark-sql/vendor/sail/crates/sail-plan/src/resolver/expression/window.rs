@@ -112,7 +112,7 @@ impl PlanResolver<'_> {
                     is_distinct,
                 )
             }
-            spec::Expr::CommonInlineUserDefinedFunction(_) => {
+            spec::Expr::CommonInlineUserDefinedFunction { .. } => {
                 return Err(PlanError::unsupported(
                     "inline user-defined window functions",
                 ));

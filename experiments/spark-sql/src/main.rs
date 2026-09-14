@@ -1029,21 +1029,29 @@ mod tests {
                 "{error}"
             );
         }
-        for node in [
-            spec::QueryNode::WithWatermark(spec::WithWatermark {
-                input: Box::new(batch.clone()),
-                event_time: "missing_column".into(),
-                delay_threshold: "invalid".into(),
-            }),
+        let missing = Box::new(sail_sql_analyzer::statement::from_ast_statement(
+            sail_sql_analyzer::parser::parse_one_statement("SELECT * FROM missing_table")?,
+        )?);
+        let nodes = [
+            spec::QueryNode::WithWatermark { input: missing },
             spec::QueryNode::CachedRemoteRelation {
                 relation_id: "missing_checkpoint".into(),
             },
-        ] {
+        ];
+        let expected_errors = [
+            "extraction probe: streaming watermarks",
+            "extraction probe: remote checkpoints",
+        ];
+        assert_eq!(nodes.len(), expected_errors.len());
+        for (node, expected) in nodes.into_iter().zip(expected_errors) {
             let error = resolver
                 .resolve_named_plan(spec::QueryPlan::new(node))
                 .await
                 .unwrap_err();
-            assert!(matches!(error, PlanError::NotSupported(_)), "{error}");
+            assert!(
+                matches!(error, PlanError::NotSupported(ref message) if message == expected),
+                "{error}"
+            );
         }
         let named = resolver.resolve_named_plan(batch).await?;
         let batches = ctx
@@ -1277,29 +1285,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_python_entrypoints_before_payload_or_input_resolution() -> ProbeResult<()> {
-        use spec::{CommonInlineUserDefinedFunction, QueryNode, QueryPlan};
+    async fn rejects_inline_udf_entrypoints_before_argument_or_input_resolution() -> ProbeResult<()>
+    {
+        use spec::{QueryNode, QueryPlan};
         let ctx = session()?;
         let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
-        let function = CommonInlineUserDefinedFunction {
-            function_name: "python_fn".into(),
-            deterministic: true,
-            is_distinct: false,
-            arguments: vec![],
-            function: spec::FunctionDefinition::PythonUdf {
-                output_type: spec::DataType::Int32,
-                eval_type: spec::PySparkUdfType::Batched,
-                command: vec![0xff],
-                python_version: "not-a-python-version".into(),
-                additional_includes: vec![],
-            },
-        };
+        let arguments = vec![spec::Expr::UnresolvedAttribute {
+            name: spec::ObjectName::bare("missing_udf_argument"),
+            plan_id: None,
+            is_metadata_column: false,
+        }];
         // If a removed path starts resolving its input, this missing table makes
         // the test fail with a different error before any row reads are possible.
         let missing = Box::new(sail_sql_analyzer::statement::from_ast_statement(
             sail_sql_analyzer::parser::parse_one_statement("SELECT * FROM missing_table")?,
         )?);
-        let expression = spec::Expr::CommonInlineUserDefinedFunction(function.clone());
+        let expression = spec::Expr::CommonInlineUserDefinedFunction {
+            arguments: arguments.clone(),
+        };
         let nodes = vec![
             QueryNode::Project {
                 input: None,
@@ -1319,64 +1322,36 @@ mod tests {
             },
             QueryNode::MapPartitions {
                 input: missing.clone(),
-                function: function.clone(),
-                is_barrier: false,
             },
-            QueryNode::GroupMap(spec::GroupMap {
+            QueryNode::GroupMap {
                 input: missing.clone(),
-                grouping_expressions: vec![],
-                function: function.clone(),
-                sorting_expressions: vec![],
-                initial_input: None,
-                initial_grouping_expressions: vec![],
-                is_map_groups_with_state: None,
-                output_mode: None,
-                timeout_conf: None,
-                state_schema: None,
-                transform_with_state_info: None,
-            }),
-            QueryNode::CoGroupMap(spec::CoGroupMap {
+            },
+            QueryNode::CoGroupMap {
                 input: missing.clone(),
-                input_grouping_expressions: vec![],
                 other: missing.clone(),
-                other_grouping_expressions: vec![],
-                function: function.clone(),
-                input_sorting_expressions: vec![],
-                other_sorting_expressions: vec![],
-            }),
-            QueryNode::ApplyInPandasWithState(spec::ApplyInPandasWithState {
-                input: missing,
-                grouping_expressions: vec![],
-                function,
-                output_schema: spec::Schema {
-                    fields: Default::default(),
-                },
-                state_schema: spec::Schema {
-                    fields: Default::default(),
-                },
-                output_mode: "append".into(),
-                timeout_conf: "NoTimeout".into(),
-            }),
-            QueryNode::CommonInlineUserDefinedTableFunction(
-                spec::CommonInlineUserDefinedTableFunction {
-                    function_name: "python_table_fn".into(),
-                    deterministic: true,
-                    arguments: vec![],
-                    function: spec::TableFunctionDefinition::PythonUdtf {
-                        return_type: None,
-                        eval_type: spec::PySparkUdfType::Table,
-                        command: vec![0xff],
-                        python_version: "not-a-python-version".into(),
-                    },
-                },
-            ),
+            },
+            QueryNode::ApplyInPandasWithState { input: missing },
+            QueryNode::CommonInlineUserDefinedTableFunction { arguments },
         ];
-        for node in nodes {
+        let expected_errors = [
+            "inline user-defined functions",
+            "inline user-defined window functions",
+            "Python user-defined functions",
+            "Python user-defined functions",
+            "Python user-defined functions",
+            "Python user-defined functions",
+            "Python user-defined functions",
+        ];
+        assert_eq!(nodes.len(), expected_errors.len());
+        for (node, expected) in nodes.into_iter().zip(expected_errors) {
             let error = resolver
                 .resolve_named_plan(QueryPlan::new(node))
                 .await
                 .unwrap_err();
-            assert!(matches!(error, PlanError::NotSupported(_)), "{error:?}");
+            assert!(
+                matches!(error, PlanError::NotSupported(ref message) if message == expected),
+                "{error:?}"
+            );
         }
         Ok(())
     }

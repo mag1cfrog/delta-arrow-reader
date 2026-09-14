@@ -57,7 +57,10 @@ pub enum Expr {
         value_expression: Option<Box<Expr>>,
     },
     UnresolvedNamedLambdaVariable(UnresolvedNamedLambdaVariable),
-    CommonInlineUserDefinedFunction(CommonInlineUserDefinedFunction),
+    /// Rejected inline UDF entrypoint; arguments retain the early-rejection check.
+    CommonInlineUserDefinedFunction {
+        arguments: Vec<Expr>,
+    },
     CallFunction {
         function_name: ObjectName,
         arguments: Vec<Expr>,
@@ -283,94 +286,6 @@ pub enum WindowFrameBoundary {
     /// An alternative way to specify a window frame boundary, where
     /// a negative value is a preceding boundary and a positive value is a following boundary.
     Value(Box<Expr>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CommonInlineUserDefinedFunction {
-    pub function_name: Identifier,
-    pub deterministic: bool,
-    pub is_distinct: bool,
-    pub arguments: Vec<Expr>,
-    pub function: FunctionDefinition,
-}
-
-#[expect(clippy::enum_variant_names)]
-#[derive(Debug, Clone, PartialEq)]
-pub enum FunctionDefinition {
-    PythonUdf {
-        output_type: DataType,
-        eval_type: PySparkUdfType,
-        command: Vec<u8>,
-        python_version: String,
-        additional_includes: Vec<String>,
-    },
-    ScalarScalaUdf {
-        payload: Vec<u8>,
-        input_types: Vec<DataType>,
-        output_type: DataType,
-        nullable: bool,
-        aggregate: bool,
-    },
-    JavaUdf {
-        class_name: String,
-        output_type: Option<DataType>,
-        aggregate: bool,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CommonInlineUserDefinedTableFunction {
-    pub function_name: Identifier,
-    pub deterministic: bool,
-    pub arguments: Vec<Expr>,
-    pub function: TableFunctionDefinition,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
-pub enum TableFunctionDefinition {
-    PythonUdtf {
-        /// The return type of the UDTF. When `None`, the UDTF uses an `analyze` static method
-        /// to determine the return type dynamically at query analysis time.
-        return_type: Option<DataType>,
-        eval_type: PySparkUdfType,
-        command: Vec<u8>,
-        python_version: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-#[repr(i32)]
-pub enum PySparkUdfType {
-    None = 0,
-    Batched = 100,
-    ArrowBatched = 101,
-    ScalarPandas = 200,
-    GroupedMapPandas = 201,
-    GroupedAggPandas = 202,
-    WindowAggPandas = 203,
-    ScalarPandasIter = 204,
-    MapPandasIter = 205,
-    CogroupedMapPandas = 206,
-    MapArrowIter = 207,
-    GroupedMapPandasWithState = 208,
-    GroupedMapArrow = 209,
-    CogroupedMapArrow = 210,
-    TransformWithStatePandas = 211,
-    TransformWithStatePandasInitState = 212,
-    TransformWithStatePythonRow = 213,
-    TransformWithStatePythonRowInitState = 214,
-    GroupedMapArrowIter = 215,
-    GroupedMapPandasIter = 216,
-    GroupedAggPandasIter = 217,
-    // Spark 4.0 Arrow-native UDF types (Arrow-in, Arrow-out — no Pandas conversion)
-    ScalarArrow = 250,
-    ScalarArrowIter = 251,
-    GroupedAggArrow = 252,
-    WindowAggArrow = 253,
-    GroupedAggArrowIter = 254,
-    Table = 300,
-    ArrowTable = 301,
-    ArrowUdtf = 302,
 }
 
 #[derive(Debug, Clone, PartialEq)]

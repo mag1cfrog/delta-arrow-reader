@@ -146,13 +146,13 @@ impl PlanResolver<'_> {
             QueryNode::Pivot(pivot) => self.resolve_query_pivot(pivot, state).await?,
             QueryNode::Unpivot(unpivot) => self.resolve_query_unpivot(unpivot, state).await?,
             QueryNode::MapPartitions { .. }
-            | QueryNode::GroupMap(_)
-            | QueryNode::CoGroupMap(_)
-            | QueryNode::ApplyInPandasWithState(_)
-            | QueryNode::CommonInlineUserDefinedTableFunction(_) => {
+            | QueryNode::GroupMap { .. }
+            | QueryNode::CoGroupMap { .. }
+            | QueryNode::ApplyInPandasWithState { .. }
+            | QueryNode::CommonInlineUserDefinedTableFunction { .. } => {
                 return Err(PlanError::unsupported("Python user-defined functions"));
             }
-            QueryNode::WithWatermark(_) => {
+            QueryNode::WithWatermark { .. } => {
                 return Err(PlanError::unsupported(
                     "extraction probe: streaming watermarks",
                 ));

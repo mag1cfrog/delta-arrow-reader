@@ -8,13 +8,13 @@ The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) d
 
 ## Current result and remaining source
 
-The latest verified cut is orphan recursive null-literal helper on `feat/spark-sql-extraction`. The retained subset has **8 Sail-owned crates and 91,000 gross Rust lines**, including 82,840 production-source lines, 8,080 test lines and 80 build-script lines. Compared with the reviewed service/streaming checkpoint, the subsequent cuts remove another 11,630 lines. Compared with the original import, 35,013 lines are gone, a 27.8% reduction. Counts include comments and blank lines.
+The latest verified cut removes unused UDF and streaming payloads on `feat/spark-sql-extraction`. The retained subset has **8 Sail-owned crates and 90,871 gross Rust lines**, including 82,711 production-source lines, 8,080 test lines and 80 build-script lines. Compared with the reviewed service/streaming checkpoint, the subsequent cuts remove another 11,759 lines. Compared with the original import, 35,142 lines are gone, a 27.9% reduction. Counts include comments and blank lines.
 
 The resolved dependency graph has 524 packages across all targets and 452 Linux normal/build packages, including the runner and reader. No reduction checkpoint adds or upgrades a package. The Rust frontend has no Python, Spark Connect service or Sail storage-reader dependency; Delta scans still use the host provider. This is the smallest subset demonstrated by these cuts, not a minimum or an adoption decision.
 
 | Retained crate | Gross Rust lines | Why it remains |
 | --- | ---: | --- |
-| `sail-common` | 1,787 | In-process query/expression/type specs and required Arrow metadata. Rejected protocol payload descriptors remain for boundary checks; they have no decoder or executor. |
+| `sail-common` | 1,658 | In-process query/expression/type specs and required Arrow metadata. Rejected UDF and watermark variants retain only inputs/arguments for boundary checks. Other excluded-operation descriptors remain without decoders or executors. |
 | `sail-common-datafusion` | 1,802 | Spark value formatting, constant evaluation, output/schema renaming and Variant metadata detection. |
 | `sail-function` | 56,865 | Spark scalar and aggregate kernels, coercion, NULL/ANSI behavior, datetime formats and nested values. The small NTILE adapter retains parameter validation. |
 | `sail-logical-plan` | 518 | SQL range, required ordering, partition IDs and monotonic-ID descriptors. Some still need physical extension planning. |
@@ -45,7 +45,7 @@ cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
 
 All 116 import-baseline observations still match: 83 queries succeed, 18 fail planning and 15 fail execution. Spark comparison remains 45 strict matches / 60 differences / 11 pending reference cases; full-Sail comparison remains 83 / 22 / 11. Matching an error stage does not establish matching error conditions. The 19 seed checks and 18 adapter checks still pass.
 
-This residual cleanup pass removes 1,097 production-source lines and adds 152 net test lines, reducing gross Rust source from 91,945 to 91,000 lines. It checks public call sites, self-recursive orphan helpers, configuration reads, rejected datetime branches and test-only display alternatives. No further confirmed deletion is queued from this audit; remaining protocol payload descriptors and input checks still enforce the exclusion boundary.
+The earlier residual cleanup pass removed 1,097 production-source lines and added 152 net vendored test lines, reducing gross Rust source from 91,945 to 91,000 lines. The follow-up removes another 129 production-source lines from ten unused UDF/state/watermark payload types. Minimal rejected variants and child inputs/arguments remain to verify early rejection. These checks preserve the exclusion boundary without serialized function bodies or state configuration.
 
 Missing physical extensions, deletion-vector/snapshot/stream-lifecycle coverage and the adoption decision remain open in the owning issue. Additional checks before deletion found two existing gaps: projecting EXISTS as a SELECT output fails physical planning, and selecting a qualified join key such as `l.a` after `JOIN ... USING (a)` fails resolution. WHERE EXISTS, the merged USING key and qualified ON-join fields work. These cuts do not repair or hide those gaps.
 
@@ -231,6 +231,7 @@ Each cut keeps the fixed inputs, SQL and both checked-in baselines unchanged. Th
 | Unused generic display options | 91,226 | 524 / 452 | 19 / 11 | 9 |
 | Unused internal parameter plumbing | 91,194 | 524 / 452 | 19 / 11 | 9 |
 | Orphan recursive NULL-literal helper | 91,000 | 524 / 452 | 19 / 11 | 9 |
+| Rejected UDF and streaming payloads | 90,871 | 524 / 452 | 19 / 11 | 9 |
 
 The DataFrame cut removes NA/statistics resolvers, value replacement and unused ShowString/SchemaPivot nodes. All eleven NA/statistics spec variants now reject before input resolution. The new test first reproduced missing-table lookup, then verified the rejection and successful SQL COUNT, AVG, COVAR_SAMP, CORR and COALESCE execution. Shared value formatting remains because SQL casts and PIVOT use it. No test source was removed from the vendored crates.
 
@@ -299,3 +300,5 @@ SQL string casts and pivot names now call the fixed Spark formatter directly. Un
 The final parameter pass removes unused schema/state/rename arguments in expression resolution, unused WKB point/ring dimension flags and an unconstructed WKB error variant. Actual WKB dimensionality, geography bounds and malformed-input checks remain. Cast naming still uses the existing expression-based rule; the spec descriptor is preserved. This removes 32 production-source lines. All retained library suites and all 116 import-baseline observations pass.
 
 The recursive data_type_to_null_literal helper had no external caller. Removing it also removes its sole error producer, the CommonError module, two unused error conversions and sail-common's thiserror dependency edge. Package identities remain unchanged. This cut removes 194 production-source lines and one Rust file. NULL handling in SQL still uses the retained analyzer/resolver paths; all 116 import-baseline observations and retained library suites pass.
+
+Ten unused payload structs/enums for inline UDFs, Python grouped operations and watermark/state operations are removed. Rejected variants retain only their child inputs or arguments. Existing rejection tests passed before and after removal with missing tables/columns and exact unsupported-operation messages, confirming rejection still precedes input or argument resolution. This removes 129 vendored production-source lines and 25 net runner-test lines. All 116 import-baseline observations and retained library suites pass; dependencies, vendored tests and reference comparison totals are unchanged.

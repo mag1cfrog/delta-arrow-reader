@@ -177,7 +177,7 @@ impl PlanResolver<'_> {
                 self.resolve_expression_named_lambda_variable(variable, state)
                     .await
             }
-            Expr::CommonInlineUserDefinedFunction(_) => {
+            Expr::CommonInlineUserDefinedFunction { .. } => {
                 Err(PlanError::unsupported("inline user-defined functions"))
             }
             Expr::CallFunction {

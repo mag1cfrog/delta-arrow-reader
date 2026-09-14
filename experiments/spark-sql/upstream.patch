@@ -12772,7 +12772,7 @@ index 206d070..a018f87 100644
      Configured,
      /// String which has a length limitation.
 diff --git a/crates/sail-common/src/spec/expression.rs b/crates/sail-common/src/spec/expression.rs
-index 25af46d..21f3d02 100644
+index 25af46d..0fcc3a0 100644
 --- a/crates/sail-common/src/spec/expression.rs
 +++ b/crates/sail-common/src/spec/expression.rs
 @@ -1,15 +1,12 @@
@@ -12793,7 +12793,19 @@ index 25af46d..21f3d02 100644
  pub enum Expr {
      Literal(Literal),
      UnresolvedAttribute {
-@@ -152,7 +149,7 @@ pub enum Expr {
+@@ -60,7 +57,10 @@ pub enum Expr {
+         value_expression: Option<Box<Expr>>,
+     },
+     UnresolvedNamedLambdaVariable(UnresolvedNamedLambdaVariable),
+-    CommonInlineUserDefinedFunction(CommonInlineUserDefinedFunction),
++    /// Rejected inline UDF entrypoint; arguments retain the early-rejection check.
++    CommonInlineUserDefinedFunction {
++        arguments: Vec<Expr>,
++    },
+     CallFunction {
+         function_name: ObjectName,
+         arguments: Vec<Expr>,
+@@ -152,7 +152,7 @@ pub enum Expr {
  
  /// An identifier with only one part.
  /// It is the raw value without quotes or escape characters.
@@ -12802,7 +12814,7 @@ index 25af46d..21f3d02 100644
  pub struct Identifier(String);
  
  impl From<String> for Identifier {
-@@ -181,7 +178,7 @@ impl AsRef<str> for Identifier {
+@@ -181,7 +181,7 @@ impl AsRef<str> for Identifier {
  
  /// An object name with potentially multiple parts.
  /// Each part is a raw value without quotes or escape characters.
@@ -12811,7 +12823,7 @@ index 25af46d..21f3d02 100644
  pub struct ObjectName(Vec<Identifier>);
  
  impl ObjectName {
-@@ -216,32 +213,28 @@ impl From<ObjectName> for Vec<String> {
+@@ -216,32 +216,28 @@ impl From<ObjectName> for Vec<String> {
      }
  }
  
@@ -12848,7 +12860,7 @@ index 25af46d..21f3d02 100644
  pub struct UnresolvedFunction {
      pub function_name: ObjectName,
      /// A list of positional arguments.
-@@ -256,8 +249,7 @@ pub struct UnresolvedFunction {
+@@ -256,8 +252,7 @@ pub struct UnresolvedFunction {
      pub order_by: Option<Vec<SortOrder>>,
  }
  
@@ -12858,7 +12870,7 @@ index 25af46d..21f3d02 100644
  pub enum Window {
      Named(Identifier),
      Unnamed {
-@@ -268,23 +260,20 @@ pub enum Window {
+@@ -268,23 +263,20 @@ pub enum Window {
      },
  }
  
@@ -12885,54 +12897,69 @@ index 25af46d..21f3d02 100644
  pub enum WindowFrameBoundary {
      CurrentRow,
      UnboundedPreceding,
-@@ -296,20 +285,17 @@ pub enum WindowFrameBoundary {
+@@ -296,135 +288,12 @@ pub enum WindowFrameBoundary {
      Value(Box<Expr>),
  }
  
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase")]
-+#[derive(Debug, Clone, PartialEq)]
- pub struct CommonInlineUserDefinedFunction {
-     pub function_name: Identifier,
-     pub deterministic: bool,
-     pub is_distinct: bool,
-     pub arguments: Vec<Expr>,
+-pub struct CommonInlineUserDefinedFunction {
+-    pub function_name: Identifier,
+-    pub deterministic: bool,
+-    pub is_distinct: bool,
+-    pub arguments: Vec<Expr>,
 -    #[serde(flatten)]
-     pub function: FunctionDefinition,
- }
- 
- #[expect(clippy::enum_variant_names)]
+-    pub function: FunctionDefinition,
+-}
+-
+-#[expect(clippy::enum_variant_names)]
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
-+#[derive(Debug, Clone, PartialEq)]
- pub enum FunctionDefinition {
-     PythonUdf {
-         output_type: DataType,
-@@ -332,18 +318,15 @@ pub enum FunctionDefinition {
-     },
- }
- 
+-pub enum FunctionDefinition {
+-    PythonUdf {
+-        output_type: DataType,
+-        eval_type: PySparkUdfType,
+-        command: Vec<u8>,
+-        python_version: String,
+-        additional_includes: Vec<String>,
+-    },
+-    ScalarScalaUdf {
+-        payload: Vec<u8>,
+-        input_types: Vec<DataType>,
+-        output_type: DataType,
+-        nullable: bool,
+-        aggregate: bool,
+-    },
+-    JavaUdf {
+-        class_name: String,
+-        output_type: Option<DataType>,
+-        aggregate: bool,
+-    },
+-}
+-
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase")]
-+#[derive(Debug, Clone, PartialEq)]
- pub struct CommonInlineUserDefinedTableFunction {
-     pub function_name: Identifier,
-     pub deterministic: bool,
-     pub arguments: Vec<Expr>,
+-pub struct CommonInlineUserDefinedTableFunction {
+-    pub function_name: Identifier,
+-    pub deterministic: bool,
+-    pub arguments: Vec<Expr>,
 -    #[serde(flatten)]
-     pub function: TableFunctionDefinition,
- }
- 
+-    pub function: TableFunctionDefinition,
+-}
+-
 -#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
-+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
- pub enum TableFunctionDefinition {
-     PythonUdtf {
-         /// The return type of the UDTF. When `None`, the UDTF uses an `analyze` static method
-@@ -355,21 +338,7 @@ pub enum TableFunctionDefinition {
-     },
- }
- 
+-pub enum TableFunctionDefinition {
+-    PythonUdtf {
+-        /// The return type of the UDTF. When `None`, the UDTF uses an `analyze` static method
+-        /// to determine the return type dynamically at query analysis time.
+-        return_type: Option<DataType>,
+-        eval_type: PySparkUdfType,
+-        command: Vec<u8>,
+-        python_version: String,
+-    },
+-}
+-
 -#[derive(
 -    Debug,
 -    Clone,
@@ -12948,14 +12975,40 @@ index 25af46d..21f3d02 100644
 -)]
 -#[serde(rename_all = "camelCase")]
 -#[num_enum(error_type(name = CommonError, constructor = PySparkUdfType::invalid))]
-+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
- #[repr(i32)]
- pub enum PySparkUdfType {
-     None = 0,
-@@ -404,27 +373,12 @@ pub enum PySparkUdfType {
-     ArrowUdtf = 302,
- }
- 
+-#[repr(i32)]
+-pub enum PySparkUdfType {
+-    None = 0,
+-    Batched = 100,
+-    ArrowBatched = 101,
+-    ScalarPandas = 200,
+-    GroupedMapPandas = 201,
+-    GroupedAggPandas = 202,
+-    WindowAggPandas = 203,
+-    ScalarPandasIter = 204,
+-    MapPandasIter = 205,
+-    CogroupedMapPandas = 206,
+-    MapArrowIter = 207,
+-    GroupedMapPandasWithState = 208,
+-    GroupedMapArrow = 209,
+-    CogroupedMapArrow = 210,
+-    TransformWithStatePandas = 211,
+-    TransformWithStatePandasInitState = 212,
+-    TransformWithStatePythonRow = 213,
+-    TransformWithStatePythonRowInitState = 214,
+-    GroupedMapArrowIter = 215,
+-    GroupedMapPandasIter = 216,
+-    GroupedAggPandasIter = 217,
+-    // Spark 4.0 Arrow-native UDF types (Arrow-in, Arrow-out — no Pandas conversion)
+-    ScalarArrow = 250,
+-    ScalarArrowIter = 251,
+-    GroupedAggArrow = 252,
+-    WindowAggArrow = 253,
+-    GroupedAggArrowIter = 254,
+-    Table = 300,
+-    ArrowTable = 301,
+-    ArrowUdtf = 302,
+-}
+-
 -impl PySparkUdfType {
 -    fn invalid(v: i32) -> CommonError {
 -        CommonError::invalid(format!("invalid PySpark UDF type: {v}"))
@@ -12982,7 +13035,7 @@ index 25af46d..21f3d02 100644
  pub struct WildcardOptions {
      pub ilike_pattern: Option<String>,
      pub exclude_columns: Option<Vec<Identifier>>,
-@@ -433,24 +387,21 @@ pub struct WildcardOptions {
+@@ -433,24 +302,21 @@ pub struct WildcardOptions {
      pub rename_columns: Option<Vec<IdentifierWithAlias>>,
  }
  
@@ -13254,10 +13307,10 @@ index 7c0705b..d31edd0 100644
 -    }
 -}
 diff --git a/crates/sail-common/src/spec/plan.rs b/crates/sail-common/src/spec/plan.rs
-index 052a216..b2626e6 100644
+index 052a216..11f17fa 100644
 --- a/crates/sail-common/src/spec/plan.rs
 +++ b/crates/sail-common/src/spec/plan.rs
-@@ -1,45 +1,16 @@
+@@ -1,45 +1,13 @@
 -use std::str::FromStr;
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  
@@ -13265,10 +13318,11 @@ index 052a216..b2626e6 100644
 -
 -use crate::error::CommonError;
  use crate::spec::data_type::Schema;
- use crate::spec::expression::{
-     CommonInlineUserDefinedFunction, CommonInlineUserDefinedTableFunction, Expr, ObjectName,
-     SortOrder,
- };
+-use crate::spec::expression::{
+-    CommonInlineUserDefinedFunction, CommonInlineUserDefinedTableFunction, Expr, ObjectName,
+-    SortOrder,
+-};
++use crate::spec::expression::{Expr, ObjectName, SortOrder};
  use crate::spec::literal::Literal;
 -use crate::spec::{DataType, FunctionDefinition, Identifier, Window};
 -
@@ -13307,7 +13361,7 @@ index 052a216..b2626e6 100644
      pub node: QueryNode,
      pub plan_id: Option<i64>,
  }
-@@ -53,28 +24,9 @@ impl QueryPlan {
+@@ -53,28 +21,9 @@ impl QueryPlan {
      }
  }
  
@@ -13337,7 +13391,53 @@ index 052a216..b2626e6 100644
          read_type: ReadType,
          is_streaming: bool,
      },
-@@ -283,359 +235,7 @@ pub enum QueryNode {
+@@ -157,10 +106,9 @@ pub enum QueryNode {
+         partition_expressions: Vec<Expr>,
+         num_partitions: Option<usize>,
+     },
++    /// Rejected Python entrypoint; input retains the early-rejection check.
+     MapPartitions {
+         input: Box<QueryPlan>,
+-        function: CommonInlineUserDefinedFunction,
+-        is_barrier: bool,
+     },
+     CollectMetrics {
+         input: Box<QueryPlan>,
+@@ -168,17 +116,28 @@ pub enum QueryNode {
+         metrics: Vec<Expr>,
+     },
+     Parse(Parse),
+-    GroupMap(GroupMap),
+-    CoGroupMap(CoGroupMap),
+-    WithWatermark(WithWatermark),
+-    ApplyInPandasWithState(ApplyInPandasWithState),
++    GroupMap {
++        input: Box<QueryPlan>,
++    },
++    CoGroupMap {
++        input: Box<QueryPlan>,
++        other: Box<QueryPlan>,
++    },
++    WithWatermark {
++        input: Box<QueryPlan>,
++    },
++    ApplyInPandasWithState {
++        input: Box<QueryPlan>,
++    },
+     CachedLocalRelation {
+         hash: String,
+     },
+     CachedRemoteRelation {
+         relation_id: String,
+     },
+-    CommonInlineUserDefinedTableFunction(CommonInlineUserDefinedTableFunction),
++    CommonInlineUserDefinedTableFunction {
++        arguments: Vec<Expr>,
++    },
+     // NA operations
+     FillNa {
+         input: Box<QueryPlan>,
+@@ -283,359 +242,7 @@ pub enum QueryNode {
      },
  }
  
@@ -13698,7 +13798,7 @@ index 052a216..b2626e6 100644
  pub enum ReadType {
      NamedTable(Box<ReadNamedTable>),
      Udtf(Box<ReadUdtf>),
-@@ -643,8 +243,7 @@ pub enum ReadType {
+@@ -643,8 +250,7 @@ pub enum ReadType {
      DynamicTable(Box<ReadDynamicTable>),
  }
  
@@ -13708,7 +13808,7 @@ index 052a216..b2626e6 100644
  pub struct ReadNamedTable {
      pub name: ObjectName,
      pub temporal: Option<TableTemporal>,
-@@ -652,30 +251,26 @@ pub struct ReadNamedTable {
+@@ -652,30 +258,26 @@ pub struct ReadNamedTable {
      pub options: Vec<(String, String)>,
  }
  
@@ -13743,7 +13843,7 @@ index 052a216..b2626e6 100644
  pub enum TableSampleMethod {
      Percent {
          value: Expr,
-@@ -689,8 +284,7 @@ pub enum TableSampleMethod {
+@@ -689,8 +291,7 @@ pub enum TableSampleMethod {
      },
  }
  
@@ -13753,7 +13853,7 @@ index 052a216..b2626e6 100644
  pub struct ReadUdtf {
      pub name: ObjectName,
      pub arguments: Vec<Expr>,
-@@ -698,8 +292,7 @@ pub struct ReadUdtf {
+@@ -698,8 +299,7 @@ pub struct ReadUdtf {
      pub options: Vec<(String, String)>,
  }
  
@@ -13763,7 +13863,7 @@ index 052a216..b2626e6 100644
  pub struct ReadDataSource {
      pub format: Option<String>,
      pub schema: Option<Schema>,
-@@ -708,8 +301,7 @@ pub struct ReadDataSource {
+@@ -708,8 +308,7 @@ pub struct ReadDataSource {
      pub predicates: Vec<Expr>,
  }
  
@@ -13773,7 +13873,7 @@ index 052a216..b2626e6 100644
  pub struct Join {
      pub left: Box<QueryPlan>,
      pub right: Box<QueryPlan>,
-@@ -718,8 +310,7 @@ pub struct Join {
+@@ -718,8 +317,7 @@ pub struct Join {
      pub join_data_type: Option<JoinDataType>,
  }
  
@@ -13783,7 +13883,7 @@ index 052a216..b2626e6 100644
  pub struct SetOperation {
      pub left: Box<QueryPlan>,
      pub right: Box<QueryPlan>,
-@@ -729,8 +320,7 @@ pub struct SetOperation {
+@@ -729,8 +327,7 @@ pub struct SetOperation {
      pub allow_missing_columns: bool,
  }
  
@@ -13793,7 +13893,7 @@ index 052a216..b2626e6 100644
  pub struct Aggregate {
      pub input: Box<QueryPlan>,
      pub grouping: Vec<Expr>,
-@@ -740,8 +330,7 @@ pub struct Aggregate {
+@@ -740,8 +337,7 @@ pub struct Aggregate {
      pub with_grouping_expressions: bool,
  }
  
@@ -13803,7 +13903,7 @@ index 052a216..b2626e6 100644
  pub struct Sample {
      pub input: Box<QueryPlan>,
      pub lower_bound: f64,
-@@ -751,8 +340,7 @@ pub struct Sample {
+@@ -751,8 +347,7 @@ pub struct Sample {
      pub deterministic_order: bool,
  }
  
@@ -13813,7 +13913,7 @@ index 052a216..b2626e6 100644
  pub struct Deduplicate {
      pub input: Box<QueryPlan>,
      pub column_names: Vec<Identifier>,
-@@ -760,8 +348,7 @@ pub struct Deduplicate {
+@@ -760,8 +355,7 @@ pub struct Deduplicate {
      pub within_watermark: bool,
  }
  
@@ -13823,7 +13923,7 @@ index 052a216..b2626e6 100644
  pub struct Range {
      pub start: Option<i64>,
      pub end: i64,
-@@ -769,17 +356,7 @@ pub struct Range {
+@@ -769,17 +363,7 @@ pub struct Range {
      pub num_partitions: Option<usize>,
  }
  
@@ -13842,7 +13942,7 @@ index 052a216..b2626e6 100644
  pub struct Pivot {
      pub input: Box<QueryPlan>,
      /// The group-by columns for the pivot operation, set for the DataFrame API (possibly
-@@ -790,8 +367,7 @@ pub struct Pivot {
+@@ -790,8 +374,7 @@ pub struct Pivot {
      pub values: Vec<PivotValue>,
  }
  
@@ -13852,7 +13952,7 @@ index 052a216..b2626e6 100644
  pub struct PivotValue {
      /// The value expressions for a single pivot output column. Each is a foldable expression
      /// (a literal, typed literal such as `DATE'...'`, or a cast) that the resolver evaluates to a
-@@ -800,8 +376,7 @@ pub struct PivotValue {
+@@ -800,8 +383,7 @@ pub struct PivotValue {
      pub alias: Option<Identifier>,
  }
  
@@ -13862,7 +13962,7 @@ index 052a216..b2626e6 100644
  pub struct Unpivot {
      pub input: Box<QueryPlan>,
      /// When `ids` is [None] (for SQL statements), all remaining columns are included.
-@@ -813,15 +388,13 @@ pub struct Unpivot {
+@@ -813,15 +395,13 @@ pub struct Unpivot {
      pub include_nulls: bool,
  }
  
@@ -13880,58 +13980,66 @@ index 052a216..b2626e6 100644
  pub struct Parse {
      pub input: Box<QueryPlan>,
      pub format: ParseFormat,
-@@ -829,8 +402,7 @@ pub struct Parse {
+@@ -829,322 +409,7 @@ pub struct Parse {
      pub options: Vec<(String, String)>,
  }
  
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase")]
-+#[derive(Debug, Clone, PartialEq)]
- pub struct GroupMap {
-     pub input: Box<QueryPlan>,
-     pub grouping_expressions: Vec<Expr>,
-@@ -845,16 +417,14 @@ pub struct GroupMap {
-     pub transform_with_state_info: Option<TransformWithStateInfo>,
- }
- 
+-pub struct GroupMap {
+-    pub input: Box<QueryPlan>,
+-    pub grouping_expressions: Vec<Expr>,
+-    pub function: CommonInlineUserDefinedFunction,
+-    pub sorting_expressions: Vec<Expr>,
+-    pub initial_input: Option<Box<QueryPlan>>,
+-    pub initial_grouping_expressions: Vec<Expr>,
+-    pub is_map_groups_with_state: Option<bool>,
+-    pub output_mode: Option<String>,
+-    pub timeout_conf: Option<String>,
+-    pub state_schema: Option<Schema>,
+-    pub transform_with_state_info: Option<TransformWithStateInfo>,
+-}
+-
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase")]
-+#[derive(Debug, Clone, PartialEq)]
- pub struct TransformWithStateInfo {
-     pub time_mode: String,
-     pub event_time_column_name: Option<Identifier>,
-     pub output_schema: Option<Schema>,
- }
- 
+-pub struct TransformWithStateInfo {
+-    pub time_mode: String,
+-    pub event_time_column_name: Option<Identifier>,
+-    pub output_schema: Option<Schema>,
+-}
+-
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase")]
-+#[derive(Debug, Clone, PartialEq)]
- pub struct CoGroupMap {
-     pub input: Box<QueryPlan>,
-     pub input_grouping_expressions: Vec<Expr>,
-@@ -865,16 +435,14 @@ pub struct CoGroupMap {
-     pub other_sorting_expressions: Vec<Expr>,
- }
- 
+-pub struct CoGroupMap {
+-    pub input: Box<QueryPlan>,
+-    pub input_grouping_expressions: Vec<Expr>,
+-    pub other: Box<QueryPlan>,
+-    pub other_grouping_expressions: Vec<Expr>,
+-    pub function: CommonInlineUserDefinedFunction,
+-    pub input_sorting_expressions: Vec<Expr>,
+-    pub other_sorting_expressions: Vec<Expr>,
+-}
+-
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase")]
-+#[derive(Debug, Clone, PartialEq)]
- pub struct WithWatermark {
-     pub input: Box<QueryPlan>,
-     pub event_time: String,
-     pub delay_threshold: String,
- }
- 
+-pub struct WithWatermark {
+-    pub input: Box<QueryPlan>,
+-    pub event_time: String,
+-    pub delay_threshold: String,
+-}
+-
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase")]
-+#[derive(Debug, Clone, PartialEq)]
- pub struct ApplyInPandasWithState {
-     pub input: Box<QueryPlan>,
-     pub grouping_expressions: Vec<Expr>,
-@@ -885,266 +453,7 @@ pub struct ApplyInPandasWithState {
-     pub timeout_conf: String,
- }
- 
+-pub struct ApplyInPandasWithState {
+-    pub input: Box<QueryPlan>,
+-    pub grouping_expressions: Vec<Expr>,
+-    pub function: CommonInlineUserDefinedFunction,
+-    pub output_schema: Schema,
+-    pub state_schema: Schema,
+-    pub output_mode: String,
+-    pub timeout_conf: String,
+-}
+-
 -#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 -#[serde(rename_all = "camelCase")]
 -pub struct HtmlString {
@@ -14196,7 +14304,7 @@ index 052a216..b2626e6 100644
  pub enum JoinType {
      Inner,
      FullOuter,
-@@ -1157,265 +466,41 @@ pub enum JoinType {
+@@ -1157,265 +422,41 @@ pub enum JoinType {
      Cross,
  }
  
@@ -45296,7 +45404,7 @@ index fd946d2..c923e0f 100644
 -    }
  }
 diff --git a/crates/sail-plan/src/resolver/expression/mod.rs b/crates/sail-plan/src/resolver/expression/mod.rs
-index 6e1d2ce..4cec234 100644
+index 6e1d2ce..7d72c0e 100644
 --- a/crates/sail-plan/src/resolver/expression/mod.rs
 +++ b/crates/sail-plan/src/resolver/expression/mod.rs
 @@ -1,3 +1,4 @@
@@ -45397,7 +45505,7 @@ index 6e1d2ce..4cec234 100644
 -            Expr::CommonInlineUserDefinedFunction(function) => {
 -                self.resolve_expression_common_inline_udf(function, schema, state)
 -                    .await
-+            Expr::CommonInlineUserDefinedFunction(_) => {
++            Expr::CommonInlineUserDefinedFunction { .. } => {
 +                Err(PlanError::unsupported("inline user-defined functions"))
              }
              Expr::CallFunction {
@@ -46089,7 +46197,7 @@ index eb3c502..a6dce03 100644
              ilike,
              exclude,
 diff --git a/crates/sail-plan/src/resolver/expression/window.rs b/crates/sail-plan/src/resolver/expression/window.rs
-index 693450b..d863540 100644
+index 693450b..f7520d6 100644
 --- a/crates/sail-plan/src/resolver/expression/window.rs
 +++ b/crates/sail-plan/src/resolver/expression/window.rs
 @@ -1,27 +1,18 @@
@@ -46313,7 +46421,7 @@ index 693450b..d863540 100644
 +                    is_distinct,
 +                )
 +            }
-+            spec::Expr::CommonInlineUserDefinedFunction(_) => {
++            spec::Expr::CommonInlineUserDefinedFunction { .. } => {
 +                return Err(PlanError::unsupported(
 +                    "inline user-defined window functions",
 +                ));
@@ -47660,7 +47768,7 @@ index 7c60188..85d4a1e 100644
 -    }
  }
 diff --git a/crates/sail-plan/src/resolver/query/mod.rs b/crates/sail-plan/src/resolver/query/mod.rs
-index fb117e5..a762098 100644
+index fb117e5..1ee15ae 100644
 --- a/crates/sail-plan/src/resolver/query/mod.rs
 +++ b/crates/sail-plan/src/resolver/query/mod.rs
 @@ -1,12 +1,7 @@
@@ -47899,13 +48007,13 @@ index fb117e5..a762098 100644
 -                self.resolve_query_apply_in_pandas_with_state(apply, state)
 -                    .await?
 +            QueryNode::MapPartitions { .. }
-+            | QueryNode::GroupMap(_)
-+            | QueryNode::CoGroupMap(_)
-+            | QueryNode::ApplyInPandasWithState(_)
-+            | QueryNode::CommonInlineUserDefinedTableFunction(_) => {
++            | QueryNode::GroupMap { .. }
++            | QueryNode::CoGroupMap { .. }
++            | QueryNode::ApplyInPandasWithState { .. }
++            | QueryNode::CommonInlineUserDefinedTableFunction { .. } => {
 +                return Err(PlanError::unsupported("Python user-defined functions"));
 +            }
-+            QueryNode::WithWatermark(_) => {
++            QueryNode::WithWatermark { .. } => {
 +                return Err(PlanError::unsupported(
 +                    "extraction probe: streaming watermarks",
 +                ));

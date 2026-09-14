@@ -1,10 +1,7 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 
 use crate::spec::data_type::Schema;
-use crate::spec::expression::{
-    CommonInlineUserDefinedFunction, CommonInlineUserDefinedTableFunction, Expr, ObjectName,
-    SortOrder,
-};
+use crate::spec::expression::{Expr, ObjectName, SortOrder};
 use crate::spec::literal::Literal;
 use crate::spec::{Identifier, Window};
 
@@ -109,10 +106,9 @@ pub enum QueryNode {
         partition_expressions: Vec<Expr>,
         num_partitions: Option<usize>,
     },
+    /// Rejected Python entrypoint; input retains the early-rejection check.
     MapPartitions {
         input: Box<QueryPlan>,
-        function: CommonInlineUserDefinedFunction,
-        is_barrier: bool,
     },
     CollectMetrics {
         input: Box<QueryPlan>,
@@ -120,17 +116,28 @@ pub enum QueryNode {
         metrics: Vec<Expr>,
     },
     Parse(Parse),
-    GroupMap(GroupMap),
-    CoGroupMap(CoGroupMap),
-    WithWatermark(WithWatermark),
-    ApplyInPandasWithState(ApplyInPandasWithState),
+    GroupMap {
+        input: Box<QueryPlan>,
+    },
+    CoGroupMap {
+        input: Box<QueryPlan>,
+        other: Box<QueryPlan>,
+    },
+    WithWatermark {
+        input: Box<QueryPlan>,
+    },
+    ApplyInPandasWithState {
+        input: Box<QueryPlan>,
+    },
     CachedLocalRelation {
         hash: String,
     },
     CachedRemoteRelation {
         relation_id: String,
     },
-    CommonInlineUserDefinedTableFunction(CommonInlineUserDefinedTableFunction),
+    CommonInlineUserDefinedTableFunction {
+        arguments: Vec<Expr>,
+    },
     // NA operations
     FillNa {
         input: Box<QueryPlan>,
@@ -400,57 +407,6 @@ pub struct Parse {
     pub format: ParseFormat,
     pub schema: Option<Schema>,
     pub options: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct GroupMap {
-    pub input: Box<QueryPlan>,
-    pub grouping_expressions: Vec<Expr>,
-    pub function: CommonInlineUserDefinedFunction,
-    pub sorting_expressions: Vec<Expr>,
-    pub initial_input: Option<Box<QueryPlan>>,
-    pub initial_grouping_expressions: Vec<Expr>,
-    pub is_map_groups_with_state: Option<bool>,
-    pub output_mode: Option<String>,
-    pub timeout_conf: Option<String>,
-    pub state_schema: Option<Schema>,
-    pub transform_with_state_info: Option<TransformWithStateInfo>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct TransformWithStateInfo {
-    pub time_mode: String,
-    pub event_time_column_name: Option<Identifier>,
-    pub output_schema: Option<Schema>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CoGroupMap {
-    pub input: Box<QueryPlan>,
-    pub input_grouping_expressions: Vec<Expr>,
-    pub other: Box<QueryPlan>,
-    pub other_grouping_expressions: Vec<Expr>,
-    pub function: CommonInlineUserDefinedFunction,
-    pub input_sorting_expressions: Vec<Expr>,
-    pub other_sorting_expressions: Vec<Expr>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct WithWatermark {
-    pub input: Box<QueryPlan>,
-    pub event_time: String,
-    pub delay_threshold: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ApplyInPandasWithState {
-    pub input: Box<QueryPlan>,
-    pub grouping_expressions: Vec<Expr>,
-    pub function: CommonInlineUserDefinedFunction,
-    pub output_schema: Schema,
-    pub state_schema: Schema,
-    pub output_mode: String,
-    pub timeout_conf: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
