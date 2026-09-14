@@ -6,9 +6,9 @@ use crate::error::{SqlError, SqlResult};
 use crate::query::from_ast_query;
 
 /// Converts a query AST into a spec plan, rejecting commands before analyzing their bodies.
-pub fn from_ast_statement(statement: Statement) -> SqlResult<spec::Plan> {
+pub fn from_ast_statement(statement: Statement) -> SqlResult<spec::QueryPlan> {
     match statement {
-        Statement::Query(query) => Ok(spec::Plan::Query(from_ast_query(query)?)),
+        Statement::Query(query) => from_ast_query(query),
         _ => Err(SqlError::unsupported(
             "extraction probe accepts queries only",
         )),

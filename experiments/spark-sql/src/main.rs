@@ -9,7 +9,6 @@ use delta_arrow_reader::{
     datafusion::{DeltaTableProvider, ScanOptions, collect_scan_metrics},
 };
 use futures_util::StreamExt;
-use sail_common::spec;
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use sail_plan::{
     config::PlanConfig,
@@ -82,11 +81,7 @@ async fn execute(ctx: &SessionContext, named: NamedPlan, path: &Path) -> ProbeRe
     let logical = plan.display_indent().to_string();
     let frame = ctx.execute_logical_plan(plan).await?;
     let physical = frame.create_physical_plan().await?;
-    let physical = if let Some(fields) = fields {
-        rename_physical_plan(physical, &fields)?
-    } else {
-        physical
-    };
+    let physical = rename_physical_plan(physical, &fields)?;
     let mut result = write_stream(ctx, physical, path).await?;
     result["logical_plan"] = json!(logical);
     Ok(result)
@@ -185,6 +180,7 @@ fn main() -> ProbeResult<()> {
 mod tests {
     use super::*;
     use arrow::array::{Array, Int32Array, ListArray, TimestampMicrosecondArray};
+    use sail_common::spec;
     use sail_plan::error::PlanError;
 
     #[tokio::test]
@@ -230,7 +226,7 @@ mod tests {
             fields["input"] = input.clone();
             let node = serde_json::from_value(json!({(name): fields}))?;
             let error = resolver
-                .resolve_named_plan(spec::Plan::Query(spec::QueryPlan::new(node)))
+                .resolve_named_plan(spec::QueryPlan::new(node))
                 .await
                 .unwrap_err();
             assert!(
@@ -247,7 +243,7 @@ mod tests {
         });
         assert!(matches!(
             resolver
-                .resolve_named_plan(spec::Plan::Query(spec::QueryPlan::new(range)))
+                .resolve_named_plan(spec::QueryPlan::new(range))
                 .await
                 .unwrap_err(),
             PlanError::NotSupported(_)
@@ -301,10 +297,7 @@ mod tests {
         let ctx = SessionContext::new();
         let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
         for data in [None, Some(vec![]), Some(vec![0xff, 0x00, 0x01])] {
-            let plan = spec::Plan::Query(spec::QueryPlan::new(spec::QueryNode::LocalRelation {
-                data,
-                schema: None,
-            }));
+            let plan = spec::QueryPlan::new(spec::QueryNode::LocalRelation { data, schema: None });
             let error = resolver.resolve_named_plan(plan).await.unwrap_err();
             assert!(
                 matches!(error, PlanError::NotSupported(ref message)
@@ -395,7 +388,7 @@ mod tests {
             fields["input"] = input.clone();
             let node = serde_json::from_value(json!({(name): fields}))?;
             let error = resolver
-                .resolve_named_plan(spec::Plan::Query(spec::QueryPlan::new(node)))
+                .resolve_named_plan(spec::QueryPlan::new(node))
                 .await
                 .unwrap_err();
             assert!(
@@ -457,10 +450,10 @@ mod tests {
                 predicates: vec![],
             })),
         ] {
-            let plan = spec::Plan::Query(spec::QueryPlan::new(spec::QueryNode::Read {
+            let plan = spec::QueryPlan::new(spec::QueryNode::Read {
                 read_type,
                 is_streaming: true,
-            }));
+            });
             let error = resolver.resolve_named_plan(plan).await.unwrap_err();
             assert!(
                 matches!(error, PlanError::NotSupported(ref message)
@@ -479,14 +472,12 @@ mod tests {
             },
         ] {
             let error = resolver
-                .resolve_named_plan(spec::Plan::Query(spec::QueryPlan::new(node)))
+                .resolve_named_plan(spec::QueryPlan::new(node))
                 .await
                 .unwrap_err();
             assert!(matches!(error, PlanError::NotSupported(_)), "{error}");
         }
-        let named = resolver
-            .resolve_named_plan(spec::Plan::Query(batch))
-            .await?;
+        let named = resolver.resolve_named_plan(batch).await?;
         let batches = ctx
             .execute_logical_plan(named.plan)
             .await?
@@ -518,10 +509,10 @@ mod tests {
                     paths: vec!["/nonexistent/spark-source".into()],
                     predicates,
                 };
-                let plan = spec::Plan::Query(spec::QueryPlan::new(spec::QueryNode::Read {
+                let plan = spec::QueryPlan::new(spec::QueryNode::Read {
                     read_type: spec::ReadType::DataSource(Box::new(source)),
                     is_streaming: false,
-                }));
+                });
                 let error = resolver.resolve_named_plan(plan).await.unwrap_err();
                 assert!(
                     matches!(error, PlanError::NotSupported(ref message)
@@ -615,7 +606,7 @@ mod tests {
         )
         .await?;
         assert_eq!(
-            named.fields.unwrap(),
+            named.fields,
             [
                 "probe_native((- 7))",
                 "ABS((- 7))",
@@ -737,12 +728,9 @@ mod tests {
         };
         // If a removed path starts resolving its input, this missing table makes
         // the test fail with a different error before any row reads are possible.
-        let missing = match sail_sql_analyzer::statement::from_ast_statement(
+        let missing = Box::new(sail_sql_analyzer::statement::from_ast_statement(
             sail_sql_analyzer::parser::parse_one_statement("SELECT * FROM missing_table")?,
-        )? {
-            spec::Plan::Query(query) => Box::new(query),
-            _ => unreachable!(),
-        };
+        )?);
         let expression = spec::Expr::CommonInlineUserDefinedFunction(function.clone());
         let nodes = vec![
             QueryNode::Project {
@@ -817,7 +805,7 @@ mod tests {
         ];
         for node in nodes {
             let error = resolver
-                .resolve_named_plan(spec::Plan::Query(QueryPlan::new(node)))
+                .resolve_named_plan(QueryPlan::new(node))
                 .await
                 .unwrap_err();
             assert!(matches!(error, PlanError::NotSupported(_)), "{error:?}");
