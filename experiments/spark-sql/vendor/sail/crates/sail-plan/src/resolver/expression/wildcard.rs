@@ -2,9 +2,9 @@
 use std::collections::VecDeque;
 
 use arrow::datatypes::DataType;
+use datafusion::sql::sqlparser::ast::{Ident, ObjectName, ObjectNamePart};
 use datafusion_common::{DFSchemaRef, TableReference};
 use datafusion_expr::expr::ScalarFunction;
-use datafusion::sql::sqlparser::ast::{Ident, ObjectName, ObjectNamePart};
 use datafusion_expr::{ScalarUDF, col, expr, lit};
 use datafusion_functions::core::get_field;
 use sail_common::spec;
@@ -21,14 +21,10 @@ impl PlanResolver<'_> {
     pub(super) async fn resolve_expression_wildcard(
         &self,
         target: Option<spec::ObjectName>,
-        plan_id: Option<i64>,
         wildcard_options: spec::WildcardOptions,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
-        if plan_id.is_some() {
-            return Err(PlanError::todo("wildcard with plan ID"));
-        }
         match target {
             Some(target) if wildcard_options == Default::default() => {
                 self.resolve_wildcard_or_nested_field_wildcard(&target, schema, state)
@@ -92,7 +88,7 @@ impl PlanResolver<'_> {
                             return None;
                         };
                         if qualifier_matches(q.as_ref(), qualifier)
-                            && info.matches(column.as_ref(), None)
+                            && info.name().eq_ignore_ascii_case(column.as_ref())
                         {
                             Self::resolve_nested_field_wildcard(
                                 col((q.as_ref(), field)),
@@ -210,7 +206,9 @@ impl PlanResolver<'_> {
         // ponytail: DF's sql feature changes these AST types. Exclude REPLACE/RENAME
         // from this probe until their metadata is adapted and tested.
         if wildcard_options.replace_columns.is_some() || wildcard_options.rename_columns.is_some() {
-            return Err(PlanError::unsupported("extraction probe: wildcard REPLACE/RENAME"));
+            return Err(PlanError::unsupported(
+                "extraction probe: wildcard REPLACE/RENAME",
+            ));
         }
         let replace = None;
         let rename = None;

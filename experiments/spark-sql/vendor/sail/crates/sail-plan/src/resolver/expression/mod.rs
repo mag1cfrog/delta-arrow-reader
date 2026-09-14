@@ -105,24 +105,30 @@ impl PlanResolver<'_> {
         use spec::Expr;
 
         match expr {
+            Expr::UnresolvedAttribute {
+                plan_id: Some(_), ..
+            }
+            | Expr::UnresolvedStar {
+                plan_id: Some(_), ..
+            } => Err(PlanError::unsupported(
+                "extraction probe: DataFrame plan IDs",
+            )),
             Expr::Literal(literal) => self.resolve_expression_literal(literal, state),
             Expr::UnresolvedAttribute {
                 name,
-                plan_id,
+                plan_id: None,
                 is_metadata_column,
-            } => {
-                self.resolve_expression_attribute(name, plan_id, is_metadata_column, schema, state)
-            }
+            } => self.resolve_expression_attribute(name, is_metadata_column, schema, state),
             Expr::UnresolvedFunction(function) => {
                 self.resolve_expression_function(function, schema, state)
                     .await
             }
             Expr::UnresolvedStar {
                 target,
-                plan_id,
+                plan_id: None,
                 wildcard_options,
             } => {
-                self.resolve_expression_wildcard(target, plan_id, wildcard_options, schema, state)
+                self.resolve_expression_wildcard(target, wildcard_options, schema, state)
                     .await
             }
             Expr::Alias {
@@ -142,10 +148,9 @@ impl PlanResolver<'_> {
                 self.resolve_expression_cast(*expr, cast_to_type, rename, is_try, schema, state)
                     .await
             }
-            Expr::UnresolvedRegex { col_name, plan_id } => {
-                self.resolve_expression_regex(col_name, plan_id, schema, state)
-                    .await
-            }
+            Expr::UnresolvedRegex { .. } | Expr::UpdateFields { .. } => Err(
+                PlanError::unsupported("extraction probe: DataFrame column expressions"),
+            ),
             Expr::SortOrder(sort) => {
                 self.resolve_expression_sort_order(sort, schema, state)
                     .await
@@ -167,20 +172,6 @@ impl PlanResolver<'_> {
             Expr::UnresolvedExtractValue { child, extraction } => {
                 self.resolve_expression_extract_value(*child, *extraction, schema, state)
                     .await
-            }
-            Expr::UpdateFields {
-                struct_expression,
-                field_name,
-                value_expression,
-            } => {
-                self.resolve_expression_update_fields(
-                    *struct_expression,
-                    field_name,
-                    value_expression.map(|x| *x),
-                    schema,
-                    state,
-                )
-                .await
             }
             Expr::UnresolvedNamedLambdaVariable(variable) => {
                 self.resolve_expression_named_lambda_variable(variable, schema, state)

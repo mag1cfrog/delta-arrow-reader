@@ -13204,6 +13204,360 @@ index d1d6037..9ff21b7 100644
  jiter = { workspace = true }
  thiserror = { workspace = true }
  serde = { workspace = true }
+diff --git a/crates/sail-function/src/scalar/drop_struct_field.rs b/crates/sail-function/src/scalar/drop_struct_field.rs
+deleted file mode 100644
+index 25573a7..0000000
+--- a/crates/sail-function/src/scalar/drop_struct_field.rs
++++ /dev/null
+@@ -1,133 +0,0 @@
+-use std::sync::Arc;
+-
+-use datafusion::arrow::array::{Array, ArrayRef, StructArray};
+-use datafusion::arrow::datatypes::{DataType, Field};
+-use datafusion_common::cast::as_struct_array;
+-use datafusion_common::{Result, exec_err, plan_err};
+-use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
+-
+-#[derive(Debug, PartialEq, Eq, Hash)]
+-pub struct DropStructField {
+-    signature: Signature,
+-    field_names: Vec<String>,
+-}
+-
+-impl DropStructField {
+-    pub fn new(field_names: Vec<String>) -> Self {
+-        Self {
+-            signature: Signature::any(1, Volatility::Immutable),
+-            field_names,
+-        }
+-    }
+-
+-    pub fn field_names(&self) -> &[String] {
+-        &self.field_names
+-    }
+-
+-    fn drop_nested_field(data_type: &DataType, field_names: &[String]) -> Result<DataType> {
+-        match data_type {
+-            DataType::Struct(fields) => {
+-                if field_names.is_empty() {
+-                    return plan_err!("Field name cannot be empty");
+-                }
+-
+-                let current_field = &field_names[0];
+-                let mut new_fields = Vec::new();
+-
+-                for field in fields.iter() {
+-                    if field.name() == current_field {
+-                        if field_names.len() == 1 {
+-                            continue;
+-                        } else {
+-                            let new_data_type =
+-                                Self::drop_nested_field(field.data_type(), &field_names[1..])?;
+-                            new_fields.push(Arc::new(Field::new(
+-                                field.name(),
+-                                new_data_type,
+-                                field.is_nullable(),
+-                            )));
+-                        }
+-                    } else {
+-                        new_fields.push(Arc::clone(field));
+-                    }
+-                }
+-
+-                // Spark's `dropFields` silently ignores field names that do not
+-                // exist (the struct is returned unchanged), but raises when every
+-                // field would be dropped.
+-                if new_fields.is_empty() {
+-                    plan_err!("[CANNOT_DROP_ALL_FIELDS] Cannot drop all fields in struct")
+-                } else {
+-                    Ok(DataType::Struct(new_fields.into()))
+-                }
+-            }
+-            _ => plan_err!("Expected Struct, found {data_type}"),
+-        }
+-    }
+-
+-    fn drop_nested_field_from_array(array: &ArrayRef, field_names: &[String]) -> Result<ArrayRef> {
+-        if field_names.is_empty() {
+-            return exec_err!("Field name cannot be empty");
+-        }
+-
+-        let struct_array = as_struct_array(&array)?;
+-        let new_data_type = Self::drop_nested_field(struct_array.data_type(), field_names)?;
+-        let new_fields = match new_data_type {
+-            DataType::Struct(fields) => fields,
+-            _ => unreachable!("drop_nested_field should always return a Struct"),
+-        };
+-        let mut new_arrays = Vec::new();
+-
+-        for field in new_fields.iter() {
+-            if let Some(column) = struct_array.column_by_name(field.name()) {
+-                if field.data_type() != column.data_type() {
+-                    let new_array = Self::drop_nested_field_from_array(column, &field_names[1..])?;
+-                    new_arrays.push(new_array);
+-                } else {
+-                    new_arrays.push(Arc::clone(column));
+-                }
+-            } else {
+-                return exec_err!("Field `{}` not found", field.name());
+-            }
+-        }
+-
+-        Ok(Arc::new(StructArray::try_new(
+-            new_fields,
+-            new_arrays,
+-            struct_array.nulls().cloned(),
+-        )?))
+-    }
+-}
+-
+-impl ScalarUDFImpl for DropStructField {
+-    fn name(&self) -> &str {
+-        "drop_struct_field"
+-    }
+-
+-    fn signature(&self) -> &Signature {
+-        &self.signature
+-    }
+-
+-    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
+-        if arg_types.len() != 1 {
+-            return exec_err!(
+-                "drop_struct_field function requires 1 argument, got {}",
+-                arg_types.len()
+-            );
+-        }
+-        Self::drop_nested_field(&arg_types[0], &self.field_names)
+-    }
+-
+-    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+-        let ScalarFunctionArgs { args, .. } = args;
+-        let args = ColumnarValue::values_to_arrays(&args)?;
+-        let [array] = args.as_slice() else {
+-            return exec_err!(
+-                "drop_struct_field function requires 1 argument, got {}",
+-                args.len()
+-            );
+-        };
+-        let new_array = Self::drop_nested_field_from_array(array, &self.field_names)?;
+-        Ok(ColumnarValue::Array(new_array))
+-    }
+-}
+diff --git a/crates/sail-function/src/scalar/mod.rs b/crates/sail-function/src/scalar/mod.rs
+index 87d7207..31d4125 100644
+--- a/crates/sail-function/src/scalar/mod.rs
++++ b/crates/sail-function/src/scalar/mod.rs
+@@ -1,9 +1,9 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ pub mod array;
+ pub mod array_struct_field;
+ pub mod collection;
+ pub mod csv;
+ pub mod datetime;
+-pub mod drop_struct_field;
+ pub mod explode;
+ pub mod geo;
+ pub mod hash;
+@@ -19,7 +19,6 @@ pub mod spark_to_string;
+ pub mod string;
+ pub mod struct_function;
+ pub mod table_input;
+-pub mod update_struct_field;
+ pub mod url;
+ pub mod variant;
+ pub mod vector;
+diff --git a/crates/sail-function/src/scalar/update_struct_field.rs b/crates/sail-function/src/scalar/update_struct_field.rs
+deleted file mode 100644
+index a898cbd..0000000
+--- a/crates/sail-function/src/scalar/update_struct_field.rs
++++ /dev/null
+@@ -1,186 +0,0 @@
+-use std::sync::Arc;
+-
+-use datafusion::arrow::array::{Array, ArrayRef, StructArray};
+-use datafusion::arrow::datatypes::{DataType, Field};
+-use datafusion_common::cast::as_struct_array;
+-use datafusion_common::{Result, ScalarValue, exec_datafusion_err, exec_err, plan_err};
+-use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
+-
+-#[derive(Debug, PartialEq, Eq, Hash)]
+-pub struct UpdateStructField {
+-    signature: Signature,
+-    field_names: Vec<String>,
+-}
+-
+-impl UpdateStructField {
+-    pub fn new(field_names: Vec<String>) -> Self {
+-        Self {
+-            signature: Signature::any(2, Volatility::Immutable),
+-            field_names,
+-        }
+-    }
+-
+-    pub fn field_names(&self) -> &[String] {
+-        &self.field_names
+-    }
+-
+-    fn update_nested_field(
+-        data_type: &DataType,
+-        field_names: &[String],
+-        new_field: &Field,
+-    ) -> Result<DataType> {
+-        match data_type {
+-            DataType::Struct(fields) => {
+-                if field_names.is_empty() {
+-                    return plan_err!("Field name cannot be empty");
+-                }
+-
+-                let current_field = &field_names[0];
+-                let mut new_fields = Vec::new();
+-                let mut field_found = false;
+-
+-                for field in fields.iter() {
+-                    if field.name() == current_field {
+-                        field_found = true;
+-                        if field_names.len() == 1 {
+-                            new_fields.push(Arc::new(new_field.clone()));
+-                        } else {
+-                            let new_data_type = Self::update_nested_field(
+-                                field.data_type(),
+-                                &field_names[1..],
+-                                new_field,
+-                            )?;
+-                            new_fields.push(Arc::new(Field::new(
+-                                field.name(),
+-                                new_data_type,
+-                                field.is_nullable(),
+-                            )));
+-                        }
+-                    } else {
+-                        new_fields.push(Arc::clone(field));
+-                    }
+-                }
+-
+-                if !field_found {
+-                    if field_names.len() == 1 {
+-                        new_fields.push(Arc::new(new_field.clone()));
+-                    } else {
+-                        let mut intermediate_type = new_field.data_type().clone();
+-                        for field_name in field_names.iter().rev().skip(1) {
+-                            intermediate_type = DataType::Struct(
+-                                vec![Arc::new(Field::new(field_name, intermediate_type, true))]
+-                                    .into(),
+-                            );
+-                        }
+-                        new_fields.push(Arc::new(Field::new(
+-                            current_field,
+-                            intermediate_type,
+-                            true,
+-                        )));
+-                    }
+-                }
+-
+-                Ok(DataType::Struct(new_fields.into()))
+-            }
+-            _ => plan_err!("Expected Struct, found {data_type}"),
+-        }
+-    }
+-
+-    fn update_nested_field_from_array(
+-        array: &ArrayRef,
+-        field_names: &[String],
+-        new_field_array: &ArrayRef,
+-    ) -> Result<ArrayRef> {
+-        if field_names.is_empty() {
+-            return exec_err!("Field name cannot be empty");
+-        }
+-
+-        let struct_array = as_struct_array(&array)?;
+-        let last_field_name = field_names
+-            .last()
+-            .ok_or_else(|| exec_datafusion_err!("empty attribute: {:?}", &field_names))?;
+-        let new_field = Field::new(last_field_name, new_field_array.data_type().clone(), true);
+-        let new_data_type =
+-            Self::update_nested_field(struct_array.data_type(), field_names, &new_field)?;
+-        let new_fields = match new_data_type {
+-            DataType::Struct(fields) => fields,
+-            _ => unreachable!("update_nested_field should always return a Struct"),
+-        };
+-        let mut new_arrays = Vec::new();
+-
+-        for field in new_fields.iter() {
+-            if field.name() == last_field_name {
+-                if field_names.len() == 1 {
+-                    new_arrays.push(Arc::clone(new_field_array));
+-                } else {
+-                    let existing_column =
+-                        struct_array.column_by_name(field.name()).ok_or_else(|| {
+-                            exec_datafusion_err!("Field `{}` not found", field.name())
+-                        })?;
+-                    let new_array = Self::update_nested_field_from_array(
+-                        existing_column,
+-                        &field_names[1..],
+-                        new_field_array,
+-                    )?;
+-                    new_arrays.push(new_array);
+-                }
+-            } else if let Some(column) = struct_array.column_by_name(field.name()) {
+-                new_arrays.push(Arc::clone(column));
+-            } else {
+-                return exec_err!("Unexpected field `{}` in updated struct", field.name());
+-            }
+-        }
+-
+-        Ok(Arc::new(StructArray::try_new(
+-            new_fields,
+-            new_arrays,
+-            struct_array.nulls().cloned(),
+-        )?))
+-    }
+-}
+-
+-impl ScalarUDFImpl for UpdateStructField {
+-    fn name(&self) -> &str {
+-        "update_struct_field"
+-    }
+-
+-    fn signature(&self) -> &Signature {
+-        &self.signature
+-    }
+-
+-    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
+-        if arg_types.len() != 2 {
+-            return exec_err!(
+-                "update_struct_field function requires 2 arguments, got {}",
+-                arg_types.len()
+-            );
+-        }
+-        let data_type = &arg_types[0];
+-        let new_field_type = &arg_types[1];
+-        let new_field = Field::new(
+-            self.field_names
+-                .last()
+-                .ok_or_else(|| exec_datafusion_err!("empty attribute: {:?}", &self.field_names))?,
+-            new_field_type.clone(),
+-            true,
+-        );
+-        Self::update_nested_field(data_type, &self.field_names, &new_field)
+-    }
+-
+-    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+-        let ScalarFunctionArgs { args, .. } = args;
+-        let args = ColumnarValue::values_to_arrays(&args)?;
+-        let [struct_array, new_field_array] = args.as_slice() else {
+-            return exec_err!(
+-                "update_struct_field function requires 2 arguments, got {}",
+-                args.len()
+-            );
+-        };
+-        if struct_array.data_type().is_null() {
+-            return Ok(ColumnarValue::Scalar(ScalarValue::Null));
+-        }
+-        let new_array =
+-            Self::update_nested_field_from_array(struct_array, &self.field_names, new_field_array)?;
+-        Ok(ColumnarValue::Array(new_array))
+-    }
+-}
 diff --git a/crates/sail-function/src/scalar/variant/utils/helper.rs b/crates/sail-function/src/scalar/variant/utils/helper.rs
 index 40f488b..d8e16c1 100644
 --- a/crates/sail-function/src/scalar/variant/utils/helper.rs
@@ -38257,6 +38611,99 @@ index 15c4a4b..0000000
 -        Ok(Constraints::new_unverified(constraints))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/expression/attribute.rs b/crates/sail-plan/src/resolver/expression/attribute.rs
+index 52d5e84..b498cfe 100644
+--- a/crates/sail-plan/src/resolver/expression/attribute.rs
++++ b/crates/sail-plan/src/resolver/expression/attribute.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use arrow::datatypes::{DataType, Field};
+@@ -17,7 +18,6 @@ impl PlanResolver<'_> {
+     pub(super) fn resolve_expression_attribute(
+         &self,
+         name: spec::ObjectName,
+-        plan_id: Option<i64>,
+         is_metadata_column: bool,
+         schema: &DFSchemaRef,
+         state: &mut PlanResolverState,
+@@ -27,10 +27,8 @@ impl PlanResolver<'_> {
+         }
+         // Lambda parameters shadow columns inside a lambda function body. SQL lambda
+         // bodies reference parameters as plain attributes, so the lambda scope stack
+-        // is consulted first. A `plan_id` indicates an explicit DataFrame column
+-        // reference, which never refers to a lambda parameter.
+-        if plan_id.is_none()
+-            && let [first, rest @ ..] = name.parts()
++        // is consulted first.
++        if let [first, rest @ ..] = name.parts()
+             && let Some((declared, field)) = state
+                 .resolve_lambda_parameter(first.as_ref())
+                 .map(|(param, field)| (param.to_string(), field.cloned()))
+@@ -59,9 +57,7 @@ impl PlanResolver<'_> {
+         {
+             return Ok(NamedExpr::new(vec![name], expr));
+         }
+-        if let Some((name, expr)) =
+-            self.resolve_field_or_nested_field(&name, plan_id, schema, state)?
+-        {
++        if let Some((name, expr)) = self.resolve_field_or_nested_field(&name, schema, state)? {
+             return Ok(NamedExpr::new(vec![name], expr));
+         }
+         if let Some((name, expr)) =
+@@ -69,7 +65,7 @@ impl PlanResolver<'_> {
+         {
+             return Ok(NamedExpr::new(vec![name], expr));
+         }
+-        if let Some((name, expr)) = self.resolve_hidden_field(&name, plan_id, schema, state)? {
++        if let Some((name, expr)) = self.resolve_hidden_field(&name, schema, state)? {
+             return Ok(NamedExpr::new(vec![name], expr));
+         }
+         let Some(outer_schema) = state.get_outer_query_schema().cloned() else {
+@@ -90,7 +86,6 @@ impl PlanResolver<'_> {
+     fn resolve_field_or_nested_field(
+         &self,
+         name: &spec::ObjectName,
+-        plan_id: Option<i64>,
+         schema: &DFSchemaRef,
+         state: &mut PlanResolverState,
+     ) -> PlanResult<Option<(String, expr::Expr)>> {
+@@ -108,7 +103,7 @@ impl PlanResolver<'_> {
+                     .iter()
+                     .filter_map(|(q, name, inner)| {
+                         if qualifier_matches(q.as_ref(), qualifier)
+-                            && info.matches(name.as_ref(), plan_id)
++                            && info.name().eq_ignore_ascii_case(name.as_ref())
+                         {
+                             let expr = Self::resolve_potentially_nested_field(
+                                 col((qualifier, field)),
+@@ -165,7 +160,6 @@ impl PlanResolver<'_> {
+     fn resolve_hidden_field(
+         &self,
+         name: &spec::ObjectName,
+-        plan_id: Option<i64>,
+         schema: &DFSchemaRef,
+         state: &mut PlanResolverState,
+     ) -> PlanResult<Option<(String, expr::Expr)>> {
+@@ -184,7 +178,7 @@ impl PlanResolver<'_> {
+                 if !info.is_hidden() {
+                     return None;
+                 }
+-                if info.matches(name.as_ref(), plan_id) {
++                if info.name().eq_ignore_ascii_case(name.as_ref()) {
+                     Some((
+                         name.as_ref().to_string(),
+                         expr::Expr::Column(Column::new_unqualified(field.name())),
+@@ -222,7 +216,7 @@ impl PlanResolver<'_> {
+                     .iter()
+                     .filter(|(q, name)| {
+                         qualifier_matches(q.as_ref(), qualifier)
+-                            && info.matches(name.as_ref(), None)
++                            && info.name().eq_ignore_ascii_case(name.as_ref())
+                     })
+                     .map(|(_, name)| {
+                         (
 diff --git a/crates/sail-plan/src/resolver/expression/cast.rs b/crates/sail-plan/src/resolver/expression/cast.rs
 index 1a8c232..ee85ad4 100644
 --- a/crates/sail-plan/src/resolver/expression/cast.rs
@@ -38635,15 +39082,21 @@ index 309481e..63b0b79 100644
              vec![name],
              expr::Expr::Literal(literal, None),
 diff --git a/crates/sail-plan/src/resolver/expression/misc.rs b/crates/sail-plan/src/resolver/expression/misc.rs
-index fd946d2..ab97f82 100644
+index fd946d2..c923e0f 100644
 --- a/crates/sail-plan/src/resolver/expression/misc.rs
 +++ b/crates/sail-plan/src/resolver/expression/misc.rs
-@@ -1,3 +1,4 @@
+@@ -1,25 +1,22 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::collections::HashMap;
  use std::sync::Arc;
  
-@@ -10,9 +11,7 @@ use datafusion_functions::core::expr_ext::FieldAccessor;
+ use arrow::datatypes::DataType;
+-use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
+-use datafusion_common::{Column, DFSchemaRef, ScalarValue, plan_datafusion_err};
++use datafusion_common::{DFSchemaRef, ScalarValue};
+ use datafusion_expr::expr::FieldMetadata;
+ use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, when};
+ use datafusion_functions::core::expr_ext::FieldAccessor;
  use datafusion_functions::expr_fn as datafusion_fn;
  use datafusion_functions_nested::expr_fn::{array_element, array_length, map_extract};
  use sail_common::spec::{self, DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID};
@@ -38651,17 +39104,17 @@ index fd946d2..ab97f82 100644
  use sail_common_datafusion::literal::LiteralEvaluator;
 -use sail_common_datafusion::session::plan::PlanService;
  use sail_common_datafusion::utils::items::ItemTaker;
- use sail_function::scalar::drop_struct_field::DropStructField;
+-use sail_function::scalar::drop_struct_field::DropStructField;
  use sail_function::scalar::misc::raise_error::RaiseError;
-@@ -20,6 +19,7 @@ use sail_function::scalar::table_input::TableInput;
- use sail_function::scalar::update_struct_field::UpdateStructField;
+ use sail_function::scalar::table_input::TableInput;
+-use sail_function::scalar::update_struct_field::UpdateStructField;
  
  use crate::error::{PlanError, PlanResult};
 +use crate::formatter::SparkPlanFormatter;
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
  use crate::resolver::state::PlanResolverState;
-@@ -84,7 +84,7 @@ impl PlanResolver<'_> {
+@@ -84,57 +81,20 @@ impl PlanResolver<'_> {
          state: &mut PlanResolverState,
      ) -> PlanResult<NamedExpr> {
          let resolved = self.resolve_expression(expr, schema, state).await?;
@@ -38670,7 +39123,9 @@ index fd946d2..ab97f82 100644
          let object_name = sail_sql_analyzer::expression::from_ast_object_name(
              sail_sql_analyzer::parser::parse_object_name(&name)?,
          )?;
-@@ -93,48 +93,11 @@ impl PlanResolver<'_> {
+-        self.resolve_expression_attribute(object_name, None, false, schema, state)
++        self.resolve_expression_attribute(object_name, false, schema, state)
+     }
  
      /// Evaluates a resolved DataFusion expression as an identifier string.
      ///
@@ -38719,7 +39174,79 @@ index fd946d2..ab97f82 100644
          let scalar = evaluator.evaluate(&expr).map_err(|e| {
              PlanError::invalid(format!("IDENTIFIER expression must be a constant: {e}"))
          })?;
-@@ -287,10 +250,9 @@ impl PlanResolver<'_> {
+@@ -181,71 +141,6 @@ impl PlanResolver<'_> {
+         ))
+     }
+ 
+-    pub(super) async fn resolve_expression_regex(
+-        &self,
+-        col_name: String,
+-        plan_id: Option<i64>,
+-        schema: &DFSchemaRef,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<NamedExpr> {
+-        use regex::Regex;
+-        use sail_function::scalar::multi_expr::MultiExpr;
+-
+-        // Remove backticks from the pattern if present
+-        let pattern_str = col_name.trim_matches('`');
+-
+-        // Add anchors to match the entire column name (like Spark does)
+-        let anchored_pattern = format!("^{}$", pattern_str);
+-
+-        // Compile the regex pattern
+-        let pattern = Regex::new(&anchored_pattern).map_err(|e| {
+-            PlanError::invalid(format!("invalid regex pattern '{}': {}", pattern_str, e))
+-        })?;
+-
+-        // Collect all matching columns
+-        let mut matching_columns = Vec::new();
+-        let mut matching_names = Vec::new();
+-
+-        for (qualifier, field) in schema.iter() {
+-            // Skip qualified columns if no qualifier is expected
+-            if qualifier.is_some() {
+-                continue;
+-            }
+-
+-            // Get field info
+-            let Ok(info) = state.get_field_info(field.name()) else {
+-                continue;
+-            };
+-
+-            // Skip hidden fields
+-            if info.is_hidden() {
+-                continue;
+-            }
+-
+-            // Check if the field name matches the pattern and plan_id
+-            let field_name = info.name();
+-            if pattern.is_match(field_name) && info.matches(field_name, plan_id) {
+-                matching_columns.push(expr::Expr::Column(Column::new_unqualified(field.name())));
+-                matching_names.push(field_name.to_string());
+-            }
+-        }
+-
+-        // If no columns match, return empty MultiExpr (like Spark does)
+-        if matching_columns.is_empty() {
+-            let multi_expr = ScalarUDF::from(MultiExpr::new()).call(matching_columns);
+-            return Ok(NamedExpr::new(matching_names, multi_expr));
+-        }
+-
+-        // If only one column matches, return it directly
+-        if matching_columns.len() == 1 {
+-            return Ok(NamedExpr::new(matching_names, matching_columns.one()?));
+-        }
+-
+-        // If multiple columns match, wrap them in a MultiExpr
+-        let multi_expr = ScalarUDF::from(MultiExpr::new()).call(matching_columns);
+-        Ok(NamedExpr::new(matching_names, multi_expr))
+-    }
+-
+     pub(super) async fn resolve_expression_extract_value(
+         &self,
+         child: spec::Expr,
+@@ -287,10 +182,9 @@ impl PlanResolver<'_> {
              _ => return Err(PlanError::invalid("extraction must be a literal")),
          };
          let extraction = self.resolve_literal(extraction, state)?;
@@ -38733,8 +39260,95 @@ index fd946d2..ab97f82 100644
          let name = match data_type {
              DataType::Struct(_) => {
                  format!("{}.{}", name.one()?, extraction_name)
+@@ -367,86 +261,4 @@ impl PlanResolver<'_> {
+         };
+         Ok(NamedExpr::new(vec![name], expr))
+     }
+-
+-    pub(super) async fn resolve_expression_update_fields(
+-        &self,
+-        struct_expression: spec::Expr,
+-        field_name: spec::ObjectName,
+-        value_expression: Option<spec::Expr>,
+-        schema: &DFSchemaRef,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<NamedExpr> {
+-        let field_name: Vec<String> = field_name.into();
+-        let NamedExpr { name, expr, .. } = self
+-            .resolve_named_expression(struct_expression, schema, state)
+-            .await?;
+-        let name = if name.len() == 1 {
+-            name.one()?
+-        } else {
+-            let names = format!("({})", name.join(", "));
+-            return Err(PlanError::invalid(format!(
+-                "one name expected for expression, got: {names}"
+-            )));
+-        };
+-
+-        // Spark names the column after the `UpdateFields` expression tree, where
+-        // each operation is rendered as `WithField(<value name>)` (the value
+-        // expression's display name, not the target field name) or `dropfield()`.
+-        let (op, new_expr) = if let Some(value_expression) = value_expression {
+-            let NamedExpr {
+-                name: value_name,
+-                expr: value_expr,
+-                ..
+-            } = self
+-                .resolve_named_expression(value_expression, schema, state)
+-                .await?;
+-            (
+-                format!("WithField({})", value_name.one()?),
+-                ScalarUDF::from(UpdateStructField::new(field_name)).call(vec![expr, value_expr]),
+-            )
+-        } else {
+-            (
+-                "dropfield()".to_string(),
+-                ScalarUDF::from(DropStructField::new(field_name)).call(vec![expr]),
+-            )
+-        };
+-        // Spark collapses chained `withField`/`dropFields` into a single
+-        // `update_fields(x, op1, op2, ...)`, so splice the new operation into an
+-        // existing `update_fields(...)` name rather than nesting.
+-        let result_name = match name.strip_suffix(')') {
+-            Some(prefix) if prefix.starts_with("update_fields(") => format!("{prefix}, {op})"),
+-            _ => format!("update_fields({name}, {op})"),
+-        };
+-        Ok(NamedExpr::new(vec![result_name], new_expr))
+-    }
+-
+-    /// Rewrites the resolved expression to refer to columns in an external schema.
+-    /// The external schema has user-facing field names instead of internal names
+-    /// derived from field IDs in the resolver state.
+-    pub(in super::super) fn rewrite_expression_for_external_schema(
+-        &self,
+-        expr: expr::Expr,
+-        state: &PlanResolverState,
+-    ) -> PlanResult<expr::Expr> {
+-        let rewrite = |e: expr::Expr| -> datafusion_common::Result<Transformed<expr::Expr>> {
+-            if let expr::Expr::Column(Column {
+-                name,
+-                relation,
+-                spans,
+-            }) = e
+-            {
+-                let info = state
+-                    .get_field_info(&name)
+-                    .map_err(|_| plan_datafusion_err!("column {name} not found"))?;
+-                Ok(Transformed::yes(expr::Expr::Column(Column {
+-                    name: info.name().to_string(),
+-                    relation,
+-                    spans,
+-                })))
+-            } else {
+-                Ok(Transformed::no(e))
+-            }
+-        };
+-        Ok(expr.transform(rewrite).data()?)
+-    }
+ }
 diff --git a/crates/sail-plan/src/resolver/expression/mod.rs b/crates/sail-plan/src/resolver/expression/mod.rs
-index 6e1d2ce..70cc9f6 100644
+index 6e1d2ce..e731e80 100644
 --- a/crates/sail-plan/src/resolver/expression/mod.rs
 +++ b/crates/sail-plan/src/resolver/expression/mod.rs
 @@ -1,3 +1,4 @@
@@ -38750,7 +39364,76 @@ index 6e1d2ce..70cc9f6 100644
  mod wildcard;
  mod window;
  
-@@ -186,9 +186,8 @@ impl PlanResolver<'_> {
+@@ -105,24 +105,30 @@ impl PlanResolver<'_> {
+         use spec::Expr;
+ 
+         match expr {
++            Expr::UnresolvedAttribute {
++                plan_id: Some(_), ..
++            }
++            | Expr::UnresolvedStar {
++                plan_id: Some(_), ..
++            } => Err(PlanError::unsupported(
++                "extraction probe: DataFrame plan IDs",
++            )),
+             Expr::Literal(literal) => self.resolve_expression_literal(literal, state),
+             Expr::UnresolvedAttribute {
+                 name,
+-                plan_id,
++                plan_id: None,
+                 is_metadata_column,
+-            } => {
+-                self.resolve_expression_attribute(name, plan_id, is_metadata_column, schema, state)
+-            }
++            } => self.resolve_expression_attribute(name, is_metadata_column, schema, state),
+             Expr::UnresolvedFunction(function) => {
+                 self.resolve_expression_function(function, schema, state)
+                     .await
+             }
+             Expr::UnresolvedStar {
+                 target,
+-                plan_id,
++                plan_id: None,
+                 wildcard_options,
+             } => {
+-                self.resolve_expression_wildcard(target, plan_id, wildcard_options, schema, state)
++                self.resolve_expression_wildcard(target, wildcard_options, schema, state)
+                     .await
+             }
+             Expr::Alias {
+@@ -142,10 +148,9 @@ impl PlanResolver<'_> {
+                 self.resolve_expression_cast(*expr, cast_to_type, rename, is_try, schema, state)
+                     .await
+             }
+-            Expr::UnresolvedRegex { col_name, plan_id } => {
+-                self.resolve_expression_regex(col_name, plan_id, schema, state)
+-                    .await
+-            }
++            Expr::UnresolvedRegex { .. } | Expr::UpdateFields { .. } => Err(
++                PlanError::unsupported("extraction probe: DataFrame column expressions"),
++            ),
+             Expr::SortOrder(sort) => {
+                 self.resolve_expression_sort_order(sort, schema, state)
+                     .await
+@@ -168,27 +173,12 @@ impl PlanResolver<'_> {
+                 self.resolve_expression_extract_value(*child, *extraction, schema, state)
+                     .await
+             }
+-            Expr::UpdateFields {
+-                struct_expression,
+-                field_name,
+-                value_expression,
+-            } => {
+-                self.resolve_expression_update_fields(
+-                    *struct_expression,
+-                    field_name,
+-                    value_expression.map(|x| *x),
+-                    schema,
+-                    state,
+-                )
+-                .await
+-            }
+             Expr::UnresolvedNamedLambdaVariable(variable) => {
                  self.resolve_expression_named_lambda_variable(variable, schema, state)
                      .await
              }
@@ -38762,7 +39445,7 @@ index 6e1d2ce..70cc9f6 100644
              }
              Expr::CallFunction {
                  function_name,
-@@ -240,22 +239,9 @@ impl PlanResolver<'_> {
+@@ -240,22 +230,9 @@ impl PlanResolver<'_> {
                  self.resolve_expression_exists(*subquery, negated, schema, state)
                      .await
              }
@@ -38788,7 +39471,7 @@ index 6e1d2ce..70cc9f6 100644
              Expr::InList {
                  expr,
                  list,
-@@ -411,43 +397,17 @@ mod tests {
+@@ -411,43 +388,17 @@ mod tests {
      use datafusion_common::{DFSchema, ScalarValue};
      use datafusion_expr::expr::{Alias, Expr};
      use datafusion_expr::{BinaryExpr, Operator};
@@ -39287,7 +39970,7 @@ index e77dd70..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/src/resolver/expression/wildcard.rs b/crates/sail-plan/src/resolver/expression/wildcard.rs
-index eb3c502..4394ed7 100644
+index eb3c502..a7d3faa 100644
 --- a/crates/sail-plan/src/resolver/expression/wildcard.rs
 +++ b/crates/sail-plan/src/resolver/expression/wildcard.rs
 @@ -1,9 +1,10 @@
@@ -39295,14 +39978,38 @@ index eb3c502..4394ed7 100644
  use std::collections::VecDeque;
  
  use arrow::datatypes::DataType;
++use datafusion::sql::sqlparser::ast::{Ident, ObjectName, ObjectNamePart};
  use datafusion_common::{DFSchemaRef, TableReference};
  use datafusion_expr::expr::ScalarFunction;
 -use datafusion_expr::sql::{Ident, ObjectName, ObjectNamePart};
-+use datafusion::sql::sqlparser::ast::{Ident, ObjectName, ObjectNamePart};
  use datafusion_expr::{ScalarUDF, col, expr, lit};
  use datafusion_functions::core::get_field;
  use sail_common::spec;
-@@ -151,15 +152,11 @@ impl PlanResolver<'_> {
+@@ -20,14 +21,10 @@ impl PlanResolver<'_> {
+     pub(super) async fn resolve_expression_wildcard(
+         &self,
+         target: Option<spec::ObjectName>,
+-        plan_id: Option<i64>,
+         wildcard_options: spec::WildcardOptions,
+         schema: &DFSchemaRef,
+         state: &mut PlanResolverState,
+     ) -> PlanResult<NamedExpr> {
+-        if plan_id.is_some() {
+-            return Err(PlanError::todo("wildcard with plan ID"));
+-        }
+         match target {
+             Some(target) if wildcard_options == Default::default() => {
+                 self.resolve_wildcard_or_nested_field_wildcard(&target, schema, state)
+@@ -91,7 +88,7 @@ impl PlanResolver<'_> {
+                             return None;
+                         };
+                         if qualifier_matches(q.as_ref(), qualifier)
+-                            && info.matches(column.as_ref(), None)
++                            && info.name().eq_ignore_ascii_case(column.as_ref())
+                         {
+                             Self::resolve_nested_field_wildcard(
+                                 col((q.as_ref(), field)),
+@@ -151,15 +148,11 @@ impl PlanResolver<'_> {
      async fn resolve_wildcard_options(
          &self,
          wildcard_options: spec::WildcardOptions,
@@ -39321,7 +40028,7 @@ index eb3c502..4394ed7 100644
          }
  
          fn make_object_name(value: impl Into<String>) -> ObjectName {
-@@ -210,58 +207,13 @@ impl PlanResolver<'_> {
+@@ -210,58 +203,15 @@ impl PlanResolver<'_> {
                  Ok(except)
              })
              .transpose()?;
@@ -39380,7 +40087,9 @@ index eb3c502..4394ed7 100644
 +        // ponytail: DF's sql feature changes these AST types. Exclude REPLACE/RENAME
 +        // from this probe until their metadata is adapted and tested.
 +        if wildcard_options.replace_columns.is_some() || wildcard_options.rename_columns.is_some() {
-+            return Err(PlanError::unsupported("extraction probe: wildcard REPLACE/RENAME"));
++            return Err(PlanError::unsupported(
++                "extraction probe: wildcard REPLACE/RENAME",
++            ));
 +        }
 +        let replace = None;
 +        let rename = None;
@@ -40406,7 +41115,7 @@ index 284f933..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/src/resolver/query/join.rs b/crates/sail-plan/src/resolver/query/join.rs
-index 66620c9..05a7e78 100644
+index 66620c9..00956c4 100644
 --- a/crates/sail-plan/src/resolver/query/join.rs
 +++ b/crates/sail-plan/src/resolver/query/join.rs
 @@ -1,10 +1,9 @@
@@ -40494,6 +41203,25 @@ index 66620c9..05a7e78 100644
                  let plan = LogicalPlanBuilder::from(left)
                      .join_on(right, join_type, Some(condition))?
                      .build()?;
+@@ -201,7 +141,7 @@ impl PlanResolver<'_> {
+             NullEquality::NullEqualsNothing,
+         )?;
+         // Re-register join key columns as hidden fields so that subsequent
+-        // attribute resolution (by plan_id) can still find them.
++        // attribute resolution can still find them.
+         let hidden_columns = builder
+             .schema()
+             .columns()
+@@ -212,9 +152,6 @@ impl PlanResolver<'_> {
+                 {
+                     let info = state.get_field_info(col.name())?.clone();
+                     let field_id = state.register_hidden_field_name(info.name());
+-                    for plan_id in info.plan_ids() {
+-                        state.register_plan_id_for_field(&field_id, plan_id)?;
+-                    }
+                     Ok(Expr::Column(col).alias(field_id))
+                 } else {
+                     Ok(Expr::Column(col))
 diff --git a/crates/sail-plan/src/resolver/query/lateral.rs b/crates/sail-plan/src/resolver/query/lateral.rs
 index f4cb08e..350879e 100644
 --- a/crates/sail-plan/src/resolver/query/lateral.rs
@@ -40940,7 +41668,7 @@ index 7c60188..85d4a1e 100644
 -    }
  }
 diff --git a/crates/sail-plan/src/resolver/query/mod.rs b/crates/sail-plan/src/resolver/query/mod.rs
-index fb117e5..f7894bc 100644
+index fb117e5..a762098 100644
 --- a/crates/sail-plan/src/resolver/query/mod.rs
 +++ b/crates/sail-plan/src/resolver/query/mod.rs
 @@ -1,12 +1,7 @@
@@ -40989,9 +41717,16 @@ index fb117e5..f7894bc 100644
  
  impl PlanResolver<'_> {
      /// Resolve query plan.
-@@ -69,16 +55,23 @@ impl PlanResolver<'_> {
+@@ -67,18 +53,29 @@ impl PlanResolver<'_> {
+     ) -> PlanResult<LogicalPlan> {
+         use spec::QueryNode;
  
-         let plan_id = plan.plan_id;
+-        let plan_id = plan.plan_id;
++        if plan.plan_id.is_some() {
++            return Err(PlanError::unsupported(
++                "extraction probe: DataFrame plan IDs",
++            ));
++        }
          let plan = match plan.node {
 +            QueryNode::Read {
 +                is_streaming: true, ..
@@ -41016,7 +41751,7 @@ index fb117e5..f7894bc 100644
                  }
                  spec::ReadType::DynamicTable(table) => {
                      self.resolve_query_read_dynamic_table(*table, state).await?
-@@ -107,24 +100,21 @@ impl PlanResolver<'_> {
+@@ -107,24 +104,21 @@ impl PlanResolver<'_> {
              QueryNode::Aggregate(aggregate) => {
                  self.resolve_query_aggregate(aggregate, state).await?
              }
@@ -41054,7 +41789,7 @@ index fb117e5..f7894bc 100644
              QueryNode::TableSample { input, sample } => {
                  let plan = self.resolve_query_plan(*input, state).await?;
                  self.apply_table_sample(plan, sample, state).await?
-@@ -132,204 +122,59 @@ impl PlanResolver<'_> {
+@@ -132,204 +126,59 @@ impl PlanResolver<'_> {
              QueryNode::Deduplicate(deduplicate) => {
                  self.resolve_query_deduplicate(deduplicate, state).await?
              }
@@ -41242,7 +41977,7 @@ index fb117e5..f7894bc 100644
 -            QueryNode::StatSummary { input, statistics } => {
 -                self.resolve_query_stat_summary(*input, vec![], statistics, state)
 -                    .await?
--            }
+             }
 -            QueryNode::StatCrosstab {
 -                input,
 -                left_column,
@@ -41277,7 +42012,7 @@ index fb117e5..f7894bc 100644
 -            }
 -            QueryNode::StatFreqItems { .. } => {
 -                return Err(PlanError::todo("freq items"));
-             }
+-            }
 -            QueryNode::StatSampleBy {
 -                input,
 -                column,
@@ -41303,7 +42038,7 @@ index fb117e5..f7894bc 100644
              }
              QueryNode::Empty { produce_one_row } => self.resolve_query_empty(produce_one_row)?,
              QueryNode::Values(values) => self.resolve_query_values(values, state).await?,
-@@ -349,10 +194,6 @@ impl PlanResolver<'_> {
+@@ -349,10 +198,6 @@ impl PlanResolver<'_> {
                  self.resolve_query_with_ctes(*input, recursive, ctes, state)
                      .await?
              }
@@ -41314,6 +42049,33 @@ index fb117e5..f7894bc 100644
              QueryNode::LateralView {
                  input,
                  function,
+@@ -388,7 +233,6 @@ impl PlanResolver<'_> {
+             }
+         };
+         self.verify_query_plan(&plan, state)?;
+-        self.register_schema_with_plan_id(&plan, plan_id, state)?;
+         Ok(plan)
+     }
+ 
+@@ -442,18 +286,4 @@ impl PlanResolver<'_> {
+             )))
+         }
+     }
+-
+-    fn register_schema_with_plan_id(
+-        &self,
+-        plan: &LogicalPlan,
+-        plan_id: Option<i64>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<()> {
+-        if let Some(plan_id) = plan_id {
+-            for field in plan.schema().fields() {
+-                state.register_plan_id_for_field(field.name(), plan_id)?;
+-            }
+-        }
+-        Ok(())
+-    }
+ }
 diff --git a/crates/sail-plan/src/resolver/query/na.rs b/crates/sail-plan/src/resolver/query/na.rs
 deleted file mode 100644
 index 21ad91e..0000000
@@ -41606,6 +42368,45 @@ index e98baaf..9b2daf8 100644
  fn check_valid_pivot_aggregate(expr: &expr::Expr, state: &PlanResolverState) -> PlanResult<()> {
      let mut bare_column = None;
  
+diff --git a/crates/sail-plan/src/resolver/query/project.rs b/crates/sail-plan/src/resolver/query/project.rs
+index 774b68e..0621dfe 100644
+--- a/crates/sail-plan/src/resolver/query/project.rs
++++ b/crates/sail-plan/src/resolver/query/project.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::sync::Arc;
+ 
+@@ -238,8 +239,7 @@ impl PlanResolver<'_> {
+ 
+     /// Rewrite named expressions to DataFusion expressions.
+     /// A field is registered for each name.
+-    /// If the expression is a column expression, all plan IDs for the column are registered for the field.
+-    /// This means the column must refer to a **registered field** of the input plan. Otherwise, the column must be wrapped with an alias.
++    /// Column expressions must refer to registered input fields.
+     pub(super) fn rewrite_named_expressions(
+         &self,
+         expr: Vec<NamedExpr>,
+@@ -260,16 +260,10 @@ impl PlanResolver<'_> {
+                         "one name expected for expression, got: {names}"
+                     )));
+                 };
+-                let plan_ids = if let Expr::Column(Column { name: field_id, .. }) = &expr {
+-                    let info = state.get_field_info(field_id)?;
+-                    info.plan_ids()
+-                } else {
+-                    vec![]
+-                };
+-                let field_id = state.register_field_name(name);
+-                for plan_id in plan_ids {
+-                    state.register_plan_id_for_field(&field_id, plan_id)?;
++                if let Expr::Column(Column { name: field_id, .. }) = &expr {
++                    state.get_field_info(field_id)?;
+                 }
++                let field_id = state.register_field_name(name);
+                 if !metadata.is_empty() {
+                     let metadata_map: HashMap<String, String> = metadata.into_iter().collect();
+                     let field_metadata = Some(FieldMetadata::from(metadata_map));
 diff --git a/crates/sail-plan/src/resolver/query/read.rs b/crates/sail-plan/src/resolver/query/read.rs
 index f2cf965..66ba27e 100644
 --- a/crates/sail-plan/src/resolver/query/read.rs
@@ -44224,13 +45025,61 @@ index 70d55b2..0000000
 -        self.resolve_query_plan(root, scope.state()).await
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/schema.rs b/crates/sail-plan/src/resolver/schema.rs
+index 8fac7af..8945676 100644
+--- a/crates/sail-plan/src/resolver/schema.rs
++++ b/crates/sail-plan/src/resolver/schema.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion_common::{Column, DFSchemaRef, TableReference};
+@@ -35,7 +36,6 @@ impl PlanResolver<'_> {
+         &self,
+         schema: &DFSchemaRef,
+         name: &str,
+-        plan_id: Option<i64>,
+         state: &PlanResolverState,
+     ) -> Vec<Column> {
+         schema
+@@ -43,7 +43,7 @@ impl PlanResolver<'_> {
+             .filter(|(_, field)| {
+                 state
+                     .get_field_info(field.name())
+-                    .is_ok_and(|info| !info.is_hidden() && info.matches(name, plan_id))
++                    .is_ok_and(|info| !info.is_hidden() && info.name().eq_ignore_ascii_case(name))
+             })
+             .map(|x| x.into())
+             .collect()
+@@ -53,10 +53,9 @@ impl PlanResolver<'_> {
+         &self,
+         schema: &DFSchemaRef,
+         name: &str,
+-        plan_id: Option<i64>,
+         state: &PlanResolverState,
+     ) -> PlanResult<Option<Column>> {
+-        let columns = self.resolve_column_candidates(schema, name, plan_id, state);
++        let columns = self.resolve_column_candidates(schema, name, state);
+         if columns.len() > 1 {
+             return Err(PlanError::AnalysisError(format!(
+                 "[AMBIGUOUS_REFERENCE] Reference {name} is ambiguous, found: {} matches",
+@@ -76,7 +75,7 @@ impl PlanResolver<'_> {
+         name: &str,
+         state: &PlanResolverState,
+     ) -> PlanResult<Column> {
+-        if let Some(column) = self.resolve_optional_column(schema, name, None, state)? {
++        if let Some(column) = self.resolve_optional_column(schema, name, state)? {
+             Ok(column)
+         } else {
+             Err(PlanError::AnalysisError(format!(
 diff --git a/crates/sail-plan/src/resolver/state.rs b/crates/sail-plan/src/resolver/state.rs
-index 3e02a51..0b9b407 100644
+index 3e02a51..8691bdf 100644
 --- a/crates/sail-plan/src/resolver/state.rs
 +++ b/crates/sail-plan/src/resolver/state.rs
 @@ -1,8 +1,9 @@
+-use std::collections::{HashMap, HashSet};
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use std::collections::{HashMap, HashSet};
++use std::collections::HashMap;
  use std::sync::Arc;
  
  use datafusion_common::arrow::datatypes::{Field, FieldRef};
@@ -44239,7 +45088,38 @@ index 3e02a51..0b9b407 100644
  use datafusion_expr::LogicalPlan;
  use sail_common::spec;
  
-@@ -75,16 +76,7 @@ pub(super) struct PlanResolverState {
+@@ -12,8 +13,6 @@ use crate::resolver::expression::NamedExpr;
+ /// The field information for fields in the logical plan.
+ #[derive(Debug, Clone)]
+ pub(super) struct FieldInfo {
+-    /// The set of plan IDs, if any, that reference this field.
+-    plan_ids: HashSet<i64>,
+     /// The user-facing name of the field.
+     name: String,
+     /// Whether this is a hidden field that should be excluded from the
+@@ -28,21 +27,9 @@ impl FieldInfo {
+         &self.name
+     }
+ 
+-    pub fn plan_ids(&self) -> Vec<i64> {
+-        self.plan_ids.iter().copied().collect()
+-    }
+-
+     pub fn is_hidden(&self) -> bool {
+         self.hidden
+     }
+-
+-    pub fn matches(&self, name: &str, plan_id: Option<i64>) -> bool {
+-        self.name.eq_ignore_ascii_case(name)
+-            && match plan_id {
+-                Some(plan_id) => self.plan_ids.contains(&plan_id),
+-                None => true,
+-            }
+-    }
+ }
+ 
+ #[derive(Debug, Clone, Default)]
+@@ -75,16 +62,7 @@ pub(super) struct PlanResolverState {
      aggregate_state: AggregateState,
      /// The CTEs for the current query.
      ctes: HashMap<TableReference, Arc<LogicalPlan>>,
@@ -44256,7 +45136,7 @@ index 3e02a51..0b9b407 100644
      /// Stack of in-scope lambda parameter frames (innermost last).
      /// Each frame holds the declared parameter names of one enclosing lambda
      /// function, along with the parameter field when the enclosing
-@@ -108,10 +100,7 @@ impl PlanResolverState {
+@@ -108,10 +86,7 @@ impl PlanResolverState {
              outer_query_schema: None,
              aggregate_state: AggregateState::default(),
              ctes: HashMap::new(),
@@ -44267,7 +45147,15 @@ index 3e02a51..0b9b407 100644
              lambda_param_scopes: Vec::new(),
              windows: HashMap::new(),
          }
-@@ -170,17 +159,6 @@ impl PlanResolverState {
+@@ -126,7 +101,6 @@ impl PlanResolverState {
+     fn register_field_info(&mut self, name: impl Into<String>, hidden: bool) -> String {
+         let field_id = self.next_field_id();
+         let info = FieldInfo {
+-            plan_ids: HashSet::new(),
+             name: name.into(),
+             hidden,
+         };
+@@ -170,26 +144,6 @@ impl PlanResolverState {
              .collect()
      }
  
@@ -44282,10 +45170,19 @@ index 3e02a51..0b9b407 100644
 -            .collect()
 -    }
 -
-     pub fn register_plan_id_for_field(&mut self, field_id: &str, plan_id: i64) -> PlanResult<()> {
-         let field_info = self
-             .fields
-@@ -241,24 +219,6 @@ impl PlanResolverState {
+-    pub fn register_plan_id_for_field(&mut self, field_id: &str, plan_id: i64) -> PlanResult<()> {
+-        let field_info = self
+-            .fields
+-            .get_mut(field_id)
+-            .ok_or_else(|| PlanError::internal(format!("unknown field: {field_id}")))?;
+-        field_info.plan_ids.insert(plan_id);
+-        Ok(())
+-    }
+-
+     pub fn get_field_info(&self, field_id: &str) -> PlanResult<&FieldInfo> {
+         self.fields
+             .get(field_id)
+@@ -241,24 +195,6 @@ impl PlanResolverState {
          self.ctes.insert(table_ref, Arc::new(plan));
      }
  
@@ -44310,7 +45207,7 @@ index 3e02a51..0b9b407 100644
      pub fn enter_config_scope(&mut self) -> ConfigScope<'_> {
          ConfigScope::new(self)
      }
-@@ -291,16 +251,6 @@ impl PlanResolverState {
+@@ -291,16 +227,6 @@ impl PlanResolverState {
          &mut self.config
      }
  
@@ -44327,7 +45224,7 @@ index 3e02a51..0b9b407 100644
      /// Enters a scope where the given lambda function parameters are in scope.
      /// The frame is popped when the scope is dropped.
      pub fn enter_lambda_scope(
-@@ -325,52 +275,6 @@ impl PlanResolverState {
+@@ -325,52 +251,6 @@ impl PlanResolverState {
      pub fn in_lambda_scope(&self) -> bool {
          !self.lambda_param_scopes.is_empty()
      }
@@ -44380,7 +45277,7 @@ index 3e02a51..0b9b407 100644
  }
  
  pub(crate) struct QueryScope<'a> {
-@@ -495,29 +399,3 @@ impl Drop for LambdaScope<'_> {
+@@ -495,29 +375,3 @@ impl Drop for LambdaScope<'_> {
          self.state.lambda_param_scopes.pop();
      }
  }

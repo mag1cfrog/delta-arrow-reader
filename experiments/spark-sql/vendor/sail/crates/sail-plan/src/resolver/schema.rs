@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion_common::{Column, DFSchemaRef, TableReference};
@@ -35,7 +36,6 @@ impl PlanResolver<'_> {
         &self,
         schema: &DFSchemaRef,
         name: &str,
-        plan_id: Option<i64>,
         state: &PlanResolverState,
     ) -> Vec<Column> {
         schema
@@ -43,7 +43,7 @@ impl PlanResolver<'_> {
             .filter(|(_, field)| {
                 state
                     .get_field_info(field.name())
-                    .is_ok_and(|info| !info.is_hidden() && info.matches(name, plan_id))
+                    .is_ok_and(|info| !info.is_hidden() && info.name().eq_ignore_ascii_case(name))
             })
             .map(|x| x.into())
             .collect()
@@ -53,10 +53,9 @@ impl PlanResolver<'_> {
         &self,
         schema: &DFSchemaRef,
         name: &str,
-        plan_id: Option<i64>,
         state: &PlanResolverState,
     ) -> PlanResult<Option<Column>> {
-        let columns = self.resolve_column_candidates(schema, name, plan_id, state);
+        let columns = self.resolve_column_candidates(schema, name, state);
         if columns.len() > 1 {
             return Err(PlanError::AnalysisError(format!(
                 "[AMBIGUOUS_REFERENCE] Reference {name} is ambiguous, found: {} matches",
@@ -76,7 +75,7 @@ impl PlanResolver<'_> {
         name: &str,
         state: &PlanResolverState,
     ) -> PlanResult<Column> {
-        if let Some(column) = self.resolve_optional_column(schema, name, None, state)? {
+        if let Some(column) = self.resolve_optional_column(schema, name, state)? {
             Ok(column)
         } else {
             Err(PlanError::AnalysisError(format!(

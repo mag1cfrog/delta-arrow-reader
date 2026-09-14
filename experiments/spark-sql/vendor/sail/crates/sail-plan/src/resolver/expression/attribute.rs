@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, Field};
@@ -17,7 +18,6 @@ impl PlanResolver<'_> {
     pub(super) fn resolve_expression_attribute(
         &self,
         name: spec::ObjectName,
-        plan_id: Option<i64>,
         is_metadata_column: bool,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
@@ -27,10 +27,8 @@ impl PlanResolver<'_> {
         }
         // Lambda parameters shadow columns inside a lambda function body. SQL lambda
         // bodies reference parameters as plain attributes, so the lambda scope stack
-        // is consulted first. A `plan_id` indicates an explicit DataFrame column
-        // reference, which never refers to a lambda parameter.
-        if plan_id.is_none()
-            && let [first, rest @ ..] = name.parts()
+        // is consulted first.
+        if let [first, rest @ ..] = name.parts()
             && let Some((declared, field)) = state
                 .resolve_lambda_parameter(first.as_ref())
                 .map(|(param, field)| (param.to_string(), field.cloned()))
@@ -59,9 +57,7 @@ impl PlanResolver<'_> {
         {
             return Ok(NamedExpr::new(vec![name], expr));
         }
-        if let Some((name, expr)) =
-            self.resolve_field_or_nested_field(&name, plan_id, schema, state)?
-        {
+        if let Some((name, expr)) = self.resolve_field_or_nested_field(&name, schema, state)? {
             return Ok(NamedExpr::new(vec![name], expr));
         }
         if let Some((name, expr)) =
@@ -69,7 +65,7 @@ impl PlanResolver<'_> {
         {
             return Ok(NamedExpr::new(vec![name], expr));
         }
-        if let Some((name, expr)) = self.resolve_hidden_field(&name, plan_id, schema, state)? {
+        if let Some((name, expr)) = self.resolve_hidden_field(&name, schema, state)? {
             return Ok(NamedExpr::new(vec![name], expr));
         }
         let Some(outer_schema) = state.get_outer_query_schema().cloned() else {
@@ -90,7 +86,6 @@ impl PlanResolver<'_> {
     fn resolve_field_or_nested_field(
         &self,
         name: &spec::ObjectName,
-        plan_id: Option<i64>,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<Option<(String, expr::Expr)>> {
@@ -108,7 +103,7 @@ impl PlanResolver<'_> {
                     .iter()
                     .filter_map(|(q, name, inner)| {
                         if qualifier_matches(q.as_ref(), qualifier)
-                            && info.matches(name.as_ref(), plan_id)
+                            && info.name().eq_ignore_ascii_case(name.as_ref())
                         {
                             let expr = Self::resolve_potentially_nested_field(
                                 col((qualifier, field)),
@@ -165,7 +160,6 @@ impl PlanResolver<'_> {
     fn resolve_hidden_field(
         &self,
         name: &spec::ObjectName,
-        plan_id: Option<i64>,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<Option<(String, expr::Expr)>> {
@@ -184,7 +178,7 @@ impl PlanResolver<'_> {
                 if !info.is_hidden() {
                     return None;
                 }
-                if info.matches(name.as_ref(), plan_id) {
+                if info.name().eq_ignore_ascii_case(name.as_ref()) {
                     Some((
                         name.as_ref().to_string(),
                         expr::Expr::Column(Column::new_unqualified(field.name())),
@@ -222,7 +216,7 @@ impl PlanResolver<'_> {
                     .iter()
                     .filter(|(q, name)| {
                         qualifier_matches(q.as_ref(), qualifier)
-                            && info.matches(name.as_ref(), None)
+                            && info.name().eq_ignore_ascii_case(name.as_ref())
                     })
                     .map(|(_, name)| {
                         (

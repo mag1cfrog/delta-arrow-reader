@@ -141,7 +141,7 @@ impl PlanResolver<'_> {
             NullEquality::NullEqualsNothing,
         )?;
         // Re-register join key columns as hidden fields so that subsequent
-        // attribute resolution (by plan_id) can still find them.
+        // attribute resolution can still find them.
         let hidden_columns = builder
             .schema()
             .columns()
@@ -152,9 +152,6 @@ impl PlanResolver<'_> {
                 {
                     let info = state.get_field_info(col.name())?.clone();
                     let field_id = state.register_hidden_field_name(info.name());
-                    for plan_id in info.plan_ids() {
-                        state.register_plan_id_for_field(&field_id, plan_id)?;
-                    }
                     Ok(Expr::Column(col).alias(field_id))
                 } else {
                     Ok(Expr::Column(col))

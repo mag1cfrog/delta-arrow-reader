@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use arrow::datatypes::DataType;
-use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
-use datafusion_common::{Column, DFSchemaRef, ScalarValue, plan_datafusion_err};
+use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::FieldMetadata;
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, when};
 use datafusion_functions::core::expr_ext::FieldAccessor;
@@ -13,10 +12,8 @@ use datafusion_functions_nested::expr_fn::{array_element, array_length, map_extr
 use sail_common::spec::{self, DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID};
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_function::scalar::drop_struct_field::DropStructField;
 use sail_function::scalar::misc::raise_error::RaiseError;
 use sail_function::scalar::table_input::TableInput;
-use sail_function::scalar::update_struct_field::UpdateStructField;
 
 use crate::error::{PlanError, PlanResult};
 use crate::formatter::SparkPlanFormatter;
@@ -88,7 +85,7 @@ impl PlanResolver<'_> {
         let object_name = sail_sql_analyzer::expression::from_ast_object_name(
             sail_sql_analyzer::parser::parse_object_name(&name)?,
         )?;
-        self.resolve_expression_attribute(object_name, None, false, schema, state)
+        self.resolve_expression_attribute(object_name, false, schema, state)
     }
 
     /// Evaluates a resolved DataFusion expression as an identifier string.
@@ -142,71 +139,6 @@ impl PlanResolver<'_> {
             vec!["table".to_string()],
             ScalarUDF::from(TableInput::new(Arc::new(plan))).call(vec![]),
         ))
-    }
-
-    pub(super) async fn resolve_expression_regex(
-        &self,
-        col_name: String,
-        plan_id: Option<i64>,
-        schema: &DFSchemaRef,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<NamedExpr> {
-        use regex::Regex;
-        use sail_function::scalar::multi_expr::MultiExpr;
-
-        // Remove backticks from the pattern if present
-        let pattern_str = col_name.trim_matches('`');
-
-        // Add anchors to match the entire column name (like Spark does)
-        let anchored_pattern = format!("^{}$", pattern_str);
-
-        // Compile the regex pattern
-        let pattern = Regex::new(&anchored_pattern).map_err(|e| {
-            PlanError::invalid(format!("invalid regex pattern '{}': {}", pattern_str, e))
-        })?;
-
-        // Collect all matching columns
-        let mut matching_columns = Vec::new();
-        let mut matching_names = Vec::new();
-
-        for (qualifier, field) in schema.iter() {
-            // Skip qualified columns if no qualifier is expected
-            if qualifier.is_some() {
-                continue;
-            }
-
-            // Get field info
-            let Ok(info) = state.get_field_info(field.name()) else {
-                continue;
-            };
-
-            // Skip hidden fields
-            if info.is_hidden() {
-                continue;
-            }
-
-            // Check if the field name matches the pattern and plan_id
-            let field_name = info.name();
-            if pattern.is_match(field_name) && info.matches(field_name, plan_id) {
-                matching_columns.push(expr::Expr::Column(Column::new_unqualified(field.name())));
-                matching_names.push(field_name.to_string());
-            }
-        }
-
-        // If no columns match, return empty MultiExpr (like Spark does)
-        if matching_columns.is_empty() {
-            let multi_expr = ScalarUDF::from(MultiExpr::new()).call(matching_columns);
-            return Ok(NamedExpr::new(matching_names, multi_expr));
-        }
-
-        // If only one column matches, return it directly
-        if matching_columns.len() == 1 {
-            return Ok(NamedExpr::new(matching_names, matching_columns.one()?));
-        }
-
-        // If multiple columns match, wrap them in a MultiExpr
-        let multi_expr = ScalarUDF::from(MultiExpr::new()).call(matching_columns);
-        Ok(NamedExpr::new(matching_names, multi_expr))
     }
 
     pub(super) async fn resolve_expression_extract_value(
@@ -328,87 +260,5 @@ impl PlanResolver<'_> {
             }
         };
         Ok(NamedExpr::new(vec![name], expr))
-    }
-
-    pub(super) async fn resolve_expression_update_fields(
-        &self,
-        struct_expression: spec::Expr,
-        field_name: spec::ObjectName,
-        value_expression: Option<spec::Expr>,
-        schema: &DFSchemaRef,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<NamedExpr> {
-        let field_name: Vec<String> = field_name.into();
-        let NamedExpr { name, expr, .. } = self
-            .resolve_named_expression(struct_expression, schema, state)
-            .await?;
-        let name = if name.len() == 1 {
-            name.one()?
-        } else {
-            let names = format!("({})", name.join(", "));
-            return Err(PlanError::invalid(format!(
-                "one name expected for expression, got: {names}"
-            )));
-        };
-
-        // Spark names the column after the `UpdateFields` expression tree, where
-        // each operation is rendered as `WithField(<value name>)` (the value
-        // expression's display name, not the target field name) or `dropfield()`.
-        let (op, new_expr) = if let Some(value_expression) = value_expression {
-            let NamedExpr {
-                name: value_name,
-                expr: value_expr,
-                ..
-            } = self
-                .resolve_named_expression(value_expression, schema, state)
-                .await?;
-            (
-                format!("WithField({})", value_name.one()?),
-                ScalarUDF::from(UpdateStructField::new(field_name)).call(vec![expr, value_expr]),
-            )
-        } else {
-            (
-                "dropfield()".to_string(),
-                ScalarUDF::from(DropStructField::new(field_name)).call(vec![expr]),
-            )
-        };
-        // Spark collapses chained `withField`/`dropFields` into a single
-        // `update_fields(x, op1, op2, ...)`, so splice the new operation into an
-        // existing `update_fields(...)` name rather than nesting.
-        let result_name = match name.strip_suffix(')') {
-            Some(prefix) if prefix.starts_with("update_fields(") => format!("{prefix}, {op})"),
-            _ => format!("update_fields({name}, {op})"),
-        };
-        Ok(NamedExpr::new(vec![result_name], new_expr))
-    }
-
-    /// Rewrites the resolved expression to refer to columns in an external schema.
-    /// The external schema has user-facing field names instead of internal names
-    /// derived from field IDs in the resolver state.
-    pub(in super::super) fn rewrite_expression_for_external_schema(
-        &self,
-        expr: expr::Expr,
-        state: &PlanResolverState,
-    ) -> PlanResult<expr::Expr> {
-        let rewrite = |e: expr::Expr| -> datafusion_common::Result<Transformed<expr::Expr>> {
-            if let expr::Expr::Column(Column {
-                name,
-                relation,
-                spans,
-            }) = e
-            {
-                let info = state
-                    .get_field_info(&name)
-                    .map_err(|_| plan_datafusion_err!("column {name} not found"))?;
-                Ok(Transformed::yes(expr::Expr::Column(Column {
-                    name: info.name().to_string(),
-                    relation,
-                    spans,
-                })))
-            } else {
-                Ok(Transformed::no(e))
-            }
-        };
-        Ok(expr.transform(rewrite).data()?)
     }
 }

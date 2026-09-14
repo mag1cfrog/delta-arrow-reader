@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -238,8 +239,7 @@ impl PlanResolver<'_> {
 
     /// Rewrite named expressions to DataFusion expressions.
     /// A field is registered for each name.
-    /// If the expression is a column expression, all plan IDs for the column are registered for the field.
-    /// This means the column must refer to a **registered field** of the input plan. Otherwise, the column must be wrapped with an alias.
+    /// Column expressions must refer to registered input fields.
     pub(super) fn rewrite_named_expressions(
         &self,
         expr: Vec<NamedExpr>,
@@ -260,16 +260,10 @@ impl PlanResolver<'_> {
                         "one name expected for expression, got: {names}"
                     )));
                 };
-                let plan_ids = if let Expr::Column(Column { name: field_id, .. }) = &expr {
-                    let info = state.get_field_info(field_id)?;
-                    info.plan_ids()
-                } else {
-                    vec![]
-                };
-                let field_id = state.register_field_name(name);
-                for plan_id in plan_ids {
-                    state.register_plan_id_for_field(&field_id, plan_id)?;
+                if let Expr::Column(Column { name: field_id, .. }) = &expr {
+                    state.get_field_info(field_id)?;
                 }
+                let field_id = state.register_field_name(name);
                 if !metadata.is_empty() {
                     let metadata_map: HashMap<String, String> = metadata.into_iter().collect();
                     let field_metadata = Some(FieldMetadata::from(metadata_map));

@@ -184,6 +184,94 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn rejects_dataframe_expressions_while_sql_fields_remain() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        for (sql, expected) in [
+            (
+                "SELECT a, r.b FROM VALUES (1,2) AS l(a,b) JOIN VALUES (1,9) AS r(a,b) USING (a)",
+                vec!["1", "9"],
+            ),
+            (
+                "SELECT l.a, r.b FROM VALUES (1,2) AS l(a,b) JOIN VALUES (1,9) AS r(a,b) ON l.a=r.a",
+                vec!["1", "9"],
+            ),
+            (
+                "SELECT s.*, s.a, arr[0], m['key'] FROM (SELECT named_struct('a',7,'b',9) AS s, array(3,4) AS arr, map('key',5) AS m)",
+                vec!["7", "9", "7", "3", "5"],
+            ),
+        ] {
+            let named = resolve(&ctx, sql, &settings).await?;
+            let batches = ctx
+                .execute_logical_plan(named.plan)
+                .await?
+                .collect()
+                .await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1
+            );
+            let values = batches[0]
+                .columns()
+                .iter()
+                .map(|column| array_value_to_string(column.as_ref(), 0))
+                .collect::<Result<Vec<_>, _>>()?;
+            assert_eq!(values, expected, "{sql}");
+        }
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let missing = spec::Expr::UnresolvedAttribute {
+            name: spec::ObjectName::bare("missing"),
+            plan_id: None,
+            is_metadata_column: false,
+        };
+        let expressions = vec![
+            spec::Expr::UnresolvedAttribute {
+                name: spec::ObjectName::bare("missing"),
+                plan_id: Some(42),
+                is_metadata_column: false,
+            },
+            spec::Expr::UnresolvedStar {
+                target: None,
+                plan_id: Some(42),
+                wildcard_options: Default::default(),
+            },
+            spec::Expr::UnresolvedRegex {
+                col_name: ".*".into(),
+                plan_id: None,
+            },
+            spec::Expr::UnresolvedRegex {
+                col_name: "[invalid".into(),
+                plan_id: Some(42),
+            },
+            spec::Expr::UpdateFields {
+                struct_expression: Box::new(missing.clone()),
+                field_name: spec::ObjectName::bare("a"),
+                value_expression: None,
+            },
+            spec::Expr::UpdateFields {
+                struct_expression: Box::new(missing.clone()),
+                field_name: spec::ObjectName::bare("a"),
+                value_expression: Some(Box::new(missing)),
+            },
+        ];
+        for expr in expressions {
+            let query = spec::QueryPlan::new(spec::QueryNode::Project {
+                input: None,
+                expressions: vec![expr],
+            });
+            let error = resolver.resolve_named_plan(query).await.unwrap_err();
+            assert!(matches!(error, PlanError::NotSupported(_)), "{error}");
+        }
+        let mut query = spec::QueryPlan::new(spec::QueryNode::Empty {
+            produce_one_row: true,
+        });
+        query.plan_id = Some(42);
+        let error = resolver.resolve_named_plan(query).await.unwrap_err();
+        assert!(matches!(error, PlanError::NotSupported(_)), "{error}");
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn rejects_connect_scopes_while_sql_subqueries_remain() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});

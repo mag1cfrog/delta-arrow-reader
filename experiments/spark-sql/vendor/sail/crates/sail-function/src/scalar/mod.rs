@@ -1,9 +1,9 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 pub mod array;
 pub mod array_struct_field;
 pub mod collection;
 pub mod csv;
 pub mod datetime;
-pub mod drop_struct_field;
 pub mod explode;
 pub mod geo;
 pub mod hash;
@@ -19,7 +19,6 @@ pub mod spark_to_string;
 pub mod string;
 pub mod struct_function;
 pub mod table_input;
-pub mod update_struct_field;
 pub mod url;
 pub mod variant;
 pub mod vector;

@@ -1,5 +1,5 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use datafusion_common::arrow::datatypes::{Field, FieldRef};
@@ -13,8 +13,6 @@ use crate::resolver::expression::NamedExpr;
 /// The field information for fields in the logical plan.
 #[derive(Debug, Clone)]
 pub(super) struct FieldInfo {
-    /// The set of plan IDs, if any, that reference this field.
-    plan_ids: HashSet<i64>,
     /// The user-facing name of the field.
     name: String,
     /// Whether this is a hidden field that should be excluded from the
@@ -29,20 +27,8 @@ impl FieldInfo {
         &self.name
     }
 
-    pub fn plan_ids(&self) -> Vec<i64> {
-        self.plan_ids.iter().copied().collect()
-    }
-
     pub fn is_hidden(&self) -> bool {
         self.hidden
-    }
-
-    pub fn matches(&self, name: &str, plan_id: Option<i64>) -> bool {
-        self.name.eq_ignore_ascii_case(name)
-            && match plan_id {
-                Some(plan_id) => self.plan_ids.contains(&plan_id),
-                None => true,
-            }
     }
 }
 
@@ -115,7 +101,6 @@ impl PlanResolverState {
     fn register_field_info(&mut self, name: impl Into<String>, hidden: bool) -> String {
         let field_id = self.next_field_id();
         let info = FieldInfo {
-            plan_ids: HashSet::new(),
             name: name.into(),
             hidden,
         };
@@ -157,15 +142,6 @@ impl PlanResolverState {
             .into_iter()
             .map(|field| self.register_field(field))
             .collect()
-    }
-
-    pub fn register_plan_id_for_field(&mut self, field_id: &str, plan_id: i64) -> PlanResult<()> {
-        let field_info = self
-            .fields
-            .get_mut(field_id)
-            .ok_or_else(|| PlanError::internal(format!("unknown field: {field_id}")))?;
-        field_info.plan_ids.insert(plan_id);
-        Ok(())
     }
 
     pub fn get_field_info(&self, field_id: &str) -> PlanResult<&FieldInfo> {

@@ -53,7 +53,11 @@ impl PlanResolver<'_> {
     ) -> PlanResult<LogicalPlan> {
         use spec::QueryNode;
 
-        let plan_id = plan.plan_id;
+        if plan.plan_id.is_some() {
+            return Err(PlanError::unsupported(
+                "extraction probe: DataFrame plan IDs",
+            ));
+        }
         let plan = match plan.node {
             QueryNode::Read {
                 is_streaming: true, ..
@@ -229,7 +233,6 @@ impl PlanResolver<'_> {
             }
         };
         self.verify_query_plan(&plan, state)?;
-        self.register_schema_with_plan_id(&plan, plan_id, state)?;
         Ok(plan)
     }
 
@@ -282,19 +285,5 @@ impl PlanResolver<'_> {
                 "a plan resolver bug has produced invalid fields: {invalid:?}",
             )))
         }
-    }
-
-    fn register_schema_with_plan_id(
-        &self,
-        plan: &LogicalPlan,
-        plan_id: Option<i64>,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<()> {
-        if let Some(plan_id) = plan_id {
-            for field in plan.schema().fields() {
-                state.register_plan_id_for_field(field.name(), plan_id)?;
-            }
-        }
-        Ok(())
     }
 }
