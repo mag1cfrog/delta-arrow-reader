@@ -1,20 +1,20 @@
 diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
-index 7c02e35..e5a4626 100644
+index 7c02e35..13d812a 100644
 --- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
 +++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
 @@ -1,4 +1,6 @@
  use std::sync::Arc;
 +use std::cmp::{max, min};
 +use datafusion::arrow::datatypes::{DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION};
- 
+
  use datafusion::arrow::datatypes::{DataType, IntervalUnit, TimeUnit, i256};
  use datafusion::arrow::error::ArrowError;
-@@ -325,6 +327,68 @@ fn make_safe_divisor(
+@@ -325,6 +327,214 @@ fn make_safe_divisor(
  /// All of the above conditions should be handled by the DataFusion.
  /// If there is a discrepancy in parity, check the link below and adjust Sail's logic accordingly:
  ///   https://github.com/apache/datafusion/blob/a28f2834c6969a0c0eb26165031f8baa1e1156a5/datafusion/expr-common/src/type_coercion/binary.rs#L194
 +// Experimental subset of Sail PR 2225 at c9fda1f3281d383ee0efbd371d2b43d957d01939.
-+// Only explicit Decimal128 pairs and default allowPrecisionLoss=true are evaluated.
++// Decimal division with numeric/NULL peers; Spark's default decimal settings are used.
 +const SPARK_MINIMUM_ADJUSTED_SCALE: i32 = 6;
 +const SPARK_MAX_SCALE: i32 = 38;
 +const ARROW_DIV_SCALE_INCREMENT: i8 = 4;
@@ -75,12 +75,167 @@ index 7c02e35..e5a4626 100644
 +    }
 +}
 +
++fn is_decimal_type(data_type: &DataType) -> bool {
++    matches!(
++        data_type,
++        DataType::Decimal128(_, _) | DataType::Decimal256(_, _)
++    )
++}
++
++fn is_float_decimal_pair(a: &DataType, b: &DataType) -> bool {
++    (a.is_floating() && is_decimal_type(b)) || (is_decimal_type(a) && b.is_floating())
++}
++
++fn spark_integer_decimal_type(data_type: &DataType) -> Option<DataType> {
++    let precision = match data_type {
++        DataType::Int8 | DataType::UInt8 => 3,
++        DataType::Int16 | DataType::UInt16 => 5,
++        DataType::Int32 | DataType::UInt32 => 10,
++        DataType::Int64 | DataType::UInt64 => 20,
++        _ => return None,
++    };
++    Some(DataType::Decimal128(precision, 0))
++}
++
++fn coerce_decimal_peer_operand(left: Expr, right: Expr, schema: &DFSchemaRef) -> (Expr, Expr) {
++    fn peer_decimal_type(data_type: &DataType, decimal_type: &DataType) -> Option<DataType> {
++        match data_type {
++            DataType::Null => Some(decimal_type.clone()),
++            _ => spark_integer_decimal_type(data_type),
++        }
++    }
++    match (left.get_type(schema), right.get_type(schema)) {
++        (Ok(left_type), Ok(right_type)) if is_decimal_type(&right_type) => {
++            match peer_decimal_type(&left_type, &right_type) {
++                Some(target) => (cast(left, target), right),
++                None => (left, right),
++            }
++        }
++        (Ok(left_type), Ok(right_type)) if is_decimal_type(&left_type) => {
++            match peer_decimal_type(&right_type, &left_type) {
++                Some(target) => (left, cast(right, target)),
++                None => (left, right),
++            }
++        }
++        _ => (left, right),
++    }
++}
++
++fn coerce_spark_divide_null_operand(
++    dividend: Expr,
++    divisor: Expr,
++    dividend_type: &DataType,
++    divisor_type: &DataType,
++) -> (Expr, Expr) {
++    match (dividend_type, divisor_type) {
++        (DataType::Decimal128(_, _) | DataType::Decimal256(_, _), DataType::Null) => {
++            let divisor = cast(divisor, dividend_type.clone());
++            (dividend, divisor)
++        }
++        (DataType::Null, DataType::Decimal128(_, _) | DataType::Decimal256(_, _)) => (
++            cast(dividend, DataType::Float64),
++            cast(divisor, DataType::Float64),
++        ),
++        _ => (dividend, divisor),
++    }
++}
++
++fn spark_decimal_literal_datatype(
++    expr: &Expr,
++    other_type: &DataType,
++    pick_minimum_precision: bool,
++) -> Option<DataType> {
++    let is_256 = match other_type {
++        DataType::Decimal128(_, _) => false,
++        DataType::Decimal256(_, _) => true,
++        _ => return None,
++    };
++    let scalar = match expr {
++        Expr::Literal(scalar, _) => scalar,
++        // A negative integer literal can appear as `Negative(Literal)` in the plan;
++        // the digit count is sign-agnostic so only the magnitude matters.
++        Expr::Negative(inner) => match inner.as_ref() {
++            Expr::Literal(scalar, _) => scalar,
++            _ => return None,
++        },
++        _ => return None,
++    };
++    let value = scalar_integer_value(scalar)?;
++    let precision = if pick_minimum_precision {
++        integer_digit_count(value)
++    } else {
++        match spark_integer_decimal_type(&scalar.data_type())? {
++            DataType::Decimal128(precision, _) => precision,
++            _ => return None,
++        }
++    };
++    Some(if is_256 {
++        DataType::Decimal256(precision, 0)
++    } else {
++        DataType::Decimal128(precision, 0)
++    })
++}
++
++fn scalar_integer_value(scalar: &ScalarValue) -> Option<i128> {
++    Some(match scalar {
++        ScalarValue::Int16(Some(v)) => i128::from(*v),
++        ScalarValue::Int32(Some(v)) => i128::from(*v),
++        ScalarValue::Int64(Some(v)) => i128::from(*v),
++        ScalarValue::UInt16(Some(v)) => i128::from(*v),
++        ScalarValue::UInt32(Some(v)) => i128::from(*v),
++        ScalarValue::UInt64(Some(v)) => i128::from(*v),
++        _ => return None,
++    })
++}
++
++fn integer_digit_count(value: i128) -> u8 {
++    // `checked_ilog10` is `None` only for zero, which Spark counts as one digit.
++    value.unsigned_abs().checked_ilog10().unwrap_or(0) as u8 + 1
++}
++
++// Numeric/NULL subset of Sail PR 2225's operand coercion, used only by `/`.
++// The probe uses Spark's default literal.pickMinimumPrecision=true.
++fn coerce_decimal_divide_operands(
++    left: Expr,
++    right: Expr,
++    schema: &DFSchemaRef,
++) -> (Expr, Expr) {
++    let (Ok(left_type), Ok(right_type)) = (left.get_type(schema), right.get_type(schema)) else {
++        return (left, right);
++    };
++    if !is_decimal_type(&left_type) && !is_decimal_type(&right_type) {
++        return (left, right);
++    }
++    if is_float_decimal_pair(&left_type, &right_type) {
++        return (cast(left, DataType::Float64), cast(right, DataType::Float64));
++    }
++    let left = match spark_decimal_literal_datatype(&left, &right_type, true) {
++        Some(target) => cast(left, target),
++        None => left,
++    };
++    let right = match spark_decimal_literal_datatype(&right, &left_type, true) {
++        Some(target) => cast(right, target),
++        None => right,
++    };
++    let (left, right) = coerce_spark_divide_null_operand(left, right, &left_type, &right_type);
++    coerce_decimal_peer_operand(left, right, schema)
++}
++
  fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
      let ScalarFunctionInput {
          arguments,
-@@ -356,6 +420,43 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
+@@ -343,6 +553,8 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
+     }
+
+     let ansi_mode = function_context.plan_config.ansi_mode;
++    let (dividend, divisor) =
++        coerce_decimal_divide_operands(dividend, divisor, function_context.schema);
+     let dividend_type = dividend.get_type(function_context.schema);
+     let divisor_type = divisor.get_type(function_context.schema);
+
+@@ -356,6 +568,43 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
      );
- 
+
      let div_expr = match (&dividend_type, &divisor_type) {
 +        (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) => {
 +            let (result_precision, result_scale) =

@@ -31,3 +31,27 @@
 {"id": "null_literal_peer", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / NULL AS r"}
 {"id": "zero_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r"}
 {"id": "round_composed", "sql": "SELECT ROUND(CAST(2 AS DECIMAL(10,2)) / CAST(3 AS DECIMAL(10,2)), 2) AS r"}
+{"id": "peer_tinyint", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS TINYINT) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "reverse_peer_tinyint", "sql": "SELECT CAST(a AS TINYINT) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "peer_smallint", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS SMALLINT) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "reverse_peer_smallint", "sql": "SELECT CAST(a AS SMALLINT) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "peer_bigint", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS BIGINT) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "reverse_peer_bigint", "sql": "SELECT CAST(a AS BIGINT) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "peer_float", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS FLOAT) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "reverse_peer_float", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "reverse_peer_double", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0, '2', '3'),(1, '-2', '3'),(2, '2', '-3'),(3, NULL, '3'),(4, '2', NULL) AS t(id,a,b) ORDER BY id"}
+{"id": "negative_integer_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / -3 AS r"}
+{"id": "reverse_integer_literal", "sql": "SELECT 3 / CAST(2 AS DECIMAL(10,2)) AS r"}
+{"id": "reverse_zero_literal", "sql": "SELECT 0 / CAST(3 AS DECIMAL(10,2)) AS r"}
+{"id": "byte_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / 3Y AS r"}
+{"id": "negative_byte_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / -3Y AS r"}
+{"id": "short_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / 3S AS r"}
+{"id": "long_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / 3L AS r"}
+{"id": "integer_max_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / 2147483647 AS r"}
+{"id": "long_max_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / 9223372036854775807L AS r"}
+{"id": "long_min_literal", "sql": "SELECT -9223372036854775808L / CAST(3 AS DECIMAL(10,2)) AS r"}
+{"id": "cast_integer_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / CAST(3 AS INT) AS r"}
+{"id": "reverse_null_literal", "sql": "SELECT NULL / CAST(3 AS DECIMAL(10,2)) AS r"}
+{"id": "both_null_literals", "sql": "SELECT NULL / NULL AS r"}
+{"id": "string_peer_control", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '3' AS r"}
+{"id": "other_operators_control", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) + 3 AS added, CAST(2 AS DECIMAL(10,2)) * 3 AS r"}

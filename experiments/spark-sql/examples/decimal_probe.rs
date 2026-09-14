@@ -23,15 +23,18 @@ async fn observe(case: &Value) -> Result<Value> {
             .build(),
     );
     let sql = case["sql"].as_str().ok_or("missing SQL")?;
-    let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
-    let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
     let mut config = PlanConfig::default();
     config.ansi_mode = case["ansi"].as_bool().ok_or("missing ANSI mode")?;
     config.session_timezone = "UTC".into();
-    let named = match PlanResolver::new(&ctx, Arc::new(config))
-        .resolve_named_plan(spec)
-        .await
-    {
+    let planned: Result<_> = async {
+        let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
+        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
+        Ok(PlanResolver::new(&ctx, Arc::new(config))
+            .resolve_named_plan(spec)
+            .await?)
+    }
+    .await;
+    let named = match planned {
         Ok(named) => named,
         Err(e) => return Ok(json!({"status":"planning_error","error":e.to_string()})),
     };
