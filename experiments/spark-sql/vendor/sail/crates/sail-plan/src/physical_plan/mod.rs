@@ -12,11 +12,14 @@ use datafusion::physical_planner::{DefaultPhysicalPlanner, ExtensionPlanner, Phy
 use datafusion_common::tree_node::TreeNodeRecursion;
 use datafusion_common::{Result, internal_err};
 use datafusion_expr::{LogicalPlan, UserDefinedLogicalNode};
+use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
 
+use self::monotonic_id::MonotonicIdExec;
 use self::spark_partition_id::SparkPartitionIdExec;
 
+mod monotonic_id;
 mod spark_partition_id;
 
 /// Plan native DataFusion queries and the supported Spark execution extensions.
@@ -77,6 +80,15 @@ impl ExtensionPlanner for SparkExtensionPlanner {
             Arc::new(SparkPartitionIdExec::try_new(
                 input.clone(),
                 partition_id.column_name(),
+                node.schema().inner().clone(),
+            )?)
+        } else if let Some(monotonic_id) = node.as_any().downcast_ref::<MonotonicIdNode>() {
+            let [input] = physical_inputs else {
+                return internal_err!("MonotonicIdExec requires exactly one physical input");
+            };
+            Arc::new(MonotonicIdExec::try_new(
+                input.clone(),
+                monotonic_id.column_name(),
                 node.schema().inner().clone(),
             )?)
         } else if let Some(sort) = node.as_any().downcast_ref::<SortWithinPartitionsNode>() {

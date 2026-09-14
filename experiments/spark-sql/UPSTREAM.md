@@ -11,9 +11,11 @@ sail-plan                sail-sql-analyzer
 sail-sql-macro           sail-sql-parser
 ```
 
-`upstream.patch` records the changes within that selection: 1,842 added lines and 48,559 deleted lines, including 145 deleted files. It also adds `sail-plan/src/function/table/range_exec.rs`, copied from upstream `sail-physical-plan/src/range.rs`. The initial copy preserved all 145 source lines apart from the modification notice. A later cut removes its uncalled getters and unused original-schema storage; range execution and projection behavior remain. Crates outside the selection are omitted, rather than represented as deletions in the patch.
+`upstream.patch` records the changes within that selection: 2,139 added lines and 48,559 deleted lines, including 145 deleted files. It also adds `sail-plan/src/function/table/range_exec.rs`, copied from upstream `sail-physical-plan/src/range.rs`. The initial copy preserved all 145 source lines apart from the modification notice. A later cut removes its uncalled getters and unused original-schema storage; range execution and projection behavior remain. Crates outside the selection are omitted, rather than represented as deletions in the patch.
 
 Execution integration adds `sail-plan/src/physical_plan/spark_partition_id.rs` from the pinned `sail-physical-plan/src/spark_partition_id.rs`. Its uncalled getters are omitted, the Stream trait uses the existing tokio-stream dependency, and a boundary test is added. `physical_plan/mod.rs` adapts the query/extension planner, partition-ID and two sorting branches from `sail-session/src/planner.rs`, using DataFusion's default planner for native plans. It additionally disables automatic round-robin repartitioning on a cloned planning state for RequiredSortNode plans that demand global order; the README records the reproduced upstream ordering problem and parallelism tradeoff. The extension adapter is private so callers use the complete query planner. These files are counted inside the retained `sail-plan` crate; neither upstream crate is added to the build.
+
+`sail-plan/src/physical_plan/monotonic_id.rs` is copied from the pinned `sail-physical-plan/src/monotonic_id.rs`, with its planning branch adapted from `sail-session/src/planner.rs`. Uncalled getters are omitted and Stream uses tokio-stream. Local changes add an Int32 partition-range check, avoid overflow in the row-capacity check and add a boundary test. The 33-bit row counter, batch streaming, plan properties and statistics come from Sail. The README records SQL coverage and remaining upstream limitations.
 
 The retained source is adapted at these boundaries:
 
@@ -27,7 +29,7 @@ The retained source is adapted at these boundaries:
 
 The [experiment README](README.md) records each checkpoint, current crate roles, validation and known limitations.
 
-To reproduce the import, copy the three root files and the 8 directories above from the pinned upstream commit into a temporary Git checkout, then apply `upstream.patch` with `git apply`. An archive of that selection plus the patch was checked against all 363 vendored files byte-for-byte. Normal builds use the committed files directly; they need no upstream checkout.
+To reproduce the import, copy the three root files and the 8 directories above from the pinned upstream commit into a temporary Git checkout, then apply `upstream.patch` with `git apply`. An archive of that selection plus the patch was checked against all 364 vendored files byte-for-byte. Normal builds use the committed files directly; they need no upstream checkout.
 
 ## Source measurements
 
@@ -71,6 +73,7 @@ To reproduce the import, copy the three root files and the 8 directories above f
 | Rejected UDF and streaming payloads | 8 | 348 | 90,871 | 83,534 | 82,711 | 8,080 | 80 | 524 | 452 |
 | Partition-ID execution integration | 8 | 350 | 91,164 | 83,796 | 82,981 | 8,103 | 80 | 524 | 452 |
 | Sorting execution integration | 8 | 350 | 91,232 | 83,864 | 83,049 | 8,103 | 80 | 524 | 452 |
+| Monotonic-ID execution integration | 8 | 351 | 91,529 | 84,137 | 83,288 | 8,161 | 80 | 524 | 452 |
 
 Gross/production/test/build-script counts include comments and blank lines. The test count includes files under `tests/` and formatted `#[cfg(test)]` modules/constants. The counter rejects unrecognized test-item shapes; it uses upstream indentation to identify module boundaries. Production count means source outside those test sections and build scripts, not live code reached by this corpus. Unused functions still count.
 
@@ -82,4 +85,4 @@ Dependency counts include the runner and reader. The all-target graph also inclu
 
 `upstream.patch` describes changes within the eight retained crates. The four omitted Python/catalog crates are excluded from its selection; their removal remains visible in the repository diff against the import commit.
 
-The checkpoint was built with Rust 1.97.1, DataFusion 54.1.0 and Arrow 58.4.0, with `PROTOC`, `PYO3_PYTHON` and `PYO3_CONFIG_FILE` set to nonexistent paths. Sail declares Rust 1.96.0; the reader's lower MSRV is unchanged. Builds reused a local Cargo cache, so no cold-build timing claim is made. The debug-profile runner with debug information disabled is 412,553,960 bytes; this is a host binary measurement, not a wheel-size estimate or release-build measurement. The result is a demonstrated subset, not a minimum.
+The checkpoint was built with Rust 1.97.1, DataFusion 54.1.0 and Arrow 58.4.0, with `PROTOC`, `PYO3_PYTHON` and `PYO3_CONFIG_FILE` set to nonexistent paths. Sail declares Rust 1.96.0; the reader's lower MSRV is unchanged. Builds reused a local Cargo cache, so no cold-build timing claim is made. The debug-profile runner with debug information disabled is 412,605,440 bytes; this is a host binary measurement, not a wheel-size estimate or release-build measurement. The result is a demonstrated subset, not a minimum.

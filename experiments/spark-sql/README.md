@@ -8,7 +8,7 @@ The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) d
 
 ## Current result and remaining source
 
-The current checkpoint adds partition-local sorting and required ordering on `feat/spark-sql-extraction`, after partition-ID execution. The retained subset has **8 Sail-owned crates and 91,232 gross Rust lines**, including 83,049 production-source lines, 8,103 test lines and 80 build-script lines. Execution integration adds 361 lines to the 90,871-line cleanup checkpoint, including 68 in this sorting slice. Compared with the original import, 34,781 lines are gone, a 27.6% reduction. Counts include comments and blank lines.
+The current checkpoint adds monotonic-ID execution on `feat/spark-sql-extraction`, after partition-ID and sorting execution. The retained subset has **8 Sail-owned crates and 91,529 gross Rust lines**, including 83,288 production-source lines, 8,161 test lines and 80 build-script lines. Execution integration adds 658 lines to the 90,871-line cleanup checkpoint, including 297 in this monotonic-ID slice. Compared with the original import, 34,484 lines are gone, a 27.4% reduction. Counts include comments and blank lines.
 
 The resolved dependency graph has 524 packages across all targets and 452 Linux normal/build packages, including the runner and reader. The extension adds no dependency or crate. The Rust frontend has no Python, Spark Connect service or Sail storage-reader dependency; Delta scans still use the host provider. This is a demonstrated subset, not a minimum or an adoption decision.
 
@@ -17,8 +17,8 @@ The resolved dependency graph has 524 packages across all targets and 452 Linux 
 | `sail-common` | 1,658 | In-process query/expression/type specs and required Arrow metadata. Rejected UDF and watermark variants retain only inputs/arguments for boundary checks. Other excluded-operation descriptors remain without decoders or executors. |
 | `sail-common-datafusion` | 1,802 | Spark value formatting, constant evaluation, output/schema renaming and Variant metadata detection. |
 | `sail-function` | 56,865 | Spark scalar and aggregate kernels, coercion, NULL/ANSI behavior, datetime formats and nested values. The small NTILE adapter retains parameter validation. |
-| `sail-logical-plan` | 518 | SQL range, required ordering, partition IDs and monotonic-ID descriptors. Some still need physical extension planning. |
-| `sail-plan` | 19,349 | SQL function dispatch, name/type resolution, relational planning, field naming, native table lookup, range, partition-ID and sorting execution integration. |
+| `sail-logical-plan` | 518 | SQL range, required ordering, partition-ID and monotonic-ID descriptors. |
+| `sail-plan` | 19,646 | SQL function dispatch, name/type resolution, relational planning, field naming, native table lookup, range, partition-ID, sorting and monotonic-ID execution integration. |
 | `sail-sql-analyzer` | 4,340 | Typed conversion from Spark SQL ASTs to query specs, including literals and SQL data types. |
 | `sail-sql-macro` | 603 | TreeParser derives used by the grammar and TreeSyntax derives used by the complete syntax snapshot. |
 | `sail-sql-parser` | 6,097 | Tokenizer, query/command grammar, ASTs and syntax snapshot support. Commands are rejected by analysis before their bodies are translated. |
@@ -36,30 +36,34 @@ The remaining bulk implements SQL behavior. Further substantial reduction would 
 | ABS and other numeric kernels | Per-query ANSI settings, interval/duration types, overflow checks and error behavior still require Spark-specific handling. |
 | Parser derives and command grammar | TreeParser drives parsing and TreeSyntax protects the full syntax graph. Command grammar supports the existing explicit rejection checks. |
 
-The current check passes 22 runner, 12 planner and 9 Python tests. The unchanged function, common DataFusion and analyzer suites passed 303, 6 and 6 tests at the cleanup checkpoint, along with the standalone parser syntax snapshot. The four frozen corpus/baseline files remain unchanged. To run the retained library suites in addition to the runner commands below:
+The current check passes 24 runner, 13 planner and 9 Python tests. The unchanged function, common DataFusion and analyzer suites passed 303, 6 and 6 tests at the cleanup checkpoint, along with the standalone parser syntax snapshot. The four frozen corpus/baseline files remain unchanged. To run the retained library suites in addition to the runner commands below:
 
 ```bash
 cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
   -p sail-function -p sail-common-datafusion -p sail-sql-analyzer --lib -j 2
 ```
 
-The capture has 86 successful queries, 18 planning errors and 12 execution errors. Of the 116 import-baseline observations, 113 remain unchanged; `sail_partition_id`, `sail_sort_within_partitions` and `aggregation_ordered_first` change from execution errors to success and match full Sail. The sorting slice changes only the latter two cases compared with the partition-ID checkpoint. Against Spark, partition-local sorting matches strictly; the other two cases differ only in field metadata. Spark comparison is 46 strict matches / 59 differences / 11 pending reference cases; full-Sail comparison is 86 / 19 / 11. Matching an error stage does not establish matching error conditions. The 19 seed checks and 18 adapter checks still pass.
+The capture has 87 successful queries, 18 planning errors and 11 execution errors. Of the 116 import-baseline observations, 112 remain unchanged; `sail_partition_id`, `sail_sort_within_partitions`, `aggregation_ordered_first` and `extensions_monotonic_id` change from execution errors to success and match full Sail. The monotonic-ID slice changes only the last case compared with the sorting checkpoint. Against Spark, partition-local sorting and monotonic IDs match strictly; the other two cases differ only in field metadata. Spark comparison is 47 strict matches / 58 differences / 11 pending reference cases; full-Sail comparison is 87 / 18 / 11. Matching an error stage does not establish matching error conditions. The 19 seed checks and 18 adapter checks still pass.
 
 The earlier residual cleanup pass removed 1,097 production-source lines and added 152 net vendored test lines, reducing gross Rust source from 91,945 to 91,000 lines. The follow-up removes another 129 production-source lines from ten unused UDF/state/watermark payload types. Minimal rejected variants and child inputs/arguments remain to verify early rejection. These checks preserve the exclusion boundary without serialized function bodies or state configuration.
 
-Monotonic-ID execution remains open, along with deletion-vector/snapshot/stream-lifecycle coverage and the adoption decision. Additional checks before deletion found two existing gaps: projecting EXISTS as a SELECT output fails physical planning, and selecting a qualified join key such as `l.a` after `JOIN ... USING (a)` fails resolution. WHERE EXISTS, the merged USING key and qualified ON-join fields work. These findings remain visible.
+Deletion-vector/snapshot/stream-lifecycle coverage and the adoption decision remain open. Additional checks before deletion found two existing gaps: projecting EXISTS as a SELECT output fails physical planning, and selecting a qualified join key such as `l.a` after `JOIN ... USING (a)` fails resolution. WHERE EXISTS, the merged USING key and qualified ON-join fields work. These findings remain visible.
 
 ## Execution integration checkpoints
 
-Install `sail-plan::physical_plan::SparkQueryPlanner` on the session as the runner does. It uses DataFusion's default physical planner with an internal adapter for `SparkPartitionIdNode`, `SortWithinPartitionsNode` and `RequiredSortNode`. Other extension types remain unhandled and fail physical planning. The adapter stays private so callers also receive the query planner's ordering safeguards. Native SQL, DeltaScanExec identity, pruning and incremental Arrow output retain their existing checks.
+Install `sail-plan::physical_plan::SparkQueryPlanner` on the session as the runner does. It uses DataFusion's default physical planner with an internal adapter for `SparkPartitionIdNode`, `SortWithinPartitionsNode`, `RequiredSortNode` and `MonotonicIdNode`. Other extension types remain unhandled and fail physical planning. The adapter stays private so callers also receive the query planner's ordering safeguards. Native SQL, DeltaScanExec identity, pruning and incremental Arrow output retain their existing checks.
 
 The partition-ID execution node comes from the pinned Sail source and stays inside `sail-plan`. That checkpoint, committed as `fdfca1a`, added 270 vendored production-source lines and 23 vendored test lines, plus two runner setup lines and 122 runner test lines. The SQL test first reproduced the missing-planner failure. It checks actual execution partition IDs across multiple batches, repeated expressions, NULLs, duplicates, filtering, an empty partition and empty results, including output types, nullability and aliases. A unit test checks the Int32 partition limit and child-count validation. No fixed partition assignment is assumed when comparing engines.
 
-The sorting slice adds 68 vendored production-source lines and 275 runner test lines. It uses native SortExec for partition-local sorting and SortExec with OutputRequirementExec for required ordering; no new execution node or dependency is added. Tests cover ascending/descending order, default/explicit NULL positions, compound and expression keys, aliases, multiple batches/partitions, empty results, FIRST/LAST with and without NULL skipping, hidden sort keys, LIMIT/OFFSET and grouped aggregates. Both tests first reproduced missing extension planners.
+The sorting slice, committed as `28c00e3`, added 68 vendored production-source lines and 275 runner test lines. It uses native SortExec for partition-local sorting and SortExec with OutputRequirementExec for required ordering; no new execution node or dependency is added. Tests cover ascending/descending order, default/explicit NULL positions, compound and expression keys, aliases, multiple batches/partitions, empty results, FIRST/LAST with and without NULL skipping, hidden sort keys, LIMIT/OFFSET and grouped aggregates. Both tests first reproduced missing extension planners.
 
 The required-ordering test then exposed a second problem: automatic round-robin repartitioning after a global sort changes FIRST/LAST results between runs at small batch sizes. Full Sail 0.7.1 reproduces this with the test's id/k rows and `SAIL_EXECUTION__BATCH_SIZE=1`. SparkQueryPlanner now disables that optimization on a cloned planning state only when a RequiredSortNode demands global ordering. Existing scan partitions remain, and tests verify the host session settings are unchanged. This may reduce aggregation parallelism for such queries. Carrying hidden ordering keys into aggregate state could remove that restriction later; ordinary native SQL and partition-local sorting retain the host optimizer settings.
 
-Run the existing build/capture commands below and inspect the three comparison reports. All three commands return exit 1 while reference differences remain. The import comparison differs only for the three repaired cases listed above, each with a status change; full Sail matches all three. Spark matches `sail_sort_within_partitions` and differs only in metadata for the other two. The original inputs, queries and both checked-in baselines are preserved. Focused checks are:
+The monotonic-ID slice copies MonotonicIdExec and its planner branch from the pinned Sail source into `sail-plan`. It adds 239 vendored production-source lines, 58 vendored test lines and 184 runner test lines. Tests first reproduced the missing-planner failure for both an explicit function call and the hidden node used by ordered windows. They now check the partition/row-offset encoding across batches, independent counters, repeated expressions and execution, arithmetic on IDs, filtering, NULL/duplicate input values, empty batches/partitions/results, a query without FROM, output aliases/types/nullability and FIRST_VALUE/LAST_VALUE over ordered input.
+
+The copied counter's overflow check also overflowed for a synthetic oversized batch. It now compares the batch length with the remaining 33-bit row capacity before allocating. A partition-range guard rejects indices outside Spark's Int32 partition representation. Tests exercise the last valid row, empty batches at the limit, overflow rejection without advancing the counter, interleaved streams and invalid child counts. The existing 2^33-row limit remains; no new crate or dependency is added. Upstream skips several aggregate-expression tests in `test_monotonically_increasing_id.py`; those cases are outside this checkpoint's verified coverage.
+
+Run the existing build/capture commands below and inspect the three comparison reports. All three commands return exit 1 while reference differences remain. The import comparison differs only for the four repaired cases listed above, each with a status change; full Sail matches all four. Spark matches `sail_sort_within_partitions` and `extensions_monotonic_id` and differs only in metadata for the other two. The original inputs, queries and both checked-in baselines are preserved. Focused checks are:
 
 ```bash
 cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
@@ -70,6 +74,10 @@ cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
   spark_sort_by_orders_each_partition
 cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
   spark_ordered_aggregates_keep_required_sort
+cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  spark_monotonic_ids
+cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  -p sail-plan --lib monotonic_ids_check_counter_and_partition_boundaries
 ```
 
 ## Run the references
@@ -161,7 +169,7 @@ python3 experiments/spark-sql/oracle.py check target/spark-sql/extracted-run/cap
 
 The import executes 83 queries successfully and records 33 errors, including the ten deliberately rejected operations. Against Spark, 45 cases match strictly, 60 differ and 11 lack reference expectations. Against full Sail, 83 match strictly, 22 differ and those same 11 lack reference expectations. Both reference comparison commands currently exit 1 to keep differences visible.
 
-Of the four original missing-extension failures, only `extensions_monotonic_id` remains. The partition-ID, partition-local sorting and ordered-FIRST cases now succeed. Two other value/type differences from full Sail agree with Spark: `nulls_conditionals` retains BIGINT, and `nested_columns` returns NULL for a NULL struct's age. These observations do not yet isolate whether the difference comes from the provider, optimizer or Connect result path. Other differences from full Sail concern nullability. No case was removed or reclassified to hide these findings.
+All four original missing-extension cases now succeed: partition IDs, partition-local sorting, ordered FIRST and monotonic IDs. Two other value/type differences from full Sail agree with Spark: `nulls_conditionals` retains BIGINT, and `nested_columns` returns NULL for a NULL struct's age. These observations do not yet isolate whether the difference comes from the provider, optimizer or Connect result path. Other differences from full Sail concern nullability. No case was removed or reclassified to hide these findings.
 
 To refresh the measured inventory without changing the source:
 

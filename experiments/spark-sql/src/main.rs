@@ -460,6 +460,190 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn spark_monotonic_ids_follow_partition_offsets() -> ProbeResult<()> {
+        use arrow::{array::Int64Array, datatypes::DataType};
+        use datafusion::physical_plan::ExecutionPlanProperties;
+        use std::collections::HashSet;
+
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.session.timeZone":"UTC"});
+        for batch_size in [1, 3] {
+            let ctx = sorting_session(batch_size)?;
+            for filter in ["", "WHERE k IS NULL", "WHERE id >= 4", "WHERE id < 0"] {
+                let sql = format!(
+                    "SELECT id, k, spark_partition_id() AS pid, monotonically_increasing_id() AS mid, monotonically_increasing_id() AS again, monotonically_increasing_id() + 10 AS shifted FROM sort_input {filter}"
+                );
+                let named = resolve(&ctx, &sql, &settings).await?;
+                let physical = ctx
+                    .execute_logical_plan(named.plan)
+                    .await?
+                    .create_physical_plan()
+                    .await?;
+                let physical = rename_physical_plan(physical, &named.fields)?;
+                assert_eq!(named.fields, ["id", "k", "pid", "mid", "again", "shifted"]);
+                for index in [3, 4, 5] {
+                    assert_eq!(physical.schema().field(index).data_type(), &DataType::Int64);
+                    assert!(!physical.schema().field(index).is_nullable());
+                }
+                // Reusing a physical plan must start a fresh counter for every stream.
+                for _ in 0..2 {
+                    let mut actual = Vec::new();
+                    let mut unique = HashSet::new();
+                    let mut active_partitions = 0;
+                    let mut multiple_batches = false;
+                    for partition in 0..physical.output_partitioning().partition_count() {
+                        let mut stream = physical.execute(partition, ctx.task_ctx())?;
+                        let mut offset = 0i64;
+                        let mut batches = 0;
+                        while let Some(batch) = stream.next().await {
+                            let batch = batch?;
+                            let ids = batch
+                                .column(0)
+                                .as_any()
+                                .downcast_ref::<Int32Array>()
+                                .unwrap();
+                            let keys = batch
+                                .column(1)
+                                .as_any()
+                                .downcast_ref::<Int32Array>()
+                                .unwrap();
+                            let pids = batch
+                                .column(2)
+                                .as_any()
+                                .downcast_ref::<Int32Array>()
+                                .unwrap();
+                            let mids = batch
+                                .column(3)
+                                .as_any()
+                                .downcast_ref::<Int64Array>()
+                                .unwrap();
+                            let repeated = batch
+                                .column(4)
+                                .as_any()
+                                .downcast_ref::<Int64Array>()
+                                .unwrap();
+                            let shifted = batch
+                                .column(5)
+                                .as_any()
+                                .downcast_ref::<Int64Array>()
+                                .unwrap();
+                            assert_eq!(mids.null_count(), 0);
+                            assert_eq!(mids, repeated);
+                            for row in 0..batch.num_rows() {
+                                assert_eq!(pids.value(row), partition as i32);
+                                let expected = ((partition as i64) << 33) + offset;
+                                assert_eq!(mids.value(row), expected, "{sql}");
+                                assert_eq!(shifted.value(row), expected + 10);
+                                assert!(unique.insert(expected), "duplicate monotonic ID");
+                                offset += 1;
+                            }
+                            actual.extend(ids.values().iter().copied().zip(keys.iter()));
+                            batches += usize::from(batch.num_rows() > 0);
+                        }
+                        active_partitions += usize::from(offset > 0);
+                        multiple_batches |= batches > 1;
+                    }
+                    if filter.is_empty() {
+                        assert!(active_partitions > 1);
+                        assert!(multiple_batches);
+                    }
+                    let mut expected = SORT_ROWS
+                        .into_iter()
+                        .flatten()
+                        .filter(|(id, k)| match filter {
+                            "WHERE k IS NULL" => k.is_none(),
+                            "WHERE id >= 4" => *id >= 4,
+                            "WHERE id < 0" => *id < 0,
+                            _ => true,
+                        })
+                        .collect::<Vec<_>>();
+                    actual.sort();
+                    expected.sort();
+                    assert_eq!(actual, expected, "{sql}");
+                }
+            }
+            let named = resolve(
+                &ctx,
+                "SELECT monotonically_increasing_id() AS mid",
+                &settings,
+            )
+            .await?;
+            let batches = ctx
+                .execute_logical_plan(named.plan)
+                .await?
+                .collect()
+                .await?;
+            assert_eq!(batches.iter().map(|b| b.num_rows()).sum::<usize>(), 1);
+            let batch = batches.iter().find(|b| b.num_rows() == 1).unwrap();
+            assert_eq!(array_value_to_string(batch.column(0).as_ref(), 0)?, "0");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn spark_monotonic_ids_keep_ordered_window_inputs() -> ProbeResult<()> {
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.session.timeZone":"UTC"});
+        for batch_size in [1, 3] {
+            let ctx = sorting_session(batch_size)?;
+            let sql = "SELECT id, FIRST_VALUE(id) OVER (PARTITION BY k) AS first_id, LAST_VALUE(id) OVER (PARTITION BY k) AS last_id FROM (SELECT id, k FROM sort_input ORDER BY id DESC)";
+            let named = resolve(&ctx, sql, &settings).await?;
+            assert!(
+                named
+                    .plan
+                    .display_indent()
+                    .to_string()
+                    .contains("MonotonicId")
+            );
+            let batches = ctx
+                .execute_logical_plan(named.plan)
+                .await?
+                .collect()
+                .await?;
+            let mut actual = Vec::new();
+            for batch in batches {
+                let ids = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .unwrap();
+                let first = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .unwrap();
+                let last = batch
+                    .column(2)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .unwrap();
+                actual.extend(
+                    (0..batch.num_rows())
+                        .map(|row| (ids.value(row), first.value(row), last.value(row))),
+                );
+            }
+            let rows = SORT_ROWS.into_iter().flatten().collect::<Vec<_>>();
+            let mut expected = rows
+                .iter()
+                .map(|(id, k)| {
+                    let group = rows
+                        .iter()
+                        .filter(|row| row.1 == *k)
+                        .map(|row| row.0)
+                        .collect::<Vec<_>>();
+                    (
+                        *id,
+                        *group.iter().max().unwrap(),
+                        *group.iter().min().unwrap(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            actual.sort();
+            expected.sort();
+            assert_eq!(actual, expected, "{sql}, batch size {batch_size}");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn spark_partition_ids_follow_execution_partitions() -> ProbeResult<()> {
         use arrow::{
             datatypes::{DataType, Field, Schema},
