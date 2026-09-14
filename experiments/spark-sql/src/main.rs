@@ -188,6 +188,115 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn rejects_dataframe_transforms_while_sql_paths_remain() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let input = serde_json::to_value(spec::QueryPlan::new(spec::QueryNode::Read {
+            read_type: spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
+                name: spec::ObjectName::bare("missing_table"),
+                temporal: None,
+                sample: None,
+                options: vec![],
+            })),
+            is_streaming: false,
+        }))?;
+        for (name, mut fields) in [
+            ("toDf", json!({"columnNames": []})),
+            ("toSchema", json!({"schema": {"fields": []}})),
+            ("withColumnsRenamed", json!({"renameColumnsMap": []})),
+            ("drop", json!({"columns": [], "columnNames": []})),
+            ("withColumns", json!({"aliases": []})),
+            ("tail", json!({"limit": {"literal": "null"}})),
+            ("hint", json!({"name": "COALESCE", "parameters": []})),
+            ("repartition", json!({"numPartitions": 0, "shuffle": false})),
+            (
+                "repartitionByExpression",
+                json!({"partitionExpressions": [], "numPartitions": null}),
+            ),
+            (
+                "sample",
+                json!({"lowerBound": 0.0, "upperBound": 1.0, "withReplacement": false, "seed": null, "deterministicOrder": false}),
+            ),
+            ("collectMetrics", json!({"name": "unused", "metrics": []})),
+            (
+                "parse",
+                json!({"format": "csv", "schema": null, "options": []}),
+            ),
+            (
+                "pivot",
+                json!({"grouping": null, "aggregate": [], "columns": [], "values": []}),
+            ),
+        ] {
+            fields["input"] = input.clone();
+            let node = serde_json::from_value(json!({(name): fields}))?;
+            let error = resolver
+                .resolve_named_plan(spec::Plan::Query(spec::QueryPlan::new(node)))
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(error, PlanError::NotSupported(ref message)
+                if message.contains("DataFrame")),
+                "{name}: {error}"
+            );
+        }
+        let range = spec::QueryNode::Range(spec::Range {
+            start: None,
+            end: 3,
+            step: 1,
+            num_partitions: None,
+        });
+        assert!(matches!(
+            resolver
+                .resolve_named_plan(spec::Plan::Query(spec::QueryPlan::new(range)))
+                .await
+                .unwrap_err(),
+            PlanError::NotSupported(_)
+        ));
+
+        let settings =
+            json!({"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC"});
+        for (sql, expected) in [
+            (
+                "WITH q(a,b) AS (SELECT 1,2) SELECT a AS b FROM q ORDER BY b LIMIT 1",
+                vec![vec!["1"]],
+            ),
+            (
+                "SELECT * FROM (SELECT * FROM VALUES (1,10), (2,20) AS t(k,v)) PIVOT (SUM(v) FOR (k) IN (1 AS one, 2 AS two))",
+                vec![vec!["10", "20"]],
+            ),
+            (
+                "SELECT * FROM (SELECT * FROM range(3)) TABLESAMPLE (100 PERCENT) ORDER BY id",
+                vec![vec!["0"], vec!["1"], vec!["2"]],
+            ),
+            (
+                "SELECT * FROM (SELECT * FROM range(3)) TABLESAMPLE (0 PERCENT)",
+                vec![],
+            ),
+        ] {
+            let named = resolve(&ctx, sql, &settings).await?;
+            let batches = ctx
+                .execute_logical_plan(named.plan)
+                .await?
+                .collect()
+                .await?;
+            let rows = batches
+                .iter()
+                .flat_map(|batch| {
+                    (0..batch.num_rows()).map(|row| {
+                        batch
+                            .columns()
+                            .iter()
+                            .map(|array| array_value_to_string(array.as_ref(), row))
+                            .collect::<Result<Vec<_>, _>>()
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            assert_eq!(rows, expected, "{sql}");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn rejects_inline_arrow_payloads_before_decoding() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));

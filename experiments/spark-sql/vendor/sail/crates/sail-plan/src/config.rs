@@ -37,9 +37,6 @@ pub struct PlanConfig {
     /// Whether identifiers (e.g. column names) are matched case-sensitively.
     /// Spark defaults to case-insensitive matching (`spark.sql.caseSensitive=false`).
     pub case_sensitive: bool,
-    /// The maximum number of distinct values collected for a pivot without an explicit
-    /// value list (`spark.sql.pivotMaxValues`, default 10000). Exceeding it is an error.
-    pub pivot_max_values: usize,
     /// Whether `COUNT()` is accepted with no arguments. Spark's legacy behavior returns zero;
     /// it does not interpret the call as `COUNT(*)`.
     pub legacy_allow_parameterless_count: bool,
@@ -63,7 +60,6 @@ impl Default for PlanConfig {
             map_key_dedup_policy: MapKeyDedupPolicy::Exception,
             cross_join_enabled: true,
             case_sensitive: false,
-            pivot_max_values: 10000,
             legacy_allow_parameterless_count: false,
         }
     }

@@ -163,6 +163,7 @@ Each cut keeps the fixed inputs, SQL and both checked-in baselines unchanged. Th
 | DataFrame statistics and display | 101,311 | 549 / 483 | 9 / 11 | 9 |
 | Command analysis | 99,020 | 549 / 483 | 10 / 11 | 9 |
 | Inline Arrow and transport helpers | 97,492 | 546 / 480 | 11 / 11 | 9 |
+| DataFrame transforms and eager planning | 96,442 | 546 / 480 | 12 / 11 | 9 |
 
 The DataFrame cut removes NA/statistics resolvers, value replacement and unused ShowString/SchemaPivot nodes. All eleven NA/statistics spec variants now reject before input resolution. The new test first reproduced missing-table lookup, then verified the rejection and successful SQL COUNT, AVG, COVAR_SAMP, CORR and COALESCE execution. Shared value formatting remains because SQL casts and PIVOT use it. No test source was removed from the vendored crates.
 
@@ -181,3 +182,5 @@ SAIL_UPDATE_GOLD_DATA= CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_DEV_DEBUG=0 \
 ```
 
 An empty SAIL_UPDATE_GOLD_DATA keeps the checked-in expectations unchanged. Any nonempty value enables upstream's gold-data regeneration. The copied parser source and gold files matched the retained source byte-for-byte after the test.
+
+The transform cut removes DataFrame column/tail/sample/repartition/hint/metrics/parse resolvers, the unused explicit-repartition node and dynamic PIVOT value inference. Fourteen direct spec cases reject before input resolution. SQL aliases/CTEs/LIMIT, explicit PIVOT, range and derived-table TABLESAMPLE have positive execution checks. SQL TABLESAMPLE keeps the existing Bernoulli filter; its known per-batch random-state limitation remains. SQL DISTRIBUTE BY and CLUSTER BY remain unimplemented. No Sail resolver now calls execute_logical_plan to collect rows during planning; this is not a claim that arbitrary host providers perform no I/O. The cut removes 1,050 Rust lines with unchanged vendored test counts and resolved packages.

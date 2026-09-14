@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -38,6 +39,12 @@ impl PlanResolver<'_> {
             values,
         } = pivot;
 
+        if values.is_empty() {
+            return Err(PlanError::unsupported(
+                "extraction probe: DataFrame pivot value inference",
+            ));
+        }
+
         let input = self.resolve_query_plan(*input, state).await?;
         let schema = input.schema().clone();
 
@@ -74,17 +81,8 @@ impl PlanResolver<'_> {
             None => Self::implicit_pivot_grouping(&schema, &pivot_column, &aggregates, state)?,
         };
 
-        // Each pivot value becomes one output column per aggregate. Values may be
-        // given explicitly (`... IN (v1, v2)`); otherwise infer the distinct values
-        // from the data (matching Spark's `pivot(column)`).
-        let pivot_values: Vec<(ScalarValue, Option<String>)> = if values.is_empty() {
-            let pivot_column_name = pivot_column_display_name(&pivot_column, state)?;
-            self.infer_pivot_values(&input, &pivot_column, &pivot_column_name)
-                .await?
-                .into_iter()
-                .map(|scalar| (scalar, None))
-                .collect()
-        } else {
+        // SQL PIVOT supplies a nonempty value list.
+        let pivot_values: Vec<(ScalarValue, Option<String>)> = {
             // Each pivot value is a foldable expression (literal, typed literal such as
             // `DATE'...'`, or cast). Resolve it against an empty schema and fold it to a scalar
             // with `LiteralEvaluator`, mirroring how SHOW PARTITIONS resolves partition values.
@@ -196,58 +194,6 @@ impl PlanResolver<'_> {
         }
 
         self.rewrite_aggregate(input, projections, grouping, None, false, state)
-    }
-
-    /// Infer pivot values by collecting the distinct values of the pivot column
-    /// from the input, sorted ascending (matching Spark's `pivot(column)`).
-    async fn infer_pivot_values(
-        &self,
-        input: &LogicalPlan,
-        pivot_column: &expr::Expr,
-        pivot_column_name: &str,
-    ) -> PlanResult<Vec<ScalarValue>> {
-        // Spark rejects pivots whose distinct-value count exceeds the configured maximum
-        // (`spark.sql.pivotMaxValues`, default 10000), defined as `DATAFRAME_PIVOT_MAX_VALUES`
-        // in `SQLConf`. Its `collectPivotValues` bounds the distinct-value scan with
-        // `.limit(maxValues + 1)` before collecting, which is what the LIMIT below mirrors:
-        //   https://github.com/apache/spark/blob/v4.0.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L1951
-        //   https://github.com/apache/spark/blob/v4.0.0/sql/core/src/main/scala/org/apache/spark/sql/classic/RelationalGroupedDataset.scala#L637-L655
-        let max_pivot_values = self.config.pivot_max_values;
-        // `GROUP BY pivot_column` with no aggregates is equivalent to
-        // `SELECT DISTINCT pivot_column`. Apply a LIMIT of one past the cap so a
-        // high-cardinality pivot column never pulls an unbounded number of distinct
-        // values into the planner process; the extra row still lets us detect overflow.
-        let plan = LogicalPlanBuilder::from(input.clone())
-            .aggregate(vec![pivot_column.clone()], Vec::<expr::Expr>::new())?
-            .limit(0, Some(max_pivot_values.saturating_add(1)))?
-            .build()?;
-        let batches = self.ctx.execute_logical_plan(plan).await?.collect().await?;
-        let mut values = Vec::new();
-        for batch in &batches {
-            let column = batch.column(0);
-            for row in 0..batch.num_rows() {
-                values.push(ScalarValue::try_from_array(column, row)?);
-            }
-        }
-        // The plan is limited to `max_pivot_values + 1` rows, so report "more than" rather than
-        // an exact count (which would be capped and misleading) — mirroring Spark's message.
-        if values.len() > max_pivot_values {
-            return Err(PlanError::AnalysisError(format!(
-                "The pivot column {pivot_column_name} has more than {max_pivot_values} distinct \
-                 values, this could indicate an error. If this was intended, set \
-                 spark.sql.pivotMaxValues to at least the number of distinct values of the pivot \
-                 column."
-            )));
-        }
-        // `partial_cmp` returns `None` only for incomparable values such as float `NaN`.
-        // Fall back to a deterministic tiebreaker so the inferred pivot column order is stable
-        // across runs (the distinct values arrive in non-deterministic aggregate order). The
-        // string form also places `NaN` last, matching Spark's "NaN is greatest" ordering.
-        values.sort_by(|a, b| {
-            a.partial_cmp(b)
-                .unwrap_or_else(|| a.to_string().cmp(&b.to_string()))
-        });
-        Ok(values)
     }
 
     /// Compute the implicit grouping columns for a SQL `PIVOT` with no explicit
@@ -460,14 +406,6 @@ fn make_pivot_struct(exprs: Vec<expr::Expr>) -> expr::Expr {
         (0..exprs.len()).map(|i| format!("col{}", i + 1)).collect(),
     ))
     .call(exprs)
-}
-
-fn pivot_column_display_name(expr: &expr::Expr, state: &PlanResolverState) -> PlanResult<String> {
-    if let expr::Expr::Column(column) = expr {
-        Ok(state.get_field_info(column.name())?.name().to_string())
-    } else {
-        Ok(expr.to_string())
-    }
 }
 
 fn check_valid_pivot_aggregate(expr: &expr::Expr, state: &PlanResolverState) -> PlanResult<()> {

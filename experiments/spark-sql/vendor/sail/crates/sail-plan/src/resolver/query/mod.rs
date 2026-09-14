@@ -9,7 +9,6 @@ use crate::resolver::state::PlanResolverState;
 
 mod aggregate;
 mod alias;
-mod column_op;
 mod cte;
 mod dedup;
 mod filter;
@@ -22,8 +21,6 @@ mod pivoting;
 mod project;
 mod read;
 mod recursion;
-mod repartition;
-mod sample;
 mod set_op;
 mod sort;
 mod values;
@@ -122,7 +119,6 @@ impl PlanResolver<'_> {
                     "extraction probe: inline Arrow input",
                 ));
             }
-            QueryNode::Sample(sample) => self.resolve_query_sample(sample, state).await?,
             QueryNode::TableSample { input, sample } => {
                 let plan = self.resolve_query_plan(*input, state).await?;
                 self.apply_table_sample(plan, sample, state).await?
@@ -130,7 +126,6 @@ impl PlanResolver<'_> {
             QueryNode::Deduplicate(deduplicate) => {
                 self.resolve_query_deduplicate(deduplicate, state).await?
             }
-            QueryNode::Range(range) => self.resolve_query_range(range, state).await?,
             QueryNode::SubqueryAlias {
                 input,
                 alias,
@@ -139,69 +134,25 @@ impl PlanResolver<'_> {
                 self.resolve_query_subquery_alias(*input, alias, qualifier, state)
                     .await?
             }
-            QueryNode::Repartition {
-                input,
-                num_partitions,
-                shuffle,
-            } => {
-                self.resolve_query_repartition(*input, num_partitions, shuffle, state)
-                    .await?
-            }
-            QueryNode::ToDf {
-                input,
-                column_names,
-            } => {
-                self.resolve_query_to_df(*input, column_names, state)
-                    .await?
-            }
-            QueryNode::WithColumnsRenamed {
-                input,
-                rename_columns_map,
-            } => {
-                self.resolve_query_with_columns_renamed(*input, rename_columns_map, state)
-                    .await?
-            }
-            QueryNode::Drop {
-                input,
-                columns,
-                column_names,
-            } => {
-                self.resolve_query_drop(*input, columns, column_names, state)
-                    .await?
-            }
-            QueryNode::Tail { input, limit } => {
-                self.resolve_query_tail(*input, limit, state).await?
-            }
-            QueryNode::WithColumns { input, aliases } => {
-                self.resolve_query_with_columns(*input, aliases, state)
-                    .await?
-            }
-            QueryNode::Hint {
-                input,
-                name,
-                parameters,
-            } => {
-                self.resolve_query_hint(*input, name, parameters, state)
-                    .await?
+            QueryNode::Sample(_)
+            | QueryNode::Range(_)
+            | QueryNode::Repartition { .. }
+            | QueryNode::RepartitionByExpression { .. }
+            | QueryNode::ToDf { .. }
+            | QueryNode::ToSchema { .. }
+            | QueryNode::WithColumnsRenamed { .. }
+            | QueryNode::Drop { .. }
+            | QueryNode::Tail { .. }
+            | QueryNode::WithColumns { .. }
+            | QueryNode::Hint { .. }
+            | QueryNode::CollectMetrics { .. }
+            | QueryNode::Parse(_) => {
+                return Err(PlanError::unsupported(
+                    "extraction probe: DataFrame transforms",
+                ));
             }
             QueryNode::Pivot(pivot) => self.resolve_query_pivot(pivot, state).await?,
             QueryNode::Unpivot(unpivot) => self.resolve_query_unpivot(unpivot, state).await?,
-            QueryNode::ToSchema { input, schema } => {
-                self.resolve_query_to_schema(*input, schema, state).await?
-            }
-            QueryNode::RepartitionByExpression {
-                input,
-                partition_expressions,
-                num_partitions,
-            } => {
-                self.resolve_query_repartition_by_expression(
-                    *input,
-                    partition_expressions,
-                    num_partitions,
-                    state,
-                )
-                .await?
-            }
             QueryNode::MapPartitions { .. }
             | QueryNode::GroupMap(_)
             | QueryNode::CoGroupMap(_)
@@ -209,15 +160,6 @@ impl PlanResolver<'_> {
             | QueryNode::CommonInlineUserDefinedTableFunction(_) => {
                 return Err(PlanError::unsupported("Python user-defined functions"));
             }
-            QueryNode::CollectMetrics {
-                input,
-                name,
-                metrics,
-            } => {
-                self.resolve_query_collect_metrics(*input, name, metrics, state)
-                    .await?
-            }
-            QueryNode::Parse(parse) => self.resolve_query_parse(parse, state).await?,
             QueryNode::WithWatermark(_) => {
                 return Err(PlanError::unsupported(
                     "extraction probe: streaming watermarks",

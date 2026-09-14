@@ -6,19 +6,23 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::catalog::TableFunctionArgs;
 use datafusion::datasource::{TableProvider, provider_as_source, source_as_provider};
 use datafusion_common::{DFSchema, ScalarValue, TableReference};
-use datafusion_expr::{Expr, LogicalPlan, TableScan, TableSource};
+use datafusion_expr::{
+    Expr, LogicalPlan, LogicalPlanBuilder, ScalarUDF, TableScan, TableSource, col, lit,
+};
 use rand::{RngExt, rng};
 use sail_common::spec;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::rename::logical_plan::rename_logical_plan;
 use sail_common_datafusion::rename::table_provider::RenameTableProvider;
 use sail_common_datafusion::utils::items::ItemTaker;
+use sail_function::scalar::math::random::Random;
 
-use super::sample::SAMPLE_ROUNDING_EPSILON;
 use crate::error::{PlanError, PlanResult};
 use crate::function::{get_built_in_table_function, is_built_in_generator_function};
 use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
+
+const SAMPLE_ROUNDING_EPSILON: f64 = 1e-6;
 
 impl PlanResolver<'_> {
     /// Resolves a named table or view reference into a logical plan node.
@@ -128,8 +132,24 @@ impl PlanResolver<'_> {
             r.random::<i64>()
         });
 
-        // TABLESAMPLE is without replacement
-        Self::apply_sample_to_plan(plan, lower_bound, upper_bound, false, seed, state)
+        // Keep the existing Bernoulli filter used by SQL TABLESAMPLE.
+        // TODO: Random restarts per batch; Spark needs a sampler that advances per partition.
+        let name = state.register_field_name("rand_value");
+        let columns = plan
+            .schema()
+            .columns()
+            .into_iter()
+            .map(Expr::Column)
+            .collect::<Vec<_>>();
+        let random = ScalarUDF::from(Random::new())
+            .call(vec![lit(seed)])
+            .alias(&name);
+        Ok(LogicalPlanBuilder::from(plan)
+            .project(columns.iter().cloned().chain([random]).collect::<Vec<_>>())?
+            .filter(col(&name).lt(lit(upper_bound)))?
+            .filter(col(&name).gt_eq(lit(lower_bound)))?
+            .project(columns)?
+            .build()?)
     }
 
     /// Evaluate a sample expression to get a float value.

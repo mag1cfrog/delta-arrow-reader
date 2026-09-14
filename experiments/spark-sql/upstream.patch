@@ -11167,10 +11167,10 @@ index 190bf5b..0000000
 -    Ok(predicate)
 -}
 diff --git a/crates/sail-logical-plan/src/lib.rs b/crates/sail-logical-plan/src/lib.rs
-index 26cf741..2e43fdc 100644
+index 26cf741..8f60ab4 100644
 --- a/crates/sail-logical-plan/src/lib.rs
 +++ b/crates/sail-logical-plan/src/lib.rs
-@@ -1,13 +1,6 @@
+@@ -1,13 +1,5 @@
 -pub mod barrier;
 -pub mod check_constraints;
 -pub mod map_partitions;
@@ -11179,7 +11179,7 @@ index 26cf741..2e43fdc 100644
  pub mod monotonic_id;
  pub mod range;
 -pub mod remote_checkpoint;
- pub mod repartition;
+-pub mod repartition;
 -pub mod schema_pivot;
 -pub mod show_string;
  pub mod sort;
@@ -13607,6 +13607,124 @@ index 93274a2..0000000
 -        Some(vec![(0..self.input.schema().fields().len()).collect()])
 -    }
 -}
+diff --git a/crates/sail-logical-plan/src/repartition.rs b/crates/sail-logical-plan/src/repartition.rs
+deleted file mode 100644
+index 5178752..0000000
+--- a/crates/sail-logical-plan/src/repartition.rs
++++ /dev/null
+@@ -1,112 +0,0 @@
+-use std::fmt::Formatter;
+-use std::sync::Arc;
+-
+-use datafusion::logical_expr::LogicalPlan;
+-use datafusion_common::{DFSchemaRef, Result, plan_err};
+-use datafusion_expr::{Expr, UserDefinedLogicalNodeCore, expr_vec_fmt};
+-
+-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+-pub enum ExplicitRepartitionKind {
+-    Coalesce,
+-    RoundRobin,
+-    Hash,
+-}
+-
+-impl ExplicitRepartitionKind {
+-    fn as_str(self) -> &'static str {
+-        match self {
+-            Self::Coalesce => "coalesce",
+-            Self::RoundRobin => "round_robin",
+-            Self::Hash => "hash",
+-        }
+-    }
+-}
+-
+-/// A logical plan node for explicit repartitioning in the query.
+-#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd)]
+-pub struct ExplicitRepartitionNode {
+-    input: Arc<LogicalPlan>,
+-    num_partitions: Option<usize>,
+-    kind: ExplicitRepartitionKind,
+-    partitioning_expressions: Vec<Expr>,
+-}
+-
+-impl ExplicitRepartitionNode {
+-    pub fn new(
+-        input: Arc<LogicalPlan>,
+-        num_partitions: Option<usize>,
+-        kind: ExplicitRepartitionKind,
+-        partitioning_expressions: Vec<Expr>,
+-    ) -> Self {
+-        Self {
+-            input,
+-            num_partitions,
+-            kind,
+-            partitioning_expressions,
+-        }
+-    }
+-
+-    pub fn input(&self) -> &Arc<LogicalPlan> {
+-        &self.input
+-    }
+-
+-    pub fn num_partitions(&self) -> Option<usize> {
+-        self.num_partitions
+-    }
+-
+-    pub fn kind(&self) -> ExplicitRepartitionKind {
+-        self.kind
+-    }
+-
+-    pub fn partitioning_expressions(&self) -> &Vec<Expr> {
+-        &self.partitioning_expressions
+-    }
+-}
+-
+-impl UserDefinedLogicalNodeCore for ExplicitRepartitionNode {
+-    fn name(&self) -> &str {
+-        "ExplicitRepartition"
+-    }
+-
+-    fn inputs(&self) -> Vec<&LogicalPlan> {
+-        vec![&self.input]
+-    }
+-
+-    fn schema(&self) -> &DFSchemaRef {
+-        self.input.schema()
+-    }
+-
+-    fn expressions(&self) -> Vec<Expr> {
+-        self.partitioning_expressions.clone()
+-    }
+-
+-    fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
+-        write!(
+-            f,
+-            "ExplicitRepartition: kind={}, n={:?}, expr=[{}]",
+-            self.kind.as_str(),
+-            self.num_partitions,
+-            expr_vec_fmt!(self.partitioning_expressions)
+-        )
+-    }
+-
+-    fn with_exprs_and_inputs(
+-        &self,
+-        exprs: Vec<Expr>,
+-        mut inputs: Vec<LogicalPlan>,
+-    ) -> Result<Self> {
+-        let (Some(input), true) = (inputs.pop(), inputs.is_empty()) else {
+-            return plan_err!("{} expects exactly one input", self.name());
+-        };
+-        Ok(Self::new(
+-            Arc::new(input),
+-            self.num_partitions,
+-            self.kind,
+-            exprs,
+-        ))
+-    }
+-
+-    fn necessary_children_exprs(&self, output_columns: &[usize]) -> Option<Vec<Vec<usize>>> {
+-        Some(vec![output_columns.to_vec()])
+-    }
+-}
 diff --git a/crates/sail-logical-plan/src/schema_pivot.rs b/crates/sail-logical-plan/src/schema_pivot.rs
 deleted file mode 100644
 index f91a275..0000000
@@ -14479,7 +14597,7 @@ index 1024739..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/Cargo.toml b/crates/sail-plan/Cargo.toml
-index f3ed96e..630c277 100644
+index f3ed96e..284c8be 100644
 --- a/crates/sail-plan/Cargo.toml
 +++ b/crates/sail-plan/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -14511,7 +14629,7 @@ index f3ed96e..630c277 100644
  chrono = { workspace = true }
  chumsky = { workspace = true }
  async-trait = { workspace = true }
-@@ -37,9 +31,9 @@ lazy_static = { workspace = true }
+@@ -37,20 +31,14 @@ lazy_static = { workspace = true }
  ryu = { workspace = true }
  either = { workspace = true }
  tokio = { workspace = true }
@@ -14522,7 +14640,10 @@ index f3ed96e..630c277 100644
  half = { workspace = true }
  arrow = { workspace = true }
  arrow-schema = { workspace = true }
-@@ -50,7 +44,3 @@ log = { workspace = true }
+ serde = { workspace = true }
+ serde_json = { workspace = true }
+-indexmap = { workspace = true }
+-log = { workspace = true }
  regex = { workspace = true }
  regex-syntax = { workspace = true }
  parquet-variant-compute = { workspace = true }
@@ -27565,7 +27686,7 @@ index 2aae312..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/src/config.rs b/crates/sail-plan/src/config.rs
-index 692c016..c27da1f 100644
+index 692c016..3258d94 100644
 --- a/crates/sail-plan/src/config.rs
 +++ b/crates/sail-plan/src/config.rs
 @@ -1,9 +1,8 @@
@@ -27610,10 +27731,13 @@ index 692c016..c27da1f 100644
      /// Policy for duplicate keys created by map functions.
      pub map_key_dedup_policy: MapKeyDedupPolicy,
      /// Whether to allow cartesian products (cross joins) without explicit `CROSS JOIN` syntax.
-@@ -56,10 +40,6 @@ pub struct PlanConfig {
-     /// The maximum number of distinct values collected for a pivot without an explicit
-     /// value list (`spark.sql.pivotMaxValues`, default 10000). Exceeding it is an error.
-     pub pivot_max_values: usize,
+@@ -53,13 +37,6 @@ pub struct PlanConfig {
+     /// Whether identifiers (e.g. column names) are matched case-sensitively.
+     /// Spark defaults to case-insensitive matching (`spark.sql.caseSensitive=false`).
+     pub case_sensitive: bool,
+-    /// The maximum number of distinct values collected for a pivot without an explicit
+-    /// value list (`spark.sql.pivotMaxValues`, default 10000). Exceeding it is an error.
+-    pub pivot_max_values: usize,
 -    /// Whether a table-valued function may receive more than one `TABLE (...)` argument
 -    /// (`spark.sql.tvf.allowMultipleTableArguments.enabled`, default false). Multiple table
 -    /// arguments produce the cartesian product of their rows.
@@ -27621,7 +27745,7 @@ index 692c016..c27da1f 100644
      /// Whether `COUNT()` is accepted with no arguments. Spark's legacy behavior returns zero;
      /// it does not interpret the call as `COUNT(*)`.
      pub legacy_allow_parameterless_count: bool,
-@@ -67,10 +47,7 @@ pub struct PlanConfig {
+@@ -67,10 +44,7 @@ pub struct PlanConfig {
  
  impl PlanConfig {
      pub fn new() -> PlanResult<Self> {
@@ -27633,7 +27757,7 @@ index 692c016..c27da1f 100644
      }
  }
  
-@@ -81,17 +58,12 @@ impl Default for PlanConfig {
+@@ -81,17 +55,11 @@ impl Default for PlanConfig {
              session_locale: Arc::from("en-US"),
              default_timestamp_type: DefaultTimestampType::TimestampLtz,
              arrow_use_large_var_types: false,
@@ -27646,7 +27770,7 @@ index 692c016..c27da1f 100644
              map_key_dedup_policy: MapKeyDedupPolicy::Exception,
              cross_join_enabled: true,
              case_sensitive: false,
-             pivot_max_values: 10000,
+-            pivot_max_values: 10000,
 -            tvf_allow_multiple_table_arguments: false,
              legacy_allow_parameterless_count: false,
          }
@@ -37474,26 +37598,282 @@ index 7cc3f5e..ec52f93 100644
 -    }
  }
 diff --git a/crates/sail-plan/src/resolver/query/column_op.rs b/crates/sail-plan/src/resolver/query/column_op.rs
-index 284f933..108a653 100644
+deleted file mode 100644
+index 284f933..0000000
 --- a/crates/sail-plan/src/resolver/query/column_op.rs
-+++ b/crates/sail-plan/src/resolver/query/column_op.rs
-@@ -1,10 +1,9 @@
-+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use std::collections::{HashMap, HashSet};
- use std::sync::Arc;
- 
- use datafusion_common::Column;
++++ /dev/null
+@@ -1,371 +0,0 @@
+-use std::collections::{HashMap, HashSet};
+-use std::sync::Arc;
+-
+-use datafusion_common::Column;
 -use datafusion_expr::{
 -    Expr, ExprSchemable, LogicalPlan, Projection, SubqueryAlias, cast, col, lit,
 -};
-+use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, Projection, SubqueryAlias};
- use indexmap::IndexMap;
- use sail_common::spec;
- use sail_common_datafusion::utils::items::ItemTaker;
-@@ -269,103 +268,4 @@ impl PlanResolver<'_> {
-             Ok(result)
-         }
-     }
+-use indexmap::IndexMap;
+-use sail_common::spec;
+-use sail_common_datafusion::utils::items::ItemTaker;
+-
+-use crate::error::{PlanError, PlanResult};
+-use crate::resolver::PlanResolver;
+-use crate::resolver::expression::NamedExpr;
+-use crate::resolver::state::PlanResolverState;
+-use crate::resolver::tree::explode::ExplodeRewriter;
+-use crate::resolver::tree::monotonic_id::MonotonicIdRewriter;
+-use crate::resolver::tree::spark_partition_id::SparkPartitionIdRewriter;
+-use crate::resolver::tree::window::WindowRewriter;
+-
+-impl PlanResolver<'_> {
+-    pub(super) async fn resolve_query_to_df(
+-        &self,
+-        input: spec::QueryPlan,
+-        columns: Vec<spec::Identifier>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let schema = input.schema();
+-        if columns.len() != schema.fields().len() {
+-            return Err(PlanError::invalid(format!(
+-                "number of column names ({}) does not match number of columns ({})",
+-                columns.len(),
+-                schema.fields().len()
+-            )));
+-        }
+-        let expr = schema
+-            .columns()
+-            .into_iter()
+-            .zip(columns)
+-            .map(|(col, name)| NamedExpr::new(vec![name.into()], Expr::Column(col)))
+-            .collect();
+-        let expr = self.rewrite_named_expressions(expr, state)?;
+-        Ok(LogicalPlan::Projection(Projection::try_new(
+-            expr,
+-            Arc::new(input),
+-        )?))
+-    }
+-
+-    pub(super) async fn resolve_query_to_schema(
+-        &self,
+-        input: spec::QueryPlan,
+-        schema: spec::Schema,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let target_schema = self.resolve_schema(schema, state)?;
+-        let input_names = Self::get_field_names(input.schema(), state)?;
+-        let mut projected_exprs = Vec::new();
+-        for target_field in target_schema.fields() {
+-            let target_name = target_field.name();
+-            let input_idx = input_names
+-                .iter()
+-                .position(|input_name| input_name.eq_ignore_ascii_case(target_name))
+-                .ok_or_else(|| {
+-                    PlanError::invalid(format!("field not found in input schema: {target_name}"))
+-                })?;
+-            let (input_qualifier, input_field) = input.schema().qualified_field(input_idx);
+-            let expr = Expr::Column(Column::from((input_qualifier, input_field)));
+-            let expr = if input_field.data_type() == target_field.data_type() {
+-                expr
+-            } else {
+-                expr.cast_to(target_field.data_type(), &input.schema())?
+-                    .alias_qualified(input_qualifier.cloned(), input_field.name())
+-            };
+-            projected_exprs.push(expr);
+-        }
+-        let projected_plan =
+-            LogicalPlan::Projection(Projection::try_new(projected_exprs, Arc::new(input))?);
+-        Ok(projected_plan)
+-    }
+-
+-    pub(super) async fn resolve_query_with_columns_renamed(
+-        &self,
+-        input: spec::QueryPlan,
+-        rename_columns_map: Vec<(spec::Identifier, spec::Identifier)>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-
+-        let mut inverse_map: HashMap<String, HashSet<String>> = HashMap::new();
+-        for (from, to) in rename_columns_map
+-            .iter()
+-            .map(|(a, b)| (a.as_ref().to_string(), b.as_ref().to_string()))
+-        {
+-            let from_froms = inverse_map.remove(&from).unwrap_or_default(); //.unwrap_or_else(|| HashSet::new());
+-            let to_froms = inverse_map.entry(to.clone()).or_default();
+-            to_froms.extend(from_froms);
+-            to_froms.insert(from);
+-        }
+-
+-        let rename_columns_map: HashMap<String, String> = inverse_map
+-            .into_iter()
+-            .flat_map(|(to, froms)| froms.into_iter().map(move |from| (from, to.clone())))
+-            .collect();
+-        let schema = input.schema();
+-        let expr = schema
+-            .columns()
+-            .into_iter()
+-            .map(|column| {
+-                let name = state.get_field_info(column.name())?.name();
+-                match rename_columns_map.get(name) {
+-                    Some(n) => Ok(NamedExpr::new(vec![n.clone()], Expr::Column(column))),
+-                    None => Ok(NamedExpr::new(vec![name.to_string()], Expr::Column(column))),
+-                }
+-            })
+-            .collect::<PlanResult<Vec<_>>>()?;
+-        let expr = self.rewrite_named_expressions(expr, state)?;
+-        Ok(LogicalPlan::Projection(Projection::try_new(
+-            expr,
+-            Arc::new(input),
+-        )?))
+-    }
+-
+-    pub(super) async fn resolve_query_drop(
+-        &self,
+-        input: spec::QueryPlan,
+-        columns: Vec<spec::Expr>,
+-        column_names: Vec<spec::Identifier>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let schema = input.schema();
+-        let excluded = columns
+-            .into_iter()
+-            .filter_map(|col| {
+-                let spec::Expr::UnresolvedAttribute {
+-                    name,
+-                    plan_id,
+-                    is_metadata_column: false,
+-                } = col
+-                else {
+-                    return Some(Err(PlanError::invalid("expecting column to drop")));
+-                };
+-                let name: Vec<String> = name.into();
+-                let Ok(name) = name.one() else {
+-                    // Ignore nested names since they cannot match a column name.
+-                    // This is not an error in Spark.
+-                    return None;
+-                };
+-                // An error is returned when there are ambiguous columns.
+-                self.resolve_optional_column(schema, &name, plan_id, state)
+-                    .transpose()
+-            })
+-            .collect::<PlanResult<Vec<_>>>()?;
+-        let excluded = excluded
+-            .into_iter()
+-            .chain(column_names.into_iter().flat_map(|name| {
+-                let name: String = name.into();
+-                // The excluded column names are allow to refer to ambiguous columns,
+-                // so we just check the column name here.
+-                self.resolve_column_candidates(schema, &name, None, state)
+-                    .into_iter()
+-            }))
+-            .collect::<Vec<_>>();
+-        let expr: Vec<Expr> = schema
+-            .columns()
+-            .into_iter()
+-            .filter(|column| !excluded.contains(column))
+-            .map(Expr::Column)
+-            .collect();
+-        Ok(LogicalPlan::Projection(Projection::try_new(
+-            expr,
+-            Arc::new(input),
+-        )?))
+-    }
+-
+-    pub(super) async fn resolve_query_with_columns(
+-        &self,
+-        input: spec::QueryPlan,
+-        aliases: Vec<spec::Expr>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        // `AliasEntry` is `(resolved_expr, seen, explicit_metadata)` where `explicit_metadata` is
+-        // `Some(meta)` when the user explicitly provided metadata via `withMetadata` (even empty),
+-        // and `None` when no metadata was specified on the alias.
+-        type AliasEntry = (Expr, bool, Option<Vec<(String, String)>>);
+-
+-        let input = self.resolve_query_plan(input, state).await?;
+-        // If the input is a SubqueryAlias, save the alias and re-apply it after building the
+-        // projection. A Projection node strips qualifiers from its output schema, so without
+-        // re-wrapping, subsequent operations could no longer reference columns by the qualified name.
+-        let input_alias = match &input {
+-            LogicalPlan::SubqueryAlias(sa) => Some(sa.alias.clone()),
+-            _ => None,
+-        };
+-        let schema = input.schema();
+-        // We use `IndexMap` to ensure the result schema has a deterministic column order.
+-        let mut aliases: IndexMap<String, AliasEntry> = async {
+-            let mut results = IndexMap::new();
+-            for alias in aliases {
+-                let (name, expr, metadata) = match alias {
+-                    spec::Expr::Alias {
+-                        name,
+-                        expr,
+-                        metadata,
+-                    } => {
+-                        let name = name
+-                            .one()
+-                            .map_err(|_| PlanError::invalid("multi-alias for column"))?;
+-                        (name, *expr, metadata)
+-                    }
+-                    _ => return Err(PlanError::invalid("alias expression expected for column")),
+-                };
+-                let expr = self.resolve_expression(expr, schema, state).await?;
+-                results.insert(name.into(), (expr, false, metadata));
+-            }
+-            Ok(results) as PlanResult<_>
+-        }
+-        .await?;
+-        let mut expr = schema
+-            .columns()
+-            .into_iter()
+-            .map(|column| {
+-                let name = state.get_field_info(column.name())?.name();
+-                match aliases.get_mut(name) {
+-                    Some((e, exists, metadata)) => {
+-                        *exists = true;
+-                        match metadata {
+-                            Some(m) if !m.is_empty() => {
+-                                Ok(NamedExpr::new(vec![name.to_string()], e.clone())
+-                                    .with_metadata(m.clone()))
+-                            }
+-                            _ => Ok(NamedExpr::new(vec![name.to_string()], e.clone())),
+-                        }
+-                    }
+-                    None => Ok(NamedExpr::new(vec![name.to_string()], Expr::Column(column))),
+-                }
+-            })
+-            .collect::<PlanResult<Vec<_>>>()?;
+-        for (name, (e, exists, metadata)) in &aliases {
+-            if !exists {
+-                match metadata {
+-                    Some(m) if !m.is_empty() => {
+-                        expr.push(
+-                            NamedExpr::new(vec![name.clone()], e.clone()).with_metadata(m.clone()),
+-                        );
+-                    }
+-                    _ => {
+-                        expr.push(NamedExpr::new(vec![name.clone()], e.clone()));
+-                    }
+-                }
+-            }
+-        }
+-        let (input, expr) = self.rewrite_projection::<MonotonicIdRewriter>(input, expr, state)?;
+-        let (input, expr) =
+-            self.rewrite_projection::<SparkPartitionIdRewriter>(input, expr, state)?;
+-        let (input, expr) = self.rewrite_projection::<ExplodeRewriter>(input, expr, state)?;
+-        let (input, expr) = self.rewrite_projection::<WindowRewriter>(input, expr, state)?;
+-        let expr = self.rewrite_multi_expr(expr)?;
+-        let expr = self.rewrite_named_expressions(expr, state)?;
+-        let result = LogicalPlan::Projection(Projection::try_new(expr, Arc::new(input))?);
+-        if let Some(alias) = input_alias {
+-            Ok(LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(
+-                Arc::new(result),
+-                alias,
+-            )?))
+-        } else {
+-            Ok(result)
+-        }
+-    }
 -
 -    pub(super) async fn resolve_query_replace(
 -        &self,
@@ -37593,7 +37973,7 @@ index 284f933..108a653 100644
 -            Arc::new(input),
 -        )?))
 -    }
- }
+-}
 diff --git a/crates/sail-plan/src/resolver/query/join.rs b/crates/sail-plan/src/resolver/query/join.rs
 index 66620c9..05a7e78 100644
 --- a/crates/sail-plan/src/resolver/query/join.rs
@@ -37775,31 +38155,157 @@ index f4cb08e..350879e 100644
          let function_name = if outer {
              get_outer_built_in_generator_functions(&function_name).to_string()
          } else {
+diff --git a/crates/sail-plan/src/resolver/query/limit.rs b/crates/sail-plan/src/resolver/query/limit.rs
+index 2ed9ee9..d5773ad 100644
+--- a/crates/sail-plan/src/resolver/query/limit.rs
++++ b/crates/sail-plan/src/resolver/query/limit.rs
+@@ -1,15 +1,10 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+-use arrow::array::AsArray;
+-use arrow::datatypes::Int64Type;
+-use datafusion::functions_aggregate::count::count_udaf;
+-use datafusion_common::ScalarValue;
+-use datafusion_common::utils::expr::COUNT_STAR_EXPANSION;
+-use datafusion_expr::expr::AggregateFunctionParams;
+-use datafusion_expr::{Aggregate, Expr, Limit, LogicalPlan, expr, lit};
++use datafusion_expr::{Limit, LogicalPlan};
+ use sail_common::spec;
+ 
+-use crate::error::{PlanError, PlanResult};
++use crate::error::PlanResult;
+ use crate::resolver::PlanResolver;
+ use crate::resolver::state::PlanResolverState;
+ 
+@@ -43,65 +38,4 @@ impl PlanResolver<'_> {
+             input: Arc::new(input),
+         }))
+     }
+-
+-    pub(super) async fn resolve_query_tail(
+-        &self,
+-        input: spec::QueryPlan,
+-        limit: spec::Expr,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self
+-            .resolve_query_plan_with_hidden_fields(input, state)
+-            .await?;
+-        let limit = self
+-            .resolve_expression(limit, input.schema(), state)
+-            .await?;
+-        let limit_num = match &limit {
+-            Expr::Literal(ScalarValue::Int8(Some(value)), _metadata) => Ok(*value as i64),
+-            Expr::Literal(ScalarValue::Int16(Some(value)), _metadata) => Ok(*value as i64),
+-            Expr::Literal(ScalarValue::Int32(Some(value)), _metadata) => Ok(*value as i64),
+-            Expr::Literal(ScalarValue::Int64(Some(value)), _metadata) => Ok(*value),
+-            Expr::Literal(ScalarValue::UInt8(Some(value)), _metadata) => Ok(*value as i64),
+-            Expr::Literal(ScalarValue::UInt16(Some(value)), _metadata) => Ok(*value as i64),
+-            Expr::Literal(ScalarValue::UInt32(Some(value)), _metadata) => Ok(*value as i64),
+-            Expr::Literal(ScalarValue::UInt64(Some(value)), _metadata) => Ok(*value as i64),
+-            _ => Err(PlanError::invalid("`tail` limit must be an integer")),
+-        }?;
+-        // TODO: This can be expensive for large input datasets
+-        //  According to Spark's docs:
+-        //    Running tail requires moving data into the application's driver process, and doing so
+-        //    with a very large `num` can crash the driver process with OutOfMemoryError.
+-        let count_alias = state.register_field_name("COUNT(*)");
+-        let count_expr = Expr::AggregateFunction(expr::AggregateFunction {
+-            func: count_udaf(),
+-            params: AggregateFunctionParams {
+-                args: vec![Expr::Literal(COUNT_STAR_EXPANSION, None)],
+-                distinct: false,
+-                filter: None,
+-                order_by: vec![],
+-                null_treatment: None,
+-            },
+-        })
+-        .alias(count_alias);
+-        let count_plan = LogicalPlan::Aggregate(Aggregate::try_new(
+-            Arc::new(input.clone()),
+-            vec![],
+-            vec![count_expr],
+-        )?);
+-        let count_batches = self
+-            .ctx
+-            .execute_logical_plan(count_plan)
+-            .await?
+-            .collect()
+-            .await?;
+-        let count = count_batches[0]
+-            .column(0)
+-            .as_primitive::<Int64Type>()
+-            .value(0);
+-        Ok(LogicalPlan::Limit(Limit {
+-            skip: Some(Box::new(lit(0i64.max(count - limit_num)))),
+-            fetch: Some(Box::new(limit)),
+-            input: Arc::new(input),
+-        }))
+-    }
+ }
 diff --git a/crates/sail-plan/src/resolver/query/misc.rs b/crates/sail-plan/src/resolver/query/misc.rs
-index 7c60188..578df5c 100644
+index 7c60188..a019a21 100644
 --- a/crates/sail-plan/src/resolver/query/misc.rs
 +++ b/crates/sail-plan/src/resolver/query/misc.rs
-@@ -1,14 +1,11 @@
+@@ -1,17 +1,11 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::collections::HashMap;
  use std::sync::Arc;
  
 -use datafusion::catalog::MemTable;
- use datafusion_common::{DFSchema, DFSchemaRef, ParamValues, ScalarValue};
+-use datafusion_common::{DFSchema, DFSchemaRef, ParamValues, ScalarValue};
 -use datafusion_expr::{EmptyRelation, Expr, Extension, LogicalPlan, UNNAMED_TABLE};
-+use datafusion_expr::{EmptyRelation, Expr, Extension, LogicalPlan};
- use log::warn;
+-use log::warn;
++use datafusion_common::{DFSchema, DFSchemaRef, ParamValues};
++use datafusion_expr::{EmptyRelation, LogicalPlan};
  use sail_common::spec;
 -use sail_common_datafusion::array::record_batch::{
 -    cast_record_batch_positionally, read_record_batches,
 -};
  use sail_common_datafusion::literal::LiteralEvaluator;
- use sail_logical_plan::range::RangeNode;
- use sail_logical_plan::repartition::{ExplicitRepartitionKind, ExplicitRepartitionNode};
-@@ -107,40 +104,6 @@ impl PlanResolver<'_> {
-         }
+-use sail_logical_plan::range::RangeNode;
+-use sail_logical_plan::repartition::{ExplicitRepartitionKind, ExplicitRepartitionNode};
+ 
+ use crate::error::{PlanError, PlanResult};
+ use crate::resolver::PlanResolver;
+@@ -27,31 +21,6 @@ impl PlanResolver<'_> {
+         }))
      }
  
+-    pub(super) async fn resolve_query_range(
+-        &self,
+-        range: spec::Range,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let spec::Range {
+-            start,
+-            end,
+-            step,
+-            num_partitions,
+-        } = range;
+-        let start = start.unwrap_or(0);
+-        // TODO: use parallelism in Spark configuration as the default
+-        let num_partitions = num_partitions.unwrap_or(1);
+-        if num_partitions < 1 {
+-            return Err(PlanError::invalid(format!(
+-                "invalid number of partitions: {num_partitions}"
+-            )));
+-        }
+-        let alias = state.register_field_name("id");
+-        Ok(LogicalPlan::Extension(Extension {
+-            node: Arc::new(RangeNode::try_new(alias, start, end, step, num_partitions)?),
+-        }))
+-    }
+-
+     pub(super) async fn resolve_query_with_parameters(
+         &self,
+         input: spec::QueryPlan,
+@@ -106,153 +75,4 @@ impl PlanResolver<'_> {
+             Ok(input)
+         }
+     }
+-
 -    pub(super) async fn resolve_query_local_relation(
 -        &self,
 -        data: Option<Vec<u8>>,
@@ -37834,13 +38340,78 @@ index 7c60188..578df5c 100644
 -        )
 -    }
 -
-     pub(super) async fn resolve_query_hint(
-         &self,
-         input: spec::QueryPlan,
-@@ -213,14 +176,6 @@ impl PlanResolver<'_> {
-     ) -> PlanResult<LogicalPlan> {
-         Err(PlanError::todo("parse"))
-     }
+-    pub(super) async fn resolve_query_hint(
+-        &self,
+-        input: spec::QueryPlan,
+-        name: String,
+-        parameters: Vec<spec::Expr>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self
+-            .resolve_query_plan_with_hidden_fields(input, state)
+-            .await?;
+-
+-        if name.eq_ignore_ascii_case("COALESCE") {
+-            let num_partitions = self
+-                .resolve_hint_partition_count(&name, &parameters, input.schema(), state)
+-                .await?;
+-            return Ok(LogicalPlan::Extension(Extension {
+-                node: Arc::new(ExplicitRepartitionNode::new(
+-                    Arc::new(input),
+-                    Some(num_partitions),
+-                    ExplicitRepartitionKind::Coalesce,
+-                    vec![],
+-                )),
+-            }));
+-        }
+-
+-        warn!("Hint operation is not yet supported and is a no-op");
+-        Ok(input)
+-    }
+-
+-    async fn resolve_hint_partition_count(
+-        &self,
+-        hint_name: &str,
+-        parameters: &[spec::Expr],
+-        schema: &DFSchemaRef,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<usize> {
+-        let hint_name = hint_name.to_uppercase();
+-        let [parameter] = parameters else {
+-            return Err(PlanError::invalid(format!(
+-                "{hint_name} hint requires exactly one partition count"
+-            )));
+-        };
+-
+-        let expr = self
+-            .resolve_expression(parameter.clone(), schema, state)
+-            .await?;
+-        let value = literal_partition_count(&hint_name, &expr)?;
+-        if value < 1 {
+-            return Err(PlanError::invalid(format!(
+-                "{hint_name} hint requires at least one partition"
+-            )));
+-        }
+-        Ok(value)
+-    }
+-
+-    pub(super) async fn resolve_query_collect_metrics(
+-        &self,
+-        _input: spec::QueryPlan,
+-        _name: String,
+-        _metrics: Vec<spec::Expr>,
+-        _state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        Err(PlanError::todo("collect metrics"))
+-    }
+-
+-    pub(super) async fn resolve_query_parse(
+-        &self,
+-        _parse: spec::Parse,
+-        _state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        Err(PlanError::todo("parse"))
+-    }
 -
 -    pub(super) async fn resolve_query_with_watermark(
 -        &self,
@@ -37849,11 +38420,43 @@ index 7c60188..578df5c 100644
 -    ) -> PlanResult<LogicalPlan> {
 -        Err(PlanError::todo("with watermark"))
 -    }
+-}
+-
+-fn literal_partition_count(hint_name: &str, expr: &Expr) -> PlanResult<usize> {
+-    match expr {
+-        Expr::Literal(ScalarValue::Int8(Some(value)), _metadata) => {
+-            usize::try_from(i64::from(*value)).map_err(|_| {
+-                PlanError::invalid(format!("{hint_name} hint requires at least one partition"))
+-            })
+-        }
+-        Expr::Literal(ScalarValue::Int16(Some(value)), _metadata) => {
+-            usize::try_from(i64::from(*value)).map_err(|_| {
+-                PlanError::invalid(format!("{hint_name} hint requires at least one partition"))
+-            })
+-        }
+-        Expr::Literal(ScalarValue::Int32(Some(value)), _metadata) => {
+-            usize::try_from(i64::from(*value)).map_err(|_| {
+-                PlanError::invalid(format!("{hint_name} hint requires at least one partition"))
+-            })
+-        }
+-        Expr::Literal(ScalarValue::Int64(Some(value)), _metadata) => usize::try_from(*value)
+-            .map_err(|_| {
+-                PlanError::invalid(format!("{hint_name} hint requires at least one partition"))
+-            }),
+-        Expr::Literal(ScalarValue::UInt8(Some(value)), _metadata) => Ok(*value as usize),
+-        Expr::Literal(ScalarValue::UInt16(Some(value)), _metadata) => Ok(*value as usize),
+-        Expr::Literal(ScalarValue::UInt32(Some(value)), _metadata) => Ok(*value as usize),
+-        Expr::Literal(ScalarValue::UInt64(Some(value)), _metadata) => usize::try_from(*value)
+-            .map_err(|_| {
+-                PlanError::invalid(format!("{hint_name} hint partition count is too large"))
+-            }),
+-        _ => Err(PlanError::invalid(format!(
+-            "{hint_name} hint partition count must be an integer"
+-        ))),
+-    }
  }
- 
- fn literal_partition_count(hint_name: &str, expr: &Expr) -> PlanResult<usize> {
 diff --git a/crates/sail-plan/src/resolver/query/mod.rs b/crates/sail-plan/src/resolver/query/mod.rs
-index fb117e5..bff7d8c 100644
+index fb117e5..01c1cb4 100644
 --- a/crates/sail-plan/src/resolver/query/mod.rs
 +++ b/crates/sail-plan/src/resolver/query/mod.rs
 @@ -1,12 +1,7 @@
@@ -37871,7 +38474,15 @@ index fb117e5..bff7d8c 100644
  
  use crate::error::{PlanError, PlanResult};
  use crate::resolver::PlanResolver;
-@@ -23,7 +18,6 @@ mod lateral;
+@@ -14,7 +9,6 @@ use crate::resolver::state::PlanResolverState;
+ 
+ mod aggregate;
+ mod alias;
+-mod column_op;
+ mod cte;
+ mod dedup;
+ mod filter;
+@@ -23,19 +17,12 @@ mod lateral;
  mod lateral_join;
  mod limit;
  mod misc;
@@ -37879,8 +38490,9 @@ index fb117e5..bff7d8c 100644
  mod pivoting;
  mod project;
  mod read;
-@@ -32,10 +26,6 @@ mod repartition;
- mod sample;
+ mod recursion;
+-mod repartition;
+-mod sample;
  mod set_op;
  mod sort;
 -mod stat;
@@ -37890,7 +38502,7 @@ index fb117e5..bff7d8c 100644
  mod values;
  mod window;
  mod with_relations;
-@@ -69,16 +59,23 @@ impl PlanResolver<'_> {
+@@ -69,16 +56,23 @@ impl PlanResolver<'_> {
  
          let plan_id = plan.plan_id;
          let plan = match plan.node {
@@ -37917,7 +38529,7 @@ index fb117e5..bff7d8c 100644
                  }
                  spec::ReadType::DynamicTable(table) => {
                      self.resolve_query_read_dynamic_table(*table, state).await?
-@@ -120,9 +117,10 @@ impl PlanResolver<'_> {
+@@ -120,11 +114,11 @@ impl PlanResolver<'_> {
                  )
                  .await?
              }
@@ -37929,12 +38541,101 @@ index fb117e5..bff7d8c 100644
 +                    "extraction probe: inline Arrow input",
 +                ));
              }
-             QueryNode::Sample(sample) => self.resolve_query_sample(sample, state).await?,
+-            QueryNode::Sample(sample) => self.resolve_query_sample(sample, state).await?,
              QueryNode::TableSample { input, sample } => {
-@@ -204,13 +202,12 @@ impl PlanResolver<'_> {
-                 )
-                 .await?
+                 let plan = self.resolve_query_plan(*input, state).await?;
+                 self.apply_table_sample(plan, sample, state).await?
+@@ -132,7 +126,6 @@ impl PlanResolver<'_> {
+             QueryNode::Deduplicate(deduplicate) => {
+                 self.resolve_query_deduplicate(deduplicate, state).await?
              }
+-            QueryNode::Range(range) => self.resolve_query_range(range, state).await?,
+             QueryNode::SubqueryAlias {
+                 input,
+                 alias,
+@@ -141,195 +134,59 @@ impl PlanResolver<'_> {
+                 self.resolve_query_subquery_alias(*input, alias, qualifier, state)
+                     .await?
+             }
+-            QueryNode::Repartition {
+-                input,
+-                num_partitions,
+-                shuffle,
+-            } => {
+-                self.resolve_query_repartition(*input, num_partitions, shuffle, state)
+-                    .await?
+-            }
+-            QueryNode::ToDf {
+-                input,
+-                column_names,
+-            } => {
+-                self.resolve_query_to_df(*input, column_names, state)
+-                    .await?
+-            }
+-            QueryNode::WithColumnsRenamed {
+-                input,
+-                rename_columns_map,
+-            } => {
+-                self.resolve_query_with_columns_renamed(*input, rename_columns_map, state)
+-                    .await?
+-            }
+-            QueryNode::Drop {
+-                input,
+-                columns,
+-                column_names,
+-            } => {
+-                self.resolve_query_drop(*input, columns, column_names, state)
+-                    .await?
+-            }
+-            QueryNode::Tail { input, limit } => {
+-                self.resolve_query_tail(*input, limit, state).await?
+-            }
+-            QueryNode::WithColumns { input, aliases } => {
+-                self.resolve_query_with_columns(*input, aliases, state)
+-                    .await?
+-            }
+-            QueryNode::Hint {
+-                input,
+-                name,
+-                parameters,
+-            } => {
+-                self.resolve_query_hint(*input, name, parameters, state)
+-                    .await?
++            QueryNode::Sample(_)
++            | QueryNode::Range(_)
++            | QueryNode::Repartition { .. }
++            | QueryNode::RepartitionByExpression { .. }
++            | QueryNode::ToDf { .. }
++            | QueryNode::ToSchema { .. }
++            | QueryNode::WithColumnsRenamed { .. }
++            | QueryNode::Drop { .. }
++            | QueryNode::Tail { .. }
++            | QueryNode::WithColumns { .. }
++            | QueryNode::Hint { .. }
++            | QueryNode::CollectMetrics { .. }
++            | QueryNode::Parse(_) => {
++                return Err(PlanError::unsupported(
++                    "extraction probe: DataFrame transforms",
++                ));
+             }
+             QueryNode::Pivot(pivot) => self.resolve_query_pivot(pivot, state).await?,
+             QueryNode::Unpivot(unpivot) => self.resolve_query_unpivot(unpivot, state).await?,
+-            QueryNode::ToSchema { input, schema } => {
+-                self.resolve_query_to_schema(*input, schema, state).await?
+-            }
+-            QueryNode::RepartitionByExpression {
+-                input,
+-                partition_expressions,
+-                num_partitions,
+-            } => {
+-                self.resolve_query_repartition_by_expression(
+-                    *input,
+-                    partition_expressions,
+-                    num_partitions,
+-                    state,
+-                )
+-                .await?
+-            }
 -            QueryNode::MapPartitions {
 -                input,
 -                function,
@@ -37942,19 +38643,16 @@ index fb117e5..bff7d8c 100644
 -            } => {
 -                self.resolve_query_map_partitions(*input, function, is_barrier, state)
 -                    .await?
-+            QueryNode::MapPartitions { .. }
-+            | QueryNode::GroupMap(_)
-+            | QueryNode::CoGroupMap(_)
-+            | QueryNode::ApplyInPandasWithState(_)
-+            | QueryNode::CommonInlineUserDefinedTableFunction(_) => {
-+                return Err(PlanError::unsupported("Python user-defined functions"));
-             }
-             QueryNode::CollectMetrics {
-                 input,
-@@ -221,115 +218,33 @@ impl PlanResolver<'_> {
-                     .await?
-             }
-             QueryNode::Parse(parse) => self.resolve_query_parse(parse, state).await?,
+-            }
+-            QueryNode::CollectMetrics {
+-                input,
+-                name,
+-                metrics,
+-            } => {
+-                self.resolve_query_collect_metrics(*input, name, metrics, state)
+-                    .await?
+-            }
+-            QueryNode::Parse(parse) => self.resolve_query_parse(parse, state).await?,
 -            QueryNode::GroupMap(map) => self.resolve_query_group_map(map, state).await?,
 -            QueryNode::CoGroupMap(map) => self.resolve_query_co_group_map(map, state).await?,
 -            QueryNode::WithWatermark(watermark) => {
@@ -37963,6 +38661,13 @@ index fb117e5..bff7d8c 100644
 -            QueryNode::ApplyInPandasWithState(apply) => {
 -                self.resolve_query_apply_in_pandas_with_state(apply, state)
 -                    .await?
++            QueryNode::MapPartitions { .. }
++            | QueryNode::GroupMap(_)
++            | QueryNode::CoGroupMap(_)
++            | QueryNode::ApplyInPandasWithState(_)
++            | QueryNode::CommonInlineUserDefinedTableFunction(_) => {
++                return Err(PlanError::unsupported("Python user-defined functions"));
++            }
 +            QueryNode::WithWatermark(_) => {
 +                return Err(PlanError::unsupported(
 +                    "extraction probe: streaming watermarks",
@@ -37996,7 +38701,7 @@ index fb117e5..bff7d8c 100644
 -                LogicalPlan::Extension(Extension {
 -                    node: Arc::new(RemoteCheckpointRelationNode::try_new(relation_id, schema)?),
 -                })
-             }
+-            }
 -            QueryNode::CommonInlineUserDefinedTableFunction(udtf) => {
 -                self.resolve_query_common_inline_udtf(udtf, state).await?
 -            }
@@ -38023,7 +38728,7 @@ index fb117e5..bff7d8c 100644
 -            } => {
 -                self.resolve_query_replace(*input, columns, replacements, state)
 -                    .await?
--            }
+             }
 -            QueryNode::StatSummary { input, statistics } => {
 -                self.resolve_query_stat_summary(*input, vec![], statistics, state)
 -                    .await?
@@ -38264,11 +38969,127 @@ index 21ad91e..0000000
 -        }
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/query/pivoting.rs b/crates/sail-plan/src/resolver/query/pivoting.rs
+index e98baaf..9b2daf8 100644
+--- a/crates/sail-plan/src/resolver/query/pivoting.rs
++++ b/crates/sail-plan/src/resolver/query/pivoting.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::{HashMap, HashSet};
+ use std::sync::Arc;
+ 
+@@ -38,6 +39,12 @@ impl PlanResolver<'_> {
+             values,
+         } = pivot;
+ 
++        if values.is_empty() {
++            return Err(PlanError::unsupported(
++                "extraction probe: DataFrame pivot value inference",
++            ));
++        }
++
+         let input = self.resolve_query_plan(*input, state).await?;
+         let schema = input.schema().clone();
+ 
+@@ -74,17 +81,8 @@ impl PlanResolver<'_> {
+             None => Self::implicit_pivot_grouping(&schema, &pivot_column, &aggregates, state)?,
+         };
+ 
+-        // Each pivot value becomes one output column per aggregate. Values may be
+-        // given explicitly (`... IN (v1, v2)`); otherwise infer the distinct values
+-        // from the data (matching Spark's `pivot(column)`).
+-        let pivot_values: Vec<(ScalarValue, Option<String>)> = if values.is_empty() {
+-            let pivot_column_name = pivot_column_display_name(&pivot_column, state)?;
+-            self.infer_pivot_values(&input, &pivot_column, &pivot_column_name)
+-                .await?
+-                .into_iter()
+-                .map(|scalar| (scalar, None))
+-                .collect()
+-        } else {
++        // SQL PIVOT supplies a nonempty value list.
++        let pivot_values: Vec<(ScalarValue, Option<String>)> = {
+             // Each pivot value is a foldable expression (literal, typed literal such as
+             // `DATE'...'`, or cast). Resolve it against an empty schema and fold it to a scalar
+             // with `LiteralEvaluator`, mirroring how SHOW PARTITIONS resolves partition values.
+@@ -198,58 +196,6 @@ impl PlanResolver<'_> {
+         self.rewrite_aggregate(input, projections, grouping, None, false, state)
+     }
+ 
+-    /// Infer pivot values by collecting the distinct values of the pivot column
+-    /// from the input, sorted ascending (matching Spark's `pivot(column)`).
+-    async fn infer_pivot_values(
+-        &self,
+-        input: &LogicalPlan,
+-        pivot_column: &expr::Expr,
+-        pivot_column_name: &str,
+-    ) -> PlanResult<Vec<ScalarValue>> {
+-        // Spark rejects pivots whose distinct-value count exceeds the configured maximum
+-        // (`spark.sql.pivotMaxValues`, default 10000), defined as `DATAFRAME_PIVOT_MAX_VALUES`
+-        // in `SQLConf`. Its `collectPivotValues` bounds the distinct-value scan with
+-        // `.limit(maxValues + 1)` before collecting, which is what the LIMIT below mirrors:
+-        //   https://github.com/apache/spark/blob/v4.0.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L1951
+-        //   https://github.com/apache/spark/blob/v4.0.0/sql/core/src/main/scala/org/apache/spark/sql/classic/RelationalGroupedDataset.scala#L637-L655
+-        let max_pivot_values = self.config.pivot_max_values;
+-        // `GROUP BY pivot_column` with no aggregates is equivalent to
+-        // `SELECT DISTINCT pivot_column`. Apply a LIMIT of one past the cap so a
+-        // high-cardinality pivot column never pulls an unbounded number of distinct
+-        // values into the planner process; the extra row still lets us detect overflow.
+-        let plan = LogicalPlanBuilder::from(input.clone())
+-            .aggregate(vec![pivot_column.clone()], Vec::<expr::Expr>::new())?
+-            .limit(0, Some(max_pivot_values.saturating_add(1)))?
+-            .build()?;
+-        let batches = self.ctx.execute_logical_plan(plan).await?.collect().await?;
+-        let mut values = Vec::new();
+-        for batch in &batches {
+-            let column = batch.column(0);
+-            for row in 0..batch.num_rows() {
+-                values.push(ScalarValue::try_from_array(column, row)?);
+-            }
+-        }
+-        // The plan is limited to `max_pivot_values + 1` rows, so report "more than" rather than
+-        // an exact count (which would be capped and misleading) — mirroring Spark's message.
+-        if values.len() > max_pivot_values {
+-            return Err(PlanError::AnalysisError(format!(
+-                "The pivot column {pivot_column_name} has more than {max_pivot_values} distinct \
+-                 values, this could indicate an error. If this was intended, set \
+-                 spark.sql.pivotMaxValues to at least the number of distinct values of the pivot \
+-                 column."
+-            )));
+-        }
+-        // `partial_cmp` returns `None` only for incomparable values such as float `NaN`.
+-        // Fall back to a deterministic tiebreaker so the inferred pivot column order is stable
+-        // across runs (the distinct values arrive in non-deterministic aggregate order). The
+-        // string form also places `NaN` last, matching Spark's "NaN is greatest" ordering.
+-        values.sort_by(|a, b| {
+-            a.partial_cmp(b)
+-                .unwrap_or_else(|| a.to_string().cmp(&b.to_string()))
+-        });
+-        Ok(values)
+-    }
+-
+     /// Compute the implicit grouping columns for a SQL `PIVOT` with no explicit
+     /// grouping: every input column that is not referenced by the pivot column or
+     /// any of the aggregate expressions.
+@@ -462,14 +408,6 @@ fn make_pivot_struct(exprs: Vec<expr::Expr>) -> expr::Expr {
+     .call(exprs)
+ }
+ 
+-fn pivot_column_display_name(expr: &expr::Expr, state: &PlanResolverState) -> PlanResult<String> {
+-    if let expr::Expr::Column(column) = expr {
+-        Ok(state.get_field_info(column.name())?.name().to_string())
+-    } else {
+-        Ok(expr.to_string())
+-    }
+-}
+-
+ fn check_valid_pivot_aggregate(expr: &expr::Expr, state: &PlanResolverState) -> PlanResult<()> {
+     let mut bare_column = None;
+ 
 diff --git a/crates/sail-plan/src/resolver/query/read.rs b/crates/sail-plan/src/resolver/query/read.rs
-index f2cf965..d78497b 100644
+index f2cf965..2160849 100644
 --- a/crates/sail-plan/src/resolver/query/read.rs
 +++ b/crates/sail-plan/src/resolver/query/read.rs
-@@ -1,28 +1,23 @@
+@@ -1,30 +1,29 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::collections::HashSet;
  use std::sync::Arc;
@@ -38279,7 +39100,9 @@ index f2cf965..d78497b 100644
  use datafusion::datasource::{TableProvider, provider_as_source, source_as_provider};
  use datafusion_common::{DFSchema, ScalarValue, TableReference};
 -use datafusion_expr::{Expr, LogicalPlan, SubqueryAlias, TableScan, TableSource, UNNAMED_TABLE};
-+use datafusion_expr::{Expr, LogicalPlan, TableScan, TableSource};
++use datafusion_expr::{
++    Expr, LogicalPlan, LogicalPlanBuilder, ScalarUDF, TableScan, TableSource, col, lit,
++};
  use rand::{RngExt, rng};
 -use sail_catalog::manager::CatalogManager;
  use sail_common::spec;
@@ -38291,16 +39114,21 @@ index f2cf965..d78497b 100644
  use sail_common_datafusion::rename::table_provider::RenameTableProvider;
  use sail_common_datafusion::utils::items::ItemTaker;
 -use sail_python_udf::udf::pyspark_unresolved_udf::PySparkUnresolvedUDF;
++use sail_function::scalar::math::random::Random;
  
- use super::sample::SAMPLE_ROUNDING_EPSILON;
+-use super::sample::SAMPLE_ROUNDING_EPSILON;
  use crate::error::{PlanError, PlanResult};
  use crate::function::{get_built_in_table_function, is_built_in_generator_function};
  use crate::resolver::PlanResolver;
 -use crate::resolver::function::PythonUdtf;
  use crate::resolver::state::PlanResolverState;
  
++const SAMPLE_ROUNDING_EPSILON: f64 = 1e-6;
++
  impl PlanResolver<'_> {
-@@ -41,140 +36,24 @@ impl PlanResolver<'_> {
+     /// Resolves a named table or view reference into a logical plan node.
+     /// Looks up the name in the catalog and produces the appropriate plan
+@@ -41,140 +40,24 @@ impl PlanResolver<'_> {
              options,
          } = table;
  
@@ -38455,7 +39283,7 @@ index f2cf965..d78497b 100644
      }
  
      pub(super) async fn resolve_query_read_dynamic_table(
-@@ -205,32 +84,6 @@ impl PlanResolver<'_> {
+@@ -205,32 +88,6 @@ impl PlanResolver<'_> {
          .await
      }
  
@@ -38488,7 +39316,34 @@ index f2cf965..d78497b 100644
      /// Apply TABLESAMPLE clause to a LogicalPlan
      pub(super) async fn apply_table_sample(
          &self,
-@@ -340,160 +193,37 @@ impl PlanResolver<'_> {
+@@ -275,8 +132,24 @@ impl PlanResolver<'_> {
+             r.random::<i64>()
+         });
+ 
+-        // TABLESAMPLE is without replacement
+-        Self::apply_sample_to_plan(plan, lower_bound, upper_bound, false, seed, state)
++        // Keep the existing Bernoulli filter used by SQL TABLESAMPLE.
++        // TODO: Random restarts per batch; Spark needs a sampler that advances per partition.
++        let name = state.register_field_name("rand_value");
++        let columns = plan
++            .schema()
++            .columns()
++            .into_iter()
++            .map(Expr::Column)
++            .collect::<Vec<_>>();
++        let random = ScalarUDF::from(Random::new())
++            .call(vec![lit(seed)])
++            .alias(&name);
++        Ok(LogicalPlanBuilder::from(plan)
++            .project(columns.iter().cloned().chain([random]).collect::<Vec<_>>())?
++            .filter(col(&name).lt(lit(upper_bound)))?
++            .filter(col(&name).gt_eq(lit(lower_bound)))?
++            .project(columns)?
++            .build()?)
+     }
+ 
+     /// Evaluate a sample expression to get a float value.
+@@ -340,160 +213,37 @@ impl PlanResolver<'_> {
              });
              self.resolve_query_project(None, vec![expr], state).await
          } else {
@@ -38676,6 +39531,379 @@ index f2cf965..d78497b 100644
      pub(super) fn resolve_table_provider_with_rename(
          &self,
          table_provider: Arc<dyn TableProvider>,
+diff --git a/crates/sail-plan/src/resolver/query/repartition.rs b/crates/sail-plan/src/resolver/query/repartition.rs
+deleted file mode 100644
+index 523a662..0000000
+--- a/crates/sail-plan/src/resolver/query/repartition.rs
++++ /dev/null
+@@ -1,60 +0,0 @@
+-use std::sync::Arc;
+-
+-use datafusion_expr::{Extension, LogicalPlan};
+-use sail_common::spec;
+-use sail_logical_plan::repartition::{ExplicitRepartitionKind, ExplicitRepartitionNode};
+-
+-use crate::error::PlanResult;
+-use crate::resolver::PlanResolver;
+-use crate::resolver::state::PlanResolverState;
+-
+-impl PlanResolver<'_> {
+-    pub(super) async fn resolve_query_repartition(
+-        &self,
+-        input: spec::QueryPlan,
+-        num_partitions: usize,
+-        shuffle: bool,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self
+-            .resolve_query_plan_with_hidden_fields(input, state)
+-            .await?;
+-        let kind = if shuffle {
+-            ExplicitRepartitionKind::RoundRobin
+-        } else {
+-            ExplicitRepartitionKind::Coalesce
+-        };
+-        Ok(LogicalPlan::Extension(Extension {
+-            node: Arc::new(ExplicitRepartitionNode::new(
+-                Arc::new(input),
+-                Some(num_partitions),
+-                kind,
+-                vec![],
+-            )),
+-        }))
+-    }
+-
+-    pub(super) async fn resolve_query_repartition_by_expression(
+-        &self,
+-        input: spec::QueryPlan,
+-        partition_expressions: Vec<spec::Expr>,
+-        num_partitions: Option<usize>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self
+-            .resolve_query_plan_with_hidden_fields(input, state)
+-            .await?;
+-        let schema = input.schema();
+-        let expr = self
+-            .resolve_expressions(partition_expressions, schema, state)
+-            .await?;
+-        Ok(LogicalPlan::Extension(Extension {
+-            node: Arc::new(ExplicitRepartitionNode::new(
+-                Arc::new(input),
+-                num_partitions,
+-                ExplicitRepartitionKind::Hash,
+-                expr,
+-            )),
+-        }))
+-    }
+-}
+diff --git a/crates/sail-plan/src/resolver/query/sample.rs b/crates/sail-plan/src/resolver/query/sample.rs
+deleted file mode 100644
+index 184924a..0000000
+--- a/crates/sail-plan/src/resolver/query/sample.rs
++++ /dev/null
+@@ -1,301 +0,0 @@
+-use std::sync::Arc;
+-
+-use datafusion::arrow::datatypes::DataType;
+-use datafusion::functions_nested::expr_fn;
+-use datafusion_common::ScalarValue;
+-use datafusion_expr::expr::ScalarFunction;
+-use datafusion_expr::select_expr::SelectExpr;
+-use datafusion_expr::{Expr, Extension, LogicalPlan, LogicalPlanBuilder, ScalarUDF, col, lit};
+-use rand::{RngExt, rng};
+-use sail_common::spec;
+-use sail_common::spec::{NullOrdering, SortDirection, SortOrder};
+-use sail_function::scalar::math::rand_poisson::RandPoisson;
+-use sail_function::scalar::math::random::Random;
+-use sail_logical_plan::sort::SortWithinPartitionsNode;
+-
+-use crate::error::{PlanError, PlanResult};
+-use crate::resolver::PlanResolver;
+-use crate::resolver::state::PlanResolverState;
+-
+-pub(super) const SAMPLE_ROUNDING_EPSILON: f64 = 1e-6;
+-
+-/// Copied from `arrow_ord::rank::can_rank` (private in arrow-ord).
+-fn can_rank(data_type: &DataType) -> bool {
+-    data_type.is_primitive()
+-        || matches!(
+-            data_type,
+-            DataType::Boolean
+-                | DataType::Utf8
+-                | DataType::LargeUtf8
+-                | DataType::Binary
+-                | DataType::LargeBinary
+-        )
+-}
+-
+-/// Copied from `arrow_ord::sort::can_sort_to_indices` (private in arrow-ord).
+-fn can_sort_to_indices(data_type: &DataType) -> bool {
+-    data_type.is_primitive()
+-        || matches!(
+-            data_type,
+-            DataType::Boolean
+-                | DataType::Utf8
+-                | DataType::LargeUtf8
+-                | DataType::Utf8View
+-                | DataType::Binary
+-                | DataType::LargeBinary
+-                | DataType::BinaryView
+-                | DataType::FixedSizeBinary(_)
+-        )
+-        || match data_type {
+-            DataType::List(f) if can_rank(f.data_type()) => true,
+-            DataType::LargeList(f) if can_rank(f.data_type()) => true,
+-            DataType::FixedSizeList(f, _) if can_rank(f.data_type()) => true,
+-            DataType::Dictionary(_, values) if can_rank(values.as_ref()) => true,
+-            DataType::RunEndEncoded(_, f) if can_sort_to_indices(f.data_type()) => true,
+-            _ => false,
+-        }
+-}
+-
+-impl PlanResolver<'_> {
+-    pub(super) async fn resolve_query_sample(
+-        &self,
+-        sample: spec::Sample,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let spec::Sample {
+-            input,
+-            lower_bound,
+-            upper_bound,
+-            with_replacement,
+-            seed,
+-            deterministic_order,
+-        } = sample;
+-        // if defined seed use these values otherwise use random seed
+-        // to generate the random values in with_replacement mode, in lambda value
+-        let seed: i64 = seed.unwrap_or_else(|| {
+-            let mut rng = rng();
+-            rng.random::<i64>()
+-        });
+-
+-        // TODO: Separate child construction from analysis so Spark's fraction check
+-        //  runs between them; child-construction errors must still win.
+-        let mut input: LogicalPlan = self
+-            .resolve_query_plan_with_hidden_fields(*input, state)
+-            .await?;
+-
+-        if deterministic_order {
+-            let schema = input.schema();
+-            let columns = schema.columns();
+-
+-            // Build spec::SortOrder using user-facing column names
+-            let sort_orders: Vec<SortOrder> = schema
+-                .fields()
+-                .iter()
+-                .enumerate()
+-                .filter_map(|(idx, field)| {
+-                    if !can_sort_to_indices(field.data_type()) {
+-                        return None;
+-                    }
+-                    let col = &columns[idx];
+-                    let info = state.get_field_info(&col.name).ok()?;
+-                    if info.is_hidden() {
+-                        return None;
+-                    }
+-                    // Use user-facing name for proper resolution
+-                    Some(SortOrder {
+-                        child: Box::new(spec::Expr::UnresolvedAttribute {
+-                            name: spec::ObjectName::bare(info.name().to_string()),
+-                            plan_id: None,
+-                            is_metadata_column: false,
+-                        }),
+-                        direction: SortDirection::Ascending,
+-                        null_ordering: NullOrdering::NullsFirst,
+-                    })
+-                })
+-                .collect();
+-
+-            if !sort_orders.is_empty() {
+-                let sort_exprs = self
+-                    .resolve_sort_orders(sort_orders, true, input.schema(), state)
+-                    .await?;
+-
+-                input = LogicalPlan::Extension(Extension {
+-                    node: Arc::new(SortWithinPartitionsNode::new(
+-                        Arc::new(input),
+-                        sort_exprs,
+-                        None,
+-                    )),
+-                });
+-            }
+-        }
+-
+-        Self::apply_sample_to_plan(
+-            input,
+-            lower_bound,
+-            upper_bound,
+-            with_replacement,
+-            seed,
+-            state,
+-        )
+-    }
+-
+-    /// Apply sampling to an existing LogicalPlan.
+-    /// This is used by both `resolve_query_sample` and TABLESAMPLE clause handling.
+-    pub(super) fn apply_sample_to_plan(
+-        input: LogicalPlan,
+-        lower_bound: f64,
+-        upper_bound: f64,
+-        with_replacement: bool,
+-        seed: i64,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let fraction = upper_bound - lower_bound;
+-        let valid_fraction = if with_replacement {
+-            fraction >= -SAMPLE_ROUNDING_EPSILON
+-        } else {
+-            (-SAMPLE_ROUNDING_EPSILON..=1.0 + SAMPLE_ROUNDING_EPSILON).contains(&fraction)
+-        };
+-        if !valid_fraction {
+-            let requirement = if with_replacement {
+-                "nonnegative with replacement"
+-            } else {
+-                "on interval [0, 1] without replacement"
+-            };
+-            return Err(PlanError::invalid(format!(
+-                "Sampling fraction ({fraction}) must be {requirement}"
+-            )));
+-        }
+-
+-        // TODO: Move these individual-bound checks into the partition-scoped sampler
+-        // described below. Spark constructs `BernoulliCellSampler` during execution, so
+-        // schema-only analysis accepts fraction-valid bounds. Keep the eager checks until
+-        // that sampler exists; removing them now would silently execute invalid ranges.
+-        if !with_replacement {
+-            if lower_bound > upper_bound + SAMPLE_ROUNDING_EPSILON {
+-                return Err(PlanError::invalid(format!(
+-                    "Lower bound ({lower_bound}) must be <= upper bound ({upper_bound})"
+-                )));
+-            }
+-            if lower_bound < -SAMPLE_ROUNDING_EPSILON {
+-                return Err(PlanError::invalid(format!(
+-                    "Lower bound ({lower_bound}) must be >= 0.0"
+-                )));
+-            }
+-            if upper_bound > 1.0 + SAMPLE_ROUNDING_EPSILON {
+-                return Err(PlanError::invalid(format!(
+-                    "Upper bound ({upper_bound}) must be <= 1.0"
+-                )));
+-            }
+-        }
+-
+-        // TODO: Replace these batch-local UDFs with partition-scoped samplers. Spark uses
+-        // `seed + partition_index` for Bernoulli sampling and per-partition seeds derived
+-        // from `java.util.Random(seed)` for replacement sampling, then advances one sampler
+-        // across the whole partition. `Random` and `RandPoisson` currently restart from the
+-        // same seed for every Arrow batch in every partition.
+-        // TODO: Use a physical sampling boundary. At replacement fraction zero,
+-        //  Spark's `SampleExec` skips a child's deferred projection evaluation.
+-        let rand_column_name: String = state.register_field_name("rand_value");
+-        let rand_expr: Expr = if with_replacement {
+-            Expr::ScalarFunction(ScalarFunction {
+-                func: Arc::new(ScalarUDF::from(RandPoisson::new())),
+-                args: vec![
+-                    Expr::Literal(ScalarValue::Float64(Some(fraction.max(0.0))), None),
+-                    Expr::Literal(ScalarValue::Int64(Some(seed)), None),
+-                ],
+-            })
+-            .alias(&rand_column_name)
+-        } else {
+-            Expr::ScalarFunction(ScalarFunction {
+-                func: Arc::new(ScalarUDF::from(Random::new())),
+-                args: vec![Expr::Literal(ScalarValue::Int64(Some(seed)), None)],
+-            })
+-            .alias(&rand_column_name)
+-        };
+-        let init_exprs: Vec<Expr> = input
+-            .schema()
+-            .columns()
+-            .iter()
+-            .map(|col| Expr::Column(col.clone()))
+-            .collect();
+-        let mut all_exprs: Vec<Expr> = init_exprs.clone();
+-        all_exprs.push(rand_expr);
+-        let plan_with_rand: LogicalPlan = LogicalPlanBuilder::from(input)
+-            .project(all_exprs)?
+-            .build()?;
+-
+-        if with_replacement {
+-            Self::resolve_sample_with_replacement(
+-                plan_with_rand,
+-                &rand_column_name,
+-                init_exprs,
+-                state,
+-            )
+-        } else {
+-            Self::resolve_sample_without_replacement(
+-                plan_with_rand,
+-                &rand_column_name,
+-                lower_bound,
+-                upper_bound,
+-                init_exprs,
+-            )
+-        }
+-    }
+-
+-    /// Bernoulli sampling - filter rows where random value falls in [lower, upper)
+-    fn resolve_sample_without_replacement(
+-        plan_with_rand: LogicalPlan,
+-        rand_column_name: &str,
+-        lower_bound: f64,
+-        upper_bound: f64,
+-        init_exprs: Vec<Expr>,
+-    ) -> PlanResult<LogicalPlan> {
+-        let plan = LogicalPlanBuilder::from(plan_with_rand)
+-            .filter(col(rand_column_name).lt(lit(upper_bound)))?
+-            .filter(col(rand_column_name).gt_eq(lit(lower_bound)))?
+-            .build()?;
+-        let plan = LogicalPlanBuilder::from(plan)
+-            .project(init_exprs)?
+-            .build()?;
+-        Ok(plan)
+-    }
+-
+-    /// Poisson sampling - replicate rows based on Poisson distribution
+-    fn resolve_sample_with_replacement(
+-        plan_with_rand: LogicalPlan,
+-        rand_column_name: &str,
+-        init_exprs: Vec<Expr>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let init_exprs_aux: Vec<Expr> = plan_with_rand
+-            .schema()
+-            .columns()
+-            .iter()
+-            .map(|col| Expr::Column(col.clone()))
+-            .collect();
+-        let array_column_name: String = state.register_field_name("array_value");
+-        let arr_expr =
+-            expr_fn::array_repeat(lit(1_i64), col(rand_column_name)).alias(&array_column_name);
+-        let plan = LogicalPlanBuilder::from(plan_with_rand)
+-            .project(
+-                init_exprs_aux
+-                    .into_iter()
+-                    .chain(vec![arr_expr])
+-                    .map(Into::into)
+-                    .collect::<Vec<SelectExpr>>(),
+-            )?
+-            .build()?;
+-        let plan = LogicalPlanBuilder::from(plan)
+-            .unnest_column(array_column_name)?
+-            .build()?;
+-        let plan = LogicalPlanBuilder::from(plan)
+-            .project(
+-                init_exprs
+-                    .into_iter()
+-                    .map(Into::into)
+-                    .collect::<Vec<SelectExpr>>(),
+-            )?
+-            .build()?;
+-        Ok(plan)
+-    }
+-}
 diff --git a/crates/sail-plan/src/resolver/query/stat.rs b/crates/sail-plan/src/resolver/query/stat.rs
 deleted file mode 100644
 index 639a5d3..0000000
