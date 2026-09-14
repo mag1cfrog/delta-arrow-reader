@@ -32,7 +32,6 @@ async fn resolve(ctx: &SessionContext, sql: &str, settings: &Value) -> ProbeResu
     let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
     let mut config = PlanConfig::default();
     config.ansi_mode = settings["spark.sql.ansi.enabled"] == "true";
-    config.case_sensitive = settings["spark.sql.caseSensitive"] == "true";
     config.session_timezone = settings["spark.sql.session.timeZone"]
         .as_str()
         .ok_or("missing session timezone")?

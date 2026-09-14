@@ -6,16 +6,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 pub const ARROW_DECIMAL128_MAX_PRECISION: u8 = arrow_schema::DECIMAL128_MAX_PRECISION;
-pub const ARROW_DECIMAL128_MAX_SCALE: i8 = arrow_schema::DECIMAL128_MAX_SCALE;
 pub const ARROW_DECIMAL256_MAX_PRECISION: u8 = arrow_schema::DECIMAL256_MAX_PRECISION;
 pub const ARROW_DECIMAL256_MAX_SCALE: i8 = arrow_schema::DECIMAL256_MAX_SCALE;
-
-/// Spark column metadata key for Arrow field metadata.
-///
-/// Spark stores the entire column metadata dictionary as a JSON-encoded object
-/// under this single key to avoid collisions with other Arrow field metadata
-/// (e.g. extension type keys).
-pub const SPARK_METADATA_JSON_KEY: &str = "SPARK::metadata::json";
 
 /// Sail metadata key for Spark UDT information stored in Arrow field metadata.
 ///
@@ -40,13 +32,6 @@ pub const SAIL_MAP_FIELD_NAME: &str = "entries";
 pub const SAIL_MAP_KEY_FIELD_NAME: &str = "key";
 /// Field name for map type's value.
 pub const SAIL_MAP_VALUE_FIELD_NAME: &str = "value";
-
-/// Default SRID for Geometry and Geography types (Spark 4.1 default: 4326 / WGS84).
-pub const GEOSPATIAL_DEFAULT_SRID: i32 = 4326;
-/// Mixed SRID value allowing different SRIDs per row (Spark 4.1: -1).
-pub const GEOSPATIAL_MIXED_SRID: i32 = -1;
-/// Default CRS string for SRID 4326 (Spark 4.1 format: OGC:CRS84).
-pub const GEOSPATIAL_DEFAULT_CRS: &str = "OGC:CRS84";
 
 /// Edge interpolation algorithm for Geography type.
 /// Determines how edges are interpolated between vertices.

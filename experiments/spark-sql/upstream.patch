@@ -11487,10 +11487,10 @@ index 391f59b..0000000
 -
 -pub use builder::{ServerBuilder, ServerBuilderOptions};
 diff --git a/crates/sail-common/src/spec/data_type.rs b/crates/sail-common/src/spec/data_type.rs
-index 206d070..3a1c5a1 100644
+index 206d070..a018f87 100644
 --- a/crates/sail-common/src/spec/data_type.rs
 +++ b/crates/sail-common/src/spec/data_type.rs
-@@ -1,12 +1,10 @@
+@@ -1,24 +1,14 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::fmt::Display;
  use std::ops::Deref;
@@ -11502,9 +11502,33 @@ index 206d070..3a1c5a1 100644
 -use crate::error::{CommonError, CommonResult};
 -
  pub const ARROW_DECIMAL128_MAX_PRECISION: u8 = arrow_schema::DECIMAL128_MAX_PRECISION;
- pub const ARROW_DECIMAL128_MAX_SCALE: i8 = arrow_schema::DECIMAL128_MAX_SCALE;
+-pub const ARROW_DECIMAL128_MAX_SCALE: i8 = arrow_schema::DECIMAL128_MAX_SCALE;
  pub const ARROW_DECIMAL256_MAX_PRECISION: u8 = arrow_schema::DECIMAL256_MAX_PRECISION;
-@@ -55,33 +53,13 @@ pub const GEOSPATIAL_DEFAULT_CRS: &str = "OGC:CRS84";
+ pub const ARROW_DECIMAL256_MAX_SCALE: i8 = arrow_schema::DECIMAL256_MAX_SCALE;
+ 
+-/// Spark column metadata key for Arrow field metadata.
+-///
+-/// Spark stores the entire column metadata dictionary as a JSON-encoded object
+-/// under this single key to avoid collisions with other Arrow field metadata
+-/// (e.g. extension type keys).
+-pub const SPARK_METADATA_JSON_KEY: &str = "SPARK::metadata::json";
+-
+ /// Sail metadata key for Spark UDT information stored in Arrow field metadata.
+ ///
+ /// This is internal to Sail and should not be exposed as Spark column metadata.
+@@ -43,45 +33,18 @@ pub const SAIL_MAP_KEY_FIELD_NAME: &str = "key";
+ /// Field name for map type's value.
+ pub const SAIL_MAP_VALUE_FIELD_NAME: &str = "value";
+ 
+-/// Default SRID for Geometry and Geography types (Spark 4.1 default: 4326 / WGS84).
+-pub const GEOSPATIAL_DEFAULT_SRID: i32 = 4326;
+-/// Mixed SRID value allowing different SRIDs per row (Spark 4.1: -1).
+-pub const GEOSPATIAL_MIXED_SRID: i32 = -1;
+-/// Default CRS string for SRID 4326 (Spark 4.1 format: OGC:CRS84).
+-pub const GEOSPATIAL_DEFAULT_CRS: &str = "OGC:CRS84";
+-
+ /// Edge interpolation algorithm for Geography type.
+ /// Determines how edges are interpolated between vertices.
  ///
  /// Spark 4.1 only defines Spherical interpolation for Geography types.
  /// Reference: org.apache.spark.sql.types.EdgeInterpolationAlgorithm
@@ -11539,7 +11563,7 @@ index 206d070..3a1c5a1 100644
  impl std::fmt::Display for EdgeInterpolationAlgorithm {
      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
          match self {
-@@ -95,13 +73,8 @@ impl std::fmt::Display for EdgeInterpolationAlgorithm {
+@@ -95,13 +58,8 @@ impl std::fmt::Display for EdgeInterpolationAlgorithm {
  /// Additionally, custom data types are supported for cases not covered by Arrow.
  ///
  /// The style of expressing the type may not always be exactly the same as Arrow's.
@@ -11554,7 +11578,7 @@ index 206d070..3a1c5a1 100644
  pub enum DataType {
      /// Null type.
      /// Corresponds to [`arrow_schema::DataType::Null`].
-@@ -308,31 +281,14 @@ pub enum DataType {
+@@ -308,31 +266,14 @@ pub enum DataType {
      ConfiguredBinary,
  }
  
@@ -11588,7 +11612,7 @@ index 206d070..3a1c5a1 100644
  pub struct Field {
      pub name: String,
      pub data_type: DataType,
-@@ -346,7 +302,7 @@ pub type FieldRef = Arc<Field>;
+@@ -346,7 +287,7 @@ pub type FieldRef = Arc<Field>;
  
  /// A cheaply cloneable, owned slice of [`FieldRef`].
  /// The implementation is copied from [`arrow_schema::Fields`].
@@ -11597,7 +11621,7 @@ index 206d070..3a1c5a1 100644
  pub struct Fields(Arc<[FieldRef]>);
  
  impl Fields {
-@@ -416,7 +372,7 @@ impl<'a> IntoIterator for &'a Fields {
+@@ -416,7 +357,7 @@ impl<'a> IntoIterator for &'a Fields {
  
  /// A cheaply cloneable, owned collection of [`FieldRef`] and their corresponding type IDs.
  /// The implementation is copied from [`arrow_schema::UnionFields`].
@@ -11606,7 +11630,7 @@ index 206d070..3a1c5a1 100644
  pub struct UnionFields(Arc<[(i8, FieldRef)]>);
  
  impl UnionFields {
-@@ -441,21 +397,7 @@ impl FromIterator<(i8, FieldRef)> for UnionFields {
+@@ -441,21 +382,7 @@ impl FromIterator<(i8, FieldRef)> for UnionFields {
  }
  
  /// Sparse or dense union layouts.
@@ -11629,7 +11653,7 @@ index 206d070..3a1c5a1 100644
  #[repr(i32)]
  pub enum UnionMode {
      /// Sparse union layout.
-@@ -464,12 +406,6 @@ pub enum UnionMode {
+@@ -464,12 +391,6 @@ pub enum UnionMode {
      Dense = 1,
  }
  
@@ -11642,7 +11666,7 @@ index 206d070..3a1c5a1 100644
  impl Display for UnionMode {
      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
          match self {
-@@ -480,21 +416,7 @@ impl Display for UnionMode {
+@@ -480,21 +401,7 @@ impl Display for UnionMode {
  }
  
  /// YEAR_MONTH, DAY_TIME, MONTH_DAY_NANO interval in SQL style.
@@ -11665,7 +11689,7 @@ index 206d070..3a1c5a1 100644
  #[repr(i32)]
  pub enum IntervalUnit {
      /// Indicates the number of elapsed whole months, stored as 4-byte integers.
-@@ -513,83 +435,7 @@ pub enum IntervalUnit {
+@@ -513,83 +420,7 @@ pub enum IntervalUnit {
      MonthDayNano = 2,
  }
  
@@ -11750,7 +11774,7 @@ index 206d070..3a1c5a1 100644
  #[repr(i32)]
  pub enum IntervalFieldType {
      Year = 0,
-@@ -600,43 +446,12 @@ pub enum IntervalFieldType {
+@@ -600,43 +431,12 @@ pub enum IntervalFieldType {
      Second = 5,
  }
  
@@ -11796,7 +11820,7 @@ index 206d070..3a1c5a1 100644
  pub enum TimeUnit {
      Second,
      Millisecond,
-@@ -646,8 +461,7 @@ pub enum TimeUnit {
+@@ -646,8 +446,7 @@ pub enum TimeUnit {
  
  // TODO: Currently the behavior for VarChar and Char is not implemented.
  /// Reference: https://spark.apache.org/docs/3.5.3/sql-ref-datatypes.html#supported-data-types
@@ -34734,7 +34758,7 @@ index 2aae312..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/src/config.rs b/crates/sail-plan/src/config.rs
-index 692c016..6797347 100644
+index 692c016..770fb62 100644
 --- a/crates/sail-plan/src/config.rs
 +++ b/crates/sail-plan/src/config.rs
 @@ -1,24 +1,14 @@
@@ -34763,7 +34787,13 @@ index 692c016..6797347 100644
  #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
  pub enum MapKeyDedupPolicy {
      #[default]
-@@ -36,16 +26,8 @@ pub struct PlanConfig {
+@@ -30,68 +20,31 @@ pub enum MapKeyDedupPolicy {
+ pub struct PlanConfig {
+     /// The time zone of the session.
+     pub session_timezone: Arc<str>,
+-    /// The locale of the session.
+-    pub session_locale: Arc<str>,
+     /// The default timestamp type.
      pub default_timestamp_type: DefaultTimestampType,
      /// Whether to use large variable types in Arrow.
      pub arrow_use_large_var_types: bool,
@@ -34780,10 +34810,10 @@ index 692c016..6797347 100644
      /// Policy for duplicate keys created by map functions.
      pub map_key_dedup_policy: MapKeyDedupPolicy,
      /// Whether to allow cartesian products (cross joins) without explicit `CROSS JOIN` syntax.
-@@ -53,27 +35,11 @@ pub struct PlanConfig {
-     /// Whether identifiers (e.g. column names) are matched case-sensitively.
-     /// Spark defaults to case-insensitive matching (`spark.sql.caseSensitive=false`).
-     pub case_sensitive: bool,
+     pub cross_join_enabled: bool,
+-    /// Whether identifiers (e.g. column names) are matched case-sensitively.
+-    /// Spark defaults to case-insensitive matching (`spark.sql.caseSensitive=false`).
+-    pub case_sensitive: bool,
 -    /// The maximum number of distinct values collected for a pivot without an explicit
 -    /// value list (`spark.sql.pivotMaxValues`, default 10000). Exceeding it is an error.
 -    pub pivot_max_values: usize,
@@ -34808,8 +34838,8 @@ index 692c016..6797347 100644
  impl Default for PlanConfig {
      fn default() -> Self {
          Self {
-@@ -81,17 +47,11 @@ impl Default for PlanConfig {
-             session_locale: Arc::from("en-US"),
+             session_timezone: Arc::from("UTC"),
+-            session_locale: Arc::from("en-US"),
              default_timestamp_type: DefaultTimestampType::TimestampLtz,
              arrow_use_large_var_types: false,
 -            pyspark_udf_config: Arc::new(PySparkUdfConfig::default()),
@@ -34820,7 +34850,7 @@ index 692c016..6797347 100644
 -            store_assignment_policy: StoreAssignmentPolicy::Ansi,
              map_key_dedup_policy: MapKeyDedupPolicy::Exception,
              cross_join_enabled: true,
-             case_sensitive: false,
+-            case_sensitive: false,
 -            pivot_max_values: 10000,
 -            tvf_allow_multiple_table_arguments: false,
              legacy_allow_parameterless_count: false,
@@ -52907,6 +52937,44 @@ index dc8a925..40f650a 100644
      match value {
          StringValue::Valid { value, prefix: _ } => Ok(value),
          StringValue::Invalid { reason } => Err(SqlError::invalid(reason)),
+diff --git a/crates/sail-sql-macro/src/attribute.rs b/crates/sail-sql-macro/src/attribute.rs
+index b1126c9..983e0d6 100644
+--- a/crates/sail-sql-macro/src/attribute.rs
++++ b/crates/sail-sql-macro/src/attribute.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::mem;
+ 
+ use syn::punctuated::Punctuated;
+@@ -86,28 +87,4 @@ impl<'a> AttributeExtractor<'a> {
+             transform(one.map(|x| x.value))
+         }
+     }
+-
+-    /// Extracts a single path from the attribute.
+-    /// The path is removed from the extractor.
+-    /// Returns an error if there are multiple paths with the same name.
+-    #[expect(unused)]
+-    pub fn extract_path(&mut self, path: &str) -> syn::Result<Option<()>> {
+-        let paths = mem::take(&mut self.paths);
+-        let (mut extracted, remaining) = paths
+-            .into_iter()
+-            .partition::<Vec<_>, _>(|x| x.is_ident(path));
+-        self.paths = remaining;
+-        let one = extracted.pop();
+-        if let Some(other) = extracted.last() {
+-            Err(syn::Error::new(
+-                other.span(),
+-                format!(
+-                    "duplicated `{}` path for the `{}` attribute",
+-                    path, self.name
+-                ),
+-            ))
+-        } else {
+-            Ok(one.map(|_| ()))
+-        }
+-    }
+ }
 diff --git a/crates/sail-sql-macro/src/lib.rs b/crates/sail-sql-macro/src/lib.rs
 index ac1b55c..03e7732 100644
 --- a/crates/sail-sql-macro/src/lib.rs

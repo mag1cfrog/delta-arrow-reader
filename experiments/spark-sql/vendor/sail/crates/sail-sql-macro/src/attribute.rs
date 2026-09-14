@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::mem;
 
 use syn::punctuated::Punctuated;
@@ -84,30 +85,6 @@ impl<'a> AttributeExtractor<'a> {
             ))
         } else {
             transform(one.map(|x| x.value))
-        }
-    }
-
-    /// Extracts a single path from the attribute.
-    /// The path is removed from the extractor.
-    /// Returns an error if there are multiple paths with the same name.
-    #[expect(unused)]
-    pub fn extract_path(&mut self, path: &str) -> syn::Result<Option<()>> {
-        let paths = mem::take(&mut self.paths);
-        let (mut extracted, remaining) = paths
-            .into_iter()
-            .partition::<Vec<_>, _>(|x| x.is_ident(path));
-        self.paths = remaining;
-        let one = extracted.pop();
-        if let Some(other) = extracted.last() {
-            Err(syn::Error::new(
-                other.span(),
-                format!(
-                    "duplicated `{}` path for the `{}` attribute",
-                    path, self.name
-                ),
-            ))
-        } else {
-            Ok(one.map(|_| ()))
         }
     }
 }
