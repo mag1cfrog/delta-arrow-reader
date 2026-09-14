@@ -97,7 +97,46 @@ Selected self percentages from [the symbol capture](decimal-profile.json):
 
 These are weighted samples in individual functions, not percentages of time for complete division or rounding stages. Optimized-build call chains did not reliably recover parent attribution. In particular, wide division is used both by SQL division and by rounding; the profile does not assign all of that cost to either caller.
 
-The locked [DataFusion rounding implementation](https://github.com/apache/datafusion/blob/54.1.0/datafusion/functions/src/math/round.rs#L645) computes the power-of-ten factor and rounding threshold inside the per-value helper, even when the scale argument is constant for the batch. It separately computes the quotient and remainder. Arrow's [public division and remainder methods](https://github.com/apache/arrow-rs/blob/58.4.0/arrow-buffer/src/bigint/mod.rs#L485) each call its private long-division helper. The profile and source therefore give concrete targets: precompute constant-scale rounding parameters once per batch, then investigate repeated wide division and rescaling. This is execution work in existing numerical functions, rather than a reason to import another analyzer. No optimization or speedup from those proposed changes has been tested yet.
+The locked [DataFusion rounding implementation](https://github.com/apache/datafusion/blob/54.1.0/datafusion/functions/src/math/round.rs#L645) computes the power-of-ten factor and rounding threshold inside the per-value helper, even when the scale argument is constant for the batch. It separately computes the quotient and remainder. Arrow's [public division and remainder methods](https://github.com/apache/arrow-rs/blob/58.4.0/arrow-buffer/src/bigint/mod.rs#L485) each call its private long-division helper. The profile and source therefore give concrete targets: precompute constant-scale rounding parameters once per batch, then investigate repeated wide division and rescaling. This is execution work in existing numerical functions, rather than a reason to import another analyzer. The following experiment tests only constant-scale parameter preparation; repeated wide division and rescaling remain unchanged.
+
+## Constant-scale rounding experiment
+
+The [optional DataFusion patch](datafusion-round-constant.patch) precomputes the power-of-ten factor and HALF_UP threshold once per batch for a fixed, nonnegative scale. It applies only when rounding reduces the input scale directly to the requested output scale. Dynamic scales, negative scales, rescaling and scalar-only calls keep their existing paths. If preparing a factor fails, the code falls back to the original per-value helper so an empty or all-NULL array does not acquire an eager arithmetic error. Existing precision checks stay in place.
+
+This is a locally written experiment against `datafusion-functions` 54.1.0's `src/math/round.rs`. It changes the existing Rust function and adds no arithmetic UDF, analyzer or execution node. The patch adds 176 lines and removes 43: a net 20 runtime lines plus 113 lines for one generic regression test, including formatting and comments. It covers the Decimal32/64/128/256 array branches; the SQL benchmark exercises Decimal128 and Decimal256. The original Apache license header stays intact. The patch is applied only to a temporary dependency copy, and is not enabled in the host workspace.
+
+Both variants use the existing Sail `decimal-division.patch` and the same path override of DataFusion 54.1.0. Here, `before` means the arithmetic candidate with original DataFusion rounding, and `after` adds the rounding optimization. They have identical SQL, output types, NULL counts, first values and physical plans across all 26 benchmark cases. This comparison preserves the tested results, unlike the earlier comparison with unmodified Sail. No dependency versions change; the isolated runtime lockfile differs only in replacing the registry source of `datafusion-functions` with the local path.
+
+Validation passed:
+
+- All 168 Decimal observations are byte-identical before and after, including captured logical plans and error text. Agreement with Spark stays at 152/168, with the same 16 known differences.
+- All 116 Delta corpus observations agree with the previous candidate. Input schemas and rows match, and all 18 adapter checks pass.
+- All six DataFusion rounding unit tests pass. The new generic test compares prepared and original helper results across all four widths, signs, maximum precision, negative input scales, extreme decimal-place arguments and dynamic arguments. It also exercises each array branch with halfway values, NULL arguments, all-NULL arrays and empty arrays.
+- All 27 extraction runner tests pass. The main workspace's release executables are restored; its benchmark binary matches the earlier unmodified-vendor binary byte-for-byte.
+
+The benchmark uses the same rows, batches, CPU affinity, release profile, warmups and sample counts as above. All builds and correctness checks finished before timing. Each variant ran in four processes, ordered before, after, after, before, after, before, before, after. All 1,872 timed executions and 416 warmups passed their row/NULL checks. The table pools 36 samples per case and variant; negative changes mean lower elapsed time.
+
+| Input and divisor | Before ms, ANSI on | After ms, ANSI on | ANSI on elapsed change | ANSI off elapsed change |
+| --- | ---: | ---: | ---: | ---: |
+| DECIMAL(10,2) / column | 35.05 | 36.49 | +4.1% | +4.3% |
+| DECIMAL(10,2) / typed literal 3 | 35.35 | 33.94 | -4.0% | -5.3% |
+| DECIMAL(10,2) / integer literal 3 | 37.40 | 38.50 | +2.9% | +21.5% |
+| DECIMAL(18,4) / column | 136.83 | 119.01 | -13.0% | -10.8% |
+| DECIMAL(18,4) / typed literal 3 | 117.93 | 99.54 | -15.6% | -26.1% |
+| DECIMAL(18,4) / integer literal 3 | 26.44 | 27.19 | +2.8% | +2.9% |
+| DECIMAL(38,6) / column | 138.54 | 116.01 | -16.3% | -16.5% |
+| DECIMAL(38,6) / typed literal 3 | 121.27 | 98.26 | -19.0% | -19.0% |
+| DECIMAL(38,6) / integer literal 3 | 121.12 | 98.19 | -18.9% | -19.4% |
+| DECIMAL(10,2), NULL masks / column | 26.17 | 27.35 | +4.5% | +4.8% |
+| DECIMAL(10,2), NULL masks / typed literal 3 | 25.76 | 26.51 | +2.9% | +3.7% |
+| DOUBLE / column | 1.09 | 1.08 | -0.7% | -0.2% |
+| DOUBLE / typed literal 3 | 0.62 | 0.62 | +0.4% | +0.1% |
+
+The wide paths improve, but this patch should not be adopted as written. `DECIMAL(38,6)` column division drops from 138.54 to 116.01 ms under ANSI, a 16.3% reduction; its typed-literal case improves by 19.0%. Narrow paths can regress: `DECIMAL(10,2)` column division rises from 35.05 to 36.49 ms, and the Decimal128 path for `DECIMAL(18,4) / 3` rises from 26.44 to 27.19 ms. For the first of those cases, all four before process medians are 34.85-35.30 ms and all four after medians are 36.46-36.98 ms. The NULL-mask cases also slow by roughly 3-5%. DOUBLE control medians change by less than 1%.
+
+Some literal timings remain strongly variable. For `DECIMAL(10,2) / 3` with ANSI off, process medians span 24.16-34.94 ms before and 25.30-36.28 ms after. Its pooled 21.5% increase is not a stable estimate of the optimization's intrinsic cost. No samples were discarded. These observations do not distinguish the cost of the prepared closure from compiler code layout or other process-dependent effects, and are not a formal statistical estimate. They do establish that this build is not a universal improvement. The source change removes repeated parameter work; it leaves the two wide quotient/remainder operations, division, casts and rescaling in place.
+
+[Raw samples, plans, hashes and validation counts](decimal-round-performance.json) retain both variants and the individual process medians. The next bounded experiment should restrict preparation to Decimal256 and check that narrow paths keep their previous performance. Sharing wide quotient/remainder work would be a separate optimization. Neither experiment resolves the remaining 16 SQL compatibility differences. No dependency fork or performance patch is enabled by this report.
 
 ## Reproduce
 
@@ -185,4 +224,57 @@ perf report --stdio --no-children -g none --percent-limit 1 -t ';' \
   -i "$perf_dir/candidate.data" > "$perf_dir/candidate-self.txt"
 ```
 
-The recommended next slice is an isolated experiment that precomputes constant-scale Decimal rounding parameters, retaining the existing rounding/error semantics and checking the existing correctness and performance matrices. NULL/zero handling for non-Decimal columns remains separate semantic work. High-scale Decimal arithmetic still needs explicit treatment before general Spark division support can be claimed. String conversion and other operators remain separate work; importing the entire arithmetic PR would expand scope without resolving all of these gaps. This evaluation does not close the adoption decision in the owning issue.
+For the constant-scale experiment, start from a commit containing the optional patches. Use a separate checkout so the main source and lockfile stay unchanged. Both timed variants must use the same dependency copy and Cargo configuration:
+
+```bash
+set -e
+host_repo="$PWD"
+round_dir="$(mktemp -d /tmp/delta-round.XXXXXX)"
+git worktree add --detach "$round_dir/checkout" HEAD
+cd "$round_dir/checkout"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$round_dir/build}"
+python3 - "$round_dir" <<'PY'
+import json, shutil, subprocess, sys
+from pathlib import Path
+run = Path(sys.argv[1])
+meta = json.loads(subprocess.check_output([
+    'cargo', 'metadata', '--locked', '--format-version', '1',
+    '--manifest-path', 'experiments/spark-sql/Cargo.toml']))
+package = next(p for p in meta['packages']
+               if p['name'] == 'datafusion-functions' and p['version'] == '54.1.0')
+dep = run / 'datafusion-functions'
+shutil.copytree(Path(package['manifest_path']).parent, dep)
+(run / 'override.toml').write_text(
+    '[patch.crates-io]\ndatafusion-functions = { path = ' + json.dumps(str(dep)) + ' }\n')
+PY
+git apply experiments/spark-sql/decimal-division.patch
+# First build records the registry-to-path replacement in this checkout's lockfile.
+cargo build --release --config "$round_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml --examples -j 4
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$round_dir/before"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$round_dir/before-probe"
+git -C "$round_dir/datafusion-functions" apply \
+  "$PWD/experiments/spark-sql/datafusion-round-constant.patch"
+cargo build --release --locked --config "$round_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml --examples -j 4
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$round_dir/after"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$round_dir/after-probe"
+# Seed dependency versions for the upstream function's unit test.
+cp experiments/spark-sql/Cargo.lock "$round_dir/datafusion-functions/Cargo.lock"
+cargo test --release --manifest-path "$round_dir/datafusion-functions/Cargo.toml" \
+  --lib math::round::test -j 4
+for variant in before after; do
+  "$round_dir/$variant-probe" experiments/spark-sql/decimal-division.jsonl \
+    "$round_dir/$variant-capture.json"
+done
+cmp "$round_dir/before-capture.json" "$round_dir/after-capture.json"
+# Finish every build and correctness check before timing.
+for run in before-1 after-1 after-2 before-2 after-3 before-3 before-4 after-4; do
+  taskset -c 2 "$round_dir/${run%-*}" "$round_dir/$run.json"
+done
+cd "$host_repo"
+```
+
+Pool all four runs' `samples_ms` per case and variant as in the earlier benchmark, using `before` and `after` instead of `baseline` and `candidate`. Compare all non-timing case fields across both variants before interpreting the medians. Keep the detached checkout for inspection; it contains the temporary arithmetic patch and dependency override lockfile.
+
+The constant-scale experiment improves wide Decimal execution but regresses some narrow paths, so it remains an optional patch. The next performance slice should test preparation only for Decimal256 before considering adoption. NULL/zero handling for non-Decimal columns remains separate semantic work. High-scale Decimal arithmetic still needs explicit treatment before general Spark division support can be claimed. String conversion and other operators remain separate work; importing the entire arithmetic PR would expand scope without resolving all of these gaps. This evaluation does not close the adoption decision in the owning issue.
