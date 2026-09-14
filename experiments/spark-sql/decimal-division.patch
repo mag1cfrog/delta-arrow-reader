@@ -1,0 +1,124 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+index 7c02e35..e5a4626 100644
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -1,4 +1,6 @@
+ use std::sync::Arc;
++use std::cmp::{max, min};
++use datafusion::arrow::datatypes::{DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION};
+ 
+ use datafusion::arrow::datatypes::{DataType, IntervalUnit, TimeUnit, i256};
+ use datafusion::arrow::error::ArrowError;
+@@ -325,6 +327,68 @@ fn make_safe_divisor(
+ /// All of the above conditions should be handled by the DataFusion.
+ /// If there is a discrepancy in parity, check the link below and adjust Sail's logic accordingly:
+ ///   https://github.com/apache/datafusion/blob/a28f2834c6969a0c0eb26165031f8baa1e1156a5/datafusion/expr-common/src/type_coercion/binary.rs#L194
++// Experimental subset of Sail PR 2225 at c9fda1f3281d383ee0efbd371d2b43d957d01939.
++// Only explicit Decimal128 pairs and default allowPrecisionLoss=true are evaluated.
++const SPARK_MINIMUM_ADJUSTED_SCALE: i32 = 6;
++const SPARK_MAX_SCALE: i32 = 38;
++const ARROW_DIV_SCALE_INCREMENT: i8 = 4;
++
++fn narrow(precision: i32, scale: i32) -> (u8, i8) {
++    (
++        precision.clamp(1, DECIMAL128_MAX_PRECISION as i32) as u8,
++        scale.clamp(-SPARK_MAX_SCALE, SPARK_MAX_SCALE) as i8,
++    )
++}
++
++fn adjust_precision_scale(precision: i32, scale: i32) -> (u8, i8) {
++    let max_precision = DECIMAL128_MAX_PRECISION as i32;
++    if precision <= max_precision {
++        narrow(precision, scale)
++    } else if scale < 0 {
++        // Spark keeps a negative scale unchanged here (DecimalType.scala:182), reachable only
++        // with `spark.sql.legacy.allowNegativeScaleOfDecimal` (negative-scale decimals). Mirror it
++        // exactly for faithfulness; with non-negative operand scales the `+ - * %` result scale
++        // stays `>= 0` (`*` uses `s1 + s2`), so this branch is not hit in practice.
++        narrow(max_precision, scale)
++    } else {
++        let int_digits = precision - scale;
++        let min_scale = scale.min(SPARK_MINIMUM_ADJUSTED_SCALE);
++        let adjusted_scale = (max_precision - int_digits).max(min_scale);
++        narrow(max_precision, adjusted_scale)
++    }
++}
++
++fn bounded(precision: i32, scale: i32) -> (u8, i8) {
++    narrow(
++        min(precision, DECIMAL128_MAX_PRECISION as i32),
++        min(scale, SPARK_MAX_SCALE),
++    )
++}
++
++fn spark_decimal_divide_type(
++    p1: u8,
++    s1: i8,
++    p2: u8,
++    s2: i8,
++    allow_precision_loss: bool,
++) -> (u8, i8) {
++    if allow_precision_loss {
++        let scale = max(SPARK_MINIMUM_ADJUSTED_SCALE, s1 as i32 + p2 as i32 + 1);
++        let precision = (p1 as i32 - s1 as i32) + s2 as i32 + scale;
++        adjust_precision_scale(precision, scale)
++    } else {
++        let mut int_digits = min(SPARK_MAX_SCALE, p1 as i32 - s1 as i32 + s2 as i32);
++        let mut dec_digits =
++            (s1 as i32 + p2 as i32 + 1).clamp(SPARK_MINIMUM_ADJUSTED_SCALE, SPARK_MAX_SCALE);
++        let diff = (int_digits + dec_digits) - SPARK_MAX_SCALE;
++        if diff > 0 {
++            dec_digits -= diff / 2 + 1;
++            int_digits = SPARK_MAX_SCALE - dec_digits;
++        }
++        bounded(int_digits + dec_digits, dec_digits)
++    }
++}
++
+ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
+     let ScalarFunctionInput {
+         arguments,
+@@ -356,6 +420,43 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
+     );
+ 
+     let div_expr = match (&dividend_type, &divisor_type) {
++        (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) => {
++            let (result_precision, result_scale) =
++                spark_decimal_divide_type(*p1, *s1, *p2, *s2, true);
++            // Rescale the dividend so Arrow's quotient carries at least one digit past
++            // Spark's scale. One guard digit is exactly enough for HALF_UP over a
++            // truncating divide: the digit at `result_scale + 1` survives truncation, so
++            // it decides the carry the same way the exact quotient would.
++            let dividend_scale = (*s1).max(result_scale - (ARROW_DIV_SCALE_INCREMENT - 1));
++            // Arrow's decimal `div` rescales the numerator to
++            // `(p1 - s1) + dividend_scale + ARROW_DIV_SCALE_INCREMENT + s2` digits. When that
++            // fits Decimal128 the quotient is computed in i128 (2-4x cheaper per row);
++            // otherwise it widens to i256. The two are value-identical whenever the
++            // intermediate does not overflow, so this is a pure performance gate.
++            let intermediate_digits = i32::from(*p1) - i32::from(*s1)
++                + i32::from(dividend_scale)
++                + i32::from(ARROW_DIV_SCALE_INCREMENT)
++                + i32::from(*s2);
++            let (dividend_target, divisor_target) =
++                if intermediate_digits <= i32::from(DECIMAL128_MAX_PRECISION) {
++                    (
++                        DataType::Decimal128(DECIMAL128_MAX_PRECISION, dividend_scale),
++                        DataType::Decimal128(DECIMAL128_MAX_PRECISION, *s2),
++                    )
++                } else {
++                    (
++                        DataType::Decimal256(DECIMAL256_MAX_PRECISION, dividend_scale),
++                        DataType::Decimal256(DECIMAL256_MAX_PRECISION, *s2),
++                    )
++                };
++            let quotient = cast(dividend, dividend_target) / cast(divisor, divisor_target);
++            let rounded = expr_fn::round(vec![quotient, lit(result_scale as i32)]);
++            if ansi_mode {
++                cast(rounded, DataType::Decimal128(result_precision, result_scale))
++            } else {
++                try_cast(rounded, DataType::Decimal128(result_precision, result_scale))
++            }
++        }
+         // TODO: Casting DataType::Interval(_) to DataType::Int64 is not supported yet.
+         //  Seems to be a bug in DataFusion.
+         // TODO: Cast the precision and scale that matches the Spark's behavior after the division.

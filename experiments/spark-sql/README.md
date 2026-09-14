@@ -2,6 +2,8 @@
 
 The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) defines the scope, coverage and reduction rules. This directory contains the test corpus, an independent Apache Spark oracle and a vendored Rust runner over real Delta tables.
 
+The [decimal division patch evaluation](DECIMAL_DIVISION.md) tests a small subset of an unmerged Sail arithmetic PR. Its candidate remains an optional patch and does not change the checkpoint below.
+
 `inputs.json` pins Apache Spark 4.2.0 and Sail 0.7.1, session settings, table schemas and data. Both engines receive the same explicit schemas, including nested nullability. The runner verifies those schemas and captures input rows for comparison. This avoids differences caused by each engine inferring its own schema from SQL VALUES.
 
 `queries.jsonl` contains 116 stable query IDs. The existing `seed_*` fields retain earlier expectations. Ordered queries compare sequences; unordered queries compare row multisets with duplicates preserved. Partition-dependent cases compare input IDs and check nonnegative partition IDs, partition-local ordering and unique/nonnegative monotonic IDs. SORT BY and monotonic-ID queries expose partition IDs for those checks. The `known_boundary` marker records earlier findings and does not suppress oracle differences.
