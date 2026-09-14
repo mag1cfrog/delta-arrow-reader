@@ -1,12 +1,5 @@
-use arrow::datatypes::TimeUnit;
-use iana_time_zone::get_timezone;
-
-use crate::error::{CommonError, CommonResult};
-
-pub fn get_system_timezone() -> CommonResult<String> {
-    // TODO: This does not work in some Amazon Linux environments.
-    get_timezone().map_err(|e| CommonError::invalid(format!("failed to get system time zone: {e}")))
-}
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+use arrow_schema::TimeUnit;
 
 pub const fn time_unit_to_multiplier(time_unit: &TimeUnit) -> i64 {
     match time_unit {

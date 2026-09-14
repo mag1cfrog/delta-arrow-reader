@@ -21,7 +21,6 @@ datafusion-expr-common = { workspace = true }
 datafusion-functions = { workspace = true }
 datafusion-functions-nested = { workspace = true }
 datafusion-spark = { workspace = true }
-educe = { workspace = true }
 thiserror = { workspace = true }
 chrono = { workspace = true }
 chumsky = { workspace = true }
@@ -33,11 +32,9 @@ either = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 rand = { workspace = true }
-uuid = { workspace = true }
 half = { workspace = true }
 arrow = { workspace = true }
 arrow-schema = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 regex = { workspace = true }
 regex-syntax = { workspace = true }

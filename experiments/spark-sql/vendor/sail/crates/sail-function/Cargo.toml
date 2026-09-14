@@ -1,3 +1,4 @@
+# Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 [package]
 name = "sail-function"
 version = { workspace = true }
@@ -26,7 +27,6 @@ chrono = { workspace = true }
 chrono-tz = { workspace = true }
 regex = { workspace = true }
 rand = { workspace = true }
-rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
 ordered-float = { workspace = true }
 lazy_static = { workspace = true }
@@ -41,7 +41,6 @@ url = { workspace = true }
 parquet-variant = { workspace = true }
 parquet-variant-compute = { workspace = true }
 parquet-variant-json = { workspace = true }
-percent-encoding = { workspace = true }
 jiter = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

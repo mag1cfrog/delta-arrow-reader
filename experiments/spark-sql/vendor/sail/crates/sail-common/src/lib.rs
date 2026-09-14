@@ -2,5 +2,4 @@
 pub mod error;
 pub mod geoarrow;
 pub mod spec;
-pub mod tests;
 pub mod utils;

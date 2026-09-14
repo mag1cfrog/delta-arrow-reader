@@ -1682,7 +1682,6 @@ dependencies = [
  "datafusion",
  "delta-arrow-reader",
  "futures-util",
- "parquet",
  "sail-common",
  "sail-common-datafusion",
  "sail-plan",
@@ -4035,16 +4034,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand_chacha"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e6af7f3e25ded52c41df4e0b1af2d047e45896c2f3281792ed68a1c243daedb"
-dependencies = [
- "ppv-lite86",
- "rand_core 0.10.1",
-]
-
-[[package]]
 name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4405,17 +4394,12 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 name = "sail-common"
 version = "0.7.1"
 dependencies = [
- "arrow",
  "arrow-buffer",
  "arrow-schema",
- "glob",
  "half",
- "iana-time-zone",
- "num-traits",
  "num_enum",
  "serde",
  "serde_json",
- "serde_yaml",
  "thiserror",
 ]
 
@@ -4435,7 +4419,6 @@ dependencies = [
  "parquet-variant-compute",
  "parquet-variant-json",
  "ryu",
- "sail-common",
  "serde",
 ]
 
@@ -4469,9 +4452,7 @@ dependencies = [
  "parquet-variant",
  "parquet-variant-compute",
  "parquet-variant-json",
- "percent-encoding",
  "rand 0.10.2",
- "rand_chacha 0.10.0",
  "rand_distr",
  "regex",
  "sail-common",
@@ -4513,7 +4494,6 @@ dependencies = [
  "datafusion-functions",
  "datafusion-functions-nested",
  "datafusion-spark",
- "educe",
  "either",
  "half",
  "lazy_static",
@@ -4527,12 +4507,10 @@ dependencies = [
  "sail-function",
  "sail-logical-plan",
  "sail-sql-analyzer",
- "serde",
  "serde_json",
  "thiserror",
  "tokio",
  "tokio-stream",
- "uuid",
 ]
 
 [[package]]
@@ -4687,19 +4665,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
 ]
 
 [[package]]
@@ -5338,12 +5303,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
 name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5388,7 +5347,6 @@ dependencies = [
  "getrandom 0.4.3",
  "js-sys",
  "rand 0.10.2",
- "serde_core",
  "wasm-bindgen",
 ]
 

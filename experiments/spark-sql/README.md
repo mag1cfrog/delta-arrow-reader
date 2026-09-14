@@ -165,6 +165,7 @@ Each cut keeps the fixed inputs, SQL and both checked-in baselines unchanged. Th
 | Inline Arrow and transport helpers | 97,492 | 546 / 480 | 11 / 11 | 9 |
 | DataFrame transforms and eager planning | 96,442 | 546 / 480 | 12 / 11 | 9 |
 | Command spec types | 95,555 | 546 / 480 | 12 / 11 | 9 |
+| Orphan dependencies and test helpers | 95,376 | 543 / 477 | 12 / 11 | 9 |
 
 The DataFrame cut removes NA/statistics resolvers, value replacement and unused ShowString/SchemaPivot nodes. All eleven NA/statistics spec variants now reject before input resolution. The new test first reproduced missing-table lookup, then verified the rejection and successful SQL COUNT, AVG, COVAR_SAMP, CORR and COALESCE execution. Shared value formatting remains because SQL casts and PIVOT use it. No test source was removed from the vendored crates.
 
@@ -177,13 +178,15 @@ The upstream parser syntax test also passes from a standalone copy of the retain
 ```bash
 cp -R experiments/spark-sql/vendor/sail target/spark-sql/parser-tests
 cp experiments/spark-sql/Cargo.lock target/spark-sql/parser-tests/Cargo.lock
-SAIL_UPDATE_GOLD_DATA= CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_DEV_DEBUG=0 \
+CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_DEV_DEBUG=0 \
   cargo test --offline --manifest-path target/spark-sql/parser-tests/Cargo.toml \
   -p sail-sql-parser --test syntax -j 2
 ```
 
-An empty SAIL_UPDATE_GOLD_DATA keeps the checked-in expectations unchanged. Any nonempty value enables upstream's gold-data regeneration. The copied parser source and gold files matched the retained source byte-for-byte after the test.
+The current test always compares against the checked-in snapshot. It does not regenerate expectations. The copied parser source and gold files matched the retained source byte-for-byte after the test.
 
 The transform cut removes DataFrame column/tail/sample/repartition/hint/metrics/parse resolvers, the unused explicit-repartition node and dynamic PIVOT value inference. Fourteen direct spec cases reject before input resolution. SQL aliases/CTEs/LIMIT, explicit PIVOT, range and derived-table TABLESAMPLE have positive execution checks. SQL TABLESAMPLE keeps the existing Bernoulli filter; its known per-batch random-state limitation remains. SQL DISTRIBUTE BY and CLUSTER BY remain unimplemented. No Sail resolver now calls execute_logical_plan to collect rows during planning; this is not a claim that arbitrary host providers perform no I/O. The cut removes 1,050 Rust lines with unchanged vendored test counts and resolved packages.
 
 The command-spec cut removes the unused command/write/catalog/cache/display descriptors and the Plan/CommandPlan wrapper, a net 887 Rust lines. The analyzer and resolver now exchange QueryPlan directly, and named query fields are always present. Query grammar, explicit command rejection and all 23 command-form checks remain. No vendored test source or resolved package changed.
+
+The dependency cut removes unused direct dependencies, 97 unused workspace declarations, the uncalled system-timezone/display-escaping/field-name helpers, and the generic gold-test framework, a net 179 Rust lines. The parser test now compares its complete generated syntax graph directly with the unchanged JSON snapshot; it passes, and a changed field in a temporary snapshot makes it fail. Snapshot regeneration through an environment variable is removed. The replacement test adds one test-source line; the deleted 154-line shared helper was previously counted as production source. serde_yaml, unsafe-libyaml and rand_chacha 0.10 leave both resolved graphs, with no additions or upgrades. cargo-machete reports no unused direct dependencies.
