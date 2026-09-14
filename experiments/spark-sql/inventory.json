@@ -1,5 +1,5 @@
 {
-  "source_sha256": "51ad077a260a5caf8924ac44438e005969a46a91b45a6a30438a11e582a41f82",
+  "source_sha256": "770d8aa3f426caf10bc5197b8be15d016dd82bfd55224e32f716eedba82cfe38",
   "crates": [
     {
       "crate": "sail-common",
@@ -82,9 +82,9 @@
     "build_script_lines": 80,
     "production_lines": 84183
   },
-  "lock_packages": 537,
-  "resolved_packages_all_targets_including_dev": 537,
-  "linux_normal_build_packages_including_runner": 465,
+  "lock_packages": 524,
+  "resolved_packages_all_targets_including_dev": 524,
+  "linux_normal_build_packages_including_runner": 452,
   "python_packages_in_linux_build": [],
   "build_generated_rust": {
     "sail-sql-parser": {

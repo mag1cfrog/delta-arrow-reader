@@ -10,7 +10,7 @@ exclude = ["vendor/sail", "vendor/sail/crates/*"]
 
 [dependencies]
 delta-arrow-reader = { path = "../..", features = ["datafusion"] }
-datafusion = "=54.1.0"
+datafusion = { version = "=54.1.0", default-features = false, features = ["sql"] }
 arrow = "58.3.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 futures-util = "0.3"
