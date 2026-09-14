@@ -1,5 +1,5 @@
 diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
-index 7c02e35..13d812a 100644
+index 7c02e35..6c15247 100644
 --- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
 +++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
 @@ -1,4 +1,6 @@
@@ -224,17 +224,48 @@ index 7c02e35..13d812a 100644
  fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
      let ScalarFunctionInput {
          arguments,
-@@ -343,6 +553,8 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
-     }
+@@ -333,29 +543,68 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
 
+     let (dividend, divisor) = arguments.two()?;
+
+-    // Plan-time check for literal zero divisors (fast path, better error UX).
+-    if is_zero_literal(&divisor) {
+-        if function_context.plan_config.ansi_mode {
+-            return Err(PlanError::ArrowError(ArrowError::DivideByZero));
+-        } else {
+-            return Ok(Expr::Literal(ScalarValue::Null, None));
+-        }
+-    }
+-
      let ansi_mode = function_context.plan_config.ansi_mode;
 +    let (dividend, divisor) =
 +        coerce_decimal_divide_operands(dividend, divisor, function_context.schema);
      let dividend_type = dividend.get_type(function_context.schema);
      let divisor_type = divisor.get_type(function_context.schema);
 
-@@ -356,6 +568,43 @@ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
-     );
+     // Apply runtime zero-divisor guard to the divisor before building the division expression.
+     let effective_divisor_type = divisor_type.as_ref().cloned().unwrap_or(DataType::Int32);
+-    let divisor = make_safe_divisor(
+-        divisor,
+-        &effective_divisor_type,
+-        ansi_mode,
+-        "Division by zero",
+-    );
++    let divisor = if ansi_mode
++        && matches!(dividend_type, Ok(DataType::Decimal128(_, _)))
++        && matches!(divisor_type, Ok(DataType::Decimal128(_, _)))
++    {
++        // Arrow decimal division skips NULL rows and rejects non-NULL zero divisors.
++        // A separate raise_error on the divisor would incorrectly reject NULL / 0.
++        divisor
++    } else {
++        make_safe_divisor(
++            divisor,
++            &effective_divisor_type,
++            ansi_mode,
++            "Division by zero",
++        )
++    };
 
      let div_expr = match (&dividend_type, &divisor_type) {
 +        (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) => {

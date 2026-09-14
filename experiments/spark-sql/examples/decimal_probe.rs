@@ -16,7 +16,7 @@ async fn observe(case: &Value) -> Result<Value> {
             .with_default_features()
             .with_config(
                 SessionConfig::new()
-                    .with_batch_size(1)
+                    .with_batch_size(usize::try_from(case["batch_size"].as_u64().unwrap_or(1))?)
                     .with_target_partitions(2),
             )
             .with_query_planner(Arc::new(SparkQueryPlanner))
@@ -39,16 +39,22 @@ async fn observe(case: &Value) -> Result<Value> {
         Err(e) => return Ok(json!({"status":"planning_error","error":e.to_string()})),
     };
     let logical_plan = named.plan.display_indent().to_string();
-    let batches = async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
-    let batches = match batches {
-        Ok(batches) => batches,
+    let executed: datafusion::common::Result<_> = async {
+        let frame = ctx.execute_logical_plan(named.plan).await?;
+        let physical = frame.create_physical_plan().await?;
+        let schema = physical.schema();
+        let batches = datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
+        Ok((schema, batches))
+    }
+    .await;
+    let (schema, batches) = match executed {
+        Ok(result) => result,
         Err(e) => {
             return Ok(
                 json!({"status":"execution_error","error":e.to_string(),"logical_plan":logical_plan}),
             );
         }
     };
-    let schema = batches.first().ok_or("missing output batch")?.schema();
     let types = schema
         .fields()
         .iter()

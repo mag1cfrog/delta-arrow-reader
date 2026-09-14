@@ -55,3 +55,30 @@
 {"id": "both_null_literals", "sql": "SELECT NULL / NULL AS r"}
 {"id": "string_peer_control", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '3' AS r"}
 {"id": "other_operators_control", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) + 3 AS added, CAST(2 AS DECIMAL(10,2)) * 3 AS r"}
+{"id": "null_zero_decimal_10_2", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r"}
+{"id": "nonnull_zero_decimal_10_2", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r"}
+{"id": "null_divisor_decimal_10_2", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / CAST(NULL AS DECIMAL(10,2)) AS r"}
+{"id": "null_zero_decimal_38_18", "sql": "SELECT CAST(NULL AS DECIMAL(38,18)) / CAST(0 AS DECIMAL(38,18)) AS r"}
+{"id": "nonnull_zero_decimal_38_18", "sql": "SELECT CAST(2 AS DECIMAL(38,18)) / CAST(0 AS DECIMAL(38,18)) AS r"}
+{"id": "null_divisor_decimal_38_18", "sql": "SELECT CAST(2 AS DECIMAL(38,18)) / CAST(NULL AS DECIMAL(38,18)) AS r"}
+{"id": "null_zero_int", "sql": "SELECT CAST(NULL AS INT) / CAST(0 AS INT) AS r"}
+{"id": "nonnull_zero_int", "sql": "SELECT CAST(2 AS INT) / CAST(0 AS INT) AS r"}
+{"id": "null_divisor_int", "sql": "SELECT CAST(2 AS INT) / CAST(NULL AS INT) AS r"}
+{"id": "null_zero_double", "sql": "SELECT CAST(NULL AS DOUBLE) / CAST(0 AS DOUBLE) AS r"}
+{"id": "nonnull_zero_double", "sql": "SELECT CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE) AS r"}
+{"id": "null_divisor_double", "sql": "SELECT CAST(2 AS DOUBLE) / CAST(NULL AS DOUBLE) AS r"}
+{"id": "both_decimal_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / CAST(NULL AS DECIMAL(10,2)) AS r"}
+{"id": "null_decimal_zero_int", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / 0 AS r"}
+{"id": "zero_decimal_literal", "sql": "SELECT CAST(0 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r"}
+{"id": "decimal_null_mask_batch_1", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'0','3') AS t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "decimal_live_zero_batch_1", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') AS t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "decimal_null_mask_batch_3", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'0','3') AS t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "decimal_live_zero_batch_3", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') AS t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "decimal_scalar_null_array_zero", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0,0),(1,2) AS t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "decimal_array_null_scalar_zero", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)) AS t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "decimal_zero_filtered", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r FROM VALUES (1) AS t(a) WHERE false"}
+{"id": "decimal_zero_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(2 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) ELSE CAST(1 AS DECIMAL(23,13)) END AS r"}
+{"id": "decimal_zero_hidden_if", "sql": "SELECT IF(true, CAST(1 AS DECIMAL(23,13)), CAST(2 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2))) AS r"}
+{"id": "decimal_zero_null_window", "sql": "SELECT CAST(SUM(a) OVER () AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0,CAST(NULL AS INT),0),(1,CAST(NULL AS INT),2) AS t(id,a,b) ORDER BY id"}
+{"id": "nondecimal_null_mask_int", "sql": "SELECT CAST(a AS INT) / CAST(b AS INT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL) AS t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "nondecimal_null_mask_double", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL) AS t(id,a,b) ORDER BY id", "batch_size": 3}
