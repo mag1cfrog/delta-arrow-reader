@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 /// [CREDIT]: https://github.com/apache/datafusion/blob/f911d529a57b211eb44a98b253f97d839f60019f/datafusion/functions-nested/src/array_transform.rs
 ///
 /// Spark-compatible `transform(array, lambda)` higher-order function.
@@ -69,13 +70,6 @@ impl SparkArrayTransform {
             ),
             index_first: true,
         }
-    }
-
-    /// Whether this instance expects the lambda parameters in `[index, element]`
-    /// order (an index-only lambda rewritten by the planner). Used by the
-    /// serialization codec to reconstruct the correct variant.
-    pub fn is_index_first(&self) -> bool {
-        self.index_first
     }
 }
 

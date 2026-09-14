@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Debug;
 use std::ops::Range;
 use std::sync::Arc;
@@ -45,10 +46,6 @@ impl SparkFirstLastValue {
 
     pub fn kind(&self) -> SparkFirstLastValueKind {
         self.kind
-    }
-
-    pub fn ignore_nulls(&self) -> bool {
-        self.ignore_nulls
     }
 
     fn new(kind: SparkFirstLastValueKind, ignore_nulls: bool) -> Self {

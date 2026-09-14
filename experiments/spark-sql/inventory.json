@@ -1,14 +1,14 @@
 {
-  "source_sha256": "819908776f335efbf7a82eb32f364cd33fa8d3488125235c4b74d7bcba71d8ba",
+  "source_sha256": "4b7fb7c87dc4622b0469aaa28a9de0e6d961ed3c66408e0e31e22de6ba000f17",
   "crates": [
     {
       "crate": "sail-common",
-      "rust_files": 14,
-      "gross_lines": 2318,
-      "nonblank_lines": 2158,
+      "rust_files": 13,
+      "gross_lines": 2281,
+      "nonblank_lines": 2125,
       "test_lines": 0,
       "build_script_lines": 0,
-      "production_lines": 2318
+      "production_lines": 2281
     },
     {
       "crate": "sail-common-datafusion",
@@ -21,12 +21,12 @@
     },
     {
       "crate": "sail-function",
-      "rust_files": 190,
-      "gross_lines": 57842,
-      "nonblank_lines": 52601,
+      "rust_files": 189,
+      "gross_lines": 57717,
+      "nonblank_lines": 52502,
       "test_lines": 6446,
       "build_script_lines": 0,
-      "production_lines": 51396
+      "production_lines": 51271
     },
     {
       "crate": "sail-logical-plan",
@@ -75,12 +75,12 @@
     }
   ],
   "totals": {
-    "rust_files": 354,
-    "gross_lines": 93256,
-    "nonblank_lines": 85699,
+    "rust_files": 352,
+    "gross_lines": 93094,
+    "nonblank_lines": 85567,
     "test_lines": 7816,
     "build_script_lines": 80,
-    "production_lines": 85360
+    "production_lines": 85198
   },
   "lock_packages": 539,
   "resolved_packages_all_targets_including_dev": 539,

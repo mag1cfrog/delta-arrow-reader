@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::ops::BitAnd;
 use std::sync::Arc;
 
@@ -45,10 +46,6 @@ impl ArraysZip {
         } else {
             default_field_names(count)
         }
-    }
-
-    pub fn field_names(&self) -> &[String] {
-        &self.field_names
     }
 }
 

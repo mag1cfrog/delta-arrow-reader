@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion::arrow::array::{Array, ArrayRef, NullArray, NullBufferBuilder, StructArray};
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::compute::cast;
@@ -28,10 +29,6 @@ impl SparkMapFromArrays {
             delegate: MapFromArrays::new(),
             last_value_wins,
         }
-    }
-
-    pub fn last_value_wins(&self) -> bool {
-        self.last_value_wins
     }
 }
 
@@ -97,10 +94,6 @@ impl SparkMapFromEntries {
             delegate: MapFromEntries::new(),
             last_value_wins,
         }
-    }
-
-    pub fn last_value_wins(&self) -> bool {
-        self.last_value_wins
     }
 }
 

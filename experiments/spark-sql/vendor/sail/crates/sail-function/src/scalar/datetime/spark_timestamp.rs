@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
@@ -184,10 +185,6 @@ impl SparkTimestamp {
 
     pub fn ansi_mode(&self) -> bool {
         self.ansi_mode
-    }
-
-    pub fn is_try(&self) -> bool {
-        self.is_try
     }
 
     /// Whether a parse/cast failure yields NULL: `try_*` always, or the strict

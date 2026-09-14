@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, FixedSizeListArray, StructArray};
@@ -28,10 +29,6 @@ impl SparkStructRename {
             signature: Signature::any(1, Volatility::Immutable),
             target_type,
         }
-    }
-
-    pub fn target_type(&self) -> &DataType {
-        &self.target_type
     }
 }
 

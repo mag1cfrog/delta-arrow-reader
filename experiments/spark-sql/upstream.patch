@@ -12942,6 +12942,48 @@ index a201cb9..2b2130f 100644
  
  pub const fn time_unit_to_multiplier(time_unit: &TimeUnit) -> i64 {
      match time_unit {
+diff --git a/crates/sail-common/src/utils/debug.rs b/crates/sail-common/src/utils/debug.rs
+deleted file mode 100644
+index 3c38bcc..0000000
+--- a/crates/sail-common/src/utils/debug.rs
++++ /dev/null
+@@ -1,36 +0,0 @@
+-use std::fmt::{Debug, Formatter};
+-
+-const MAX_BINARY_DEBUG_LENGTH: usize = 128;
+-
+-/// A wrapper that implements custom debug message for binary data.
+-pub struct DebugBinary<'a> {
+-    data: &'a [u8],
+-}
+-
+-impl<'a> DebugBinary<'a> {
+-    pub fn from(data: &'a [u8]) -> Self {
+-        Self { data }
+-    }
+-}
+-
+-impl Debug for DebugBinary<'_> {
+-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+-        write!(f, "[")?;
+-        for (i, byte) in self.data.iter().enumerate() {
+-            if i > 0 {
+-                write!(f, ", ")?;
+-            }
+-            if i >= MAX_BINARY_DEBUG_LENGTH {
+-                write!(f, "...")?;
+-                break;
+-            }
+-            write!(f, "{byte}")?;
+-        }
+-        let n = self.data.len();
+-        if n == 1 {
+-            write!(f, " (1 byte)]")
+-        } else {
+-            write!(f, " ({n} bytes)]")
+-        }
+-    }
+-}
 diff --git a/crates/sail-common/src/utils/http.rs b/crates/sail-common/src/utils/http.rs
 deleted file mode 100644
 index d3ba67a..0000000
@@ -12956,13 +12998,13 @@ index d3ba67a..0000000
 -///   * <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent>
 -pub const SAIL_USER_AGENT: &str = concat!("Sail/", env!("CARGO_PKG_VERSION"));
 diff --git a/crates/sail-common/src/utils/mod.rs b/crates/sail-common/src/utils/mod.rs
-index 50ee559..e7a99cd 100644
+index 50ee559..757c6b6 100644
 --- a/crates/sail-common/src/utils/mod.rs
 +++ b/crates/sail-common/src/utils/mod.rs
-@@ -1,6 +1,4 @@
+@@ -1,6 +1,3 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  pub mod datetime;
- pub mod debug;
+-pub mod debug;
 -pub mod http;
 -pub mod object;
 -pub mod retry;
@@ -13332,6 +13374,26 @@ index d1d6037..9ff21b7 100644
  jiter = { workspace = true }
  thiserror = { workspace = true }
  serde = { workspace = true }
+diff --git a/crates/sail-function/src/aggregate/skewness.rs b/crates/sail-function/src/aggregate/skewness.rs
+index 097a23b..32293cb 100644
+--- a/crates/sail-function/src/aggregate/skewness.rs
++++ b/crates/sail-function/src/aggregate/skewness.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::fmt::Debug;
+ 
+ use datafusion::arrow::array::{ArrayRef, AsArray, Float64Array};
+@@ -147,9 +148,7 @@ impl SkewnessAccumulator {
+     pub fn n(&self) -> f64 {
+         self.n
+     }
+-    pub fn avg(&self) -> f64 {
+-        self.avg
+-    }
++
+     pub fn m2(&self) -> f64 {
+         self.m2
+     }
 diff --git a/crates/sail-function/src/aggregate/utils.rs b/crates/sail-function/src/aggregate/utils.rs
 index e4ed496..2c0d10c 100644
 --- a/crates/sail-function/src/aggregate/utils.rs
@@ -13374,6 +13436,26 @@ index e4ed496..2c0d10c 100644
  pub fn filtered_null_mask(
      opt_filter: Option<&BooleanArray>,
      input: &dyn Array,
+diff --git a/crates/sail-function/src/scalar/array/arrays_zip.rs b/crates/sail-function/src/scalar/array/arrays_zip.rs
+index d85067e..7b6da7c 100644
+--- a/crates/sail-function/src/scalar/array/arrays_zip.rs
++++ b/crates/sail-function/src/scalar/array/arrays_zip.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::ops::BitAnd;
+ use std::sync::Arc;
+ 
+@@ -46,10 +47,6 @@ impl ArraysZip {
+             default_field_names(count)
+         }
+     }
+-
+-    pub fn field_names(&self) -> &[String] {
+-        &self.field_names
+-    }
+ }
+ 
+ impl ScalarUDFImpl for ArraysZip {
 diff --git a/crates/sail-function/src/scalar/array/spark_array_aggregate.rs b/crates/sail-function/src/scalar/array/spark_array_aggregate.rs
 index 9826c77..2c5c979 100644
 --- a/crates/sail-function/src/scalar/array/spark_array_aggregate.rs
@@ -13394,6 +13476,29 @@ index 9826c77..2c5c979 100644
  }
  
  impl HigherOrderUDFImpl for SparkArrayAggregate {
+diff --git a/crates/sail-function/src/scalar/array/spark_array_filter.rs b/crates/sail-function/src/scalar/array/spark_array_filter.rs
+index bb822c2..417e8fe 100644
+--- a/crates/sail-function/src/scalar/array/spark_array_filter.rs
++++ b/crates/sail-function/src/scalar/array/spark_array_filter.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ /// [CREDIT]: https://github.com/apache/datafusion/blob/f911d529a57b211eb44a98b253f97d839f60019f/datafusion/functions-nested/src/array_filter.rs
+ ///
+ /// Spark-compatible `filter(array, lambda)` higher-order function.
+@@ -73,13 +74,6 @@ impl SparkArrayFilter {
+             index_first: true,
+         }
+     }
+-
+-    /// Whether this instance expects the lambda parameters in `[index, element]`
+-    /// order (an index-only lambda rewritten by the planner). Used by the
+-    /// serialization codec to reconstruct the correct variant.
+-    pub fn is_index_first(&self) -> bool {
+-        self.index_first
+-    }
+ }
+ 
+ impl HigherOrderUDFImpl for SparkArrayFilter {
 diff --git a/crates/sail-function/src/scalar/array/spark_array_sort.rs b/crates/sail-function/src/scalar/array/spark_array_sort.rs
 index 86e50aa..de6937c 100644
 --- a/crates/sail-function/src/scalar/array/spark_array_sort.rs
@@ -13417,6 +13522,227 @@ index 86e50aa..de6937c 100644
  }
  
  impl HigherOrderUDFImpl for SparkArraySort {
+diff --git a/crates/sail-function/src/scalar/array/spark_array_transform.rs b/crates/sail-function/src/scalar/array/spark_array_transform.rs
+index c1ba66c..b1ddd82 100644
+--- a/crates/sail-function/src/scalar/array/spark_array_transform.rs
++++ b/crates/sail-function/src/scalar/array/spark_array_transform.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ /// [CREDIT]: https://github.com/apache/datafusion/blob/f911d529a57b211eb44a98b253f97d839f60019f/datafusion/functions-nested/src/array_transform.rs
+ ///
+ /// Spark-compatible `transform(array, lambda)` higher-order function.
+@@ -70,13 +71,6 @@ impl SparkArrayTransform {
+             index_first: true,
+         }
+     }
+-
+-    /// Whether this instance expects the lambda parameters in `[index, element]`
+-    /// order (an index-only lambda rewritten by the planner). Used by the
+-    /// serialization codec to reconstruct the correct variant.
+-    pub fn is_index_first(&self) -> bool {
+-        self.index_first
+-    }
+ }
+ 
+ impl HigherOrderUDFImpl for SparkArrayTransform {
+diff --git a/crates/sail-function/src/scalar/datetime/mod.rs b/crates/sail-function/src/scalar/datetime/mod.rs
+index 735941a..8dfb514 100644
+--- a/crates/sail-function/src/scalar/datetime/mod.rs
++++ b/crates/sail-function/src/scalar/datetime/mod.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ pub mod convert_tz;
+ pub mod format;
+ pub mod negate_duration;
+@@ -15,7 +16,6 @@ pub mod spark_time;
+ pub mod spark_time_diff;
+ pub mod spark_time_trunc;
+ pub mod spark_timestamp;
+-pub mod spark_try_to_timestamp;
+ pub mod spark_unix_timestamp;
+ pub mod spark_window_buckets;
+ pub mod spark_year;
+diff --git a/crates/sail-function/src/scalar/datetime/spark_date.rs b/crates/sail-function/src/scalar/datetime/spark_date.rs
+index 9116fc4..e94c51a 100644
+--- a/crates/sail-function/src/scalar/datetime/spark_date.rs
++++ b/crates/sail-function/src/scalar/datetime/spark_date.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::collections::hash_map::Entry;
+ use std::sync::Arc;
+@@ -30,10 +31,6 @@ impl SparkDate {
+         }
+     }
+ 
+-    pub fn is_try(&self) -> bool {
+-        self.is_try
+-    }
+-
+     fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {
+         match parse_date(value).and_then(|date| Ok(Date32Type::from_naive_date(date.try_into()?))) {
+             Ok(v) => Ok(Some(v)),
+diff --git a/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs b/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs
+index 4c146ac..a8bf64a 100644
+--- a/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs
++++ b/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use chrono::{Duration, NaiveDate};
+@@ -25,10 +26,6 @@ impl SparkMakeTimestampNtz {
+             is_try,
+         }
+     }
+-
+-    pub fn is_try(&self) -> bool {
+-        self.is_try
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkMakeTimestampNtz {
+diff --git a/crates/sail-function/src/scalar/datetime/spark_time.rs b/crates/sail-function/src/scalar/datetime/spark_time.rs
+index 43ee7f9..409fbd4 100644
+--- a/crates/sail-function/src/scalar/datetime/spark_time.rs
++++ b/crates/sail-function/src/scalar/datetime/spark_time.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::collections::hash_map::Entry;
+ use std::sync::Arc;
+@@ -48,10 +49,6 @@ impl SparkTime {
+         }
+     }
+ 
+-    pub fn is_try(&self) -> bool {
+-        self.is_try
+-    }
+-
+     fn naive_time_to_us(t: NaiveTime) -> i64 {
+         let seconds = t.num_seconds_from_midnight() as i64;
+         let nanos = t.nanosecond() as i64;
+diff --git a/crates/sail-function/src/scalar/datetime/spark_timestamp.rs b/crates/sail-function/src/scalar/datetime/spark_timestamp.rs
+index 1c24162..c018d96 100644
+--- a/crates/sail-function/src/scalar/datetime/spark_timestamp.rs
++++ b/crates/sail-function/src/scalar/datetime/spark_timestamp.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::collections::hash_map::Entry;
+ use std::fmt::Debug;
+@@ -186,10 +187,6 @@ impl SparkTimestamp {
+         self.ansi_mode
+     }
+ 
+-    pub fn is_try(&self) -> bool {
+-        self.is_try
+-    }
+-
+     /// Whether a parse/cast failure yields NULL: `try_*` always, or the strict
+     /// variant when ANSI is disabled.
+     fn safe(&self) -> bool {
+diff --git a/crates/sail-function/src/scalar/datetime/spark_try_to_timestamp.rs b/crates/sail-function/src/scalar/datetime/spark_try_to_timestamp.rs
+deleted file mode 100644
+index fe8399b..0000000
+--- a/crates/sail-function/src/scalar/datetime/spark_try_to_timestamp.rs
++++ /dev/null
+@@ -1,67 +0,0 @@
+-use std::sync::Arc;
+-
+-use datafusion::arrow::datatypes::{DataType, TimeUnit};
+-use datafusion_common::{Result, plan_err};
+-use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
+-
+-use crate::scalar::datetime::spark_timestamp::SparkTimestamp;
+-
+-#[derive(Debug, PartialEq, Eq, Hash)]
+-pub struct SparkTryToTimestamp {
+-    timezone: Option<Arc<str>>,
+-    signature: Signature,
+-}
+-
+-impl Default for SparkTryToTimestamp {
+-    fn default() -> Self {
+-        Self::new()
+-    }
+-}
+-
+-impl SparkTryToTimestamp {
+-    pub fn new() -> Self {
+-        Self::try_new(None)
+-    }
+-
+-    pub fn try_new(timezone: Option<Arc<str>>) -> Self {
+-        Self {
+-            timezone,
+-            signature: Signature::variadic_any(Volatility::Immutable),
+-        }
+-    }
+-
+-    pub fn timezone(&self) -> Option<&str> {
+-        self.timezone.as_deref()
+-    }
+-}
+-
+-impl ScalarUDFImpl for SparkTryToTimestamp {
+-    fn name(&self) -> &str {
+-        "spark_try_to_timestamp"
+-    }
+-
+-    fn signature(&self) -> &Signature {
+-        &self.signature
+-    }
+-
+-    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
+-        let [first, ..] = arg_types else {
+-            return plan_err!("`try_to_timestamp` function requires at least 1 argument");
+-        };
+-        match first {
+-            DataType::Timestamp(_, Some(tz)) => Ok(DataType::Timestamp(
+-                TimeUnit::Microsecond,
+-                Some(Arc::clone(tz)),
+-            )),
+-            _ => Ok(DataType::Timestamp(TimeUnit::Microsecond, None)),
+-        }
+-    }
+-
+-    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+-        // Delegate to SparkTimestamp with is_try=true
+-        // This will return NULL on parse failure instead of raising an error
+-        // ansi_mode is set to true for try_to_timestamp (safe parsing)
+-        let spark_timestamp = SparkTimestamp::try_new(self.timezone.clone(), true, true)?;
+-        spark_timestamp.invoke_with_args(args)
+-    }
+-}
+diff --git a/crates/sail-function/src/scalar/datetime/spark_window_buckets.rs b/crates/sail-function/src/scalar/datetime/spark_window_buckets.rs
+index 43bcb09..fff4c28 100644
+--- a/crates/sail-function/src/scalar/datetime/spark_window_buckets.rs
++++ b/crates/sail-function/src/scalar/datetime/spark_window_buckets.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{Array, ListArray, StructArray, TimestampMicrosecondArray};
+@@ -28,18 +29,6 @@ impl SparkWindowBuckets {
+             start_time,
+         }
+     }
+-
+-    pub fn window_duration(&self) -> i64 {
+-        self.window_duration
+-    }
+-
+-    pub fn slide_duration(&self) -> i64 {
+-        self.slide_duration
+-    }
+-
+-    pub fn start_time(&self) -> i64 {
+-        self.start_time
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkWindowBuckets {
 diff --git a/crates/sail-function/src/scalar/drop_struct_field.rs b/crates/sail-function/src/scalar/drop_struct_field.rs
 deleted file mode 100644
 index 25573a7..0000000
@@ -13585,6 +13911,57 @@ index a00a4d5..d306b32 100644
  #[derive(Debug, PartialEq, Eq, Hash)]
  pub struct Explode {
      signature: Signature,
+diff --git a/crates/sail-function/src/scalar/map/map_from.rs b/crates/sail-function/src/scalar/map/map_from.rs
+index d74c7c6..82218d1 100644
+--- a/crates/sail-function/src/scalar/map/map_from.rs
++++ b/crates/sail-function/src/scalar/map/map_from.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use datafusion::arrow::array::{Array, ArrayRef, NullArray, NullBufferBuilder, StructArray};
+ use datafusion::arrow::buffer::NullBuffer;
+ use datafusion::arrow::compute::cast;
+@@ -29,10 +30,6 @@ impl SparkMapFromArrays {
+             last_value_wins,
+         }
+     }
+-
+-    pub fn last_value_wins(&self) -> bool {
+-        self.last_value_wins
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkMapFromArrays {
+@@ -98,10 +95,6 @@ impl SparkMapFromEntries {
+             last_value_wins,
+         }
+     }
+-
+-    pub fn last_value_wins(&self) -> bool {
+-        self.last_value_wins
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkMapFromEntries {
+diff --git a/crates/sail-function/src/scalar/map/str_to_map.rs b/crates/sail-function/src/scalar/map/str_to_map.rs
+index b6c6321..ceaebf9 100644
+--- a/crates/sail-function/src/scalar/map/str_to_map.rs
++++ b/crates/sail-function/src/scalar/map/str_to_map.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{Array, ArrayRef, AsArray, ListArray, StringArray};
+@@ -39,10 +40,6 @@ impl StrToMap {
+             last_value_wins,
+         }
+     }
+-
+-    pub fn last_value_wins(&self) -> bool {
+-        self.last_value_wins
+-    }
+ }
+ 
+ impl ScalarUDFImpl for StrToMap {
 diff --git a/crates/sail-function/src/scalar/math/spark_unhex.rs b/crates/sail-function/src/scalar/math/spark_unhex.rs
 index 826643c..534ef76 100644
 --- a/crates/sail-function/src/scalar/math/spark_unhex.rs
@@ -13783,6 +14160,46 @@ index 87d7207..31d4125 100644
  pub mod url;
  pub mod variant;
  pub mod vector;
+diff --git a/crates/sail-function/src/scalar/spark_struct_rename.rs b/crates/sail-function/src/scalar/spark_struct_rename.rs
+index 2843936..41dc4ca 100644
+--- a/crates/sail-function/src/scalar/spark_struct_rename.rs
++++ b/crates/sail-function/src/scalar/spark_struct_rename.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{Array, ArrayRef, AsArray, FixedSizeListArray, StructArray};
+@@ -29,10 +30,6 @@ impl SparkStructRename {
+             target_type,
+         }
+     }
+-
+-    pub fn target_type(&self) -> &DataType {
+-        &self.target_type
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkStructRename {
+diff --git a/crates/sail-function/src/scalar/struct_function.rs b/crates/sail-function/src/scalar/struct_function.rs
+index 29ed545..5ae2988 100644
+--- a/crates/sail-function/src/scalar/struct_function.rs
++++ b/crates/sail-function/src/scalar/struct_function.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{ArrayRef, StructArray};
+@@ -63,10 +64,6 @@ impl StructFunction {
+             field_names,
+         }
+     }
+-
+-    pub fn field_names(&self) -> &[String] {
+-        &self.field_names
+-    }
+ }
+ 
+ impl ScalarUDFImpl for StructFunction {
 diff --git a/crates/sail-function/src/scalar/update_struct_field.rs b/crates/sail-function/src/scalar/update_struct_field.rs
 deleted file mode 100644
 index a898cbd..0000000
@@ -14042,6 +14459,26 @@ index 212427e..138c92b 100644
  /// The kind of typed XPath function.
  #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
  pub enum XpathTypedKind {
+diff --git a/crates/sail-function/src/window/spark_first_last_value.rs b/crates/sail-function/src/window/spark_first_last_value.rs
+index 4386c5c..c2143c2 100644
+--- a/crates/sail-function/src/window/spark_first_last_value.rs
++++ b/crates/sail-function/src/window/spark_first_last_value.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::fmt::Debug;
+ use std::ops::Range;
+ use std::sync::Arc;
+@@ -47,10 +48,6 @@ impl SparkFirstLastValue {
+         self.kind
+     }
+ 
+-    pub fn ignore_nulls(&self) -> bool {
+-        self.ignore_nulls
+-    }
+-
+     fn new(kind: SparkFirstLastValueKind, ignore_nulls: bool) -> Self {
+         Self {
+             kind,
 diff --git a/crates/sail-logical-plan/Cargo.toml b/crates/sail-logical-plan/Cargo.toml
 index c4036e8..1969cac 100644
 --- a/crates/sail-logical-plan/Cargo.toml

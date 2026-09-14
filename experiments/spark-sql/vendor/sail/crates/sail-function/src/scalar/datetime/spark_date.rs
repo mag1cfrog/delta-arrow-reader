@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
@@ -28,10 +29,6 @@ impl SparkDate {
             signature: Signature::variadic_any(Volatility::Immutable),
             is_try,
         }
-    }
-
-    pub fn is_try(&self) -> bool {
-        self.is_try
     }
 
     fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {

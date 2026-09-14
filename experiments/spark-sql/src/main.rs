@@ -184,12 +184,12 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
-    async fn hex_sql_uses_the_retained_implementations() -> ProbeResult<()> {
+    async fn sql_functions_use_the_retained_implementations() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
         let named = resolve(
             &ctx,
-            "SELECT hex(255), hex('Spark'), hex(unhex('f')), unhex('bad!') IS NULL",
+            "SELECT hex(255), hex('Spark'), hex(unhex('f')), unhex('bad!') IS NULL, try_to_timestamp('invalid') IS NULL, year(try_to_timestamp('2024-02-29')), dayofmonth(try_to_timestamp('2024-02-29'))",
             &settings,
         )
         .await?;
@@ -207,7 +207,10 @@ mod tests {
             .iter()
             .map(|column| array_value_to_string(column.as_ref(), 0))
             .collect::<Result<Vec<_>, _>>()?;
-        assert_eq!(values, ["FF", "537061726B", "0F", "true"]);
+        assert_eq!(
+            values,
+            ["FF", "537061726B", "0F", "true", "true", "2024", "29"]
+        );
         Ok(())
     }
 

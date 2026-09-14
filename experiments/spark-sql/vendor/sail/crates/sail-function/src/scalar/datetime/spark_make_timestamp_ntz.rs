@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use chrono::{Duration, NaiveDate};
@@ -24,10 +25,6 @@ impl SparkMakeTimestampNtz {
             signature: Signature::user_defined(Volatility::Immutable),
             is_try,
         }
-    }
-
-    pub fn is_try(&self) -> bool {
-        self.is_try
     }
 }
 

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, ListArray, StructArray, TimestampMicrosecondArray};
@@ -27,18 +28,6 @@ impl SparkWindowBuckets {
             slide_duration,
             start_time,
         }
-    }
-
-    pub fn window_duration(&self) -> i64 {
-        self.window_duration
-    }
-
-    pub fn slide_duration(&self) -> i64 {
-        self.slide_duration
-    }
-
-    pub fn start_time(&self) -> i64 {
-        self.start_time
     }
 }
 

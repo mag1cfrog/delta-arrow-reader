@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{ArrayRef, StructArray};
@@ -62,10 +63,6 @@ impl StructFunction {
             ),
             field_names,
         }
-    }
-
-    pub fn field_names(&self) -> &[String] {
-        &self.field_names
     }
 }
 

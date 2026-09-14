@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Debug;
 
 use datafusion::arrow::array::{ArrayRef, AsArray, Float64Array};
@@ -147,9 +148,7 @@ impl SkewnessAccumulator {
     pub fn n(&self) -> f64 {
         self.n
     }
-    pub fn avg(&self) -> f64 {
-        self.avg
-    }
+
     pub fn m2(&self) -> f64 {
         self.m2
     }
