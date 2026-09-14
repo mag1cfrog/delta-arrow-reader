@@ -1,0 +1,116 @@
+{"id": "spark_null_order", "family": "ordering", "sql": "SELECT x FROM t ORDER BY x ASC LIMIT 1", "origin": "previous-extraction-probe", "seed_rows": [[null]]}
+{"id": "databricks_ifnull", "family": "nulls", "sql": "SELECT IFNULL(`x`, 0) AS v FROM t WHERE x IS NULL", "origin": "previous-extraction-probe", "seed_rows": [["0"]]}
+{"id": "spark_integer_division", "family": "arithmetic", "sql": "SELECT 5 / 2 AS v", "origin": "previous-extraction-probe", "seed_rows": [["2.5"]], "seed_arrow_types": ["Float64"]}
+{"id": "spark_concat_null", "family": "nulls", "sql": "SELECT CONCAT('a', CAST(NULL AS STRING)) AS v", "origin": "previous-extraction-probe", "seed_rows": [[null]]}
+{"id": "spark_date_format", "family": "dates", "sql": "SELECT DATE_FORMAT(DATE '2024-01-02', 'yyyy-MM-dd') AS v", "origin": "previous-extraction-probe", "seed_rows": [["2024-01-02"]]}
+{"id": "spark_date_add", "family": "dates", "sql": "SELECT DATE_ADD(DATE '2024-01-31', 1) AS v", "origin": "previous-extraction-probe", "seed_rows": [["2024-02-01"]], "seed_arrow_types": ["Date32"]}
+{"id": "spark_null_safe_equal", "family": "nulls", "sql": "SELECT CAST(NULL AS INT) <=> CAST(NULL AS INT) AS v", "origin": "previous-extraction-probe", "seed_rows": [["true"]]}
+{"id": "spark_array_element", "family": "nested", "sql": "SELECT ELEMENT_AT(ARRAY(10, 20), 1) AS v", "origin": "previous-extraction-probe", "seed_rows": [["10"]]}
+{"id": "spark_try_cast", "family": "casts", "sql": "SELECT TRY_CAST('bad' AS INT) AS v", "origin": "previous-extraction-probe", "seed_rows": [[null]]}
+{"id": "delta_filter_projection", "family": "relational", "sql": "SELECT `id`, name FROM t WHERE region = 'west' AND id >= 2 ORDER BY id", "origin": "previous-extraction-probe", "seed_rows": [["2", null]], "seed_fields": ["id", "name"]}
+{"id": "delta_group", "family": "aggregation", "sql": "SELECT region, COUNT(*) AS n, SUM(x) AS total FROM t GROUP BY region ORDER BY region", "origin": "previous-extraction-probe", "seed_rows": [["east", "2", "5"], ["west", "2", "1"]], "comparison": "ordered"}
+{"id": "delta_cte", "family": "relational", "sql": "WITH a AS (SELECT id, x FROM t WHERE id <= 2) SELECT id, x / 2 AS half FROM a ORDER BY id", "origin": "previous-extraction-probe", "seed_rows": [["1", null], ["2", "0.5"]], "comparison": "ordered"}
+{"id": "delta_self_join", "family": "joins", "sql": "SELECT a.id, b.name FROM t a JOIN t b ON a.id = b.id WHERE a.id = 3", "origin": "previous-extraction-probe", "seed_rows": [["3", "bob"]]}
+{"id": "delta_window", "family": "windows", "sql": "SELECT id, ROW_NUMBER() OVER (PARTITION BY region ORDER BY id) AS rn FROM t ORDER BY id", "origin": "previous-extraction-probe", "seed_rows": [["1", "1"], ["2", "2"], ["3", "1"], ["4", "2"]], "comparison": "ordered"}
+{"id": "delta_column_semantics", "family": "arithmetic", "sql": "SELECT id, x / 2 AS half, CONCAT(name, '!') AS label FROM t ORDER BY id", "origin": "previous-extraction-probe", "seed_rows": [["1", null, "alice!"], ["2", "0.5", null], ["3", "1.0", "bob!"], ["4", "1.5", "carol!"]], "seed_arrow_types": ["Int32", "Float64", "Utf8View"], "comparison": "ordered"}
+{"id": "delta_date_function", "family": "dates", "sql": "SELECT id, DATE_FORMAT(DATE_ADD(DATE '2024-01-31', id), 'yyyy-MM-dd') AS d FROM t ORDER BY id", "origin": "previous-extraction-probe", "seed_rows": [["1", "2024-02-01"], ["2", "2024-02-02"], ["3", "2024-02-03"], ["4", "2024-02-04"]], "comparison": "ordered"}
+{"id": "duplicate_names", "family": "names", "sql": "SELECT id AS same, x AS same FROM t WHERE id = 3", "origin": "previous-extraction-probe", "seed_rows": [["3", "2"]], "seed_fields": ["same", "same"]}
+{"id": "qualified_table", "family": "names", "sql": "SELECT id FROM public.t WHERE id = 1", "origin": "previous-extraction-probe", "seed_rows": [["1"]], "host_only": true}
+{"id": "unknown_function", "family": "errors", "sql": "SELECT made_up_function(x) FROM t", "origin": "previous-extraction-probe"}
+{"id": "reject_ddl", "family": "excluded", "sql": "CREATE TABLE unwanted (id INT)", "origin": "previous-extraction-probe", "host_only": true}
+{"id": "reject_time_travel", "family": "excluded", "sql": "SELECT * FROM t VERSION AS OF 0", "origin": "previous-extraction-probe", "host_only": true}
+{"id": "sail_range_extension", "family": "extensions", "sql": "SELECT * FROM range(3)", "origin": "previous-extraction-probe", "seed_rows": [["0"], ["1"], ["2"]], "seed_arrow_types": ["Int64"]}
+{"id": "sail_partition_id", "family": "extensions", "sql": "SELECT id, spark_partition_id() FROM t", "origin": "previous-extraction-probe", "known_boundary": true}
+{"id": "sail_sort_within_partitions", "family": "extensions", "sql": "SELECT id FROM t SORT BY id", "origin": "previous-extraction-probe", "known_boundary": true}
+{"id": "delta_wildcard", "family": "names", "sql": "SELECT * FROM t WHERE id = 3", "origin": "previous-extraction-probe", "seed_rows": [["3", "2", "bob", "east"]], "seed_fields": ["id", "x", "name", "region"]}
+{"id": "delta_star_except", "family": "names", "sql": "SELECT * EXCEPT (name, region) FROM t WHERE id = 3", "origin": "previous-extraction-probe", "seed_rows": [["3", "2"]], "seed_fields": ["id", "x"], "known_boundary": true}
+{"id": "reject_wildcard_replace", "family": "names", "sql": "SELECT * REPLACE (id + 1 AS id) FROM t", "origin": "previous-extraction-probe", "known_boundary": true}
+{"id": "names_comments_quotes", "family": "names", "sql": "/* before */ SELECT `id` AS `odd name`, 1 + 2 * 3 AS v FROM t WHERE id = 1 -- end"}
+{"id": "names_escaped_identifier", "family": "names", "sql": "SELECT 1 AS `a``b`"}
+{"id": "names_case_insensitive", "family": "names", "sql": "SELECT ID FROM t WHERE id = 1"}
+{"id": "names_case_sensitive", "family": "names", "sql": "SELECT ID FROM t WHERE id = 1", "settings": {"spark.sql.caseSensitive": "true"}}
+{"id": "names_qualified_wildcard", "family": "names", "sql": "SELECT a.* FROM t a WHERE id = 3"}
+{"id": "names_cte_shadow", "family": "names", "sql": "WITH t AS (SELECT 99 AS id) SELECT id FROM t"}
+{"id": "names_cte_reuse", "family": "names", "sql": "WITH a AS (SELECT id FROM t WHERE id <= 2) SELECT l.id, r.id FROM a l JOIN a r ON l.id = r.id ORDER BY l.id"}
+{"id": "joins_left_unmatched", "family": "joins", "sql": "SELECT a.id, b.name FROM t a LEFT JOIN t b ON a.id = b.id + 1 ORDER BY a.id"}
+{"id": "joins_semi", "family": "joins", "sql": "SELECT a.id FROM t a LEFT SEMI JOIN t b ON a.id = b.id AND b.x >= 2 ORDER BY a.id"}
+{"id": "joins_anti", "family": "joins", "sql": "SELECT a.id FROM t a LEFT ANTI JOIN t b ON a.id = b.id AND b.x >= 2 ORDER BY a.id"}
+{"id": "joins_duplicate_keys", "family": "joins", "sql": "SELECT a.region, COUNT(*) n FROM t a JOIN t b ON a.region = b.region GROUP BY a.region ORDER BY a.region"}
+{"id": "joins_null_keys", "family": "joins", "sql": "SELECT COUNT(*) FROM t a JOIN t b ON a.x = b.x"}
+{"id": "joins_null_safe_keys", "family": "joins", "sql": "SELECT COUNT(*) FROM t a JOIN t b ON a.x <=> b.x"}
+{"id": "joins_cross", "family": "joins", "sql": "SELECT COUNT(*) FROM t CROSS JOIN t b"}
+{"id": "relational_union_all", "family": "relational", "sql": "SELECT id FROM t WHERE id < 3 UNION ALL SELECT id FROM t WHERE id = 1"}
+{"id": "relational_union_distinct", "family": "relational", "sql": "SELECT region FROM t UNION SELECT region FROM t"}
+{"id": "relational_intersect", "family": "relational", "sql": "SELECT id FROM t INTERSECT SELECT id FROM t WHERE x >= 2"}
+{"id": "relational_except", "family": "relational", "sql": "SELECT id FROM t EXCEPT SELECT id FROM t WHERE x >= 2"}
+{"id": "relational_correlated_exists", "family": "relational", "sql": "SELECT a.id FROM t a WHERE EXISTS (SELECT 1 FROM t b WHERE a.id = b.id AND b.x > 1) ORDER BY a.id"}
+{"id": "relational_scalar_subquery", "family": "relational", "sql": "SELECT id, (SELECT MAX(x) FROM t) m FROM t WHERE id = 1"}
+{"id": "relational_correlated_scalar", "family": "relational", "sql": "SELECT a.id, (SELECT MAX(b.x) FROM t b WHERE b.region = a.region) m FROM t a ORDER BY a.id"}
+{"id": "relational_subquery_multirow_error", "family": "relational", "sql": "SELECT (SELECT id FROM t)"}
+{"id": "relational_empty_projection", "family": "relational", "sql": "SELECT id, x / 2 FROM empty_t"}
+{"id": "aggregation_empty", "family": "aggregation", "sql": "SELECT COUNT(*), COUNT(x), SUM(x), AVG(x) FROM empty_t"}
+{"id": "aggregation_all_null", "family": "aggregation", "sql": "SELECT COUNT(x), SUM(x), AVG(x) FROM t WHERE x IS NULL"}
+{"id": "aggregation_distinct_having", "family": "aggregation", "sql": "SELECT region, COUNT(DISTINCT x), AVG(x) FROM t GROUP BY region HAVING COUNT(*) > 1 ORDER BY region"}
+{"id": "aggregation_count_if", "family": "aggregation", "sql": "SELECT COUNT_IF(x > 1), COUNT_IF(x > 100) FROM t"}
+{"id": "aggregation_collect_list", "family": "aggregation", "sql": "SELECT SORT_ARRAY(COLLECT_LIST(name)) FROM t"}
+{"id": "aggregation_ordered_first", "family": "aggregation", "sql": "SELECT FIRST(name) FROM (SELECT name FROM t ORDER BY id DESC)"}
+{"id": "windows_rank_ties", "family": "windows", "sql": "SELECT id, RANK() OVER (ORDER BY region), DENSE_RANK() OVER (ORDER BY region) FROM t ORDER BY id"}
+{"id": "windows_lag", "family": "windows", "sql": "SELECT id, LAG(x, 1, CAST(-1 AS BIGINT)) OVER (ORDER BY id) FROM t ORDER BY id"}
+{"id": "windows_rows_frame", "family": "windows", "sql": "SELECT id, SUM(x) OVER (ORDER BY id ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t ORDER BY id"}
+{"id": "windows_range_frame", "family": "windows", "sql": "SELECT id, SUM(x) OVER (ORDER BY id RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t ORDER BY id"}
+{"id": "ordering_nulls_desc", "family": "ordering", "sql": "SELECT x FROM t ORDER BY x DESC"}
+{"id": "ordering_explicit_nulls", "family": "ordering", "sql": "SELECT id, x FROM t ORDER BY x ASC NULLS LAST, id LIMIT 3"}
+{"id": "ordering_limit_zero", "family": "ordering", "sql": "SELECT * FROM t LIMIT 0"}
+{"id": "arithmetic_negative_div_mod", "family": "arithmetic", "sql": "SELECT -5 / 2, -5 % 2, PMOD(-5, 2)"}
+{"id": "arithmetic_zero_div_ansi", "family": "arithmetic", "sql": "SELECT x / (id - id) FROM t WHERE id = 3"}
+{"id": "arithmetic_zero_div_legacy", "family": "arithmetic", "sql": "SELECT x / (id - id) FROM t WHERE id = 3", "settings": {"spark.sql.ansi.enabled": "false"}}
+{"id": "arithmetic_overflow_ansi", "family": "arithmetic", "sql": "SELECT CAST(2147483647 AS INT) + CAST(id AS INT) FROM t WHERE id = 1"}
+{"id": "arithmetic_overflow_legacy", "family": "arithmetic", "sql": "SELECT CAST(2147483647 AS INT) + CAST(id AS INT) FROM t WHERE id = 1", "settings": {"spark.sql.ansi.enabled": "false"}}
+{"id": "arithmetic_decimal_division", "family": "arithmetic", "sql": "SELECT CAST(x AS DECIMAL(10,2)) / CAST(3 AS DECIMAL(3,0)) FROM t ORDER BY id"}
+{"id": "arithmetic_decimal_rounding", "family": "arithmetic", "sql": "SELECT ROUND(CAST(2.345 AS DECIMAL(6,3)), 2), BROUND(CAST(2.345 AS DECIMAL(6,3)), 2)"}
+{"id": "arithmetic_decimal_overflow", "family": "arithmetic", "sql": "SELECT CAST(999.99 AS DECIMAL(3,1))"}
+{"id": "casts_invalid_column", "family": "casts", "sql": "SELECT CAST(name AS INT) FROM t WHERE id = 1"}
+{"id": "casts_try_column", "family": "casts", "sql": "SELECT id, TRY_CAST(name AS INT) FROM t ORDER BY id"}
+{"id": "casts_fraction_to_int", "family": "casts", "sql": "SELECT CAST(2.9 AS INT), CAST(-2.9 AS INT)"}
+{"id": "casts_invalid_boolean", "family": "casts", "sql": "SELECT CAST('bad' AS BOOLEAN)"}
+{"id": "nulls_three_valued", "family": "nulls", "sql": "SELECT TRUE AND NULL, FALSE AND NULL, TRUE OR NULL, FALSE OR NULL, NOT NULL"}
+{"id": "nulls_not_in_null", "family": "nulls", "sql": "SELECT id FROM t WHERE id NOT IN (1, NULL)"}
+{"id": "nulls_in_subquery", "family": "nulls", "sql": "SELECT id FROM t WHERE x IN (SELECT x FROM t WHERE id <= 2) ORDER BY id"}
+{"id": "nulls_conditionals", "family": "nulls", "sql": "SELECT id, IF(x IS NULL, 7, x), COALESCE(x, 8), NULLIF(x, 2), CASE WHEN x > 1 THEN 'yes' ELSE 'no' END FROM t ORDER BY id"}
+{"id": "nulls_concat_ws", "family": "nulls", "sql": "SELECT id, CONCAT_WS('-', name, CAST(x AS STRING)) FROM t ORDER BY id"}
+{"id": "strings_unicode", "family": "strings", "sql": "SELECT LENGTH('\u4f60\u597d\ud83d\ude00'), SUBSTRING('\u4f60\u597d\ud83d\ude00', 2, 2)"}
+{"id": "strings_like", "family": "strings", "sql": "SELECT id FROM t WHERE name LIKE 'a%' OR name ILIKE 'BO%' ORDER BY id"}
+{"id": "strings_regexp", "family": "strings", "sql": "SELECT REGEXP_REPLACE('a12b34', '[0-9]+', 'X'), REGEXP_EXTRACT('a12', '([0-9]+)', 1)"}
+{"id": "strings_trim_case_column", "family": "strings", "sql": "SELECT id, UPPER(TRIM(CONCAT(' ', name, ' '))) FROM t ORDER BY id"}
+{"id": "strings_binary", "family": "strings", "sql": "SELECT HEX(UNHEX('00FF')), LENGTH(UNHEX('00FF'))"}
+{"id": "dates_column_boundary", "family": "dates", "sql": "SELECT id, DATE_ADD(d, 1), ADD_MONTHS(d, 1), LAST_DAY(d) FROM dates ORDER BY id"}
+{"id": "dates_invalid_date", "family": "dates", "sql": "SELECT CAST('2024-02-30' AS DATE)"}
+{"id": "dates_try_date", "family": "dates", "sql": "SELECT TRY_CAST('2024-02-30' AS DATE)"}
+{"id": "dates_format_tokens", "family": "dates", "sql": "SELECT DATE_FORMAT(TIMESTAMP '2024-01-02 13:04:05.123456', 'yyyy-MM-dd HH:mm:ss.SSS')"}
+{"id": "dates_timestamp_precision", "family": "dates", "sql": "SELECT CAST('2024-01-02 03:04:05.123456' AS TIMESTAMP_NTZ)"}
+{"id": "dates_timestamp_ltz", "family": "dates", "sql": "SELECT CAST('2024-01-02 03:04:05.123456' AS TIMESTAMP_LTZ)"}
+{"id": "dates_dst_gap", "family": "dates", "sql": "SELECT TO_UTC_TIMESTAMP(CAST('2024-03-10 02:30:00' AS TIMESTAMP_NTZ), 'America/Los_Angeles')", "settings": {"spark.sql.session.timeZone": "America/Los_Angeles"}}
+{"id": "dates_dst_overlap", "family": "dates", "sql": "SELECT TO_UTC_TIMESTAMP(CAST('2024-11-03 01:30:00' AS TIMESTAMP_NTZ), 'America/Los_Angeles')", "settings": {"spark.sql.session.timeZone": "America/Los_Angeles"}}
+{"id": "nested_negative_index", "family": "nested", "sql": "SELECT ELEMENT_AT(ARRAY(10, 20), -1)"}
+{"id": "nested_zero_index", "family": "nested", "sql": "SELECT ELEMENT_AT(ARRAY(10, 20), 0)"}
+{"id": "nested_out_of_range_ansi", "family": "nested", "sql": "SELECT ELEMENT_AT(ARRAY(10, 20), 3)"}
+{"id": "nested_out_of_range_legacy", "family": "nested", "sql": "SELECT ELEMENT_AT(ARRAY(10, 20), 3)", "settings": {"spark.sql.ansi.enabled": "false"}}
+{"id": "nested_columns", "family": "nested", "sql": "SELECT id, SIZE(a), ELEMENT_AT(m, 'missing'), s.age FROM nested ORDER BY id"}
+{"id": "nested_explode", "family": "nested", "sql": "SELECT id, v FROM nested LATERAL VIEW EXPLODE(a) e AS v ORDER BY id, v NULLS FIRST"}
+{"id": "nested_outer_explode", "family": "nested", "sql": "SELECT id, v FROM nested LATERAL VIEW OUTER EXPLODE(a) e AS v ORDER BY id, v NULLS FIRST"}
+{"id": "nested_null_array", "family": "nested", "sql": "SELECT SIZE(CAST(NULL AS ARRAY<INT>)), ARRAY_CONTAINS(ARRAY(1, NULL), 2)"}
+{"id": "extensions_range_step", "family": "extensions", "sql": "SELECT * FROM range(5, -1, -2) ORDER BY id"}
+{"id": "extensions_monotonic_id", "family": "extensions", "sql": "SELECT id, MONOTONICALLY_INCREASING_ID() AS mid FROM t"}
+{"id": "errors_empty", "family": "errors", "sql": ""}
+{"id": "errors_malformed", "family": "errors", "sql": "SELECT FROM"}
+{"id": "errors_unknown_table", "family": "errors", "sql": "SELECT * FROM missing_table"}
+{"id": "errors_unknown_column", "family": "errors", "sql": "SELECT missing_column FROM t"}
+{"id": "errors_ambiguous", "family": "errors", "sql": "SELECT id FROM t a JOIN t b ON a.id = b.id"}
+{"id": "excluded_multi_statement", "family": "excluded", "sql": "SELECT 1; SELECT 2", "host_only": true}
+{"id": "excluded_insert", "family": "excluded", "sql": "INSERT INTO t SELECT * FROM t", "host_only": true}
+{"id": "excluded_delete", "family": "excluded", "sql": "DELETE FROM t WHERE id = 1", "host_only": true}
+{"id": "excluded_copy", "family": "excluded", "sql": "COPY t TO '/tmp/forbidden-spark-sql-output'", "host_only": true}
+{"id": "excluded_set", "family": "excluded", "sql": "SET spark.sql.ansi.enabled = false", "host_only": true}
+{"id": "excluded_format_path", "family": "excluded", "sql": "SELECT * FROM parquet.`/tmp/forbidden-spark-sql-input`", "host_only": true}
+{"id": "excluded_sample", "family": "excluded", "sql": "SELECT * FROM t TABLESAMPLE (50 PERCENT)", "host_only": true}
+{"id": "excluded_python_udf", "family": "excluded", "sql": "CREATE TEMPORARY FUNCTION python_fn AS 'python.module.Function'", "host_only": true}

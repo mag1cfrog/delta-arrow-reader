@@ -1,0 +1,17 @@
+{
+  "reference": {
+    "distribution": "pysail",
+    "version": "0.7.1"
+  },
+  "settings": {
+    "spark.sql.ansi.enabled": "true",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.caseSensitive": "false"
+  },
+  "views": {
+    "t": "SELECT CAST(id AS INT) id, CAST(x AS BIGINT) x, name, region FROM VALUES (1, NULL, 'alice', 'west'), (2, 1, CAST(NULL AS STRING), 'west'), (3, 2, 'bob', 'east'), (4, 3, 'carol', 'east') AS v(id,x,name,region)",
+    "empty_t": "SELECT * FROM t WHERE FALSE",
+    "nested": "SELECT 1 AS id, ARRAY(10, 20) AS a, MAP('one', 1, 'two', 2) AS m, NAMED_STRUCT('age', 21, 'label', 'a') AS s UNION ALL SELECT 2, ARRAY(CAST(NULL AS INT)), MAP('one', CAST(NULL AS INT)), NAMED_STRUCT('age', CAST(NULL AS INT), 'label', CAST(NULL AS STRING)) UNION ALL SELECT 3, CAST(ARRAY() AS ARRAY<INT>), CAST(MAP() AS MAP<STRING, INT>), CAST(NULL AS STRUCT<age:INT,label:STRING>)",
+    "dates": "SELECT * FROM VALUES (1, DATE '2024-01-31'), (2, DATE '2024-02-28'), (3, CAST(NULL AS DATE)) AS v(id,d)"
+  }
+}

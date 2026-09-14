@@ -14,6 +14,7 @@ categories = ["asynchronous", "database"]
 exclude = [
     ".github/**",
     ".gitignore",
+    "experiments/**",
     "benches/incremental_refresh.rs",
     "benches/reader.rs",
     "benches/page_index.rs",
