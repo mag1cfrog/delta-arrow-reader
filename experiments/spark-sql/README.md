@@ -8,7 +8,7 @@ The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) d
 
 ## Current result and remaining source
 
-The latest verified cut is unused generic display options on `feat/spark-sql-extraction`. The retained subset has **8 Sail-owned crates and 91,226 gross Rust lines**, including 83,066 production-source lines, 8,080 test lines and 80 build-script lines. Compared with the reviewed service/streaming checkpoint, the subsequent cuts remove another 11,404 lines. Compared with the original import, 34,787 lines are gone, a 27.6% reduction. Counts include comments and blank lines.
+The latest verified cut is unused internal parameter plumbing on `feat/spark-sql-extraction`. The retained subset has **8 Sail-owned crates and 91,194 gross Rust lines**, including 83,034 production-source lines, 8,080 test lines and 80 build-script lines. Compared with the reviewed service/streaming checkpoint, the subsequent cuts remove another 11,436 lines. Compared with the original import, 34,819 lines are gone, a 27.6% reduction. Counts include comments and blank lines.
 
 The resolved dependency graph has 524 packages across all targets and 452 Linux normal/build packages, including the runner and reader. No reduction checkpoint adds or upgrades a package. The Rust frontend has no Python, Spark Connect service or Sail storage-reader dependency; Delta scans still use the host provider. This is the smallest subset demonstrated by these cuts, not a minimum or an adoption decision.
 
@@ -16,14 +16,14 @@ The resolved dependency graph has 524 packages across all targets and 452 Linux 
 | --- | ---: | --- |
 | `sail-common` | 1,963 | In-process query/expression/type specs and required Arrow metadata. Rejected protocol payload descriptors remain for boundary checks; they have no decoder or executor. |
 | `sail-common-datafusion` | 1,802 | Spark value formatting, constant evaluation, output/schema renaming and Variant metadata detection. |
-| `sail-function` | 56,892 | Spark scalar and aggregate kernels, coercion, NULL/ANSI behavior, datetime formats and nested values. The small NTILE adapter retains parameter validation. |
+| `sail-function` | 56,865 | Spark scalar and aggregate kernels, coercion, NULL/ANSI behavior, datetime formats and nested values. The small NTILE adapter retains parameter validation. |
 | `sail-logical-plan` | 518 | SQL range, required ordering, partition IDs and monotonic-ID descriptors. Some still need physical extension planning. |
-| `sail-plan` | 19,002 | SQL function dispatch, name/type resolution, relational planning, field naming, native table lookup and range execution. |
+| `sail-plan` | 18,997 | SQL function dispatch, name/type resolution, relational planning, field naming, native table lookup and range execution. |
 | `sail-sql-analyzer` | 4,349 | Typed conversion from Spark SQL ASTs to query specs, including literals and SQL data types. |
 | `sail-sql-macro` | 603 | TreeParser derives used by the grammar and TreeSyntax derives used by the complete syntax snapshot. |
 | `sail-sql-parser` | 6,097 | Tokenizer, query/command grammar, ASTs and syntax snapshot support. Commands are rejected by analysis before their bodies are translated. |
 
-The 56,892 lines in `sail-function` include its tests. Its largest groups implement aggregates, datetime/math/string functions, arrays, JSON, CSV and XML. Variant, map, binary/hash, sketch, spatial and other SQL functions also have live registrations. Removing whole families would narrow the support boundary; absence from the 116-case sample does not make them unused.
+The 56,865 lines in `sail-function` include its tests. Its largest groups implement aggregates, datetime/math/string functions, arrays, JSON, CSV and XML. Variant, map, binary/hash, sketch, spatial and other SQL functions also have live registrations. Removing whole families would narrow the support boundary; absence from the 116-case sample does not make them unused.
 
 The remaining bulk implements SQL behavior. Further substantial reduction would require replacing those implementations or narrowing the supported SQL. Several same-name native replacements were considered and left in place:
 
@@ -227,6 +227,7 @@ Each cut keeps the fixed inputs, SQL and both checked-in baselines unchanged. Th
 | Unreachable datetime format paths | 91,604 | 524 / 452 | 19 / 11 | 9 |
 | Orphan constants, macro helper and configuration | 91,559 | 524 / 452 | 19 / 11 | 9 |
 | Unused generic display options | 91,226 | 524 / 452 | 19 / 11 | 9 |
+| Unused internal parameter plumbing | 91,194 | 524 / 452 | 19 / 11 | 9 |
 
 The DataFrame cut removes NA/statistics resolvers, value replacement and unused ShowString/SchemaPivot nodes. All eleven NA/statistics spec variants now reject before input resolution. The new test first reproduced missing-table lookup, then verified the rejection and successful SQL COUNT, AVG, COVAR_SAMP, CORR and COALESCE execution. Shared value formatting remains because SQL casts and PIVOT use it. No test source was removed from the vendored crates.
 
@@ -291,3 +292,5 @@ Datetime cleanup removes fields that were written but never read, the fixed-loca
 A further cleanup removes five unreferenced constants, the uncalled macro path extractor and the unused session-locale/case-sensitive configuration fields, totaling 45 vendored production-source lines plus one runner assignment. Unexpected macro paths are still rejected by the unchanged validation, and the complete parser syntax snapshot passes. The case-sensitive setting had no reader in the retained resolver; its existing corpus mismatch stays visible. All 116 import-baseline observations, 19 runner tests, 11 planner tests and 9 Python tests remain unchanged.
 
 SQL string casts and pivot names now call the fixed Spark formatter directly. Unused RFC3339, custom datetime and ISO-duration alternatives, display-error options and their configuration propagation are removed. The error-returning writer remains; its invalid-timezone and failed-output checks pass. Existing Spark duration, map, NULL, run-array and Variant expectations remain, and the added temporal/decimal checks passed before and after deletion. The cut removes 365 production-source lines and adds 32 net test lines. The 116-case import baseline and all retained library suites pass.
+
+The final parameter pass removes unused schema/state/rename arguments in expression resolution, unused WKB point/ring dimension flags and an unconstructed WKB error variant. Actual WKB dimensionality, geography bounds and malformed-input checks remain. Cast naming still uses the existing expression-based rule; the spec descriptor is preserved. This removes 32 production-source lines. All retained library suites and all 116 import-baseline observations pass.

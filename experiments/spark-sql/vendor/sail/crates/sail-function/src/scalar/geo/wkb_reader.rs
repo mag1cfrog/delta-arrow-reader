@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 const BYTE_SIZE: usize = 1;
 const INT_SIZE: usize = 4;
 const DOUBLE_SIZE: usize = 8;
@@ -25,8 +26,6 @@ pub enum WkbError {
     InvalidByteOrder(u8),
     #[error("Invalid or unsupported type: {0}")]
     InvalidType(i32),
-    #[error("Unsupported dimension: {0}")]
-    UnsupportedDimension(i32),
     #[error(
         "Unexpected end of WKB buffer: expected {expected} bytes at position {position}, but only {remaining} remaining"
     )]
@@ -260,9 +259,9 @@ impl WkbReader {
         }
 
         match geo_type {
-            1 => self.read_point(dimension_count, has_z, has_m, true),
-            2 => self.read_linestring(dimension_count, has_z, has_m),
-            3 => self.read_polygon(dimension_count, has_z, has_m),
+            1 => self.read_point(dimension_count, true),
+            2 => self.read_linestring(dimension_count),
+            3 => self.read_polygon(dimension_count),
             4 => self.read_multipoint(has_z, has_m),
             5 => self.read_multilinestring(has_z, has_m),
             6 => self.read_multipolygon(has_z, has_m),
@@ -271,13 +270,7 @@ impl WkbReader {
         }
     }
 
-    fn read_point(
-        &mut self,
-        dimension_count: usize,
-        _has_z: bool,
-        _has_m: bool,
-        allow_empty: bool,
-    ) -> Result<(), WkbError> {
+    fn read_point(&mut self, dimension_count: usize, allow_empty: bool) -> Result<(), WkbError> {
         let coords_start_pos = self.position;
         let mut coords = Vec::with_capacity(dimension_count);
 
@@ -316,12 +309,7 @@ impl WkbReader {
         Ok(())
     }
 
-    fn read_linestring(
-        &mut self,
-        dimension_count: usize,
-        has_z: bool,
-        has_m: bool,
-    ) -> Result<(), WkbError> {
+    fn read_linestring(&mut self, dimension_count: usize) -> Result<(), WkbError> {
         let num_points_pos = self.position;
         let num_points = self.read_int()?;
 
@@ -334,18 +322,13 @@ impl WkbReader {
         }
 
         for _ in 0..num_points {
-            self.read_internal_point(dimension_count, has_z, has_m)?;
+            self.read_internal_point(dimension_count)?;
         }
 
         Ok(())
     }
 
-    fn read_internal_point(
-        &mut self,
-        dimension_count: usize,
-        _has_z: bool,
-        _has_m: bool,
-    ) -> Result<(), WkbError> {
+    fn read_internal_point(&mut self, dimension_count: usize) -> Result<(), WkbError> {
         let coords_start_pos = self.position;
 
         let mut coords = Vec::with_capacity(dimension_count);
@@ -382,12 +365,7 @@ impl WkbReader {
         Ok(())
     }
 
-    fn read_polygon(
-        &mut self,
-        dimension_count: usize,
-        has_z: bool,
-        has_m: bool,
-    ) -> Result<(), WkbError> {
+    fn read_polygon(&mut self, dimension_count: usize) -> Result<(), WkbError> {
         let num_rings = self.read_int()?;
         if num_rings < 0 {
             return Err(WkbError::UnexpectedEndOfBuffer {
@@ -398,18 +376,13 @@ impl WkbReader {
         }
 
         for _ in 0..num_rings {
-            self.read_ring(dimension_count, has_z, has_m)?;
+            self.read_ring(dimension_count)?;
         }
 
         Ok(())
     }
 
-    fn read_ring(
-        &mut self,
-        dimension_count: usize,
-        _has_z: bool,
-        _has_m: bool,
-    ) -> Result<(), WkbError> {
+    fn read_ring(&mut self, dimension_count: usize) -> Result<(), WkbError> {
         let num_points_pos = self.position;
         let num_points = self.read_int()?;
 
@@ -629,9 +602,9 @@ impl WkbReader {
         let dimension_count = self.get_dimension_count(type_and_dim);
 
         match geo_type {
-            1 => self.read_point(dimension_count, has_z, has_m, false)?,
-            2 => self.read_linestring(dimension_count, has_z, has_m)?,
-            3 => self.read_polygon(dimension_count, has_z, has_m)?,
+            1 => self.read_point(dimension_count, false)?,
+            2 => self.read_linestring(dimension_count)?,
+            3 => self.read_polygon(dimension_count)?,
             4 => self.read_multipoint(has_z, has_m)?,
             5 => self.read_multilinestring(has_z, has_m)?,
             6 => self.read_multipolygon(has_z, has_m)?,

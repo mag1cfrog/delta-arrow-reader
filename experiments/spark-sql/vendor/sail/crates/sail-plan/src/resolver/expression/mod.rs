@@ -142,10 +142,10 @@ impl PlanResolver<'_> {
             Expr::Cast {
                 expr,
                 cast_to_type,
-                rename,
+                rename: _,
                 is_try,
             } => {
-                self.resolve_expression_cast(*expr, cast_to_type, rename, is_try, schema, state)
+                self.resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
                     .await
             }
             Expr::UnresolvedRegex { .. } | Expr::UpdateFields { .. } => Err(
@@ -174,7 +174,7 @@ impl PlanResolver<'_> {
                     .await
             }
             Expr::UnresolvedNamedLambdaVariable(variable) => {
-                self.resolve_expression_named_lambda_variable(variable, schema, state)
+                self.resolve_expression_named_lambda_variable(variable, state)
                     .await
             }
             Expr::CommonInlineUserDefinedFunction(_) => {

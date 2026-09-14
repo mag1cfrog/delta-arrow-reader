@@ -33,9 +33,7 @@ impl PlanResolver<'_> {
                 let qualifier = target
                     .map(|x| self.resolve_table_reference(&x))
                     .transpose()?;
-                let options = self
-                    .resolve_wildcard_options(wildcard_options, schema, state)
-                    .await?;
+                let options = self.resolve_wildcard_options(wildcard_options).await?;
                 Ok(NamedExpr::new(
                     vec!["*".to_string()],
                     #[expect(deprecated)]
@@ -148,8 +146,6 @@ impl PlanResolver<'_> {
     async fn resolve_wildcard_options(
         &self,
         wildcard_options: spec::WildcardOptions,
-        _schema: &DFSchemaRef,
-        _state: &mut PlanResolverState,
     ) -> PlanResult<expr::WildcardOptions> {
         fn make_ident(value: impl Into<String>) -> Ident {
             Ident::new(value.into())

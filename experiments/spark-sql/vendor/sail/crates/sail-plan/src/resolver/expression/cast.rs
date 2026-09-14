@@ -34,7 +34,6 @@ impl PlanResolver<'_> {
         &self,
         expr: spec::Expr,
         cast_to_type: spec::DataType,
-        _rename: bool,
         is_try: bool,
         schema: &DFSchemaRef,
         state: &mut PlanResolverState,

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion_common::DFSchemaRef;
 use datafusion_common::arrow::datatypes::FieldRef;
 use datafusion_common::datatype::FieldExt;
@@ -178,7 +179,6 @@ impl PlanResolver<'_> {
     pub(super) async fn resolve_expression_named_lambda_variable(
         &self,
         variable: spec::UnresolvedNamedLambdaVariable,
-        _schema: &DFSchemaRef,
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
         let name = <Vec<String>>::from(variable.name)

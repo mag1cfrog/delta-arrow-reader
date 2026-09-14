@@ -17270,6 +17270,135 @@ index a00a4d5..d306b32 100644
  #[derive(Debug, PartialEq, Eq, Hash)]
  pub struct Explode {
      signature: Signature,
+diff --git a/crates/sail-function/src/scalar/geo/wkb_reader.rs b/crates/sail-function/src/scalar/geo/wkb_reader.rs
+index 0b2884b..7759274 100644
+--- a/crates/sail-function/src/scalar/geo/wkb_reader.rs
++++ b/crates/sail-function/src/scalar/geo/wkb_reader.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ const BYTE_SIZE: usize = 1;
+ const INT_SIZE: usize = 4;
+ const DOUBLE_SIZE: usize = 8;
+@@ -25,8 +26,6 @@ pub enum WkbError {
+     InvalidByteOrder(u8),
+     #[error("Invalid or unsupported type: {0}")]
+     InvalidType(i32),
+-    #[error("Unsupported dimension: {0}")]
+-    UnsupportedDimension(i32),
+     #[error(
+         "Unexpected end of WKB buffer: expected {expected} bytes at position {position}, but only {remaining} remaining"
+     )]
+@@ -260,9 +259,9 @@ impl WkbReader {
+         }
+ 
+         match geo_type {
+-            1 => self.read_point(dimension_count, has_z, has_m, true),
+-            2 => self.read_linestring(dimension_count, has_z, has_m),
+-            3 => self.read_polygon(dimension_count, has_z, has_m),
++            1 => self.read_point(dimension_count, true),
++            2 => self.read_linestring(dimension_count),
++            3 => self.read_polygon(dimension_count),
+             4 => self.read_multipoint(has_z, has_m),
+             5 => self.read_multilinestring(has_z, has_m),
+             6 => self.read_multipolygon(has_z, has_m),
+@@ -271,13 +270,7 @@ impl WkbReader {
+         }
+     }
+ 
+-    fn read_point(
+-        &mut self,
+-        dimension_count: usize,
+-        _has_z: bool,
+-        _has_m: bool,
+-        allow_empty: bool,
+-    ) -> Result<(), WkbError> {
++    fn read_point(&mut self, dimension_count: usize, allow_empty: bool) -> Result<(), WkbError> {
+         let coords_start_pos = self.position;
+         let mut coords = Vec::with_capacity(dimension_count);
+ 
+@@ -316,12 +309,7 @@ impl WkbReader {
+         Ok(())
+     }
+ 
+-    fn read_linestring(
+-        &mut self,
+-        dimension_count: usize,
+-        has_z: bool,
+-        has_m: bool,
+-    ) -> Result<(), WkbError> {
++    fn read_linestring(&mut self, dimension_count: usize) -> Result<(), WkbError> {
+         let num_points_pos = self.position;
+         let num_points = self.read_int()?;
+ 
+@@ -334,18 +322,13 @@ impl WkbReader {
+         }
+ 
+         for _ in 0..num_points {
+-            self.read_internal_point(dimension_count, has_z, has_m)?;
++            self.read_internal_point(dimension_count)?;
+         }
+ 
+         Ok(())
+     }
+ 
+-    fn read_internal_point(
+-        &mut self,
+-        dimension_count: usize,
+-        _has_z: bool,
+-        _has_m: bool,
+-    ) -> Result<(), WkbError> {
++    fn read_internal_point(&mut self, dimension_count: usize) -> Result<(), WkbError> {
+         let coords_start_pos = self.position;
+ 
+         let mut coords = Vec::with_capacity(dimension_count);
+@@ -382,12 +365,7 @@ impl WkbReader {
+         Ok(())
+     }
+ 
+-    fn read_polygon(
+-        &mut self,
+-        dimension_count: usize,
+-        has_z: bool,
+-        has_m: bool,
+-    ) -> Result<(), WkbError> {
++    fn read_polygon(&mut self, dimension_count: usize) -> Result<(), WkbError> {
+         let num_rings = self.read_int()?;
+         if num_rings < 0 {
+             return Err(WkbError::UnexpectedEndOfBuffer {
+@@ -398,18 +376,13 @@ impl WkbReader {
+         }
+ 
+         for _ in 0..num_rings {
+-            self.read_ring(dimension_count, has_z, has_m)?;
++            self.read_ring(dimension_count)?;
+         }
+ 
+         Ok(())
+     }
+ 
+-    fn read_ring(
+-        &mut self,
+-        dimension_count: usize,
+-        _has_z: bool,
+-        _has_m: bool,
+-    ) -> Result<(), WkbError> {
++    fn read_ring(&mut self, dimension_count: usize) -> Result<(), WkbError> {
+         let num_points_pos = self.position;
+         let num_points = self.read_int()?;
+ 
+@@ -629,9 +602,9 @@ impl WkbReader {
+         let dimension_count = self.get_dimension_count(type_and_dim);
+ 
+         match geo_type {
+-            1 => self.read_point(dimension_count, has_z, has_m, false)?,
+-            2 => self.read_linestring(dimension_count, has_z, has_m)?,
+-            3 => self.read_polygon(dimension_count, has_z, has_m)?,
++            1 => self.read_point(dimension_count, false)?,
++            2 => self.read_linestring(dimension_count)?,
++            3 => self.read_polygon(dimension_count)?,
+             4 => self.read_multipoint(has_z, has_m)?,
+             5 => self.read_multilinestring(has_z, has_m)?,
+             6 => self.read_multipolygon(has_z, has_m)?,
 diff --git a/crates/sail-function/src/scalar/json/common_union.rs b/crates/sail-function/src/scalar/json/common_union.rs
 index 0cd025a..40ae108 100644
 --- a/crates/sail-function/src/scalar/json/common_union.rs
@@ -44341,7 +44470,7 @@ index 52d5e84..b498cfe 100644
                      .map(|(_, name)| {
                          (
 diff --git a/crates/sail-plan/src/resolver/expression/cast.rs b/crates/sail-plan/src/resolver/expression/cast.rs
-index 1a8c232..ee85ad4 100644
+index 1a8c232..63835b8 100644
 --- a/crates/sail-plan/src/resolver/expression/cast.rs
 +++ b/crates/sail-plan/src/resolver/expression/cast.rs
 @@ -1,3 +1,4 @@
@@ -44366,7 +44495,15 @@ index 1a8c232..ee85ad4 100644
  use crate::function::is_spark_compatible_arrow_fixed_offset;
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
-@@ -74,10 +74,7 @@ impl PlanResolver<'_> {
+@@ -34,7 +34,6 @@ impl PlanResolver<'_> {
+         &self,
+         expr: spec::Expr,
+         cast_to_type: spec::DataType,
+-        _rename: bool,
+         is_try: bool,
+         schema: &DFSchemaRef,
+         state: &mut PlanResolverState,
+@@ -74,10 +73,7 @@ impl PlanResolver<'_> {
          let expr_type = expr_field.data_type().clone();
          let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
          let name = if need_rename_cast(&expr) {
@@ -44378,7 +44515,7 @@ index 1a8c232..ee85ad4 100644
              vec![format!(
                  "{}CAST({} AS {})",
                  if is_try { "TRY_" } else { "" },
-@@ -139,8 +136,7 @@ impl PlanResolver<'_> {
+@@ -139,8 +135,7 @@ impl PlanResolver<'_> {
                  ScalarUDF::new_from_impl(SparkVariantToJsonUdf::new()).call(vec![expr])
              }
              (_, to, is_try) if expr_is_variant => {
@@ -44680,6 +44817,23 @@ index 460ca78..c7541e8 100644
              &function_name,
              argument_display_names.iter().map(|x| x.as_str()).collect(),
              is_distinct,
+diff --git a/crates/sail-plan/src/resolver/expression/lambda.rs b/crates/sail-plan/src/resolver/expression/lambda.rs
+index f8bd512..6d7b0a2 100644
+--- a/crates/sail-plan/src/resolver/expression/lambda.rs
++++ b/crates/sail-plan/src/resolver/expression/lambda.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use datafusion_common::DFSchemaRef;
+ use datafusion_common::arrow::datatypes::FieldRef;
+ use datafusion_common::datatype::FieldExt;
+@@ -178,7 +179,6 @@ impl PlanResolver<'_> {
+     pub(super) async fn resolve_expression_named_lambda_variable(
+         &self,
+         variable: spec::UnresolvedNamedLambdaVariable,
+-        _schema: &DFSchemaRef,
+         state: &mut PlanResolverState,
+     ) -> PlanResult<NamedExpr> {
+         let name = <Vec<String>>::from(variable.name)
 diff --git a/crates/sail-plan/src/resolver/expression/literal.rs b/crates/sail-plan/src/resolver/expression/literal.rs
 index 309481e..63b0b79 100644
 --- a/crates/sail-plan/src/resolver/expression/literal.rs
@@ -44984,7 +45138,7 @@ index fd946d2..c923e0f 100644
 -    }
  }
 diff --git a/crates/sail-plan/src/resolver/expression/mod.rs b/crates/sail-plan/src/resolver/expression/mod.rs
-index 6e1d2ce..d0331ae 100644
+index 6e1d2ce..4cec234 100644
 --- a/crates/sail-plan/src/resolver/expression/mod.rs
 +++ b/crates/sail-plan/src/resolver/expression/mod.rs
 @@ -1,3 +1,4 @@
@@ -45037,14 +45191,22 @@ index 6e1d2ce..d0331ae 100644
                      .await
              }
              Expr::Alias {
-@@ -142,10 +148,9 @@ impl PlanResolver<'_> {
-                 self.resolve_expression_cast(*expr, cast_to_type, rename, is_try, schema, state)
-                     .await
-             }
--            Expr::UnresolvedRegex { col_name, plan_id } => {
--                self.resolve_expression_regex(col_name, plan_id, schema, state)
+@@ -136,16 +142,15 @@ impl PlanResolver<'_> {
+             Expr::Cast {
+                 expr,
+                 cast_to_type,
+-                rename,
++                rename: _,
+                 is_try,
+             } => {
+-                self.resolve_expression_cast(*expr, cast_to_type, rename, is_try, schema, state)
 -                    .await
 -            }
+-            Expr::UnresolvedRegex { col_name, plan_id } => {
+-                self.resolve_expression_regex(col_name, plan_id, schema, state)
++                self.resolve_expression_cast(*expr, cast_to_type, is_try, schema, state)
+                     .await
+             }
 +            Expr::UnresolvedRegex { .. } | Expr::UpdateFields { .. } => Err(
 +                PlanError::unsupported("extraction probe: DataFrame column expressions"),
 +            ),
@@ -45070,7 +45232,8 @@ index 6e1d2ce..d0331ae 100644
 -                .await
 -            }
              Expr::UnresolvedNamedLambdaVariable(variable) => {
-                 self.resolve_expression_named_lambda_variable(variable, schema, state)
+-                self.resolve_expression_named_lambda_variable(variable, schema, state)
++                self.resolve_expression_named_lambda_variable(variable, state)
                      .await
              }
 -            Expr::CommonInlineUserDefinedFunction(function) => {
@@ -45632,7 +45795,7 @@ index e77dd70..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/src/resolver/expression/wildcard.rs b/crates/sail-plan/src/resolver/expression/wildcard.rs
-index eb3c502..a7d3faa 100644
+index eb3c502..a6dce03 100644
 --- a/crates/sail-plan/src/resolver/expression/wildcard.rs
 +++ b/crates/sail-plan/src/resolver/expression/wildcard.rs
 @@ -1,9 +1,10 @@
@@ -45662,7 +45825,18 @@ index eb3c502..a7d3faa 100644
          match target {
              Some(target) if wildcard_options == Default::default() => {
                  self.resolve_wildcard_or_nested_field_wildcard(&target, schema, state)
-@@ -91,7 +88,7 @@ impl PlanResolver<'_> {
+@@ -36,9 +33,7 @@ impl PlanResolver<'_> {
+                 let qualifier = target
+                     .map(|x| self.resolve_table_reference(&x))
+                     .transpose()?;
+-                let options = self
+-                    .resolve_wildcard_options(wildcard_options, schema, state)
+-                    .await?;
++                let options = self.resolve_wildcard_options(wildcard_options).await?;
+                 Ok(NamedExpr::new(
+                     vec!["*".to_string()],
+                     #[expect(deprecated)]
+@@ -91,7 +86,7 @@ impl PlanResolver<'_> {
                              return None;
                          };
                          if qualifier_matches(q.as_ref(), qualifier)
@@ -45671,14 +45845,12 @@ index eb3c502..a7d3faa 100644
                          {
                              Self::resolve_nested_field_wildcard(
                                  col((q.as_ref(), field)),
-@@ -151,15 +148,11 @@ impl PlanResolver<'_> {
+@@ -151,15 +146,9 @@ impl PlanResolver<'_> {
      async fn resolve_wildcard_options(
          &self,
          wildcard_options: spec::WildcardOptions,
 -        schema: &DFSchemaRef,
 -        state: &mut PlanResolverState,
-+        _schema: &DFSchemaRef,
-+        _state: &mut PlanResolverState,
      ) -> PlanResult<expr::WildcardOptions> {
          fn make_ident(value: impl Into<String>) -> Ident {
 -            Ident {
@@ -45690,7 +45862,7 @@ index eb3c502..a7d3faa 100644
          }
  
          fn make_object_name(value: impl Into<String>) -> ObjectName {
-@@ -210,58 +203,15 @@ impl PlanResolver<'_> {
+@@ -210,58 +199,15 @@ impl PlanResolver<'_> {
                  Ok(except)
              })
              .transpose()?;
