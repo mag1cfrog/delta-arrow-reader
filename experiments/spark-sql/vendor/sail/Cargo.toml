@@ -37,7 +37,7 @@ xee-xpath = "0.1.5"
 xot = "0.31.2"
 regex = "1.12.3"
 regex-syntax = "0.8.11"
-chrono = { version = "0.4.44", features = ["serde"] }
+chrono = "0.4.44"
 chrono-tz = "0.10.4"
 syn = "2.0.117"
 quote = "1.0.45"
@@ -60,7 +60,7 @@ half = { version = "2.7.1", features = ["num-traits", "zerocopy"] }
 chumsky = { version = "0.12.0", default-features = false, features = ["pratt"] }
 num = "0.4.3"
 itertools = "0.14.0"
-ordered-float = { version = "5.3.0", features = ["serde"] }
+ordered-float = "5.3.0"
 datafusion = { version = "54.1.0", default-features = false, features = [
     "nested_expressions",
     "crypto_expressions",
@@ -83,7 +83,7 @@ datafusion-spark = { version = "54.1.0", features = ["core"] }
 jiter = { version = "0.15.0", default-features = false }
 arrow = { version = "58.3.0", features = ["chrono-tz"] }
 arrow-buffer = { version = "58.3.0" }
-arrow-schema = { version = "58.3.0", features = ["serde"] }
+arrow-schema = "58.3.0"
 parquet-variant = { version = "58.3.0" }
 parquet-variant-compute = { version = "58.3.0" }
 parquet-variant-json = { version = "58.3.0" }
