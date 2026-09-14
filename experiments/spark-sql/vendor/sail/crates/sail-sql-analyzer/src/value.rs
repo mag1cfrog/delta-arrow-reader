@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use sail_common::spec;
 use sail_sql_parser::ast::expression::BooleanLiteral;
 use sail_sql_parser::ast::literal::{NumberLiteral, NumberSuffix, StringLiteral};
@@ -50,11 +51,7 @@ enum StringLiteralList {
 
 impl StringLiteralList {
     fn try_new(value: StringLiteral) -> SqlResult<Self> {
-        let StringLiteral {
-            span: _,
-            tokens: _,
-            value,
-        } = value;
+        let StringLiteral { span: _, value } = value;
         match value {
             StringValue::Valid {
                 value,
@@ -120,11 +117,7 @@ pub(crate) fn from_ast_boolean_literal(value: BooleanLiteral) -> SqlResult<spec:
 }
 
 pub(crate) fn from_ast_string(s: StringLiteral) -> SqlResult<String> {
-    let StringLiteral {
-        span: _,
-        tokens: _,
-        value,
-    } = s;
+    let StringLiteral { span: _, value } = s;
     match value {
         StringValue::Valid { value, prefix: _ } => Ok(value),
         StringValue::Invalid { reason } => Err(SqlError::invalid(reason)),

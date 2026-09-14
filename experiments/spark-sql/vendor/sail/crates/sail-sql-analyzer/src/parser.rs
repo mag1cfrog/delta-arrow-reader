@@ -96,7 +96,6 @@ pub fn parse_time(s: &str) -> SqlResult<TimeValue> {
 mod tests {
     use sail_sql_parser::ast::query::Query;
     use sail_sql_parser::ast::statement::Statement;
-    use sail_sql_parser::tree::TreeText;
 
     use crate::error::SqlResult;
     use crate::parser::{parse_one_statement, parse_statements};
@@ -116,23 +115,18 @@ mod tests {
     }
 
     #[test]
-    fn test_unparse() -> SqlResult<()> {
-        assert_eq!(
-            parse_one_statement("/* */ SELECT 1+1")?.text(),
-            "SELECT 1 + 1 "
-        );
-        assert_eq!(
-            parse_one_statement("Select  2*3 +(4*5)AS a, b '\\x01', $1,? -- comment")?.text(),
-            "SELECT 2 * 3 + ( 4 * 5 ) AS a , b '\\x01' , $1 , ? "
-        );
-        assert_eq!(
-            parse_one_statement("SELECT foo(0), cast(1L as decimal(10, -1)) FROM a.b")?.text(),
-            "SELECT foo ( 0 ) , CAST ( 1L AS DECIMAL ( 10 , -1 ) ) FROM a . b "
-        );
-        assert_eq!(
-            parse_one_statement("SELECT U&\"a#2014b#+002014c\"   UESCAPE '#'")?.text(),
-            "SELECT U&\"a#2014b#+002014c\" UESCAPE '#' "
-        );
+    fn test_literal_and_variable_syntax() -> SqlResult<()> {
+        for sql in [
+            "/* */ SELECT 1+1",
+            r"Select  2*3 +(4*5)AS a, b '\x01', $1,? -- comment",
+            "SELECT foo(0), cast(1L as decimal(10, -1)) FROM a.b",
+            r##"SELECT U&"a#2014b#+002014c"   UESCAPE '#'"##,
+        ] {
+            assert!(
+                matches!(parse_one_statement(sql)?, Statement::Query(_)),
+                "{sql}"
+            );
+        }
         Ok(())
     }
 }

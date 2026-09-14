@@ -184,6 +184,58 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn sql_literals_decode_without_reconstructing_sql_text() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        let sql = r#"/* comment */ SELECT 1+1 AS n, 2*3+(4*5) AS arithmetic,
+            r'\n' AS raw, 'a\nb' AS escaped, hex(X'00ff') AS bytes,
+            U&"a#0041b#+000042c" UESCAPE '#' AS unicode,
+            CAST(1L AS BIGINT) AS wide, 'a' 'b' AS joined -- comment"#;
+        let named = resolve(&ctx, sql, &settings).await?;
+        assert_eq!(
+            named.fields,
+            [
+                "n",
+                "arithmetic",
+                "raw",
+                "escaped",
+                "bytes",
+                "unicode",
+                "wide",
+                "joined"
+            ]
+        );
+        let batches = ctx
+            .execute_logical_plan(named.plan)
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        let values = batches[0]
+            .columns()
+            .iter()
+            .map(|column| array_value_to_string(column.as_ref(), 0))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            values,
+            ["2", "26", "\\n", "a\nb", "00FF", "aAbBc", "1", "ab"]
+        );
+        for invalid in [
+            "SELECT U&'a#0041' UESCAPE 'ab'",
+            "SELECT U&'a#XYZW' UESCAPE '#'",
+        ] {
+            assert!(
+                resolve(&ctx, invalid, &settings).await.is_err(),
+                "{invalid}"
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn first_last_windows_preserve_nulls_frames_and_batches() -> ProbeResult<()> {
         use arrow::datatypes::DataType;
         use arrow::record_batch::RecordBatch;

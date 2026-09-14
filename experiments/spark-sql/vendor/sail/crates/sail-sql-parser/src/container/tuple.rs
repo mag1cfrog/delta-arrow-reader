@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::any::TypeId;
 
 use chumsky::Parser;
@@ -6,7 +7,7 @@ use chumsky::prelude::Input;
 use paste::paste;
 
 use crate::options::ParserOptions;
-use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax, TreeText};
+use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax};
 
 macro_rules! nested {
     (@fold $acc:tt) => { $acc };
@@ -57,23 +58,6 @@ macro_rules! impl_tree_parser_for_tuple {
             }
         }
 
-        impl<$T $(,$Ts)*> TreeText for ($T, $($Ts,)*)
-        where
-            $T: TreeText
-            $(,$Ts: TreeText)*
-        {
-            fn text(&self) -> String {
-                let mut result = String::new();
-                paste! {
-                    let ([<$T:lower>], $([<$Ts:lower>],)*) = self;
-                    result.push_str(&[<$T:lower>].text());
-                    $(
-                        result.push_str(&[<$Ts:lower>].text());
-                    )*
-                }
-                result
-            }
-        }
     };
 }
 

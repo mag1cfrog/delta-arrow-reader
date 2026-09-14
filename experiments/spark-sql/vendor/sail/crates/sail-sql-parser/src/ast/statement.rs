@@ -1,5 +1,6 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use either::Either;
-use sail_sql_macro::{TreeParser, TreeSyntax, TreeText};
+use sail_sql_macro::{TreeParser, TreeSyntax};
 
 use crate::ast;
 use crate::ast::data_type::DataType;
@@ -32,7 +33,7 @@ use crate::combinator::{boxed, compose, sequence, unit};
 use crate::common::Sequence;
 use crate::token::TokenLabel;
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Statement, Query, Expr, DataType)", label = TokenLabel::Statement)]
 pub enum Statement {
     Query(#[parser(function = |(_, q, _, _), _| q)] Query),
@@ -350,7 +351,7 @@ pub enum Statement {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum ExplainFormat {
     Extended(Extended),
     Codegen(Codegen),
@@ -360,46 +361,46 @@ pub enum ExplainFormat {
     Verbose(Verbose),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub struct PropertyList {
     pub left: LeftParenthesis,
     pub properties: Sequence<PropertyKeyValue, Comma>,
     pub right: RightParenthesis,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub struct PropertyKeyList {
     pub left: LeftParenthesis,
     pub properties: Sequence<PropertyKey, Comma>,
     pub right: RightParenthesis,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub struct PropertyKeyValue {
     pub key: PropertyKey,
     pub value: Option<(Option<Equals>, PropertyValue)>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum PropertyKey {
     Name(ObjectName),
     Literal(StringLiteral),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum PropertyValue {
     String(StringLiteral),
     Number(Option<Either<Plus, Minus>>, NumberLiteral),
     Boolean(BooleanLiteral),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum AlterDatabaseOperation {
     SetProperties(Set, Either<Dbproperties, Properties>, PropertyList),
     SetLocation(Set, Location, StringLiteral),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Query")]
 pub struct AsQueryClause {
     pub r#as: Option<As>,
@@ -407,20 +408,20 @@ pub struct AsQueryClause {
     pub query: Query,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub struct ViewUsingClause {
     pub using: Using,
     pub format: Ident,
     pub options: Option<(Options, PropertyList)>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub struct TemporaryViewClause {
     pub global: Option<Global>,
     pub temporary: Either<Temp, Temporary>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Query, DataType)")]
 pub enum CreateViewDefinition {
     Query {
@@ -445,7 +446,7 @@ pub enum CreateViewDefinition {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, DataType)")]
 pub struct ColumnDefinitionList {
     pub left: LeftParenthesis,
@@ -454,7 +455,7 @@ pub struct ColumnDefinitionList {
     pub right: RightParenthesis,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, DataType)")]
 pub struct ColumnDefinition {
     pub name: Ident,
@@ -464,7 +465,7 @@ pub struct ColumnDefinition {
     pub options: Vec<ColumnDefinitionOption>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub enum ColumnDefinitionOption {
     NotNull(Not, Null),
@@ -495,20 +496,20 @@ pub enum ColumnDefinitionOption {
     Comment(Comment, StringLiteral),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub struct TableColumnIdentityOptions {
     pub left: LeftParenthesis,
     pub options: Vec<TableColumnIdentityOption>,
     pub right: RightParenthesis,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum TableColumnIdentityOption {
     StartWith(Start, With, Option<Either<Plus, Minus>>, NumberLiteral),
     IncrementBy(Increment, By, Option<Either<Plus, Minus>>, NumberLiteral),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "DataType")]
 pub struct ColumnTypeDefinition {
     pub name: Ident,
@@ -519,7 +520,7 @@ pub struct ColumnTypeDefinition {
     pub comment: Option<(Comment, StringLiteral)>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, Query, DataType)")]
 pub enum PartitionByItem {
     /// Hive-style typed partition column definition: `col_name <data_type>`
@@ -528,7 +529,7 @@ pub enum PartitionByItem {
     Expression(#[parser(function = |(e, q, d), o| compose((e, q, d), o))] Expr),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, Query, DataType)")]
 pub struct PartitionByList {
     pub left: LeftParenthesis,
@@ -537,7 +538,7 @@ pub struct PartitionByList {
     pub right: RightParenthesis,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub struct PartitionClause {
     pub partition: Partition,
@@ -545,7 +546,7 @@ pub struct PartitionClause {
     pub values: PartitionValueList,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub struct PartitionValue {
     pub column: Ident,
@@ -553,7 +554,7 @@ pub struct PartitionValue {
     pub value: Option<(Equals, Expr)>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub struct PartitionValueList {
     pub left: LeftParenthesis,
@@ -562,48 +563,48 @@ pub struct PartitionValueList {
     pub right: RightParenthesis,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum CreateDatabaseClause {
     Comment(Comment, StringLiteral),
     Location(Location, StringLiteral),
     Properties(With, Either<Dbproperties, Properties>, PropertyList),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum DatabaseKeyword {
     Database(Database),
     Schema(Schema),
     Namespace(Namespace),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum ShowFunctionScope {
     All(All),
     User(User),
     System(System),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum ShowFunctionsClause {
     NamespacePattern(Either<From, In>, ObjectName, Like, StringLiteral),
     Namespace(Either<From, In>, ObjectName),
     Pattern(Option<Like>, ShowFunctionsPattern),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum ShowFunctionsPattern {
     String(StringLiteral),
     Name(ObjectName),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum DatabasesKeyword {
     Databases(Databases),
     Schemas(Schemas),
     Namespaces(Namespaces),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, Query, DataType)")]
 pub enum CreateTableClause {
     /// The `PARTITIONED BY` clause for table.
@@ -640,7 +641,7 @@ pub enum CreateTableClause {
     Properties(Tblproperties, PropertyList),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, Query, DataType)")]
 pub struct SortColumnClause {
     pub sorted: Sorted,
@@ -649,7 +650,7 @@ pub struct SortColumnClause {
     pub columns: SortColumnList,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, Query, DataType)")]
 pub struct SortColumnList {
     pub left: LeftParenthesis,
@@ -658,7 +659,7 @@ pub struct SortColumnList {
     pub right: RightParenthesis,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, Query, DataType)")]
 pub struct SortColumn {
     #[parser(function = |(e, q, d), o| compose((e, q, d), o))]
@@ -666,7 +667,7 @@ pub struct SortColumn {
     pub direction: Option<OrderDirection>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum RowFormat {
     Serde {
         serde: Serde,
@@ -679,7 +680,7 @@ pub enum RowFormat {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum RowFormatDelimitedClause {
     Fields(
         Fields,
@@ -694,19 +695,19 @@ pub enum RowFormatDelimitedClause {
     Null(Null, Defined, As, StringLiteral),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum FileFormat {
     Table(Inputformat, StringLiteral, Outputformat, StringLiteral),
     General(Ident),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum CreateViewClause {
     Comment(Comment, StringLiteral),
     Properties(Tblproperties, PropertyList),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "DataType")]
 pub struct ViewColumnList {
     pub left: LeftParenthesis,
@@ -715,7 +716,7 @@ pub struct ViewColumnList {
     pub right: RightParenthesis,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "DataType")]
 pub struct ViewColumn {
     pub name: Ident,
@@ -725,7 +726,7 @@ pub struct ViewColumn {
     pub comment: Option<(Comment, StringLiteral)>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, DataType)")]
 pub enum AlterTableOperation {
     RenameTable {
@@ -826,7 +827,7 @@ pub enum AlterTableOperation {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Query, Expr)")]
 pub enum AlterViewOperation {
     RenameView {
@@ -848,7 +849,7 @@ pub enum AlterViewOperation {
     Query(#[parser(function = |(q, _), o| compose(q, o))] AsQueryClause),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, DataType)")]
 pub enum AlterColumnOperation {
     Type(Type, #[parser(function = |(_, d), _| d)] DataType),
@@ -860,7 +861,7 @@ pub enum AlterColumnOperation {
     DropDefault(Drop, Default),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, DataType)")]
 pub enum ColumnAlterationList {
     Delimited {
@@ -875,7 +876,7 @@ pub enum ColumnAlterationList {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Expr, DataType)")]
 pub struct ColumnAlteration {
     pub name: ObjectName,
@@ -885,7 +886,7 @@ pub struct ColumnAlteration {
     pub options: Vec<ColumnAlterationOption>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub enum ColumnAlterationOption {
     NotNull(Not, Null),
@@ -894,13 +895,13 @@ pub enum ColumnAlterationOption {
     Position(ColumnPosition),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum ColumnPosition {
     First(First),
     After(After, ObjectName),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum ColumnDropList {
     Delimited {
         left: LeftParenthesis,
@@ -912,7 +913,7 @@ pub enum ColumnDropList {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum InsertDirectoryDestination {
     Spark {
         path: Option<StringLiteral>,
@@ -929,7 +930,7 @@ pub enum InsertDirectoryDestination {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Query")]
 pub enum MergeSource {
     Table {
@@ -945,7 +946,7 @@ pub enum MergeSource {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub enum MergeMatchClause {
     Matched {
@@ -981,7 +982,7 @@ pub enum MergeMatchClause {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub enum MergeMatchedAction {
     Delete(Delete),
@@ -993,7 +994,7 @@ pub enum MergeMatchedAction {
     ),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub enum MergeNotMatchedBySourceAction {
     Delete(Delete),
@@ -1004,7 +1005,7 @@ pub enum MergeNotMatchedBySourceAction {
     ),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub enum MergeNotMatchedByTargetAction {
     InsertAll(Insert, Asterisk),
@@ -1019,7 +1020,7 @@ pub enum MergeNotMatchedByTargetAction {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub struct UpdateTableAlias {
     pub r#as: Option<As>,
     #[parser(function = |(), o| table_ident(o))]
@@ -1027,7 +1028,7 @@ pub struct UpdateTableAlias {
     pub columns: Option<IdentList>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub struct SetClause {
     pub set: Set,
@@ -1035,7 +1036,7 @@ pub struct SetClause {
     pub assignments: AssignmentList,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub enum AssignmentList {
     Delimited {
@@ -1050,7 +1051,7 @@ pub enum AssignmentList {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "Expr")]
 pub struct Assignment {
     pub target: ObjectName,
@@ -1059,7 +1060,7 @@ pub struct Assignment {
     pub value: Expr,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub struct DeleteTableAlias {
     pub r#as: Option<As>,
     #[parser(function = |(), o| table_ident(o))]
@@ -1067,14 +1068,14 @@ pub struct DeleteTableAlias {
     pub columns: Option<IdentList>,
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum AnalyzeTableModifier {
     NoScan(Noscan),
     ForAllColumns(For, All, Columns),
     ForColumns(For, Columns, Sequence<ObjectName, Comma>),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "(Query, Expr)")]
 pub enum DescribeItem {
     Function {
@@ -1117,7 +1118,7 @@ pub enum DescribeItem {
     },
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum DescribeFunctionName {
     Name(ObjectName),
     String(StringLiteral),
@@ -1146,7 +1147,7 @@ pub enum DescribeFunctionName {
     Equals(Equals),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum CommentValue {
     NotNull(StringLiteral),
     Null(Null),

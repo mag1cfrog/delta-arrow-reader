@@ -1,4 +1,5 @@
-use sail_sql_macro::{TreeParser, TreeSyntax, TreeText};
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+use sail_sql_macro::{TreeParser, TreeSyntax};
 
 use crate::ast::identifier::Ident;
 use crate::ast::keywords::{
@@ -17,7 +18,7 @@ use crate::combinator::{boxed, compose, sequence, unit};
 use crate::common::Sequence;
 use crate::token::TokenLabel;
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "DataType", label = TokenLabel::DataType)]
 pub enum DataType {
     Null(Null),
@@ -115,26 +116,26 @@ pub enum DataType {
     Variant(Variant),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum GeometrySrid {
     Srid(IntegerLiteral),
     Any(Any),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum GeographySrid {
     Srid(IntegerLiteral),
     Any(Any),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum DecimalType {
     Decimal(Decimal),
     Dec(Dec),
     Numeric(Numeric),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum IntervalType {
     YearMonth(
         Interval,
@@ -149,13 +150,13 @@ pub enum IntervalType {
     Default(Interval),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum IntervalYearMonthUnit {
     Year(Year),
     Month(Month),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum IntervalDayTimeUnit {
     Day(Day),
     Hour(Hour),
@@ -164,14 +165,14 @@ pub enum IntervalDayTimeUnit {
 }
 
 #[expect(clippy::enum_variant_names)]
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 pub enum TimezoneType {
     WithTimeZone(With, Time, Zone),
     WithoutTimeZone(Without, Time, Zone),
     WithLocalTimeZone(With, Local, Time, Zone),
 }
 
-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+#[derive(Debug, Clone, TreeParser, TreeSyntax)]
 #[parser(dependency = "DataType")]
 pub struct StructField {
     pub identifier: Ident,

@@ -47861,7 +47861,7 @@ index 409d1ac..8fbda84 100644
      match op {
          UnaryOperator::Plus(_) => Ok("+".to_string()),
 diff --git a/crates/sail-sql-analyzer/src/parser.rs b/crates/sail-sql-analyzer/src/parser.rs
-index 2729fef..f9112d0 100644
+index 2729fef..6b1d17a 100644
 --- a/crates/sail-sql-analyzer/src/parser.rs
 +++ b/crates/sail-sql-analyzer/src/parser.rs
 @@ -1,19 +1,18 @@
@@ -47940,6 +47940,50 @@ index 2729fef..f9112d0 100644
 -
  pub(crate) fn parse_interval_literal(s: &str) -> SqlResult<IntervalLiteral> {
      parse!(s, create_interval_literal_parser)
+ }
+@@ -130,7 +96,6 @@ pub fn parse_time(s: &str) -> SqlResult<TimeValue> {
+ mod tests {
+     use sail_sql_parser::ast::query::Query;
+     use sail_sql_parser::ast::statement::Statement;
+-    use sail_sql_parser::tree::TreeText;
+ 
+     use crate::error::SqlResult;
+     use crate::parser::{parse_one_statement, parse_statements};
+@@ -150,23 +115,18 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn test_unparse() -> SqlResult<()> {
+-        assert_eq!(
+-            parse_one_statement("/* */ SELECT 1+1")?.text(),
+-            "SELECT 1 + 1 "
+-        );
+-        assert_eq!(
+-            parse_one_statement("Select  2*3 +(4*5)AS a, b '\\x01', $1,? -- comment")?.text(),
+-            "SELECT 2 * 3 + ( 4 * 5 ) AS a , b '\\x01' , $1 , ? "
+-        );
+-        assert_eq!(
+-            parse_one_statement("SELECT foo(0), cast(1L as decimal(10, -1)) FROM a.b")?.text(),
+-            "SELECT foo ( 0 ) , CAST ( 1L AS DECIMAL ( 10 , -1 ) ) FROM a . b "
+-        );
+-        assert_eq!(
+-            parse_one_statement("SELECT U&\"a#2014b#+002014c\"   UESCAPE '#'")?.text(),
+-            "SELECT U&\"a#2014b#+002014c\" UESCAPE '#' "
+-        );
++    fn test_literal_and_variable_syntax() -> SqlResult<()> {
++        for sql in [
++            "/* */ SELECT 1+1",
++            r"Select  2*3 +(4*5)AS a, b '\x01', $1,? -- comment",
++            "SELECT foo(0), cast(1L as decimal(10, -1)) FROM a.b",
++            r##"SELECT U&"a#2014b#+002014c"   UESCAPE '#'"##,
++        ] {
++            assert!(
++                matches!(parse_one_statement(sql)?, Statement::Query(_)),
++                "{sql}"
++            );
++        }
+         Ok(())
+     }
  }
 diff --git a/crates/sail-sql-analyzer/src/statement.rs b/crates/sail-sql-analyzer/src/statement.rs
 index fec7256..dbcc2e5 100644
@@ -50261,6 +50305,198 @@ index fec7256..dbcc2e5 100644
 -) -> SqlResult<spec::AlterViewOperation> {
 -    Ok(spec::AlterViewOperation::Unknown)
 -}
+diff --git a/crates/sail-sql-analyzer/src/value.rs b/crates/sail-sql-analyzer/src/value.rs
+index dc8a925..40f650a 100644
+--- a/crates/sail-sql-analyzer/src/value.rs
++++ b/crates/sail-sql-analyzer/src/value.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use sail_common::spec;
+ use sail_sql_parser::ast::expression::BooleanLiteral;
+ use sail_sql_parser::ast::literal::{NumberLiteral, NumberSuffix, StringLiteral};
+@@ -50,11 +51,7 @@ enum StringLiteralList {
+ 
+ impl StringLiteralList {
+     fn try_new(value: StringLiteral) -> SqlResult<Self> {
+-        let StringLiteral {
+-            span: _,
+-            tokens: _,
+-            value,
+-        } = value;
++        let StringLiteral { span: _, value } = value;
+         match value {
+             StringValue::Valid {
+                 value,
+@@ -120,11 +117,7 @@ pub(crate) fn from_ast_boolean_literal(value: BooleanLiteral) -> SqlResult<spec:
+ }
+ 
+ pub(crate) fn from_ast_string(s: StringLiteral) -> SqlResult<String> {
+-    let StringLiteral {
+-        span: _,
+-        tokens: _,
+-        value,
+-    } = s;
++    let StringLiteral { span: _, value } = s;
+     match value {
+         StringValue::Valid { value, prefix: _ } => Ok(value),
+         StringValue::Invalid { reason } => Err(SqlError::invalid(reason)),
+diff --git a/crates/sail-sql-macro/src/lib.rs b/crates/sail-sql-macro/src/lib.rs
+index ac1b55c..03e7732 100644
+--- a/crates/sail-sql-macro/src/lib.rs
++++ b/crates/sail-sql-macro/src/lib.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ extern crate proc_macro;
+ extern crate proc_macro2;
+ 
+@@ -89,18 +90,3 @@ pub fn derive_tree_syntax(input: TokenStream) -> TokenStream {
+         .unwrap_or_else(syn::Error::into_compile_error)
+         .into()
+ }
+-
+-/// Derives the `TreeText` trait.
+-///
+-/// The type can be an enum with struct or tuple variants, or a struct with named or unnamed fields.
+-/// For enums, the variants represent a choice of texts.
+-/// For structs, the fields represent a sequence of texts.
+-///
+-/// The text cannot be derived for enums with unit variants, or structs with no fields.
+-#[proc_macro_derive(TreeText)]
+-pub fn derive_tree_text(input: TokenStream) -> TokenStream {
+-    let input = parse_macro_input!(input as DeriveInput);
+-    tree::text::derive_tree_text(input)
+-        .unwrap_or_else(syn::Error::into_compile_error)
+-        .into()
+-}
+diff --git a/crates/sail-sql-macro/src/tree/mod.rs b/crates/sail-sql-macro/src/tree/mod.rs
+index 6a1eb31..931a3ca 100644
+--- a/crates/sail-sql-macro/src/tree/mod.rs
++++ b/crates/sail-sql-macro/src/tree/mod.rs
+@@ -1,3 +1,3 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ pub mod parser;
+ pub mod syntax;
+-pub mod text;
+diff --git a/crates/sail-sql-macro/src/tree/text.rs b/crates/sail-sql-macro/src/tree/text.rs
+deleted file mode 100644
+index fea0cbb..0000000
+--- a/crates/sail-sql-macro/src/tree/text.rs
++++ /dev/null
+@@ -1,114 +0,0 @@
+-use proc_macro2::{Ident, TokenStream};
+-use quote::{format_ident, quote};
+-use syn::spanned::Spanned;
+-use syn::{Data, DeriveInput, Field, Fields};
+-
+-/// The trait to derive for tree text.
+-const TRAIT: &str = "TreeText";
+-
+-struct TextFields {
+-    pattern: TokenStream,
+-    statements: TokenStream,
+-}
+-
+-fn derive_fields_inner<'a>(
+-    fields: impl IntoIterator<Item = &'a Field>,
+-) -> (TokenStream, Vec<Ident>) {
+-    let mut initializer = quote! {};
+-    let mut variables = vec![];
+-    for (i, field) in fields.into_iter().enumerate() {
+-        let v = format_ident!("v{}", i);
+-        if let Some(name) = &field.ident {
+-            initializer.extend(quote! { #name: #v, });
+-        } else {
+-            initializer.extend(quote! { #v, });
+-        }
+-        variables.push(v);
+-    }
+-    (initializer, variables)
+-}
+-
+-fn derive_fields(spanned: impl Spanned, fields: &Fields) -> syn::Result<TextFields> {
+-    let (pattern, variables) = match fields {
+-        Fields::Named(named) => {
+-            let (initializer, variables) = derive_fields_inner(&named.named);
+-            (quote! { { #initializer } }, variables)
+-        }
+-        Fields::Unnamed(unnamed) => {
+-            let (initializer, variables) = derive_fields_inner(&unnamed.unnamed);
+-            (quote! { ( #initializer ) }, variables)
+-        }
+-        Fields::Unit => {
+-            return Err(syn::Error::new(
+-                spanned.span(),
+-                format!("cannot derive `{TRAIT}` for unit fields"),
+-            ));
+-        }
+-    };
+-    Ok(TextFields {
+-        pattern,
+-        statements: quote! { #( result.push_str(&#variables.text()); )* },
+-    })
+-}
+-
+-pub(crate) fn derive_tree_text(input: DeriveInput) -> syn::Result<TokenStream> {
+-    let name = &input.ident;
+-
+-    let statements = match &input.data {
+-        Data::Enum(data) => {
+-            if data.variants.is_empty() {
+-                return Err(syn::Error::new(
+-                    data.variants.span(),
+-                    format!("cannot derive `{TRAIT}` for empty enums"),
+-                ));
+-            }
+-            let arms = data
+-                .variants
+-                .iter()
+-                .map(|variant| {
+-                    let variant_name = &variant.ident;
+-                    let TextFields {
+-                        pattern,
+-                        statements,
+-                    } = derive_fields(variant, &variant.fields)?;
+-                    Ok(quote! {
+-                        Self::#variant_name #pattern => {
+-                            #statements
+-                        }
+-                    })
+-                })
+-                .collect::<syn::Result<Vec<_>>>()?;
+-            quote! {
+-                match self {
+-                    #(#arms)*
+-                }
+-            }
+-        }
+-        Data::Struct(data) => {
+-            let TextFields {
+-                pattern,
+-                statements,
+-            } = derive_fields(&input, &data.fields)?;
+-            quote! {
+-                let Self #pattern = self;
+-                #statements
+-            }
+-        }
+-        _ => {
+-            return Err(syn::Error::new(
+-                input.span(),
+-                format!("`{TRAIT}` can only be derived for enums or structs"),
+-            ));
+-        }
+-    };
+-
+-    Ok(quote! {
+-        impl crate::tree::TreeText for #name {
+-            fn text(&self) -> std::string::String {
+-                let mut result = std::string::String::new();
+-                #statements
+-                result
+-            }
+-        }
+-    })
+-}
 diff --git a/crates/sail-sql-parser/Cargo.toml b/crates/sail-sql-parser/Cargo.toml
 index 57f0b83..f7159e3 100644
 --- a/crates/sail-sql-parser/Cargo.toml
@@ -50279,6 +50515,1881 @@ index 57f0b83..f7159e3 100644
  
  [build-dependencies]
  prettyplease = { workspace = true }
+diff --git a/crates/sail-sql-parser/src/ast/data_type.rs b/crates/sail-sql-parser/src/ast/data_type.rs
+index 22264c7..093096d 100644
+--- a/crates/sail-sql-parser/src/ast/data_type.rs
++++ b/crates/sail-sql-parser/src/ast/data_type.rs
+@@ -1,4 +1,5 @@
+-use sail_sql_macro::{TreeParser, TreeSyntax, TreeText};
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
++use sail_sql_macro::{TreeParser, TreeSyntax};
+ 
+ use crate::ast::identifier::Ident;
+ use crate::ast::keywords::{
+@@ -17,7 +18,7 @@ use crate::combinator::{boxed, compose, sequence, unit};
+ use crate::common::Sequence;
+ use crate::token::TokenLabel;
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "DataType", label = TokenLabel::DataType)]
+ pub enum DataType {
+     Null(Null),
+@@ -115,26 +116,26 @@ pub enum DataType {
+     Variant(Variant),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum GeometrySrid {
+     Srid(IntegerLiteral),
+     Any(Any),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum GeographySrid {
+     Srid(IntegerLiteral),
+     Any(Any),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum DecimalType {
+     Decimal(Decimal),
+     Dec(Dec),
+     Numeric(Numeric),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum IntervalType {
+     YearMonth(
+         Interval,
+@@ -149,13 +150,13 @@ pub enum IntervalType {
+     Default(Interval),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum IntervalYearMonthUnit {
+     Year(Year),
+     Month(Month),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum IntervalDayTimeUnit {
+     Day(Day),
+     Hour(Hour),
+@@ -164,14 +165,14 @@ pub enum IntervalDayTimeUnit {
+ }
+ 
+ #[expect(clippy::enum_variant_names)]
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum TimezoneType {
+     WithTimeZone(With, Time, Zone),
+     WithoutTimeZone(Without, Time, Zone),
+     WithLocalTimeZone(With, Local, Time, Zone),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "DataType")]
+ pub struct StructField {
+     pub identifier: Ident,
+diff --git a/crates/sail-sql-parser/src/ast/expression.rs b/crates/sail-sql-parser/src/ast/expression.rs
+index 1a256e6..aee7015 100644
+--- a/crates/sail-sql-parser/src/ast/expression.rs
++++ b/crates/sail-sql-parser/src/ast/expression.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::Parser;
+ use chumsky::extra::ParserExtra;
+ use chumsky::input::{Input, MapExtra, ValueInput};
+@@ -5,7 +6,7 @@ use chumsky::label::LabelError;
+ use chumsky::pratt::{Operator, infix, left, postfix, prefix};
+ use chumsky::prelude::{any, choice};
+ use either::Either;
+-use sail_sql_macro::{TreeParser, TreeSyntax, TreeText};
++use sail_sql_macro::{TreeParser, TreeSyntax};
+ 
+ use crate::ast::data_type::{DataType, IntervalDayTimeUnit, IntervalYearMonthUnit};
+ use crate::ast::identifier::{Ident, ObjectName, Variable};
+@@ -36,7 +37,7 @@ use crate::span::TokenSpan;
+ use crate::token::{Token, TokenLabel};
+ use crate::tree::TreeParser;
+ 
+-#[derive(Debug, Clone, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeSyntax)]
+ #[syntax(name = "Expression")]
+ pub enum Expr {
+     Atom(AtomExpr),
+@@ -96,7 +97,7 @@ pub enum Expr {
+     ),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Query, DataType)")]
+ #[syntax(name = "AtomExpression")]
+ pub enum AtomExpr {
+@@ -242,7 +243,7 @@ pub enum AtomExpr {
+     Identifier(Ident),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Query")]
+ pub enum TableExpr {
+     Name(ObjectName),
+@@ -254,13 +255,13 @@ pub enum TableExpr {
+     ),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum BooleanLiteral {
+     True(True),
+     False(False),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct IntervalLiteral {
+     pub interval: Option<Interval>,
+@@ -268,7 +269,7 @@ pub struct IntervalLiteral {
+     pub value: IntervalExpr,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum IntervalExpr {
+     // The multi-unit pattern must be defined before the standard pattern,
+@@ -293,7 +294,7 @@ pub enum IntervalExpr {
+     Literal(StringLiteral),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct IntervalValueWithUnit {
+     #[parser(function = |e, _| e)]
+@@ -301,7 +302,7 @@ pub struct IntervalValueWithUnit {
+     pub unit: IntervalUnit,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum IntervalUnit {
+     Year(Year),
+     Years(Years),
+@@ -323,13 +324,13 @@ pub enum IntervalUnit {
+     Microseconds(Microseconds),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum IntervalQualifier {
+     YearMonth(IntervalYearMonthUnit, Option<(To, IntervalYearMonthUnit)>),
+     DayTime(IntervalDayTimeUnit, Option<(To, IntervalDayTimeUnit)>),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum TrimExpr {
+     LeadingSpace(Leading, From, #[parser(function = |e, _| e)] Expr),
+@@ -355,7 +356,7 @@ pub enum TrimExpr {
+     ),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct FunctionExpr {
+     pub name: ObjectName,
+@@ -372,7 +373,7 @@ pub struct FunctionExpr {
+     pub over_clause: Option<OverClause>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct FunctionArgumentList {
+     pub left: LeftParenthesis,
+@@ -383,7 +384,7 @@ pub struct FunctionArgumentList {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum FunctionArgument {
+     Named(
+@@ -394,19 +395,19 @@ pub enum FunctionArgument {
+     Unnamed(#[parser(function = |e, _| e)] Expr),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum DuplicateTreatment {
+     All(All),
+     Distinct(Distinct),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum NullTreatment {
+     RespectNulls(Respect, Nulls),
+     IgnoreNulls(Ignore, Nulls),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct WithinGroupClause {
+     pub within_group: (Within, Group),
+@@ -417,7 +418,7 @@ pub struct WithinGroupClause {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct FilterClause {
+     pub filter: Filter,
+@@ -428,7 +429,7 @@ pub struct FilterClause {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct OverClause {
+     pub over: Over,
+@@ -436,7 +437,7 @@ pub struct OverClause {
+     pub window: WindowSpec,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum WindowSpec {
+     Named(Ident),
+@@ -451,7 +452,7 @@ pub enum WindowSpec {
+ }
+ 
+ #[expect(clippy::enum_variant_names)]
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum WindowModifier {
+     ClusterBy(#[parser(function = |e, o| compose(e, o))] ClusterByClause),
+@@ -461,7 +462,7 @@ pub enum WindowModifier {
+     SortBy(#[parser(function = |e, o| compose(e, o))] SortByClause),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct OrderByExpr {
+     #[parser(function = |e, _| e)]
+@@ -470,19 +471,19 @@ pub struct OrderByExpr {
+     pub nulls: Option<OrderNulls>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum OrderDirection {
+     Asc(Asc),
+     Desc(Desc),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum OrderNulls {
+     First(Nulls, First),
+     Last(Nulls, Last),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum WindowFrame {
+     RangeBetween(
+@@ -509,7 +510,7 @@ pub enum WindowFrame {
+     ),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum WindowFrameBound {
+     UnboundedPreceding(Unbounded, Preceding),
+@@ -519,7 +520,7 @@ pub enum WindowFrameBound {
+     Following(#[parser(function = |e, _| e)] Expr, Following),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum UnaryOperator {
+     Plus(operator::Plus),
+     Minus(operator::Minus),
+@@ -528,7 +529,7 @@ pub enum UnaryOperator {
+     LogicalNot(operator::ExclamationMark),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum BinaryOperator {
+     Plus(operator::Plus),
+     Minus(operator::Minus),
+@@ -558,7 +559,7 @@ pub enum BinaryOperator {
+     BitwiseOr(operator::VerticalBar),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct CaseWhen {
+     pub when: When,
+@@ -569,7 +570,7 @@ pub struct CaseWhen {
+     pub result: Expr,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct CaseElse {
+     pub r#else: Else,
+@@ -577,26 +578,26 @@ pub struct CaseElse {
+     pub result: Expr,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum LambdaFunctionParameters {
+     Single(Ident),
+     Multiple(LeftParenthesis, Sequence<Ident, Comma>, RightParenthesis),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum PatternQuantifier {
+     All(All),
+     Any(Any),
+     Some(crate::ast::keywords::Some),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct PatternEscape {
+     pub escape: Escape,
+     pub value: StringLiteral,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum GroupingExpr {
+     GroupingSets(
+@@ -615,7 +616,7 @@ pub enum GroupingExpr {
+ }
+ 
+ // TODO: support nested grouping sets
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct GroupingSet {
+     pub left: LeftParenthesis,
+@@ -627,7 +628,7 @@ pub struct GroupingSet {
+ // All private `struct`s or `enum`s are "internal" AST nodes used to parse expressions.
+ // They are not part of the final AST.
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, DataType)")]
+ enum ExprModifier {
+     Wildcard(Period, operator::Asterisk),
+@@ -640,7 +641,7 @@ enum ExprModifier {
+     Cast(DoubleColon, #[parser(function = |(_, d), _| d)] DataType),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Query)")]
+ enum ExprPostfixPredicate {
+     IsFalse(Is, Option<Not>, False),
+@@ -663,7 +664,7 @@ enum ExprPostfixPredicate {
+     ),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ enum ExprInfixPredicate {
+     IsDistinctFrom(Is, Option<Not>, Distinct, From),
+     Between(Option<Not>, Between),
+diff --git a/crates/sail-sql-parser/src/ast/identifier.rs b/crates/sail-sql-parser/src/ast/identifier.rs
+index 4a31c34..7e9df10 100644
+--- a/crates/sail-sql-parser/src/ast/identifier.rs
++++ b/crates/sail-sql-parser/src/ast/identifier.rs
+@@ -1,18 +1,19 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::Parser;
+ use chumsky::extra::ParserExtra;
+ use chumsky::input::{Input, InputRef, ValueInput};
+ use chumsky::label::LabelError;
+ use chumsky::prelude::custom;
+-use sail_sql_macro::{TreeParser, TreeSyntax, TreeText};
++use sail_sql_macro::{TreeParser, TreeSyntax};
+ 
+-use crate::ast::operator::{Asterisk, Period};
++use crate::ast::operator::Period;
+ use crate::combinator::sequence;
+ use crate::common::Sequence;
+ use crate::options::ParserOptions;
+ use crate::span::TokenSpan;
+ use crate::string::StringValue;
+ use crate::token::{Keyword, Punctuation, StringStyle, Token, TokenLabel};
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax};
+ use crate::utils::skip_whitespace;
+ 
+ fn parse_identifier<'a, F, I, E>(
+@@ -89,12 +90,6 @@ impl TreeSyntax for Ident {
+     }
+ }
+ 
+-impl TreeText for Ident {
+-    fn text(&self) -> String {
+-        format!("{} ", self.value.clone())
+-    }
+-}
+-
+ /// A restricted identifier parser for column names.
+ pub(crate) fn column_ident<'a, I, E>(
+     options: &'a ParserOptions,
+@@ -129,7 +124,7 @@ where
+     custom(move |input| parse_identifier(input, matcher, options))
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct ObjectName(pub Sequence<Ident, Period>);
+ 
+ /// A restricted object name parser.
+@@ -147,9 +142,6 @@ where
+     sequence(ident, Period::parser((), options)).map(ObjectName)
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
+-pub struct QualifiedWildcard(pub Sequence<Ident, Period>, pub Period, pub Asterisk);
+-
+ /// A named variable `$name` or `:name`, or an unnamed variable `?`.
+ #[derive(Debug, Clone)]
+ pub struct Variable {
+@@ -244,12 +236,6 @@ impl TreeSyntax for Variable {
+     }
+ }
+ 
+-impl TreeText for Variable {
+-    fn text(&self) -> String {
+-        format!("{} ", self.value)
+-    }
+-}
+-
+ pub(crate) fn is_identifier_string(style: &StringStyle, options: &ParserOptions) -> bool {
+     if options.allow_double_quote_identifier {
+         matches!(
+diff --git a/crates/sail-sql-parser/src/ast/keywords.rs b/crates/sail-sql-parser/src/ast/keywords.rs
+index 394018e..15ea1f5 100644
+--- a/crates/sail-sql-parser/src/ast/keywords.rs
++++ b/crates/sail-sql-parser/src/ast/keywords.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::Parser;
+ use chumsky::extra::ParserExtra;
+ use chumsky::input::{Input, InputRef, ValueInput};
+@@ -7,7 +8,7 @@ use chumsky::prelude::custom;
+ use crate::options::ParserOptions;
+ use crate::span::TokenSpan;
+ use crate::token::{Keyword, Token, TokenLabel};
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax};
+ use crate::utils::skip_whitespace;
+ 
+ fn parse_keyword<'a, I, E>(
+@@ -91,11 +92,6 @@ macro_rules! keyword_types {
+                 }
+             }
+ 
+-            impl TreeText for $name {
+-                fn text(&self) -> std::string::String {
+-                    format!("{} ", Self::keyword().as_str())
+-                }
+-            }
+         )*
+     }
+ }
+diff --git a/crates/sail-sql-parser/src/ast/literal.rs b/crates/sail-sql-parser/src/ast/literal.rs
+index 0890ef2..f577611 100644
+--- a/crates/sail-sql-parser/src/ast/literal.rs
++++ b/crates/sail-sql-parser/src/ast/literal.rs
+@@ -1,7 +1,7 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::Parser;
+ use chumsky::extra::ParserExtra;
+-use chumsky::input::{Checkpoint, InputRef, ValueInput};
+-use chumsky::inspector::Inspector;
++use chumsky::input::{InputRef, ValueInput};
+ use chumsky::label::LabelError;
+ use chumsky::prelude::{Input, custom};
+ 
+@@ -10,7 +10,7 @@ use crate::options::ParserOptions;
+ use crate::span::TokenSpan;
+ use crate::string::StringValue;
+ use crate::token::{Keyword, Punctuation, StringStyle, Token, TokenLabel};
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax};
+ use crate::utils::skip_whitespace;
+ 
+ #[derive(Debug, Clone)]
+@@ -30,19 +30,6 @@ pub enum NumberSuffix {
+     Bd,
+ }
+ 
+-impl NumberSuffix {
+-    pub fn as_str(self) -> &'static str {
+-        match self {
+-            NumberSuffix::Y => "Y",
+-            NumberSuffix::S => "S",
+-            NumberSuffix::L => "L",
+-            NumberSuffix::F => "F",
+-            NumberSuffix::D => "D",
+-            NumberSuffix::Bd => "BD",
+-        }
+-    }
+-}
+-
+ /// The state for number literal parsing.
+ /// Formally, the state and state transitions are equivalent to a minimal DFA
+ /// derived from the regular grammar for number literals.
+@@ -221,15 +208,6 @@ impl TreeSyntax for NumberLiteral {
+     }
+ }
+ 
+-impl TreeText for NumberLiteral {
+-    fn text(&self) -> String {
+-        match self.suffix {
+-            Some(suffix) => format!("{}{} ", self.value, suffix.as_str()),
+-            None => format!("{} ", self.value),
+-        }
+-    }
+-}
+-
+ #[derive(Debug, Clone)]
+ pub struct IntegerLiteral {
+     pub span: TokenSpan,
+@@ -287,25 +265,12 @@ impl TreeSyntax for IntegerLiteral {
+     }
+ }
+ 
+-impl TreeText for IntegerLiteral {
+-    fn text(&self) -> String {
+-        format!("{} ", self.value)
+-    }
+-}
+-
+ #[derive(Debug, Clone)]
+ pub struct StringLiteral {
+     pub span: TokenSpan,
+-    pub tokens: Vec<StringToken>,
+     pub value: StringValue,
+ }
+ 
+-#[derive(Debug, Clone)]
+-pub enum StringToken {
+-    Word { raw: String },
+-    String { raw: String },
+-}
+-
+ /// Parse the `UESCAPE 'c'` clause following a Unicode string literal.
+ /// Unlike other parsers, the whitespace handling logic is different here,
+ /// due to how it is used in the string literal parser.
+@@ -368,7 +333,6 @@ where
+                     };
+                     let literal = StringLiteral {
+                         span: input.span_since(before.cursor()).into(),
+-                        tokens: collect_string_tokens(input, before.clone()),
+                         value,
+                     };
+                     skip_whitespace(input);
+@@ -385,37 +349,6 @@ where
+     }
+ }
+ 
+-fn collect_string_tokens<'a, 'b, I, E>(
+-    input: &mut InputRef<'a, 'b, I, E>,
+-    before: Checkpoint<'a, 'b, I, <E::State as Inspector<'a, I>>::Checkpoint>,
+-) -> Vec<StringToken>
+-where
+-    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+-    E: ParserExtra<'a, I> + 'a,
+-{
+-    let marker = input.save();
+-    input.rewind(before.clone());
+-    let mut result = vec![];
+-    while let Some(token) = input.next() {
+-        match token {
+-            Token::Word { raw, .. } => result.push(StringToken::Word {
+-                raw: raw.to_string(),
+-            }),
+-            Token::String { raw, .. } => result.push(StringToken::String {
+-                raw: raw.to_string(),
+-            }),
+-            _ => {}
+-        }
+-        if input.cursor() >= *marker.cursor() {
+-            break;
+-        }
+-    }
+-    // The cursor should have reached the marker at this point,
+-    // but to be safe, we perform an explicit rewind to recover the exact state.
+-    input.rewind(marker);
+-    result
+-}
+-
+ impl TreeSyntax for StringLiteral {
+     fn syntax() -> SyntaxDescriptor {
+         SyntaxDescriptor {
+@@ -426,17 +359,6 @@ impl TreeSyntax for StringLiteral {
+     }
+ }
+ 
+-impl TreeText for StringLiteral {
+-    fn text(&self) -> String {
+-        self.tokens
+-            .iter()
+-            .map(|token| match token {
+-                StringToken::Word { raw } | StringToken::String { raw } => format!("{} ", raw),
+-            })
+-            .collect()
+-    }
+-}
+-
+ fn is_valid_unicode_escape_character(c: char) -> bool {
+     !(c.is_whitespace() || c.is_ascii_hexdigit() || c == '\'' || c == '"' || c == '+')
+ }
+diff --git a/crates/sail-sql-parser/src/ast/operator.rs b/crates/sail-sql-parser/src/ast/operator.rs
+index d898732..c0206b6 100644
+--- a/crates/sail-sql-parser/src/ast/operator.rs
++++ b/crates/sail-sql-parser/src/ast/operator.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::Parser;
+ use chumsky::extra::ParserExtra;
+ use chumsky::input::{Input, InputRef, ValueInput};
+@@ -7,7 +8,7 @@ use chumsky::prelude::custom;
+ use crate::options::ParserOptions;
+ use crate::span::TokenSpan;
+ use crate::token::{Punctuation, Token, TokenLabel};
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax};
+ use crate::utils::skip_whitespace;
+ 
+ fn parse_operator<'a, I, E>(
+@@ -83,12 +84,6 @@ macro_rules! define_operator {
+             }
+         }
+ 
+-        impl TreeText for $name {
+-            fn text(&self) -> String {
+-                let operator: String = Self::punctuations().iter().map(|p| p.to_char()).collect();
+-                format!("{operator} ")
+-            }
+-        }
+     };
+ }
+ 
+diff --git a/crates/sail-sql-parser/src/ast/query.rs b/crates/sail-sql-parser/src/ast/query.rs
+index a20e26d..d6efc59 100644
+--- a/crates/sail-sql-parser/src/ast/query.rs
++++ b/crates/sail-sql-parser/src/ast/query.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::Parser;
+ use chumsky::extra::ParserExtra;
+ use chumsky::input::{Input, ValueInput};
+@@ -5,7 +6,7 @@ use chumsky::label::LabelError;
+ use chumsky::pratt::{infix, left};
+ use chumsky::prelude::choice;
+ use either::Either;
+-use sail_sql_macro::{TreeParser, TreeSyntax, TreeText};
++use sail_sql_macro::{TreeParser, TreeSyntax};
+ 
+ use crate::ast::expression::{
+     DuplicateTreatment, Expr, FunctionArgument, GroupingExpr, OrderByExpr, WindowSpec,
+@@ -28,7 +29,7 @@ use crate::span::TokenSpan;
+ use crate::token::{Token, TokenLabel};
+ use crate::tree::TreeParser;
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, Expr, TableWithJoins)", label = TokenLabel::Query)]
+ pub struct Query {
+     #[parser(function = |(q, _, _), o| compose(q, o))]
+@@ -39,7 +40,7 @@ pub struct Query {
+     pub modifiers: Vec<QueryModifier>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum QueryModifier {
+     Window(#[parser(function = |e, o| compose(e, o))] WindowClause),
+@@ -51,7 +52,7 @@ pub enum QueryModifier {
+     Offset(#[parser(function = |e, o| compose(e, o))] OffsetClause),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Query")]
+ pub struct WithClause {
+     pub with: With,
+@@ -60,7 +61,7 @@ pub struct WithClause {
+     pub ctes: Sequence<NamedQuery, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Query")]
+ pub struct NamedQuery {
+     pub name: Ident,
+@@ -72,14 +73,14 @@ pub struct NamedQuery {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct IdentList {
+     pub left: LeftParenthesis,
+     pub names: Sequence<Ident, Comma>,
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeSyntax)]
+ pub enum QueryBody {
+     Term(Box<QueryTerm>),
+     SetOperation {
+@@ -139,7 +140,7 @@ where
+     }
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum SetOperator {
+     Union(Union),
+     Except(Except),
+@@ -147,7 +148,7 @@ pub enum SetOperator {
+     Intersect(Intersect),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum SetQuantifier {
+     Distinct(Distinct),
+     DistinctByName(Distinct, By, Name),
+@@ -156,7 +157,7 @@ pub enum SetQuantifier {
+     ByName(By, Name),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, Expr, TableWithJoins)")]
+ pub enum QueryTerm {
+     Select(#[parser(function = |(q, e, t), o| boxed(compose((q, e, t), o)))] Box<QuerySelect>),
+@@ -169,7 +170,7 @@ pub enum QueryTerm {
+     ),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, Expr, TableWithJoins)")]
+ pub struct QuerySelect {
+     #[parser(function = |(_, e, _), o| compose(e, o))]
+@@ -186,7 +187,7 @@ pub struct QuerySelect {
+     pub having: Option<HavingClause>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct ValuesClause {
+     pub values: Values,
+@@ -195,7 +196,7 @@ pub struct ValuesClause {
+     pub alias: Option<AliasClause>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct AliasClause {
+     pub r#as: Option<As>,
+     #[parser(function = |(), o| table_ident(o))]
+@@ -203,7 +204,7 @@ pub struct AliasClause {
+     pub columns: Option<IdentList>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct SelectClause {
+     pub select: Select,
+@@ -212,7 +213,7 @@ pub struct SelectClause {
+     pub projection: Sequence<NamedExpr, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Ident)")]
+ pub struct NamedExpr {
+     #[parser(function = |(e, _), _| e)]
+@@ -231,7 +232,7 @@ pub struct NamedExpr {
+     pub alias: Option<(Option<As>, Either<Ident, IdentList>)>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct NamedExprList {
+     pub left: LeftParenthesis,
+@@ -242,7 +243,7 @@ pub struct NamedExprList {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "TableWithJoins")]
+ pub struct FromClause {
+     pub from: From,
+@@ -250,7 +251,7 @@ pub struct FromClause {
+     pub tables: Sequence<TableWithJoins, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, Expr, TableWithJoins)")]
+ pub struct TableWithJoins {
+     pub lateral: Option<Lateral>,
+@@ -260,7 +261,7 @@ pub struct TableWithJoins {
+     pub joins: Vec<TableJoin>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, Expr, TableWithJoins)")]
+ pub enum TableFactor {
+     Values {
+@@ -315,7 +316,7 @@ pub enum TableFactor {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum TemporalClause {
+     Version {
+@@ -334,7 +335,7 @@ pub enum TemporalClause {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct TableSampleClause {
+     pub sample: Tablesample,
+@@ -345,7 +346,7 @@ pub struct TableSampleClause {
+     pub repeatable: Option<TableSampleRepeatable>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum TableSampleMethod {
+     Percent {
+@@ -366,7 +367,7 @@ pub enum TableSampleMethod {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct TableSampleRepeatable {
+     pub repeatable: Repeatable,
+     pub left: LeftParenthesis,
+@@ -374,14 +375,14 @@ pub struct TableSampleRepeatable {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum TableModifier {
+     Pivot(#[parser(function = |e, o| compose(e, o))] PivotClause),
+     Unpivot(UnpivotClause),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct PivotClause {
+     pub pivot: Pivot,
+@@ -396,7 +397,7 @@ pub struct PivotClause {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct UnpivotClause {
+     pub unpivot: Unpivot,
+     pub nulls: Option<UnpivotNulls>,
+@@ -405,13 +406,13 @@ pub struct UnpivotClause {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum UnpivotNulls {
+     IncludeNulls(Include, Nulls),
+     ExcludeNulls(Exclude, Nulls),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum UnpivotColumns {
+     SingleValue {
+         values: Ident,
+@@ -435,7 +436,7 @@ pub enum UnpivotColumns {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct TableFunction {
+     pub name: ObjectName,
+@@ -445,7 +446,7 @@ pub struct TableFunction {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, Expr, TableWithJoins)")]
+ pub struct TableJoin {
+     // The join criteria must be absent for natural joins.
+@@ -460,7 +461,7 @@ pub struct TableJoin {
+     pub criteria: Option<JoinCriteria>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum JoinOperator {
+     Inner(Inner),
+     Cross(Cross),
+@@ -479,14 +480,14 @@ pub enum JoinOperator {
+     Full(Full),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum JoinCriteria {
+     On(On, #[parser(function = |e, _| e)] Expr),
+     Using(Using, IdentList),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct LateralViewClause {
+     pub lateral_view: (Lateral, View),
+@@ -504,7 +505,7 @@ pub struct LateralViewClause {
+     pub columns: Option<(Option<As>, Sequence<Ident, Comma>)>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct WhereClause {
+     pub r#where: Where,
+@@ -512,7 +513,7 @@ pub struct WhereClause {
+     pub condition: Expr,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct GroupByClause {
+     pub group_by: (Group, By),
+@@ -521,13 +522,13 @@ pub struct GroupByClause {
+     pub modifier: Option<GroupByModifier>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum GroupByModifier {
+     WithRollup(With, Rollup),
+     WithCube(With, Cube),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct HavingClause {
+     pub having: Having,
+@@ -535,7 +536,7 @@ pub struct HavingClause {
+     pub condition: Expr,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct WindowClause {
+     pub window: Window,
+@@ -543,7 +544,7 @@ pub struct WindowClause {
+     pub items: Sequence<NamedWindow, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct NamedWindow {
+     pub name: Ident,
+@@ -552,7 +553,7 @@ pub struct NamedWindow {
+     pub window: WindowSpec,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct OrderByClause {
+     pub order_by: (Order, By),
+@@ -560,7 +561,7 @@ pub struct OrderByClause {
+     pub items: Sequence<OrderByExpr, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct SortByClause {
+     pub sort_by: (Sort, By),
+@@ -568,7 +569,7 @@ pub struct SortByClause {
+     pub items: Sequence<OrderByExpr, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct ClusterByClause {
+     pub cluster_by: (Cluster, By),
+@@ -576,7 +577,7 @@ pub struct ClusterByClause {
+     pub items: Sequence<Expr, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct PartitionByClause {
+     pub partition_by: (Partition, By),
+@@ -584,7 +585,7 @@ pub struct PartitionByClause {
+     pub items: Sequence<Expr, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct DistributeByClause {
+     pub distribute_by: (Distribute, By),
+@@ -592,7 +593,7 @@ pub struct DistributeByClause {
+     pub items: Sequence<Expr, Comma>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct LimitClause {
+     pub limit: Limit,
+@@ -600,14 +601,14 @@ pub struct LimitClause {
+     pub value: LimitValue,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum LimitValue {
+     All(All),
+     Value(#[parser(function = |e, _| boxed(e))] Box<Expr>),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct OffsetClause {
+     pub offset: Offset,
+diff --git a/crates/sail-sql-parser/src/ast/statement.rs b/crates/sail-sql-parser/src/ast/statement.rs
+index 5f70e6b..f653b8c 100644
+--- a/crates/sail-sql-parser/src/ast/statement.rs
++++ b/crates/sail-sql-parser/src/ast/statement.rs
+@@ -1,5 +1,6 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use either::Either;
+-use sail_sql_macro::{TreeParser, TreeSyntax, TreeText};
++use sail_sql_macro::{TreeParser, TreeSyntax};
+ 
+ use crate::ast;
+ use crate::ast::data_type::DataType;
+@@ -32,7 +33,7 @@ use crate::combinator::{boxed, compose, sequence, unit};
+ use crate::common::Sequence;
+ use crate::token::TokenLabel;
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Statement, Query, Expr, DataType)", label = TokenLabel::Statement)]
+ pub enum Statement {
+     Query(#[parser(function = |(_, q, _, _), _| q)] Query),
+@@ -350,7 +351,7 @@ pub enum Statement {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum ExplainFormat {
+     Extended(Extended),
+     Codegen(Codegen),
+@@ -360,46 +361,46 @@ pub enum ExplainFormat {
+     Verbose(Verbose),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct PropertyList {
+     pub left: LeftParenthesis,
+     pub properties: Sequence<PropertyKeyValue, Comma>,
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct PropertyKeyList {
+     pub left: LeftParenthesis,
+     pub properties: Sequence<PropertyKey, Comma>,
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct PropertyKeyValue {
+     pub key: PropertyKey,
+     pub value: Option<(Option<Equals>, PropertyValue)>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum PropertyKey {
+     Name(ObjectName),
+     Literal(StringLiteral),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum PropertyValue {
+     String(StringLiteral),
+     Number(Option<Either<Plus, Minus>>, NumberLiteral),
+     Boolean(BooleanLiteral),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum AlterDatabaseOperation {
+     SetProperties(Set, Either<Dbproperties, Properties>, PropertyList),
+     SetLocation(Set, Location, StringLiteral),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Query")]
+ pub struct AsQueryClause {
+     pub r#as: Option<As>,
+@@ -407,20 +408,20 @@ pub struct AsQueryClause {
+     pub query: Query,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct ViewUsingClause {
+     pub using: Using,
+     pub format: Ident,
+     pub options: Option<(Options, PropertyList)>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct TemporaryViewClause {
+     pub global: Option<Global>,
+     pub temporary: Either<Temp, Temporary>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, DataType)")]
+ pub enum CreateViewDefinition {
+     Query {
+@@ -445,7 +446,7 @@ pub enum CreateViewDefinition {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, DataType)")]
+ pub struct ColumnDefinitionList {
+     pub left: LeftParenthesis,
+@@ -454,7 +455,7 @@ pub struct ColumnDefinitionList {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, DataType)")]
+ pub struct ColumnDefinition {
+     pub name: Ident,
+@@ -464,7 +465,7 @@ pub struct ColumnDefinition {
+     pub options: Vec<ColumnDefinitionOption>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum ColumnDefinitionOption {
+     NotNull(Not, Null),
+@@ -495,20 +496,20 @@ pub enum ColumnDefinitionOption {
+     Comment(Comment, StringLiteral),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct TableColumnIdentityOptions {
+     pub left: LeftParenthesis,
+     pub options: Vec<TableColumnIdentityOption>,
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum TableColumnIdentityOption {
+     StartWith(Start, With, Option<Either<Plus, Minus>>, NumberLiteral),
+     IncrementBy(Increment, By, Option<Either<Plus, Minus>>, NumberLiteral),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "DataType")]
+ pub struct ColumnTypeDefinition {
+     pub name: Ident,
+@@ -519,7 +520,7 @@ pub struct ColumnTypeDefinition {
+     pub comment: Option<(Comment, StringLiteral)>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Query, DataType)")]
+ pub enum PartitionByItem {
+     /// Hive-style typed partition column definition: `col_name <data_type>`
+@@ -528,7 +529,7 @@ pub enum PartitionByItem {
+     Expression(#[parser(function = |(e, q, d), o| compose((e, q, d), o))] Expr),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Query, DataType)")]
+ pub struct PartitionByList {
+     pub left: LeftParenthesis,
+@@ -537,7 +538,7 @@ pub struct PartitionByList {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct PartitionClause {
+     pub partition: Partition,
+@@ -545,7 +546,7 @@ pub struct PartitionClause {
+     pub values: PartitionValueList,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct PartitionValue {
+     pub column: Ident,
+@@ -553,7 +554,7 @@ pub struct PartitionValue {
+     pub value: Option<(Equals, Expr)>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct PartitionValueList {
+     pub left: LeftParenthesis,
+@@ -562,48 +563,48 @@ pub struct PartitionValueList {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum CreateDatabaseClause {
+     Comment(Comment, StringLiteral),
+     Location(Location, StringLiteral),
+     Properties(With, Either<Dbproperties, Properties>, PropertyList),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum DatabaseKeyword {
+     Database(Database),
+     Schema(Schema),
+     Namespace(Namespace),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum ShowFunctionScope {
+     All(All),
+     User(User),
+     System(System),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum ShowFunctionsClause {
+     NamespacePattern(Either<From, In>, ObjectName, Like, StringLiteral),
+     Namespace(Either<From, In>, ObjectName),
+     Pattern(Option<Like>, ShowFunctionsPattern),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum ShowFunctionsPattern {
+     String(StringLiteral),
+     Name(ObjectName),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum DatabasesKeyword {
+     Databases(Databases),
+     Schemas(Schemas),
+     Namespaces(Namespaces),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Query, DataType)")]
+ pub enum CreateTableClause {
+     /// The `PARTITIONED BY` clause for table.
+@@ -640,7 +641,7 @@ pub enum CreateTableClause {
+     Properties(Tblproperties, PropertyList),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Query, DataType)")]
+ pub struct SortColumnClause {
+     pub sorted: Sorted,
+@@ -649,7 +650,7 @@ pub struct SortColumnClause {
+     pub columns: SortColumnList,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Query, DataType)")]
+ pub struct SortColumnList {
+     pub left: LeftParenthesis,
+@@ -658,7 +659,7 @@ pub struct SortColumnList {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, Query, DataType)")]
+ pub struct SortColumn {
+     #[parser(function = |(e, q, d), o| compose((e, q, d), o))]
+@@ -666,7 +667,7 @@ pub struct SortColumn {
+     pub direction: Option<OrderDirection>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum RowFormat {
+     Serde {
+         serde: Serde,
+@@ -679,7 +680,7 @@ pub enum RowFormat {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum RowFormatDelimitedClause {
+     Fields(
+         Fields,
+@@ -694,19 +695,19 @@ pub enum RowFormatDelimitedClause {
+     Null(Null, Defined, As, StringLiteral),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum FileFormat {
+     Table(Inputformat, StringLiteral, Outputformat, StringLiteral),
+     General(Ident),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum CreateViewClause {
+     Comment(Comment, StringLiteral),
+     Properties(Tblproperties, PropertyList),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "DataType")]
+ pub struct ViewColumnList {
+     pub left: LeftParenthesis,
+@@ -715,7 +716,7 @@ pub struct ViewColumnList {
+     pub right: RightParenthesis,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "DataType")]
+ pub struct ViewColumn {
+     pub name: Ident,
+@@ -725,7 +726,7 @@ pub struct ViewColumn {
+     pub comment: Option<(Comment, StringLiteral)>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, DataType)")]
+ pub enum AlterTableOperation {
+     RenameTable {
+@@ -826,7 +827,7 @@ pub enum AlterTableOperation {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, Expr)")]
+ pub enum AlterViewOperation {
+     RenameView {
+@@ -848,7 +849,7 @@ pub enum AlterViewOperation {
+     Query(#[parser(function = |(q, _), o| compose(q, o))] AsQueryClause),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, DataType)")]
+ pub enum AlterColumnOperation {
+     Type(Type, #[parser(function = |(_, d), _| d)] DataType),
+@@ -860,7 +861,7 @@ pub enum AlterColumnOperation {
+     DropDefault(Drop, Default),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, DataType)")]
+ pub enum ColumnAlterationList {
+     Delimited {
+@@ -875,7 +876,7 @@ pub enum ColumnAlterationList {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Expr, DataType)")]
+ pub struct ColumnAlteration {
+     pub name: ObjectName,
+@@ -885,7 +886,7 @@ pub struct ColumnAlteration {
+     pub options: Vec<ColumnAlterationOption>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum ColumnAlterationOption {
+     NotNull(Not, Null),
+@@ -894,13 +895,13 @@ pub enum ColumnAlterationOption {
+     Position(ColumnPosition),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum ColumnPosition {
+     First(First),
+     After(After, ObjectName),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum ColumnDropList {
+     Delimited {
+         left: LeftParenthesis,
+@@ -912,7 +913,7 @@ pub enum ColumnDropList {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum InsertDirectoryDestination {
+     Spark {
+         path: Option<StringLiteral>,
+@@ -929,7 +930,7 @@ pub enum InsertDirectoryDestination {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Query")]
+ pub enum MergeSource {
+     Table {
+@@ -945,7 +946,7 @@ pub enum MergeSource {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum MergeMatchClause {
+     Matched {
+@@ -981,7 +982,7 @@ pub enum MergeMatchClause {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum MergeMatchedAction {
+     Delete(Delete),
+@@ -993,7 +994,7 @@ pub enum MergeMatchedAction {
+     ),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum MergeNotMatchedBySourceAction {
+     Delete(Delete),
+@@ -1004,7 +1005,7 @@ pub enum MergeNotMatchedBySourceAction {
+     ),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum MergeNotMatchedByTargetAction {
+     InsertAll(Insert, Asterisk),
+@@ -1019,7 +1020,7 @@ pub enum MergeNotMatchedByTargetAction {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct UpdateTableAlias {
+     pub r#as: Option<As>,
+     #[parser(function = |(), o| table_ident(o))]
+@@ -1027,7 +1028,7 @@ pub struct UpdateTableAlias {
+     pub columns: Option<IdentList>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct SetClause {
+     pub set: Set,
+@@ -1035,7 +1036,7 @@ pub struct SetClause {
+     pub assignments: AssignmentList,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub enum AssignmentList {
+     Delimited {
+@@ -1050,7 +1051,7 @@ pub enum AssignmentList {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "Expr")]
+ pub struct Assignment {
+     pub target: ObjectName,
+@@ -1059,7 +1060,7 @@ pub struct Assignment {
+     pub value: Expr,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub struct DeleteTableAlias {
+     pub r#as: Option<As>,
+     #[parser(function = |(), o| table_ident(o))]
+@@ -1067,14 +1068,14 @@ pub struct DeleteTableAlias {
+     pub columns: Option<IdentList>,
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum AnalyzeTableModifier {
+     NoScan(Noscan),
+     ForAllColumns(For, All, Columns),
+     ForColumns(For, Columns, Sequence<ObjectName, Comma>),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ #[parser(dependency = "(Query, Expr)")]
+ pub enum DescribeItem {
+     Function {
+@@ -1117,7 +1118,7 @@ pub enum DescribeItem {
+     },
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum DescribeFunctionName {
+     Name(ObjectName),
+     String(StringLiteral),
+@@ -1146,7 +1147,7 @@ pub enum DescribeFunctionName {
+     Equals(Equals),
+ }
+ 
+-#[derive(Debug, Clone, TreeParser, TreeSyntax, TreeText)]
++#[derive(Debug, Clone, TreeParser, TreeSyntax)]
+ pub enum CommentValue {
+     NotNull(StringLiteral),
+     Null(Null),
+diff --git a/crates/sail-sql-parser/src/container/box.rs b/crates/sail-sql-parser/src/container/box.rs
+index 3e0a2ae..6448d04 100644
+--- a/crates/sail-sql-parser/src/container/box.rs
++++ b/crates/sail-sql-parser/src/container/box.rs
+@@ -1,6 +1,7 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::any::TypeId;
+ 
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeSyntax};
+ 
+ impl<T> TreeSyntax for Box<T>
+ where
+@@ -14,12 +15,3 @@ where
+         }
+     }
+ }
+-
+-impl<T> TreeText for Box<T>
+-where
+-    T: TreeText,
+-{
+-    fn text(&self) -> String {
+-        self.as_ref().text()
+-    }
+-}
+diff --git a/crates/sail-sql-parser/src/container/either.rs b/crates/sail-sql-parser/src/container/either.rs
+index 185ea55..508f7a4 100644
+--- a/crates/sail-sql-parser/src/container/either.rs
++++ b/crates/sail-sql-parser/src/container/either.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::any::TypeId;
+ 
+ use chumsky::Parser;
+@@ -7,7 +8,7 @@ use either::Either;
+ 
+ use crate::combinator::either_or;
+ use crate::options::ParserOptions;
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax};
+ 
+ impl<'a, L, R, I, E, A> TreeParser<'a, I, E, A> for Either<L, R>
+ where
+@@ -41,16 +42,3 @@ where
+         }
+     }
+ }
+-
+-impl<L, R> TreeText for Either<L, R>
+-where
+-    L: TreeText,
+-    R: TreeText,
+-{
+-    fn text(&self) -> String {
+-        match self {
+-            Either::Left(l) => l.text(),
+-            Either::Right(r) => r.text(),
+-        }
+-    }
+-}
+diff --git a/crates/sail-sql-parser/src/container/option.rs b/crates/sail-sql-parser/src/container/option.rs
+index 52816e4..34e9ff4 100644
+--- a/crates/sail-sql-parser/src/container/option.rs
++++ b/crates/sail-sql-parser/src/container/option.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::any::TypeId;
+ 
+ use chumsky::Parser;
+@@ -5,7 +6,7 @@ use chumsky::extra::ParserExtra;
+ use chumsky::prelude::Input;
+ 
+ use crate::options::ParserOptions;
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax};
+ 
+ impl<'a, T, I, E, A> TreeParser<'a, I, E, A> for Option<T>
+ where
+@@ -31,15 +32,3 @@ where
+         }
+     }
+ }
+-
+-impl<T> TreeText for Option<T>
+-where
+-    T: TreeText,
+-{
+-    fn text(&self) -> String {
+-        match self {
+-            Some(t) => t.text(),
+-            None => String::new(),
+-        }
+-    }
+-}
+diff --git a/crates/sail-sql-parser/src/container/sequence.rs b/crates/sail-sql-parser/src/container/sequence.rs
+index e74e747..7c9d266 100644
+--- a/crates/sail-sql-parser/src/container/sequence.rs
++++ b/crates/sail-sql-parser/src/container/sequence.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::any::TypeId;
+ 
+ use chumsky::Parser;
+@@ -7,7 +8,7 @@ use chumsky::prelude::Input;
+ use crate::combinator::sequence;
+ use crate::common::Sequence;
+ use crate::options::ParserOptions;
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax};
+ 
+ impl<'a, T, S, I, E, A> TreeParser<'a, I, E, A> for Sequence<T, S>
+ where
+@@ -44,19 +45,3 @@ where
+         }
+     }
+ }
+-
+-impl<T, S> TreeText for Sequence<T, S>
+-where
+-    T: TreeText,
+-    S: TreeText,
+-{
+-    fn text(&self) -> String {
+-        let mut result = String::new();
+-        result.push_str(&self.head.text());
+-        for (sep, item) in &self.tail {
+-            result.push_str(&sep.text());
+-            result.push_str(&item.text());
+-        }
+-        result
+-    }
+-}
+diff --git a/crates/sail-sql-parser/src/container/tuple.rs b/crates/sail-sql-parser/src/container/tuple.rs
+index 5c7ee39..652967b 100644
+--- a/crates/sail-sql-parser/src/container/tuple.rs
++++ b/crates/sail-sql-parser/src/container/tuple.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::any::TypeId;
+ 
+ use chumsky::Parser;
+@@ -6,7 +7,7 @@ use chumsky::prelude::Input;
+ use paste::paste;
+ 
+ use crate::options::ParserOptions;
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax};
+ 
+ macro_rules! nested {
+     (@fold $acc:tt) => { $acc };
+@@ -57,23 +58,6 @@ macro_rules! impl_tree_parser_for_tuple {
+             }
+         }
+ 
+-        impl<$T $(,$Ts)*> TreeText for ($T, $($Ts,)*)
+-        where
+-            $T: TreeText
+-            $(,$Ts: TreeText)*
+-        {
+-            fn text(&self) -> String {
+-                let mut result = String::new();
+-                paste! {
+-                    let ([<$T:lower>], $([<$Ts:lower>],)*) = self;
+-                    result.push_str(&[<$T:lower>].text());
+-                    $(
+-                        result.push_str(&[<$Ts:lower>].text());
+-                    )*
+-                }
+-                result
+-            }
+-        }
+     };
+ }
+ 
+diff --git a/crates/sail-sql-parser/src/container/vec.rs b/crates/sail-sql-parser/src/container/vec.rs
+index 7ca2029..29cb22f 100644
+--- a/crates/sail-sql-parser/src/container/vec.rs
++++ b/crates/sail-sql-parser/src/container/vec.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::any::TypeId;
+ 
+ use chumsky::extra::ParserExtra;
+@@ -5,7 +6,7 @@ use chumsky::prelude::Input;
+ use chumsky::{IterParser, Parser};
+ 
+ use crate::options::ParserOptions;
+-use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax, TreeText};
++use crate::tree::{SyntaxDescriptor, SyntaxNode, TreeParser, TreeSyntax};
+ 
+ impl<'a, T, I, E, A> TreeParser<'a, I, E, A> for Vec<T>
+ where
+@@ -31,16 +32,3 @@ where
+         }
+     }
+ }
+-
+-impl<T> TreeText for Vec<T>
+-where
+-    T: TreeText,
+-{
+-    fn text(&self) -> String {
+-        let mut result = String::new();
+-        for item in self {
+-            result.push_str(&item.text());
+-        }
+-        result
+-    }
+-}
 diff --git a/crates/sail-sql-parser/src/parser.rs b/crates/sail-sql-parser/src/parser.rs
 index cd992bf..bf42826 100644
 --- a/crates/sail-sql-parser/src/parser.rs
@@ -50378,6 +52489,33 @@ index 79b56c4..d672610 100644
  }
  
  impl<C> From<SimpleSpan<usize, C>> for TokenSpan {
+diff --git a/crates/sail-sql-parser/src/tree/mod.rs b/crates/sail-sql-parser/src/tree/mod.rs
+index f5baca3..22d5359 100644
+--- a/crates/sail-sql-parser/src/tree/mod.rs
++++ b/crates/sail-sql-parser/src/tree/mod.rs
+@@ -1,7 +1,6 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ mod parser;
+ mod syntax;
+-mod text;
+ 
+ pub use parser::*;
+ pub use syntax::*;
+-pub use text::*;
+diff --git a/crates/sail-sql-parser/src/tree/text.rs b/crates/sail-sql-parser/src/tree/text.rs
+deleted file mode 100644
+index 8a189e0..0000000
+--- a/crates/sail-sql-parser/src/tree/text.rs
++++ /dev/null
+@@ -1,8 +0,0 @@
+-/// A trait for converting AST nodes to their text representation.
+-pub trait TreeText {
+-    /// Returns the corresponding text of the AST node.
+-    /// The text must form a valid input that can be parsed to the same AST node.
+-    /// If the text is non-empty, it must end with a whitespace character
+-    /// so that the texts of multiple AST nodes can be concatenated easily.
+-    fn text(&self) -> String;
+-}
 diff --git a/crates/sail-sql-parser/tests/syntax.rs b/crates/sail-sql-parser/tests/syntax.rs
 index a2258b2..8fd74da 100644
 --- a/crates/sail-sql-parser/tests/syntax.rs

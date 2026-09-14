@@ -1,7 +1,7 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use chumsky::Parser;
 use chumsky::extra::ParserExtra;
-use chumsky::input::{Checkpoint, InputRef, ValueInput};
-use chumsky::inspector::Inspector;
+use chumsky::input::{InputRef, ValueInput};
 use chumsky::label::LabelError;
 use chumsky::prelude::{Input, custom};
 
@@ -10,7 +10,7 @@ use crate::options::ParserOptions;
 use crate::span::TokenSpan;
 use crate::string::StringValue;
 use crate::token::{Keyword, Punctuation, StringStyle, Token, TokenLabel};
-use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax, TreeText};
+use crate::tree::{SyntaxDescriptor, SyntaxNode, TerminalKind, TreeParser, TreeSyntax};
 use crate::utils::skip_whitespace;
 
 #[derive(Debug, Clone)]
@@ -28,19 +28,6 @@ pub enum NumberSuffix {
     F,
     D,
     Bd,
-}
-
-impl NumberSuffix {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            NumberSuffix::Y => "Y",
-            NumberSuffix::S => "S",
-            NumberSuffix::L => "L",
-            NumberSuffix::F => "F",
-            NumberSuffix::D => "D",
-            NumberSuffix::Bd => "BD",
-        }
-    }
 }
 
 /// The state for number literal parsing.
@@ -221,15 +208,6 @@ impl TreeSyntax for NumberLiteral {
     }
 }
 
-impl TreeText for NumberLiteral {
-    fn text(&self) -> String {
-        match self.suffix {
-            Some(suffix) => format!("{}{} ", self.value, suffix.as_str()),
-            None => format!("{} ", self.value),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct IntegerLiteral {
     pub span: TokenSpan,
@@ -287,23 +265,10 @@ impl TreeSyntax for IntegerLiteral {
     }
 }
 
-impl TreeText for IntegerLiteral {
-    fn text(&self) -> String {
-        format!("{} ", self.value)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct StringLiteral {
     pub span: TokenSpan,
-    pub tokens: Vec<StringToken>,
     pub value: StringValue,
-}
-
-#[derive(Debug, Clone)]
-pub enum StringToken {
-    Word { raw: String },
-    String { raw: String },
 }
 
 /// Parse the `UESCAPE 'c'` clause following a Unicode string literal.
@@ -368,7 +333,6 @@ where
                     };
                     let literal = StringLiteral {
                         span: input.span_since(before.cursor()).into(),
-                        tokens: collect_string_tokens(input, before.clone()),
                         value,
                     };
                     skip_whitespace(input);
@@ -385,37 +349,6 @@ where
     }
 }
 
-fn collect_string_tokens<'a, 'b, I, E>(
-    input: &mut InputRef<'a, 'b, I, E>,
-    before: Checkpoint<'a, 'b, I, <E::State as Inspector<'a, I>>::Checkpoint>,
-) -> Vec<StringToken>
-where
-    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
-    E: ParserExtra<'a, I> + 'a,
-{
-    let marker = input.save();
-    input.rewind(before.clone());
-    let mut result = vec![];
-    while let Some(token) = input.next() {
-        match token {
-            Token::Word { raw, .. } => result.push(StringToken::Word {
-                raw: raw.to_string(),
-            }),
-            Token::String { raw, .. } => result.push(StringToken::String {
-                raw: raw.to_string(),
-            }),
-            _ => {}
-        }
-        if input.cursor() >= *marker.cursor() {
-            break;
-        }
-    }
-    // The cursor should have reached the marker at this point,
-    // but to be safe, we perform an explicit rewind to recover the exact state.
-    input.rewind(marker);
-    result
-}
-
 impl TreeSyntax for StringLiteral {
     fn syntax() -> SyntaxDescriptor {
         SyntaxDescriptor {
@@ -423,17 +356,6 @@ impl TreeSyntax for StringLiteral {
             node: SyntaxNode::Terminal(TerminalKind::StringLiteral),
             children: vec![],
         }
-    }
-}
-
-impl TreeText for StringLiteral {
-    fn text(&self) -> String {
-        self.tokens
-            .iter()
-            .map(|token| match token {
-                StringToken::Word { raw } | StringToken::String { raw } => format!("{} ", raw),
-            })
-            .collect()
     }
 }
 
