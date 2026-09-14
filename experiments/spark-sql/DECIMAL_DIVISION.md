@@ -77,6 +77,28 @@ The Decimal cost is substantial even without a new custom arithmetic UDF. Captur
 
 All 1,872 timed executions and 416 warmup executions passed their row/NULL checks. Repeated captures agree on SQL, output types, sample values and physical plans within each variant. The optional patch, vendored source and dependency locks are unchanged; the restored release executable matches the original baseline byte-for-byte. The candidate should remain experimental while its performance is investigated.
 
+## Analyzer placement and CPU profile
+
+The current patch follows the plan-builder approach from PR 2225. Sail's resolver calls `spark_divide` while constructing logical expressions; the function returns an `Expr` containing casts, division and rounding. DataFusion's normal analyzer and optimizer run afterward. No additional Spark arithmetic `AnalyzerRule` is registered by this patch.
+
+[PR 2137](https://github.com/lakehq/sail/pull/2137) proposed an analyzer rule for type coercion. The later [PR 2223 explanation](https://github.com/lakehq/sail/pull/2223) says why the author moved arithmetic coercion into plan builders: expression types are requested while constructing a plan, before an analyzer rule can override them. PR 2225 extends that approach. Moving the same expressions into an analyzer would not remove their execution steps. A faster analyzer-generated plan would need to change the physical computation while preserving the required semantics. The timing loop above begins after physical planning, so the measured slowdown cannot be attributed to time spent in the analyzer.
+
+Linux `perf` sampled the existing candidate binary from the benchmark committed in `9bea09e`, without changing or rebuilding it. Recording user-space cycles at 499 Hz produced 8,892 samples with none lost. The binary hash matches the performance capture, and all 26 profiled cases retain their previous SQL, output types, sample values, NULL counts and physical plans. The profile includes setup, planning, warmups and execution across the whole matrix; its elapsed times are not added to the unprofiled benchmark samples.
+
+Selected self percentages from [the symbol capture](decimal-profile.json):
+
+| Symbol | Sampled cycles in the function itself |
+| --- | ---: |
+| Arrow wide-division `bits` helper | 12.68% |
+| Arrow `div_rem::<4>` | 10.87%, plus 2.52% in another compiled instance |
+| Arrow `i256::checked_pow` | 6.76% |
+| DataFusion `round_decimal_or_zero::<i256>` | 6.18% |
+| Arrow `i256` checked multiplication | 6.07% and 5.98% in two compiled instances |
+
+These are weighted samples in individual functions, not percentages of time for complete division or rounding stages. Optimized-build call chains did not reliably recover parent attribution. In particular, wide division is used both by SQL division and by rounding; the profile does not assign all of that cost to either caller.
+
+The locked [DataFusion rounding implementation](https://github.com/apache/datafusion/blob/54.1.0/datafusion/functions/src/math/round.rs#L645) computes the power-of-ten factor and rounding threshold inside the per-value helper, even when the scale argument is constant for the batch. It separately computes the quotient and remainder. Arrow's [public division and remainder methods](https://github.com/apache/arrow-rs/blob/58.4.0/arrow-buffer/src/bigint/mod.rs#L485) each call its private long-division helper. The profile and source therefore give concrete targets: precompute constant-scale rounding parameters once per batch, then investigate repeated wide division and rescaling. This is execution work in existing numerical functions, rather than a reason to import another analyzer. No optimization or speedup from those proposed changes has been tested yet.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse the same Cargo target directory for all Rust commands.
@@ -153,4 +175,14 @@ for index, case in enumerate(runs["baseline"][0]["results"]):
 PY
 ```
 
-The recommended next slice is to profile the existing Decimal casts, rounding and wide-integer path before adopting the candidate. NULL/zero handling for non-Decimal columns remains separate semantic work. High-scale Decimal arithmetic still needs explicit treatment before general Spark division support can be claimed. String conversion and other operators remain separate work; importing the entire arithmetic PR would expand scope without resolving all of these gaps. This evaluation does not close the adoption decision in the owning issue.
+For the CPU profile, reuse the candidate binary from the performance commands above. Run profiling separately from timing:
+
+```bash
+perf record -e cycles:u -F 499 --call-graph dwarf,8192 \
+  -o "$perf_dir/candidate.data" -- taskset -c 2 \
+  "$perf_dir/candidate" "$perf_dir/profile-candidate.json"
+perf report --stdio --no-children -g none --percent-limit 1 -t ';' \
+  -i "$perf_dir/candidate.data" > "$perf_dir/candidate-self.txt"
+```
+
+The recommended next slice is an isolated experiment that precomputes constant-scale Decimal rounding parameters, retaining the existing rounding/error semantics and checking the existing correctness and performance matrices. NULL/zero handling for non-Decimal columns remains separate semantic work. High-scale Decimal arithmetic still needs explicit treatment before general Spark division support can be claimed. String conversion and other operators remain separate work; importing the entire arithmetic PR would expand scope without resolving all of these gaps. This evaluation does not close the adoption decision in the owning issue.

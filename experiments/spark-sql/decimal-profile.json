@@ -1,0 +1,163 @@
+{
+  "benchmark_commit": "9bea09e54aaa1696e0116d2e909e526b9f4a935f",
+  "candidate_binary_sha256": "b71ef054683e79e9858a3ce22da3873c327f63f80345d95be841852f3d4aa836",
+  "arithmetic_patch_sha256": "81c9972126ee7e6a23378bfd3a3a17ce92f775b736061d48189491e2a2722809",
+  "benchmark_source_sha256": "8885a9369944a0069c48a363647ca95e933d29d11e9efaa77233a73d8bfe4f80",
+  "perf_version": "perf version 7.1.4-100.fc43.x86_64",
+  "event": "cycles:u",
+  "frequency_hz": 499,
+  "logical_cpu_affinity": [
+    2
+  ],
+  "recorded_samples": 8892,
+  "lost_samples": 0,
+  "approximate_event_count": 73640397551,
+  "scope": "Full candidate benchmark process, including input generation, planning, warmups and timed executions; 26 cases. Profiled elapsed times are not used in the performance comparison.",
+  "interpretation": "Self percentages are weighted sampled user-space cycles, not stage timings. Optimized-build call chains do not reliably recover parent attribution. Duplicate symbol names may refer to different compiled instances. Rows include report entries at or above the 1% inclusive threshold.",
+  "verified_capture_cases": 26,
+  "dependency_source_sha256": {
+    "datafusion-functions-54.1.0/src/math/round.rs": "58e6192057903b20bcc1571df2d05b43076d6e4f1f5bd30a07a920b95cd7c991",
+    "datafusion-functions-54.1.0/src/utils.rs": "db4cae0913ab7635353896ab54cbb774ce5aa8b21c74e62738209e295aba2753",
+    "arrow-buffer-58.4.0/src/bigint/mod.rs": "c87a2051496470ae199b17dafd27f3b42e7abceefca50a131669f51796bed373"
+  },
+  "self_symbols": [
+    {
+      "self_percent": 12.68,
+      "samples": 1145,
+      "object": "candidate",
+      "symbol": "arrow_buffer::bigint::div::bits"
+    },
+    {
+      "self_percent": 10.87,
+      "samples": 985,
+      "object": "candidate",
+      "symbol": "arrow_buffer::bigint::div::div_rem::<4>"
+    },
+    {
+      "self_percent": 6.76,
+      "samples": 612,
+      "object": "candidate",
+      "symbol": "<arrow_buffer::bigint::i256>::checked_pow"
+    },
+    {
+      "self_percent": 6.35,
+      "samples": 579,
+      "object": "candidate",
+      "symbol": "core::iter::traits::iterator::Iterator::try_for_each::call::<usize, core::result::Result<(), arrow_schema::error::ArrowError>, <arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal256Type>>::try_unary<arrow_arith::numeric::decimal_op<arrow_array::types::Decimal256Type>::{closure#19}, arrow_array::types::Decimal256Type, arrow_schema::error::ArrowError>::{closure#0}>::{closure#0}"
+    },
+    {
+      "self_percent": 6.18,
+      "samples": 558,
+      "object": "candidate",
+      "symbol": "datafusion_functions::math::round::round_decimal_or_zero::<arrow_buffer::bigint::i256>"
+    },
+    {
+      "self_percent": 6.07,
+      "samples": 541,
+      "object": "candidate",
+      "symbol": "<arrow_buffer::bigint::i256 as arrow_array::arithmetic::ArrowNativeTypeOp>::mul_checked"
+    },
+    {
+      "self_percent": 5.98,
+      "samples": 545,
+      "object": "candidate",
+      "symbol": "<arrow_buffer::bigint::i256 as arrow_array::arithmetic::ArrowNativeTypeOp>::mul_checked"
+    },
+    {
+      "self_percent": 4.23,
+      "samples": 350,
+      "object": "candidate",
+      "symbol": "__divti3"
+    },
+    {
+      "self_percent": 3.83,
+      "samples": 309,
+      "object": "candidate",
+      "symbol": "core::iter::traits::iterator::Iterator::try_for_each::call::<usize, core::result::Result<(), arrow_schema::error::ArrowError>, <arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal128Type>>::try_unary<arrow_arith::numeric::decimal_op<arrow_array::types::Decimal128Type>::{closure#19}, arrow_array::types::Decimal128Type, arrow_schema::error::ArrowError>::{closure#0}>::{closure#0}"
+    },
+    {
+      "self_percent": 3.63,
+      "samples": 324,
+      "object": "candidate",
+      "symbol": "arrow_arith::numeric::decimal_op::<arrow_array::types::Decimal256Type>::{closure#15}"
+    },
+    {
+      "self_percent": 3.12,
+      "samples": 259,
+      "object": "candidate",
+      "symbol": "compiler_builtins::int::specialized_div_rem::u128_div_rem"
+    },
+    {
+      "self_percent": 2.98,
+      "samples": 270,
+      "object": "candidate",
+      "symbol": "<arrow_buffer::bigint::i256>::div_rem"
+    },
+    {
+      "self_percent": 2.88,
+      "samples": 260,
+      "object": "candidate",
+      "symbol": "<alloc::vec::Vec<arrow_buffer::bigint::i256> as alloc::vec::spec_from_iter::SpecFromIter<arrow_buffer::bigint::i256, core::iter::adapters::map::Map<core::slice::iter::Iter<i128>, <arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal128Type>>::unary<arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal128Type, arrow_array::types::Decimal256Type>::{closure#1}, arrow_array::types::Decimal256Type>::{closure#0}>>>::from_iter"
+    },
+    {
+      "self_percent": 2.52,
+      "samples": 226,
+      "object": "candidate",
+      "symbol": "arrow_buffer::bigint::div::div_rem::<4>"
+    },
+    {
+      "self_percent": 2.42,
+      "samples": 201,
+      "object": "candidate",
+      "symbol": "datafusion_functions::math::round::round_decimal_or_zero::<i128>"
+    },
+    {
+      "self_percent": 2.3,
+      "samples": 207,
+      "object": "candidate",
+      "symbol": "core::iter::traits::iterator::Iterator::try_for_each::call::<usize, core::result::Result<(), arrow_schema::error::ArrowError>, <arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal256Type>>::try_unary<arrow_cast::cast::decimal::apply_decimal_cast<arrow_array::types::Decimal256Type, arrow_array::types::Decimal128Type, arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal256Type, arrow_array::types::Decimal128Type>::{closure#0}, arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal256Type, arrow_array::types::Decimal128Type>::{closure#1}>::{closure#1}, arrow_array::types::Decimal128Type, arrow_schema::error::ArrowError>::{closure#0}>::{closure#0}"
+    },
+    {
+      "self_percent": 1.11,
+      "samples": 98,
+      "object": "libc.so.6",
+      "symbol": "__memset_avx512_unaligned_erms"
+    },
+    {
+      "self_percent": 1.6,
+      "samples": 131,
+      "object": "candidate",
+      "symbol": "core::iter::traits::iterator::Iterator::try_for_each::call::<usize, core::result::Result<(), arrow_schema::error::ArrowError>, <arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal128Type>>::try_unary<arrow_cast::cast::decimal::apply_decimal_cast<arrow_array::types::Decimal128Type, arrow_array::types::Decimal128Type, arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal128Type, arrow_array::types::Decimal128Type>::{closure#0}, arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal128Type, arrow_array::types::Decimal128Type>::{closure#1}>::{closure#1}, arrow_array::types::Decimal128Type, arrow_schema::error::ArrowError>::{closure#0}>::{closure#0}"
+    },
+    {
+      "self_percent": 1.5,
+      "samples": 136,
+      "object": "candidate",
+      "symbol": "core::iter::traits::iterator::Iterator::try_for_each::call::<usize, core::result::Result<(), ()>, <arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal256Type>>::unary_opt<arrow_cast::cast::decimal::apply_decimal_cast<arrow_array::types::Decimal256Type, arrow_array::types::Decimal128Type, arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal256Type, arrow_array::types::Decimal128Type>::{closure#0}, arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal256Type, arrow_array::types::Decimal128Type>::{closure#1}>::{closure#0}, arrow_array::types::Decimal128Type>::{closure#0}>::{closure#0}"
+    },
+    {
+      "self_percent": 1.19,
+      "samples": 98,
+      "object": "candidate",
+      "symbol": "<arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal128Type>>::unary_opt::<arrow_cast::cast::decimal::apply_decimal_cast<arrow_array::types::Decimal128Type, arrow_array::types::Decimal128Type, arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal128Type, arrow_array::types::Decimal128Type>::{closure#0}, arrow_cast::cast::decimal::make_upscaler<arrow_array::types::Decimal128Type, arrow_array::types::Decimal128Type>::{closure#1}>::{closure#0}, arrow_array::types::Decimal128Type>"
+    },
+    {
+      "self_percent": 1.13,
+      "samples": 96,
+      "object": "candidate",
+      "symbol": "<arrow_array::types::Decimal128Type as arrow_array::types::DecimalType>::validate_decimal_precision"
+    },
+    {
+      "self_percent": 1.07,
+      "samples": 101,
+      "object": "candidate",
+      "symbol": "arrow_arith::arity::try_binary_no_nulls::<&arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal128Type>, &arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal128Type>, arrow_arith::numeric::decimal_op<arrow_array::types::Decimal128Type>::{closure#15}, arrow_array::types::Decimal128Type>"
+    },
+    {
+      "self_percent": 1.02,
+      "samples": 92,
+      "object": "candidate",
+      "symbol": "<arrow_array::array::primitive_array::PrimitiveArray<arrow_array::types::Decimal256Type>>::try_unary::<datafusion_functions::utils::calculate_binary_math<arrow_array::types::Decimal256Type, arrow_array::types::Int32Type, arrow_array::types::Decimal256Type, datafusion_functions::math::round::round_columnar::{closure#3}>::{closure#1}, arrow_array::types::Decimal256Type, arrow_schema::error::ArrowError>"
+    }
+  ]
+}
