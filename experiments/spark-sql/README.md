@@ -116,7 +116,7 @@ The common spec still describes Python functions so the resolver can reject thos
 
 ## Catalog/session removal checkpoint
 
-The frontend now retains eight Sail crates and 113,834 gross Rust lines, 6,703 fewer than the Python removal checkpoint. The resolved graph has 599 packages across all targets and 529 Linux normal/build packages. No dependency versions changed. The dependency test also rejects sail-catalog and sail-catalog-memory.
+The approved catalog/session slice, committed as `4987c12`, retained eight Sail crates and 113,834 gross Rust lines, 6,703 fewer than the Python removal checkpoint. The resolved graph has 599 packages across all targets and 529 Linux normal/build packages. No dependency versions changed. The dependency test also rejects sail-catalog and sail-catalog-memory.
 
 Named tables and derived views use DataFusion's registry. The runner no longer installs Sail catalog or PlanService extensions, and Spark's literal, type and expression-name formatting calls the existing SparkPlanFormatter directly. The removed code includes both catalog crates, catalog command/display types and the unused persistent-view resolver.
 
@@ -130,4 +130,14 @@ Two new Rust tests first failed on the missing Sail catalog extension. They now 
 
 All 116 observations still match the import baseline, with the same 83 successes, 18 planning errors and 15 execution errors. The 19 seeds and 18 adapter checks pass. Spark and full-Sail comparison totals remain unchanged, and the fixed inputs, queries and both checked-in baselines are untouched.
 
-Shared catalog metadata types and other datasource/session modules remain in sail-common-datafusion. Remaining storage coupling, missing extension planners and Delta/lifecycle checks still need work before an adoption decision.
+## Storage/write removal checkpoint
+
+The current subset retains eight Sail crates and 107,168 gross Rust lines, a reduction of 6,666 lines from the catalog checkpoint. It removes MERGE/write-constraint nodes, shared catalog/data-source types, unused schema-evolution and time-travel helpers, and storage/write configuration fields. Registered tables still use the existing DeltaTableProvider and native DataFusion execution.
+
+The removed catalog types had one remaining function-help consumer. Removing that unused consumer also removes its build script, function-name listing helpers and 24 YAML files containing 12,447 lines of help metadata. YAML is counted separately from Rust. Executable scalar, aggregate, window and table-function registries remain intact. Build-generated Rust falls from seven files / 1,251 lines to six files / 685 lines.
+
+A direct `ReadType::DataSource` spec now returns `PlanError::NotSupported` before inspecting its format, paths, options or predicates. Previously this route could fail with a missing TableFormatRegistry extension or argument errors. A new test first reproduced the internal error, then verified rejection for Parquet, Delta, Iceberg, unknown and missing formats, with and without predicates. Another test checks CREATE/INSERT/UPDATE/DELETE/MERGE and SQL VERSION/TIMESTAMP modifiers against missing tables, so rejection must precede table lookup. Reader snapshot support remains in the host provider; SQL snapshot modifiers remain outside this frontend's current boundary.
+
+All 116 observations match the unchanged import baseline: 83 successes, 18 planning errors and 15 execution errors. The 19 seeds, 18 adapter checks, seven runner tests, eleven Sail planner tests and nine Python tests pass. Comparisons still report 45 matches / 60 differences / 11 pending reference cases against Spark, and 83 / 22 / 11 against full Sail. Inputs, queries and both checked-in baselines are unchanged.
+
+The resolved graph remains at 599 packages across all targets and 529 Linux normal/build packages, with identical package versions. Removed direct dependency edges point to packages still used elsewhere. Service/streaming code and system-table generation remain for later cuts, along with missing extension planners and the outstanding Delta/lifecycle checks.

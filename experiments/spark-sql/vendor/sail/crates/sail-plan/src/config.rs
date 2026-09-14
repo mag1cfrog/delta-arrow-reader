@@ -11,13 +11,6 @@ pub enum DefaultTimestampType {
     TimestampNtz,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-pub enum StoreAssignmentPolicy {
-    Ansi,
-    Strict,
-    Legacy,
-}
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 pub enum MapKeyDedupPolicy {
     #[default]
@@ -35,14 +28,8 @@ pub struct PlanConfig {
     pub default_timestamp_type: DefaultTimestampType,
     /// Whether to use large variable types in Arrow.
     pub arrow_use_large_var_types: bool,
-    /// The default table file format.
-    pub default_table_file_format: String,
-    /// The default location for managed databases and tables.
-    pub default_warehouse_directory: String,
     pub session_user_id: String,
     pub ansi_mode: bool,
-    /// Type coercion policy for values written into table columns.
-    pub store_assignment_policy: StoreAssignmentPolicy,
     /// Policy for duplicate keys created by map functions.
     pub map_key_dedup_policy: MapKeyDedupPolicy,
     /// Whether to allow cartesian products (cross joins) without explicit `CROSS JOIN` syntax.
@@ -71,11 +58,8 @@ impl Default for PlanConfig {
             session_locale: Arc::from("en-US"),
             default_timestamp_type: DefaultTimestampType::TimestampLtz,
             arrow_use_large_var_types: false,
-            default_table_file_format: "PARQUET".to_string(),
-            default_warehouse_directory: "spark-warehouse".to_string(),
             session_user_id: "".to_string(),
             ansi_mode: true,
-            store_assignment_policy: StoreAssignmentPolicy::Ansi,
             map_key_dedup_policy: MapKeyDedupPolicy::Exception,
             cross_join_enabled: true,
             case_sensitive: false,

@@ -1,5 +1,5 @@
 {
-  "source_sha256": "f995f89f6f94f8ba9916c8739c88f41d7acdac162098aa6404284e2c8d019c1b",
+  "source_sha256": "63360a31404418c23e85d84af973e0ba1ff8c2f0829b06208fdfb27ffac32557",
   "crates": [
     {
       "crate": "sail-common",
@@ -12,12 +12,12 @@
     },
     {
       "crate": "sail-common-datafusion",
-      "rust_files": 48,
-      "gross_lines": 9549,
-      "nonblank_lines": 8671,
-      "test_lines": 1388,
+      "rust_files": 38,
+      "gross_lines": 5854,
+      "nonblank_lines": 5293,
+      "test_lines": 718,
       "build_script_lines": 467,
-      "production_lines": 7694
+      "production_lines": 4669
     },
     {
       "crate": "sail-function",
@@ -30,21 +30,21 @@
     },
     {
       "crate": "sail-logical-plan",
-      "rust_files": 19,
-      "gross_lines": 3988,
-      "nonblank_lines": 3571,
+      "rust_files": 17,
+      "gross_lines": 1769,
+      "nonblank_lines": 1529,
       "test_lines": 0,
       "build_script_lines": 0,
-      "production_lines": 3988
+      "production_lines": 1769
     },
     {
       "crate": "sail-plan",
-      "rust_files": 86,
-      "gross_lines": 22340,
-      "nonblank_lines": 20956,
+      "rust_files": 83,
+      "gross_lines": 21588,
+      "nonblank_lines": 20249,
       "test_lines": 779,
-      "build_script_lines": 238,
-      "production_lines": 21323
+      "build_script_lines": 0,
+      "production_lines": 20809
     },
     {
       "crate": "sail-sql-analyzer",
@@ -75,12 +75,12 @@
     }
   ],
   "totals": {
-    "rust_files": 434,
-    "gross_lines": 113834,
-    "nonblank_lines": 104657,
-    "test_lines": 9282,
-    "build_script_lines": 785,
-    "production_lines": 103767
+    "rust_files": 419,
+    "gross_lines": 107168,
+    "nonblank_lines": 98530,
+    "test_lines": 8612,
+    "build_script_lines": 547,
+    "production_lines": 98009
   },
   "lock_packages": 599,
   "resolved_packages_all_targets_including_dev": 599,
@@ -94,10 +94,6 @@
     "sail-common-datafusion": {
       "files": 5,
       "lines": 416
-    },
-    "sail-plan": {
-      "files": 1,
-      "lines": 566
     }
   }
 }

@@ -4879,10 +4879,8 @@ dependencies = [
  "datafusion-expr",
  "educe",
  "html-escape",
- "log",
  "sail-common",
  "sail-common-datafusion",
- "sail-function",
 ]
 
 [[package]]
@@ -4908,7 +4906,6 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "log",
- "object_store",
  "parquet-variant-compute",
  "rand 0.10.2",
  "regex",
@@ -4921,7 +4918,6 @@ dependencies = [
  "sail-sql-analyzer",
  "serde",
  "serde_json",
- "serde_yaml",
  "thiserror",
  "tokio",
  "tokio-stream",

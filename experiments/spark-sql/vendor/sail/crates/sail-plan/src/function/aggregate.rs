@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -1063,10 +1064,6 @@ pub(crate) fn get_built_in_aggregate_function(name: &str) -> PlanResult<AggFunct
         .get(name)
         .ok_or_else(|| PlanError::unsupported(format!("unknown aggregate function: {name}")))?
         .clone())
-}
-
-pub(crate) fn list_built_in_aggregate_function_names() -> impl Iterator<Item = &'static str> {
-    BUILT_IN_AGGREGATE_FUNCTIONS.keys().copied()
 }
 
 #[cfg(test)]

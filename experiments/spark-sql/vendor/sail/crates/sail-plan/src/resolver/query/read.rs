@@ -6,11 +6,9 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::catalog::TableFunctionArgs;
 use datafusion::datasource::{TableProvider, provider_as_source, source_as_provider};
 use datafusion_common::{DFSchema, ScalarValue, TableReference};
-use datafusion_expr::{Expr, LogicalPlan, TableScan, TableSource, UNNAMED_TABLE};
+use datafusion_expr::{Expr, LogicalPlan, TableScan, TableSource};
 use rand::{RngExt, rng};
 use sail_common::spec;
-use sail_common_datafusion::datasource::{OptionLayer, SourceInfo, TableFormatRegistry};
-use sail_common_datafusion::extension::SessionExtensionAccessor;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::rename::logical_plan::rename_logical_plan;
 use sail_common_datafusion::rename::table_provider::RenameTableProvider;
@@ -224,57 +222,6 @@ impl PlanResolver<'_> {
                 state,
             )
         }
-    }
-
-    pub(super) async fn resolve_query_read_data_source(
-        &self,
-        source: spec::ReadDataSource,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<LogicalPlan> {
-        let spec::ReadDataSource {
-            format,
-            schema,
-            options,
-            paths,
-            predicates,
-        } = source;
-        if !predicates.is_empty() {
-            return Err(PlanError::todo("data source predicates"));
-        }
-        let Some(format) = format else {
-            return Err(PlanError::invalid("missing data source format"));
-        };
-        let schema = match schema {
-            Some(schema) => Some(self.resolve_schema(schema, state)?),
-            None => None,
-        };
-        let info = SourceInfo {
-            paths,
-            lakehouse_table: None,
-            schema,
-            constraints: Default::default(),
-            partition_by: vec![],
-            bucket_by: None,
-            sort_order: vec![],
-            // TODO: detect duplicated keys in the set of options
-            options: vec![OptionLayer::OptionList {
-                items: options.into_iter().collect(),
-            }],
-            read_case_sensitive: self.config.case_sensitive,
-        };
-        let registry = self.ctx.extension::<TableFormatRegistry>()?;
-        let table_source = registry
-            .get(&format)?
-            .create_source(&self.ctx.state(), info)
-            .await?;
-        self.resolve_table_source_with_rename(
-            table_source,
-            UNNAMED_TABLE,
-            None,
-            vec![],
-            None,
-            state,
-        )
     }
 
     pub(super) fn resolve_table_provider_with_rename(

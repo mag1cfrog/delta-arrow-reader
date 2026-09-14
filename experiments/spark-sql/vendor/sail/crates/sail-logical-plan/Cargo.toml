@@ -1,3 +1,4 @@
+# Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 [package]
 name = "sail-logical-plan"
 version = { workspace = true }
@@ -9,12 +10,10 @@ workspace = true
 [dependencies]
 sail-common = { path = "../sail-common" }
 sail-common-datafusion = { path = "../sail-common-datafusion" }
-sail-function = { path = "../sail-function" }
 
 datafusion = { workspace = true }
 datafusion-common = { workspace = true }
 datafusion-expr = { workspace = true }
 comfy-table = { workspace = true }
 html-escape = { workspace = true }
-log = { workspace = true }
 educe = { workspace = true }

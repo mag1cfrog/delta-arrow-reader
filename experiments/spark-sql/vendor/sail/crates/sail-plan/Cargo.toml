@@ -35,7 +35,6 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 rand = { workspace = true }
 uuid = { workspace = true }
-object_store = { workspace = true }
 half = { workspace = true }
 arrow = { workspace = true }
 arrow-schema = { workspace = true }
@@ -46,7 +45,3 @@ log = { workspace = true }
 regex = { workspace = true }
 regex-syntax = { workspace = true }
 parquet-variant-compute = { workspace = true }
-
-[build-dependencies]
-serde = { workspace = true }
-serde_yaml = { workspace = true }

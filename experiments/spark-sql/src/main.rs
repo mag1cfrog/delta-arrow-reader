@@ -191,6 +191,65 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn rejects_external_sources_before_format_or_predicate_resolution() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        for format in [
+            Some("parquet"),
+            Some("delta"),
+            Some("iceberg"),
+            Some("unknown"),
+            None,
+        ] {
+            for predicates in [vec![], vec![spec::Expr::Literal(spec::Literal::Null)]] {
+                let source = spec::ReadDataSource {
+                    format: format.map(str::to_string),
+                    schema: None,
+                    options: vec![("path".into(), "/nonexistent/spark-source".into())],
+                    paths: vec!["/nonexistent/spark-source".into()],
+                    predicates,
+                };
+                let plan = spec::Plan::Query(spec::QueryPlan::new(spec::QueryNode::Read {
+                    read_type: spec::ReadType::DataSource(Box::new(source)),
+                    is_streaming: false,
+                }));
+                let error = resolver.resolve_named_plan(plan).await.unwrap_err();
+                assert!(
+                    matches!(error, PlanError::NotSupported(ref message)
+                    if message.contains("external data sources")),
+                    "{format:?}: {error}"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rejects_writes_and_snapshot_modifiers_before_table_lookup() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        for sql in [
+            "CREATE TABLE unwanted (x INT)",
+            "INSERT INTO missing_table VALUES (1)",
+            "UPDATE missing_table SET x = 1",
+            "DELETE FROM missing_table WHERE x = 1",
+            "MERGE INTO missing_table t USING missing_source s ON t.x = s.x WHEN MATCHED THEN UPDATE SET x = s.x",
+            "SELECT * FROM missing_table VERSION AS OF 0",
+            "SELECT * FROM missing_table TIMESTAMP AS OF '2024-01-01'",
+        ] {
+            let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
+            let plan = sail_sql_analyzer::statement::from_ast_statement(ast)?;
+            let error = resolver.resolve_named_plan(plan).await.unwrap_err();
+            assert!(
+                matches!(error, PlanError::NotSupported(_)),
+                "{sql}: {error}"
+            );
+        }
+        assert!(!ctx.table_exist("unwanted")?);
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn native_session_catalogs_and_views_need_no_sail_extensions() -> ProbeResult<()> {
         let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
         for (catalog, schema) in [("datafusion", "public"), ("warehouse", "schema.with`quote")] {

@@ -28,7 +28,6 @@ mod sample;
 mod set_op;
 mod sort;
 mod stat;
-mod time_travel;
 mod values;
 mod window;
 mod with_relations;
@@ -70,8 +69,10 @@ impl PlanResolver<'_> {
                     self.resolve_query_read_named_table(*table, state).await?
                 }
                 spec::ReadType::Udtf(udtf) => self.resolve_query_read_udtf(*udtf, state).await?,
-                spec::ReadType::DataSource(source) => {
-                    self.resolve_query_read_data_source(*source, state).await?
+                spec::ReadType::DataSource(_) => {
+                    return Err(PlanError::unsupported(
+                        "extraction probe: external data sources",
+                    ));
                 }
                 spec::ReadType::DynamicTable(table) => {
                     self.resolve_query_read_dynamic_table(*table, state).await?
