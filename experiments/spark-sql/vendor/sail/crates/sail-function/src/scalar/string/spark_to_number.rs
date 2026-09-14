@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -43,10 +44,6 @@ impl SparkToNumber {
             safe,
             signature: Signature::user_defined(Volatility::Immutable),
         }
-    }
-
-    pub fn safe(&self) -> bool {
-        self.safe
     }
 }
 

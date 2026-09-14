@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 /// [Credit]: <https://github.com/datafusion-contrib/datafusion-variant/blob/main/src/variant_get.rs>
@@ -256,10 +257,6 @@ impl SparkVariantGet {
             signature: Signature::user_defined(Volatility::Immutable),
             safe,
         }
-    }
-
-    pub fn safe(&self) -> bool {
-        self.safe
     }
 }
 

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -161,10 +162,6 @@ impl SparkToXml {
             session_timezone,
             signature: Signature::user_defined(Volatility::Immutable),
         }
-    }
-
-    pub fn session_timezone(&self) -> &str {
-        &self.session_timezone
     }
 
     fn column_name(args: &[datafusion_expr::Expr]) -> String {

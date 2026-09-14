@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::Display;
@@ -39,14 +40,6 @@ impl SparkUnixTimestamp {
             session_timezone,
             ansi_mode,
         }
-    }
-
-    pub fn session_timezone(&self) -> &str {
-        &self.session_timezone
-    }
-
-    pub fn ansi_mode(&self) -> bool {
-        self.ansi_mode
     }
 }
 

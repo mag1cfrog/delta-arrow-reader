@@ -179,14 +179,6 @@ impl SparkTimestamp {
         })
     }
 
-    pub fn timezone(&self) -> Option<&str> {
-        self.timezone.as_deref()
-    }
-
-    pub fn ansi_mode(&self) -> bool {
-        self.ansi_mode
-    }
-
     /// Whether a parse/cast failure yields NULL: `try_*` always, or the strict
     /// variant when ANSI is disabled.
     fn safe(&self) -> bool {

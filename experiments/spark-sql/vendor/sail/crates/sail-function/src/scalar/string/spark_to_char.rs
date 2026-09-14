@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
@@ -35,10 +36,6 @@ impl SparkToChar {
             ansi_mode,
             signature: Signature::user_defined(Volatility::Immutable),
         }
-    }
-
-    pub fn ansi_mode(&self) -> bool {
-        self.ansi_mode
     }
 }
 

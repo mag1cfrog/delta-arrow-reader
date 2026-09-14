@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 /// [Credit]: <https://github.com/datafusion-contrib/datafusion-variant/blob/51e0d4be62d7675e9b7b56ed1c0b0a10ae4a28d7/src/json_to_variant.rs>
@@ -36,10 +37,6 @@ impl SparkParseJson {
             signature: Signature::user_defined(Volatility::Immutable),
             safe,
         }
-    }
-
-    pub fn safe(&self) -> bool {
-        self.safe
     }
 }
 

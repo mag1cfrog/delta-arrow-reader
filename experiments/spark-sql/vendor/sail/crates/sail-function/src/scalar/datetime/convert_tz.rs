@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -47,14 +48,6 @@ impl ConvertTz {
         self.null_short_circuit = true;
         self
     }
-
-    pub fn classic(&self) -> bool {
-        self.classic
-    }
-
-    pub fn null_short_circuit(&self) -> bool {
-        self.null_short_circuit
-    }
 }
 
 /// Evaluates `convert_timezone` arguments from left to right and stops at the first NULL.
@@ -70,14 +63,6 @@ impl ConvertTzLazy {
             signature: HigherOrderSignature::variadic_any(Volatility::Immutable),
             convert_tz,
         }
-    }
-
-    pub fn classic(&self) -> bool {
-        self.convert_tz.classic()
-    }
-
-    pub fn null_short_circuit(&self) -> bool {
-        self.convert_tz.null_short_circuit()
     }
 }
 

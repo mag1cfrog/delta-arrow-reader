@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -64,14 +65,6 @@ impl SparkSequence {
         }
     }
 
-    pub fn session_timezone(&self) -> &str {
-        &self.session_timezone
-    }
-
-    pub fn ansi_mode(&self) -> bool {
-        self.ansi_mode
-    }
-
     fn parse_session_timezone(&self) -> Result<Tz> {
         self.session_timezone.parse().map_err(|error| {
             exec_datafusion_err!(
@@ -95,14 +88,6 @@ impl SparkSequenceLazy {
             signature: HigherOrderSignature::variadic_any(Volatility::Immutable),
             sequence,
         }
-    }
-
-    pub fn session_timezone(&self) -> &str {
-        self.sequence.session_timezone()
-    }
-
-    pub fn ansi_mode(&self) -> bool {
-        self.sequence.ansi_mode()
     }
 }
 

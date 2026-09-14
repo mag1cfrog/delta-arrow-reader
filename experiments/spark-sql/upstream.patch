@@ -14294,6 +14294,26 @@ index d1d6037..9ff21b7 100644
  jiter = { workspace = true }
  thiserror = { workspace = true }
  serde = { workspace = true }
+diff --git a/crates/sail-function/src/aggregate/percentile_disc.rs b/crates/sail-function/src/aggregate/percentile_disc.rs
+index f328861..0a1fd34 100644
+--- a/crates/sail-function/src/aggregate/percentile_disc.rs
++++ b/crates/sail-function/src/aggregate/percentile_disc.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::fmt::{Debug, Formatter};
+ use std::mem::{size_of, size_of_val};
+ use std::sync::Arc;
+@@ -74,10 +75,6 @@ impl PercentileDisc {
+     }
+ 
+     /// `true` when running under `spark.sql.ansi.enabled = true`.
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+-
+     /// `true` when the (single) `ORDER BY` direction is `DESC`.
+     fn is_descending(args: &AccumulatorArgs) -> bool {
+         args.order_bys
 diff --git a/crates/sail-function/src/aggregate/skewness.rs b/crates/sail-function/src/aggregate/skewness.rs
 index 097a23b..32293cb 100644
 --- a/crates/sail-function/src/aggregate/skewness.rs
@@ -14531,6 +14551,124 @@ index c1ba66c..b1ddd82 100644
  }
  
  impl HigherOrderUDFImpl for SparkArrayTransform {
+diff --git a/crates/sail-function/src/scalar/array/spark_sequence.rs b/crates/sail-function/src/scalar/array/spark_sequence.rs
+index 156937c..e0ae6de 100644
+--- a/crates/sail-function/src/scalar/array/spark_sequence.rs
++++ b/crates/sail-function/src/scalar/array/spark_sequence.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::fmt::{Display, Formatter};
+ use std::sync::Arc;
+ 
+@@ -64,14 +65,6 @@ impl SparkSequence {
+         }
+     }
+ 
+-    pub fn session_timezone(&self) -> &str {
+-        &self.session_timezone
+-    }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+-
+     fn parse_session_timezone(&self) -> Result<Tz> {
+         self.session_timezone.parse().map_err(|error| {
+             exec_datafusion_err!(
+@@ -96,14 +89,6 @@ impl SparkSequenceLazy {
+             sequence,
+         }
+     }
+-
+-    pub fn session_timezone(&self) -> &str {
+-        self.sequence.session_timezone()
+-    }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.sequence.ansi_mode()
+-    }
+ }
+ 
+ impl HigherOrderUDFImpl for SparkSequenceLazy {
+diff --git a/crates/sail-function/src/scalar/csv/spark_from_csv.rs b/crates/sail-function/src/scalar/csv/spark_from_csv.rs
+index 4f8a681..83756e4 100644
+--- a/crates/sail-function/src/scalar/csv/spark_from_csv.rs
++++ b/crates/sail-function/src/scalar/csv/spark_from_csv.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashSet;
+ use std::sync::Arc;
+ 
+@@ -133,10 +134,6 @@ impl SparkFromCSV {
+             signature: Signature::user_defined(Volatility::Immutable),
+         }
+     }
+-
+-    pub fn session_timezone(&self) -> &str {
+-        &self.session_timezone
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkFromCSV {
+diff --git a/crates/sail-function/src/scalar/csv/spark_to_csv.rs b/crates/sail-function/src/scalar/csv/spark_to_csv.rs
+index cd97616..3019125 100644
+--- a/crates/sail-function/src/scalar/csv/spark_to_csv.rs
++++ b/crates/sail-function/src/scalar/csv/spark_to_csv.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use chrono::prelude::*;
+@@ -197,10 +198,6 @@ impl SparkToCsv {
+         }
+     }
+ 
+-    pub fn session_timezone(&self) -> &str {
+-        &self.session_timezone
+-    }
+-
+     fn column_name(args: &[Expr]) -> String {
+         let Some(input) = args.first() else {
+             return format!("{}()", Self::TO_CSV_NAME);
+diff --git a/crates/sail-function/src/scalar/datetime/convert_tz.rs b/crates/sail-function/src/scalar/datetime/convert_tz.rs
+index c73874d..16d05f6 100644
+--- a/crates/sail-function/src/scalar/datetime/convert_tz.rs
++++ b/crates/sail-function/src/scalar/datetime/convert_tz.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::sync::Arc;
+ 
+@@ -47,14 +48,6 @@ impl ConvertTz {
+         self.null_short_circuit = true;
+         self
+     }
+-
+-    pub fn classic(&self) -> bool {
+-        self.classic
+-    }
+-
+-    pub fn null_short_circuit(&self) -> bool {
+-        self.null_short_circuit
+-    }
+ }
+ 
+ /// Evaluates `convert_timezone` arguments from left to right and stops at the first NULL.
+@@ -71,14 +64,6 @@ impl ConvertTzLazy {
+             convert_tz,
+         }
+     }
+-
+-    pub fn classic(&self) -> bool {
+-        self.convert_tz.classic()
+-    }
+-
+-    pub fn null_short_circuit(&self) -> bool {
+-        self.convert_tz.null_short_circuit()
+-    }
+ }
+ 
+ impl HigherOrderUDFImpl for ConvertTzLazy {
 diff --git a/crates/sail-function/src/scalar/datetime/mod.rs b/crates/sail-function/src/scalar/datetime/mod.rs
 index 735941a..8dfb514 100644
 --- a/crates/sail-function/src/scalar/datetime/mod.rs
@@ -14568,6 +14706,26 @@ index 9116fc4..e94c51a 100644
      fn string_to_date32(value: &str, is_try: bool) -> Result<Option<i32>> {
          match parse_date(value).and_then(|date| Ok(Date32Type::from_naive_date(date.try_into()?))) {
              Ok(v) => Ok(Some(v)),
+diff --git a/crates/sail-function/src/scalar/datetime/spark_date_format.rs b/crates/sail-function/src/scalar/datetime/spark_date_format.rs
+index 2e22cfc..21f7522 100644
+--- a/crates/sail-function/src/scalar/datetime/spark_date_format.rs
++++ b/crates/sail-function/src/scalar/datetime/spark_date_format.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::collections::hash_map::Entry;
+ use std::sync::Arc;
+@@ -36,10 +37,6 @@ impl SparkDateFormat {
+             signature: Signature::variadic_any(Volatility::Immutable),
+         }
+     }
+-
+-    pub fn session_timezone(&self) -> &str {
+-        &self.session_timezone
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkDateFormat {
 diff --git a/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs b/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs
 index 4c146ac..a8bf64a 100644
 --- a/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs
@@ -14588,6 +14746,26 @@ index 4c146ac..a8bf64a 100644
  }
  
  impl ScalarUDFImpl for SparkMakeTimestampNtz {
+diff --git a/crates/sail-function/src/scalar/datetime/spark_next_day.rs b/crates/sail-function/src/scalar/datetime/spark_next_day.rs
+index 53ae770..aaf1c10 100644
+--- a/crates/sail-function/src/scalar/datetime/spark_next_day.rs
++++ b/crates/sail-function/src/scalar/datetime/spark_next_day.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use chrono::{Datelike, Duration, Weekday};
+@@ -32,10 +33,6 @@ impl SparkNextDay {
+             ansi_mode,
+         }
+     }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkNextDay {
 diff --git a/crates/sail-function/src/scalar/datetime/spark_time.rs b/crates/sail-function/src/scalar/datetime/spark_time.rs
 index 43ee7f9..409fbd4 100644
 --- a/crates/sail-function/src/scalar/datetime/spark_time.rs
@@ -14609,7 +14787,7 @@ index 43ee7f9..409fbd4 100644
          let seconds = t.num_seconds_from_midnight() as i64;
          let nanos = t.nanosecond() as i64;
 diff --git a/crates/sail-function/src/scalar/datetime/spark_timestamp.rs b/crates/sail-function/src/scalar/datetime/spark_timestamp.rs
-index 1c24162..c018d96 100644
+index 1c24162..f0c6d96 100644
 --- a/crates/sail-function/src/scalar/datetime/spark_timestamp.rs
 +++ b/crates/sail-function/src/scalar/datetime/spark_timestamp.rs
 @@ -1,3 +1,4 @@
@@ -14617,10 +14795,18 @@ index 1c24162..c018d96 100644
  use std::collections::HashMap;
  use std::collections::hash_map::Entry;
  use std::fmt::Debug;
-@@ -186,10 +187,6 @@ impl SparkTimestamp {
-         self.ansi_mode
+@@ -178,18 +179,6 @@ impl SparkTimestamp {
+         })
      }
  
+-    pub fn timezone(&self) -> Option<&str> {
+-        self.timezone.as_deref()
+-    }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+-
 -    pub fn is_try(&self) -> bool {
 -        self.is_try
 -    }
@@ -14701,6 +14887,30 @@ index fe8399b..0000000
 -        spark_timestamp.invoke_with_args(args)
 -    }
 -}
+diff --git a/crates/sail-function/src/scalar/datetime/spark_unix_timestamp.rs b/crates/sail-function/src/scalar/datetime/spark_unix_timestamp.rs
+index 143715e..afcb106 100644
+--- a/crates/sail-function/src/scalar/datetime/spark_unix_timestamp.rs
++++ b/crates/sail-function/src/scalar/datetime/spark_unix_timestamp.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::collections::hash_map::Entry;
+ use std::fmt::Display;
+@@ -40,14 +41,6 @@ impl SparkUnixTimestamp {
+             ansi_mode,
+         }
+     }
+-
+-    pub fn session_timezone(&self) -> &str {
+-        &self.session_timezone
+-    }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkUnixTimestamp {
 diff --git a/crates/sail-function/src/scalar/datetime/spark_window_buckets.rs b/crates/sail-function/src/scalar/datetime/spark_window_buckets.rs
 index 43bcb09..fff4c28 100644
 --- a/crates/sail-function/src/scalar/datetime/spark_window_buckets.rs
@@ -15032,6 +15242,26 @@ index 0cd025a..412b4b0 100644
              ]
          );
      }
+diff --git a/crates/sail-function/src/scalar/json/from_json.rs b/crates/sail-function/src/scalar/json/from_json.rs
+index aca95c8..8f46f67 100644
+--- a/crates/sail-function/src/scalar/json/from_json.rs
++++ b/crates/sail-function/src/scalar/json/from_json.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use chrono::prelude::*;
+@@ -107,10 +108,6 @@ impl SparkFromJson {
+             signature: Signature::user_defined(Volatility::Immutable),
+         }
+     }
+-
+-    pub fn session_timezone(&self) -> &str {
+-        &self.session_timezone
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkFromJson {
 diff --git a/crates/sail-function/src/scalar/json/mod.rs b/crates/sail-function/src/scalar/json/mod.rs
 index 2b596d4..03a4d3a 100644
 --- a/crates/sail-function/src/scalar/json/mod.rs
@@ -15101,6 +15331,117 @@ index b6c6321..ceaebf9 100644
  }
  
  impl ScalarUDFImpl for StrToMap {
+diff --git a/crates/sail-function/src/scalar/math/spark_abs.rs b/crates/sail-function/src/scalar/math/spark_abs.rs
+index 2ab0f9d..994fcd5 100644
+--- a/crates/sail-function/src/scalar/math/spark_abs.rs
++++ b/crates/sail-function/src/scalar/math/spark_abs.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{
+@@ -41,10 +42,6 @@ impl SparkAbs {
+             ansi_mode,
+         }
+     }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkAbs {
+diff --git a/crates/sail-function/src/scalar/math/spark_bin.rs b/crates/sail-function/src/scalar/math/spark_bin.rs
+index cb18074..9106619 100644
+--- a/crates/sail-function/src/scalar/math/spark_bin.rs
++++ b/crates/sail-function/src/scalar/math/spark_bin.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{
+@@ -32,10 +33,6 @@ impl SparkBin {
+             ansi_mode,
+         }
+     }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkBin {
+diff --git a/crates/sail-function/src/scalar/math/spark_ceil_floor.rs b/crates/sail-function/src/scalar/math/spark_ceil_floor.rs
+index 08bb14e..49b5046 100644
+--- a/crates/sail-function/src/scalar/math/spark_ceil_floor.rs
++++ b/crates/sail-function/src/scalar/math/spark_ceil_floor.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{ArrayRef, ArrowNativeTypeOp, AsArray, Float32Array, Float64Array};
+@@ -241,10 +242,6 @@ impl SparkCeil {
+             ansi_mode,
+         }
+     }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkCeil {
+@@ -303,10 +300,6 @@ impl SparkFloor {
+             ansi_mode,
+         }
+     }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkFloor {
+diff --git a/crates/sail-function/src/scalar/math/spark_negative.rs b/crates/sail-function/src/scalar/math/spark_negative.rs
+index 90a0581..90695fe 100644
+--- a/crates/sail-function/src/scalar/math/spark_negative.rs
++++ b/crates/sail-function/src/scalar/math/spark_negative.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::{Arc, LazyLock};
+ 
+ use datafusion::arrow::datatypes::DataType;
+@@ -49,10 +50,6 @@ impl SparkNegative {
+             ansi_mode,
+         }
+     }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkNegative {
+diff --git a/crates/sail-function/src/scalar/math/spark_pmod.rs b/crates/sail-function/src/scalar/math/spark_pmod.rs
+index f9d96ba..271e6cf 100644
+--- a/crates/sail-function/src/scalar/math/spark_pmod.rs
++++ b/crates/sail-function/src/scalar/math/spark_pmod.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::datatypes::{DataType, FieldRef};
+@@ -34,10 +35,6 @@ impl SparkPmod {
+             ansi_mode,
+         }
+     }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkPmod {
 diff --git a/crates/sail-function/src/scalar/math/spark_unhex.rs b/crates/sail-function/src/scalar/math/spark_unhex.rs
 index 826643c..534ef76 100644
 --- a/crates/sail-function/src/scalar/math/spark_unhex.rs
@@ -15319,6 +15660,46 @@ index 2843936..41dc4ca 100644
  }
  
  impl ScalarUDFImpl for SparkStructRename {
+diff --git a/crates/sail-function/src/scalar/string/spark_to_char.rs b/crates/sail-function/src/scalar/string/spark_to_char.rs
+index 2ae1cbb..4869b92 100644
+--- a/crates/sail-function/src/scalar/string/spark_to_char.rs
++++ b/crates/sail-function/src/scalar/string/spark_to_char.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{
+@@ -36,10 +37,6 @@ impl SparkToChar {
+             signature: Signature::user_defined(Volatility::Immutable),
+         }
+     }
+-
+-    pub fn ansi_mode(&self) -> bool {
+-        self.ansi_mode
+-    }
+ }
+ 
+ impl Default for SparkToChar {
+diff --git a/crates/sail-function/src/scalar/string/spark_to_number.rs b/crates/sail-function/src/scalar/string/spark_to_number.rs
+index c6b69b3..3a7c070 100644
+--- a/crates/sail-function/src/scalar/string/spark_to_number.rs
++++ b/crates/sail-function/src/scalar/string/spark_to_number.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashSet;
+ use std::fmt::Display;
+ use std::ops::Deref;
+@@ -44,10 +45,6 @@ impl SparkToNumber {
+             signature: Signature::user_defined(Volatility::Immutable),
+         }
+     }
+-
+-    pub fn safe(&self) -> bool {
+-        self.safe
+-    }
+ }
+ 
+ impl Default for SparkToNumber {
 diff --git a/crates/sail-function/src/scalar/struct_function.rs b/crates/sail-function/src/scalar/struct_function.rs
 index 29ed545..5ae2988 100644
 --- a/crates/sail-function/src/scalar/struct_function.rs
@@ -15531,6 +15912,46 @@ index a898cbd..0000000
 -        Ok(ColumnarValue::Array(new_array))
 -    }
 -}
+diff --git a/crates/sail-function/src/scalar/variant/spark_parse_json.rs b/crates/sail-function/src/scalar/variant/spark_parse_json.rs
+index 4683519..7db123b 100644
+--- a/crates/sail-function/src/scalar/variant/spark_parse_json.rs
++++ b/crates/sail-function/src/scalar/variant/spark_parse_json.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ /// [Credit]: <https://github.com/datafusion-contrib/datafusion-variant/blob/51e0d4be62d7675e9b7b56ed1c0b0a10ae4a28d7/src/json_to_variant.rs>
+@@ -37,10 +38,6 @@ impl SparkParseJson {
+             safe,
+         }
+     }
+-
+-    pub fn safe(&self) -> bool {
+-        self.safe
+-    }
+ }
+ 
+ impl Default for SparkParseJson {
+diff --git a/crates/sail-function/src/scalar/variant/spark_variant_get.rs b/crates/sail-function/src/scalar/variant/spark_variant_get.rs
+index c351c72..c8cc367 100644
+--- a/crates/sail-function/src/scalar/variant/spark_variant_get.rs
++++ b/crates/sail-function/src/scalar/variant/spark_variant_get.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ /// [Credit]: <https://github.com/datafusion-contrib/datafusion-variant/blob/main/src/variant_get.rs>
+@@ -257,10 +258,6 @@ impl SparkVariantGet {
+             safe,
+         }
+     }
+-
+-    pub fn safe(&self) -> bool {
+-        self.safe
+-    }
+ }
+ 
+ impl ScalarUDFImpl for SparkVariantGet {
 diff --git a/crates/sail-function/src/scalar/variant/utils/helper.rs b/crates/sail-function/src/scalar/variant/utils/helper.rs
 index 40f488b..d8e16c1 100644
 --- a/crates/sail-function/src/scalar/variant/utils/helper.rs
@@ -15568,6 +15989,46 @@ index 40f488b..d8e16c1 100644
  pub fn try_parse_string_scalar(scalar: &ScalarValue) -> datafusion_common::Result<Option<&String>> {
      let b = match scalar {
          ScalarValue::Null => return Ok(None),
+diff --git a/crates/sail-function/src/scalar/xml/from_xml.rs b/crates/sail-function/src/scalar/xml/from_xml.rs
+index 8a18044..1900375 100644
+--- a/crates/sail-function/src/scalar/xml/from_xml.rs
++++ b/crates/sail-function/src/scalar/xml/from_xml.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::timezone::Tz;
+@@ -42,10 +43,6 @@ impl SparkFromXml {
+             signature: Signature::user_defined(Volatility::Immutable),
+         }
+     }
+-
+-    pub fn session_timezone(&self) -> &str {
+-        &self.session_timezone
+-    }
+ }
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+diff --git a/crates/sail-function/src/scalar/xml/to_xml.rs b/crates/sail-function/src/scalar/xml/to_xml.rs
+index ecfc2b4..bb16045 100644
+--- a/crates/sail-function/src/scalar/xml/to_xml.rs
++++ b/crates/sail-function/src/scalar/xml/to_xml.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::fmt::Write as _;
+ use std::sync::Arc;
+ 
+@@ -163,10 +164,6 @@ impl SparkToXml {
+         }
+     }
+ 
+-    pub fn session_timezone(&self) -> &str {
+-        &self.session_timezone
+-    }
+-
+     fn column_name(args: &[datafusion_expr::Expr]) -> String {
+         let Some(input) = args.first() else {
+             return format!("{}()", Self::TO_XML_NAME);
 diff --git a/crates/sail-function/src/scalar/xml/xpath_typed.rs b/crates/sail-function/src/scalar/xml/xpath_typed.rs
 index 212427e..138c92b 100644
 --- a/crates/sail-function/src/scalar/xml/xpath_typed.rs

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::{Debug, Formatter};
 use std::mem::{size_of, size_of_val};
 use std::sync::Arc;
@@ -74,10 +75,6 @@ impl PercentileDisc {
     }
 
     /// `true` when running under `spark.sql.ansi.enabled = true`.
-    pub fn ansi_mode(&self) -> bool {
-        self.ansi_mode
-    }
-
     /// `true` when the (single) `ORDER BY` direction is `DESC`.
     fn is_descending(args: &AccumulatorArgs) -> bool {
         args.order_bys

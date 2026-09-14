@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{ArrayRef, ArrowNativeTypeOp, AsArray, Float32Array, Float64Array};
@@ -241,10 +242,6 @@ impl SparkCeil {
             ansi_mode,
         }
     }
-
-    pub fn ansi_mode(&self) -> bool {
-        self.ansi_mode
-    }
 }
 
 impl ScalarUDFImpl for SparkCeil {
@@ -302,10 +299,6 @@ impl SparkFloor {
             signature: Signature::user_defined(Volatility::Immutable),
             ansi_mode,
         }
-    }
-
-    pub fn ansi_mode(&self) -> bool {
-        self.ansi_mode
     }
 }
 
