@@ -6,6 +6,47 @@ The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) d
 
 `queries.jsonl` contains 116 stable query IDs. The existing `seed_*` fields retain earlier expectations. Ordered queries compare sequences; unordered queries compare row multisets with duplicates preserved. Partition-dependent cases compare input IDs and check nonnegative partition IDs, partition-local ordering and unique/nonnegative monotonic IDs. SORT BY and monotonic-ID queries expose partition IDs for those checks. The `known_boundary` marker records earlier findings and does not suppress oracle differences.
 
+## Current result and remaining source
+
+The latest cut is `ad98dd4` on `feat/spark-sql-extraction`. The retained subset has **8 Sail-owned crates and 91,945 gross Rust lines**, including 83,937 production-source lines, 7,928 test lines and 80 build-script lines. All eight crate directories contain retained Sail source. Compared with the reviewed service/streaming checkpoint, the subsequent cuts remove another 10,685 lines. Compared with the original import, 34,068 lines are gone, a 27.0% reduction. Counts include comments and blank lines.
+
+The resolved dependency graph has 524 packages across all targets and 452 Linux normal/build packages, including the runner and reader. No reduction checkpoint adds or upgrades a package. The Rust frontend has no Python, Spark Connect service or Sail storage-reader dependency; Delta scans still use the host provider. This is the smallest subset demonstrated by these cuts, not a minimum or an adoption decision.
+
+| Retained crate | Gross Rust lines | Why it remains |
+| --- | ---: | --- |
+| `sail-common` | 1,978 | In-process query/expression/type specs and required Arrow metadata. Rejected protocol payload descriptors remain for boundary checks; they have no decoder or executor. |
+| `sail-common-datafusion` | 2,131 | Spark value formatting, constant evaluation, output/schema renaming and Variant metadata detection. |
+| `sail-function` | 57,237 | Spark scalar and aggregate kernels, coercion, NULL/ANSI behavior, datetime formats and nested values. The small NTILE adapter retains parameter validation. |
+| `sail-logical-plan` | 518 | SQL range, required ordering, partition IDs and monotonic-ID descriptors. Some still need physical extension planning. |
+| `sail-plan` | 19,009 | SQL function dispatch, name/type resolution, relational planning, field naming, native table lookup and range execution. |
+| `sail-sql-analyzer` | 4,349 | Typed conversion from Spark SQL ASTs to query specs, including literals and SQL data types. |
+| `sail-sql-macro` | 626 | TreeParser derives used by the grammar and TreeSyntax derives used by the complete syntax snapshot. |
+| `sail-sql-parser` | 6,097 | Tokenizer, query/command grammar, ASTs and syntax snapshot support. Commands are rejected by analysis before their bodies are translated. |
+
+The 57,237 lines in `sail-function` include its tests. Its largest groups implement aggregates, datetime/math/string functions, arrays, JSON, CSV and XML. Variant, map, binary/hash, sketch, spatial and other SQL functions also have live registrations. Removing whole families would narrow the support boundary; absence from the 116-case sample does not make them unused.
+
+The remaining bulk implements SQL behavior. Further substantial reduction would require replacing those implementations or narrowing the supported SQL. Several same-name native replacements were considered and left in place:
+
+| Candidate | Reason retained |
+| --- | --- |
+| Soundex | DataFusion 54.1.0 constructs Utf8 output even for LargeUtf8 input. Casting afterward does not preserve the full LargeUtf8 capacity contract. |
+| make_valid_utf8 | Nullability and FixedSizeBinary support differ. |
+| parse_url / try_parse_url | Percent-decoding, relative URLs, path handling and coercion differ. |
+| Regression aggregates | Sail preserves Spark's floating-point operation order; algebraically equivalent formulas can produce different values. |
+| ABS and other numeric kernels | Per-query ANSI settings, interval/duration types, overflow checks and error behavior still require Spark-specific handling. |
+| Parser derives and command grammar | TreeParser drives parsing and TreeSyntax protects the full syntax graph. Command grammar supports the existing explicit rejection checks. |
+
+The final check passes 19 runner, 11 planner and 9 Python tests, plus 302 function, 6 common DataFusion and 6 analyzer unit tests. The standalone parser syntax snapshot also passes; neither its expected graph nor the four frozen corpus/baseline files changed during reduction. To run the retained library suites in addition to the runner commands below:
+
+```bash
+cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  -p sail-function -p sail-common-datafusion -p sail-sql-analyzer --lib -j 2
+```
+
+All 116 import-baseline observations still match: 83 queries succeed, 18 fail planning and 15 fail execution. Spark comparison remains 45 strict matches / 60 differences / 11 pending reference cases; full-Sail comparison remains 83 / 22 / 11. Matching an error stage does not establish matching error conditions. The 19 seed checks and 18 adapter checks still pass.
+
+Missing physical extensions, deletion-vector/snapshot/stream-lifecycle coverage and the adoption decision remain open in the owning issue. Additional checks before deletion found two existing gaps: projecting EXISTS as a SELECT output fails physical planning, and selecting a qualified join key such as `l.a` after `JOIN ... USING (a)` fails resolution. WHERE EXISTS, the merged USING key and qualified ON-join fields work. These cuts do not repair or hide those gaps.
+
 ## Run the references
 
 Use separate environments for the full Spark package and Sail's Spark Connect client:
