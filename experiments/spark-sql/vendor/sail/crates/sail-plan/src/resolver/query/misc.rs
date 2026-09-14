@@ -2,14 +2,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use datafusion::catalog::MemTable;
 use datafusion_common::{DFSchema, DFSchemaRef, ParamValues, ScalarValue};
-use datafusion_expr::{EmptyRelation, Expr, Extension, LogicalPlan, UNNAMED_TABLE};
+use datafusion_expr::{EmptyRelation, Expr, Extension, LogicalPlan};
 use log::warn;
 use sail_common::spec;
-use sail_common_datafusion::array::record_batch::{
-    cast_record_batch_positionally, read_record_batches,
-};
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_logical_plan::range::RangeNode;
 use sail_logical_plan::repartition::{ExplicitRepartitionKind, ExplicitRepartitionNode};
@@ -106,40 +102,6 @@ impl PlanResolver<'_> {
         } else {
             Ok(input)
         }
-    }
-
-    pub(super) async fn resolve_query_local_relation(
-        &self,
-        data: Option<Vec<u8>>,
-        schema: Option<spec::Schema>,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<LogicalPlan> {
-        let batches = if let Some(data) = data {
-            read_record_batches(&data)?
-        } else {
-            vec![]
-        };
-        let (schema, batches) = if let Some(schema) = schema {
-            let schema = Arc::new(self.resolve_schema(schema, state)?);
-            let batches = batches
-                .into_iter()
-                .map(|b| Ok(cast_record_batch_positionally(b, schema.clone())?))
-                .collect::<PlanResult<_>>()?;
-            (schema, batches)
-        } else if let [batch, ..] = batches.as_slice() {
-            (batch.schema(), batches)
-        } else {
-            return Err(PlanError::invalid("missing schema for local relation"));
-        };
-        let table_provider = Arc::new(MemTable::try_new(schema, vec![batches])?);
-        self.resolve_table_provider_with_rename(
-            table_provider,
-            UNNAMED_TABLE,
-            None,
-            vec![],
-            None,
-            state,
-        )
     }
 
     pub(super) async fn resolve_query_hint(

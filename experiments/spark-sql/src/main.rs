@@ -187,6 +187,25 @@ mod tests {
     use arrow::array::{Array, Int32Array, ListArray, TimestampMicrosecondArray};
     use sail_plan::error::PlanError;
 
+    #[tokio::test]
+    async fn rejects_inline_arrow_payloads_before_decoding() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        for data in [None, Some(vec![]), Some(vec![0xff, 0x00, 0x01])] {
+            let plan = spec::Plan::Query(spec::QueryPlan::new(spec::QueryNode::LocalRelation {
+                data,
+                schema: None,
+            }));
+            let error = resolver.resolve_named_plan(plan).await.unwrap_err();
+            assert!(
+                matches!(error, PlanError::NotSupported(ref message)
+                if message.contains("inline Arrow input")),
+                "{error}"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn rejects_commands_during_analysis() -> ProbeResult<()> {
         use sail_sql_analyzer::error::SqlError;

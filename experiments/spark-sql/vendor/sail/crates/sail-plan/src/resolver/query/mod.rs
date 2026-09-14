@@ -117,9 +117,10 @@ impl PlanResolver<'_> {
                 )
                 .await?
             }
-            QueryNode::LocalRelation { data, schema } => {
-                self.resolve_query_local_relation(data, schema, state)
-                    .await?
+            QueryNode::LocalRelation { .. } => {
+                return Err(PlanError::unsupported(
+                    "extraction probe: inline Arrow input",
+                ));
             }
             QueryNode::Sample(sample) => self.resolve_query_sample(sample, state).await?,
             QueryNode::TableSample { input, sample } => {

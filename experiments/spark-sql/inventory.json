@@ -1,23 +1,23 @@
 {
-  "source_sha256": "ff9a46e81abf04c1f5c2b0194cd542b5b7f4428071348c9c0a69ca7b9c32082a",
+  "source_sha256": "c4c284a7b6173caa74dc74590ca13ce7683f6c75987d5fbe2963935885a8eb80",
   "crates": [
     {
       "crate": "sail-common",
-      "rust_files": 16,
-      "gross_lines": 3440,
-      "nonblank_lines": 3206,
+      "rust_files": 15,
+      "gross_lines": 3386,
+      "nonblank_lines": 3160,
       "test_lines": 0,
       "build_script_lines": 0,
-      "production_lines": 3440
+      "production_lines": 3386
     },
     {
       "crate": "sail-common-datafusion",
-      "rust_files": 22,
-      "gross_lines": 4418,
-      "nonblank_lines": 4031,
-      "test_lines": 671,
+      "rust_files": 14,
+      "gross_lines": 2981,
+      "nonblank_lines": 2679,
+      "test_lines": 333,
       "build_script_lines": 0,
-      "production_lines": 3747
+      "production_lines": 2648
     },
     {
       "crate": "sail-function",
@@ -40,11 +40,11 @@
     {
       "crate": "sail-plan",
       "rust_files": 81,
-      "gross_lines": 20664,
-      "nonblank_lines": 19376,
+      "gross_lines": 20627,
+      "nonblank_lines": 19340,
       "test_lines": 779,
       "build_script_lines": 0,
-      "production_lines": 19885
+      "production_lines": 19848
     },
     {
       "crate": "sail-sql-analyzer",
@@ -75,16 +75,16 @@
     }
   ],
   "totals": {
-    "rust_files": 371,
-    "gross_lines": 99020,
-    "nonblank_lines": 91052,
-    "test_lines": 8269,
+    "rust_files": 362,
+    "gross_lines": 97492,
+    "nonblank_lines": 89618,
+    "test_lines": 7931,
     "build_script_lines": 80,
-    "production_lines": 90671
+    "production_lines": 89481
   },
-  "lock_packages": 549,
-  "resolved_packages_all_targets_including_dev": 549,
-  "linux_normal_build_packages_including_runner": 483,
+  "lock_packages": 546,
+  "resolved_packages_all_targets_including_dev": 546,
+  "linux_normal_build_packages_including_runner": 480,
   "python_packages_in_linux_build": [],
   "build_generated_rust": {
     "sail-sql-parser": {

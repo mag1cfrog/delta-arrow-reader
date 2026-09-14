@@ -16,7 +16,7 @@ index e8af02f..8fe41b0 100644
  arrow = { version = "58.3.0", features = ["chrono-tz"] }
  arrow-array = { version = "58.3.0", features = ["ffi"] }
 diff --git a/crates/sail-common-datafusion/Cargo.toml b/crates/sail-common-datafusion/Cargo.toml
-index b000371..1d08c32 100644
+index b000371..eea201f 100644
 --- a/crates/sail-common-datafusion/Cargo.toml
 +++ b/crates/sail-common-datafusion/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -24,9 +24,16 @@ index b000371..1d08c32 100644
  [package]
  name = "sail-common-datafusion"
  version = { workspace = true }
-@@ -22,22 +23,7 @@ futures = { workspace = true }
+@@ -15,29 +16,10 @@ datafusion = { workspace = true }
+ datafusion-common = { workspace = true }
+ datafusion-expr = { workspace = true }
+ arrow-schema = { workspace = true }
+-thiserror = { workspace = true }
+ either = { workspace = true }
+ lexical-core = { workspace = true }
+-futures = { workspace = true }
  serde = { workspace = true }
- serde_json = { workspace = true }
+-serde_json = { workspace = true }
  async-trait = { workspace = true }
 -prost = { workspace = true }
 -tonic = { workspace = true }
@@ -35,7 +42,7 @@ index b000371..1d08c32 100644
  parquet-variant = { workspace = true }
  parquet-variant-json = { workspace = true }
 -tokio = { workspace = true }
- serde_arrow = { workspace = true }
+-serde_arrow = { workspace = true }
 -
 -[build-dependencies]
 -tonic-prost-build = { workspace = true }
@@ -845,6 +852,1216 @@ index 8c85d96..0000000
 -}
 -
 -message EndOfData {}
+diff --git a/crates/sail-common-datafusion/src/array/mod.rs b/crates/sail-common-datafusion/src/array/mod.rs
+deleted file mode 100644
+index 87a0a7d..0000000
+--- a/crates/sail-common-datafusion/src/array/mod.rs
++++ /dev/null
+@@ -1,3 +0,0 @@
+-pub mod placeholder;
+-pub mod record_batch;
+-pub mod serde;
+diff --git a/crates/sail-common-datafusion/src/array/placeholder.rs b/crates/sail-common-datafusion/src/array/placeholder.rs
+deleted file mode 100644
+index 325cb05..0000000
+--- a/crates/sail-common-datafusion/src/array/placeholder.rs
++++ /dev/null
+@@ -1,632 +0,0 @@
+-use std::sync::Arc;
+-
+-use datafusion::arrow::array::{
+-    ArrayData, ArrayRef, ArrowNativeTypeOp, ArrowPrimitiveType, BinaryArray, BinaryViewArray,
+-    BooleanBuilder, DictionaryArray, FixedSizeBinaryArray, FixedSizeListArray, LargeBinaryArray,
+-    LargeListArray, LargeListViewArray, LargeStringArray, ListArray, ListViewArray, MapArray,
+-    NullArray, PrimitiveArray, PrimitiveBuilder, RunArray, StringArray, StringViewArray,
+-    StructArray, UnionArray, new_null_array,
+-};
+-use datafusion::arrow::buffer::{Buffer, ScalarBuffer};
+-use datafusion::arrow::datatypes::{
+-    ArrowTimestampType, DataType, Date32Type, Date64Type, Decimal32Type, Decimal64Type,
+-    Decimal128Type, Decimal256Type, DurationMicrosecondType, DurationMillisecondType,
+-    DurationNanosecondType, DurationSecondType, Float16Type, Float32Type, Float64Type, Int8Type,
+-    Int16Type, Int32Type, Int64Type, IntervalDayTimeType, IntervalMonthDayNanoType, IntervalUnit,
+-    IntervalYearMonthType, Time32MillisecondType, Time32SecondType, Time64MicrosecondType,
+-    Time64NanosecondType, TimeUnit, TimestampMicrosecondType, TimestampMillisecondType,
+-    TimestampNanosecondType, TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
+-    UnionMode,
+-};
+-use datafusion_common::internal_err;
+-
+-/// Create a non-null placeholder array of the specified data type and length.
+-pub fn placeholder_array(
+-    data_type: &DataType,
+-    length: usize,
+-) -> datafusion_common::Result<ArrayRef> {
+-    match data_type {
+-        DataType::Null => Ok(Arc::new(NullArray::new(length))),
+-        DataType::Boolean => Ok(placeholder_boolean_array(length)),
+-        DataType::Int8 => Ok(placeholder_primitive_array::<Int8Type>(length)),
+-        DataType::Int16 => Ok(placeholder_primitive_array::<Int16Type>(length)),
+-        DataType::Int32 => Ok(placeholder_primitive_array::<Int32Type>(length)),
+-        DataType::Int64 => Ok(placeholder_primitive_array::<Int64Type>(length)),
+-        DataType::UInt8 => Ok(placeholder_primitive_array::<UInt8Type>(length)),
+-        DataType::UInt16 => Ok(placeholder_primitive_array::<UInt16Type>(length)),
+-        DataType::UInt32 => Ok(placeholder_primitive_array::<UInt32Type>(length)),
+-        DataType::UInt64 => Ok(placeholder_primitive_array::<UInt64Type>(length)),
+-        DataType::Float16 => Ok(placeholder_primitive_array::<Float16Type>(length)),
+-        DataType::Float32 => Ok(placeholder_primitive_array::<Float32Type>(length)),
+-        DataType::Float64 => Ok(placeholder_primitive_array::<Float64Type>(length)),
+-        DataType::Timestamp(time_unit, tz) => {
+-            match time_unit {
+-                TimeUnit::Second => Ok(placeholder_timestamp_array::<TimestampSecondType>(
+-                    length,
+-                    tz.clone(),
+-                )),
+-                TimeUnit::Millisecond => Ok(
+-                    placeholder_timestamp_array::<TimestampMillisecondType>(length, tz.clone()),
+-                ),
+-                TimeUnit::Microsecond => Ok(
+-                    placeholder_timestamp_array::<TimestampMicrosecondType>(length, tz.clone()),
+-                ),
+-                TimeUnit::Nanosecond => Ok(placeholder_timestamp_array::<TimestampNanosecondType>(
+-                    length,
+-                    tz.clone(),
+-                )),
+-            }
+-        }
+-        DataType::Date32 => Ok(placeholder_primitive_array::<Date32Type>(length)),
+-        DataType::Date64 => Ok(placeholder_primitive_array::<Date64Type>(length)),
+-        DataType::Time32(time_unit) => match time_unit {
+-            TimeUnit::Second => Ok(placeholder_primitive_array::<Time32SecondType>(length)),
+-            TimeUnit::Millisecond => {
+-                Ok(placeholder_primitive_array::<Time32MillisecondType>(length))
+-            }
+-            TimeUnit::Microsecond | TimeUnit::Nanosecond => {
+-                internal_err!("invalid data type: {data_type:?}")
+-            }
+-        },
+-        DataType::Time64(time_unit) => match time_unit {
+-            TimeUnit::Second | TimeUnit::Millisecond => {
+-                internal_err!("invalid data type: {data_type:?}")
+-            }
+-            TimeUnit::Microsecond => {
+-                Ok(placeholder_primitive_array::<Time64MicrosecondType>(length))
+-            }
+-            TimeUnit::Nanosecond => Ok(placeholder_primitive_array::<Time64NanosecondType>(length)),
+-        },
+-        DataType::Duration(time_unit) => match time_unit {
+-            TimeUnit::Second => Ok(placeholder_primitive_array::<DurationSecondType>(length)),
+-            TimeUnit::Millisecond => Ok(placeholder_primitive_array::<DurationMillisecondType>(
+-                length,
+-            )),
+-            TimeUnit::Microsecond => Ok(placeholder_primitive_array::<DurationMicrosecondType>(
+-                length,
+-            )),
+-            TimeUnit::Nanosecond => Ok(placeholder_primitive_array::<DurationNanosecondType>(
+-                length,
+-            )),
+-        },
+-        DataType::Interval(interval_unit) => match interval_unit {
+-            IntervalUnit::YearMonth => {
+-                Ok(placeholder_primitive_array::<IntervalYearMonthType>(length))
+-            }
+-            IntervalUnit::DayTime => Ok(placeholder_primitive_array::<IntervalDayTimeType>(length)),
+-            IntervalUnit::MonthDayNano => Ok(
+-                placeholder_primitive_array::<IntervalMonthDayNanoType>(length),
+-            ),
+-        },
+-        DataType::Binary => {
+-            let offsets = vec![0i32; length + 1];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_buffer(Buffer::from(Vec::<u8>::new()))
+-                .build()?;
+-            Ok(Arc::new(BinaryArray::from(array_data)))
+-        }
+-        DataType::FixedSizeBinary(size) => {
+-            let values = vec![0u8; *size as usize * length];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(values))
+-                .build()?;
+-            Ok(Arc::new(FixedSizeBinaryArray::from(array_data)))
+-        }
+-        DataType::LargeBinary => {
+-            let offsets = vec![0i64; length + 1];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_buffer(Buffer::from(Vec::<u8>::new()))
+-                .build()?;
+-            Ok(Arc::new(LargeBinaryArray::from(array_data)))
+-        }
+-        DataType::BinaryView => {
+-            let views = vec![0i128; length];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(views))
+-                .build()?;
+-            Ok(Arc::new(BinaryViewArray::from(array_data)))
+-        }
+-        DataType::Utf8 => {
+-            let offsets = vec![0i32; length + 1];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_buffer(Buffer::from(Vec::<u8>::new()))
+-                .build()?;
+-            Ok(Arc::new(StringArray::from(array_data)))
+-        }
+-        DataType::LargeUtf8 => {
+-            let offsets = vec![0i64; length + 1];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_buffer(Buffer::from(Vec::<u8>::new()))
+-                .build()?;
+-            Ok(Arc::new(LargeStringArray::from(array_data)))
+-        }
+-        DataType::Utf8View => {
+-            let views = vec![0i128; length];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(views))
+-                .build()?;
+-            Ok(Arc::new(StringViewArray::from(array_data)))
+-        }
+-        DataType::List(field) => {
+-            let child_array = if field.is_nullable() {
+-                new_null_array(field.data_type(), 0)
+-            } else {
+-                placeholder_array(field.data_type(), 0)?
+-            };
+-            let offsets = vec![0i32; length + 1];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_child_data(child_array.to_data())
+-                .build()?;
+-            Ok(Arc::new(ListArray::from(array_data)))
+-        }
+-        DataType::ListView(field) => {
+-            let child_array = if field.is_nullable() {
+-                new_null_array(field.data_type(), 0)
+-            } else {
+-                placeholder_array(field.data_type(), 0)?
+-            };
+-            let offsets = vec![0i32; length];
+-            let sizes = vec![0i32; length];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_buffer(Buffer::from(sizes))
+-                .add_child_data(child_array.to_data())
+-                .build()?;
+-            Ok(Arc::new(ListViewArray::from(array_data)))
+-        }
+-        DataType::FixedSizeList(field, list_size) => {
+-            let child_length = (*list_size as usize) * length;
+-            let child_array = if field.is_nullable() {
+-                new_null_array(field.data_type(), child_length)
+-            } else {
+-                placeholder_array(field.data_type(), child_length)?
+-            };
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_child_data(child_array.to_data())
+-                .build()?;
+-            Ok(Arc::new(FixedSizeListArray::from(array_data)))
+-        }
+-        DataType::LargeList(field) => {
+-            let child_array = if field.is_nullable() {
+-                new_null_array(field.data_type(), 0)
+-            } else {
+-                placeholder_array(field.data_type(), 0)?
+-            };
+-            let offsets = vec![0i64; length + 1];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_child_data(child_array.to_data())
+-                .build()?;
+-            Ok(Arc::new(LargeListArray::from(array_data)))
+-        }
+-        DataType::LargeListView(field) => {
+-            let child_array = if field.is_nullable() {
+-                new_null_array(field.data_type(), 0)
+-            } else {
+-                placeholder_array(field.data_type(), 0)?
+-            };
+-            let offsets = vec![0i64; length];
+-            let sizes = vec![0i64; length];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_buffer(Buffer::from(sizes))
+-                .add_child_data(child_array.to_data())
+-                .build()?;
+-            Ok(Arc::new(LargeListViewArray::from(array_data)))
+-        }
+-        DataType::Struct(fields) => {
+-            let mut child_data = Vec::new();
+-            for field in fields {
+-                let child_array = if field.is_nullable() {
+-                    new_null_array(field.data_type(), length)
+-                } else {
+-                    placeholder_array(field.data_type(), length)?
+-                };
+-                child_data.push(child_array.to_data());
+-            }
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .child_data(child_data)
+-                .build()?;
+-            Ok(Arc::new(StructArray::from(array_data)))
+-        }
+-        DataType::Union(union_fields, union_mode) => {
+-            // use first type ID for all entries
+-            let Some(first_type_id) = union_fields.iter().next().map(|(type_id, _)| type_id) else {
+-                return internal_err!("union type must have at least one field");
+-            };
+-            // create type IDs buffer
+-            let type_ids: ScalarBuffer<i8> = vec![first_type_id; length].into();
+-
+-            // create child arrays for each field in the union
+-            let mut children = Vec::new();
+-            for (type_id, field) in union_fields.iter() {
+-                let child_length = match union_mode {
+-                    UnionMode::Sparse => length,
+-                    UnionMode::Dense => {
+-                        if type_id == first_type_id {
+-                            length
+-                        } else {
+-                            0
+-                        }
+-                    }
+-                };
+-                let child_array = if field.is_nullable() {
+-                    new_null_array(field.data_type(), child_length)
+-                } else {
+-                    placeholder_array(field.data_type(), child_length)?
+-                };
+-                children.push(child_array);
+-            }
+-
+-            let offsets = match union_mode {
+-                UnionMode::Dense => Some((0i32..length as i32).collect::<Vec<_>>().into()),
+-                UnionMode::Sparse => None,
+-            };
+-
+-            let union_array =
+-                UnionArray::try_new(union_fields.clone(), type_ids, offsets, children)?;
+-
+-            Ok(Arc::new(union_array))
+-        }
+-        DataType::Dictionary(key_type, value_type) => {
+-            // create a minimal values array (single element)
+-            let values_array = placeholder_array(value_type, 1)?;
+-
+-            // create keys array with all zeros pointing to the single value
+-            match key_type.as_ref() {
+-                DataType::Int8 => {
+-                    let keys = PrimitiveArray::<Int8Type>::from(vec![0i8; length]);
+-                    let dict_array = DictionaryArray::try_new(keys, values_array)?;
+-                    Ok(Arc::new(dict_array))
+-                }
+-                DataType::Int16 => {
+-                    let keys = PrimitiveArray::<Int16Type>::from(vec![0i16; length]);
+-                    let dict_array = DictionaryArray::try_new(keys, values_array)?;
+-                    Ok(Arc::new(dict_array))
+-                }
+-                DataType::Int32 => {
+-                    let keys = PrimitiveArray::<Int32Type>::from(vec![0i32; length]);
+-                    let dict_array = DictionaryArray::try_new(keys, values_array)?;
+-                    Ok(Arc::new(dict_array))
+-                }
+-                DataType::Int64 => {
+-                    let keys = PrimitiveArray::<Int64Type>::from(vec![0i64; length]);
+-                    let dict_array = DictionaryArray::try_new(keys, values_array)?;
+-                    Ok(Arc::new(dict_array))
+-                }
+-                DataType::UInt8 => {
+-                    let keys = PrimitiveArray::<UInt8Type>::from(vec![0u8; length]);
+-                    let dict_array = DictionaryArray::try_new(keys, values_array)?;
+-                    Ok(Arc::new(dict_array))
+-                }
+-                DataType::UInt16 => {
+-                    let keys = PrimitiveArray::<UInt16Type>::from(vec![0u16; length]);
+-                    let dict_array = DictionaryArray::try_new(keys, values_array)?;
+-                    Ok(Arc::new(dict_array))
+-                }
+-                DataType::UInt32 => {
+-                    let keys = PrimitiveArray::<UInt32Type>::from(vec![0u32; length]);
+-                    let dict_array = DictionaryArray::try_new(keys, values_array)?;
+-                    Ok(Arc::new(dict_array))
+-                }
+-                DataType::UInt64 => {
+-                    let keys = PrimitiveArray::<UInt64Type>::from(vec![0u64; length]);
+-                    let dict_array = DictionaryArray::try_new(keys, values_array)?;
+-                    Ok(Arc::new(dict_array))
+-                }
+-                _ => internal_err!("invalid dictionary key type: {key_type:?}"),
+-            }
+-        }
+-        DataType::Decimal32(_, _) => Ok(placeholder_primitive_array::<Decimal32Type>(length)),
+-        DataType::Decimal64(_, _) => Ok(placeholder_primitive_array::<Decimal64Type>(length)),
+-        DataType::Decimal128(_, _) => Ok(placeholder_primitive_array::<Decimal128Type>(length)),
+-        DataType::Decimal256(_, _) => Ok(placeholder_primitive_array::<Decimal256Type>(length)),
+-        DataType::Map(field, _) => {
+-            let child_array = if field.is_nullable() {
+-                new_null_array(field.data_type(), 0)
+-            } else {
+-                placeholder_array(field.data_type(), 0)?
+-            };
+-            let offsets = vec![0i32; length + 1];
+-            let array_data = ArrayData::builder(data_type.clone())
+-                .len(length)
+-                .add_buffer(Buffer::from(offsets))
+-                .add_child_data(child_array.to_data())
+-                .build()?;
+-            Ok(Arc::new(MapArray::from(array_data)))
+-        }
+-        DataType::RunEndEncoded(run_ends_field, values_field) => {
+-            // create a minimal values array (single element)
+-            let values_array = if values_field.is_nullable() {
+-                new_null_array(values_field.data_type(), 1)
+-            } else {
+-                placeholder_array(values_field.data_type(), 1)?
+-            };
+-
+-            // create run-end array where all values point to the single run
+-            match run_ends_field.data_type() {
+-                DataType::Int16 => {
+-                    let run_ends = PrimitiveArray::<Int16Type>::from(vec![length as i16]);
+-                    let run_array = RunArray::try_new(&run_ends, &*values_array)?;
+-                    Ok(Arc::new(run_array))
+-                }
+-                DataType::Int32 => {
+-                    let run_ends = PrimitiveArray::<Int32Type>::from(vec![length as i32]);
+-                    let run_array = RunArray::try_new(&run_ends, &*values_array)?;
+-                    Ok(Arc::new(run_array))
+-                }
+-                DataType::Int64 => {
+-                    let run_ends = PrimitiveArray::<Int64Type>::from(vec![length as i64]);
+-                    let run_array = RunArray::try_new(&run_ends, &*values_array)?;
+-                    Ok(Arc::new(run_array))
+-                }
+-                _ => internal_err!("invalid run ends type: {:?}", run_ends_field.data_type()),
+-            }
+-        }
+-    }
+-}
+-
+-pub fn placeholder_boolean_array(length: usize) -> ArrayRef {
+-    let mut builder = BooleanBuilder::with_capacity(length);
+-    for _ in 0..length {
+-        builder.append_value(false);
+-    }
+-    Arc::new(builder.finish())
+-}
+-
+-pub fn placeholder_primitive_array<T: ArrowPrimitiveType>(length: usize) -> ArrayRef {
+-    let mut builder = <PrimitiveBuilder<T>>::with_capacity(length);
+-    for _ in 0..length {
+-        builder.append_value(T::Native::ZERO);
+-    }
+-    Arc::new(builder.finish())
+-}
+-
+-pub fn placeholder_timestamp_array<T: ArrowTimestampType + ArrowPrimitiveType>(
+-    length: usize,
+-    tz: Option<Arc<str>>,
+-) -> ArrayRef {
+-    let mut builder = <PrimitiveBuilder<T>>::with_capacity(length);
+-    for _ in 0..length {
+-        builder.append_value(T::Native::ZERO);
+-    }
+-    Arc::new(builder.finish().with_timezone_opt(tz))
+-}
+-
+-#[cfg(test)]
+-mod tests {
+-    use datafusion::arrow::array::Array;
+-    use datafusion::arrow::datatypes::Field;
+-    use datafusion_common::Result;
+-    use sail_common::spec::{
+-        SAIL_LIST_FIELD_NAME, SAIL_MAP_FIELD_NAME, SAIL_MAP_KEY_FIELD_NAME,
+-        SAIL_MAP_VALUE_FIELD_NAME,
+-    };
+-
+-    use super::*;
+-
+-    fn test_placeholder_array(data_type: DataType, length: usize) -> Result<()> {
+-        let array = placeholder_array(&data_type, length)?;
+-        assert_eq!(array.len(), length);
+-        // The null count is 0 even for `DataType::Null` since
+-        // `NullArray` contains logical nulls rather than physical nulls.
+-        assert_eq!(array.null_count(), 0);
+-        for i in 0..length {
+-            assert!(array.is_valid(i));
+-        }
+-        Ok(())
+-    }
+-
+-    #[test]
+-    fn test_all_placeholder_arrays() -> Result<()> {
+-        let test_cases = vec![
+-            (DataType::Null, 10),
+-            (DataType::Boolean, 10),
+-            (DataType::Int8, 10),
+-            (DataType::Int16, 10),
+-            (DataType::Int32, 10),
+-            (DataType::Int64, 10),
+-            (DataType::UInt8, 10),
+-            (DataType::UInt16, 10),
+-            (DataType::UInt32, 10),
+-            (DataType::UInt64, 10),
+-            (DataType::Float16, 10),
+-            (DataType::Float32, 10),
+-            (DataType::Float64, 10),
+-            (DataType::Timestamp(TimeUnit::Second, None), 10),
+-            (
+-                DataType::Timestamp(TimeUnit::Millisecond, Some(Arc::from("UTC"))),
+-                10,
+-            ),
+-            (DataType::Timestamp(TimeUnit::Microsecond, None), 10),
+-            (
+-                DataType::Timestamp(TimeUnit::Nanosecond, Some(Arc::from("PST"))),
+-                10,
+-            ),
+-            (DataType::Date32, 10),
+-            (DataType::Date64, 10),
+-            (DataType::Time32(TimeUnit::Second), 10),
+-            (DataType::Time32(TimeUnit::Millisecond), 10),
+-            (DataType::Time64(TimeUnit::Microsecond), 10),
+-            (DataType::Time64(TimeUnit::Nanosecond), 10),
+-            (DataType::Duration(TimeUnit::Second), 10),
+-            (DataType::Duration(TimeUnit::Millisecond), 10),
+-            (DataType::Duration(TimeUnit::Microsecond), 10),
+-            (DataType::Duration(TimeUnit::Nanosecond), 10),
+-            (DataType::Interval(IntervalUnit::YearMonth), 10),
+-            (DataType::Interval(IntervalUnit::DayTime), 10),
+-            (DataType::Interval(IntervalUnit::MonthDayNano), 10),
+-            (DataType::Binary, 10),
+-            (DataType::FixedSizeBinary(4), 10),
+-            (DataType::LargeBinary, 10),
+-            (DataType::BinaryView, 10),
+-            (DataType::Utf8, 10),
+-            (DataType::LargeUtf8, 10),
+-            (DataType::Utf8View, 10),
+-            (
+-                DataType::List(Arc::new(Field::new(
+-                    SAIL_LIST_FIELD_NAME,
+-                    DataType::Int32,
+-                    false,
+-                ))),
+-                10,
+-            ),
+-            (
+-                DataType::ListView(Arc::new(Field::new(
+-                    SAIL_LIST_FIELD_NAME,
+-                    DataType::Int32,
+-                    false,
+-                ))),
+-                10,
+-            ),
+-            (
+-                DataType::FixedSizeList(
+-                    Arc::new(Field::new(SAIL_LIST_FIELD_NAME, DataType::Int32, false)),
+-                    3,
+-                ),
+-                10,
+-            ),
+-            (
+-                DataType::LargeList(Arc::new(Field::new(
+-                    SAIL_LIST_FIELD_NAME,
+-                    DataType::Int32,
+-                    false,
+-                ))),
+-                10,
+-            ),
+-            (
+-                DataType::LargeListView(Arc::new(Field::new(
+-                    SAIL_LIST_FIELD_NAME,
+-                    DataType::Int32,
+-                    false,
+-                ))),
+-                10,
+-            ),
+-            (
+-                DataType::Struct(
+-                    vec![
+-                        Field::new("a", DataType::Int32, false),
+-                        Field::new("b", DataType::Utf8, false),
+-                    ]
+-                    .into(),
+-                ),
+-                10,
+-            ),
+-            (
+-                DataType::Union(
+-                    [(0i8, Arc::new(Field::new("a", DataType::Int32, false)))]
+-                        .into_iter()
+-                        .collect(),
+-                    UnionMode::Sparse,
+-                ),
+-                10,
+-            ),
+-            (
+-                DataType::Union(
+-                    [
+-                        (0i8, Arc::new(Field::new("a", DataType::Int32, false))),
+-                        (1i8, Arc::new(Field::new("b", DataType::Utf8, false))),
+-                    ]
+-                    .into_iter()
+-                    .collect(),
+-                    UnionMode::Dense,
+-                ),
+-                10,
+-            ),
+-            (
+-                DataType::Dictionary(Box::new(DataType::UInt8), Box::new(DataType::Utf8)),
+-                10,
+-            ),
+-            (
+-                DataType::Dictionary(Box::new(DataType::UInt16), Box::new(DataType::Int32)),
+-                10,
+-            ),
+-            (
+-                DataType::Dictionary(Box::new(DataType::UInt32), Box::new(DataType::Float32)),
+-                10,
+-            ),
+-            (
+-                DataType::Dictionary(Box::new(DataType::UInt64), Box::new(DataType::Boolean)),
+-                10,
+-            ),
+-            (
+-                DataType::Dictionary(Box::new(DataType::Int8), Box::new(DataType::Float64)),
+-                10,
+-            ),
+-            (
+-                DataType::Dictionary(Box::new(DataType::Int16), Box::new(DataType::Boolean)),
+-                10,
+-            ),
+-            (
+-                DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Date32)),
+-                10,
+-            ),
+-            (
+-                DataType::Dictionary(Box::new(DataType::Int64), Box::new(DataType::Date64)),
+-                10,
+-            ),
+-            (DataType::Decimal128(10, 2), 10),
+-            (DataType::Decimal256(20, 4), 10),
+-            (
+-                DataType::Map(
+-                    Arc::new(Field::new(
+-                        SAIL_MAP_FIELD_NAME,
+-                        DataType::Struct(
+-                            vec![
+-                                Field::new(SAIL_MAP_KEY_FIELD_NAME, DataType::Utf8, false),
+-                                Field::new(SAIL_MAP_VALUE_FIELD_NAME, DataType::Int32, true),
+-                            ]
+-                            .into(),
+-                        ),
+-                        false,
+-                    )),
+-                    false,
+-                ),
+-                10,
+-            ),
+-            (
+-                DataType::RunEndEncoded(
+-                    Arc::new(Field::new("run_ends", DataType::Int16, false)),
+-                    Arc::new(Field::new("values", DataType::Float64, false)),
+-                ),
+-                10,
+-            ),
+-            (
+-                DataType::RunEndEncoded(
+-                    Arc::new(Field::new("run_ends", DataType::Int32, false)),
+-                    Arc::new(Field::new("values", DataType::Utf8, true)),
+-                ),
+-                10,
+-            ),
+-            (
+-                DataType::RunEndEncoded(
+-                    Arc::new(Field::new("run_ends", DataType::Int64, false)),
+-                    Arc::new(Field::new("values", DataType::Int32, false)),
+-                ),
+-                10,
+-            ),
+-        ];
+-        for (data_type, length) in test_cases {
+-            test_placeholder_array(data_type, length)?;
+-        }
+-        Ok(())
+-    }
+-}
+diff --git a/crates/sail-common-datafusion/src/array/record_batch.rs b/crates/sail-common-datafusion/src/array/record_batch.rs
+deleted file mode 100644
+index 7b6ac25..0000000
+--- a/crates/sail-common-datafusion/src/array/record_batch.rs
++++ /dev/null
+@@ -1,501 +0,0 @@
+-use std::io::Cursor;
+-use std::sync::Arc;
+-
+-use datafusion::arrow::array::{
+-    Array, ArrayRef, LargeListArray, ListArray, MapArray, PrimitiveArray, RecordBatch,
+-    RecordBatchOptions, StructArray, new_null_array,
+-};
+-use datafusion::arrow::compute::cast;
+-use datafusion::arrow::datatypes::{
+-    ArrowTimestampType, DataType, FieldRef, Fields, Schema, SchemaRef, TimeUnit,
+-    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
+-    TimestampSecondType,
+-};
+-use datafusion::arrow::ipc::reader::StreamReader;
+-use datafusion::arrow::ipc::writer::StreamWriter;
+-use datafusion_common::{DataFusionError, Result};
+-
+-pub fn cast_record_batch_positionally(
+-    batch: RecordBatch,
+-    schema: SchemaRef,
+-) -> Result<RecordBatch> {
+-    let fields = schema.fields();
+-    let columns = batch.columns();
+-    let columns = fields
+-        .iter()
+-        .zip(columns)
+-        .map(|(field, column)| cast_array_positionally_recursively(column, field.data_type()))
+-        .collect::<Result<Vec<_>>>()?;
+-    if columns.is_empty() {
+-        Ok(RecordBatch::try_new_with_options(
+-            schema,
+-            columns,
+-            &RecordBatchOptions::default().with_row_count(Some(batch.num_rows())),
+-        )?)
+-    } else {
+-        Ok(RecordBatch::try_new(schema, columns)?)
+-    }
+-}
+-
+-/// Cast a RecordBatch to a target schema with relaxed timezone handling.
+-///
+-/// This function is similar to `cast_record_batch` but handles timestamp timezone
+-/// differences more gracefully by reinterpreting timezone metadata without converting
+-/// the underlying values. This is useful for Iceberg writes where timezone metadata
+-/// needs to be adjusted but the actual timestamp values should remain unchanged.
+-pub fn cast_record_batch_relaxed_tz(
+-    batch: &RecordBatch,
+-    target: &SchemaRef,
+-) -> Result<RecordBatch> {
+-    if target.fields().is_empty() {
+-        return Ok(RecordBatch::try_new_with_options(
+-            target.clone(),
+-            vec![],
+-            &RecordBatchOptions::default().with_row_count(Some(batch.num_rows())),
+-        )?);
+-    }
+-    let mut cols: Vec<ArrayRef> = Vec::with_capacity(target.fields().len());
+-
+-    for field in target.fields() {
+-        let idx = batch.schema().index_of(field.name());
+-        let src = match idx {
+-            Ok(i) => batch.column(i),
+-            Err(_) => {
+-                if field.is_nullable() {
+-                    cols.push(new_null_array(field.data_type(), batch.num_rows()));
+-                    continue;
+-                } else {
+-                    return Err(DataFusionError::Plan(format!(
+-                        "Missing required column '{}' in input batch",
+-                        field.name()
+-                    )));
+-                }
+-            }
+-        };
+-
+-        let casted = cast_array_recursively(src, field.data_type())?;
+-        cols.push(casted);
+-    }
+-
+-    if cols.is_empty() {
+-        Ok(RecordBatch::try_new_with_options(
+-            target.clone(),
+-            cols,
+-            &RecordBatchOptions::default().with_row_count(Some(batch.num_rows())),
+-        )?)
+-    } else {
+-        Ok(RecordBatch::try_new(target.clone(), cols)?)
+-    }
+-}
+-
+-/// Helper function to handle timezone adjustment for timestamp arrays.
+-fn adjust_timestamp_timezone<T>(array: &ArrayRef, target_tz: Option<Arc<str>>) -> Result<ArrayRef>
+-where
+-    T: ArrowTimestampType,
+-{
+-    let timestamp_array = array
+-        .as_any()
+-        .downcast_ref::<PrimitiveArray<T>>()
+-        .ok_or_else(|| {
+-            datafusion_common::DataFusionError::Plan(format!(
+-                "Failed to downcast to timestamp array type: {:?}",
+-                array.data_type()
+-            ))
+-        })?;
+-
+-    Ok(Arc::new(
+-        timestamp_array.clone().with_timezone_opt(target_tz),
+-    ))
+-}
+-
+-pub fn cast_array_recursively(src: &ArrayRef, target_type: &DataType) -> Result<ArrayRef> {
+-    let src_type = src.data_type();
+-    if src_type == target_type {
+-        return Ok(src.clone());
+-    }
+-
+-    // Handle timestamp timezone metadata adjustments before diving into nested logic.
+-    if let (DataType::Timestamp(src_unit, _), DataType::Timestamp(target_unit, target_tz)) =
+-        (src_type, target_type)
+-        && src_unit == target_unit
+-    {
+-        let adjusted = match src_unit {
+-            TimeUnit::Second => {
+-                adjust_timestamp_timezone::<TimestampSecondType>(src, target_tz.clone())?
+-            }
+-            TimeUnit::Millisecond => {
+-                adjust_timestamp_timezone::<TimestampMillisecondType>(src, target_tz.clone())?
+-            }
+-            TimeUnit::Microsecond => {
+-                adjust_timestamp_timezone::<TimestampMicrosecondType>(src, target_tz.clone())?
+-            }
+-            TimeUnit::Nanosecond => {
+-                adjust_timestamp_timezone::<TimestampNanosecondType>(src, target_tz.clone())?
+-            }
+-        };
+-        return Ok(adjusted);
+-    }
+-
+-    match (src_type, target_type) {
+-        (DataType::Struct(_), DataType::Struct(target_fields)) => {
+-            cast_struct_array(src, target_fields)
+-        }
+-        (DataType::List(_), DataType::List(target_field)) => cast_list_array(src, target_field),
+-        (DataType::LargeList(_), DataType::LargeList(target_field)) => {
+-            cast_large_list_array(src, target_field)
+-        }
+-        (DataType::Map(_, _), DataType::Map(target_field, sorted)) => {
+-            cast_map_array(src, target_field, *sorted)
+-        }
+-        _ => {
+-            let casted = cast(src, target_type)?;
+-            Ok(casted)
+-        }
+-    }
+-}
+-
+-fn cast_array_positionally_recursively(src: &ArrayRef, target_type: &DataType) -> Result<ArrayRef> {
+-    let src_type = src.data_type();
+-    if src_type == target_type {
+-        return Ok(src.clone());
+-    }
+-
+-    match (src_type, target_type) {
+-        (DataType::Struct(_), DataType::Struct(target_fields)) => {
+-            cast_struct_array_positionally(src, target_fields)
+-        }
+-        (DataType::List(_), DataType::List(target_field)) => {
+-            cast_list_array_positionally(src, target_field)
+-        }
+-        (DataType::LargeList(_), DataType::LargeList(target_field)) => {
+-            cast_large_list_array_positionally(src, target_field)
+-        }
+-        (DataType::Map(_, _), DataType::Map(target_field, sorted)) => {
+-            cast_map_array_positionally(src, target_field, *sorted)
+-        }
+-        _ => {
+-            let casted = cast(src, target_type)?;
+-            Ok(casted)
+-        }
+-    }
+-}
+-
+-fn cast_struct_array(src: &ArrayRef, target_fields: &Fields) -> Result<ArrayRef> {
+-    let struct_array = src.as_any().downcast_ref::<StructArray>().ok_or_else(|| {
+-        DataFusionError::Internal("Failed to downcast array to StructArray".to_string())
+-    })?;
+-
+-    let mut new_children: Vec<ArrayRef> = Vec::with_capacity(target_fields.len());
+-    for target_field in target_fields.iter() {
+-        if let Some(child) = struct_array.column_by_name(target_field.name()) {
+-            new_children.push(cast_array_recursively(child, target_field.data_type())?);
+-        } else if target_field.is_nullable() {
+-            new_children.push(new_null_array(target_field.data_type(), struct_array.len()));
+-        } else {
+-            return Err(DataFusionError::Plan(format!(
+-                "Missing required field '{}' in nested struct",
+-                target_field.name()
+-            )));
+-        }
+-    }
+-
+-    let new_struct = StructArray::try_new(
+-        target_fields.clone(),
+-        new_children,
+-        struct_array.nulls().cloned(),
+-    )?;
+-    Ok(Arc::new(new_struct))
+-}
+-
+-fn cast_struct_array_positionally(src: &ArrayRef, target_fields: &Fields) -> Result<ArrayRef> {
+-    let struct_array = src.as_any().downcast_ref::<StructArray>().ok_or_else(|| {
+-        DataFusionError::Internal("Failed to downcast array to StructArray".to_string())
+-    })?;
+-    if struct_array.num_columns() != target_fields.len() {
+-        return Err(DataFusionError::Plan(format!(
+-            "Struct field count mismatch: expected {} fields but found {} fields",
+-            target_fields.len(),
+-            struct_array.num_columns()
+-        )));
+-    }
+-
+-    let new_children = target_fields
+-        .iter()
+-        .zip(struct_array.columns())
+-        .map(|(target_field, child)| {
+-            cast_array_positionally_recursively(child, target_field.data_type())
+-        })
+-        .collect::<Result<Vec<_>>>()?;
+-    let new_struct = StructArray::try_new(
+-        target_fields.clone(),
+-        new_children,
+-        struct_array.nulls().cloned(),
+-    )?;
+-    Ok(Arc::new(new_struct))
+-}
+-
+-fn cast_list_array(src: &ArrayRef, target_field: &FieldRef) -> Result<ArrayRef> {
+-    let list_array = src.as_any().downcast_ref::<ListArray>().ok_or_else(|| {
+-        DataFusionError::Internal("Failed to downcast array to ListArray".to_string())
+-    })?;
+-
+-    let values = cast_array_recursively(list_array.values(), target_field.data_type())?;
+-    let new_list = ListArray::try_new(
+-        target_field.clone(),
+-        list_array.offsets().clone(),
+-        values,
+-        list_array.nulls().cloned(),
+-    )?;
+-    Ok(Arc::new(new_list))
+-}
+-
+-fn cast_list_array_positionally(src: &ArrayRef, target_field: &FieldRef) -> Result<ArrayRef> {
+-    let list_array = src.as_any().downcast_ref::<ListArray>().ok_or_else(|| {
+-        DataFusionError::Internal("Failed to downcast array to ListArray".to_string())
+-    })?;
+-
+-    let values =
+-        cast_array_positionally_recursively(list_array.values(), target_field.data_type())?;
+-    let new_list = ListArray::try_new(
+-        target_field.clone(),
+-        list_array.offsets().clone(),
+-        values,
+-        list_array.nulls().cloned(),
+-    )?;
+-    Ok(Arc::new(new_list))
+-}
+-
+-fn cast_large_list_array(src: &ArrayRef, target_field: &FieldRef) -> Result<ArrayRef> {
+-    let list_array = src
+-        .as_any()
+-        .downcast_ref::<LargeListArray>()
+-        .ok_or_else(|| {
+-            DataFusionError::Internal("Failed to downcast array to LargeListArray".to_string())
+-        })?;
+-
+-    let values = cast_array_recursively(list_array.values(), target_field.data_type())?;
+-    let new_list = LargeListArray::try_new(
+-        target_field.clone(),
+-        list_array.offsets().clone(),
+-        values,
+-        list_array.nulls().cloned(),
+-    )?;
+-    Ok(Arc::new(new_list))
+-}
+-
+-fn cast_large_list_array_positionally(src: &ArrayRef, target_field: &FieldRef) -> Result<ArrayRef> {
+-    let list_array = src
+-        .as_any()
+-        .downcast_ref::<LargeListArray>()
+-        .ok_or_else(|| {
+-            DataFusionError::Internal("Failed to downcast array to LargeListArray".to_string())
+-        })?;
+-
+-    let values =
+-        cast_array_positionally_recursively(list_array.values(), target_field.data_type())?;
+-    let new_list = LargeListArray::try_new(
+-        target_field.clone(),
+-        list_array.offsets().clone(),
+-        values,
+-        list_array.nulls().cloned(),
+-    )?;
+-    Ok(Arc::new(new_list))
+-}
+-
+-fn cast_map_array(src: &ArrayRef, target_field: &FieldRef, sorted: bool) -> Result<ArrayRef> {
+-    let map_array = src.as_any().downcast_ref::<MapArray>().ok_or_else(|| {
+-        DataFusionError::Internal("Failed to downcast array to MapArray".to_string())
+-    })?;
+-    let entries: ArrayRef = Arc::new(map_array.entries().clone());
+-    let cast_entries = cast_array_recursively(&entries, target_field.data_type())?;
+-    let struct_entries = cast_entries
+-        .as_any()
+-        .downcast_ref::<StructArray>()
+-        .ok_or_else(|| {
+-            DataFusionError::Internal("Map entries must be struct arrays after casting".to_string())
+-        })?
+-        .clone();
+-    let new_map = MapArray::try_new(
+-        target_field.clone(),
+-        map_array.offsets().clone(),
+-        struct_entries,
+-        map_array.nulls().cloned(),
+-        sorted,
+-    )?;
+-    Ok(Arc::new(new_map))
+-}
+-
+-fn cast_map_array_positionally(
+-    src: &ArrayRef,
+-    target_field: &FieldRef,
+-    sorted: bool,
+-) -> Result<ArrayRef> {
+-    let map_array = src.as_any().downcast_ref::<MapArray>().ok_or_else(|| {
+-        DataFusionError::Internal("Failed to downcast array to MapArray".to_string())
+-    })?;
+-    let entries: ArrayRef = Arc::new(map_array.entries().clone());
+-    let cast_entries = cast_array_positionally_recursively(&entries, target_field.data_type())?;
+-    let struct_entries = cast_entries
+-        .as_any()
+-        .downcast_ref::<StructArray>()
+-        .ok_or_else(|| {
+-            DataFusionError::Internal("Map entries must be struct arrays after casting".to_string())
+-        })?
+-        .clone();
+-    let new_map = MapArray::try_new(
+-        target_field.clone(),
+-        map_array.offsets().clone(),
+-        struct_entries,
+-        map_array.nulls().cloned(),
+-        sorted,
+-    )?;
+-    Ok(Arc::new(new_map))
+-}
+-
+-pub fn read_record_batches(data: &[u8]) -> Result<Vec<RecordBatch>> {
+-    let cursor = Cursor::new(data);
+-    let reader = StreamReader::try_new(cursor, None)?;
+-    let mut batches = Vec::new();
+-    for batch in reader {
+-        batches.push(batch?);
+-    }
+-    Ok(batches)
+-}
+-
+-pub fn write_record_batches(batches: &[RecordBatch], schema: &Schema) -> Result<Vec<u8>> {
+-    let mut output = Vec::new();
+-    let mut writer = StreamWriter::try_new(&mut output, schema)?;
+-    for batch in batches {
+-        writer.write(batch)?;
+-    }
+-    writer.finish()?;
+-    Ok(output)
+-}
+-
+-pub fn record_batch_with_schema(batch: RecordBatch, schema: &SchemaRef) -> Result<RecordBatch> {
+-    Ok(RecordBatch::try_new_with_options(
+-        schema.clone(),
+-        batch.columns().to_vec(),
+-        &RecordBatchOptions::default().with_row_count(Some(batch.num_rows())),
+-    )?)
+-}
+-
+-#[cfg(test)]
+-#[expect(clippy::unwrap_used)]
+-mod tests {
+-    use datafusion::arrow::array::{ArrayRef, Int32Array, StructArray};
+-    use datafusion::arrow::datatypes::{Field, Fields};
+-
+-    use super::*;
+-
+-    fn make_struct_array(fields: Vec<Field>, columns: Vec<ArrayRef>) -> StructArray {
+-        let field_refs_vec: Vec<FieldRef> = fields.into_iter().map(Arc::new).collect();
+-        let field_refs: Fields = field_refs_vec.into();
+-        StructArray::new(field_refs, columns, None)
+-    }
+-
+-    #[test]
+-    fn cast_struct_reorders_fields_by_name() {
+-        let a_values = Arc::new(Int32Array::from(vec![Some(1), Some(2)]));
+-        let b_values = Arc::new(Int32Array::from(vec![Some(10), Some(20)]));
+-        let a_ref: ArrayRef = a_values.clone();
+-        let b_ref: ArrayRef = b_values.clone();
+-        let struct_array = Arc::new(make_struct_array(
+-            vec![
+-                Field::new("b", DataType::Int32, true),
+-                Field::new("a", DataType::Int32, true),
+-            ],
+-            vec![b_ref, a_ref],
+-        ));
+-
+-        let input_schema = Arc::new(Schema::new(vec![Field::new(
+-            "payload",
+-            DataType::Struct(
+-                vec![
+-                    Arc::new(Field::new("b", DataType::Int32, true)),
+-                    Arc::new(Field::new("a", DataType::Int32, true)),
+-                ]
+-                .into(),
+-            ),
+-            true,
+-        )]));
+-
+-        let batch = RecordBatch::try_new(input_schema, vec![struct_array]).unwrap();
+-
+-        let target_schema = Arc::new(Schema::new(vec![Field::new(
+-            "payload",
+-            DataType::Struct(
+-                vec![
+-                    Arc::new(Field::new("a", DataType::Int32, true)),
+-                    Arc::new(Field::new("b", DataType::Int32, true)),
+-                ]
+-                .into(),
+-            ),
+-            true,
+-        )]));
+-
+-        let casted = cast_record_batch_relaxed_tz(&batch, &target_schema).unwrap();
+-        let payload = casted
+-            .column(0)
+-            .as_any()
+-            .downcast_ref::<StructArray>()
+-            .unwrap();
+-        let a_cast = payload
+-            .column_by_name("a")
+-            .unwrap()
+-            .as_any()
+-            .downcast_ref::<Int32Array>()
+-            .unwrap();
+-        let b_cast = payload
+-            .column_by_name("b")
+-            .unwrap()
+-            .as_any()
+-            .downcast_ref::<Int32Array>()
+-            .unwrap();
+-
+-        assert_eq!(a_cast.values(), a_values.values());
+-        assert_eq!(b_cast.values(), b_values.values());
+-    }
+-
+-    #[test]
+-    fn cast_struct_populates_missing_optional_fields() {
+-        let a_values = Arc::new(Int32Array::from(vec![Some(5), Some(6)]));
+-        let a_ref: ArrayRef = a_values.clone();
+-        let struct_array = Arc::new(make_struct_array(
+-            vec![Field::new("a", DataType::Int32, true)],
+-            vec![a_ref],
+-        ));
+-        let input_schema = Arc::new(Schema::new(vec![Field::new(
+-            "payload",
+-            DataType::Struct(vec![Arc::new(Field::new("a", DataType::Int32, true))].into()),
+-            true,
+-        )]));
+-        let batch = RecordBatch::try_new(input_schema, vec![struct_array]).unwrap();
+-
+-        let target_schema = Arc::new(Schema::new(vec![Field::new(
+-            "payload",
+-            DataType::Struct(
+-                vec![
+-                    Arc::new(Field::new("a", DataType::Int32, true)),
+-                    Arc::new(Field::new("b", DataType::Int32, true)),
+-                ]
+-                .into(),
+-            ),
+-            true,
+-        )]));
+-
+-        let casted = cast_record_batch_relaxed_tz(&batch, &target_schema).unwrap();
+-        let payload = casted
+-            .column(0)
+-            .as_any()
+-            .downcast_ref::<StructArray>()
+-            .unwrap();
+-        let b_cast = payload
+-            .column_by_name("b")
+-            .unwrap()
+-            .as_any()
+-            .downcast_ref::<Int32Array>()
+-            .unwrap();
+-        assert_eq!(b_cast.null_count(), b_cast.len());
+-    }
+-}
+diff --git a/crates/sail-common-datafusion/src/array/serde.rs b/crates/sail-common-datafusion/src/array/serde.rs
+deleted file mode 100644
+index 341514d..0000000
+--- a/crates/sail-common-datafusion/src/array/serde.rs
++++ /dev/null
+@@ -1,50 +0,0 @@
+-use std::ops::Deref;
+-use std::sync::Arc;
+-
+-use datafusion::arrow::array::{RecordBatch, RecordBatchOptions};
+-use datafusion::arrow::datatypes::{FieldRef, Schema, SchemaRef};
+-use datafusion_common::{Result, internal_datafusion_err};
+-use serde::{Deserialize, Serialize};
+-use serde_arrow::schema::{SchemaLike, TracingOptions};
+-use serde_arrow::to_arrow;
+-
+-#[derive(Default)]
+-pub struct ArrowSerializer {
+-    options: TracingOptions,
+-}
+-
+-impl ArrowSerializer {
+-    pub fn new(options: TracingOptions) -> Self {
+-        Self { options }
+-    }
+-
+-    pub fn schema<T>(&self) -> Result<SchemaRef>
+-    where
+-        T: Serialize + for<'de> Deserialize<'de>,
+-    {
+-        let fields = Vec::<FieldRef>::from_type::<T>(self.options.clone())
+-            .map_err(|e| internal_datafusion_err!("{e}"))?;
+-        Ok(Arc::new(Schema::new(fields)))
+-    }
+-
+-    pub fn build_record_batch<T>(&self, items: &[T]) -> Result<RecordBatch>
+-    where
+-        T: Serialize + for<'de> Deserialize<'de>,
+-    {
+-        let schema = self.schema::<T>()?;
+-        Self::build_record_batch_with_schema(items, schema)
+-    }
+-
+-    pub fn build_record_batch_with_schema<T>(items: &[T], schema: SchemaRef) -> Result<RecordBatch>
+-    where
+-        T: Serialize + for<'de> Deserialize<'de>,
+-    {
+-        let arrays = to_arrow(schema.fields().deref(), items)
+-            .map_err(|e| internal_datafusion_err!("failed to create record batch: {e}"))?;
+-        // We must specify the row count if the schema has no fields.
+-        let options = RecordBatchOptions::new().with_row_count(Some(items.len()));
+-        let batch = RecordBatch::try_new_with_options(schema, arrays, &options)
+-            .map_err(|e| internal_datafusion_err!("failed to create record batch: {e}"))?;
+-        Ok(batch)
+-    }
+-}
 diff --git a/crates/sail-common-datafusion/src/catalog/delta.rs b/crates/sail-common-datafusion/src/catalog/delta.rs
 deleted file mode 100644
 index 30c0cd0..0000000
@@ -3115,22 +4332,200 @@ index 50fcccb..0000000
 -    }
 -}
 diff --git a/crates/sail-common-datafusion/src/error.rs b/crates/sail-common-datafusion/src/error.rs
-index a9c1a81..a7cc006 100644
+deleted file mode 100644
+index a9c1a81..0000000
 --- a/crates/sail-common-datafusion/src/error.rs
-+++ b/crates/sail-common-datafusion/src/error.rs
-@@ -1,3 +1,4 @@
-+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use std::collections::HashSet;
- use std::fmt;
- use std::fmt::Formatter;
-@@ -148,6 +149,7 @@ impl CommonErrorCause {
-                 DataFusionError::NotImplemented(x) => Self::NotImplemented(x.clone()),
-                 DataFusionError::Internal(x) => Self::Internal(x.clone()),
-                 DataFusionError::Plan(x) => Self::Plan(x.clone()),
-+                DataFusionError::SQL(e, _) => Self::Plan(e.to_string()),
-                 DataFusionError::Configuration(x) => Self::Configuration(x.clone()),
-                 DataFusionError::SchemaError(e, _) => Self::Schema(e.to_string()),
-                 DataFusionError::Execution(x) => Self::Execution(x.clone()),
++++ /dev/null
+@@ -1,189 +0,0 @@
+-use std::collections::HashSet;
+-use std::fmt;
+-use std::fmt::Formatter;
+-
+-use datafusion::arrow::error::ArrowError;
+-use datafusion_common::DataFusionError;
+-use serde::{Deserialize, Serialize};
+-use thiserror::Error;
+-
+-/// An error with a cause received from a remote worker.
+-#[derive(Debug, Clone, Error)]
+-#[error("remote error: {cause}")]
+-pub struct RemoteError {
+-    pub cause: CommonErrorCause,
+-}
+-
+-#[derive(Debug, Clone, Serialize, Deserialize)]
+-pub struct PythonErrorCause {
+-    pub summary: String,
+-    pub traceback: Option<Vec<String>>,
+-}
+-
+-/// A trait to extract Python error cause from a generic error.
+-///
+-/// The implementation should inspect the provided error without
+-/// recursively inspecting its inner errors.
+-///
+-/// This trait avoids direct dependency on `PyO3` for this crate.
+-/// Since this crate is used by many other crates, we can therefore
+-/// avoid unnecessary recompilation when switching Python environments.
+-pub trait PythonErrorCauseExtractor {
+-    fn extract(error: &(dyn std::error::Error + 'static)) -> Option<PythonErrorCause>;
+-}
+-
+-#[derive(Debug, Clone, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
+-pub enum CommonErrorCause {
+-    Unknown(String),
+-    Internal(String),
+-    NotImplemented(String),
+-    InvalidArgument(String),
+-    Io(String),
+-    Python(PythonErrorCause),
+-    ArrowCast(String),
+-    ArrowMemory(String),
+-    ArrowParse(String),
+-    ArrowCompute(String),
+-    ArrowIpc(String),
+-    ArrowCDataInterface(String),
+-    ArrowDivideByZero(String),
+-    ArrowArithmeticOverflow(String),
+-    ArrowDictionaryKeyOverflow(String),
+-    ArrowRunEndIndexOverflow(String),
+-    ArrowOffsetOverflow(String),
+-    FormatCsv(String),
+-    FormatJson(String),
+-    FormatParquet(String),
+-    FormatAvro(String),
+-    Plan(String),
+-    Schema(String),
+-    Configuration(String),
+-    Execution(String),
+-    DeltaTable(String),
+-}
+-
+-impl fmt::Display for CommonErrorCause {
+-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+-        match self {
+-            CommonErrorCause::Unknown(x)
+-            | CommonErrorCause::Internal(x)
+-            | CommonErrorCause::NotImplemented(x)
+-            | CommonErrorCause::InvalidArgument(x)
+-            | CommonErrorCause::Io(x)
+-            | CommonErrorCause::ArrowCast(x)
+-            | CommonErrorCause::ArrowMemory(x)
+-            | CommonErrorCause::ArrowParse(x)
+-            | CommonErrorCause::ArrowCompute(x)
+-            | CommonErrorCause::ArrowIpc(x)
+-            | CommonErrorCause::ArrowCDataInterface(x)
+-            | CommonErrorCause::ArrowDivideByZero(x)
+-            | CommonErrorCause::ArrowArithmeticOverflow(x)
+-            | CommonErrorCause::ArrowDictionaryKeyOverflow(x)
+-            | CommonErrorCause::ArrowRunEndIndexOverflow(x)
+-            | CommonErrorCause::ArrowOffsetOverflow(x)
+-            | CommonErrorCause::FormatCsv(x)
+-            | CommonErrorCause::FormatJson(x)
+-            | CommonErrorCause::FormatParquet(x)
+-            | CommonErrorCause::FormatAvro(x)
+-            | CommonErrorCause::Plan(x)
+-            | CommonErrorCause::Schema(x)
+-            | CommonErrorCause::Configuration(x)
+-            | CommonErrorCause::Execution(x)
+-            | CommonErrorCause::DeltaTable(x) => write!(f, "{x}"),
+-            CommonErrorCause::Python(PythonErrorCause { summary, .. }) => {
+-                write!(f, "{summary}")
+-            }
+-        }
+-    }
+-}
+-
+-impl CommonErrorCause {
+-    fn build<Py: PythonErrorCauseExtractor>(
+-        error: &(dyn std::error::Error + 'static),
+-        seen: &mut HashSet<*const dyn std::error::Error>,
+-    ) -> Self {
+-        let ptr = error as *const _;
+-        if seen.contains(&ptr) {
+-            return Self::Unknown("circular error reference".to_string());
+-        }
+-        seen.insert(ptr);
+-        if let Some(e) = error.downcast_ref::<ArrowError>() {
+-            return match e {
+-                ArrowError::NotYetImplemented(x) => Self::NotImplemented(x.clone()),
+-                ArrowError::ExternalError(e) => Self::build::<Py>(e.as_ref(), seen),
+-                ArrowError::CastError(x) => Self::ArrowCast(x.clone()),
+-                ArrowError::MemoryError(x) => Self::ArrowMemory(x.clone()),
+-                ArrowError::ParseError(x) => Self::ArrowParse(x.clone()),
+-                ArrowError::SchemaError(x) => Self::Schema(x.clone()),
+-                ArrowError::ComputeError(x) => Self::ArrowCompute(x.clone()),
+-                ArrowError::DivideByZero => Self::ArrowDivideByZero("divide by zero".to_string()),
+-                ArrowError::ArithmeticOverflow(x) => Self::ArrowArithmeticOverflow(x.clone()),
+-                ArrowError::CsvError(x) => Self::FormatCsv(x.clone()),
+-                ArrowError::JsonError(x) => Self::FormatJson(x.clone()),
+-                ArrowError::IoError(message, e) => Self::Io(format!("{message}: {e}")),
+-                ArrowError::IpcError(x) => Self::ArrowIpc(x.clone()),
+-                ArrowError::InvalidArgumentError(x) => Self::InvalidArgument(x.clone()),
+-                ArrowError::ParquetError(x) => Self::FormatParquet(x.clone()),
+-                ArrowError::AvroError(x) => Self::FormatAvro(x.clone()),
+-                ArrowError::CDataInterface(x) => Self::ArrowCDataInterface(x.clone()),
+-                ArrowError::DictionaryKeyOverflowError => {
+-                    Self::ArrowDictionaryKeyOverflow("dictionary key overflow".to_string())
+-                }
+-                ArrowError::RunEndIndexOverflowError => {
+-                    Self::ArrowRunEndIndexOverflow("run-end index overflow".to_string())
+-                }
+-                ArrowError::OffsetOverflowError(x) => {
+-                    Self::ArrowOffsetOverflow(format!("offset overflow: {x}"))
+-                }
+-            };
+-        }
+-
+-        if let Some(e) = error.downcast_ref::<DataFusionError>() {
+-            return match e {
+-                DataFusionError::ArrowError(e, _) => Self::build::<Py>(e, seen),
+-                DataFusionError::ParquetError(e) => Self::FormatParquet(e.to_string()),
+-                DataFusionError::ObjectStore(e) => Self::Io(e.to_string()),
+-                DataFusionError::IoError(e) => Self::Io(e.to_string()),
+-                DataFusionError::NotImplemented(x) => Self::NotImplemented(x.clone()),
+-                DataFusionError::Internal(x) => Self::Internal(x.clone()),
+-                DataFusionError::Plan(x) => Self::Plan(x.clone()),
+-                DataFusionError::Configuration(x) => Self::Configuration(x.clone()),
+-                DataFusionError::SchemaError(e, _) => Self::Schema(e.to_string()),
+-                DataFusionError::Execution(x) => Self::Execution(x.clone()),
+-                DataFusionError::ExecutionJoin(e) => Self::Execution(e.to_string()),
+-                DataFusionError::ResourcesExhausted(x) => Self::Execution(x.clone()),
+-                DataFusionError::External(e) => Self::build::<Py>(e.as_ref(), seen),
+-                DataFusionError::Context(_, e) => Self::build::<Py>(e, seen),
+-                DataFusionError::Substrait(x) => Self::Unknown(x.clone()),
+-                DataFusionError::Diagnostic(_, e) => Self::build::<Py>(e.as_ref(), seen),
+-                DataFusionError::Collection(errors) => match errors.first() {
+-                    None => Self::Unknown("empty error collection".to_string()),
+-                    Some(e) => Self::build::<Py>(e, seen),
+-                },
+-                DataFusionError::Shared(e) => Self::build::<Py>(e.as_ref(), seen),
+-                DataFusionError::Ffi(x) => Self::Unknown(x.clone()),
+-            };
+-        }
+-
+-        if let Some(cause) = Py::extract(error) {
+-            return Self::Python(cause);
+-        }
+-
+-        if let Some(e) = error.downcast_ref::<RemoteError>() {
+-            return e.cause.clone();
+-        }
+-
+-        if let Some(e) = error.source() {
+-            Self::build::<Py>(e, seen)
+-        } else {
+-            Self::Unknown(error.to_string())
+-        }
+-    }
+-
+-    /// Recursively traverse the error source and determine the best error cause
+-    /// from the innermost error.
+-    pub fn new<Py: PythonErrorCauseExtractor>(error: &(dyn std::error::Error + 'static)) -> Self {
+-        Self::build::<Py>(error, &mut HashSet::new())
+-    }
+-}
 diff --git a/crates/sail-common-datafusion/src/extension.rs b/crates/sail-common-datafusion/src/extension.rs
 deleted file mode 100644
 index 30fbbd0..0000000
@@ -3204,28 +4599,28 @@ index 30fbbd0..0000000
 -    }
 -}
 diff --git a/crates/sail-common-datafusion/src/lib.rs b/crates/sail-common-datafusion/src/lib.rs
-index 892aad6..71de625 100644
+index 892aad6..541f14f 100644
 --- a/crates/sail-common-datafusion/src/lib.rs
 +++ b/crates/sail-common-datafusion/src/lib.rs
-@@ -1,19 +1,11 @@
-+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- pub mod array;
+@@ -1,19 +1,7 @@
+-pub mod array;
 -pub mod catalog;
 -pub mod column_features;
 -pub mod datasource;
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  pub mod display;
- pub mod error;
+-pub mod error;
 -pub mod extension;
  pub mod formatter;
  pub mod literal;
 -pub mod logical_expr;
- pub mod logical_rewriter;
+-pub mod logical_rewriter;
  pub mod rename;
 -pub mod schema_evolution;
 -pub mod session;
 -pub mod streaming;
 -pub mod system;
- pub mod udf;
+-pub mod udf;
  pub mod utils;
  pub mod variant;
 diff --git a/crates/sail-common-datafusion/src/logical_expr.rs b/crates/sail-common-datafusion/src/logical_expr.rs
@@ -3249,6 +4644,63 @@ index eb8da69..0000000
 -    pub fn new(expr: Expr, source: Option<String>) -> Self {
 -        Self { expr, source }
 -    }
+-}
+diff --git a/crates/sail-common-datafusion/src/logical_rewriter.rs b/crates/sail-common-datafusion/src/logical_rewriter.rs
+deleted file mode 100644
+index 1f682e8..0000000
+--- a/crates/sail-common-datafusion/src/logical_rewriter.rs
++++ /dev/null
+@@ -1,12 +0,0 @@
+-use datafusion_common::Result;
+-use datafusion_common::tree_node::Transformed;
+-use datafusion_expr::LogicalPlan;
+-
+-/// A trait for rewriting logical plans after logical optimization.
+-/// This is needed so that the rewritten plan does not confuse the multi-pass
+-/// logical optimization process.
+-pub trait LogicalRewriter {
+-    fn name(&self) -> &str;
+-
+-    fn rewrite(&self, plan: LogicalPlan) -> Result<Transformed<LogicalPlan>>;
+-}
+diff --git a/crates/sail-common-datafusion/src/rename/mod.rs b/crates/sail-common-datafusion/src/rename/mod.rs
+index 2957a63..c380a29 100644
+--- a/crates/sail-common-datafusion/src/rename/mod.rs
++++ b/crates/sail-common-datafusion/src/rename/mod.rs
+@@ -1,6 +1,6 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ pub mod expression;
+ pub mod logical_plan;
+ pub mod physical_plan;
+-pub mod record_batch;
+ pub mod schema;
+ pub mod table_provider;
+diff --git a/crates/sail-common-datafusion/src/rename/record_batch.rs b/crates/sail-common-datafusion/src/rename/record_batch.rs
+deleted file mode 100644
+index c19dd2d..0000000
+--- a/crates/sail-common-datafusion/src/rename/record_batch.rs
++++ /dev/null
+@@ -1,21 +0,0 @@
+-use datafusion::execution::SendableRecordBatchStream;
+-use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
+-use futures::StreamExt;
+-
+-use crate::array::record_batch;
+-use crate::rename::schema;
+-
+-pub fn rename_record_batch_stream(
+-    stream: SendableRecordBatchStream,
+-    names: &[String],
+-) -> datafusion_common::Result<SendableRecordBatchStream> {
+-    let schema = schema::rename_schema(&stream.schema(), names)?;
+-    let stream = {
+-        let schema = schema.clone();
+-        stream.map(move |x| match x {
+-            Ok(batch) => Ok(record_batch::record_batch_with_schema(batch, &schema)?),
+-            Err(e) => Err(e),
+-        })
+-    };
+-    Ok(Box::pin(RecordBatchStreamAdapter::new(schema, stream)))
 -}
 diff --git a/crates/sail-common-datafusion/src/schema_evolution.rs b/crates/sail-common-datafusion/src/schema_evolution.rs
 deleted file mode 100644
@@ -5925,6 +7377,35 @@ index 5072213..0000000
 -        true,
 -    )))
 -}
+diff --git a/crates/sail-common-datafusion/src/udf.rs b/crates/sail-common-datafusion/src/udf.rs
+deleted file mode 100644
+index b0946d2..0000000
+--- a/crates/sail-common-datafusion/src/udf.rs
++++ /dev/null
+@@ -1,23 +0,0 @@
+-use std::cmp::Ordering;
+-use std::fmt::Debug;
+-use std::hash::{Hash, Hasher};
+-
+-use datafusion::arrow::datatypes::SchemaRef;
+-use datafusion::execution::SendableRecordBatchStream;
+-use datafusion_common::Result;
+-use sail_common::impl_dyn_object_traits;
+-use sail_common::utils::object::DynObject;
+-
+-/// Trait for implementing UDF to map input stream to output stream.
+-pub trait StreamUDF: DynObject + Debug + Send + Sync {
+-    /// The name of the UDF.
+-    fn name(&self) -> &str;
+-
+-    /// The schema of the output stream.
+-    fn output_schema(&self) -> SchemaRef;
+-
+-    /// Invoke the UDF to map input stream to output stream.
+-    fn invoke(&self, input: SendableRecordBatchStream) -> Result<SendableRecordBatchStream>;
+-}
+-
+-impl_dyn_object_traits!(StreamUDF);
 diff --git a/crates/sail-common/Cargo.toml b/crates/sail-common/Cargo.toml
 index 7ac30bf..86f5d6b 100644
 --- a/crates/sail-common/Cargo.toml
@@ -9203,17 +10684,76 @@ index d3ba67a..0000000
 -///   * <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent>
 -pub const SAIL_USER_AGENT: &str = concat!("Sail/", env!("CARGO_PKG_VERSION"));
 diff --git a/crates/sail-common/src/utils/mod.rs b/crates/sail-common/src/utils/mod.rs
-index 50ee559..2578908 100644
+index 50ee559..e7a99cd 100644
 --- a/crates/sail-common/src/utils/mod.rs
 +++ b/crates/sail-common/src/utils/mod.rs
-@@ -1,6 +1,5 @@
+@@ -1,6 +1,4 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  pub mod datetime;
  pub mod debug;
 -pub mod http;
- pub mod object;
+-pub mod object;
 -pub mod retry;
  pub mod string;
+diff --git a/crates/sail-common/src/utils/object.rs b/crates/sail-common/src/utils/object.rs
+deleted file mode 100644
+index c3124ae..0000000
+--- a/crates/sail-common/src/utils/object.rs
++++ /dev/null
+@@ -1,53 +0,0 @@
+-use std::any::Any;
+-use std::cmp::Ordering;
+-use std::hash::{Hash, Hasher};
+-
+-/// A trait that facilitates deriving `PartialEq`, `Eq`, `Hash` and 'PartialOrd' for `dyn` trait objects.
+-/// Since `DynObject` has a blanket implementation, all method names are prefixed with `dyn_object_`
+-/// to avoid conflicts with similar methods defined by other traits.
+-pub trait DynObject: Any {
+-    fn dyn_object_eq(&self, other: &dyn Any) -> bool;
+-    fn dyn_object_hash(&self, state: &mut dyn Hasher);
+-    fn dyn_object_partial_cmp(&self, other: &dyn Any) -> Option<Ordering>;
+-}
+-
+-impl<T: PartialEq + Eq + Hash + PartialOrd + 'static> DynObject for T {
+-    fn dyn_object_eq(&self, other: &dyn Any) -> bool {
+-        other.downcast_ref::<Self>() == Some(self)
+-    }
+-
+-    fn dyn_object_hash(&self, mut state: &mut dyn Hasher) {
+-        self.hash(&mut state)
+-    }
+-
+-    fn dyn_object_partial_cmp(&self, other: &dyn Any) -> Option<Ordering> {
+-        other
+-            .downcast_ref::<Self>()
+-            .and_then(|x| self.partial_cmp(x))
+-    }
+-}
+-
+-#[macro_export]
+-macro_rules! impl_dyn_object_traits {
+-    ($t:ident) => {
+-        impl PartialEq<dyn $t> for dyn $t {
+-            fn eq(&self, other: &dyn $t) -> bool {
+-                self.dyn_object_eq(other)
+-            }
+-        }
+-
+-        impl Eq for dyn $t {}
+-
+-        impl Hash for dyn $t {
+-            fn hash<H: Hasher>(&self, state: &mut H) {
+-                self.dyn_object_hash(state)
+-            }
+-        }
+-
+-        impl PartialOrd<dyn $t> for dyn $t {
+-            fn partial_cmp(&self, other: &dyn $t) -> Option<Ordering> {
+-                self.dyn_object_partial_cmp(other)
+-            }
+-        }
+-    };
+-}
 diff --git a/crates/sail-common/src/utils/retry.rs b/crates/sail-common/src/utils/retry.rs
 deleted file mode 100644
 index e05945a..0000000
@@ -36236,15 +37776,68 @@ index f4cb08e..350879e 100644
              get_outer_built_in_generator_functions(&function_name).to_string()
          } else {
 diff --git a/crates/sail-plan/src/resolver/query/misc.rs b/crates/sail-plan/src/resolver/query/misc.rs
-index 7c60188..2de7fea 100644
+index 7c60188..578df5c 100644
 --- a/crates/sail-plan/src/resolver/query/misc.rs
 +++ b/crates/sail-plan/src/resolver/query/misc.rs
-@@ -1,3 +1,4 @@
+@@ -1,14 +1,11 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::collections::HashMap;
  use std::sync::Arc;
  
-@@ -213,14 +214,6 @@ impl PlanResolver<'_> {
+-use datafusion::catalog::MemTable;
+ use datafusion_common::{DFSchema, DFSchemaRef, ParamValues, ScalarValue};
+-use datafusion_expr::{EmptyRelation, Expr, Extension, LogicalPlan, UNNAMED_TABLE};
++use datafusion_expr::{EmptyRelation, Expr, Extension, LogicalPlan};
+ use log::warn;
+ use sail_common::spec;
+-use sail_common_datafusion::array::record_batch::{
+-    cast_record_batch_positionally, read_record_batches,
+-};
+ use sail_common_datafusion::literal::LiteralEvaluator;
+ use sail_logical_plan::range::RangeNode;
+ use sail_logical_plan::repartition::{ExplicitRepartitionKind, ExplicitRepartitionNode};
+@@ -107,40 +104,6 @@ impl PlanResolver<'_> {
+         }
+     }
+ 
+-    pub(super) async fn resolve_query_local_relation(
+-        &self,
+-        data: Option<Vec<u8>>,
+-        schema: Option<spec::Schema>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let batches = if let Some(data) = data {
+-            read_record_batches(&data)?
+-        } else {
+-            vec![]
+-        };
+-        let (schema, batches) = if let Some(schema) = schema {
+-            let schema = Arc::new(self.resolve_schema(schema, state)?);
+-            let batches = batches
+-                .into_iter()
+-                .map(|b| Ok(cast_record_batch_positionally(b, schema.clone())?))
+-                .collect::<PlanResult<_>>()?;
+-            (schema, batches)
+-        } else if let [batch, ..] = batches.as_slice() {
+-            (batch.schema(), batches)
+-        } else {
+-            return Err(PlanError::invalid("missing schema for local relation"));
+-        };
+-        let table_provider = Arc::new(MemTable::try_new(schema, vec![batches])?);
+-        self.resolve_table_provider_with_rename(
+-            table_provider,
+-            UNNAMED_TABLE,
+-            None,
+-            vec![],
+-            None,
+-            state,
+-        )
+-    }
+-
+     pub(super) async fn resolve_query_hint(
+         &self,
+         input: spec::QueryPlan,
+@@ -213,14 +176,6 @@ impl PlanResolver<'_> {
      ) -> PlanResult<LogicalPlan> {
          Err(PlanError::todo("parse"))
      }
@@ -36260,7 +37853,7 @@ index 7c60188..2de7fea 100644
  
  fn literal_partition_count(hint_name: &str, expr: &Expr) -> PlanResult<usize> {
 diff --git a/crates/sail-plan/src/resolver/query/mod.rs b/crates/sail-plan/src/resolver/query/mod.rs
-index fb117e5..931a359 100644
+index fb117e5..bff7d8c 100644
 --- a/crates/sail-plan/src/resolver/query/mod.rs
 +++ b/crates/sail-plan/src/resolver/query/mod.rs
 @@ -1,12 +1,7 @@
@@ -36324,7 +37917,21 @@ index fb117e5..931a359 100644
                  }
                  spec::ReadType::DynamicTable(table) => {
                      self.resolve_query_read_dynamic_table(*table, state).await?
-@@ -204,13 +201,12 @@ impl PlanResolver<'_> {
+@@ -120,9 +117,10 @@ impl PlanResolver<'_> {
+                 )
+                 .await?
+             }
+-            QueryNode::LocalRelation { data, schema } => {
+-                self.resolve_query_local_relation(data, schema, state)
+-                    .await?
++            QueryNode::LocalRelation { .. } => {
++                return Err(PlanError::unsupported(
++                    "extraction probe: inline Arrow input",
++                ));
+             }
+             QueryNode::Sample(sample) => self.resolve_query_sample(sample, state).await?,
+             QueryNode::TableSample { input, sample } => {
+@@ -204,13 +202,12 @@ impl PlanResolver<'_> {
                  )
                  .await?
              }
@@ -36344,7 +37951,7 @@ index fb117e5..931a359 100644
              }
              QueryNode::CollectMetrics {
                  input,
-@@ -221,115 +217,33 @@ impl PlanResolver<'_> {
+@@ -221,115 +218,33 @@ impl PlanResolver<'_> {
                      .await?
              }
              QueryNode::Parse(parse) => self.resolve_query_parse(parse, state).await?,
@@ -36389,10 +37996,10 @@ index fb117e5..931a359 100644
 -                LogicalPlan::Extension(Extension {
 -                    node: Arc::new(RemoteCheckpointRelationNode::try_new(relation_id, schema)?),
 -                })
--            }
+             }
 -            QueryNode::CommonInlineUserDefinedTableFunction(udtf) => {
 -                self.resolve_query_common_inline_udtf(udtf, state).await?
-             }
+-            }
 -            QueryNode::FillNa {
 -                input,
 -                columns,

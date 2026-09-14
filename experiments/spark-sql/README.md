@@ -162,7 +162,22 @@ Each cut keeps the fixed inputs, SQL and both checked-in baselines unchanged. Th
 | --- | ---: | ---: | ---: | ---: |
 | DataFrame statistics and display | 101,311 | 549 / 483 | 9 / 11 | 9 |
 | Command analysis | 99,020 | 549 / 483 | 10 / 11 | 9 |
+| Inline Arrow and transport helpers | 97,492 | 546 / 480 | 11 / 11 | 9 |
 
 The DataFrame cut removes NA/statistics resolvers, value replacement and unused ShowString/SchemaPivot nodes. All eleven NA/statistics spec variants now reject before input resolution. The new test first reproduced missing-table lookup, then verified the rejection and successful SQL COUNT, AVG, COVAR_SAMP, CORR and COALESCE execution. Shared value formatting remains because SQL casts and PIVOT use it. No test source was removed from the vendored crates.
 
 The command-analysis cut replaces command conversion with an explicit NotSupported error at AST dispatch. It removes 2,291 Rust lines of write/catalog/metadata command translation without changing query analysis or SQL grammar. The new test covers 23 command forms, including CTAS, views, writes, cache operations, EXPLAIN and session settings. Existing write/snapshot boundary checks now accept rejection at analysis or resolution, while still requiring NotSupported. Parsed commands therefore fail earlier; the fixed corpus still records the same planning-error stages. No vendored test source or resolved package changed.
+
+The transport cut rejects LocalRelation specs before decoding their Arrow payloads, and removes the unused IPC import/cast/serialization helpers, placeholder-array builders, stream-renaming helper, remote/Python error envelopes, StreamUDF/DynObject and LogicalRewriter traits. The new test checks missing, empty and malformed input payloads. Registered TableProviders, derived views, SQL VALUES, literal evaluation and physical-plan output renaming remain. The cut removes 1,528 gross Rust lines, including 338 tests for deleted array helpers, and three resolved packages. The dependency test now rejects serde_arrow as well.
+
+The upstream parser syntax test also passes from a standalone copy of the retained workspace, resolving the earlier Cargo selection limitation. The copy keeps generated lockfiles outside the vendored source. To repeat it, choose a new scratch directory:
+
+```bash
+cp -R experiments/spark-sql/vendor/sail target/spark-sql/parser-tests
+cp experiments/spark-sql/Cargo.lock target/spark-sql/parser-tests/Cargo.lock
+SAIL_UPDATE_GOLD_DATA= CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_DEV_DEBUG=0 \
+  cargo test --offline --manifest-path target/spark-sql/parser-tests/Cargo.toml \
+  -p sail-sql-parser --test syntax -j 2
+```
+
+An empty SAIL_UPDATE_GOLD_DATA keeps the checked-in expectations unchanged. Any nonempty value enables upstream's gold-data regeneration. The copied parser source and gold files matched the retained source byte-for-byte after the test.
