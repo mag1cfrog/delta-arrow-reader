@@ -184,6 +184,281 @@ mod tests {
     use sail_common::spec;
     use sail_plan::error::PlanError;
 
+    const SORT_ROWS: [[(i32, Option<i32>); 4]; 2] = [
+        [(0, None), (6, Some(2)), (3, Some(1)), (7, None)],
+        [(5, Some(3)), (1, Some(4)), (2, Some(4)), (4, Some(2))],
+    ];
+
+    fn sorting_session(batch_size: usize) -> ProbeResult<SessionContext> {
+        use arrow::{
+            datatypes::{DataType, Field, Schema},
+            record_batch::RecordBatch,
+        };
+        use datafusion::datasource::MemTable;
+
+        let ctx = session()?;
+        let ctx = SessionContext::new_with_state(
+            SessionStateBuilder::new_from_existing(ctx.state())
+                .with_config(ctx.copied_config().with_batch_size(batch_size))
+                .build(),
+        );
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("k", DataType::Int32, true),
+        ]));
+        let mut partitions = Vec::new();
+        for rows in SORT_ROWS {
+            let mut batches = vec![RecordBatch::new_empty(schema.clone())];
+            for rows in rows.chunks(2) {
+                batches.push(RecordBatch::try_new(
+                    schema.clone(),
+                    vec![
+                        Arc::new(Int32Array::from_iter_values(rows.iter().map(|row| row.0))),
+                        Arc::new(Int32Array::from_iter(rows.iter().map(|row| row.1))),
+                    ],
+                )?);
+            }
+            partitions.push(batches);
+        }
+        partitions.push(vec![]);
+        ctx.register_table(
+            "sort_input",
+            Arc::new(MemTable::try_new(schema, partitions)?),
+        )?;
+        Ok(ctx)
+    }
+
+    #[tokio::test]
+    async fn spark_sort_by_orders_each_partition() -> ProbeResult<()> {
+        use datafusion::physical_plan::ExecutionPlanProperties;
+        use std::cmp::Ordering;
+
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.session.timeZone":"UTC"});
+        for batch_size in [1, 3] {
+            let ctx = sorting_session(batch_size)?;
+            for (order, ascending, nulls_first) in [
+                ("sort_key ASC", true, true),
+                ("sort_key DESC", false, false),
+                ("sort_key ASC NULLS FIRST", true, true),
+                ("sort_key ASC NULLS LAST", true, false),
+                ("sort_key DESC NULLS FIRST", false, true),
+                ("sort_key DESC NULLS LAST", false, false),
+                ("sort_key + 1 DESC NULLS FIRST", false, true),
+            ] {
+                for empty in [false, true] {
+                    let filter = if empty { "WHERE id < 0" } else { "" };
+                    let sql = format!(
+                        "SELECT id AS row_id, k AS sort_key, spark_partition_id() AS pid FROM sort_input {filter} SORT BY {order}, row_id ASC"
+                    );
+                    let named = resolve(&ctx, &sql, &settings).await?;
+                    let physical = ctx
+                        .execute_logical_plan(named.plan)
+                        .await?
+                        .create_physical_plan()
+                        .await?;
+                    let physical = rename_physical_plan(physical, &named.fields)?;
+                    assert_eq!(named.fields, ["row_id", "sort_key", "pid"]);
+                    assert!(
+                        physical
+                            .schema()
+                            .fields()
+                            .iter()
+                            .map(|f| f.is_nullable())
+                            .eq([false, true, false])
+                    );
+                    let mut actual = Vec::new();
+                    let mut active_partitions = 0;
+                    let mut multiple_batches = false;
+                    for partition in 0..physical.output_partitioning().partition_count() {
+                        let mut stream = physical.execute(partition, ctx.task_ctx())?;
+                        let mut rows = Vec::new();
+                        let mut batches = 0;
+                        while let Some(batch) = stream.next().await {
+                            let batch = batch?;
+                            let ids = batch
+                                .column(0)
+                                .as_any()
+                                .downcast_ref::<Int32Array>()
+                                .unwrap();
+                            let keys = batch
+                                .column(1)
+                                .as_any()
+                                .downcast_ref::<Int32Array>()
+                                .unwrap();
+                            let pids = batch
+                                .column(2)
+                                .as_any()
+                                .downcast_ref::<Int32Array>()
+                                .unwrap();
+                            assert!(
+                                pids.iter().all(|pid| pid == Some(partition as i32)),
+                                "{sql}"
+                            );
+                            rows.extend(ids.values().iter().copied().zip(keys.iter()));
+                            batches += usize::from(batch.num_rows() > 0);
+                        }
+                        let mut sorted = rows.clone();
+                        sorted.sort_by(|a, b| {
+                            let cmp = match (a.1, b.1) {
+                                (None, None) => Ordering::Equal,
+                                (None, _) => {
+                                    if nulls_first {
+                                        Ordering::Less
+                                    } else {
+                                        Ordering::Greater
+                                    }
+                                }
+                                (_, None) => {
+                                    if nulls_first {
+                                        Ordering::Greater
+                                    } else {
+                                        Ordering::Less
+                                    }
+                                }
+                                (Some(a), Some(b)) => {
+                                    if ascending {
+                                        a.cmp(&b)
+                                    } else {
+                                        b.cmp(&a)
+                                    }
+                                }
+                            };
+                            cmp.then(a.0.cmp(&b.0))
+                        });
+                        assert_eq!(rows, sorted, "{sql}, partition {partition}");
+                        active_partitions += usize::from(!rows.is_empty());
+                        multiple_batches |= batches > 1;
+                        actual.extend(rows);
+                    }
+                    if !empty {
+                        assert!(
+                            active_partitions > 1,
+                            "SORT BY must preserve multiple partitions"
+                        );
+                        assert!(multiple_batches, "check sorting across output batches");
+                    }
+                    let mut expected = if empty {
+                        vec![]
+                    } else {
+                        SORT_ROWS.into_iter().flatten().collect::<Vec<_>>()
+                    };
+                    actual.sort();
+                    expected.sort();
+                    assert_eq!(actual, expected, "{sql}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn spark_ordered_aggregates_keep_required_sort() -> ProbeResult<()> {
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.session.timeZone":"UTC"});
+        for batch_size in [1, 3] {
+            let ctx = sorting_session(batch_size)?;
+            for (order, filter, limit, expected) in [
+                ("ASC", "", "", [None, None, Some(4), Some(2)]),
+                ("DESC", "", "", [None, None, Some(2), Some(4)]),
+                ("ASC", "WHERE id < 0", "", [None, None, None, None]),
+                ("ASC", "WHERE k IS NULL", "", [None, None, None, None]),
+                ("ASC", "", "LIMIT 4", [None, Some(1), Some(4), Some(1)]),
+                ("DESC", "", "LIMIT 3", [None, Some(3), Some(2), Some(3)]),
+                ("ASC", "", "LIMIT 0", [None, None, None, None]),
+                (
+                    "ASC",
+                    "",
+                    "LIMIT 3 OFFSET 1",
+                    [Some(4), Some(1), Some(4), Some(1)],
+                ),
+            ] {
+                let sql = format!(
+                    "SELECT FIRST(k) AS first_value, LAST(k) AS last_value, FIRST(k, true) AS first_nonnull, LAST(k, true) AS last_nonnull FROM (SELECT k FROM sort_input {filter} ORDER BY id {order} {limit})"
+                );
+                let named = resolve(&ctx, &sql, &settings).await?;
+                assert_eq!(
+                    named.fields,
+                    ["first_value", "last_value", "first_nonnull", "last_nonnull"]
+                );
+                let physical = ctx
+                    .execute_logical_plan(named.plan)
+                    .await?
+                    .create_physical_plan()
+                    .await?;
+                let plan_text = displayable(physical.as_ref()).indent(true).to_string();
+                let batches = datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
+                assert_eq!(batches.iter().map(|b| b.num_rows()).sum::<usize>(), 1);
+                let batch = batches.iter().find(|b| b.num_rows() == 1).unwrap();
+                for (index, expected) in expected.into_iter().enumerate() {
+                    let values = batch
+                        .column(index)
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .unwrap();
+                    assert_eq!(
+                        values.iter().next(),
+                        Some(expected),
+                        "{sql}, batch size {batch_size}, column {index}\n{plan_text}"
+                    );
+                }
+            }
+            for (sql, mut expected) in [
+                (
+                    "SELECT k, FIRST(id), LAST(id) FROM (SELECT id, k FROM sort_input ORDER BY id DESC) GROUP BY k",
+                    vec![
+                        vec![None, Some(7), Some(0)],
+                        vec![Some(1), Some(3), Some(3)],
+                        vec![Some(2), Some(6), Some(4)],
+                        vec![Some(3), Some(5), Some(5)],
+                        vec![Some(4), Some(2), Some(1)],
+                    ],
+                ),
+                (
+                    "SELECT FIRST(k, true), LAST(k, true) FROM (SELECT k, spark_partition_id() AS pid FROM sort_input SORT BY k DESC NULLS LAST) GROUP BY pid",
+                    vec![vec![Some(2), Some(1)], vec![Some(4), Some(2)]],
+                ),
+            ] {
+                let named = resolve(&ctx, sql, &settings).await?;
+                let batches = ctx
+                    .execute_logical_plan(named.plan)
+                    .await?
+                    .collect()
+                    .await?;
+                let mut actual = Vec::new();
+                for batch in batches {
+                    for row in 0..batch.num_rows() {
+                        actual.push(
+                            batch
+                                .columns()
+                                .iter()
+                                .map(|column| {
+                                    let values =
+                                        column.as_any().downcast_ref::<Int32Array>().unwrap();
+                                    (!values.is_null(row)).then(|| values.value(row))
+                                })
+                                .collect::<Vec<_>>(),
+                        );
+                    }
+                }
+                actual.sort();
+                expected.sort();
+                assert_eq!(actual, expected, "{sql}, batch size {batch_size}");
+            }
+            assert!(
+                ctx.state()
+                    .config_options()
+                    .optimizer
+                    .enable_round_robin_repartition
+            );
+            assert!(
+                ctx.state()
+                    .config_options()
+                    .optimizer
+                    .repartition_aggregations
+            );
+        }
+        Ok(())
+    }
+
     #[tokio::test]
     async fn spark_partition_ids_follow_execution_partitions() -> ProbeResult<()> {
         use arrow::{
