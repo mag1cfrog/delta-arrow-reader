@@ -1,0 +1,353 @@
+{
+  "engine": "extracted",
+  "reference": {
+    "distribution": "vendored-sail",
+    "version": "0.7.1"
+  },
+  "source_sha256": "d6173581a9c9c0a850558e7bfafc76751d67dc32a8bce4faa7f89bfc24a7598e",
+  "cargo_lock_sha256": "71c85194bd99d905c2e2b9bba5b77a313eeacb38513ff3f6e0576e419e9c3163",
+  "corpus_sha256": "7912366150cf9a8cad14dba7832d67c1a33920045d8f0266b82d4e30e96ec2d5",
+  "input_schemas": {
+    "t": {
+      "type": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "x",
+          "type": "long",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        }
+      ]
+    },
+    "empty_t": {
+      "type": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "x",
+          "type": "long",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "metadata": {}
+        }
+      ]
+    },
+    "nested": {
+      "type": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "metadata": {}
+        },
+        {
+          "name": "a",
+          "type": {
+            "type": "array",
+            "elementType": "integer",
+            "containsNull": true
+          },
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "m",
+          "type": {
+            "type": "map",
+            "keyType": "string",
+            "valueType": "integer",
+            "valueContainsNull": true
+          },
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "s",
+          "type": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "age",
+                "type": "integer",
+                "nullable": true,
+                "metadata": {}
+              },
+              {
+                "name": "label",
+                "type": "string",
+                "nullable": true,
+                "metadata": {}
+              }
+            ]
+          },
+          "nullable": true,
+          "metadata": {}
+        }
+      ]
+    },
+    "dates": {
+      "type": "struct",
+      "fields": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": true,
+          "metadata": {}
+        },
+        {
+          "name": "d",
+          "type": "date",
+          "nullable": true,
+          "metadata": {}
+        }
+      ]
+    }
+  },
+  "input_rows": {
+    "t": [
+      [
+        "1",
+        null,
+        "alice",
+        "west"
+      ],
+      [
+        "2",
+        "1",
+        null,
+        "west"
+      ],
+      [
+        "3",
+        "2",
+        "bob",
+        "east"
+      ],
+      [
+        "4",
+        "3",
+        "carol",
+        "east"
+      ]
+    ],
+    "empty_t": [],
+    "nested": [
+      [
+        "1",
+        [
+          "10",
+          "20"
+        ],
+        {
+          "map_entries": [
+            [
+              "one",
+              "1"
+            ],
+            [
+              "two",
+              "2"
+            ]
+          ]
+        },
+        [
+          "21",
+          "a"
+        ]
+      ],
+      [
+        "2",
+        [
+          null
+        ],
+        {
+          "map_entries": [
+            [
+              "one",
+              null
+            ]
+          ]
+        },
+        [
+          null,
+          null
+        ]
+      ],
+      [
+        "3",
+        [],
+        {
+          "map_entries": []
+        },
+        null
+      ]
+    ],
+    "dates": [
+      [
+        "1",
+        "2024-01-31"
+      ],
+      [
+        "2",
+        "2024-02-28"
+      ],
+      [
+        "3",
+        null
+      ]
+    ]
+  },
+  "observations": [
+    {"id": "spark_null_order", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64"], "schema": {"type": "struct", "fields": [{"name": "x", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [[null]]},
+    {"id": "databricks_ifnull", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64"], "schema": {"type": "struct", "fields": [{"name": "v", "type": "long", "nullable": false, "metadata": {}}]}, "rows": [["0"]]},
+    {"id": "spark_integer_division", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Float64"], "schema": {"type": "struct", "fields": [{"name": "v", "type": "double", "nullable": false, "metadata": {}}]}, "rows": [["2.5"]]},
+    {"id": "spark_concat_null", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Utf8"], "schema": {"type": "struct", "fields": [{"name": "v", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [[null]]},
+    {"id": "spark_date_format", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Utf8"], "schema": {"type": "struct", "fields": [{"name": "v", "type": "string", "nullable": false, "metadata": {}}]}, "rows": [["2024-01-02"]]},
+    {"id": "spark_date_add", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Date32"], "schema": {"type": "struct", "fields": [{"name": "v", "type": "date", "nullable": false, "metadata": {}}]}, "rows": [["2024-02-01"]]},
+    {"id": "spark_null_safe_equal", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Boolean"], "schema": {"type": "struct", "fields": [{"name": "v", "type": "boolean", "nullable": false, "metadata": {}}]}, "rows": [["true"]]},
+    {"id": "spark_array_element", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "v", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["10"]]},
+    {"id": "spark_try_cast", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "v", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [[null]]},
+    {"id": "delta_filter_projection", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Utf8View"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "name", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["2", null]]},
+    {"id": "delta_group", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Dictionary(UInt16, Utf8)", "Int64", "Int64"], "schema": {"type": "struct", "fields": [{"name": "region", "type": "string", "nullable": true, "metadata": {}}, {"name": "n", "type": "long", "nullable": false, "metadata": {}}, {"name": "total", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["east", "2", "5"], ["west", "2", "1"]]},
+    {"id": "delta_cte", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Float64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "half", "type": "double", "nullable": true, "metadata": {}}]}, "rows": [["1", null], ["2", "0.5"]]},
+    {"id": "delta_self_join", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Utf8View"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "name", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["3", "bob"]]},
+    {"id": "delta_window", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "rn", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["1", "1"], ["2", "2"], ["3", "1"], ["4", "2"]]},
+    {"id": "delta_column_semantics", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Float64", "Utf8View"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "half", "type": "double", "nullable": true, "metadata": {}}, {"name": "label", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["1", null, "alice!"], ["2", "0.5", null], ["3", "1.0", "bob!"], ["4", "1.5", "carol!"]]},
+    {"id": "delta_date_function", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Utf8"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "d", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["1", "2024-02-01"], ["2", "2024-02-02"], ["3", "2024-02-03"], ["4", "2024-02-04"]]},
+    {"id": "duplicate_names", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64"], "schema": {"type": "struct", "fields": [{"name": "same", "type": "integer", "nullable": true, "metadata": {}}, {"name": "same", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["3", "2"]]},
+    {"id": "qualified_table", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1"]]},
+    {"id": "unknown_function", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "reject_ddl", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "reject_time_travel", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "sail_range_extension", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "long", "nullable": false, "metadata": {}}]}, "rows": [["0"], ["1"], ["2"]]},
+    {"id": "sail_partition_id", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "sail_sort_within_partitions", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "delta_wildcard", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64", "Utf8View", "Dictionary(UInt16, Utf8)"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "x", "type": "long", "nullable": true, "metadata": {}}, {"name": "name", "type": "string", "nullable": true, "metadata": {}}, {"name": "region", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["3", "2", "bob", "east"]]},
+    {"id": "delta_star_except", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "reject_wildcard_replace", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "names_comments_quotes", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "odd name", "type": "integer", "nullable": true, "metadata": {}}, {"name": "v", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["1", "7"]]},
+    {"id": "names_escaped_identifier", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "a`b", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["1"]]},
+    {"id": "names_case_insensitive", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "ID", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1"]]},
+    {"id": "names_case_sensitive", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "true"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "ID", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1"]]},
+    {"id": "names_qualified_wildcard", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64", "Utf8View", "Dictionary(UInt16, Utf8)"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "x", "type": "long", "nullable": true, "metadata": {}}, {"name": "name", "type": "string", "nullable": true, "metadata": {}}, {"name": "region", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["3", "2", "bob", "east"]]},
+    {"id": "names_cte_shadow", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["99"]]},
+    {"id": "names_cte_reuse", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1", "1"], ["2", "2"]]},
+    {"id": "joins_left_unmatched", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Utf8View"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "name", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["1", null], ["2", "alice"], ["3", null], ["4", "bob"]]},
+    {"id": "joins_semi", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["3"], ["4"]]},
+    {"id": "joins_anti", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1"], ["2"]]},
+    {"id": "joins_duplicate_keys", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Dictionary(UInt16, Utf8)", "Int64"], "schema": {"type": "struct", "fields": [{"name": "region", "type": "string", "nullable": true, "metadata": {}}, {"name": "n", "type": "long", "nullable": false, "metadata": {}}]}, "rows": [["east", "4"], ["west", "4"]]},
+    {"id": "joins_null_keys", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64"], "schema": {"type": "struct", "fields": [{"name": "count(1)", "type": "long", "nullable": false, "metadata": {}}]}, "rows": [["3"]]},
+    {"id": "joins_null_safe_keys", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64"], "schema": {"type": "struct", "fields": [{"name": "count(1)", "type": "long", "nullable": false, "metadata": {}}]}, "rows": [["4"]]},
+    {"id": "joins_cross", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64"], "schema": {"type": "struct", "fields": [{"name": "count(1)", "type": "long", "nullable": false, "metadata": {}}]}, "rows": [["16"]]},
+    {"id": "relational_union_all", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1"], ["1"], ["2"]]},
+    {"id": "relational_union_distinct", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Dictionary(UInt16, Utf8)"], "schema": {"type": "struct", "fields": [{"name": "region", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["east"], ["west"]]},
+    {"id": "relational_intersect", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["4"], ["3"]]},
+    {"id": "relational_except", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["2"], ["1"]]},
+    {"id": "relational_correlated_exists", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["3"], ["4"]]},
+    {"id": "relational_scalar_subquery", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "m", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["1", "3"]]},
+    {"id": "relational_correlated_scalar", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "m", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["1", "1"], ["2", "1"], ["3", "3"], ["4", "3"]]},
+    {"id": "relational_subquery_multirow_error", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "relational_empty_projection", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Float64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "(x / 2)", "type": "double", "nullable": true, "metadata": {}}]}, "rows": []},
+    {"id": "aggregation_empty", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64", "Int64", "Int64", "Float64"], "schema": {"type": "struct", "fields": [{"name": "count(1)", "type": "long", "nullable": false, "metadata": {}}, {"name": "count(x)", "type": "long", "nullable": false, "metadata": {}}, {"name": "SUM(x)", "type": "long", "nullable": true, "metadata": {}}, {"name": "AVG(x)", "type": "double", "nullable": true, "metadata": {}}]}, "rows": [["0", "0", null, null]]},
+    {"id": "aggregation_all_null", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64", "Int64", "Float64"], "schema": {"type": "struct", "fields": [{"name": "count(x)", "type": "long", "nullable": false, "metadata": {}}, {"name": "SUM(x)", "type": "long", "nullable": true, "metadata": {}}, {"name": "AVG(x)", "type": "double", "nullable": true, "metadata": {}}]}, "rows": [["0", null, null]]},
+    {"id": "aggregation_distinct_having", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Dictionary(UInt16, Utf8)", "Int64", "Float64"], "schema": {"type": "struct", "fields": [{"name": "region", "type": "string", "nullable": true, "metadata": {}}, {"name": "count(DISTINCT x)", "type": "long", "nullable": false, "metadata": {}}, {"name": "AVG(x)", "type": "double", "nullable": true, "metadata": {}}]}, "rows": [["east", "2", "2.5"], ["west", "1", "1.0"]]},
+    {"id": "aggregation_count_if", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64", "Int64"], "schema": {"type": "struct", "fields": [{"name": "COUNT_IF((x > 1))", "type": "long", "nullable": false, "metadata": {}}, {"name": "COUNT_IF((x > 100))", "type": "long", "nullable": false, "metadata": {}}]}, "rows": [["2", "0"]]},
+    {"id": "aggregation_collect_list", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["List(Field { data_type: Utf8View, nullable: true })"], "schema": {"type": "struct", "fields": [{"name": "SORT_ARRAY(COLLECT_LIST(name))", "type": {"type": "array", "elementType": "string", "containsNull": true}, "nullable": true, "metadata": {}}]}, "rows": [[["alice", "bob", "carol"]]]},
+    {"id": "aggregation_ordered_first", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "windows_rank_ties", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "RANK()", "type": "integer", "nullable": false, "metadata": {}}, {"name": "DENSE_RANK()", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["1", "3", "2"], ["2", "3", "2"], ["3", "1", "1"], ["4", "1", "1"]]},
+    {"id": "windows_lag", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "LAG(x, 1, CAST((- 1) AS BIGINT))", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["1", "-1"], ["2", null], ["3", "1"], ["4", "2"]]},
+    {"id": "windows_rows_frame", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "SUM(x)", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["1", null], ["2", "1"], ["3", "3"], ["4", "5"]]},
+    {"id": "windows_range_frame", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "SUM(x)", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["1", null], ["2", "1"], ["3", "3"], ["4", "5"]]},
+    {"id": "ordering_nulls_desc", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64"], "schema": {"type": "struct", "fields": [{"name": "x", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["3"], ["2"], ["1"], [null]]},
+    {"id": "ordering_explicit_nulls", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "x", "type": "long", "nullable": true, "metadata": {}}]}, "rows": [["2", "1"], ["3", "2"], ["4", "3"]]},
+    {"id": "ordering_limit_zero", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64", "Utf8View", "Dictionary(UInt16, Utf8)"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "x", "type": "long", "nullable": true, "metadata": {}}, {"name": "name", "type": "string", "nullable": true, "metadata": {}}, {"name": "region", "type": "string", "nullable": true, "metadata": {}}]}, "rows": []},
+    {"id": "arithmetic_negative_div_mod", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Float64", "Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "((- 5) / 2)", "type": "double", "nullable": false, "metadata": {}}, {"name": "((- 5) % 2)", "type": "integer", "nullable": false, "metadata": {}}, {"name": "PMOD((- 5), 2)", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["-2.5", "-1", "1"]]},
+    {"id": "arithmetic_zero_div_ansi", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "arithmetic_zero_div_legacy", "settings": {"spark.sql.ansi.enabled": "false", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Float64"], "schema": {"type": "struct", "fields": [{"name": "(x / (id - id))", "type": "double", "nullable": true, "metadata": {}}]}, "rows": [[null]]},
+    {"id": "arithmetic_overflow_ansi", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "(CAST(2147483647 AS INT) + id)", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["-2147483648"]]},
+    {"id": "arithmetic_overflow_legacy", "settings": {"spark.sql.ansi.enabled": "false", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "(CAST(2147483647 AS INT) + id)", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["-2147483648"]]},
+    {"id": "arithmetic_decimal_division", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Decimal128(14, 6)"], "schema": {"type": "struct", "fields": [{"name": "(x / CAST(3 AS DECIMAL(3,0)))", "type": "decimal(14,6)", "nullable": true, "metadata": {}}]}, "rows": [[null], ["0.333333"], ["0.666666"], ["1.000000"]]},
+    {"id": "arithmetic_decimal_rounding", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Decimal128(6, 2)", "Float64"], "schema": {"type": "struct", "fields": [{"name": "ROUND(CAST(2.345 AS DECIMAL(6,3)), 2)", "type": "decimal(6,2)", "nullable": false, "metadata": {}}, {"name": "BROUND(CAST(2.345 AS DECIMAL(6,3)), 2)", "type": "double", "nullable": false, "metadata": {}}]}, "rows": [["2.35", "2.35"]]},
+    {"id": "arithmetic_decimal_overflow", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "casts_invalid_column", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "casts_try_column", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "name", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1", null], ["2", null], ["3", null], ["4", null]]},
+    {"id": "casts_fraction_to_int", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "CAST(2.9 AS INT)", "type": "integer", "nullable": false, "metadata": {}}, {"name": "CAST((- 2.9) AS INT)", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["2", "-2"]]},
+    {"id": "casts_invalid_boolean", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "nulls_three_valued", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Boolean", "Boolean", "Boolean", "Boolean", "Boolean"], "schema": {"type": "struct", "fields": [{"name": "(true AND NULL)", "type": "boolean", "nullable": true, "metadata": {}}, {"name": "(false AND NULL)", "type": "boolean", "nullable": false, "metadata": {}}, {"name": "(true OR NULL)", "type": "boolean", "nullable": false, "metadata": {}}, {"name": "(false OR NULL)", "type": "boolean", "nullable": true, "metadata": {}}, {"name": "(NOT NULL)", "type": "boolean", "nullable": true, "metadata": {}}]}, "rows": [[null, "false", "true", null, null]]},
+    {"id": "nulls_not_in_null", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": []},
+    {"id": "nulls_in_subquery", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["2"]]},
+    {"id": "nulls_conditionals", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int64", "Int64", "Int64", "Utf8"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "IF(is_null, 7, x)", "type": "long", "nullable": true, "metadata": {}}, {"name": "COALESCE(x, 8)", "type": "long", "nullable": false, "metadata": {}}, {"name": "NULLIF(x, 2)", "type": "long", "nullable": true, "metadata": {}}, {"name": "CASE WHEN (x > 1) THEN yes ELSE no END", "type": "string", "nullable": false, "metadata": {}}]}, "rows": [["1", "7", "8", null, "no"], ["2", "1", "1", "1", "no"], ["3", "2", "2", null, "yes"], ["4", "3", "3", "3", "yes"]]},
+    {"id": "nulls_concat_ws", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Utf8"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "CONCAT_WS(-, name, x)", "type": "string", "nullable": false, "metadata": {}}]}, "rows": [["1", "alice"], ["2", "1"], ["3", "bob-2"], ["4", "carol-3"]]},
+    {"id": "strings_unicode", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Utf8"], "schema": {"type": "struct", "fields": [{"name": "LENGTH(\u4f60\u597d\ud83d\ude00)", "type": "integer", "nullable": false, "metadata": {}}, {"name": "SUBSTRING(\u4f60\u597d\ud83d\ude00, 2, 2)", "type": "string", "nullable": false, "metadata": {}}]}, "rows": [["3", "\u597d\ud83d\ude00"]]},
+    {"id": "strings_like", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1"], ["3"]]},
+    {"id": "strings_regexp", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Utf8", "Utf8"], "schema": {"type": "struct", "fields": [{"name": "REGEXP_REPLACE(a12b34, [0-9]+, X, 1)", "type": "string", "nullable": false, "metadata": {}}, {"name": "REGEXP_EXTRACT(a12, ([0-9]+), 1)", "type": "string", "nullable": false, "metadata": {}}]}, "rows": [["aXbX", "12"]]},
+    {"id": "strings_trim_case_column", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Utf8View"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "UPPER(TRIM(CONCAT( , name,  )))", "type": "string", "nullable": true, "metadata": {}}]}, "rows": [["1", "ALICE"], ["2", null], ["3", "BOB"], ["4", "CAROL"]]},
+    {"id": "strings_binary", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Utf8", "Int32"], "schema": {"type": "struct", "fields": [{"name": "HEX(UNHEX(00FF))", "type": "string", "nullable": false, "metadata": {}}, {"name": "LENGTH(UNHEX(00FF))", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["00FF", "2"]]},
+    {"id": "dates_column_boundary", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Date32", "Date32", "Date32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": true, "metadata": {}}, {"name": "date_add(d, 1)", "type": "date", "nullable": true, "metadata": {}}, {"name": "ADD_MONTHS(d, 1)", "type": "date", "nullable": true, "metadata": {}}, {"name": "LAST_DAY(d)", "type": "date", "nullable": true, "metadata": {}}]}, "rows": [["1", "2024-02-01", "2024-02-29", "2024-01-31"], ["2", "2024-02-29", "2024-03-28", "2024-02-29"], ["3", null, null, null]]},
+    {"id": "dates_invalid_date", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "dates_try_date", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Date32"], "schema": {"type": "struct", "fields": [{"name": "TRY_CAST(2024-02-30 AS DATE)", "type": "date", "nullable": true, "metadata": {}}]}, "rows": [[null]]},
+    {"id": "dates_format_tokens", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Utf8"], "schema": {"type": "struct", "fields": [{"name": "DATE_FORMAT(TIMESTAMP '2024-01-02 13:04:05.123456', yyyy-MM-dd HH:mm:ss.SSS)", "type": "string", "nullable": false, "metadata": {}}]}, "rows": [["2024-01-02 13:04:05.123"]]},
+    {"id": "dates_timestamp_precision", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Timestamp(Microsecond, None)"], "schema": {"type": "struct", "fields": [{"name": "CAST(2024-01-02 03:04:05.123456 AS TIMESTAMP_NTZ)", "type": "timestamp_ntz", "nullable": false, "metadata": {}}]}, "rows": [["2024-01-02 03:04:05.123456"]]},
+    {"id": "dates_timestamp_ltz", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Timestamp(Microsecond, Some(\"UTC\"))"], "schema": {"type": "struct", "fields": [{"name": "CAST(2024-01-02 03:04:05.123456 AS TIMESTAMP)", "type": "timestamp", "nullable": false, "metadata": {}}]}, "rows": [["2024-01-02 03:04:05.123456"]]},
+    {"id": "dates_dst_gap", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "America/Los_Angeles", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "dates_dst_overlap", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "America/Los_Angeles", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "nested_negative_index", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32"], "schema": {"type": "struct", "fields": [{"name": "ELEMENT_AT(ARRAY(10, 20), (- 1))", "type": "integer", "nullable": false, "metadata": {}}]}, "rows": [["20"]]},
+    {"id": "nested_zero_index", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "nested_out_of_range_ansi", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "nested_out_of_range_legacy", "settings": {"spark.sql.ansi.enabled": "false", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "nested_columns", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32", "Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": false, "metadata": {}}, {"name": "SIZE(a)", "type": "integer", "nullable": true, "metadata": {}}, {"name": "ELEMENT_AT(m, missing)", "type": "integer", "nullable": true, "metadata": {}}, {"name": "age", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1", "2", null, "21"], ["2", "1", null, null], ["3", "0", null, null]]},
+    {"id": "nested_explode", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": false, "metadata": {}}, {"name": "v", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1", "10"], ["1", "20"], ["2", null]]},
+    {"id": "nested_outer_explode", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Int32"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "integer", "nullable": false, "metadata": {}}, {"name": "v", "type": "integer", "nullable": true, "metadata": {}}]}, "rows": [["1", "10"], ["1", "20"], ["2", null], ["3", null]]},
+    {"id": "nested_null_array", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int32", "Boolean"], "schema": {"type": "struct", "fields": [{"name": "SIZE(CAST(NULL AS ARRAY<INT>))", "type": "integer", "nullable": true, "metadata": {}}, {"name": "ARRAY_CONTAINS(ARRAY(1, NULL), 2)", "type": "boolean", "nullable": false, "metadata": {}}]}, "rows": [[null, "false"]]},
+    {"id": "extensions_range_step", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "ok", "arrow_types": ["Int64"], "schema": {"type": "struct", "fields": [{"name": "id", "type": "long", "nullable": false, "metadata": {}}]}, "rows": [["1"], ["3"], ["5"]]},
+    {"id": "extensions_monotonic_id", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "execution_error", "condition": null},
+    {"id": "errors_empty", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "errors_malformed", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "errors_unknown_table", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "errors_unknown_column", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "errors_ambiguous", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "excluded_multi_statement", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "excluded_insert", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "excluded_delete", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "excluded_copy", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "excluded_set", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "excluded_format_path", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "excluded_sample", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null},
+    {"id": "excluded_python_udf", "settings": {"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC", "spark.sql.caseSensitive": "false"}, "status": "planning_error", "condition": null}
+  ]
+}

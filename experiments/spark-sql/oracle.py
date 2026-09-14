@@ -99,12 +99,15 @@ def main():
     parser.add_argument("command", choices=["freeze", "check"])
     parser.add_argument("capture", type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--against", type=Path, help="Compare with another capture; defaults to the Spark oracle")
     args = parser.parse_args()
     inputs, cases = load_corpus()
     capture = json.loads(args.capture.read_text())
     validate_capture(capture, inputs, cases)
     oracle_path = ROOT / "spark-oracle.json"
     if args.command == "freeze":
+        if args.against:
+            parser.error("--against is only valid with check")
         if capture["engine"] != "spark" or capture["reference"] != inputs["spark_reference"]:
             raise ValueError("only the pinned Apache Spark engine can create the oracle")
         if capture["spark_version"] != inputs["spark_reference"]["version"]:
@@ -125,7 +128,7 @@ def main():
         print(f"Froze {len(observations)} cases from Apache Spark {capture['spark_version']}")
         return
 
-    oracle = json.loads(oracle_path.read_text())
+    oracle = json.loads((args.against or oracle_path).read_text())
     validate_capture(oracle, inputs, cases)
     results = [{"id": case["id"], **compare(case, expected, actual)}
                for case, expected, actual in zip(cases, oracle["observations"], capture["observations"], strict=True)]

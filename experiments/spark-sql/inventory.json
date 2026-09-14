@@ -1,0 +1,147 @@
+{
+  "source_sha256": "d6173581a9c9c0a850558e7bfafc76751d67dc32a8bce4faa7f89bfc24a7598e",
+  "crates": [
+    {
+      "crate": "sail-catalog",
+      "rust_files": 20,
+      "gross_lines": 5584,
+      "nonblank_lines": 5115,
+      "test_lines": 1191,
+      "build_script_lines": 0,
+      "production_lines": 4393
+    },
+    {
+      "crate": "sail-catalog-memory",
+      "rust_files": 3,
+      "gross_lines": 594,
+      "nonblank_lines": 566,
+      "test_lines": 29,
+      "build_script_lines": 0,
+      "production_lines": 565
+    },
+    {
+      "crate": "sail-common",
+      "rust_files": 35,
+      "gross_lines": 5799,
+      "nonblank_lines": 5318,
+      "test_lines": 296,
+      "build_script_lines": 0,
+      "production_lines": 5503
+    },
+    {
+      "crate": "sail-common-datafusion",
+      "rust_files": 50,
+      "gross_lines": 9769,
+      "nonblank_lines": 8853,
+      "test_lines": 1388,
+      "build_script_lines": 467,
+      "production_lines": 7914
+    },
+    {
+      "crate": "sail-function",
+      "rust_files": 192,
+      "gross_lines": 58384,
+      "nonblank_lines": 53078,
+      "test_lines": 6446,
+      "build_script_lines": 0,
+      "production_lines": 51938
+    },
+    {
+      "crate": "sail-logical-plan",
+      "rust_files": 19,
+      "gross_lines": 3988,
+      "nonblank_lines": 3571,
+      "test_lines": 0,
+      "build_script_lines": 0,
+      "production_lines": 3988
+    },
+    {
+      "crate": "sail-plan",
+      "rust_files": 92,
+      "gross_lines": 24492,
+      "nonblank_lines": 23024,
+      "test_lines": 805,
+      "build_script_lines": 238,
+      "production_lines": 23449
+    },
+    {
+      "crate": "sail-pyarrow",
+      "rust_files": 1,
+      "gross_lines": 633,
+      "nonblank_lines": 546,
+      "test_lines": 0,
+      "build_script_lines": 0,
+      "production_lines": 633
+    },
+    {
+      "crate": "sail-python-udf",
+      "rust_files": 23,
+      "gross_lines": 2996,
+      "nonblank_lines": 2707,
+      "test_lines": 0,
+      "build_script_lines": 0,
+      "production_lines": 2996
+    },
+    {
+      "crate": "sail-sql-analyzer",
+      "rust_files": 14,
+      "gross_lines": 6705,
+      "nonblank_lines": 6441,
+      "test_lines": 299,
+      "build_script_lines": 0,
+      "production_lines": 6406
+    },
+    {
+      "crate": "sail-sql-macro",
+      "rust_files": 7,
+      "gross_lines": 754,
+      "nonblank_lines": 704,
+      "test_lines": 0,
+      "build_script_lines": 0,
+      "production_lines": 754
+    },
+    {
+      "crate": "sail-sql-parser",
+      "rust_files": 33,
+      "gross_lines": 6315,
+      "nonblank_lines": 5918,
+      "test_lines": 74,
+      "build_script_lines": 80,
+      "production_lines": 6161
+    }
+  ],
+  "totals": {
+    "rust_files": 489,
+    "gross_lines": 126013,
+    "nonblank_lines": 115841,
+    "test_lines": 10528,
+    "build_script_lines": 785,
+    "production_lines": 114700
+  },
+  "lock_packages": 618,
+  "resolved_packages_all_targets_including_dev": 618,
+  "linux_normal_build_packages_including_runner": 548,
+  "python_packages_in_linux_build": [
+    "pyo3 v0.29.2",
+    "pyo3-build-config v0.29.2",
+    "pyo3-ffi v0.29.2",
+    "pyo3-macros v0.29.2 (proc-macro)",
+    "pyo3-macros-backend v0.29.2",
+    "sail-pyarrow v0.7.1 ($EXPERIMENT/vendor/sail/crates/sail-pyarrow)",
+    "sail-python-udf v0.7.1 ($EXPERIMENT/vendor/sail/crates/sail-python-udf)"
+  ],
+  "build_generated_rust": {
+    "sail-common-datafusion": {
+      "files": 5,
+      "lines": 416
+    },
+    "sail-sql-parser": {
+      "files": 1,
+      "lines": 269
+    },
+    "sail-plan": {
+      "files": 1,
+      "lines": 566
+    }
+  }
+}

@@ -1,0 +1,28 @@
+[package]
+name = "delta-reader-sail-extraction-probe"
+version = "0.1.0"
+edition = "2024"
+
+publish = false
+
+[workspace]
+exclude = ["vendor/sail", "vendor/sail/crates/*"]
+
+[dependencies]
+delta-arrow-reader = { path = "../..", features = ["datafusion"] }
+datafusion = "=54.1.0"
+arrow = "58.3.0"
+parquet = "58.3.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+futures-util = "0.3"
+serde_json = "1"
+sail-common = { path = "vendor/sail/crates/sail-common" }
+sail-common-datafusion = { path = "vendor/sail/crates/sail-common-datafusion" }
+sail-sql-analyzer = { path = "vendor/sail/crates/sail-sql-analyzer" }
+sail-plan = { path = "vendor/sail/crates/sail-plan" }
+sail-catalog = { path = "vendor/sail/crates/sail-catalog" }
+sail-catalog-memory = { path = "vendor/sail/crates/sail-catalog-memory" }
+
+[profile.dev]
+debug = 0
+incremental = false
