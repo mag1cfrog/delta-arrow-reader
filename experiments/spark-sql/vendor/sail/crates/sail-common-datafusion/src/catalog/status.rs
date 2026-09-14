@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
@@ -9,7 +10,6 @@ use crate::catalog::{
     CatalogPartitionField, CatalogTableBucketBy, CatalogTableConstraint, CatalogTableSort,
 };
 use crate::column_features::ColumnFeaturesBuilder;
-use crate::session::plan::PlanFormatter;
 
 /// Metadata key used by Spark Connect's column protocol for generation
 /// expressions. This is an input/output boundary value translated to the
@@ -295,28 +295,6 @@ impl TableStatus {
         }
 
         rows
-    }
-
-    pub fn show_table_extended_information(&self, formatter: &dyn PlanFormatter) -> Result<String> {
-        let mut output = String::new();
-
-        for (key, value) in self.describe_extended_metadata() {
-            output.push_str(&format!("{key}: {value}\n"));
-        }
-
-        output.push_str("Schema: root\n");
-        for column in self.kind.columns() {
-            let data_type = formatter
-                .data_type_to_simple_string(&column.data_type)
-                .unwrap_or_else(|_| "invalid".to_string());
-            let nullable = if column.nullable { "true" } else { "false" };
-            output.push_str(&format!(
-                " |-- {}: {} (nullable = {})\n",
-                column.name, data_type, nullable
-            ));
-        }
-
-        Ok(output)
     }
 }
 

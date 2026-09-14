@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::str::FromStr;
 
 use arrow::array::timezone::Tz;
@@ -5,13 +6,12 @@ use arrow::datatypes::Date32Type;
 use chrono::{NaiveTime, Timelike};
 use datafusion_expr::expr;
 use sail_common::spec;
-use sail_common_datafusion::extension::SessionExtensionAccessor;
-use sail_common_datafusion::session::plan::PlanService;
 use sail_common_datafusion::utils::datetime::localize_with_fallback;
 use sail_sql_analyzer::parser::{parse_date, parse_time, parse_timestamp};
 
 use crate::config::DefaultTimestampType;
 use crate::error::PlanResult;
+use crate::formatter::SparkPlanFormatter;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -23,10 +23,8 @@ impl PlanResolver<'_> {
         state: &mut PlanResolverState,
     ) -> PlanResult<NamedExpr> {
         let literal = self.resolve_literal(literal, state)?;
-        let service = self.ctx.extension::<PlanService>()?;
-        let name = service
-            .plan_formatter()
-            .literal_to_string(&literal, &self.config.session_timezone)?;
+
+        let name = SparkPlanFormatter.literal_to_string(&literal, &self.config.session_timezone)?;
         Ok(NamedExpr::new(
             vec![name],
             expr::Expr::Literal(literal, None),

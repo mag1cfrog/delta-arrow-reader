@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::ops::{Div, Mul};
 use std::sync::Arc;
 
@@ -6,8 +7,6 @@ use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
 use sail_common::spec;
 use sail_common::utils::datetime::time_unit_to_multiplier;
-use sail_common_datafusion::extension::SessionExtensionAccessor;
-use sail_common_datafusion::session::plan::PlanService;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_common_datafusion::variant::is_variant_storage_field;
 use sail_function::scalar::datetime::convert_tz::ConvertTz;
@@ -24,6 +23,7 @@ use sail_function::scalar::variant::spark_variant_get::SparkVariantGet;
 use sail_function::scalar::variant::spark_variant_to_json::SparkVariantToJsonUdf;
 
 use crate::error::{PlanError, PlanResult};
+use crate::formatter::SparkPlanFormatter;
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
@@ -74,10 +74,7 @@ impl PlanResolver<'_> {
         let expr_type = expr_field.data_type().clone();
         let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
         let name = if need_rename_cast(&expr) {
-            let service = self.ctx.extension::<PlanService>()?;
-            let data_type_string = service
-                .plan_formatter()
-                .data_type_to_simple_string(&cast_to_type)?;
+            let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?;
             vec![format!(
                 "{}CAST({} AS {})",
                 if is_try { "TRY_" } else { "" },
@@ -139,8 +136,7 @@ impl PlanResolver<'_> {
                 ScalarUDF::new_from_impl(SparkVariantToJsonUdf::new()).call(vec![expr])
             }
             (_, to, is_try) if expr_is_variant => {
-                let service = self.ctx.extension::<PlanService>()?;
-                let data_type_string = service.plan_formatter().data_type_to_simple_string(&to)?;
+                let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&to)?;
                 ScalarUDF::new_from_impl(SparkVariantGet::new(is_try)).call(vec![
                     expr,
                     lit("$"),

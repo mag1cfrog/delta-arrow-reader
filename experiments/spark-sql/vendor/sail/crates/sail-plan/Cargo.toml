@@ -11,8 +11,6 @@ workspace = true
 sail-common = { path = "../sail-common" }
 sail-common-datafusion = { path = "../sail-common-datafusion" }
 sail-sql-analyzer = { path = "../sail-sql-analyzer" }
-sail-catalog = { path = "../sail-catalog" }
-sail-catalog-memory = { path = "../sail-catalog-memory" }
 sail-function = { path = "../sail-function" }
 sail-logical-plan = { path = "../sail-logical-plan" }
 

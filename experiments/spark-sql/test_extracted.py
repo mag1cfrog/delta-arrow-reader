@@ -13,11 +13,11 @@ from reference import ROOT, load_corpus
 
 
 class ArrowTransportTests(unittest.TestCase):
-    def test_resolved_dependencies_do_not_include_python_bridges(self):
+    def test_resolved_dependencies_exclude_removed_crates(self):
         metadata = json.loads(subprocess.check_output([
             "cargo", "metadata", "--locked", "--format-version=1", "--manifest-path", str(ROOT / "Cargo.toml")]))
         forbidden = [package["name"] for package in metadata["packages"]
-                     if package["name"].startswith("pyo3") or package["name"] in {"sail-python-udf", "sail-pyarrow"}]
+                     if package["name"].startswith("pyo3") or package["name"] in {"sail-python-udf", "sail-pyarrow", "sail-catalog", "sail-catalog-memory"}]
         self.assertEqual(forbidden, [])
 
     def test_inputs_and_nested_nulls(self):

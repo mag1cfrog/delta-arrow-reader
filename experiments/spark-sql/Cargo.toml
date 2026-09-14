@@ -20,8 +20,6 @@ sail-common = { path = "vendor/sail/crates/sail-common" }
 sail-common-datafusion = { path = "vendor/sail/crates/sail-common-datafusion" }
 sail-sql-analyzer = { path = "vendor/sail/crates/sail-sql-analyzer" }
 sail-plan = { path = "vendor/sail/crates/sail-plan" }
-sail-catalog = { path = "vendor/sail/crates/sail-catalog" }
-sail-catalog-memory = { path = "vendor/sail/crates/sail-catalog-memory" }
 
 [profile.dev]
 debug = 0

@@ -410,43 +410,17 @@ mod tests {
     use datafusion_common::{DFSchema, ScalarValue};
     use datafusion_expr::expr::{Alias, Expr};
     use datafusion_expr::{BinaryExpr, Operator};
-    use sail_catalog::manager::{CatalogManager, CatalogManagerOptions};
-    use sail_catalog::provider::CatalogProvider;
-    use sail_catalog_memory::MemoryCatalogProvider;
     use sail_common::geoarrow::extension::GeoArrowWkbType;
     use sail_common::spec;
-    use sail_common_datafusion::catalog::display::DefaultCatalogDisplay;
-    use sail_common_datafusion::session::plan::PlanService;
 
-    use crate::catalog::SparkCatalogObjectDisplay;
     use crate::config::PlanConfig;
     use crate::error::PlanResult;
-    use crate::formatter::SparkPlanFormatter;
     use crate::resolver::PlanResolver;
     use crate::resolver::expression::NamedExpr;
     use crate::resolver::state::PlanResolverState;
 
     fn create_session() -> PlanResult<SessionContext> {
-        let mut state = SessionStateBuilder::new().build();
-        let catalog_manager = CatalogManager::try_new(CatalogManagerOptions {
-            catalogs: HashMap::from([(
-                "sail".to_string(),
-                Arc::new(MemoryCatalogProvider::new(
-                    "sail".to_string(),
-                    vec![Arc::from("default")].try_into()?,
-                    None,
-                )) as Arc<dyn CatalogProvider>,
-            )]),
-            default_catalog: "sail".to_string(),
-            default_database: vec!["default".to_string()],
-            global_temporary_database: vec!["global_temp".to_string()],
-        })?;
-        let plan_service = PlanService::new(
-            Box::new(DefaultCatalogDisplay::<SparkCatalogObjectDisplay>::default()),
-            Box::new(SparkPlanFormatter),
-        );
-        state.config_mut().set_extension(Arc::new(catalog_manager));
-        state.config_mut().set_extension(Arc::new(plan_service));
+        let state = SessionStateBuilder::new().build();
         Ok(SessionContext::new_with_state(state))
     }
 

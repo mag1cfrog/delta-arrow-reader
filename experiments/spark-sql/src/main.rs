@@ -9,56 +9,23 @@ use delta_arrow_reader::{
     datafusion::{DeltaTableProvider, ScanOptions, collect_scan_metrics},
 };
 use futures_util::StreamExt;
-use sail_catalog::{
-    manager::{CatalogManager, CatalogManagerOptions},
-    provider::CatalogProvider,
-};
-use sail_catalog_memory::MemoryCatalogProvider;
 use sail_common::spec;
-use sail_common_datafusion::{
-    catalog::display::DefaultCatalogDisplay, rename::physical_plan::rename_physical_plan,
-    session::plan::PlanService,
-};
+use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use sail_plan::{
-    catalog::SparkCatalogObjectDisplay,
     config::PlanConfig,
-    formatter::SparkPlanFormatter,
     resolver::{PlanResolver, plan::NamedPlan},
 };
 use serde_json::{Value, json};
-use std::{collections::HashMap, error::Error, fs, path::Path, sync::Arc};
+use std::{error::Error, fs, path::Path, sync::Arc};
 
 type ProbeResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
 fn session() -> ProbeResult<SessionContext> {
-    let mut state = SessionStateBuilder::new()
+    let state = SessionStateBuilder::new()
         .with_config(SessionConfig::new().with_target_partitions(2))
         .with_default_features()
         .build();
-    // Sail still consults this for unresolved UDF lookup. Tables use the native registry.
-    let catalog = CatalogManager::try_new(CatalogManagerOptions {
-        catalogs: HashMap::from([(
-            "sail".to_string(),
-            Arc::new(MemoryCatalogProvider::new(
-                "sail".to_string(),
-                vec![Arc::from("default")].try_into()?,
-                None,
-            )) as Arc<dyn CatalogProvider>,
-        )]),
-        default_catalog: "sail".into(),
-        default_database: vec!["default".into()],
-        global_temporary_database: vec!["global_temp".into()],
-    })?;
-    state.config_mut().set_extension(Arc::new(catalog));
-    state.config_mut().set_extension(Arc::new(PlanService::new(
-        Box::new(DefaultCatalogDisplay::<SparkCatalogObjectDisplay>::default()),
-        Box::new(SparkPlanFormatter),
-    )));
-    let ctx = SessionContext::new_with_state(state);
-    // Native DF also registers range; Spark's INT literals need Sail's implementation.
-    let range = sail_plan::function::get_built_in_table_function("range")?;
-    ctx.register_udtf("range", range.function().clone());
-    Ok(ctx)
+    Ok(SessionContext::new_with_state(state))
 }
 
 async fn resolve(ctx: &SessionContext, sql: &str, settings: &Value) -> ProbeResult<NamedPlan> {
@@ -222,6 +189,125 @@ mod tests {
     use super::*;
     use arrow::array::{Array, Int32Array, ListArray, TimestampMicrosecondArray};
     use sail_plan::error::PlanError;
+
+    #[tokio::test]
+    async fn native_session_catalogs_and_views_need_no_sail_extensions() -> ProbeResult<()> {
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        for (catalog, schema) in [("datafusion", "public"), ("warehouse", "schema.with`quote")] {
+            let ctx = SessionContext::new_with_config(
+                SessionConfig::new().with_default_catalog_and_schema(catalog, schema),
+            );
+            let view = ctx.sql("SELECT CAST(42 AS INT) AS x").await?.into_view();
+            ctx.register_table("v", view)?;
+            let named = resolve(&ctx,
+                "SELECT x, current_catalog(), current_database(), current_schema(), typeof(x) FROM v",
+                &settings).await?;
+            let batches = ctx
+                .execute_logical_plan(named.plan)
+                .await?
+                .collect()
+                .await?;
+            let row = (0..5)
+                .map(|i| array_value_to_string(batches[0].column(i).as_ref(), 0))
+                .collect::<Result<Vec<_>, _>>()?;
+            assert_eq!(row, ["42", catalog, schema, schema, "int"]);
+            assert!(
+                resolve(&ctx, "SELECT * FROM missing_table", &settings)
+                    .await
+                    .is_err()
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn native_functions_preserve_spark_precedence_and_formatting() -> ProbeResult<()> {
+        use arrow::datatypes::DataType;
+        use datafusion::logical_expr::{Volatility, create_udf};
+
+        let ctx = SessionContext::new();
+        for name in ["probe_native", "abs", "from_avro"] {
+            ctx.register_udf(create_udf(
+                name,
+                vec![DataType::Int32],
+                DataType::Int32,
+                Volatility::Immutable,
+                Arc::new(|args| Ok(args[0].clone())),
+            ));
+        }
+        let range = sail_plan::function::get_built_in_table_function("range")?;
+        ctx.register_udtf("probe_range", range.function().clone());
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        let named = resolve(
+            &ctx,
+            "SELECT probe_native(-7), ABS(-7), 1, CAST(1 AS BIGINT), typeof(1)",
+            &settings,
+        )
+        .await?;
+        assert_eq!(
+            named.fields.unwrap(),
+            [
+                "probe_native((- 7))",
+                "ABS((- 7))",
+                "1",
+                "CAST(1 AS BIGINT)",
+                "typeof(1)"
+            ]
+        );
+        let batches = ctx
+            .execute_logical_plan(named.plan)
+            .await?
+            .collect()
+            .await?;
+        let row = (0..5)
+            .map(|i| array_value_to_string(batches[0].column(i).as_ref(), 0))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(row, ["-7", "7", "1", "1", "int"]);
+        assert_eq!(batches[0].schema().field(2).data_type(), &DataType::Int32);
+        assert_eq!(batches[0].schema().field(3).data_type(), &DataType::Int64);
+        for name in ["range", "probe_range"] {
+            let named = resolve(
+                &ctx,
+                &format!("SELECT * FROM {name}(3) ORDER BY id"),
+                &settings,
+            )
+            .await?;
+            let batches = ctx
+                .execute_logical_plan(named.plan)
+                .await?
+                .collect()
+                .await?;
+            let values = batches
+                .iter()
+                .flat_map(|batch| {
+                    (0..batch.num_rows())
+                        .map(|row| array_value_to_string(batch.column(0).as_ref(), row))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            assert_eq!(values, ["0", "1", "2"]);
+        }
+        for sql in [
+            "SELECT missing_function(1)",
+            "SELECT from_avro(1)",
+            "SELECT probe_native(DISTINCT 1)",
+            "SELECT probe_native(1) FILTER (WHERE TRUE)",
+            "SELECT probe_native(1) IGNORE NULLS",
+            "SELECT * FROM missing_table_function(1)",
+        ] {
+            assert!(resolve(&ctx, sql, &settings).await.is_err(), "{sql}");
+        }
+        // Spark resolution must not change the host's native registry.
+        let native = ctx
+            .sql("SELECT abs(CAST(-7 AS INT))")
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            array_value_to_string(native[0].column(0).as_ref(), 0)?,
+            "-7"
+        );
+        Ok(())
+    }
 
     #[tokio::test]
     async fn native_sequence_and_timezone_paths_still_execute() -> ProbeResult<()> {

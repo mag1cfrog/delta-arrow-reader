@@ -68,6 +68,7 @@ cargo build --locked --manifest-path experiments/spark-sql/Cargo.toml -j 2 \
   --binary "$CARGO_TARGET_DIR/debug/delta-reader-sail-extraction-probe" \
   --run-dir target/spark-sql/extracted-run
 cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml -j 2
+cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml -p sail-plan --lib -j 2
 "$SPARK_TEST_PYTHON" -m unittest discover -s experiments/spark-sql -p 'test_*.py'
 ```
 
@@ -105,7 +106,7 @@ python3 experiments/spark-sql/inventory.py --build-messages target/spark-sql-bui
 
 ## Python UDF removal checkpoint
 
-The current frontend retains ten Sail crates. It removes sail-python-udf, sail-pyarrow, PyO3 and the linked resolver/configuration paths. Source shrank from 126,013 to 120,537 gross Rust lines, a reduction of 5,476 lines. `inventory.json` reports 610 resolved packages across all targets and 540 Linux normal/build packages. The dependency test checks the full resolved graph for Python bridge packages.
+The approved Python removal slice, committed as `4674528`, retained ten Sail crates. It removed sail-python-udf, sail-pyarrow, PyO3 and the linked resolver/configuration paths. Source shrank from 126,013 to 120,537 gross Rust lines, a reduction of 5,476 lines. That checkpoint had 610 resolved packages across all targets and 540 Linux normal/build packages. The dependency test checks the full resolved graph for Python bridge packages.
 
 The build succeeded with `PYO3_PYTHON` and `PYO3_CONFIG_FILE` set to nonexistent paths. The binary has no libpython dependency or CPython symbol imports. `extracted.py` runs it with an empty usable PATH, no LD_LIBRARY_PATH and an invalid PYO3_PYTHON, while Python/PyArrow remain outside the Rust process as fixture/capture tools.
 
@@ -113,4 +114,20 @@ All 116 observations match the committed import baseline, including schemas, row
 
 The common spec still describes Python functions so the resolver can reject those variants. It contains no Python execution implementation. Named scalar/table arguments now fail explicitly; the removed Python keyword handling had discarded names on native-function paths. Named-argument support would need parameter binding before it could be enabled safely.
 
-Missing extension planners, catalog/session coupling and the remaining Delta/lifecycle checks still need work before an adoption decision.
+## Catalog/session removal checkpoint
+
+The frontend now retains eight Sail crates and 113,834 gross Rust lines, 6,703 fewer than the Python removal checkpoint. The resolved graph has 599 packages across all targets and 529 Linux normal/build packages. No dependency versions changed. The dependency test also rejects sail-catalog and sail-catalog-memory.
+
+Named tables and derived views use DataFusion's registry. The runner no longer installs Sail catalog or PlanService extensions, and Spark's literal, type and expression-name formatting calls the existing SparkPlanFormatter directly. The removed code includes both catalog crates, catalog command/display types and the unused persistent-view resolver.
+
+The native session boundary has three explicit behaviors outside the frozen corpus:
+
+- Spark builtin scalar, aggregate and table functions take precedence over same-name native functions. Native scalar/table functions are available for names absent from Sail's corresponding registry. A known but unsupported Sail function still fails; it does not retry a native implementation. Custom aggregate/window registration is not added by this slice.
+- `current_catalog()` returns the native session's default catalog. `current_database()` and `current_schema()` return its default schema name as stored, including dots or backticks. The default session therefore reports `datafusion` and `public`, replacing the runner's unused `sail`/`default` catalog.
+- Spark resolution does not change the native function registry. A plain SessionContext can execute Spark `range(3)` without the runner replacing DataFusion's own range registration.
+
+Two new Rust tests first failed on the missing Sail catalog extension. They now cover plain/default/custom sessions, native derived views, scalar/table function lookup, name collisions, unsupported function rejection, output names/types and unchanged native SQL behavior. All five runner tests, eleven retained Sail planner tests and nine Python tests pass.
+
+All 116 observations still match the import baseline, with the same 83 successes, 18 planning errors and 15 execution errors. The 19 seeds and 18 adapter checks pass. Spark and full-Sail comparison totals remain unchanged, and the fixed inputs, queries and both checked-in baselines are untouched.
+
+Shared catalog metadata types and other datasource/session modules remain in sail-common-datafusion. Remaining storage coupling, missing extension planners and Delta/lifecycle checks still need work before an adoption decision.

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -10,9 +11,7 @@ use datafusion_functions::core::expr_ext::FieldAccessor;
 use datafusion_functions::expr_fn as datafusion_fn;
 use datafusion_functions_nested::expr_fn::{array_element, array_length, map_extract};
 use sail_common::spec::{self, DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID};
-use sail_common_datafusion::extension::SessionExtensionAccessor;
 use sail_common_datafusion::literal::LiteralEvaluator;
-use sail_common_datafusion::session::plan::PlanService;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::drop_struct_field::DropStructField;
 use sail_function::scalar::misc::raise_error::RaiseError;
@@ -20,6 +19,7 @@ use sail_function::scalar::table_input::TableInput;
 use sail_function::scalar::update_struct_field::UpdateStructField;
 
 use crate::error::{PlanError, PlanResult};
+use crate::formatter::SparkPlanFormatter;
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::state::PlanResolverState;
@@ -287,10 +287,9 @@ impl PlanResolver<'_> {
             _ => return Err(PlanError::invalid("extraction must be a literal")),
         };
         let extraction = self.resolve_literal(extraction, state)?;
-        let service = self.ctx.extension::<PlanService>()?;
-        let extraction_name = service
-            .plan_formatter()
-            .literal_to_string(&extraction, &self.config.session_timezone)?;
+
+        let extraction_name =
+            SparkPlanFormatter.literal_to_string(&extraction, &self.config.session_timezone)?;
         let name = match data_type {
             DataType::Struct(_) => {
                 format!("{}.{}", name.one()?, extraction_name)

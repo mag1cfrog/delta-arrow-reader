@@ -6,10 +6,9 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::catalog::TableFunctionArgs;
 use datafusion::datasource::{TableProvider, provider_as_source, source_as_provider};
 use datafusion_common::{DFSchema, ScalarValue, TableReference};
-use datafusion_expr::{Expr, LogicalPlan, SubqueryAlias, TableScan, TableSource, UNNAMED_TABLE};
+use datafusion_expr::{Expr, LogicalPlan, TableScan, TableSource, UNNAMED_TABLE};
 use rand::{RngExt, rng};
 use sail_common::spec;
-use sail_common_datafusion::catalog::TableColumnStatus;
 use sail_common_datafusion::datasource::{OptionLayer, SourceInfo, TableFormatRegistry};
 use sail_common_datafusion::extension::SessionExtensionAccessor;
 use sail_common_datafusion::literal::LiteralEvaluator;
@@ -85,32 +84,6 @@ impl PlanResolver<'_> {
             state,
         )
         .await
-    }
-
-    /// Resolves a persistent view by re-parsing its SQL definition into a logical plan.
-    async fn resolve_table_view(
-        &self,
-        definition: String,
-        columns: Vec<TableColumnStatus>,
-        table_reference: TableReference,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<LogicalPlan> {
-        let ast = sail_sql_analyzer::parser::parse_one_statement(&definition)?;
-        let spec_plan = sail_sql_analyzer::statement::from_ast_statement(ast)?;
-        let plan = match spec_plan {
-            spec::Plan::Query(query_plan) => self.resolve_query_plan(query_plan, state).await?,
-            _ => {
-                return Err(PlanError::invalid("view definition must be a query"));
-            }
-        };
-        let plan =
-            LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(Arc::new(plan), table_reference)?);
-        if columns.is_empty() {
-            Ok(plan)
-        } else {
-            let names = state.register_field_names(columns.iter().map(|c| &c.name));
-            Ok(rename_logical_plan(plan, &names)?)
-        }
     }
 
     /// Apply TABLESAMPLE clause to a LogicalPlan
@@ -227,9 +200,9 @@ impl PlanResolver<'_> {
             }
             let schema = Arc::new(DFSchema::empty());
             let arguments = self.resolve_expressions(arguments, &schema, state).await?;
-            let table_function = match self.ctx.table_function(&canonical_function_name) {
+            let table_function = match get_built_in_table_function(&canonical_function_name) {
                 Ok(f) => f,
-                _ => match get_built_in_table_function(&canonical_function_name) {
+                _ => match self.ctx.table_function(&canonical_function_name) {
                     Ok(f) => f,
                     _ => {
                         return Err(PlanError::unsupported(format!(

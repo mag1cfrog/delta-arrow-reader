@@ -13,6 +13,204 @@
  jiter = { version = "0.15.0", default-features = false }
  arrow = { version = "58.3.0", features = ["chrono-tz"] }
  arrow-array = { version = "58.3.0", features = ["ffi"] }
+--- a/crates/sail-common-datafusion/src/catalog/display.rs
++++ /dev/null
+@@ -1,142 +0,0 @@
+-use datafusion::arrow::array::RecordBatch;
+-use datafusion::arrow::datatypes::SchemaRef;
+-use datafusion::common::Result;
+-use serde::{Deserialize, Serialize};
+-
+-use crate::array::serde::ArrowSerializer;
+-use crate::catalog::{DatabaseStatus, FunctionStatus, TableColumnStatus, TableStatus};
+-
+-/// A trait for displaying catalog objects in a structured format.
+-/// This is useful for defining output schemas and producing outputs
+-/// for various SQL catalog commands.
+-pub trait CatalogObjectDisplay {
+-    type Catalog: Serialize + for<'de> Deserialize<'de>;
+-    type Database: Serialize + for<'de> Deserialize<'de>;
+-    type Table: Serialize + for<'de> Deserialize<'de>;
+-    type TableColumn: Serialize + for<'de> Deserialize<'de>;
+-    type Function: Serialize + for<'de> Deserialize<'de>;
+-
+-    fn catalog(name: String) -> Self::Catalog;
+-
+-    fn database(status: DatabaseStatus) -> Self::Database;
+-
+-    fn table(status: TableStatus) -> Self::Table;
+-
+-    fn table_column(status: TableColumnStatus) -> Self::TableColumn;
+-
+-    fn function(status: FunctionStatus) -> Self::Function;
+-}
+-
+-/// A trait for providing output display for catalog command.
+-/// Different from [`CatalogObjectDisplay`], this trait provides
+-/// a higher-level abstraction and is dyn-compatible, so that
+-/// an implementation can be stored in the session context
+-/// as a trait object.
+-pub trait CatalogDisplay: Send + Sync {
+-    fn empty(&self) -> Box<dyn OutputDisplay<()>>;
+-    fn bools(&self) -> Box<dyn OutputDisplay<bool>>;
+-    fn strings(&self) -> Box<dyn OutputDisplay<String>>;
+-    fn catalogs(&self) -> Box<dyn OutputDisplay<String>>;
+-    fn tables(&self) -> Box<dyn OutputDisplay<TableStatus>>;
+-    fn databases(&self) -> Box<dyn OutputDisplay<DatabaseStatus>>;
+-    fn table_columns(&self) -> Box<dyn OutputDisplay<TableColumnStatus>>;
+-    fn functions(&self) -> Box<dyn OutputDisplay<FunctionStatus>>;
+-}
+-
+-pub trait OutputDisplay<T> {
+-    fn schema(&self) -> Result<SchemaRef>;
+-    fn to_record_batch(&self, values: Vec<T>) -> Result<RecordBatch>;
+-}
+-
+-struct MappedOutputDisplay<T, U, F> {
+-    phantom: std::marker::PhantomData<(T, U)>,
+-    mapper: F,
+-    serializer: ArrowSerializer,
+-}
+-
+-impl<T, U, F> MappedOutputDisplay<T, U, F> {
+-    fn new(mapper: F) -> Self {
+-        Self {
+-            phantom: std::marker::PhantomData,
+-            mapper,
+-            serializer: ArrowSerializer::default(),
+-        }
+-    }
+-}
+-
+-impl<T, U, F> OutputDisplay<T> for MappedOutputDisplay<T, U, F>
+-where
+-    U: Serialize + for<'de> Deserialize<'de>,
+-    F: Fn(T) -> U,
+-{
+-    fn schema(&self) -> Result<SchemaRef> {
+-        self.serializer.schema::<U>()
+-    }
+-
+-    fn to_record_batch(&self, items: Vec<T>) -> Result<RecordBatch> {
+-        let items = items.into_iter().map(&self.mapper).collect::<Vec<_>>();
+-        self.serializer.build_record_batch(&items)
+-    }
+-}
+-
+-#[derive(Default)]
+-pub struct DefaultCatalogDisplay<D> {
+-    phantom: std::marker::PhantomData<D>,
+-}
+-
+-impl<D> CatalogDisplay for DefaultCatalogDisplay<D>
+-where
+-    D: CatalogObjectDisplay + Send + Sync + 'static,
+-{
+-    fn empty(&self) -> Box<dyn OutputDisplay<()>> {
+-        Box::new(<MappedOutputDisplay<(), _, _>>::new(|()| EmptyOutput {}))
+-    }
+-
+-    fn bools(&self) -> Box<dyn OutputDisplay<bool>> {
+-        Box::new(MappedOutputDisplay::<bool, _, _>::new(|value| {
+-            SingleValueOutput { value }
+-        }))
+-    }
+-
+-    fn strings(&self) -> Box<dyn OutputDisplay<String>> {
+-        Box::new(MappedOutputDisplay::<String, _, _>::new(|value| {
+-            SingleValueOutput { value }
+-        }))
+-    }
+-
+-    fn catalogs(&self) -> Box<dyn OutputDisplay<String>> {
+-        Box::new(<MappedOutputDisplay<String, D::Catalog, _>>::new(
+-            D::catalog,
+-        ))
+-    }
+-
+-    fn tables(&self) -> Box<dyn OutputDisplay<TableStatus>> {
+-        Box::new(<MappedOutputDisplay<TableStatus, D::Table, _>>::new(
+-            D::table,
+-        ))
+-    }
+-
+-    fn databases(&self) -> Box<dyn OutputDisplay<DatabaseStatus>> {
+-        Box::new(<MappedOutputDisplay<DatabaseStatus, D::Database, _>>::new(
+-            D::database,
+-        ))
+-    }
+-
+-    fn table_columns(&self) -> Box<dyn OutputDisplay<TableColumnStatus>> {
+-        Box::new(<MappedOutputDisplay<TableColumnStatus, D::TableColumn, _>>::new(D::table_column))
+-    }
+-
+-    fn functions(&self) -> Box<dyn OutputDisplay<FunctionStatus>> {
+-        Box::new(<MappedOutputDisplay<FunctionStatus, D::Function, _>>::new(
+-            D::function,
+-        ))
+-    }
+-}
+-
+-#[derive(Serialize, Deserialize)]
+-pub struct EmptyOutput {}
+-
+-#[derive(Serialize, Deserialize)]
+-pub struct SingleValueOutput<T> {
+-    pub value: T,
+-}
+--- a/crates/sail-common-datafusion/src/catalog/mod.rs
++++ b/crates/sail-common-datafusion/src/catalog/mod.rs
+@@ -1,5 +1,5 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ pub mod delta;
+-pub mod display;
+ pub mod iceberg;
+ pub mod lakehouse;
+ pub mod managed;
+--- a/crates/sail-common-datafusion/src/catalog/status.rs
++++ b/crates/sail-common-datafusion/src/catalog/status.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::datatypes::{DataType, Field, Fields};
+@@ -9,7 +10,6 @@
+     CatalogPartitionField, CatalogTableBucketBy, CatalogTableConstraint, CatalogTableSort,
+ };
+ use crate::column_features::ColumnFeaturesBuilder;
+-use crate::session::plan::PlanFormatter;
+ 
+ /// Metadata key used by Spark Connect's column protocol for generation
+ /// expressions. This is an input/output boundary value translated to the
+@@ -295,28 +295,6 @@
+         }
+ 
+         rows
+-    }
+-
+-    pub fn show_table_extended_information(&self, formatter: &dyn PlanFormatter) -> Result<String> {
+-        let mut output = String::new();
+-
+-        for (key, value) in self.describe_extended_metadata() {
+-            output.push_str(&format!("{key}: {value}\n"));
+-        }
+-
+-        output.push_str("Schema: root\n");
+-        for column in self.kind.columns() {
+-            let data_type = formatter
+-                .data_type_to_simple_string(&column.data_type)
+-                .unwrap_or_else(|_| "invalid".to_string());
+-            let nullable = if column.nullable { "true" } else { "false" };
+-            output.push_str(&format!(
+-                " |-- {}: {} (nullable = {})\n",
+-                column.name, data_type, nullable
+-            ));
+-        }
+-
+-        Ok(output)
+     }
+ }
+ 
 --- a/crates/sail-common-datafusion/src/error.rs
 +++ b/crates/sail-common-datafusion/src/error.rs
 @@ -1,3 +1,4 @@
@@ -28,6 +226,73 @@
                  DataFusionError::Configuration(x) => Self::Configuration(x.clone()),
                  DataFusionError::SchemaError(e, _) => Self::Schema(e.to_string()),
                  DataFusionError::Execution(x) => Self::Execution(x.clone()),
+--- a/crates/sail-common-datafusion/src/session/mod.rs
++++ b/crates/sail-common-datafusion/src/session/mod.rs
+@@ -1,4 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ pub mod activity;
+ pub mod job;
+-pub mod plan;
+ pub mod repartition;
+--- a/crates/sail-common-datafusion/src/session/plan.rs
++++ /dev/null
+@@ -1,56 +0,0 @@
+-use std::fmt::Debug;
+-
+-use datafusion::arrow::datatypes::DataType;
+-use datafusion_common::{Result, ScalarValue};
+-use sail_common::utils::object::DynObject;
+-
+-use crate::catalog::display::CatalogDisplay;
+-use crate::extension::SessionExtension;
+-
+-/// A utility to format various data structures in the query plan.
+-pub trait PlanFormatter: DynObject + Debug + Send + Sync {
+-    /// Returns a human-readable simple string for the data type.
+-    fn data_type_to_simple_string(&self, data_type: &DataType) -> Result<String>;
+-
+-    /// Returns a human-readable string for the literal.
+-    fn literal_to_string(&self, literal: &ScalarValue, display_timezone: &str) -> Result<String>;
+-
+-    /// Returns a human-readable string for the function call.
+-    fn function_to_string(
+-        &self,
+-        name: &str,
+-        arguments: Vec<&str>,
+-        is_distinct: bool,
+-    ) -> Result<String>;
+-}
+-
+-pub struct PlanService {
+-    catalog_display: Box<dyn CatalogDisplay>,
+-    plan_formatter: Box<dyn PlanFormatter>,
+-}
+-
+-impl PlanService {
+-    pub fn new(
+-        catalog_display: Box<dyn CatalogDisplay>,
+-        plan_formatter: Box<dyn PlanFormatter>,
+-    ) -> Self {
+-        Self {
+-            catalog_display,
+-            plan_formatter,
+-        }
+-    }
+-
+-    pub fn catalog_display(&self) -> &dyn CatalogDisplay {
+-        self.catalog_display.as_ref()
+-    }
+-
+-    pub fn plan_formatter(&self) -> &dyn PlanFormatter {
+-        self.plan_formatter.as_ref()
+-    }
+-}
+-
+-impl SessionExtension for PlanService {
+-    fn name() -> &'static str {
+-        "PlanService"
+-    }
+-}
 --- a/crates/sail-plan/Cargo.toml
 +++ b/crates/sail-plan/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -35,14 +300,14 @@
  [package]
  name = "sail-plan"
  version = { workspace = true }
-@@ -9,15 +10,11 @@
+@@ -9,15 +10,9 @@
  [dependencies]
  sail-common = { path = "../sail-common" }
  sail-common-datafusion = { path = "../sail-common-datafusion" }
 -sail-python-udf = { path = "../sail-python-udf" }
  sail-sql-analyzer = { path = "../sail-sql-analyzer" }
- sail-catalog = { path = "../sail-catalog" }
- sail-catalog-memory = { path = "../sail-catalog-memory" }
+-sail-catalog = { path = "../sail-catalog" }
+-sail-catalog-memory = { path = "../sail-catalog-memory" }
  sail-function = { path = "../sail-function" }
  sail-logical-plan = { path = "../sail-logical-plan" }
 -sail-physical-plan = { path = "../sail-physical-plan" }
@@ -51,7 +316,7 @@
  
  datafusion = { workspace = true }
  datafusion-common = { workspace = true }
-@@ -37,6 +34,7 @@
+@@ -37,6 +32,7 @@
  ryu = { workspace = true }
  either = { workspace = true }
  tokio = { workspace = true }
@@ -59,6 +324,202 @@
  rand = { workspace = true }
  uuid = { workspace = true }
  object_store = { workspace = true }
+--- a/crates/sail-plan/src/catalog.rs
++++ /dev/null
+@@ -1,193 +0,0 @@
+-use std::fmt::Formatter;
+-
+-use datafusion::common::{DFSchemaRef, Result};
+-use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
+-use datafusion::prelude::SessionContext;
+-use datafusion_common::{DFSchema, internal_datafusion_err};
+-use educe::Educe;
+-use sail_catalog::command::CatalogCommand;
+-use sail_catalog::utils::quote_names_if_needed;
+-use sail_common_datafusion::catalog::display::CatalogObjectDisplay;
+-use sail_common_datafusion::catalog::{
+-    DatabaseStatus, FunctionStatus, TableColumnStatus, TableStatus,
+-};
+-use sail_common_datafusion::session::plan::PlanFormatter;
+-use sail_common_datafusion::utils::items::ItemTaker;
+-
+-use crate::formatter::SparkPlanFormatter;
+-
+-#[derive(Clone, Debug, PartialEq, Eq, Hash, Educe)]
+-#[educe(PartialOrd)]
+-pub struct CatalogCommandNode {
+-    name: String,
+-    #[educe(PartialOrd(ignore))]
+-    schema: DFSchemaRef,
+-    command: CatalogCommand,
+-}
+-
+-impl CatalogCommandNode {
+-    pub(crate) fn try_new(ctx: &SessionContext, command: CatalogCommand) -> Result<Self> {
+-        let schema = command
+-            .schema(ctx)
+-            .map_err(|e| internal_datafusion_err!("{e}"))?;
+-        Ok(Self {
+-            name: format!("CatalogCommand: {}", command.name()),
+-            schema: DFSchemaRef::new(DFSchema::try_from(schema)?),
+-            command,
+-        })
+-    }
+-
+-    pub fn command(&self) -> &CatalogCommand {
+-        &self.command
+-    }
+-}
+-
+-impl UserDefinedLogicalNodeCore for CatalogCommandNode {
+-    fn name(&self) -> &str {
+-        &self.name
+-    }
+-
+-    fn inputs(&self) -> Vec<&LogicalPlan> {
+-        vec![]
+-    }
+-
+-    fn schema(&self) -> &DFSchemaRef {
+-        &self.schema
+-    }
+-
+-    fn expressions(&self) -> Vec<Expr> {
+-        vec![]
+-    }
+-
+-    fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
+-        write!(f, "{}", self.name)
+-    }
+-
+-    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+-        exprs.zero()?;
+-        inputs.zero()?;
+-        Ok(self.clone())
+-    }
+-}
+-
+-mod display {
+-    use serde::{Deserialize, Serialize};
+-
+-    #[derive(Debug, Clone, Serialize, Deserialize)]
+-    pub struct SparkCatalog {
+-        #[serde(rename = "catalog")]
+-        pub name: String,
+-        pub description: Option<String>,
+-    }
+-
+-    #[derive(Debug, Clone, Serialize, Deserialize)]
+-    #[serde(rename_all = "camelCase")]
+-    pub struct SparkDatabase {
+-        pub name: String,
+-        pub catalog: Option<String>,
+-        pub description: Option<String>,
+-        pub location_uri: Option<String>,
+-    }
+-
+-    #[derive(Debug, Clone, Serialize, Deserialize)]
+-    #[serde(rename_all = "camelCase")]
+-    pub struct SparkTable {
+-        #[serde(rename = "tableName")]
+-        pub name: String,
+-        pub catalog: Option<String>,
+-        pub namespace: Vec<String>,
+-        pub description: Option<String>,
+-        pub table_type: String,
+-        pub is_temporary: bool,
+-    }
+-
+-    #[derive(Debug, Clone, Serialize, Deserialize)]
+-    #[serde(rename_all = "camelCase")]
+-    pub struct SparkTableColumn {
+-        pub name: String,
+-        pub description: Option<String>,
+-        pub data_type: String,
+-        pub nullable: bool,
+-        pub is_partition: bool,
+-        pub is_bucket: bool,
+-        pub is_cluster: bool, // new in Spark 4.0
+-    }
+-
+-    #[derive(Debug, Clone, Serialize, Deserialize)]
+-    #[serde(rename_all = "camelCase")]
+-    pub struct SparkFunction {
+-        pub name: String,
+-        pub catalog: Option<String>,
+-        pub namespace: Option<Vec<String>>,
+-        pub description: Option<String>,
+-        pub class_name: String,
+-        pub is_temporary: bool,
+-    }
+-}
+-
+-#[derive(Default)]
+-pub struct SparkCatalogObjectDisplay;
+-
+-impl CatalogObjectDisplay for SparkCatalogObjectDisplay {
+-    type Catalog = display::SparkCatalog;
+-    type Database = display::SparkDatabase;
+-    type Table = display::SparkTable;
+-    type TableColumn = display::SparkTableColumn;
+-    type Function = display::SparkFunction;
+-
+-    fn catalog(name: String) -> Self::Catalog {
+-        Self::Catalog {
+-            name,
+-            description: None, // Spark code sets all descriptions to None
+-        }
+-    }
+-
+-    fn database(status: DatabaseStatus) -> Self::Database {
+-        Self::Database {
+-            name: quote_names_if_needed(&status.database),
+-            catalog: Some(status.catalog),
+-            description: status.comment,
+-            location_uri: status.location,
+-        }
+-    }
+-
+-    fn table(status: TableStatus) -> Self::Table {
+-        let table_type = status.kind.type_name().to_string();
+-        let is_temporary = status.kind.is_temporary();
+-        Self::Table {
+-            name: status.name,
+-            catalog: status.catalog,
+-            namespace: status.database,
+-            description: status.kind.comment(),
+-            table_type,
+-            is_temporary,
+-        }
+-    }
+-
+-    fn table_column(status: TableColumnStatus) -> Self::TableColumn {
+-        let data_type = SparkPlanFormatter
+-            .data_type_to_simple_string(&status.data_type)
+-            .unwrap_or("invalid".to_string());
+-        Self::TableColumn {
+-            name: status.name,
+-            description: status.comment,
+-            data_type,
+-            nullable: status.nullable,
+-            is_partition: status.is_partition,
+-            is_bucket: status.is_bucket,
+-            is_cluster: status.is_cluster,
+-        }
+-    }
+-
+-    fn function(status: FunctionStatus) -> Self::Function {
+-        let description = status.list_description();
+-        Self::Function {
+-            name: status.name,
+-            catalog: status.catalog,
+-            namespace: status.namespace,
+-            description,
+-            class_name: status.class_name,
+-            is_temporary: status.is_temporary,
+-        }
+-    }
+-}
 --- a/crates/sail-plan/src/config.rs
 +++ b/crates/sail-plan/src/config.rs
 @@ -1,8 +1,7 @@
@@ -121,17 +582,52 @@
      }
 --- a/crates/sail-plan/src/error.rs
 +++ b/crates/sail-plan/src/error.rs
-@@ -1,8 +1,8 @@
+@@ -1,8 +1,7 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use datafusion::arrow::error::ArrowError;
  use datafusion::common::DataFusionError;
- use sail_catalog::error::CatalogError;
+-use sail_catalog::error::CatalogError;
  use sail_common::error::CommonError;
 -use sail_python_udf::error::PyUdfError;
  use sail_sql_analyzer::error::SqlError;
  use thiserror::Error;
  
-@@ -125,17 +125,3 @@
+@@ -84,34 +83,6 @@
+     }
+ }
+ 
+-impl From<CatalogError> for PlanError {
+-    fn from(error: CatalogError) -> Self {
+-        match error {
+-            CatalogError::DataFusionError(e) => PlanError::DataFusionError(e),
+-            CatalogError::InvalidArgument(message) => PlanError::InvalidArgument(message),
+-            e @ CatalogError::NotFound(_, _) => PlanError::AnalysisError(e.to_string()),
+-            e @ CatalogError::AlreadyExists(_, _) => PlanError::AnalysisError(e.to_string()),
+-            CatalogError::Conflict(message) => PlanError::AnalysisError(message),
+-            CatalogError::NotSupported(message) => PlanError::NotSupported(message),
+-            CatalogError::UnsupportedCapability(message) => PlanError::NotSupported(message),
+-            CatalogError::Unauthorized(message)
+-            | CatalogError::Forbidden(message)
+-            | CatalogError::AuthExpired(message)
+-            | CatalogError::RateLimited(message)
+-            | CatalogError::ResourceExhausted(message)
+-            | CatalogError::ReadOnly(message)
+-            | CatalogError::StaleMetadata(message)
+-            | CatalogError::CommitStateUnknown(message)
+-            | CatalogError::CredentialUnavailable(message)
+-            | CatalogError::ConversionLag(message)
+-            | CatalogError::ConversionFailed(message)
+-            | CatalogError::RemoteProtocol(message) => PlanError::AnalysisError(message),
+-            CatalogError::Internal(message) => PlanError::InternalError(message),
+-            CatalogError::External(message) => PlanError::AnalysisError(message),
+-        }
+-    }
+-}
+-
+ impl From<SqlError> for PlanError {
+     fn from(value: SqlError) -> Self {
+         match value {
+@@ -125,17 +96,3 @@
          }
      }
  }
@@ -669,6 +1165,56 @@
 -        stringified_plans: collected.stringified,
 -    })
 -}
+--- a/crates/sail-plan/src/formatter.rs
++++ b/crates/sail-plan/src/formatter.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::fmt::{Debug, Display, Formatter};
+ use std::hash::Hash;
+ 
+@@ -14,7 +15,6 @@
+     TimestampMicrosecondFormatter, TimestampMillisecondFormatter, TimestampNanosecondFormatter,
+     TimestampSecondFormatter,
+ };
+-use sail_common_datafusion::session::plan::PlanFormatter;
+ use sail_common_datafusion::utils::items::ItemTaker;
+ 
+ #[derive(Debug, PartialEq, Eq, Hash, PartialOrd)]
+@@ -29,10 +29,8 @@
+             TimeUnit::Nanosecond => "nanosecond",
+         }
+     }
+-}
+-
+-impl PlanFormatter for SparkPlanFormatter {
+-    fn data_type_to_simple_string(&self, data_type: &DataType) -> Result<String> {
++
++    pub fn data_type_to_simple_string(&self, data_type: &DataType) -> Result<String> {
+         match data_type {
+             DataType::Null => Ok("void".to_string()),
+             DataType::Binary
+@@ -130,7 +128,11 @@
+         }
+     }
+ 
+-    fn literal_to_string(&self, literal: &ScalarValue, display_timezone: &str) -> Result<String> {
++    pub fn literal_to_string(
++        &self,
++        literal: &ScalarValue,
++        display_timezone: &str,
++    ) -> Result<String> {
+         let literal_list_to_string = |name: &str, values: Option<&dyn Array>| -> Result<String> {
+             let Some(values) = values else {
+                 return Ok("NULL".to_string());
+@@ -428,7 +430,7 @@
+         }
+     }
+ 
+-    fn function_to_string(
++    pub fn function_to_string(
+         &self,
+         name: &str,
+         arguments: Vec<&str>,
 --- a/crates/sail-plan/src/function/common.rs
 +++ b/crates/sail-plan/src/function/common.rs
 @@ -1,3 +1,4 @@
@@ -786,6 +1332,83 @@
 +                    expr_contains_spark_cast_to_variant(argument)
                  }
              })?;
+ 
+--- a/crates/sail-plan/src/function/scalar/misc.rs
++++ b/crates/sail-plan/src/function/scalar/misc.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use arrow::datatypes::DataType;
+@@ -5,10 +6,6 @@
+ use datafusion_common::ScalarValue;
+ use datafusion_expr::{ExprSchemable, Operator, ScalarUDF, cast, expr, lit, when};
+ use datafusion_spark::function::bitmap::expr_fn as bitmap_fn;
+-use sail_catalog::manager::CatalogManager;
+-use sail_catalog::utils::quote_namespace_if_needed;
+-use sail_common_datafusion::extension::SessionExtensionAccessor;
+-use sail_common_datafusion::session::plan::PlanService;
+ use sail_common_datafusion::utils::items::ItemTaker;
+ use sail_function::scalar::misc::hll_sketch::{HllSketchEstimateFunction, HllUnionFunction};
+ use sail_function::scalar::misc::monotonically_increasing_id::SparkMonotonicallyIncreasingId;
+@@ -25,6 +22,7 @@
+ use sail_function::sketch::DEFAULT_THETA_LG_NOM_ENTRIES;
+ 
+ use crate::error::{PlanError, PlanResult};
++use crate::formatter::SparkPlanFormatter;
+ use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+ 
+ fn assert_true(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+@@ -63,22 +61,28 @@
+ 
+ fn current_catalog(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+     input.arguments.zero()?;
+-    let catalog_manager = input
++    Ok(lit(input
+         .function_context
+         .session_context
+-        .extension::<CatalogManager>()?;
+-    Ok(lit(catalog_manager.default_catalog()?.to_string()))
++        .state()
++        .config()
++        .options()
++        .catalog
++        .default_catalog
++        .clone()))
+ }
+ 
+ fn current_database(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+     input.arguments.zero()?;
+-    let catalog_manager = input
++    Ok(lit(input
+         .function_context
+         .session_context
+-        .extension::<CatalogManager>()?;
+-    Ok(lit(quote_namespace_if_needed(
+-        &catalog_manager.default_database()?,
+-    )))
++        .state()
++        .config()
++        .options()
++        .catalog
++        .default_schema
++        .clone()))
+ }
+ 
+ fn current_user(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+@@ -97,12 +101,7 @@
+     } = input;
+     let expr = arguments.one()?;
+     let data_type = expr.get_type(function_context.schema)?;
+-    let service = function_context
+-        .session_context
+-        .extension::<PlanService>()?;
+-    let type_of = service
+-        .plan_formatter()
+-        .data_type_to_simple_string(&data_type)?;
++    let type_of = SparkPlanFormatter.data_type_to_simple_string(&data_type)?;
+     Ok(lit(type_of))
+ }
  
 --- a/crates/sail-plan/src/function/table/mod.rs
 +++ b/crates/sail-plan/src/function/table/mod.rs
@@ -969,7 +1592,7 @@
 +}
 --- a/crates/sail-plan/src/lib.rs
 +++ b/crates/sail-plan/src/lib.rs
-@@ -1,66 +1,8 @@
+@@ -1,66 +1,7 @@
 -use std::sync::Arc;
 -
 -use datafusion::dataframe::DataFrame;
@@ -987,8 +1610,8 @@
 -use crate::resolver::plan::NamedPlan;
 -use crate::streaming::rewriter::{is_streaming_plan, rewrite_streaming_plan};
 -
+-pub mod catalog;
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- pub mod catalog;
  pub mod config;
  pub mod error;
 -pub mod explain;
@@ -7941,22 +8564,75 @@
 -        Ok(Constraints::new_unverified(constraints))
 -    }
 -}
+--- a/crates/sail-plan/src/resolver/expression/cast.rs
++++ b/crates/sail-plan/src/resolver/expression/cast.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::ops::{Div, Mul};
+ use std::sync::Arc;
+ 
+@@ -6,8 +7,6 @@
+ use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
+ use sail_common::spec;
+ use sail_common::utils::datetime::time_unit_to_multiplier;
+-use sail_common_datafusion::extension::SessionExtensionAccessor;
+-use sail_common_datafusion::session::plan::PlanService;
+ use sail_common_datafusion::utils::items::ItemTaker;
+ use sail_common_datafusion::variant::is_variant_storage_field;
+ use sail_function::scalar::datetime::convert_tz::ConvertTz;
+@@ -24,6 +23,7 @@
+ use sail_function::scalar::variant::spark_variant_to_json::SparkVariantToJsonUdf;
+ 
+ use crate::error::{PlanError, PlanResult};
++use crate::formatter::SparkPlanFormatter;
+ use crate::function::is_spark_compatible_arrow_fixed_offset;
+ use crate::resolver::PlanResolver;
+ use crate::resolver::expression::NamedExpr;
+@@ -74,10 +74,7 @@
+         let expr_type = expr_field.data_type().clone();
+         let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
+         let name = if need_rename_cast(&expr) {
+-            let service = self.ctx.extension::<PlanService>()?;
+-            let data_type_string = service
+-                .plan_formatter()
+-                .data_type_to_simple_string(&cast_to_type)?;
++            let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&cast_to_type)?;
+             vec![format!(
+                 "{}CAST({} AS {})",
+                 if is_try { "TRY_" } else { "" },
+@@ -139,8 +136,7 @@
+                 ScalarUDF::new_from_impl(SparkVariantToJsonUdf::new()).call(vec![expr])
+             }
+             (_, to, is_try) if expr_is_variant => {
+-                let service = self.ctx.extension::<PlanService>()?;
+-                let data_type_string = service.plan_formatter().data_type_to_simple_string(&to)?;
++                let data_type_string = SparkPlanFormatter.data_type_to_simple_string(&to)?;
+                 ScalarUDF::new_from_impl(SparkVariantGet::new(is_try)).call(vec![
+                     expr,
+                     lit("$"),
 --- a/crates/sail-plan/src/resolver/expression/function.rs
 +++ b/crates/sail-plan/src/resolver/expression/function.rs
-@@ -1,3 +1,4 @@
+@@ -1,16 +1,15 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use datafusion_common::DFSchemaRef;
  use datafusion_expr::expr::ScalarFunction;
++use datafusion_expr::registry::FunctionRegistry;
  use datafusion_expr::utils::{expand_qualified_wildcard, expand_wildcard};
-@@ -8,7 +9,6 @@
- use sail_common_datafusion::session::plan::PlanService;
+ use datafusion_expr::{EmptyRelation, Expr, LogicalPlan, expr};
+-use sail_catalog::manager::CatalogManager;
+ use sail_common::spec;
+-use sail_common_datafusion::extension::SessionExtensionAccessor;
+-use sail_common_datafusion::session::plan::PlanService;
  use sail_common_datafusion::utils::items::ItemTaker;
  use sail_function::scalar::multi_expr::MultiExpr;
 -use sail_python_udf::udf::pyspark_unresolved_udf::PySparkUnresolvedUDF;
  
  use crate::error::{PlanError, PlanResult};
++use crate::formatter::SparkPlanFormatter;
  use crate::function::common::{AggFunctionInput, FunctionContextInput, ScalarFunctionInput};
-@@ -18,7 +18,6 @@
+ use crate::function::{
+     get_built_in_aggregate_function, get_built_in_function, is_higher_order_function,
+@@ -18,7 +17,6 @@
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
  use crate::resolver::expression::lambda::is_spec_lambda_argument;
@@ -7964,7 +8640,7 @@
  use crate::resolver::state::PlanResolverState;
  
  impl PlanResolver<'_> {
-@@ -45,40 +44,16 @@
+@@ -45,40 +43,15 @@
          let Ok(function_name) = <Vec<String>>::from(function_name).one() else {
              return Err(PlanError::unsupported("qualified function name"));
          };
@@ -8000,7 +8676,7 @@
          }
  
          let canonical_function_name = function_name.to_ascii_lowercase();
-         let catalog_manager = self.ctx.extension::<CatalogManager>()?;
+-        let catalog_manager = self.ctx.extension::<CatalogManager>()?;
 -        if let Some(udf) = catalog_manager.get_function(&canonical_function_name)?
 -            && udf.inner().is::<PySparkUnresolvedUDF>()
 -        {
@@ -8010,10 +8686,17 @@
          // For functions that accept a date-part keyword as the first argument
          // (e.g., DATEDIFF(DAY, start, end)), convert the unresolved attribute
          // to a string literal before resolution.
-@@ -118,40 +93,10 @@
-                 if ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
-                     return Err(PlanError::invalid("invalid scalar function clause"));
-                 }
+@@ -111,130 +84,80 @@
+ 
+         let has_lambda_argument = arguments.iter().any(|x| matches!(x, expr::Expr::Lambda(_)));
+ 
+-        // FIXME: `is_user_defined_function` is always false,
+-        //   so we need to check UDFs before built-in functions.
+-        let func = match catalog_manager.get_function(&canonical_function_name)? {
+-            Some(udf) => {
+-                if ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
+-                    return Err(PlanError::invalid("invalid scalar function clause"));
+-                }
 -                if let Some(f) = udf.inner().downcast_ref::<PySparkUnresolvedUDF>() {
 -                    if f.eval_type().is_table_function() {
 -                        return Err(PlanError::AnalysisError(format!(
@@ -8046,15 +8729,251 @@
 -                    expr::Expr::ScalarFunction(ScalarFunction {
 -                        func: std::sync::Arc::new(udf),
 -                        args: arguments,
--                    })
++        // The native registry also contains DataFusion builtins. Keep Spark's
++        // implementations (and explicit unsupported entries) authoritative.
++        let func = if let Ok(func) = get_built_in_function(&canonical_function_name) {
++            if ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
++                return Err(PlanError::invalid("invalid scalar function clause"));
++            }
++            let input = ScalarFunctionInput {
++                arguments,
++                function_context: FunctionContextInput {
++                    argument_display_names: &argument_display_names,
++                    plan_config: &self.config,
++                    session_context: self.ctx,
++                    schema,
++                },
++            };
++            func(input)?
++        } else if let Ok(func) = get_built_in_aggregate_function(&canonical_function_name) {
++            let filter = match filter {
++                Some(x) => Some(Box::new(self.resolve_expression(*x, schema, state).await?)),
++                None => None,
++            };
++            let order_by = match order_by {
++                Some(x) => self.resolve_sort_orders(x, true, schema, state).await?,
++                None => vec![],
++            };
++            // For DISTINCT aggregate functions with a wildcard argument (e.g., COUNT(DISTINCT *)),
++            // expand the wildcard to visible column references here in the resolver where we have
++            // access to `state` for hidden-column filtering. This ensures hidden columns (e.g.,
++            // join keys) are excluded from the distinct count.
++            #[expect(deprecated)]
++            let arguments = if is_distinct
++                && matches!(
++                    arguments.as_slice(),
++                    [expr::Expr::Wildcard {
++                        qualifier: None,
++                        options: _
++                    }]
++                ) {
++                schema
++                    .columns()
++                    .into_iter()
++                    .filter(|c| {
++                        state
++                            .get_field_info(&c.name)
++                            .is_ok_and(|info| !info.is_hidden())
+                     })
 -                }
-+                expr::Expr::ScalarFunction(ScalarFunction {
-+                    func: std::sync::Arc::new(udf),
-+                    args: arguments,
-+                })
++                    .map(expr::Expr::Column)
++                    .collect()
++            } else {
++                arguments
++            };
++            let input = AggFunctionInput {
++                arguments,
++                distinct: is_distinct,
++                ignore_nulls,
++                filter,
++                order_by,
++                function_context: FunctionContextInput {
++                    argument_display_names: &argument_display_names,
++                    plan_config: &self.config,
++                    session_context: self.ctx,
++                    schema,
++                },
++            };
++            func(input)?
++        } else if let Ok(udf) = self.ctx.udf(&canonical_function_name) {
++            if is_distinct || ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
++                return Err(PlanError::invalid("invalid scalar function clause"));
              }
-             _ => {
-                 match get_built_in_function(&canonical_function_name) {
+-            _ => {
+-                match get_built_in_function(&canonical_function_name) {
+-                    Ok(func) => {
+-                        if ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
+-                            return Err(PlanError::invalid("invalid scalar function clause"));
+-                        }
+-                        let input = ScalarFunctionInput {
+-                            arguments,
+-                            function_context: FunctionContextInput {
+-                                argument_display_names: &argument_display_names,
+-                                plan_config: &self.config,
+-                                session_context: self.ctx,
+-                                schema,
+-                            },
+-                        };
+-                        func(input)?
+-                    }
+-                    _ => {
+-                        match get_built_in_aggregate_function(&canonical_function_name) {
+-                            Ok(func) => {
+-                                let filter = match filter {
+-                                    Some(x) => Some(Box::new(
+-                                        self.resolve_expression(*x, schema, state).await?,
+-                                    )),
+-                                    None => None,
+-                                };
+-                                let order_by = match order_by {
+-                                    Some(x) => {
+-                                        self.resolve_sort_orders(x, true, schema, state).await?
+-                                    }
+-                                    None => vec![],
+-                                };
+-                                // For DISTINCT aggregate functions with a wildcard argument (e.g., COUNT(DISTINCT *)),
+-                                // expand the wildcard to visible column references here in the resolver where we have
+-                                // access to `state` for hidden-column filtering. This ensures hidden columns (e.g.,
+-                                // join keys) are excluded from the distinct count.
+-                                #[expect(deprecated)]
+-                                let arguments = if is_distinct
+-                                    && matches!(
+-                                        arguments.as_slice(),
+-                                        [expr::Expr::Wildcard {
+-                                            qualifier: None,
+-                                            options: _
+-                                        }]
+-                                    ) {
+-                                    schema
+-                                        .columns()
+-                                        .into_iter()
+-                                        .filter(|c| {
+-                                            state
+-                                                .get_field_info(&c.name)
+-                                                .is_ok_and(|info| !info.is_hidden())
+-                                        })
+-                                        .map(expr::Expr::Column)
+-                                        .collect()
+-                                } else {
+-                                    arguments
+-                                };
+-                                let input = AggFunctionInput {
+-                                    arguments,
+-                                    distinct: is_distinct,
+-                                    ignore_nulls,
+-                                    filter,
+-                                    order_by,
+-                                    function_context: FunctionContextInput {
+-                                        argument_display_names: &argument_display_names,
+-                                        plan_config: &self.config,
+-                                        session_context: self.ctx,
+-                                        schema,
+-                                    },
+-                                };
+-                                func(input)?
+-                            }
+-                            _ => {
+-                                return Err(PlanError::unsupported(format!(
+-                                    "unknown function: {function_name}",
+-                                )));
+-                            }
+-                        }
+-                    }
+-                }
+-            }
++            udf.call(arguments)
++        } else {
++            return Err(PlanError::unsupported(format!(
++                "unknown function: {function_name}",
++            )));
+         };
+ 
+         // DataFusion lambda variables carry no type until resolved against the schema.
+@@ -268,8 +191,8 @@
+             } else {
+                 argument_display_names
+             };
+-        let service = self.ctx.extension::<PlanService>()?;
+-        let name = service.plan_formatter().function_to_string(
++
++        let name = SparkPlanFormatter.function_to_string(
+             &function_name,
+             argument_display_names.iter().map(|x| x.as_str()).collect(),
+             is_distinct,
+--- a/crates/sail-plan/src/resolver/expression/literal.rs
++++ b/crates/sail-plan/src/resolver/expression/literal.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::str::FromStr;
+ 
+ use arrow::array::timezone::Tz;
+@@ -5,13 +6,12 @@
+ use chrono::{NaiveTime, Timelike};
+ use datafusion_expr::expr;
+ use sail_common::spec;
+-use sail_common_datafusion::extension::SessionExtensionAccessor;
+-use sail_common_datafusion::session::plan::PlanService;
+ use sail_common_datafusion::utils::datetime::localize_with_fallback;
+ use sail_sql_analyzer::parser::{parse_date, parse_time, parse_timestamp};
+ 
+ use crate::config::DefaultTimestampType;
+ use crate::error::PlanResult;
++use crate::formatter::SparkPlanFormatter;
+ use crate::resolver::PlanResolver;
+ use crate::resolver::expression::NamedExpr;
+ use crate::resolver::state::PlanResolverState;
+@@ -23,10 +23,8 @@
+         state: &mut PlanResolverState,
+     ) -> PlanResult<NamedExpr> {
+         let literal = self.resolve_literal(literal, state)?;
+-        let service = self.ctx.extension::<PlanService>()?;
+-        let name = service
+-            .plan_formatter()
+-            .literal_to_string(&literal, &self.config.session_timezone)?;
++
++        let name = SparkPlanFormatter.literal_to_string(&literal, &self.config.session_timezone)?;
+         Ok(NamedExpr::new(
+             vec![name],
+             expr::Expr::Literal(literal, None),
+--- a/crates/sail-plan/src/resolver/expression/misc.rs
++++ b/crates/sail-plan/src/resolver/expression/misc.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::sync::Arc;
+ 
+@@ -10,9 +11,7 @@
+ use datafusion_functions::expr_fn as datafusion_fn;
+ use datafusion_functions_nested::expr_fn::{array_element, array_length, map_extract};
+ use sail_common::spec::{self, DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID};
+-use sail_common_datafusion::extension::SessionExtensionAccessor;
+ use sail_common_datafusion::literal::LiteralEvaluator;
+-use sail_common_datafusion::session::plan::PlanService;
+ use sail_common_datafusion::utils::items::ItemTaker;
+ use sail_function::scalar::drop_struct_field::DropStructField;
+ use sail_function::scalar::misc::raise_error::RaiseError;
+@@ -20,6 +19,7 @@
+ use sail_function::scalar::update_struct_field::UpdateStructField;
+ 
+ use crate::error::{PlanError, PlanResult};
++use crate::formatter::SparkPlanFormatter;
+ use crate::resolver::PlanResolver;
+ use crate::resolver::expression::NamedExpr;
+ use crate::resolver::state::PlanResolverState;
+@@ -287,10 +287,9 @@
+             _ => return Err(PlanError::invalid("extraction must be a literal")),
+         };
+         let extraction = self.resolve_literal(extraction, state)?;
+-        let service = self.ctx.extension::<PlanService>()?;
+-        let extraction_name = service
+-            .plan_formatter()
+-            .literal_to_string(&extraction, &self.config.session_timezone)?;
++
++        let extraction_name =
++            SparkPlanFormatter.literal_to_string(&extraction, &self.config.session_timezone)?;
+         let name = match data_type {
+             DataType::Struct(_) => {
+                 format!("{}.{}", name.one()?, extraction_name)
 --- a/crates/sail-plan/src/resolver/expression/mod.rs
 +++ b/crates/sail-plan/src/resolver/expression/mod.rs
 @@ -1,3 +1,4 @@
@@ -8082,6 +9001,52 @@
              }
              Expr::CallFunction {
                  function_name,
+@@ -411,43 +410,17 @@
+     use datafusion_common::{DFSchema, ScalarValue};
+     use datafusion_expr::expr::{Alias, Expr};
+     use datafusion_expr::{BinaryExpr, Operator};
+-    use sail_catalog::manager::{CatalogManager, CatalogManagerOptions};
+-    use sail_catalog::provider::CatalogProvider;
+-    use sail_catalog_memory::MemoryCatalogProvider;
+     use sail_common::geoarrow::extension::GeoArrowWkbType;
+     use sail_common::spec;
+-    use sail_common_datafusion::catalog::display::DefaultCatalogDisplay;
+-    use sail_common_datafusion::session::plan::PlanService;
+-
+-    use crate::catalog::SparkCatalogObjectDisplay;
++
+     use crate::config::PlanConfig;
+     use crate::error::PlanResult;
+-    use crate::formatter::SparkPlanFormatter;
+     use crate::resolver::PlanResolver;
+     use crate::resolver::expression::NamedExpr;
+     use crate::resolver::state::PlanResolverState;
+ 
+     fn create_session() -> PlanResult<SessionContext> {
+-        let mut state = SessionStateBuilder::new().build();
+-        let catalog_manager = CatalogManager::try_new(CatalogManagerOptions {
+-            catalogs: HashMap::from([(
+-                "sail".to_string(),
+-                Arc::new(MemoryCatalogProvider::new(
+-                    "sail".to_string(),
+-                    vec![Arc::from("default")].try_into()?,
+-                    None,
+-                )) as Arc<dyn CatalogProvider>,
+-            )]),
+-            default_catalog: "sail".to_string(),
+-            default_database: vec!["default".to_string()],
+-            global_temporary_database: vec!["global_temp".to_string()],
+-        })?;
+-        let plan_service = PlanService::new(
+-            Box::new(DefaultCatalogDisplay::<SparkCatalogObjectDisplay>::default()),
+-            Box::new(SparkPlanFormatter),
+-        );
+-        state.config_mut().set_extension(Arc::new(catalog_manager));
+-        state.config_mut().set_extension(Arc::new(plan_service));
++        let state = SessionStateBuilder::new().build();
+         Ok(SessionContext::new_with_state(state))
+     }
+ 
 --- a/crates/sail-plan/src/resolver/expression/udf.rs
 +++ /dev/null
 @@ -1,384 +0,0 @@
@@ -8570,7 +9535,7 @@
              exclude,
 --- a/crates/sail-plan/src/resolver/expression/window.rs
 +++ b/crates/sail-plan/src/resolver/expression/window.rs
-@@ -1,27 +1,19 @@
+@@ -1,27 +1,18 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::cmp::Ordering;
 -use std::sync::Arc;
@@ -8587,9 +9552,9 @@
 -use sail_catalog::manager::CatalogManager;
 +use datafusion_expr::{ExprSchemable, WindowFrame, WindowFrameBound, WindowFrameUnits, expr};
  use sail_common::spec::{self};
- use sail_common_datafusion::extension::SessionExtensionAccessor;
+-use sail_common_datafusion::extension::SessionExtensionAccessor;
  use sail_common_datafusion::literal::LiteralEvaluator;
- use sail_common_datafusion::session::plan::PlanService;
+-use sail_common_datafusion::session::plan::PlanService;
  use sail_common_datafusion::utils::items::ItemTaker;
 -use sail_python_udf::cereal::pyspark_udf::PySparkUdfPayload;
 -use sail_python_udf::get_udf_name;
@@ -8598,11 +9563,12 @@
  
  use crate::error::{PlanError, PlanResult};
 -use crate::function::common::{FunctionContextInput, WinFunctionInput, get_null_treatment};
++use crate::formatter::SparkPlanFormatter;
 +use crate::function::common::{FunctionContextInput, WinFunctionInput};
  use crate::function::get_built_in_window_function;
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
-@@ -96,169 +88,35 @@
+@@ -96,169 +87,35 @@
                      return Err(PlanError::todo("named window function arguments"));
                  }
                  let canonical_function_name = function_name.to_ascii_lowercase();
@@ -8797,7 +9763,16 @@
              }
              _ => {
                  return Err(PlanError::invalid(format!(
-@@ -273,68 +131,6 @@
+@@ -266,75 +123,13 @@
+                 )));
+             }
+         };
+-        let service = self.ctx.extension::<PlanService>()?;
+-        let name = service.plan_formatter().function_to_string(
++
++        let name = SparkPlanFormatter.function_to_string(
+             function_name.as_str(),
+             argument_display_names.iter().map(|x| x.as_str()).collect(),
              is_distinct,
          )?;
          Ok(NamedExpr::new(vec![name], window))
@@ -9405,7 +10380,7 @@
                  input,
 --- a/crates/sail-plan/src/resolver/query/read.rs
 +++ b/crates/sail-plan/src/resolver/query/read.rs
-@@ -1,28 +1,26 @@
+@@ -1,28 +1,25 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::collections::HashSet;
  use std::sync::Arc;
@@ -9415,12 +10390,12 @@
  use datafusion::catalog::TableFunctionArgs;
  use datafusion::datasource::{TableProvider, provider_as_source, source_as_provider};
  use datafusion_common::{DFSchema, ScalarValue, TableReference};
- use datafusion_expr::{Expr, LogicalPlan, SubqueryAlias, TableScan, TableSource, UNNAMED_TABLE};
+-use datafusion_expr::{Expr, LogicalPlan, SubqueryAlias, TableScan, TableSource, UNNAMED_TABLE};
++use datafusion_expr::{Expr, LogicalPlan, TableScan, TableSource, UNNAMED_TABLE};
  use rand::{RngExt, rng};
 -use sail_catalog::manager::CatalogManager;
  use sail_common::spec;
 -use sail_common_datafusion::catalog::{LakehouseOperation, TableColumnStatus, TableKind};
-+use sail_common_datafusion::catalog::TableColumnStatus;
  use sail_common_datafusion::datasource::{OptionLayer, SourceInfo, TableFormatRegistry};
  use sail_common_datafusion::extension::SessionExtensionAccessor;
  use sail_common_datafusion::literal::LiteralEvaluator;
@@ -9437,7 +10412,7 @@
  use crate::resolver::state::PlanResolverState;
  
  impl PlanResolver<'_> {
-@@ -41,140 +39,24 @@
+@@ -41,140 +38,24 @@
              options,
          } = table;
  
@@ -9594,7 +10569,40 @@
      }
  
      pub(super) async fn resolve_query_read_dynamic_table(
-@@ -340,106 +222,34 @@
+@@ -203,32 +84,6 @@
+             state,
+         )
+         .await
+-    }
+-
+-    /// Resolves a persistent view by re-parsing its SQL definition into a logical plan.
+-    async fn resolve_table_view(
+-        &self,
+-        definition: String,
+-        columns: Vec<TableColumnStatus>,
+-        table_reference: TableReference,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let ast = sail_sql_analyzer::parser::parse_one_statement(&definition)?;
+-        let spec_plan = sail_sql_analyzer::statement::from_ast_statement(ast)?;
+-        let plan = match spec_plan {
+-            spec::Plan::Query(query_plan) => self.resolve_query_plan(query_plan, state).await?,
+-            _ => {
+-                return Err(PlanError::invalid("view definition must be a query"));
+-            }
+-        };
+-        let plan =
+-            LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(Arc::new(plan), table_reference)?);
+-        if columns.is_empty() {
+-            Ok(plan)
+-        } else {
+-            let names = state.register_field_names(columns.iter().map(|c| &c.name));
+-            Ok(rename_logical_plan(plan, &names)?)
+-        }
+     }
+ 
+     /// Apply TABLESAMPLE clause to a LogicalPlan
+@@ -340,106 +195,34 @@
              });
              self.resolve_query_project(None, vec![expr], state).await
          } else {
@@ -9656,9 +10664,9 @@
 +            }
 +            let schema = Arc::new(DFSchema::empty());
 +            let arguments = self.resolve_expressions(arguments, &schema, state).await?;
-+            let table_function = match self.ctx.table_function(&canonical_function_name) {
++            let table_function = match get_built_in_table_function(&canonical_function_name) {
 +                Ok(f) => f,
-+                _ => match get_built_in_table_function(&canonical_function_name) {
++                _ => match self.ctx.table_function(&canonical_function_name) {
 +                    Ok(f) => f,
 +                    _ => {
 +                        return Err(PlanError::unsupported(format!(

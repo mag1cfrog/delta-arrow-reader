@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use arrow::datatypes::DataType;
@@ -5,10 +6,6 @@ use datafusion::functions::expr_fn;
 use datafusion_common::ScalarValue;
 use datafusion_expr::{ExprSchemable, Operator, ScalarUDF, cast, expr, lit, when};
 use datafusion_spark::function::bitmap::expr_fn as bitmap_fn;
-use sail_catalog::manager::CatalogManager;
-use sail_catalog::utils::quote_namespace_if_needed;
-use sail_common_datafusion::extension::SessionExtensionAccessor;
-use sail_common_datafusion::session::plan::PlanService;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::misc::hll_sketch::{HllSketchEstimateFunction, HllUnionFunction};
 use sail_function::scalar::misc::monotonically_increasing_id::SparkMonotonicallyIncreasingId;
@@ -25,6 +22,7 @@ use sail_function::scalar::misc::version::SparkVersion;
 use sail_function::sketch::DEFAULT_THETA_LG_NOM_ENTRIES;
 
 use crate::error::{PlanError, PlanResult};
+use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 
 fn assert_true(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -63,22 +61,28 @@ fn assert_true(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
 
 fn current_catalog(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     input.arguments.zero()?;
-    let catalog_manager = input
+    Ok(lit(input
         .function_context
         .session_context
-        .extension::<CatalogManager>()?;
-    Ok(lit(catalog_manager.default_catalog()?.to_string()))
+        .state()
+        .config()
+        .options()
+        .catalog
+        .default_catalog
+        .clone()))
 }
 
 fn current_database(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     input.arguments.zero()?;
-    let catalog_manager = input
+    Ok(lit(input
         .function_context
         .session_context
-        .extension::<CatalogManager>()?;
-    Ok(lit(quote_namespace_if_needed(
-        &catalog_manager.default_database()?,
-    )))
+        .state()
+        .config()
+        .options()
+        .catalog
+        .default_schema
+        .clone()))
 }
 
 fn current_user(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -97,12 +101,7 @@ fn type_of(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
     } = input;
     let expr = arguments.one()?;
     let data_type = expr.get_type(function_context.schema)?;
-    let service = function_context
-        .session_context
-        .extension::<PlanService>()?;
-    let type_of = service
-        .plan_formatter()
-        .data_type_to_simple_string(&data_type)?;
+    let type_of = SparkPlanFormatter.data_type_to_simple_string(&data_type)?;
     Ok(lit(type_of))
 }
 

@@ -1,7 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::DataFusionError;
-use sail_catalog::error::CatalogError;
 use sail_common::error::CommonError;
 use sail_sql_analyzer::error::SqlError;
 use thiserror::Error;
@@ -80,34 +79,6 @@ impl From<CommonError> for PlanError {
             CommonError::InvalidArgument(message) => PlanError::InvalidArgument(message),
             CommonError::NotSupported(message) => PlanError::NotSupported(message),
             CommonError::InternalError(message) => PlanError::InternalError(message),
-        }
-    }
-}
-
-impl From<CatalogError> for PlanError {
-    fn from(error: CatalogError) -> Self {
-        match error {
-            CatalogError::DataFusionError(e) => PlanError::DataFusionError(e),
-            CatalogError::InvalidArgument(message) => PlanError::InvalidArgument(message),
-            e @ CatalogError::NotFound(_, _) => PlanError::AnalysisError(e.to_string()),
-            e @ CatalogError::AlreadyExists(_, _) => PlanError::AnalysisError(e.to_string()),
-            CatalogError::Conflict(message) => PlanError::AnalysisError(message),
-            CatalogError::NotSupported(message) => PlanError::NotSupported(message),
-            CatalogError::UnsupportedCapability(message) => PlanError::NotSupported(message),
-            CatalogError::Unauthorized(message)
-            | CatalogError::Forbidden(message)
-            | CatalogError::AuthExpired(message)
-            | CatalogError::RateLimited(message)
-            | CatalogError::ResourceExhausted(message)
-            | CatalogError::ReadOnly(message)
-            | CatalogError::StaleMetadata(message)
-            | CatalogError::CommitStateUnknown(message)
-            | CatalogError::CredentialUnavailable(message)
-            | CatalogError::ConversionLag(message)
-            | CatalogError::ConversionFailed(message)
-            | CatalogError::RemoteProtocol(message) => PlanError::AnalysisError(message),
-            CatalogError::Internal(message) => PlanError::InternalError(message),
-            CatalogError::External(message) => PlanError::AnalysisError(message),
         }
     }
 }

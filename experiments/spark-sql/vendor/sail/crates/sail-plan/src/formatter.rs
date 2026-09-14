@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 
@@ -14,7 +15,6 @@ use sail_common_datafusion::formatter::{
     TimestampMicrosecondFormatter, TimestampMillisecondFormatter, TimestampNanosecondFormatter,
     TimestampSecondFormatter,
 };
-use sail_common_datafusion::session::plan::PlanFormatter;
 use sail_common_datafusion::utils::items::ItemTaker;
 
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd)]
@@ -29,10 +29,8 @@ impl SparkPlanFormatter {
             TimeUnit::Nanosecond => "nanosecond",
         }
     }
-}
 
-impl PlanFormatter for SparkPlanFormatter {
-    fn data_type_to_simple_string(&self, data_type: &DataType) -> Result<String> {
+    pub fn data_type_to_simple_string(&self, data_type: &DataType) -> Result<String> {
         match data_type {
             DataType::Null => Ok("void".to_string()),
             DataType::Binary
@@ -130,7 +128,11 @@ impl PlanFormatter for SparkPlanFormatter {
         }
     }
 
-    fn literal_to_string(&self, literal: &ScalarValue, display_timezone: &str) -> Result<String> {
+    pub fn literal_to_string(
+        &self,
+        literal: &ScalarValue,
+        display_timezone: &str,
+    ) -> Result<String> {
         let literal_list_to_string = |name: &str, values: Option<&dyn Array>| -> Result<String> {
             let Some(values) = values else {
                 return Ok("NULL".to_string());
@@ -428,7 +430,7 @@ impl PlanFormatter for SparkPlanFormatter {
         }
     }
 
-    fn function_to_string(
+    pub fn function_to_string(
         &self,
         name: &str,
         arguments: Vec<&str>,

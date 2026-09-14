@@ -7,12 +7,11 @@ use datafusion_common::{DFSchemaRef, ScalarValue};
 use datafusion_expr::simplify::SimplifyContextBuilder;
 use datafusion_expr::{ExprSchemable, WindowFrame, WindowFrameBound, WindowFrameUnits, expr};
 use sail_common::spec::{self};
-use sail_common_datafusion::extension::SessionExtensionAccessor;
 use sail_common_datafusion::literal::LiteralEvaluator;
-use sail_common_datafusion::session::plan::PlanService;
 use sail_common_datafusion::utils::items::ItemTaker;
 
 use crate::error::{PlanError, PlanResult};
+use crate::formatter::SparkPlanFormatter;
 use crate::function::common::{FunctionContextInput, WinFunctionInput};
 use crate::function::get_built_in_window_function;
 use crate::resolver::PlanResolver;
@@ -124,8 +123,8 @@ impl PlanResolver<'_> {
                 )));
             }
         };
-        let service = self.ctx.extension::<PlanService>()?;
-        let name = service.plan_formatter().function_to_string(
+
+        let name = SparkPlanFormatter.function_to_string(
             function_name.as_str(),
             argument_display_names.iter().map(|x| x.as_str()).collect(),
             is_distinct,
