@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 // https://github.com/datafusion-contrib/datafusion-functions-json/blob/cb1ba7a80a84e10a4d658f3100eae8f6bca2ced9/LICENSE
 //
 // [Credit]: https://github.com/datafusion-contrib/datafusion-functions-json/blob/78c5abbf7222510ff221517f5d2e3c344969da98/src/common_union.rs
@@ -9,7 +10,7 @@ use datafusion::arrow::array::{
     Array, ArrayRef, AsArray, BooleanArray, Float64Array, Int64Array, NullArray, StringArray,
     UnionArray,
 };
-use datafusion::arrow::buffer::{Buffer, ScalarBuffer};
+use datafusion::arrow::buffer::Buffer;
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::ScalarValue;
@@ -257,73 +258,6 @@ impl From<JsonUnionField> for ScalarValue {
     }
 }
 
-pub struct JsonUnionEncoder {
-    boolean: BooleanArray,
-    int: Int64Array,
-    float: Float64Array,
-    string: StringArray,
-    array: StringArray,
-    object: StringArray,
-    type_ids: ScalarBuffer<i8>,
-}
-
-impl JsonUnionEncoder {
-    #[must_use]
-    pub fn from_union(union: UnionArray) -> Option<Self> {
-        if is_json_union(union.data_type()) {
-            let (_, type_ids, _, c) = union.into_parts();
-            Some(Self {
-                boolean: c[1].as_boolean().clone(),
-                int: c[2].as_primitive().clone(),
-                float: c[3].as_primitive().clone(),
-                string: c[4].as_string().clone(),
-                array: c[5].as_string().clone(),
-                object: c[6].as_string().clone(),
-                type_ids,
-            })
-        } else {
-            None
-        }
-    }
-
-    #[must_use]
-    #[expect(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
-        self.type_ids.len()
-    }
-
-    /// Get the encodable value for a given index
-    ///
-    /// # Panics
-    ///
-    /// Panics if the idx is outside the union values or an invalid type id exists in the union.
-    #[must_use]
-    pub fn get_value(&self, idx: usize) -> JsonUnionValue<'_> {
-        let type_id = self.type_ids[idx];
-        match type_id {
-            TYPE_ID_NULL => JsonUnionValue::JsonNull,
-            TYPE_ID_BOOL => JsonUnionValue::Bool(self.boolean.value(idx)),
-            TYPE_ID_INT => JsonUnionValue::Int(self.int.value(idx)),
-            TYPE_ID_FLOAT => JsonUnionValue::Float(self.float.value(idx)),
-            TYPE_ID_STR => JsonUnionValue::Str(self.string.value(idx)),
-            TYPE_ID_ARRAY => JsonUnionValue::Array(self.array.value(idx)),
-            TYPE_ID_OBJECT => JsonUnionValue::Object(self.object.value(idx)),
-            _ => unreachable!("Invalid type_id: {type_id}, not a valid JSON type"),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum JsonUnionValue<'a> {
-    JsonNull,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Str(&'a str),
-    Array(&'a str),
-    Object(&'a str),
-}
-
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod test {
@@ -344,23 +278,29 @@ mod test {
         ]);
 
         let union_array = UnionArray::try_from(json_union).unwrap();
-        let encoder = JsonUnionEncoder::from_union(union_array).unwrap();
-
-        let values_after: Vec<_> = (0..encoder.len())
-            .map(|idx| encoder.get_value(idx))
+        assert!(is_json_union(union_array.data_type()));
+        assert_eq!(
+            union_array.type_ids().as_ref(),
+            &[0, 1, 1, 2, 3, 4, 5, 6, 0]
+        );
+        let values_after: Vec<_> = (0..union_array.len())
+            .map(|idx| {
+                ScalarValue::try_from_array(union_array.child(union_array.type_id(idx)), idx)
+                    .unwrap()
+            })
             .collect();
         assert_eq!(
             values_after,
             vec![
-                JsonUnionValue::JsonNull,
-                JsonUnionValue::Bool(true),
-                JsonUnionValue::Bool(false),
-                JsonUnionValue::Int(42),
-                JsonUnionValue::Float(42.0),
-                JsonUnionValue::Str("foo"),
-                JsonUnionValue::Array("[42]"),
-                JsonUnionValue::Object(r#"{"foo": 42}"#),
-                JsonUnionValue::JsonNull,
+                ScalarValue::Null,
+                ScalarValue::Boolean(Some(true)),
+                ScalarValue::Boolean(Some(false)),
+                ScalarValue::Int64(Some(42)),
+                ScalarValue::Float64(Some(42.0)),
+                ScalarValue::Utf8(Some("foo".into())),
+                ScalarValue::Utf8(Some("[42]".into())),
+                ScalarValue::Utf8(Some(r#"{"foo": 42}"#.into())),
+                ScalarValue::Null,
             ]
         );
     }
