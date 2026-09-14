@@ -18,7 +18,6 @@ mod lateral;
 mod lateral_join;
 mod limit;
 mod misc;
-mod na;
 mod pivoting;
 mod project;
 mod read;
@@ -27,7 +26,6 @@ mod repartition;
 mod sample;
 mod set_op;
 mod sort;
-mod stat;
 mod values;
 mod window;
 mod with_relations;
@@ -232,77 +230,20 @@ impl PlanResolver<'_> {
                     "extraction probe: remote checkpoints",
                 ));
             }
-            QueryNode::FillNa {
-                input,
-                columns,
-                values,
-            } => {
-                self.resolve_query_fill_na(*input, columns, values, state)
-                    .await?
-            }
-            QueryNode::DropNa {
-                input,
-                columns,
-                min_non_nulls,
-            } => {
-                self.resolve_query_drop_na(*input, columns, min_non_nulls, state)
-                    .await?
-            }
-            QueryNode::Replace {
-                input,
-                columns,
-                replacements,
-            } => {
-                self.resolve_query_replace(*input, columns, replacements, state)
-                    .await?
-            }
-            QueryNode::StatSummary { input, statistics } => {
-                self.resolve_query_stat_summary(*input, vec![], statistics, state)
-                    .await?
-            }
-            QueryNode::StatCrosstab {
-                input,
-                left_column,
-                right_column,
-            } => {
-                self.resolve_query_stat_cross_tab(*input, left_column, right_column, state)
-                    .await?
-            }
-            QueryNode::StatDescribe { input, columns } => {
-                self.resolve_query_stat_describe(*input, columns, state)
-                    .await?
-            }
-            QueryNode::StatCov {
-                input,
-                left_column,
-                right_column,
-            } => {
-                self.resolve_query_stat_cov(*input, left_column, right_column, state)
-                    .await?
-            }
-            QueryNode::StatCorr {
-                input,
-                left_column,
-                right_column,
-                method,
-            } => {
-                self.resolve_query_stat_corr(*input, left_column, right_column, method, state)
-                    .await?
-            }
-            QueryNode::StatApproxQuantile { .. } => {
-                return Err(PlanError::todo("approx quantile"));
-            }
-            QueryNode::StatFreqItems { .. } => {
-                return Err(PlanError::todo("freq items"));
-            }
-            QueryNode::StatSampleBy {
-                input,
-                column,
-                fractions,
-                seed,
-            } => {
-                self.resolve_query_stat_sample_by(*input, column, fractions, seed, state)
-                    .await?
+            QueryNode::FillNa { .. }
+            | QueryNode::DropNa { .. }
+            | QueryNode::Replace { .. }
+            | QueryNode::StatSummary { .. }
+            | QueryNode::StatDescribe { .. }
+            | QueryNode::StatCrosstab { .. }
+            | QueryNode::StatCov { .. }
+            | QueryNode::StatCorr { .. }
+            | QueryNode::StatApproxQuantile { .. }
+            | QueryNode::StatFreqItems { .. }
+            | QueryNode::StatSampleBy { .. } => {
+                return Err(PlanError::unsupported(
+                    "extraction probe: DataFrame NA/statistics",
+                ));
             }
             QueryNode::Empty { produce_one_row } => self.resolve_query_empty(produce_one_row)?,
             QueryNode::Values(values) => self.resolve_query_values(values, state).await?,

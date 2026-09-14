@@ -1,3 +1,5 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index e8af02f..8fe41b0 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -5,7 +7,7 @@
  [workspace]
  members = [
      "crates/*",
-@@ -184,7 +185,6 @@
+@@ -184,7 +185,6 @@ datafusion-functions-nested = { version = "54.1.0", default-features = false }
  datafusion-physical-expr = { version = "54.1.0" }
  datafusion-session = { version = "54.1.0" }
  datafusion-spark = { version = "54.1.0", features = ["core"] }
@@ -13,6 +15,8 @@
  jiter = { version = "0.15.0", default-features = false }
  arrow = { version = "58.3.0", features = ["chrono-tz"] }
  arrow-array = { version = "58.3.0", features = ["ffi"] }
+diff --git a/crates/sail-common-datafusion/Cargo.toml b/crates/sail-common-datafusion/Cargo.toml
+index b000371..1d08c32 100644
 --- a/crates/sail-common-datafusion/Cargo.toml
 +++ b/crates/sail-common-datafusion/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -20,7 +24,7 @@
  [package]
  name = "sail-common-datafusion"
  version = { workspace = true }
-@@ -22,22 +23,7 @@
+@@ -22,22 +23,7 @@ futures = { workspace = true }
  serde = { workspace = true }
  serde_json = { workspace = true }
  async-trait = { workspace = true }
@@ -43,6 +47,9 @@
 -quote = { workspace = true }
 -proc-macro2 = { workspace = true }
 -lazy_static = { workspace = true }
+diff --git a/crates/sail-common-datafusion/build.rs b/crates/sail-common-datafusion/build.rs
+deleted file mode 100644
+index aa4d32e..0000000
 --- a/crates/sail-common-datafusion/build.rs
 +++ /dev/null
 @@ -1,467 +0,0 @@
@@ -513,6 +520,9 @@
 -
 -    Ok(())
 -}
+diff --git a/crates/sail-common-datafusion/data/system/databases.yaml b/crates/sail-common-datafusion/data/system/databases.yaml
+deleted file mode 100644
+index 776712a..0000000
 --- a/crates/sail-common-datafusion/data/system/databases.yaml
 +++ /dev/null
 @@ -1,282 +0,0 @@
@@ -798,6 +808,9 @@
 -          sql_type: TIMESTAMP_LTZ(6)
 -          arrow_type: crate::system::types::timestamp()
 -          nullable: true
+diff --git a/crates/sail-common-datafusion/proto/sail/streaming/marker.proto b/crates/sail-common-datafusion/proto/sail/streaming/marker.proto
+deleted file mode 100644
+index 8c85d96..0000000
 --- a/crates/sail-common-datafusion/proto/sail/streaming/marker.proto
 +++ /dev/null
 @@ -1,31 +0,0 @@
@@ -832,6 +845,9 @@
 -}
 -
 -message EndOfData {}
+diff --git a/crates/sail-common-datafusion/src/catalog/delta.rs b/crates/sail-common-datafusion/src/catalog/delta.rs
+deleted file mode 100644
+index 30c0cd0..0000000
 --- a/crates/sail-common-datafusion/src/catalog/delta.rs
 +++ /dev/null
 @@ -1,22 +0,0 @@
@@ -857,6 +873,9 @@
 -    managed::property_value(properties.clone(), DELTA_UNITY_TABLE_ID_KEY)
 -        .or_else(|| managed::property_value(properties, DELTA_UNITY_TABLE_ID_LEGACY_KEY))
 -}
+diff --git a/crates/sail-common-datafusion/src/catalog/display.rs b/crates/sail-common-datafusion/src/catalog/display.rs
+deleted file mode 100644
+index 1999597..0000000
 --- a/crates/sail-common-datafusion/src/catalog/display.rs
 +++ /dev/null
 @@ -1,142 +0,0 @@
@@ -1002,6 +1021,9 @@
 -pub struct SingleValueOutput<T> {
 -    pub value: T,
 -}
+diff --git a/crates/sail-common-datafusion/src/catalog/iceberg.rs b/crates/sail-common-datafusion/src/catalog/iceberg.rs
+deleted file mode 100644
+index d4cee30..0000000
 --- a/crates/sail-common-datafusion/src/catalog/iceberg.rs
 +++ /dev/null
 @@ -1,24 +0,0 @@
@@ -1029,6 +1051,9 @@
 -            || managed::is_metadata_location_key(key.trim())
 -    })
 -}
+diff --git a/crates/sail-common-datafusion/src/catalog/lakehouse.rs b/crates/sail-common-datafusion/src/catalog/lakehouse.rs
+deleted file mode 100644
+index 0df282d..0000000
 --- a/crates/sail-common-datafusion/src/catalog/lakehouse.rs
 +++ /dev/null
 @@ -1,325 +0,0 @@
@@ -1357,6 +1382,9 @@
 -        assert!(!session.remote_signing_enabled);
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/catalog/managed.rs b/crates/sail-common-datafusion/src/catalog/managed.rs
+deleted file mode 100644
+index 05a5dbd..0000000
 --- a/crates/sail-common-datafusion/src/catalog/managed.rs
 +++ /dev/null
 @@ -1,109 +0,0 @@
@@ -1469,6 +1497,9 @@
 -        ));
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/catalog/mod.rs b/crates/sail-common-datafusion/src/catalog/mod.rs
+deleted file mode 100644
+index f518d5f..0000000
 --- a/crates/sail-common-datafusion/src/catalog/mod.rs
 +++ /dev/null
 @@ -1,92 +0,0 @@
@@ -1564,6 +1595,9 @@
 -        }
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/catalog/status.rs b/crates/sail-common-datafusion/src/catalog/status.rs
+deleted file mode 100644
+index d4028ce..0000000
 --- a/crates/sail-common-datafusion/src/catalog/status.rs
 +++ /dev/null
 @@ -1,503 +0,0 @@
@@ -2070,6 +2104,9 @@
 -        })
 -        .collect()
 -}
+diff --git a/crates/sail-common-datafusion/src/column_features.rs b/crates/sail-common-datafusion/src/column_features.rs
+deleted file mode 100644
+index a6d2fe3..0000000
 --- a/crates/sail-common-datafusion/src/column_features.rs
 +++ /dev/null
 @@ -1,230 +0,0 @@
@@ -2303,6 +2340,9 @@
 -        self.entries
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/datasource.rs b/crates/sail-common-datafusion/src/datasource.rs
+deleted file mode 100644
+index 50fcccb..0000000
 --- a/crates/sail-common-datafusion/src/datasource.rs
 +++ /dev/null
 @@ -1,768 +0,0 @@
@@ -3074,6 +3114,8 @@
 -        Ok(())
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/error.rs b/crates/sail-common-datafusion/src/error.rs
+index a9c1a81..a7cc006 100644
 --- a/crates/sail-common-datafusion/src/error.rs
 +++ b/crates/sail-common-datafusion/src/error.rs
 @@ -1,3 +1,4 @@
@@ -3081,7 +3123,7 @@
  use std::collections::HashSet;
  use std::fmt;
  use std::fmt::Formatter;
-@@ -148,6 +149,7 @@
+@@ -148,6 +149,7 @@ impl CommonErrorCause {
                  DataFusionError::NotImplemented(x) => Self::NotImplemented(x.clone()),
                  DataFusionError::Internal(x) => Self::Internal(x.clone()),
                  DataFusionError::Plan(x) => Self::Plan(x.clone()),
@@ -3089,6 +3131,9 @@
                  DataFusionError::Configuration(x) => Self::Configuration(x.clone()),
                  DataFusionError::SchemaError(e, _) => Self::Schema(e.to_string()),
                  DataFusionError::Execution(x) => Self::Execution(x.clone()),
+diff --git a/crates/sail-common-datafusion/src/extension.rs b/crates/sail-common-datafusion/src/extension.rs
+deleted file mode 100644
+index 30fbbd0..0000000
 --- a/crates/sail-common-datafusion/src/extension.rs
 +++ /dev/null
 @@ -1,66 +0,0 @@
@@ -3158,6 +3203,8 @@
 -        self.runtime_env().clone()
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/lib.rs b/crates/sail-common-datafusion/src/lib.rs
+index 892aad6..71de625 100644
 --- a/crates/sail-common-datafusion/src/lib.rs
 +++ b/crates/sail-common-datafusion/src/lib.rs
 @@ -1,19 +1,11 @@
@@ -3181,6 +3228,9 @@
  pub mod udf;
  pub mod utils;
  pub mod variant;
+diff --git a/crates/sail-common-datafusion/src/logical_expr.rs b/crates/sail-common-datafusion/src/logical_expr.rs
+deleted file mode 100644
+index eb8da69..0000000
 --- a/crates/sail-common-datafusion/src/logical_expr.rs
 +++ /dev/null
 @@ -1,16 +0,0 @@
@@ -3200,6 +3250,9 @@
 -        Self { expr, source }
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/schema_evolution.rs b/crates/sail-common-datafusion/src/schema_evolution.rs
+deleted file mode 100644
+index 109130c..0000000
 --- a/crates/sail-common-datafusion/src/schema_evolution.rs
 +++ /dev/null
 @@ -1,1624 +0,0 @@
@@ -4827,6 +4880,9 @@
 -        Ok(())
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/session/activity.rs b/crates/sail-common-datafusion/src/session/activity.rs
+deleted file mode 100644
+index 57a5ebc..0000000
 --- a/crates/sail-common-datafusion/src/session/activity.rs
 +++ /dev/null
 @@ -1,48 +0,0 @@
@@ -4878,6 +4934,9 @@
 -        "ActivityTracker"
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/session/job.rs b/crates/sail-common-datafusion/src/session/job.rs
+deleted file mode 100644
+index 105ed97..0000000
 --- a/crates/sail-common-datafusion/src/session/job.rs
 +++ /dev/null
 @@ -1,43 +0,0 @@
@@ -4924,6 +4983,9 @@
 -        "JobService"
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/session/mod.rs b/crates/sail-common-datafusion/src/session/mod.rs
+deleted file mode 100644
+index 2bde515..0000000
 --- a/crates/sail-common-datafusion/src/session/mod.rs
 +++ /dev/null
 @@ -1,4 +0,0 @@
@@ -4931,6 +4993,9 @@
 -pub mod job;
 -pub mod plan;
 -pub mod repartition;
+diff --git a/crates/sail-common-datafusion/src/session/plan.rs b/crates/sail-common-datafusion/src/session/plan.rs
+deleted file mode 100644
+index 1f0dfbf..0000000
 --- a/crates/sail-common-datafusion/src/session/plan.rs
 +++ /dev/null
 @@ -1,56 +0,0 @@
@@ -4990,6 +5055,9 @@
 -        "PlanService"
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/session/repartition.rs b/crates/sail-common-datafusion/src/session/repartition.rs
+deleted file mode 100644
+index dcc744d..0000000
 --- a/crates/sail-common-datafusion/src/session/repartition.rs
 +++ /dev/null
 @@ -1,32 +0,0 @@
@@ -5025,6 +5093,9 @@
 -        "RepartitionBufferConfig"
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/streaming/event/encoding.rs b/crates/sail-common-datafusion/src/streaming/event/encoding.rs
+deleted file mode 100644
+index 2403211..0000000
 --- a/crates/sail-common-datafusion/src/streaming/event/encoding.rs
 +++ /dev/null
 @@ -1,228 +0,0 @@
@@ -5256,6 +5327,9 @@
 -        self.schema.clone()
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/streaming/event/marker.rs b/crates/sail-common-datafusion/src/streaming/event/marker.rs
+deleted file mode 100644
+index 7d6f367..0000000
 --- a/crates/sail-common-datafusion/src/streaming/event/marker.rs
 +++ /dev/null
 @@ -1,148 +0,0 @@
@@ -5407,6 +5481,9 @@
 -        Ok(())
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/streaming/event/mod.rs b/crates/sail-common-datafusion/src/streaming/event/mod.rs
+deleted file mode 100644
+index 70814eb..0000000
 --- a/crates/sail-common-datafusion/src/streaming/event/mod.rs
 +++ /dev/null
 @@ -1,38 +0,0 @@
@@ -5448,6 +5525,9 @@
 -        Self::Data { batch, retracted }
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/streaming/event/schema.rs b/crates/sail-common-datafusion/src/streaming/event/schema.rs
+deleted file mode 100644
+index 9403f24..0000000
 --- a/crates/sail-common-datafusion/src/streaming/event/schema.rs
 +++ /dev/null
 @@ -1,74 +0,0 @@
@@ -5525,6 +5605,9 @@
 -    }
 -    Ok(Schema::new(fields.cloned().collect::<Vec<_>>()))
 -}
+diff --git a/crates/sail-common-datafusion/src/streaming/event/stream.rs b/crates/sail-common-datafusion/src/streaming/event/stream.rs
+deleted file mode 100644
+index e6ae0da..0000000
 --- a/crates/sail-common-datafusion/src/streaming/event/stream.rs
 +++ /dev/null
 @@ -1,56 +0,0 @@
@@ -5584,11 +5667,17 @@
 -        self.stream.size_hint()
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/streaming/mod.rs b/crates/sail-common-datafusion/src/streaming/mod.rs
+deleted file mode 100644
+index e322c1f..0000000
 --- a/crates/sail-common-datafusion/src/streaming/mod.rs
 +++ /dev/null
 @@ -1,2 +0,0 @@
 -pub mod event;
 -pub mod source;
+diff --git a/crates/sail-common-datafusion/src/streaming/source.rs b/crates/sail-common-datafusion/src/streaming/source.rs
+deleted file mode 100644
+index a76872f..0000000
 --- a/crates/sail-common-datafusion/src/streaming/source.rs
 +++ /dev/null
 @@ -1,94 +0,0 @@
@@ -5686,6 +5775,9 @@
 -        self.source.supports_filters_pushdown(filters)
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/system/mod.rs b/crates/sail-common-datafusion/src/system/mod.rs
+deleted file mode 100644
+index 3e323d8..0000000
 --- a/crates/sail-common-datafusion/src/system/mod.rs
 +++ /dev/null
 @@ -1,30 +0,0 @@
@@ -5719,6 +5811,9 @@
 -        }
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/system/predicate.rs b/crates/sail-common-datafusion/src/system/predicate.rs
+deleted file mode 100644
+index 6df7484..0000000
 --- a/crates/sail-common-datafusion/src/system/predicate.rs
 +++ /dev/null
 @@ -1,30 +0,0 @@
@@ -5752,6 +5847,9 @@
 -        })
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/system/types.rs b/crates/sail-common-datafusion/src/system/types.rs
+deleted file mode 100644
+index 5072213..0000000
 --- a/crates/sail-common-datafusion/src/system/types.rs
 +++ /dev/null
 @@ -1,72 +0,0 @@
@@ -5827,6 +5925,8 @@
 -        true,
 -    )))
 -}
+diff --git a/crates/sail-common/Cargo.toml b/crates/sail-common/Cargo.toml
+index 7ac30bf..86f5d6b 100644
 --- a/crates/sail-common/Cargo.toml
 +++ b/crates/sail-common/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -5834,7 +5934,7 @@
  [package]
  name = "sail-common"
  version = { workspace = true }
-@@ -22,17 +23,5 @@
+@@ -22,17 +23,5 @@ serde_yaml = { workspace = true }
  glob = { workspace = true }
  num_enum = { workspace = true }
  num-traits = { workspace = true }
@@ -5852,6 +5952,9 @@
 -tower = { workspace = true }
 -axum = { workspace = true }
 -pin-project-lite = { workspace = true }
+diff --git a/crates/sail-common/src/actor.rs b/crates/sail-common/src/actor.rs
+deleted file mode 100644
+index afff435..0000000
 --- a/crates/sail-common/src/actor.rs
 +++ /dev/null
 @@ -1,424 +0,0 @@
@@ -6279,6 +6382,9 @@
 -        assert!(child.sender.is_closed());
 -    }
 -}
+diff --git a/crates/sail-common/src/config/application.rs b/crates/sail-common/src/config/application.rs
+deleted file mode 100644
+index fe717cd..0000000
 --- a/crates/sail-common/src/config/application.rs
 +++ /dev/null
 @@ -1,956 +0,0 @@
@@ -7238,6 +7344,9 @@
 -        assert!("zstd(127)".parse::<CelebornCompressionCodec>().is_err());
 -    }
 -}
+diff --git a/crates/sail-common/src/config/application.yaml b/crates/sail-common/src/config/application.yaml
+deleted file mode 100644
+index 7784820..0000000
 --- a/crates/sail-common/src/config/application.yaml
 +++ /dev/null
 @@ -1,1013 +0,0 @@
@@ -8254,6 +8363,9 @@
 -    If a read operation takes longer than this duration, a warning is logged suggesting
 -    faster I/O or subprocess isolation.
 -  experimental: true
+diff --git a/crates/sail-common/src/config/cli.rs b/crates/sail-common/src/config/cli.rs
+deleted file mode 100644
+index 7fc6804..0000000
 --- a/crates/sail-common/src/config/cli.rs
 +++ /dev/null
 @@ -1,28 +0,0 @@
@@ -8285,6 +8397,9 @@
 -    /// This allows the embedded Python interpreter to fork child Python processes.
 -    pub const RUN_PYTHON: &'static str = "SAIL_INTERNAL__RUN_PYTHON";
 -}
+diff --git a/crates/sail-common/src/config/loader.rs b/crates/sail-common/src/config/loader.rs
+deleted file mode 100644
+index 4b75afc..0000000
 --- a/crates/sail-common/src/config/loader.rs
 +++ /dev/null
 @@ -1,127 +0,0 @@
@@ -8415,6 +8530,9 @@
 -        Some(self.profile.clone())
 -    }
 -}
+diff --git a/crates/sail-common/src/config/mod.rs b/crates/sail-common/src/config/mod.rs
+deleted file mode 100644
+index aff8258..0000000
 --- a/crates/sail-common/src/config/mod.rs
 +++ /dev/null
 @@ -1,12 +0,0 @@
@@ -8430,6 +8548,9 @@
 -pub use application::*;
 -pub use cli::*;
 -pub use loader::*;
+diff --git a/crates/sail-common/src/config/observer.rs b/crates/sail-common/src/config/observer.rs
+deleted file mode 100644
+index 07d770f..0000000
 --- a/crates/sail-common/src/config/observer.rs
 +++ /dev/null
 @@ -1,66 +0,0 @@
@@ -8499,6 +8620,8 @@
 -    let _ = v;
 -    s.serialize_str("[REDACTED]")
 -}
+diff --git a/crates/sail-common/src/lib.rs b/crates/sail-common/src/lib.rs
+index 5b2d68f..a519910 100644
 --- a/crates/sail-common/src/lib.rs
 +++ b/crates/sail-common/src/lib.rs
 @@ -1,10 +1,6 @@
@@ -8513,6 +8636,9 @@
 -pub mod telemetry;
  pub mod tests;
  pub mod utils;
+diff --git a/crates/sail-common/src/runtime.rs b/crates/sail-common/src/runtime.rs
+deleted file mode 100644
+index fa90081..0000000
 --- a/crates/sail-common/src/runtime.rs
 +++ /dev/null
 @@ -1,64 +0,0 @@
@@ -8580,6 +8706,9 @@
 -        &self.io
 -    }
 -}
+diff --git a/crates/sail-common/src/server/builder.rs b/crates/sail-common/src/server/builder.rs
+deleted file mode 100644
+index 95df6c9..0000000
 --- a/crates/sail-common/src/server/builder.rs
 +++ /dev/null
 @@ -1,127 +0,0 @@
@@ -8710,12 +8839,18 @@
 -        Ok(())
 -    }
 -}
+diff --git a/crates/sail-common/src/server/mod.rs b/crates/sail-common/src/server/mod.rs
+deleted file mode 100644
+index 391f59b..0000000
 --- a/crates/sail-common/src/server/mod.rs
 +++ /dev/null
 @@ -1,3 +0,0 @@
 -mod builder;
 -
 -pub use builder::{ServerBuilder, ServerBuilderOptions};
+diff --git a/crates/sail-common/src/telemetry/common.rs b/crates/sail-common/src/telemetry/common.rs
+deleted file mode 100644
+index e4ca9a8..0000000
 --- a/crates/sail-common/src/telemetry/common.rs
 +++ /dev/null
 @@ -1,94 +0,0 @@
@@ -8813,6 +8948,9 @@
 -/// This is a restriction over [`opentelemetry::KeyValue`] to only allow
 -/// static string keys and clone-on-write string values.
 -pub type KeyValue = (&'static str, Cow<'static, str>);
+diff --git a/crates/sail-common/src/telemetry/futures.rs b/crates/sail-common/src/telemetry/futures.rs
+deleted file mode 100644
+index 8f608ce..0000000
 --- a/crates/sail-common/src/telemetry/futures.rs
 +++ /dev/null
 @@ -1,65 +0,0 @@
@@ -8881,6 +9019,9 @@
 -        poll
 -    }
 -}
+diff --git a/crates/sail-common/src/telemetry/layers/client.rs b/crates/sail-common/src/telemetry/layers/client.rs
+deleted file mode 100644
+index cc0a061..0000000
 --- a/crates/sail-common/src/telemetry/layers/client.rs
 +++ /dev/null
 @@ -1,52 +0,0 @@
@@ -8936,6 +9077,9 @@
 -        self.inner.call(req).in_span(span)
 -    }
 -}
+diff --git a/crates/sail-common/src/telemetry/layers/mod.rs b/crates/sail-common/src/telemetry/layers/mod.rs
+deleted file mode 100644
+index 9b05c86..0000000
 --- a/crates/sail-common/src/telemetry/layers/mod.rs
 +++ /dev/null
 @@ -1,10 +0,0 @@
@@ -8949,6 +9093,9 @@
 -
 -pub use client::{TracingClientLayer, TracingClientService};
 -pub use server::{TracingServerLayer, TracingServerService};
+diff --git a/crates/sail-common/src/telemetry/layers/server.rs b/crates/sail-common/src/telemetry/layers/server.rs
+deleted file mode 100644
+index f5d78e6..0000000
 --- a/crates/sail-common/src/telemetry/layers/server.rs
 +++ /dev/null
 @@ -1,54 +0,0 @@
@@ -9006,6 +9153,9 @@
 -        self.inner.call(req).in_span(span)
 -    }
 -}
+diff --git a/crates/sail-common/src/telemetry/mod.rs b/crates/sail-common/src/telemetry/mod.rs
+deleted file mode 100644
+index 3fd26c6..0000000
 --- a/crates/sail-common/src/telemetry/mod.rs
 +++ /dev/null
 @@ -1,9 +0,0 @@
@@ -9018,6 +9168,9 @@
 -pub use futures::*;
 -pub use layers::*;
 -pub use recorder::*;
+diff --git a/crates/sail-common/src/telemetry/recorder.rs b/crates/sail-common/src/telemetry/recorder.rs
+deleted file mode 100644
+index 817d916..0000000
 --- a/crates/sail-common/src/telemetry/recorder.rs
 +++ /dev/null
 @@ -1,15 +0,0 @@
@@ -9036,6 +9189,9 @@
 -        span.add_property(|| (SpanAttribute::EXCEPTION_MESSAGE, e.to_string()));
 -    }
 -}
+diff --git a/crates/sail-common/src/utils/http.rs b/crates/sail-common/src/utils/http.rs
+deleted file mode 100644
+index d3ba67a..0000000
 --- a/crates/sail-common/src/utils/http.rs
 +++ /dev/null
 @@ -1,7 +0,0 @@
@@ -9046,6 +9202,8 @@
 -///   * <https://www.rfc-editor.org/info/rfc7231/#section-5.5.3> (obsolete)
 -///   * <https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent>
 -pub const SAIL_USER_AGENT: &str = concat!("Sail/", env!("CARGO_PKG_VERSION"));
+diff --git a/crates/sail-common/src/utils/mod.rs b/crates/sail-common/src/utils/mod.rs
+index 50ee559..2578908 100644
 --- a/crates/sail-common/src/utils/mod.rs
 +++ b/crates/sail-common/src/utils/mod.rs
 @@ -1,6 +1,5 @@
@@ -9056,6 +9214,9 @@
  pub mod object;
 -pub mod retry;
  pub mod string;
+diff --git a/crates/sail-common/src/utils/retry.rs b/crates/sail-common/src/utils/retry.rs
+deleted file mode 100644
+index e05945a..0000000
 --- a/crates/sail-common/src/utils/retry.rs
 +++ /dev/null
 @@ -1,114 +0,0 @@
@@ -9173,6 +9334,9 @@
 -        }
 -    }
 -}
+diff --git a/crates/sail-common/tests/catalog_hms_config.rs b/crates/sail-common/tests/catalog_hms_config.rs
+deleted file mode 100644
+index de4355f..0000000
 --- a/crates/sail-common/tests/catalog_hms_config.rs
 +++ /dev/null
 @@ -1,127 +0,0 @@
@@ -9303,6 +9467,8 @@
 -        other => panic!("unexpected catalog type: {other:?}"),
 -    }
 -}
+diff --git a/crates/sail-logical-plan/Cargo.toml b/crates/sail-logical-plan/Cargo.toml
+index c4036e8..1969cac 100644
 --- a/crates/sail-logical-plan/Cargo.toml
 +++ b/crates/sail-logical-plan/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -9310,19 +9476,24 @@
  [package]
  name = "sail-logical-plan"
  version = { workspace = true }
-@@ -9,12 +10,10 @@
+@@ -7,14 +8,9 @@ edition = { workspace = true }
+ workspace = true
+ 
  [dependencies]
- sail-common = { path = "../sail-common" }
+-sail-common = { path = "../sail-common" }
  sail-common-datafusion = { path = "../sail-common-datafusion" }
 -sail-function = { path = "../sail-function" }
  
  datafusion = { workspace = true }
  datafusion-common = { workspace = true }
  datafusion-expr = { workspace = true }
- comfy-table = { workspace = true }
- html-escape = { workspace = true }
+-comfy-table = { workspace = true }
+-html-escape = { workspace = true }
 -log = { workspace = true }
  educe = { workspace = true }
+diff --git a/crates/sail-logical-plan/src/barrier.rs b/crates/sail-logical-plan/src/barrier.rs
+deleted file mode 100644
+index 5574c68..0000000
 --- a/crates/sail-logical-plan/src/barrier.rs
 +++ /dev/null
 @@ -1,80 +0,0 @@
@@ -9406,6 +9577,9 @@
 -        None
 -    }
 -}
+diff --git a/crates/sail-logical-plan/src/check_constraints.rs b/crates/sail-logical-plan/src/check_constraints.rs
+deleted file mode 100644
+index 190bf5b..0000000
 --- a/crates/sail-logical-plan/src/check_constraints.rs
 +++ /dev/null
 @@ -1,43 +0,0 @@
@@ -9452,9 +9626,11 @@
 -    }
 -    Ok(predicate)
 -}
+diff --git a/crates/sail-logical-plan/src/lib.rs b/crates/sail-logical-plan/src/lib.rs
+index 26cf741..2e43fdc 100644
 --- a/crates/sail-logical-plan/src/lib.rs
 +++ b/crates/sail-logical-plan/src/lib.rs
-@@ -1,13 +1,8 @@
+@@ -1,13 +1,6 @@
 -pub mod barrier;
 -pub mod check_constraints;
 -pub mod map_partitions;
@@ -9464,11 +9640,14 @@
  pub mod range;
 -pub mod remote_checkpoint;
  pub mod repartition;
- pub mod schema_pivot;
- pub mod show_string;
+-pub mod schema_pivot;
+-pub mod show_string;
  pub mod sort;
  pub mod spark_partition_id;
 -pub mod streaming;
+diff --git a/crates/sail-logical-plan/src/map_partitions.rs b/crates/sail-logical-plan/src/map_partitions.rs
+deleted file mode 100644
+index fa888c0..0000000
 --- a/crates/sail-logical-plan/src/map_partitions.rs
 +++ /dev/null
 @@ -1,95 +0,0 @@
@@ -9567,6 +9746,9 @@
 -        Some(vec![(0..self.input.schema().fields().len()).collect()])
 -    }
 -}
+diff --git a/crates/sail-logical-plan/src/merge.rs b/crates/sail-logical-plan/src/merge.rs
+deleted file mode 100644
+index 83c3f8e..0000000
 --- a/crates/sail-logical-plan/src/merge.rs
 +++ /dev/null
 @@ -1,2175 +0,0 @@
@@ -11745,6 +11927,9 @@
 -        .collect();
 -    !non_path.is_empty() && non_path.iter().all(|name| name.starts_with('#'))
 -}
+diff --git a/crates/sail-logical-plan/src/remote_checkpoint.rs b/crates/sail-logical-plan/src/remote_checkpoint.rs
+deleted file mode 100644
+index 93274a2..0000000
 --- a/crates/sail-logical-plan/src/remote_checkpoint.rs
 +++ /dev/null
 @@ -1,134 +0,0 @@
@@ -11882,6 +12067,414 @@
 -        Some(vec![(0..self.input.schema().fields().len()).collect()])
 -    }
 -}
+diff --git a/crates/sail-logical-plan/src/schema_pivot.rs b/crates/sail-logical-plan/src/schema_pivot.rs
+deleted file mode 100644
+index f91a275..0000000
+--- a/crates/sail-logical-plan/src/schema_pivot.rs
++++ /dev/null
+@@ -1,97 +0,0 @@
+-use std::collections::HashMap;
+-use std::fmt::{Debug, Formatter};
+-use std::sync::Arc;
+-
+-use datafusion::arrow::datatypes::{DataType, Field};
+-use datafusion_common::{DFSchema, DFSchemaRef, Result, plan_err};
+-use datafusion_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
+-use educe::Educe;
+-use sail_common_datafusion::utils::items::ItemTaker;
+-
+-#[derive(Clone, Debug, PartialEq, Eq, Hash, Educe)]
+-#[educe(PartialOrd)]
+-pub struct SchemaPivotNode {
+-    input: Arc<LogicalPlan>,
+-    // names is part of schema so we skip it in PartialOrd
+-    #[educe(PartialOrd(ignore))]
+-    names: Vec<String>,
+-    #[educe(PartialOrd(ignore))]
+-    schema: DFSchemaRef,
+-    exprs: Vec<Expr>,
+-}
+-
+-impl SchemaPivotNode {
+-    pub fn try_new(
+-        input: Arc<LogicalPlan>,
+-        names: Vec<String>,
+-        output_name: String,
+-    ) -> Result<Self> {
+-        let fields = vec![Field::new(output_name, DataType::Utf8, false)];
+-        let schema = Arc::new(DFSchema::from_unqualified_fields(
+-            fields.into(),
+-            HashMap::new(),
+-        )?);
+-        let exprs = input
+-            .schema()
+-            .columns()
+-            .into_iter()
+-            .map(Expr::Column)
+-            .collect::<Vec<_>>();
+-        Ok(Self {
+-            input,
+-            names,
+-            schema,
+-            exprs,
+-        })
+-    }
+-
+-    pub fn names(&self) -> &[String] {
+-        &self.names
+-    }
+-
+-    pub fn schema(&self) -> &DFSchemaRef {
+-        &self.schema
+-    }
+-}
+-
+-impl UserDefinedLogicalNodeCore for SchemaPivotNode {
+-    fn name(&self) -> &str {
+-        "SchemaPivot"
+-    }
+-
+-    fn inputs(&self) -> Vec<&LogicalPlan> {
+-        vec![&self.input]
+-    }
+-
+-    fn schema(&self) -> &DFSchemaRef {
+-        &self.schema
+-    }
+-
+-    fn expressions(&self) -> Vec<Expr> {
+-        self.exprs.clone()
+-    }
+-
+-    fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
+-        write!(f, "SchemaPivot")
+-    }
+-
+-    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+-        if exprs.len() != self.exprs.len() {
+-            return plan_err!(
+-                "SchemaPivot: expected {} expressions, but got {}",
+-                self.exprs.len(),
+-                exprs.len()
+-            );
+-        }
+-        Ok(Self {
+-            input: Arc::new(inputs.one()?),
+-            names: self.names.clone(),
+-            schema: self.schema.clone(),
+-            exprs,
+-        })
+-    }
+-
+-    fn necessary_children_exprs(&self, _output_columns: &[usize]) -> Option<Vec<Vec<usize>>> {
+-        Some(vec![(0..self.input.schema().fields().len()).collect()])
+-    }
+-}
+diff --git a/crates/sail-logical-plan/src/show_string.rs b/crates/sail-logical-plan/src/show_string.rs
+deleted file mode 100644
+index 1ef2e1d..0000000
+--- a/crates/sail-logical-plan/src/show_string.rs
++++ /dev/null
+@@ -1,296 +0,0 @@
+-use std::collections::HashMap;
+-use std::fmt::{Debug, Formatter};
+-use std::hash::Hash;
+-use std::sync::Arc;
+-
+-use comfy_table::{Cell, CellAlignment, ColumnConstraint, Table, Width};
+-use datafusion::arrow::array::RecordBatch;
+-use datafusion::arrow::datatypes::{DataType, Field};
+-use datafusion_common::{DFSchema, DFSchemaRef, Result};
+-use datafusion_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
+-use educe::Educe;
+-use sail_common::utils::string::escape_meta_characters;
+-use sail_common_datafusion::display::{ArrayFormatter, FormatOptions};
+-use sail_common_datafusion::utils::items::ItemTaker;
+-
+-fn truncate_string(s: &str, n: usize) -> String {
+-    if n == 0 || s.len() <= n {
+-        s.to_string()
+-    } else if n < 4 {
+-        s.chars().take(n).collect::<String>()
+-    } else {
+-        format!("{}...", s.chars().take(n - 3).collect::<String>())
+-    }
+-}
+-
+-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd)]
+-pub enum ShowStringStyle {
+-    Default,
+-    Vertical,
+-    Html,
+-}
+-
+-#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd)]
+-pub struct ShowStringFormat {
+-    style: ShowStringStyle,
+-    truncate: usize,
+-}
+-
+-impl ShowStringFormat {
+-    pub fn new(style: ShowStringStyle, truncate: usize) -> Self {
+-        Self { style, truncate }
+-    }
+-
+-    pub fn style(&self) -> ShowStringStyle {
+-        self.style
+-    }
+-
+-    pub fn truncate(&self) -> usize {
+-        self.truncate
+-    }
+-}
+-
+-impl ShowStringFormat {
+-    pub fn show(&self, batch: &RecordBatch, has_more: bool) -> Result<String> {
+-        match self.style {
+-            ShowStringStyle::Default => self.show_string(batch, has_more),
+-            ShowStringStyle::Vertical => self.show_vertical_string(batch, has_more),
+-            ShowStringStyle::Html => self.show_html(batch, has_more),
+-        }
+-    }
+-
+-    fn get_formatters<'a>(&'a self, batch: &'a RecordBatch) -> Result<Vec<ArrayFormatter<'a>>> {
+-        let options = FormatOptions::default();
+-        Ok(batch
+-            .columns()
+-            .iter()
+-            .map(|c| ArrayFormatter::try_new(c.as_ref(), &options))
+-            .collect::<std::result::Result<Vec<_>, _>>()?)
+-    }
+-
+-    fn show_footer(&self, num_rows: usize, has_more: bool) -> String {
+-        match (has_more, num_rows) {
+-            (true, 1) => "only showing top 1 row\n".to_string(),
+-            (true, n) => format!("only showing top {n} rows\n"),
+-            _ => "".to_string(),
+-        }
+-    }
+-
+-    fn show_string(&self, batch: &RecordBatch, has_more: bool) -> Result<String> {
+-        const MIN_COLUMN_WIDTH: u16 = 3;
+-        const PADDING: u16 = 0;
+-
+-        let mut table = Table::new();
+-        table.load_preset("||--+-++|    ++++++");
+-
+-        let header = batch
+-            .schema()
+-            .fields
+-            .iter()
+-            .map(|f| Cell::new(escape_meta_characters(f.name())))
+-            .collect::<Vec<_>>();
+-        table.set_header(header);
+-
+-        let alignment = match self.truncate {
+-            0 => CellAlignment::Left,
+-            _ => CellAlignment::Right,
+-        };
+-        table.column_iter_mut().for_each(|c| {
+-            c.set_padding((PADDING, PADDING))
+-                .set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(
+-                    MIN_COLUMN_WIDTH,
+-                )))
+-                .set_cell_alignment(alignment);
+-        });
+-
+-        let formatters = self.get_formatters(batch)?;
+-        for row in 0..batch.num_rows() {
+-            let row = formatters
+-                .iter()
+-                .map(|f| {
+-                    f.value(row)
+-                        .try_to_string()
+-                        .map(|s| escape_meta_characters(&s))
+-                        .map(|s| truncate_string(&s, self.truncate))
+-                })
+-                .collect::<std::result::Result<Vec<_>, _>>()?;
+-            table.add_row(row);
+-        }
+-        let footer = self.show_footer(batch.num_rows(), has_more);
+-        let table = format!("{table}\n{footer}");
+-        Ok(table)
+-    }
+-
+-    fn show_vertical_string(&self, batch: &RecordBatch, has_more: bool) -> Result<String> {
+-        const MIN_COLUMN_WIDTH: u16 = 3;
+-        const PADDING: u16 = 1;
+-
+-        let mut table = Table::new();
+-        table.load_preset("        |          ");
+-        let formatters = self.get_formatters(batch)?;
+-        for row in 0..batch.num_rows() {
+-            for (formatter, field) in formatters.iter().zip(batch.schema().fields.iter()) {
+-                let value = formatter
+-                    .value(row)
+-                    .try_to_string()
+-                    .map(|s| escape_meta_characters(&s))
+-                    .map(|s| truncate_string(&s, self.truncate))?;
+-                table.add_row(vec![field.name().clone(), value]);
+-            }
+-        }
+-        table.column_iter_mut().for_each(|c| {
+-            c.set_padding((PADDING, PADDING))
+-                .set_constraint(ColumnConstraint::LowerBoundary(Width::Fixed(
+-                    MIN_COLUMN_WIDTH,
+-                )))
+-                .set_cell_alignment(CellAlignment::Left);
+-        });
+-
+-        fn header(i: usize, width: usize) -> String {
+-            let value = format!("-RECORD {i}");
+-            format!("{value:-<width$}")
+-        }
+-
+-        let lines = table.lines().collect::<Vec<_>>();
+-        let mut table = vec![];
+-        let num_fields = batch.schema().fields.len();
+-        if num_fields > 0 {
+-            let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+-            for (i, line) in lines.into_iter().enumerate() {
+-                if i.is_multiple_of(num_fields) {
+-                    table.push(header(i / num_fields, width));
+-                }
+-                table.push(line);
+-            }
+-        } else {
+-            let width =
+-                PADDING + MIN_COLUMN_WIDTH + PADDING + 1 + PADDING + MIN_COLUMN_WIDTH + PADDING;
+-            for i in 0..batch.num_rows() {
+-                table.push(header(i, width as usize));
+-            }
+-        }
+-        if batch.num_rows() == 0 {
+-            table.push("(0 rows)".to_string());
+-        }
+-        let footer = self.show_footer(batch.num_rows(), has_more);
+-        let table = format!("{}\n{}", table.join("\n"), footer);
+-        Ok(table)
+-    }
+-
+-    fn show_html(&self, batch: &RecordBatch, has_more: bool) -> Result<String> {
+-        let formatters = self.get_formatters(batch)?;
+-        let mut table = vec!["<table border='1'>".to_string()];
+-        let header = batch
+-            .schema()
+-            .fields
+-            .iter()
+-            .map(|f| format!("<th>{}</th>", html_escape::encode_text(f.name())))
+-            .collect::<Vec<_>>()
+-            .join("");
+-        table.push(format!("<tr>{header}</tr>"));
+-        for row in 0..batch.num_rows() {
+-            let row = formatters
+-                .iter()
+-                .map(|f| {
+-                    f.value(row).try_to_string().map(|s| {
+-                        let s = truncate_string(&s, self.truncate);
+-                        format!("<td>{}</td>", html_escape::encode_text(s.as_str()))
+-                    })
+-                })
+-                .collect::<std::result::Result<Vec<_>, _>>()?;
+-            table.push(format!("<tr>{}</tr>", row.join("")));
+-        }
+-        table.push("</table>".to_string());
+-        let footer = self.show_footer(batch.num_rows(), has_more);
+-        let table = format!("{}\n{}", table.join("\n"), footer);
+-        Ok(table)
+-    }
+-}
+-
+-#[derive(Clone, Debug, PartialEq, Eq, Hash, Educe)]
+-#[educe(PartialOrd)]
+-pub struct ShowStringNode {
+-    input: Arc<LogicalPlan>,
+-    // names is part of schema so we skip it in PartialOrd
+-    #[educe(PartialOrd(ignore))]
+-    names: Vec<String>,
+-    #[educe(PartialOrd(ignore))]
+-    schema: DFSchemaRef,
+-    limit: usize,
+-    format: ShowStringFormat,
+-}
+-
+-impl ShowStringNode {
+-    pub fn try_new(
+-        input: Arc<LogicalPlan>,
+-        names: Vec<String>,
+-        limit: usize,
+-        format: ShowStringFormat,
+-        output_name: String,
+-    ) -> Result<Self> {
+-        let fields = vec![Field::new(output_name, DataType::Utf8, false)];
+-        Ok(Self {
+-            input,
+-            names,
+-            limit,
+-            format: format.clone(),
+-            schema: Arc::new(DFSchema::from_unqualified_fields(
+-                fields.into(),
+-                HashMap::new(),
+-            )?),
+-        })
+-    }
+-
+-    pub fn input(&self) -> &Arc<LogicalPlan> {
+-        &self.input
+-    }
+-
+-    pub fn names(&self) -> &[String] {
+-        &self.names
+-    }
+-
+-    pub fn limit(&self) -> usize {
+-        self.limit
+-    }
+-
+-    pub fn format(&self) -> &ShowStringFormat {
+-        &self.format
+-    }
+-}
+-
+-impl UserDefinedLogicalNodeCore for ShowStringNode {
+-    fn name(&self) -> &str {
+-        "ShowString"
+-    }
+-
+-    fn inputs(&self) -> Vec<&LogicalPlan> {
+-        vec![self.input.as_ref()]
+-    }
+-
+-    fn schema(&self) -> &DFSchemaRef {
+-        &self.schema
+-    }
+-
+-    fn expressions(&self) -> Vec<Expr> {
+-        vec![]
+-    }
+-
+-    fn fmt_for_explain(&self, f: &mut Formatter) -> std::fmt::Result {
+-        write!(f, "ShowString")
+-    }
+-
+-    fn with_exprs_and_inputs(&self, exprs: Vec<Expr>, inputs: Vec<LogicalPlan>) -> Result<Self> {
+-        exprs.zero()?;
+-        Ok(Self {
+-            input: Arc::new(inputs.one()?),
+-            names: self.names.clone(),
+-            limit: self.limit,
+-            format: self.format.clone(),
+-            schema: self.schema.clone(),
+-        })
+-    }
+-
+-    fn necessary_children_exprs(&self, _output_columns: &[usize]) -> Option<Vec<Vec<usize>>> {
+-        Some(vec![(0..self.input.schema().fields().len()).collect()])
+-    }
+-}
+diff --git a/crates/sail-logical-plan/src/streaming/collector.rs b/crates/sail-logical-plan/src/streaming/collector.rs
+deleted file mode 100644
+index bf4c1f6..0000000
 --- a/crates/sail-logical-plan/src/streaming/collector.rs
 +++ /dev/null
 @@ -1,70 +0,0 @@
@@ -11955,6 +12548,9 @@
 -        Some(vec![(0..self.input.schema().fields().len()).collect()])
 -    }
 -}
+diff --git a/crates/sail-logical-plan/src/streaming/filter.rs b/crates/sail-logical-plan/src/streaming/filter.rs
+deleted file mode 100644
+index 6456207..0000000
 --- a/crates/sail-logical-plan/src/streaming/filter.rs
 +++ /dev/null
 @@ -1,67 +0,0 @@
@@ -12025,6 +12621,9 @@
 -        Some(vec![(0..self.input.schema().fields().len()).collect()])
 -    }
 -}
+diff --git a/crates/sail-logical-plan/src/streaming/limit.rs b/crates/sail-logical-plan/src/streaming/limit.rs
+deleted file mode 100644
+index 636dad3..0000000
 --- a/crates/sail-logical-plan/src/streaming/limit.rs
 +++ /dev/null
 @@ -1,78 +0,0 @@
@@ -12106,6 +12705,9 @@
 -        Some(vec![(0..self.input.schema().fields().len()).collect()])
 -    }
 -}
+diff --git a/crates/sail-logical-plan/src/streaming/mod.rs b/crates/sail-logical-plan/src/streaming/mod.rs
+deleted file mode 100644
+index 38ce503..0000000
 --- a/crates/sail-logical-plan/src/streaming/mod.rs
 +++ /dev/null
 @@ -1,5 +0,0 @@
@@ -12114,6 +12716,9 @@
 -pub mod limit;
 -pub mod source_adapter;
 -pub mod source_wrapper;
+diff --git a/crates/sail-logical-plan/src/streaming/source_adapter.rs b/crates/sail-logical-plan/src/streaming/source_adapter.rs
+deleted file mode 100644
+index 8cdeb50..0000000
 --- a/crates/sail-logical-plan/src/streaming/source_adapter.rs
 +++ /dev/null
 @@ -1,70 +0,0 @@
@@ -12187,6 +12792,9 @@
 -        Some(vec![(0..self.input.schema().fields().len()).collect()])
 -    }
 -}
+diff --git a/crates/sail-logical-plan/src/streaming/source_wrapper.rs b/crates/sail-logical-plan/src/streaming/source_wrapper.rs
+deleted file mode 100644
+index 1024739..0000000
 --- a/crates/sail-logical-plan/src/streaming/source_wrapper.rs
 +++ /dev/null
 @@ -1,140 +0,0 @@
@@ -12330,6 +12938,8 @@
 -        Ok(self.clone())
 -    }
 -}
+diff --git a/crates/sail-plan/Cargo.toml b/crates/sail-plan/Cargo.toml
+index f3ed96e..630c277 100644
 --- a/crates/sail-plan/Cargo.toml
 +++ b/crates/sail-plan/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -12337,7 +12947,7 @@
  [package]
  name = "sail-plan"
  version = { workspace = true }
-@@ -9,15 +10,9 @@
+@@ -9,15 +10,9 @@ workspace = true
  [dependencies]
  sail-common = { path = "../sail-common" }
  sail-common-datafusion = { path = "../sail-common-datafusion" }
@@ -12353,7 +12963,7 @@
  
  datafusion = { workspace = true }
  datafusion-common = { workspace = true }
-@@ -28,7 +23,6 @@
+@@ -28,7 +23,6 @@ datafusion-functions-nested = { workspace = true }
  datafusion-spark = { workspace = true }
  educe = { workspace = true }
  thiserror = { workspace = true }
@@ -12361,7 +12971,7 @@
  chrono = { workspace = true }
  chumsky = { workspace = true }
  async-trait = { workspace = true }
-@@ -37,9 +31,9 @@
+@@ -37,9 +31,9 @@ lazy_static = { workspace = true }
  ryu = { workspace = true }
  either = { workspace = true }
  tokio = { workspace = true }
@@ -12372,7 +12982,7 @@
  half = { workspace = true }
  arrow = { workspace = true }
  arrow-schema = { workspace = true }
-@@ -50,7 +44,3 @@
+@@ -50,7 +44,3 @@ log = { workspace = true }
  regex = { workspace = true }
  regex-syntax = { workspace = true }
  parquet-variant-compute = { workspace = true }
@@ -12380,6 +12990,9 @@
 -[build-dependencies]
 -serde = { workspace = true }
 -serde_yaml = { workspace = true }
+diff --git a/crates/sail-plan/build.rs b/crates/sail-plan/build.rs
+deleted file mode 100644
+index 0fe7434..0000000
 --- a/crates/sail-plan/build.rs
 +++ /dev/null
 @@ -1,238 +0,0 @@
@@ -12621,6 +13234,9 @@
 -    build_function_metadata(&entries, &out_dir)?;
 -    Ok(())
 -}
+diff --git a/crates/sail-plan/data/functions/aggregate.yaml b/crates/sail-plan/data/functions/aggregate.yaml
+deleted file mode 100644
+index aae11ad..0000000
 --- a/crates/sail-plan/data/functions/aggregate.yaml
 +++ /dev/null
 @@ -1,1841 +0,0 @@
@@ -14465,6 +15081,9 @@
 -           [4.0,6.0]
 -      
 -  since: "4.2.0"
+diff --git a/crates/sail-plan/data/functions/generator.yaml b/crates/sail-plan/data/functions/generator.yaml
+deleted file mode 100644
+index ebfccf3..0000000
 --- a/crates/sail-plan/data/functions/generator.yaml
 +++ /dev/null
 @@ -1,177 +0,0 @@
@@ -14645,6 +15264,9 @@
 -      
 -  since: "4.0.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/array.yaml b/crates/sail-plan/data/functions/scalar/array.yaml
+deleted file mode 100644
+index d16a45c..0000000
 --- a/crates/sail-plan/data/functions/scalar/array.yaml
 +++ /dev/null
 @@ -1,535 +0,0 @@
@@ -15183,6 +15805,9 @@
 -      
 -  since: "1.5.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/bitwise.yaml b/crates/sail-plan/data/functions/scalar/bitwise.yaml
+deleted file mode 100644
+index e2e22b5..0000000
 --- a/crates/sail-plan/data/functions/scalar/bitwise.yaml
 +++ /dev/null
 @@ -1,264 +0,0 @@
@@ -15450,6 +16075,9 @@
 -      
 -  since: "1.4.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/collection.yaml b/crates/sail-plan/data/functions/scalar/collection.yaml
+deleted file mode 100644
+index d316f30..0000000
 --- a/crates/sail-plan/data/functions/scalar/collection.yaml
 +++ /dev/null
 @@ -1,439 +0,0 @@
@@ -15892,6 +16520,9 @@
 -    
 -        || for arrays is available since 2.4.0.
 -  since: "2.3.0"
+diff --git a/crates/sail-plan/data/functions/scalar/conditional.yaml b/crates/sail-plan/data/functions/scalar/conditional.yaml
+deleted file mode 100644
+index 46f5d90..0000000
 --- a/crates/sail-plan/data/functions/scalar/conditional.yaml
 +++ /dev/null
 @@ -1,201 +0,0 @@
@@ -16096,6 +16727,9 @@
 -      
 -  since: "4.0.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/conversion.yaml b/crates/sail-plan/data/functions/scalar/conversion.yaml
+deleted file mode 100644
+index ad162db..0000000
 --- a/crates/sail-plan/data/functions/scalar/conversion.yaml
 +++ /dev/null
 @@ -1,148 +0,0 @@
@@ -16247,6 +16881,9 @@
 -  usage: "tinyint(expr) - Casts the value `expr` to the target data type `tinyint`."
 -  since: "2.0.1"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/csv.yaml b/crates/sail-plan/data/functions/scalar/csv.yaml
+deleted file mode 100644
+index 2e33709..0000000
 --- a/crates/sail-plan/data/functions/scalar/csv.yaml
 +++ /dev/null
 @@ -1,52 +0,0 @@
@@ -16302,6 +16939,9 @@
 -      
 -  since: "3.0.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/datetime.yaml b/crates/sail-plan/data/functions/scalar/datetime.yaml
+deleted file mode 100644
+index c5a3d6b..0000000
 --- a/crates/sail-plan/data/functions/scalar/datetime.yaml
 +++ /dev/null
 @@ -1,2178 +0,0 @@
@@ -18483,6 +19123,9 @@
 -  signatures:
 -    - "years(date)"
 -  usage: "years(date) - Returns the year component of the date/timestamp."
+diff --git a/crates/sail-plan/data/functions/scalar/geo.yaml b/crates/sail-plan/data/functions/scalar/geo.yaml
+deleted file mode 100644
+index 745d496..0000000
 --- a/crates/sail-plan/data/functions/scalar/geo.yaml
 +++ /dev/null
 @@ -1,123 +0,0 @@
@@ -18609,6 +19252,9 @@
 -      
 -  since: "4.1.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/hash.yaml b/crates/sail-plan/data/functions/scalar/hash.yaml
+deleted file mode 100644
+index f25070f..0000000
 --- a/crates/sail-plan/data/functions/scalar/hash.yaml
 +++ /dev/null
 @@ -1,116 +0,0 @@
@@ -18728,6 +19374,9 @@
 -      
 -  since: "3.0.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/json.yaml b/crates/sail-plan/data/functions/scalar/json.yaml
+deleted file mode 100644
+index 5326e72..0000000
 --- a/crates/sail-plan/data/functions/scalar/json.yaml
 +++ /dev/null
 @@ -1,157 +0,0 @@
@@ -18888,6 +19537,9 @@
 -      
 -  since: "2.2.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/map.yaml b/crates/sail-plan/data/functions/scalar/map.yaml
+deleted file mode 100644
+index 6135f26..0000000
 --- a/crates/sail-plan/data/functions/scalar/map.yaml
 +++ /dev/null
 @@ -1,151 +0,0 @@
@@ -19042,6 +19694,9 @@
 -      
 -  since: "2.0.1"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/math.yaml b/crates/sail-plan/data/functions/scalar/math.yaml
+deleted file mode 100644
+index 85661c8..0000000
 --- a/crates/sail-plan/data/functions/scalar/math.yaml
 +++ /dev/null
 @@ -1,1349 +0,0 @@
@@ -20394,6 +21049,9 @@
 -      
 -  since: "3.1.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/misc.yaml b/crates/sail-plan/data/functions/scalar/misc.yaml
+deleted file mode 100644
+index 00bd9f9..0000000
 --- a/crates/sail-plan/data/functions/scalar/misc.yaml
 +++ /dev/null
 @@ -1,1121 +0,0 @@
@@ -21518,6 +22176,9 @@
 -           3.1.0 a6d6ea3efedbad14d99c24143834cd4e2e52fb40
 -      
 -  since: "3.0.0"
+diff --git a/crates/sail-plan/data/functions/scalar/predicate.yaml b/crates/sail-plan/data/functions/scalar/predicate.yaml
+deleted file mode 100644
+index 80986d9..0000000
 --- a/crates/sail-plan/data/functions/scalar/predicate.yaml
 +++ /dev/null
 @@ -1,728 +0,0 @@
@@ -22249,6 +22910,9 @@
 -      
 -  since: "1.0.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/string.yaml b/crates/sail-plan/data/functions/scalar/string.yaml
+deleted file mode 100644
+index 5b2c03c..0000000
 --- a/crates/sail-plan/data/functions/scalar/string.yaml
 +++ /dev/null
 @@ -1,1902 +0,0 @@
@@ -24154,6 +24818,9 @@
 -      
 -  since: "4.0.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/struct.yaml b/crates/sail-plan/data/functions/scalar/struct.yaml
+deleted file mode 100644
+index 942d3b3..0000000
 --- a/crates/sail-plan/data/functions/scalar/struct.yaml
 +++ /dev/null
 @@ -1,32 +0,0 @@
@@ -24189,6 +24856,9 @@
 -      
 -  since: "1.4.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/url.yaml b/crates/sail-plan/data/functions/scalar/url.yaml
+deleted file mode 100644
+index 60d6d3b..0000000
 --- a/crates/sail-plan/data/functions/scalar/url.yaml
 +++ /dev/null
 @@ -1,114 +0,0 @@
@@ -24306,6 +24976,9 @@
 -      
 -  since: "3.4.0"
 -
+diff --git a/crates/sail-plan/data/functions/scalar/variant.yaml b/crates/sail-plan/data/functions/scalar/variant.yaml
+deleted file mode 100644
+index e133d0d..0000000
 --- a/crates/sail-plan/data/functions/scalar/variant.yaml
 +++ /dev/null
 @@ -1,191 +0,0 @@
@@ -24500,6 +25173,9 @@
 -  signatures:
 -    - "variant_to_json(expr), variant_to_json(expr, options)"
 -  usage: "variant_to_json(expr), variant_to_json(expr, options) - Returns a JSON string representation of a VARIANT expression."
+diff --git a/crates/sail-plan/data/functions/scalar/vector.yaml b/crates/sail-plan/data/functions/scalar/vector.yaml
+deleted file mode 100644
+index 29f8285..0000000
 --- a/crates/sail-plan/data/functions/scalar/vector.yaml
 +++ /dev/null
 @@ -1,109 +0,0 @@
@@ -24612,6 +25288,9 @@
 -           [0.75,1.0]
 -      
 -  since: "4.2.0"
+diff --git a/crates/sail-plan/data/functions/scalar/xml.yaml b/crates/sail-plan/data/functions/scalar/xml.yaml
+deleted file mode 100644
+index 01c9a95..0000000
 --- a/crates/sail-plan/data/functions/scalar/xml.yaml
 +++ /dev/null
 @@ -1,207 +0,0 @@
@@ -24822,6 +25501,9 @@
 -      
 -  since: "2.0.0"
 -
+diff --git a/crates/sail-plan/data/functions/table/range.yaml b/crates/sail-plan/data/functions/table/range.yaml
+deleted file mode 100644
+index a183cc0..0000000
 --- a/crates/sail-plan/data/functions/table/range.yaml
 +++ /dev/null
 @@ -1,45 +0,0 @@
@@ -24870,6 +25552,9 @@
 -      
 -  since: "2.0.0"
 -
+diff --git a/crates/sail-plan/data/functions/window.yaml b/crates/sail-plan/data/functions/window.yaml
+deleted file mode 100644
+index 781d795..0000000
 --- a/crates/sail-plan/data/functions/window.yaml
 +++ /dev/null
 @@ -1,267 +0,0 @@
@@ -25140,6 +25825,9 @@
 -      
 -  since: "2.0.0"
 -
+diff --git a/crates/sail-plan/src/catalog.rs b/crates/sail-plan/src/catalog.rs
+deleted file mode 100644
+index 2aae312..0000000
 --- a/crates/sail-plan/src/catalog.rs
 +++ /dev/null
 @@ -1,193 +0,0 @@
@@ -25336,33 +26024,36 @@
 -        }
 -    }
 -}
+diff --git a/crates/sail-plan/src/config.rs b/crates/sail-plan/src/config.rs
+index 692c016..c27da1f 100644
 --- a/crates/sail-plan/src/config.rs
 +++ b/crates/sail-plan/src/config.rs
-@@ -1,8 +1,7 @@
+@@ -1,9 +1,8 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::fmt::Debug;
  use std::hash::Hash;
  use std::sync::Arc;
--
--use sail_python_udf::config::PySparkUdfConfig;
  
+-use sail_python_udf::config::PySparkUdfConfig;
+-
  use crate::error::PlanResult;
  
-@@ -10,13 +9,6 @@
- pub enum DefaultTimestampType {
-     TimestampLtz,
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+@@ -12,13 +11,6 @@ pub enum DefaultTimestampType {
      TimestampNtz,
--}
--
+ }
+ 
 -#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 -pub enum StoreAssignmentPolicy {
 -    Ansi,
 -    Strict,
 -    Legacy,
- }
- 
+-}
+-
  #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-@@ -36,16 +28,8 @@
+ pub enum MapKeyDedupPolicy {
+     #[default]
+@@ -36,16 +28,8 @@ pub struct PlanConfig {
      pub default_timestamp_type: DefaultTimestampType,
      /// Whether to use large variable types in Arrow.
      pub arrow_use_large_var_types: bool,
@@ -25379,7 +26070,7 @@
      /// Policy for duplicate keys created by map functions.
      pub map_key_dedup_policy: MapKeyDedupPolicy,
      /// Whether to allow cartesian products (cross joins) without explicit `CROSS JOIN` syntax.
-@@ -56,10 +40,6 @@
+@@ -56,10 +40,6 @@ pub struct PlanConfig {
      /// The maximum number of distinct values collected for a pivot without an explicit
      /// value list (`spark.sql.pivotMaxValues`, default 10000). Exceeding it is an error.
      pub pivot_max_values: usize,
@@ -25390,7 +26081,7 @@
      /// Whether `COUNT()` is accepted with no arguments. Spark's legacy behavior returns zero;
      /// it does not interpret the call as `COUNT(*)`.
      pub legacy_allow_parameterless_count: bool,
-@@ -67,10 +47,7 @@
+@@ -67,10 +47,7 @@ pub struct PlanConfig {
  
  impl PlanConfig {
      pub fn new() -> PlanResult<Self> {
@@ -25402,7 +26093,7 @@
      }
  }
  
-@@ -81,17 +58,12 @@
+@@ -81,17 +58,12 @@ impl Default for PlanConfig {
              session_locale: Arc::from("en-US"),
              default_timestamp_type: DefaultTimestampType::TimestampLtz,
              arrow_use_large_var_types: false,
@@ -25420,6 +26111,8 @@
              legacy_allow_parameterless_count: false,
          }
      }
+diff --git a/crates/sail-plan/src/error.rs b/crates/sail-plan/src/error.rs
+index 5fdb1c3..67f01d6 100644
 --- a/crates/sail-plan/src/error.rs
 +++ b/crates/sail-plan/src/error.rs
 @@ -1,8 +1,7 @@
@@ -25432,7 +26125,7 @@
  use sail_sql_analyzer::error::SqlError;
  use thiserror::Error;
  
-@@ -84,34 +83,6 @@
+@@ -84,34 +83,6 @@ impl From<CommonError> for PlanError {
      }
  }
  
@@ -25467,7 +26160,7 @@
  impl From<SqlError> for PlanError {
      fn from(value: SqlError) -> Self {
          match value {
-@@ -125,17 +96,3 @@
+@@ -125,17 +96,3 @@ impl From<SqlError> for PlanError {
          }
      }
  }
@@ -25485,6 +26178,9 @@
 -        }
 -    }
 -}
+diff --git a/crates/sail-plan/src/explain.rs b/crates/sail-plan/src/explain.rs
+deleted file mode 100644
+index a7a7630..0000000
 --- a/crates/sail-plan/src/explain.rs
 +++ /dev/null
 @@ -1,517 +0,0 @@
@@ -26005,6 +26701,8 @@
 -        stringified_plans: collected.stringified,
 -    })
 -}
+diff --git a/crates/sail-plan/src/formatter.rs b/crates/sail-plan/src/formatter.rs
+index 83de6d8..996f147 100644
 --- a/crates/sail-plan/src/formatter.rs
 +++ b/crates/sail-plan/src/formatter.rs
 @@ -1,3 +1,4 @@
@@ -26012,7 +26710,7 @@
  use std::fmt::{Debug, Display, Formatter};
  use std::hash::Hash;
  
-@@ -14,7 +15,6 @@
+@@ -14,7 +15,6 @@ use sail_common_datafusion::formatter::{
      TimestampMicrosecondFormatter, TimestampMillisecondFormatter, TimestampNanosecondFormatter,
      TimestampSecondFormatter,
  };
@@ -26020,20 +26718,19 @@
  use sail_common_datafusion::utils::items::ItemTaker;
  
  #[derive(Debug, PartialEq, Eq, Hash, PartialOrd)]
-@@ -29,10 +29,8 @@
+@@ -29,10 +29,8 @@ impl SparkPlanFormatter {
              TimeUnit::Nanosecond => "nanosecond",
          }
      }
 -}
--
+ 
 -impl PlanFormatter for SparkPlanFormatter {
 -    fn data_type_to_simple_string(&self, data_type: &DataType) -> Result<String> {
-+
 +    pub fn data_type_to_simple_string(&self, data_type: &DataType) -> Result<String> {
          match data_type {
              DataType::Null => Ok("void".to_string()),
              DataType::Binary
-@@ -130,7 +128,11 @@
+@@ -130,7 +128,11 @@ impl PlanFormatter for SparkPlanFormatter {
          }
      }
  
@@ -26046,7 +26743,7 @@
          let literal_list_to_string = |name: &str, values: Option<&dyn Array>| -> Result<String> {
              let Some(values) = values else {
                  return Ok("NULL".to_string());
-@@ -428,7 +430,7 @@
+@@ -428,7 +430,7 @@ impl PlanFormatter for SparkPlanFormatter {
          }
      }
  
@@ -26055,6 +26752,8 @@
          &self,
          name: &str,
          arguments: Vec<&str>,
+diff --git a/crates/sail-plan/src/function/aggregate.rs b/crates/sail-plan/src/function/aggregate.rs
+index 3561975..5757a6f 100644
 --- a/crates/sail-plan/src/function/aggregate.rs
 +++ b/crates/sail-plan/src/function/aggregate.rs
 @@ -1,3 +1,4 @@
@@ -26062,7 +26761,7 @@
  use std::collections::HashMap;
  use std::sync::Arc;
  
-@@ -1065,10 +1066,6 @@
+@@ -1065,10 +1066,6 @@ pub(crate) fn get_built_in_aggregate_function(name: &str) -> PlanResult<AggFunct
          .clone())
  }
  
@@ -26073,6 +26772,8 @@
  #[cfg(test)]
  mod tests {
      use std::sync::Arc;
+diff --git a/crates/sail-plan/src/function/common.rs b/crates/sail-plan/src/function/common.rs
+index 8517d29..0471fc1 100644
 --- a/crates/sail-plan/src/function/common.rs
 +++ b/crates/sail-plan/src/function/common.rs
 @@ -1,3 +1,4 @@
@@ -26080,7 +26781,7 @@
  use std::sync::Arc;
  
  use datafusion::arrow::datatypes::DataType;
-@@ -13,12 +14,6 @@
+@@ -13,12 +14,6 @@ use datafusion_expr::{
  use sail_common_datafusion::utils::items::ItemTaker;
  use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
  use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIES};
@@ -26093,7 +26794,7 @@
  
  use crate::config::PlanConfig;
  use crate::error::{IntoPlanResult, PlanError, PlanResult};
-@@ -485,33 +480,8 @@
+@@ -485,33 +480,8 @@ pub(crate) fn theta_args_with_default_lg(
      }
  }
  
@@ -26128,6 +26829,9 @@
  pub fn expr_contains_spark_cast_to_variant(body: &expr::Expr) -> PlanResult<bool> {
      Ok(body.exists(|expression| {
          Ok(matches!(
+diff --git a/crates/sail-plan/src/function/metadata.rs b/crates/sail-plan/src/function/metadata.rs
+deleted file mode 100644
+index ac07d57..0000000
 --- a/crates/sail-plan/src/function/metadata.rs
 +++ /dev/null
 @@ -1,58 +0,0 @@
@@ -26189,6 +26893,8 @@
 -        .is_public
 -        .then(|| built_in_function_status(metadata))
 -}
+diff --git a/crates/sail-plan/src/function/mod.rs b/crates/sail-plan/src/function/mod.rs
+index ba4406d..f28725c 100644
 --- a/crates/sail-plan/src/function/mod.rs
 +++ b/crates/sail-plan/src/function/mod.rs
 @@ -1,3 +1,4 @@
@@ -26196,7 +26902,7 @@
  use std::collections::HashMap;
  use std::sync::Arc;
  
-@@ -7,7 +8,6 @@
+@@ -7,7 +8,6 @@ use datafusion::catalog::TableFunction;
  use datafusion_common::utils::expr::COUNT_STAR_EXPANSION;
  use datafusion_expr::expr::Expr;
  use lazy_static::lazy_static;
@@ -26204,7 +26910,7 @@
  
  use crate::error::{PlanError, PlanResult};
  use crate::function::common::ScalarFunction;
-@@ -15,7 +15,6 @@
+@@ -15,7 +15,6 @@ use crate::function::common::ScalarFunction;
  mod aggregate;
  pub(crate) mod common;
  mod generator;
@@ -26212,21 +26918,19 @@
  mod scalar;
  mod table;
  mod window;
-@@ -32,8 +31,6 @@
-     pub static ref BUILT_IN_TABLE_FUNCTIONS: HashMap<&'static str, Arc<TableFunction>> =
+@@ -33,8 +32,6 @@ lazy_static! {
          HashMap::from_iter(table::list_built_in_table_functions());
  }
--
--const BUILT_IN_OPERATOR_FUNCTION_NAMES: &[&str] = &["<>", "between", "||"];
  
+-const BUILT_IN_OPERATOR_FUNCTION_NAMES: &[&str] = &["<>", "between", "||"];
+-
  pub fn get_built_in_function(name: &str) -> PlanResult<ScalarFunction> {
      Ok(BUILT_IN_SCALAR_FUNCTIONS
-@@ -52,28 +49,6 @@
- 
- pub fn is_built_in_generator_function(name: &str) -> bool {
+         .get(name)
+@@ -54,28 +51,6 @@ pub fn is_built_in_generator_function(name: &str) -> bool {
      BUILT_IN_GENERATOR_FUNCTIONS.contains_key(name)
--}
--
+ }
+ 
 -fn list_built_in_function_names() -> Vec<&'static str> {
 -    let mut names = BUILT_IN_SCALAR_FUNCTIONS
 -        .keys()
@@ -26247,9 +26951,13 @@
 -        .into_iter()
 -        .filter_map(metadata::built_in_public_function_status)
 -        .collect()
- }
- 
+-}
+-
  pub use generator::get_outer_built_in_generator_functions;
+ 
+ /// This function is temporary and should ONLY be used for COUNT(*).
+diff --git a/crates/sail-plan/src/function/scalar/array.rs b/crates/sail-plan/src/function/scalar/array.rs
+index d9c95b9..ca94210 100644
 --- a/crates/sail-plan/src/function/scalar/array.rs
 +++ b/crates/sail-plan/src/function/scalar/array.rs
 @@ -1,3 +1,4 @@
@@ -26257,7 +26965,7 @@
  use std::sync::Arc;
  
  use datafusion::arrow::datatypes::{DataType, TimeUnit};
-@@ -27,7 +28,7 @@
+@@ -27,7 +28,7 @@ use sail_function::scalar::misc::raise_error::RaiseError;
  
  use super::lambda::lambda_with_fresh_parameter;
  use crate::error::{PlanError, PlanResult};
@@ -26266,11 +26974,10 @@
  use crate::function::is_spark_compatible_arrow_fixed_offset;
  
  fn array_repeat(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-@@ -397,19 +398,6 @@
-             sequence_cast(argument, &source_type, &target_type, config.ansi_mode)
+@@ -398,19 +399,6 @@ fn sequence(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
          })
          .collect::<PlanResult<Vec<_>>>()?;
--
+ 
 -    let has_pyspark_udf = arguments.iter().try_fold(false, |found, argument| {
 -        if found {
 -            Ok(true)
@@ -26283,9 +26990,12 @@
 -        //  expression-local lazy evaluation around the extracted values.
 -        return Ok(ScalarUDF::from(udf).call(arguments));
 -    }
- 
+-
      // TODO: Fold all-foldable arguments in Spark's left-to-right order.
      //  Optimizing independent lambda bodies can change which NULL or error wins.
+     let arguments = arguments
+diff --git a/crates/sail-plan/src/function/scalar/datetime.rs b/crates/sail-plan/src/function/scalar/datetime.rs
+index 4ee185c..0e246d4 100644
 --- a/crates/sail-plan/src/function/scalar/datetime.rs
 +++ b/crates/sail-plan/src/function/scalar/datetime.rs
 @@ -1,3 +1,4 @@
@@ -26293,7 +27003,7 @@
  use std::sync::Arc;
  
  use datafusion::arrow::compute::can_cast_types;
-@@ -42,8 +43,7 @@
+@@ -42,8 +43,7 @@ use super::lambda::lambda_with_fresh_parameter;
  use crate::config::DefaultTimestampType;
  use crate::error::{PlanError, PlanResult};
  use crate::function::common::{
@@ -26303,7 +27013,7 @@
  };
  
  fn integer_part(expr: Expr, part: &str) -> Expr {
-@@ -841,8 +841,7 @@
+@@ -841,8 +841,7 @@ fn convert_timezone(input: ScalarFunctionInput) -> PlanResult<Expr> {
                  if found {
                      PlanResult::Ok(true)
                  } else {
@@ -26313,6 +27023,8 @@
                  }
              })?;
  
+diff --git a/crates/sail-plan/src/function/scalar/misc.rs b/crates/sail-plan/src/function/scalar/misc.rs
+index 53c09a5..15a01a0 100644
 --- a/crates/sail-plan/src/function/scalar/misc.rs
 +++ b/crates/sail-plan/src/function/scalar/misc.rs
 @@ -1,3 +1,4 @@
@@ -26320,7 +27032,7 @@
  use std::sync::Arc;
  
  use arrow::datatypes::DataType;
-@@ -5,10 +6,6 @@
+@@ -5,10 +6,6 @@ use datafusion::functions::expr_fn;
  use datafusion_common::ScalarValue;
  use datafusion_expr::{ExprSchemable, Operator, ScalarUDF, cast, expr, lit, when};
  use datafusion_spark::function::bitmap::expr_fn as bitmap_fn;
@@ -26331,7 +27043,7 @@
  use sail_common_datafusion::utils::items::ItemTaker;
  use sail_function::scalar::misc::hll_sketch::{HllSketchEstimateFunction, HllUnionFunction};
  use sail_function::scalar::misc::monotonically_increasing_id::SparkMonotonicallyIncreasingId;
-@@ -25,6 +22,7 @@
+@@ -25,6 +22,7 @@ use sail_function::scalar::misc::version::SparkVersion;
  use sail_function::sketch::DEFAULT_THETA_LG_NOM_ENTRIES;
  
  use crate::error::{PlanError, PlanResult};
@@ -26339,7 +27051,7 @@
  use crate::function::common::{ScalarFunction, ScalarFunctionInput};
  
  fn assert_true(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-@@ -63,22 +61,28 @@
+@@ -63,22 +61,28 @@ fn assert_true(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
  
  fn current_catalog(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
      input.arguments.zero()?;
@@ -26376,7 +27088,7 @@
  }
  
  fn current_user(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
-@@ -97,12 +101,7 @@
+@@ -97,12 +101,7 @@ fn type_of(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
      } = input;
      let expr = arguments.one()?;
      let data_type = expr.get_type(function_context.schema)?;
@@ -26390,6 +27102,8 @@
      Ok(lit(type_of))
  }
  
+diff --git a/crates/sail-plan/src/function/table/mod.rs b/crates/sail-plan/src/function/table/mod.rs
+index 29882c9..75cbdc3 100644
 --- a/crates/sail-plan/src/function/table/mod.rs
 +++ b/crates/sail-plan/src/function/table/mod.rs
 @@ -1,3 +1,4 @@
@@ -26397,7 +27111,7 @@
  use std::sync::Arc;
  
  use datafusion::catalog::TableFunction;
-@@ -5,6 +6,7 @@
+@@ -5,6 +6,7 @@ use datafusion::catalog::TableFunction;
  use crate::function::table::range::RangeTableFunction;
  
  mod range;
@@ -26405,6 +27119,8 @@
  
  pub(super) fn list_built_in_table_functions() -> Vec<(&'static str, Arc<TableFunction>)> {
      vec![("range", Arc::new(RangeTableFunction::new()))]
+diff --git a/crates/sail-plan/src/function/table/range.rs b/crates/sail-plan/src/function/table/range.rs
+index 01ae060..4d3c4f2 100644
 --- a/crates/sail-plan/src/function/table/range.rs
 +++ b/crates/sail-plan/src/function/table/range.rs
 @@ -1,7 +1,9 @@
@@ -26417,7 +27133,7 @@
  use datafusion::arrow::datatypes::SchemaRef;
  use datafusion::catalog::{Session, TableFunctionImpl, TableProvider};
  use datafusion::physical_plan::ExecutionPlan;
-@@ -9,14 +11,13 @@
+@@ -9,14 +11,13 @@ use datafusion_common::{Result, exec_err};
  use datafusion_expr::{Expr, LogicalPlan, TableType, UserDefinedLogicalNodeCore, logical_plan};
  use sail_common_datafusion::literal::{LiteralEvaluator, LiteralValue};
  use sail_logical_plan::range::RangeNode;
@@ -26433,6 +27149,9 @@
  impl TableProvider for RangeTableProvider {
      fn schema(&self) -> SchemaRef {
          self.node.schema().inner().clone()
+diff --git a/crates/sail-plan/src/function/table/range_exec.rs b/crates/sail-plan/src/function/table/range_exec.rs
+new file mode 100644
+index 0000000..ae0e8f7
 --- /dev/null
 +++ b/crates/sail-plan/src/function/table/range_exec.rs
 @@ -0,0 +1,146 @@
@@ -26582,6 +27301,8 @@
 +        )))
 +    }
 +}
+diff --git a/crates/sail-plan/src/function/window.rs b/crates/sail-plan/src/function/window.rs
+index d2ee562..68da34b 100644
 --- a/crates/sail-plan/src/function/window.rs
 +++ b/crates/sail-plan/src/function/window.rs
 @@ -1,3 +1,4 @@
@@ -26589,7 +27310,7 @@
  use std::collections::HashMap;
  use std::sync::Arc;
  
-@@ -854,10 +855,6 @@
+@@ -854,10 +855,6 @@ pub(crate) fn get_built_in_window_function(name: &str) -> PlanResult<WinFunction
          .clone())
  }
  
@@ -26600,6 +27321,8 @@
  #[cfg(test)]
  mod tests {
      use std::sync::Arc;
+diff --git a/crates/sail-plan/src/lib.rs b/crates/sail-plan/src/lib.rs
+index bb87e6d..d1d7cd2 100644
 --- a/crates/sail-plan/src/lib.rs
 +++ b/crates/sail-plan/src/lib.rs
 @@ -1,66 +1,7 @@
@@ -26671,6 +27394,9 @@
 -    Ok((plan, info))
 -}
 +pub use error::PlanResult;
+diff --git a/crates/sail-plan/src/resolver/command/catalog/database.rs b/crates/sail-plan/src/resolver/command/catalog/database.rs
+deleted file mode 100644
+index ba53b08..0000000
 --- a/crates/sail-plan/src/resolver/command/catalog/database.rs
 +++ /dev/null
 @@ -1,32 +0,0 @@
@@ -26706,12 +27432,18 @@
 -        self.resolve_catalog_command(command)
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/catalog/mod.rs b/crates/sail-plan/src/resolver/command/catalog/mod.rs
+deleted file mode 100644
+index 3977cdf..0000000
 --- a/crates/sail-plan/src/resolver/command/catalog/mod.rs
 +++ /dev/null
 @@ -1,3 +0,0 @@
 -pub(super) mod database;
 -pub(super) mod table;
 -pub(super) mod view;
+diff --git a/crates/sail-plan/src/resolver/command/catalog/table.rs b/crates/sail-plan/src/resolver/command/catalog/table.rs
+deleted file mode 100644
+index 469b843..0000000
 --- a/crates/sail-plan/src/resolver/command/catalog/table.rs
 +++ /dev/null
 @@ -1,620 +0,0 @@
@@ -27335,6 +28067,9 @@
 -    }
 -    Ok(value)
 -}
+diff --git a/crates/sail-plan/src/resolver/command/catalog/view.rs b/crates/sail-plan/src/resolver/command/catalog/view.rs
+deleted file mode 100644
+index 4868143..0000000
 --- a/crates/sail-plan/src/resolver/command/catalog/view.rs
 +++ /dev/null
 @@ -1,185 +0,0 @@
@@ -27523,6 +28258,9 @@
 -        self.resolve_catalog_command(command)
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/checkpoint.rs b/crates/sail-plan/src/resolver/command/checkpoint.rs
+deleted file mode 100644
+index c0150bf..0000000
 --- a/crates/sail-plan/src/resolver/command/checkpoint.rs
 +++ /dev/null
 @@ -1,36 +0,0 @@
@@ -27562,6 +28300,9 @@
 -        }))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/delete.rs b/crates/sail-plan/src/resolver/command/delete.rs
+deleted file mode 100644
+index 3163432..0000000
 --- a/crates/sail-plan/src/resolver/command/delete.rs
 +++ /dev/null
 @@ -1,165 +0,0 @@
@@ -27730,6 +28471,9 @@
 -    properties: Vec<(String, String)>,
 -    lakehouse_table: Option<LakehouseExecutionContext>,
 -}
+diff --git a/crates/sail-plan/src/resolver/command/delta.rs b/crates/sail-plan/src/resolver/command/delta.rs
+deleted file mode 100644
+index beb21dd..0000000
 --- a/crates/sail-plan/src/resolver/command/delta.rs
 +++ /dev/null
 @@ -1,727 +0,0 @@
@@ -28460,6 +29204,9 @@
 -        ))
 -    })
 -}
+diff --git a/crates/sail-plan/src/resolver/command/explain.rs b/crates/sail-plan/src/resolver/command/explain.rs
+deleted file mode 100644
+index 25dcff0..0000000
 --- a/crates/sail-plan/src/resolver/command/explain.rs
 +++ /dev/null
 @@ -1,38 +0,0 @@
@@ -28501,6 +29248,9 @@
 -        Ok(plan)
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/function.rs b/crates/sail-plan/src/resolver/command/function.rs
+deleted file mode 100644
+index d7c8b29..0000000
 --- a/crates/sail-plan/src/resolver/command/function.rs
 +++ /dev/null
 @@ -1,79 +0,0 @@
@@ -28583,6 +29333,9 @@
 -        self.resolve_catalog_command(command)
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/insert.rs b/crates/sail-plan/src/resolver/command/insert.rs
+deleted file mode 100644
+index bfee945..0000000
 --- a/crates/sail-plan/src/resolver/command/insert.rs
 +++ /dev/null
 @@ -1,197 +0,0 @@
@@ -28783,6 +29536,9 @@
 -        self.resolve_write_with_builder(input, builder, state).await
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/merge.rs b/crates/sail-plan/src/resolver/command/merge.rs
+deleted file mode 100644
+index 4f4248e..0000000
 --- a/crates/sail-plan/src/resolver/command/merge.rs
 +++ /dev/null
 @@ -1,1958 +0,0 @@
@@ -30744,6 +31500,9 @@
 -
 -    (join_key_pairs, residual_predicates, target_only_predicates)
 -}
+diff --git a/crates/sail-plan/src/resolver/command/mod.rs b/crates/sail-plan/src/resolver/command/mod.rs
+deleted file mode 100644
+index 5111c21..0000000
 --- a/crates/sail-plan/src/resolver/command/mod.rs
 +++ /dev/null
 @@ -1,365 +0,0 @@
@@ -31112,6 +31871,9 @@
 -        }))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/show.rs b/crates/sail-plan/src/resolver/command/show.rs
+deleted file mode 100644
+index b21fa50..0000000
 --- a/crates/sail-plan/src/resolver/command/show.rs
 +++ /dev/null
 @@ -1,76 +0,0 @@
@@ -31191,6 +31953,9 @@
 -        })
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/variable.rs b/crates/sail-plan/src/resolver/command/variable.rs
+deleted file mode 100644
+index 4bad92d..0000000
 --- a/crates/sail-plan/src/resolver/command/variable.rs
 +++ /dev/null
 @@ -1,24 +0,0 @@
@@ -31218,6 +31983,9 @@
 -        Ok(LogicalPlan::Statement(statement))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/with_relations.rs b/crates/sail-plan/src/resolver/command/with_relations.rs
+deleted file mode 100644
+index 1e482ee..0000000
 --- a/crates/sail-plan/src/resolver/command/with_relations.rs
 +++ /dev/null
 @@ -1,65 +0,0 @@
@@ -31286,6 +32054,9 @@
 -        self.resolve_command_plan(root, scope.state()).await
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/write.rs b/crates/sail-plan/src/resolver/command/write.rs
+deleted file mode 100644
+index 0cd1a1a..0000000
 --- a/crates/sail-plan/src/resolver/command/write.rs
 +++ /dev/null
 @@ -1,1866 +0,0 @@
@@ -33155,6 +33926,9 @@
 -        bucket_by_match && sort_by_match
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/write_stream.rs b/crates/sail-plan/src/resolver/command/write_stream.rs
+deleted file mode 100644
+index f9acf47..0000000
 --- a/crates/sail-plan/src/resolver/command/write_stream.rs
 +++ /dev/null
 @@ -1,73 +0,0 @@
@@ -33231,6 +34005,9 @@
 -        self.resolve_write_with_builder(input, builder, state).await
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/write_v1.rs b/crates/sail-plan/src/resolver/command/write_v1.rs
+deleted file mode 100644
+index c95ec70..0000000
 --- a/crates/sail-plan/src/resolver/command/write_v1.rs
 +++ /dev/null
 @@ -1,166 +0,0 @@
@@ -33400,6 +34177,9 @@
 -        self.resolve_write_with_builder(input, builder, state).await
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/command/write_v2.rs b/crates/sail-plan/src/resolver/command/write_v2.rs
+deleted file mode 100644
+index 1c1d03c..0000000
 --- a/crates/sail-plan/src/resolver/command/write_v2.rs
 +++ /dev/null
 @@ -1,106 +0,0 @@
@@ -33509,6 +34289,9 @@
 -        self.resolve_write_with_builder(input, builder, state).await
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/constraint.rs b/crates/sail-plan/src/resolver/constraint.rs
+deleted file mode 100644
+index 15c4a4b..0000000
 --- a/crates/sail-plan/src/resolver/constraint.rs
 +++ /dev/null
 @@ -1,62 +0,0 @@
@@ -33574,6 +34357,8 @@
 -        Ok(Constraints::new_unverified(constraints))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/expression/cast.rs b/crates/sail-plan/src/resolver/expression/cast.rs
+index 1a8c232..ee85ad4 100644
 --- a/crates/sail-plan/src/resolver/expression/cast.rs
 +++ b/crates/sail-plan/src/resolver/expression/cast.rs
 @@ -1,3 +1,4 @@
@@ -33581,7 +34366,7 @@
  use std::ops::{Div, Mul};
  use std::sync::Arc;
  
-@@ -6,8 +7,6 @@
+@@ -6,8 +7,6 @@ use datafusion_common::{DFSchemaRef, ScalarValue};
  use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
  use sail_common::spec;
  use sail_common::utils::datetime::time_unit_to_multiplier;
@@ -33590,7 +34375,7 @@
  use sail_common_datafusion::utils::items::ItemTaker;
  use sail_common_datafusion::variant::is_variant_storage_field;
  use sail_function::scalar::datetime::convert_tz::ConvertTz;
-@@ -24,6 +23,7 @@
+@@ -24,6 +23,7 @@ use sail_function::scalar::variant::spark_variant_get::SparkVariantGet;
  use sail_function::scalar::variant::spark_variant_to_json::SparkVariantToJsonUdf;
  
  use crate::error::{PlanError, PlanResult};
@@ -33598,7 +34383,7 @@
  use crate::function::is_spark_compatible_arrow_fixed_offset;
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
-@@ -74,10 +74,7 @@
+@@ -74,10 +74,7 @@ impl PlanResolver<'_> {
          let expr_type = expr_field.data_type().clone();
          let expr_is_variant = is_variant_storage_field(expr_field.as_ref());
          let name = if need_rename_cast(&expr) {
@@ -33610,7 +34395,7 @@
              vec![format!(
                  "{}CAST({} AS {})",
                  if is_try { "TRY_" } else { "" },
-@@ -139,8 +136,7 @@
+@@ -139,8 +136,7 @@ impl PlanResolver<'_> {
                  ScalarUDF::new_from_impl(SparkVariantToJsonUdf::new()).call(vec![expr])
              }
              (_, to, is_try) if expr_is_variant => {
@@ -33620,6 +34405,8 @@
                  ScalarUDF::new_from_impl(SparkVariantGet::new(is_try)).call(vec![
                      expr,
                      lit("$"),
+diff --git a/crates/sail-plan/src/resolver/expression/function.rs b/crates/sail-plan/src/resolver/expression/function.rs
+index 460ca78..c7541e8 100644
 --- a/crates/sail-plan/src/resolver/expression/function.rs
 +++ b/crates/sail-plan/src/resolver/expression/function.rs
 @@ -1,16 +1,15 @@
@@ -33642,7 +34429,7 @@
  use crate::function::common::{AggFunctionInput, FunctionContextInput, ScalarFunctionInput};
  use crate::function::{
      get_built_in_aggregate_function, get_built_in_function, is_higher_order_function,
-@@ -18,7 +17,6 @@
+@@ -18,7 +17,6 @@ use crate::function::{
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
  use crate::resolver::expression::lambda::is_spec_lambda_argument;
@@ -33650,7 +34437,7 @@
  use crate::resolver::state::PlanResolverState;
  
  impl PlanResolver<'_> {
-@@ -45,40 +43,15 @@
+@@ -45,40 +43,15 @@ impl PlanResolver<'_> {
          let Ok(function_name) = <Vec<String>>::from(function_name).one() else {
              return Err(PlanError::unsupported("qualified function name"));
          };
@@ -33696,7 +34483,7 @@
          // For functions that accept a date-part keyword as the first argument
          // (e.g., DATEDIFF(DAY, start, end)), convert the unresolved attribute
          // to a string literal before resolution.
-@@ -111,130 +84,80 @@
+@@ -111,130 +84,80 @@ impl PlanResolver<'_> {
  
          let has_lambda_argument = arguments.iter().any(|x| matches!(x, expr::Expr::Lambda(_)));
  
@@ -33739,74 +34526,12 @@
 -                    expr::Expr::ScalarFunction(ScalarFunction {
 -                        func: std::sync::Arc::new(udf),
 -                        args: arguments,
+-                    })
+-                }
 +        // The native registry also contains DataFusion builtins. Keep Spark's
 +        // implementations (and explicit unsupported entries) authoritative.
 +        let func = if let Ok(func) = get_built_in_function(&canonical_function_name) {
 +            if ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
-+                return Err(PlanError::invalid("invalid scalar function clause"));
-+            }
-+            let input = ScalarFunctionInput {
-+                arguments,
-+                function_context: FunctionContextInput {
-+                    argument_display_names: &argument_display_names,
-+                    plan_config: &self.config,
-+                    session_context: self.ctx,
-+                    schema,
-+                },
-+            };
-+            func(input)?
-+        } else if let Ok(func) = get_built_in_aggregate_function(&canonical_function_name) {
-+            let filter = match filter {
-+                Some(x) => Some(Box::new(self.resolve_expression(*x, schema, state).await?)),
-+                None => None,
-+            };
-+            let order_by = match order_by {
-+                Some(x) => self.resolve_sort_orders(x, true, schema, state).await?,
-+                None => vec![],
-+            };
-+            // For DISTINCT aggregate functions with a wildcard argument (e.g., COUNT(DISTINCT *)),
-+            // expand the wildcard to visible column references here in the resolver where we have
-+            // access to `state` for hidden-column filtering. This ensures hidden columns (e.g.,
-+            // join keys) are excluded from the distinct count.
-+            #[expect(deprecated)]
-+            let arguments = if is_distinct
-+                && matches!(
-+                    arguments.as_slice(),
-+                    [expr::Expr::Wildcard {
-+                        qualifier: None,
-+                        options: _
-+                    }]
-+                ) {
-+                schema
-+                    .columns()
-+                    .into_iter()
-+                    .filter(|c| {
-+                        state
-+                            .get_field_info(&c.name)
-+                            .is_ok_and(|info| !info.is_hidden())
-                     })
--                }
-+                    .map(expr::Expr::Column)
-+                    .collect()
-+            } else {
-+                arguments
-+            };
-+            let input = AggFunctionInput {
-+                arguments,
-+                distinct: is_distinct,
-+                ignore_nulls,
-+                filter,
-+                order_by,
-+                function_context: FunctionContextInput {
-+                    argument_display_names: &argument_display_names,
-+                    plan_config: &self.config,
-+                    session_context: self.ctx,
-+                    schema,
-+                },
-+            };
-+            func(input)?
-+        } else if let Ok(udf) = self.ctx.udf(&canonical_function_name) {
-+            if is_distinct || ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
 +                return Err(PlanError::invalid("invalid scalar function clause"));
              }
 -            _ => {
@@ -33890,7 +34615,69 @@
 -                        }
 -                    }
 -                }
--            }
++            let input = ScalarFunctionInput {
++                arguments,
++                function_context: FunctionContextInput {
++                    argument_display_names: &argument_display_names,
++                    plan_config: &self.config,
++                    session_context: self.ctx,
++                    schema,
++                },
++            };
++            func(input)?
++        } else if let Ok(func) = get_built_in_aggregate_function(&canonical_function_name) {
++            let filter = match filter {
++                Some(x) => Some(Box::new(self.resolve_expression(*x, schema, state).await?)),
++                None => None,
++            };
++            let order_by = match order_by {
++                Some(x) => self.resolve_sort_orders(x, true, schema, state).await?,
++                None => vec![],
++            };
++            // For DISTINCT aggregate functions with a wildcard argument (e.g., COUNT(DISTINCT *)),
++            // expand the wildcard to visible column references here in the resolver where we have
++            // access to `state` for hidden-column filtering. This ensures hidden columns (e.g.,
++            // join keys) are excluded from the distinct count.
++            #[expect(deprecated)]
++            let arguments = if is_distinct
++                && matches!(
++                    arguments.as_slice(),
++                    [expr::Expr::Wildcard {
++                        qualifier: None,
++                        options: _
++                    }]
++                ) {
++                schema
++                    .columns()
++                    .into_iter()
++                    .filter(|c| {
++                        state
++                            .get_field_info(&c.name)
++                            .is_ok_and(|info| !info.is_hidden())
++                    })
++                    .map(expr::Expr::Column)
++                    .collect()
++            } else {
++                arguments
++            };
++            let input = AggFunctionInput {
++                arguments,
++                distinct: is_distinct,
++                ignore_nulls,
++                filter,
++                order_by,
++                function_context: FunctionContextInput {
++                    argument_display_names: &argument_display_names,
++                    plan_config: &self.config,
++                    session_context: self.ctx,
++                    schema,
++                },
++            };
++            func(input)?
++        } else if let Ok(udf) = self.ctx.udf(&canonical_function_name) {
++            if is_distinct || ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
++                return Err(PlanError::invalid("invalid scalar function clause"));
+             }
 +            udf.call(arguments)
 +        } else {
 +            return Err(PlanError::unsupported(format!(
@@ -33899,7 +34686,7 @@
          };
  
          // DataFusion lambda variables carry no type until resolved against the schema.
-@@ -268,8 +191,8 @@
+@@ -268,8 +191,8 @@ impl PlanResolver<'_> {
              } else {
                  argument_display_names
              };
@@ -33910,6 +34697,8 @@
              &function_name,
              argument_display_names.iter().map(|x| x.as_str()).collect(),
              is_distinct,
+diff --git a/crates/sail-plan/src/resolver/expression/literal.rs b/crates/sail-plan/src/resolver/expression/literal.rs
+index 309481e..63b0b79 100644
 --- a/crates/sail-plan/src/resolver/expression/literal.rs
 +++ b/crates/sail-plan/src/resolver/expression/literal.rs
 @@ -1,3 +1,4 @@
@@ -33917,7 +34706,7 @@
  use std::str::FromStr;
  
  use arrow::array::timezone::Tz;
-@@ -5,13 +6,12 @@
+@@ -5,13 +6,12 @@ use arrow::datatypes::Date32Type;
  use chrono::{NaiveTime, Timelike};
  use datafusion_expr::expr;
  use sail_common::spec;
@@ -33932,7 +34721,7 @@
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
  use crate::resolver::state::PlanResolverState;
-@@ -23,10 +23,8 @@
+@@ -23,10 +23,8 @@ impl PlanResolver<'_> {
          state: &mut PlanResolverState,
      ) -> PlanResult<NamedExpr> {
          let literal = self.resolve_literal(literal, state)?;
@@ -33945,6 +34734,8 @@
          Ok(NamedExpr::new(
              vec![name],
              expr::Expr::Literal(literal, None),
+diff --git a/crates/sail-plan/src/resolver/expression/misc.rs b/crates/sail-plan/src/resolver/expression/misc.rs
+index fd946d2..ad46128 100644
 --- a/crates/sail-plan/src/resolver/expression/misc.rs
 +++ b/crates/sail-plan/src/resolver/expression/misc.rs
 @@ -1,3 +1,4 @@
@@ -33952,7 +34743,7 @@
  use std::collections::HashMap;
  use std::sync::Arc;
  
-@@ -10,9 +11,7 @@
+@@ -10,9 +11,7 @@ use datafusion_functions::core::expr_ext::FieldAccessor;
  use datafusion_functions::expr_fn as datafusion_fn;
  use datafusion_functions_nested::expr_fn::{array_element, array_length, map_extract};
  use sail_common::spec::{self, DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID};
@@ -33962,7 +34753,7 @@
  use sail_common_datafusion::utils::items::ItemTaker;
  use sail_function::scalar::drop_struct_field::DropStructField;
  use sail_function::scalar::misc::raise_error::RaiseError;
-@@ -20,6 +19,7 @@
+@@ -20,6 +19,7 @@ use sail_function::scalar::table_input::TableInput;
  use sail_function::scalar::update_struct_field::UpdateStructField;
  
  use crate::error::{PlanError, PlanResult};
@@ -33970,7 +34761,7 @@
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
  use crate::resolver::state::PlanResolverState;
-@@ -287,10 +287,9 @@
+@@ -287,10 +287,9 @@ impl PlanResolver<'_> {
              _ => return Err(PlanError::invalid("extraction must be a literal")),
          };
          let extraction = self.resolve_literal(extraction, state)?;
@@ -33984,6 +34775,8 @@
          let name = match data_type {
              DataType::Struct(_) => {
                  format!("{}.{}", name.one()?, extraction_name)
+diff --git a/crates/sail-plan/src/resolver/expression/mod.rs b/crates/sail-plan/src/resolver/expression/mod.rs
+index 6e1d2ce..9f614e0 100644
 --- a/crates/sail-plan/src/resolver/expression/mod.rs
 +++ b/crates/sail-plan/src/resolver/expression/mod.rs
 @@ -1,3 +1,4 @@
@@ -33991,7 +34784,7 @@
  use std::fmt::Debug;
  
  use async_recursion::async_recursion;
-@@ -20,7 +21,6 @@
+@@ -20,7 +21,6 @@ mod misc;
  mod predicate;
  mod sort;
  mod subquery;
@@ -33999,7 +34792,7 @@
  mod wildcard;
  mod window;
  
-@@ -186,9 +186,8 @@
+@@ -186,9 +186,8 @@ impl PlanResolver<'_> {
                  self.resolve_expression_named_lambda_variable(variable, schema, state)
                      .await
              }
@@ -34011,7 +34804,7 @@
              }
              Expr::CallFunction {
                  function_name,
-@@ -411,43 +410,17 @@
+@@ -411,43 +410,17 @@ mod tests {
      use datafusion_common::{DFSchema, ScalarValue};
      use datafusion_expr::expr::{Alias, Expr};
      use datafusion_expr::{BinaryExpr, Operator};
@@ -34022,9 +34815,8 @@
      use sail_common::spec;
 -    use sail_common_datafusion::catalog::display::DefaultCatalogDisplay;
 -    use sail_common_datafusion::session::plan::PlanService;
--
+ 
 -    use crate::catalog::SparkCatalogObjectDisplay;
-+
      use crate::config::PlanConfig;
      use crate::error::PlanResult;
 -    use crate::formatter::SparkPlanFormatter;
@@ -34057,6 +34849,9 @@
          Ok(SessionContext::new_with_state(state))
      }
  
+diff --git a/crates/sail-plan/src/resolver/expression/udf.rs b/crates/sail-plan/src/resolver/expression/udf.rs
+deleted file mode 100644
+index e77dd70..0000000
 --- a/crates/sail-plan/src/resolver/expression/udf.rs
 +++ /dev/null
 @@ -1,384 +0,0 @@
@@ -34444,6 +35239,8 @@
 -        (exprs, kwargs)
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/expression/wildcard.rs b/crates/sail-plan/src/resolver/expression/wildcard.rs
+index eb3c502..4394ed7 100644
 --- a/crates/sail-plan/src/resolver/expression/wildcard.rs
 +++ b/crates/sail-plan/src/resolver/expression/wildcard.rs
 @@ -1,9 +1,10 @@
@@ -34458,7 +35255,7 @@
  use datafusion_expr::{ScalarUDF, col, expr, lit};
  use datafusion_functions::core::get_field;
  use sail_common::spec;
-@@ -151,15 +152,11 @@
+@@ -151,15 +152,11 @@ impl PlanResolver<'_> {
      async fn resolve_wildcard_options(
          &self,
          wildcard_options: spec::WildcardOptions,
@@ -34477,7 +35274,7 @@
          }
  
          fn make_object_name(value: impl Into<String>) -> ObjectName {
-@@ -210,58 +207,13 @@
+@@ -210,58 +207,13 @@ impl PlanResolver<'_> {
                  Ok(except)
              })
              .transpose()?;
@@ -34543,6 +35340,8 @@
          Ok(expr::WildcardOptions {
              ilike,
              exclude,
+diff --git a/crates/sail-plan/src/resolver/expression/window.rs b/crates/sail-plan/src/resolver/expression/window.rs
+index 693450b..d863540 100644
 --- a/crates/sail-plan/src/resolver/expression/window.rs
 +++ b/crates/sail-plan/src/resolver/expression/window.rs
 @@ -1,27 +1,18 @@
@@ -34578,7 +35377,7 @@
  use crate::function::get_built_in_window_function;
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
-@@ -96,169 +87,35 @@
+@@ -96,169 +87,35 @@ impl PlanResolver<'_> {
                      return Err(PlanError::todo("named window function arguments"));
                  }
                  let canonical_function_name = function_name.to_ascii_lowercase();
@@ -34773,7 +35572,7 @@
              }
              _ => {
                  return Err(PlanError::invalid(format!(
-@@ -266,75 +123,13 @@
+@@ -266,8 +123,8 @@ impl PlanResolver<'_> {
                  )));
              }
          };
@@ -34784,10 +35583,10 @@
              function_name.as_str(),
              argument_display_names.iter().map(|x| x.as_str()).collect(),
              is_distinct,
-         )?;
+@@ -275,68 +132,6 @@ impl PlanResolver<'_> {
          Ok(NamedExpr::new(vec![name], window))
--    }
--
+     }
+ 
 -    async fn resolve_registered_pyspark_udaf(
 -        &self,
 -        udaf: &PySparkUnresolvedUDF,
@@ -34848,9 +35647,14 @@
 -            arguments,
 -            argument_display_names,
 -        ))
-     }
- 
+-    }
+-
      async fn resolve_window_frame(
+         &self,
+         frame: spec::WindowFrame,
+diff --git a/crates/sail-plan/src/resolver/function.rs b/crates/sail-plan/src/resolver/function.rs
+deleted file mode 100644
+index 840e1fd..0000000
 --- a/crates/sail-plan/src/resolver/function.rs
 +++ /dev/null
 @@ -1,86 +0,0 @@
@@ -34940,6 +35744,9 @@
 -        })
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/lakehouse.rs b/crates/sail-plan/src/resolver/lakehouse.rs
+deleted file mode 100644
+index d0a1c75..0000000
 --- a/crates/sail-plan/src/resolver/lakehouse.rs
 +++ /dev/null
 @@ -1,65 +0,0 @@
@@ -35008,6 +35815,8 @@
 -        }
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/mod.rs b/crates/sail-plan/src/resolver/mod.rs
+index ebda046..8043d0a 100644
 --- a/crates/sail-plan/src/resolver/mod.rs
 +++ b/crates/sail-plan/src/resolver/mod.rs
 @@ -1,15 +1,12 @@
@@ -35027,6 +35836,8 @@
  mod literal;
  pub mod plan;
  mod query;
+diff --git a/crates/sail-plan/src/resolver/plan.rs b/crates/sail-plan/src/resolver/plan.rs
+index 9310c57..ceafae4 100644
 --- a/crates/sail-plan/src/resolver/plan.rs
 +++ b/crates/sail-plan/src/resolver/plan.rs
 @@ -1,7 +1,8 @@
@@ -35039,7 +35850,7 @@
  use crate::resolver::PlanResolver;
  use crate::resolver::state::PlanResolverState;
  
-@@ -24,11 +25,9 @@
+@@ -24,11 +25,9 @@ impl PlanResolver<'_> {
                  let fields = Some(Self::get_field_names(plan.schema(), &state)?);
                  Ok(NamedPlan { plan, fields })
              }
@@ -35054,6 +35865,8 @@
          }
      }
  }
+diff --git a/crates/sail-plan/src/resolver/query/aggregate.rs b/crates/sail-plan/src/resolver/query/aggregate.rs
+index 7cc3f5e..ec52f93 100644
 --- a/crates/sail-plan/src/resolver/query/aggregate.rs
 +++ b/crates/sail-plan/src/resolver/query/aggregate.rs
 @@ -1,3 +1,4 @@
@@ -35061,7 +35874,7 @@
  use std::sync::Arc;
  
  use datafusion::functions_aggregate::{average, bit_and_or_xor, bool_and_or, count, min_max, sum};
-@@ -21,8 +22,6 @@
+@@ -21,8 +22,6 @@ use sail_function::scalar::explode::Explode;
  use sail_logical_plan::monotonic_id::MonotonicIdNode;
  use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
  use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
@@ -35070,18 +35883,18 @@
  
  use crate::error::{PlanError, PlanResult};
  use crate::resolver::PlanResolver;
-@@ -118,10 +117,6 @@
-                 )));
+@@ -119,10 +118,6 @@ impl PlanResolver<'_> {
              }
          }
--
+ 
 -        // Spark CheckAnalysis: GroupedAgg Pandas/Arrow UDFs cannot be mixed with regular
 -        // (non-UDF) aggregate functions in the same .agg() call.
 -        Self::check_no_mixed_grouped_agg_udf(&projections)?;
- 
+-
          let having = {
              let mut scope = state.enter_aggregate_scope(AggregateState::Having {
-@@ -1014,38 +1009,4 @@
+                 projections: projections.clone(),
+@@ -1014,38 +1009,4 @@ impl PlanResolver<'_> {
              ))),
          }
      }
@@ -35120,9 +35933,132 @@
 -        Ok(())
 -    }
  }
+diff --git a/crates/sail-plan/src/resolver/query/column_op.rs b/crates/sail-plan/src/resolver/query/column_op.rs
+index 284f933..108a653 100644
+--- a/crates/sail-plan/src/resolver/query/column_op.rs
++++ b/crates/sail-plan/src/resolver/query/column_op.rs
+@@ -1,10 +1,9 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::{HashMap, HashSet};
+ use std::sync::Arc;
+ 
+ use datafusion_common::Column;
+-use datafusion_expr::{
+-    Expr, ExprSchemable, LogicalPlan, Projection, SubqueryAlias, cast, col, lit,
+-};
++use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, Projection, SubqueryAlias};
+ use indexmap::IndexMap;
+ use sail_common::spec;
+ use sail_common_datafusion::utils::items::ItemTaker;
+@@ -269,103 +268,4 @@ impl PlanResolver<'_> {
+             Ok(result)
+         }
+     }
+-
+-    pub(super) async fn resolve_query_replace(
+-        &self,
+-        input: spec::QueryPlan,
+-        columns: Vec<spec::Identifier>,
+-        replacements: Vec<spec::Replacement>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let schema = input.schema();
+-        let cols_to_change: Vec<String> = columns
+-            .into_iter()
+-            .map(|ident| ident.as_ref().to_ascii_lowercase())
+-            .collect();
+-        let replacements: Vec<(Expr, Expr)> = replacements
+-            .into_iter()
+-            .map(|r| {
+-                Ok((
+-                    lit(self.resolve_literal(r.old_value, state)?),
+-                    lit(self.resolve_literal(r.new_value, state)?),
+-                ))
+-            })
+-            .collect::<PlanResult<_>>()?;
+-
+-        let existing_cols_info = schema
+-            .iter()
+-            .map(|(qualifier, field)| {
+-                let field_info = state.get_field_info(field.name())?;
+-                Ok::<_, PlanError>((
+-                    col((qualifier, field)),
+-                    field.data_type(),
+-                    field_info.name().to_ascii_lowercase(),
+-                ))
+-            })
+-            .collect::<Result<Vec<_>, _>>()?;
+-
+-        let existing_cols_set: HashSet<_> =
+-            existing_cols_info.iter().map(|(_, _, name)| name).collect();
+-
+-        if let Some(missing_colname) = cols_to_change
+-            .iter()
+-            .find(|col| !existing_cols_set.contains(*col))
+-        {
+-            let existing_cols = existing_cols_info
+-                .iter()
+-                .map(|(_, _, name)| name.as_str())
+-                .collect::<Vec<_>>()
+-                .join(", ");
+-
+-            return Err(PlanError::AnalysisError(format!(
+-                "Cannot resolve column name \"{}\" among ({})",
+-                missing_colname, existing_cols
+-            )));
+-        }
+-
+-        let cols_to_change_set: HashSet<_> = cols_to_change.iter().collect();
+-
+-        let replace_exprs = existing_cols_info
+-            .into_iter()
+-            .map(|(column_expr, column_type, column_name)| {
+-                let expr = if cols_to_change.is_empty() || cols_to_change_set.contains(&column_name)
+-                {
+-                    let when_then_expr = replacements
+-                        .iter()
+-                        .filter(|(old, _new)| {
+-                            old.get_type(schema).is_ok_and(|old_type| {
+-                                old_type.is_null()
+-                                    || (old_type.is_numeric() && column_type.is_numeric())
+-                                    || (old_type == *column_type)
+-                            })
+-                        })
+-                        .map(|(old, new)| {
+-                            let old = cast(old.clone(), column_type.clone());
+-                            let new = cast(new.clone(), column_type.clone());
+-                            (Box::new(column_expr.clone().eq(old)), Box::new(new))
+-                        })
+-                        .collect::<Vec<_>>();
+-
+-                    if when_then_expr.is_empty() {
+-                        column_expr
+-                    } else {
+-                        Expr::Case(datafusion_expr::Case {
+-                            expr: None,
+-                            when_then_expr,
+-                            else_expr: Some(Box::new(column_expr)),
+-                        })
+-                    }
+-                } else {
+-                    column_expr
+-                };
+-                Ok(NamedExpr::new(vec![column_name], expr))
+-            })
+-            .collect::<PlanResult<Vec<_>>>()?;
+-
+-        Ok(LogicalPlan::Projection(Projection::try_new(
+-            self.rewrite_named_expressions(replace_exprs, state)?,
+-            Arc::new(input),
+-        )?))
+-    }
+ }
+diff --git a/crates/sail-plan/src/resolver/query/join.rs b/crates/sail-plan/src/resolver/query/join.rs
+index 66620c9..05a7e78 100644
 --- a/crates/sail-plan/src/resolver/query/join.rs
 +++ b/crates/sail-plan/src/resolver/query/join.rs
-@@ -1,44 +1,15 @@
+@@ -1,10 +1,9 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::sync::Arc;
  
@@ -35134,10 +36070,10 @@
  
  use crate::error::{PlanError, PlanResult};
  use crate::function::common::{FunctionContextInput, ScalarFunctionInput};
- use crate::function::get_built_in_function;
+@@ -12,34 +11,6 @@ use crate::function::get_built_in_function;
  use crate::resolver::PlanResolver;
  use crate::resolver::state::PlanResolverState;
--
+ 
 -/// Returns `true` if the expression is itself a top-level Python scalar UDF call.
 -/// This matches Spark SQL's `ExtractPythonUDFFromJoinCondition` optimizer rule
 -/// (`org.apache.spark.sql.catalyst.optimizer.ExtractPythonUDFFromJoinCondition`),
@@ -35165,14 +36101,14 @@
 -        JoinType::RightMark => "RIGHT MARK",
 -    }
 -}
- 
+-
  const IMPLICIT_CARTESIAN_PRODUCT_MSG: &str = "Detected implicit cartesian product for INNER join between logical plans. \
      Join condition is missing or trivial. \
-@@ -104,37 +75,6 @@
-                     .await?
+     Either: use the CROSS JOIN syntax to allow cartesian products between \
+@@ -105,37 +76,6 @@ impl PlanResolver<'_> {
                      .unalias_nested()
                      .data;
--
+ 
 -                // Validate Python UDF usage in the join condition, matching
 -                // Spark's ExtractPythonUDFFromJoinCondition optimizer rule.
 -                let conjuncts = split_conjunction(&condition);
@@ -35203,9 +36139,12 @@
 -                        }
 -                    }
 -                }
- 
+-
                  let plan = LogicalPlanBuilder::from(left)
                      .join_on(right, join_type, Some(condition))?
+                     .build()?;
+diff --git a/crates/sail-plan/src/resolver/query/lateral.rs b/crates/sail-plan/src/resolver/query/lateral.rs
+index f4cb08e..350879e 100644
 --- a/crates/sail-plan/src/resolver/query/lateral.rs
 +++ b/crates/sail-plan/src/resolver/query/lateral.rs
 @@ -1,16 +1,13 @@
@@ -35226,7 +36165,7 @@
  use crate::resolver::state::PlanResolverState;
  use crate::resolver::tree::explode::ExplodeRewriter;
  use crate::resolver::tree::monotonic_id::MonotonicIdRewriter;
-@@ -34,68 +31,11 @@
+@@ -34,69 +31,12 @@ impl PlanResolver<'_> {
                  "qualified lateral view function name",
              ));
          };
@@ -35244,7 +36183,7 @@
              None => self.resolve_query_empty(true)?,
          };
          let schema = input.schema().clone();
--
+ 
 -        if let Some(f) = catalog_manager.get_function(&canonical_function_name)?
 -            && let Some(f) = f.inner().downcast_ref::<PySparkUnresolvedUDF>()
 -        {
@@ -35292,9 +36231,12 @@
 -                state,
 -            );
 -        }
- 
+-
          let function_name = if outer {
              get_outer_built_in_generator_functions(&function_name).to_string()
+         } else {
+diff --git a/crates/sail-plan/src/resolver/query/misc.rs b/crates/sail-plan/src/resolver/query/misc.rs
+index 7c60188..2de7fea 100644
 --- a/crates/sail-plan/src/resolver/query/misc.rs
 +++ b/crates/sail-plan/src/resolver/query/misc.rs
 @@ -1,3 +1,4 @@
@@ -35302,7 +36244,7 @@
  use std::collections::HashMap;
  use std::sync::Arc;
  
-@@ -213,14 +214,6 @@
+@@ -213,14 +214,6 @@ impl PlanResolver<'_> {
      ) -> PlanResult<LogicalPlan> {
          Err(PlanError::todo("parse"))
      }
@@ -35317,6 +36259,8 @@
  }
  
  fn literal_partition_count(hint_name: &str, expr: &Expr) -> PlanResult<usize> {
+diff --git a/crates/sail-plan/src/resolver/query/mod.rs b/crates/sail-plan/src/resolver/query/mod.rs
+index fb117e5..931a359 100644
 --- a/crates/sail-plan/src/resolver/query/mod.rs
 +++ b/crates/sail-plan/src/resolver/query/mod.rs
 @@ -1,12 +1,7 @@
@@ -35334,25 +36278,35 @@
  
  use crate::error::{PlanError, PlanResult};
  use crate::resolver::PlanResolver;
-@@ -33,9 +28,6 @@
+@@ -23,7 +18,6 @@ mod lateral;
+ mod lateral_join;
+ mod limit;
+ mod misc;
+-mod na;
+ mod pivoting;
+ mod project;
+ mod read;
+@@ -32,10 +26,6 @@ mod repartition;
+ mod sample;
  mod set_op;
  mod sort;
- mod stat;
+-mod stat;
 -mod time_travel;
 -mod udf;
 -mod udtf;
  mod values;
  mod window;
  mod with_relations;
-@@ -70,15 +62,22 @@
+@@ -69,16 +59,23 @@ impl PlanResolver<'_> {
+ 
          let plan_id = plan.plan_id;
          let plan = match plan.node {
-             QueryNode::Read {
++            QueryNode::Read {
 +                is_streaming: true, ..
 +            } => {
 +                return Err(PlanError::unsupported("extraction probe: streaming reads"));
 +            }
-+            QueryNode::Read {
+             QueryNode::Read {
                  read_type,
 -                is_streaming: _,
 +                is_streaming: false,
@@ -35370,7 +36324,7 @@
                  }
                  spec::ReadType::DynamicTable(table) => {
                      self.resolve_query_read_dynamic_table(*table, state).await?
-@@ -204,13 +203,12 @@
+@@ -204,13 +201,12 @@ impl PlanResolver<'_> {
                  )
                  .await?
              }
@@ -35390,7 +36344,7 @@
              }
              QueryNode::CollectMetrics {
                  input,
-@@ -221,43 +219,18 @@
+@@ -221,115 +217,33 @@ impl PlanResolver<'_> {
                      .await?
              }
              QueryNode::Parse(parse) => self.resolve_query_parse(parse, state).await?,
@@ -35439,8 +36393,272 @@
 -            QueryNode::CommonInlineUserDefinedTableFunction(udtf) => {
 -                self.resolve_query_common_inline_udtf(udtf, state).await?
              }
-             QueryNode::FillNa {
-                 input,
+-            QueryNode::FillNa {
+-                input,
+-                columns,
+-                values,
+-            } => {
+-                self.resolve_query_fill_na(*input, columns, values, state)
+-                    .await?
+-            }
+-            QueryNode::DropNa {
+-                input,
+-                columns,
+-                min_non_nulls,
+-            } => {
+-                self.resolve_query_drop_na(*input, columns, min_non_nulls, state)
+-                    .await?
+-            }
+-            QueryNode::Replace {
+-                input,
+-                columns,
+-                replacements,
+-            } => {
+-                self.resolve_query_replace(*input, columns, replacements, state)
+-                    .await?
+-            }
+-            QueryNode::StatSummary { input, statistics } => {
+-                self.resolve_query_stat_summary(*input, vec![], statistics, state)
+-                    .await?
+-            }
+-            QueryNode::StatCrosstab {
+-                input,
+-                left_column,
+-                right_column,
+-            } => {
+-                self.resolve_query_stat_cross_tab(*input, left_column, right_column, state)
+-                    .await?
+-            }
+-            QueryNode::StatDescribe { input, columns } => {
+-                self.resolve_query_stat_describe(*input, columns, state)
+-                    .await?
+-            }
+-            QueryNode::StatCov {
+-                input,
+-                left_column,
+-                right_column,
+-            } => {
+-                self.resolve_query_stat_cov(*input, left_column, right_column, state)
+-                    .await?
+-            }
+-            QueryNode::StatCorr {
+-                input,
+-                left_column,
+-                right_column,
+-                method,
+-            } => {
+-                self.resolve_query_stat_corr(*input, left_column, right_column, method, state)
+-                    .await?
+-            }
+-            QueryNode::StatApproxQuantile { .. } => {
+-                return Err(PlanError::todo("approx quantile"));
+-            }
+-            QueryNode::StatFreqItems { .. } => {
+-                return Err(PlanError::todo("freq items"));
+-            }
+-            QueryNode::StatSampleBy {
+-                input,
+-                column,
+-                fractions,
+-                seed,
+-            } => {
+-                self.resolve_query_stat_sample_by(*input, column, fractions, seed, state)
+-                    .await?
++            QueryNode::FillNa { .. }
++            | QueryNode::DropNa { .. }
++            | QueryNode::Replace { .. }
++            | QueryNode::StatSummary { .. }
++            | QueryNode::StatDescribe { .. }
++            | QueryNode::StatCrosstab { .. }
++            | QueryNode::StatCov { .. }
++            | QueryNode::StatCorr { .. }
++            | QueryNode::StatApproxQuantile { .. }
++            | QueryNode::StatFreqItems { .. }
++            | QueryNode::StatSampleBy { .. } => {
++                return Err(PlanError::unsupported(
++                    "extraction probe: DataFrame NA/statistics",
++                ));
+             }
+             QueryNode::Empty { produce_one_row } => self.resolve_query_empty(produce_one_row)?,
+             QueryNode::Values(values) => self.resolve_query_values(values, state).await?,
+diff --git a/crates/sail-plan/src/resolver/query/na.rs b/crates/sail-plan/src/resolver/query/na.rs
+deleted file mode 100644
+index 21ad91e..0000000
+--- a/crates/sail-plan/src/resolver/query/na.rs
++++ /dev/null
+@@ -1,170 +0,0 @@
+-use std::sync::Arc;
+-
+-use datafusion::arrow::datatypes::DataType;
+-use datafusion_expr::utils::conjunction;
+-use datafusion_expr::{
+-    Expr, ExprSchemable, Filter, LogicalPlan, Projection, TryCast, cast, col, is_false, lit, when,
+-};
+-use datafusion_functions::expr_fn::isnan;
+-use sail_common::spec;
+-use sail_common_datafusion::utils::items::ItemTaker;
+-
+-use crate::error::{PlanError, PlanResult};
+-use crate::resolver::PlanResolver;
+-use crate::resolver::expression::NamedExpr;
+-use crate::resolver::state::PlanResolverState;
+-
+-impl PlanResolver<'_> {
+-    pub(super) async fn resolve_query_fill_na(
+-        &self,
+-        input: spec::QueryPlan,
+-        columns: Vec<spec::Identifier>,
+-        values: Vec<spec::Expr>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        enum Strategy {
+-            All { value: Expr },
+-            Columns { columns: Vec<String>, value: Expr },
+-            EachColumn { columns: Vec<(String, Expr)> },
+-        }
+-
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let schema = input.schema();
+-        let values = self.resolve_expressions(values, schema, state).await?;
+-        let columns: Vec<String> = columns.into_iter().map(|x| x.into()).collect();
+-
+-        if values.is_empty() {
+-            return Err(PlanError::invalid("missing fill na values"));
+-        }
+-        let strategy = if columns.is_empty() {
+-            let Ok(value) = values.one() else {
+-                return Err(PlanError::invalid(
+-                    "expected one value to fill na for all columns",
+-                ));
+-            };
+-            Strategy::All { value }
+-        } else if values.len() == 1 {
+-            let value = values.one()?;
+-            Strategy::Columns { columns, value }
+-        } else {
+-            if values.len() != columns.len() {
+-                return Err(PlanError::invalid(
+-                    "fill na number of values does not match number of columns",
+-                ));
+-            }
+-            let columns: Vec<(String, Expr)> = columns.into_iter().zip(values).collect();
+-            Strategy::EachColumn { columns }
+-        };
+-
+-        let fill_na_exprs = schema
+-            .iter()
+-            .map(|(qualifier, field)| {
+-                let info = state.get_field_info(field.name())?;
+-                let value = match &strategy {
+-                    Strategy::All { value } => Some(value.clone()),
+-                    Strategy::Columns { columns, value } => columns
+-                        .iter()
+-                        .any(|col| info.matches(col, None))
+-                        .then(|| value.clone()),
+-                    Strategy::EachColumn { columns } => columns
+-                        .iter()
+-                        .find_map(|(col, val)| info.matches(col, None).then(|| val.clone())),
+-                };
+-                let column_expr = col((qualifier, field));
+-                let expr = if let Some(value) = value {
+-                    let value_type = value.get_type(schema)?;
+-                    if self.can_cast_fill_na_types(&value_type, field.data_type()) {
+-                        let value =
+-                            Expr::TryCast(TryCast::new(Box::new(value), field.data_type().clone()));
+-                        let is_null_or_nan = column_expr
+-                            .clone()
+-                            .is_null()
+-                            .or(self.is_nan_float(column_expr.clone(), field.data_type()));
+-                        when(is_null_or_nan, value).otherwise(column_expr)?
+-                    } else {
+-                        column_expr
+-                    }
+-                } else {
+-                    column_expr
+-                };
+-                Ok(NamedExpr::new(vec![info.name().to_string()], expr))
+-            })
+-            .collect::<PlanResult<Vec<_>>>()?;
+-
+-        Ok(LogicalPlan::Projection(Projection::try_new(
+-            self.rewrite_named_expressions(fill_na_exprs, state)?,
+-            Arc::new(input),
+-        )?))
+-    }
+-
+-    fn can_cast_fill_na_types(&self, from_type: &DataType, to_type: &DataType) -> bool {
+-        // Spark only supports 4 data types for fill na: bool, long, double, string
+-        if from_type == to_type {
+-            return true;
+-        }
+-        match (from_type, to_type) {
+-            (DataType::Utf8 | DataType::LargeUtf8, DataType::Utf8 | DataType::LargeUtf8) => true,
+-            (DataType::Null, _) => true,
+-            (_, DataType::Null) => true,
+-            // Only care about checking numeric types because we do TryCast.
+-            (_, _) => from_type.is_numeric() && to_type.is_numeric(),
+-        }
+-    }
+-
+-    pub(super) async fn resolve_query_drop_na(
+-        &self,
+-        input: spec::QueryPlan,
+-        columns: Vec<spec::Identifier>,
+-        min_non_nulls: Option<usize>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let schema = input.schema();
+-        let not_null_exprs = schema
+-            .columns()
+-            .into_iter()
+-            .filter_map(|column| {
+-                (columns.is_empty() || {
+-                    let columns: Vec<String> = columns.iter().map(|x| x.as_ref().into()).collect();
+-                    state
+-                        .get_field_info(column.name())
+-                        .is_ok_and(|info| columns.iter().any(|c| info.matches(c, None)))
+-                })
+-                .then(|| {
+-                    col(column.clone()).get_type(schema).ok().map(|col_type| {
+-                        let is_nan = self.is_nan_float(col(column.clone()), &col_type);
+-                        col(column).is_not_null().and(is_false(is_nan))
+-                    })
+-                })
+-                .flatten()
+-            })
+-            .collect::<Vec<Expr>>();
+-
+-        let filter_expr = match min_non_nulls {
+-            Some(min_non_nulls) if min_non_nulls > 0 => {
+-                let non_null_count = not_null_exprs
+-                    .into_iter()
+-                    .map(|expr| Ok(when(expr, lit(1)).otherwise(lit(0))?))
+-                    .try_fold(lit(0), |acc: Expr, predicate: PlanResult<Expr>| {
+-                        Ok(acc + predicate?) as PlanResult<Expr>
+-                    })?;
+-                non_null_count.gt_eq(lit(min_non_nulls as u32))
+-            }
+-            _ => conjunction(not_null_exprs)
+-                .ok_or_else(|| PlanError::invalid("No columns specified for drop na."))?,
+-        };
+-
+-        Ok(LogicalPlan::Filter(Filter::try_new(
+-            filter_expr,
+-            Arc::new(input),
+-        )?))
+-    }
+-
+-    fn is_nan_float(&self, expr: Expr, data_type: &DataType) -> Expr {
+-        match data_type {
+-            DataType::Float16 => isnan(cast(expr, DataType::Float32)),
+-            DataType::Float32 | DataType::Float64 => isnan(expr),
+-            _ => lit(false),
+-        }
+-    }
+-}
+diff --git a/crates/sail-plan/src/resolver/query/read.rs b/crates/sail-plan/src/resolver/query/read.rs
+index f2cf965..d78497b 100644
 --- a/crates/sail-plan/src/resolver/query/read.rs
 +++ b/crates/sail-plan/src/resolver/query/read.rs
 @@ -1,28 +1,23 @@
@@ -35475,7 +36693,7 @@
  use crate::resolver::state::PlanResolverState;
  
  impl PlanResolver<'_> {
-@@ -41,140 +36,24 @@
+@@ -41,140 +36,24 @@ impl PlanResolver<'_> {
              options,
          } = table;
  
@@ -35502,13 +36720,12 @@
 -                    Ok(plan)
 -                };
 -            }
--        }
--
 +        // ponytail: registered-table SELECT probe; format paths, options, time travel,
 +        // and sampling need a deliberate adapter before supporting them.
 +        if temporal.is_some() || sample.is_some() || !options.is_empty() {
 +            return Err(PlanError::unsupported("extraction probe: table modifiers"));
-+        }
+         }
+-
          let table_reference = self.resolve_table_reference(&name)?;
          if let Some(cte) = state.get_cte(&table_reference) {
 -            if temporal.is_some() {
@@ -35617,9 +36834,8 @@
 -            self.apply_table_sample(plan, table_sample, state).await
 -        } else {
 -            Ok(plan)
--        }
 +            return Ok(cte.clone());
-+        }
+         }
 +        let provider = self.ctx.table_provider(table_reference.clone()).await?;
 +        self.resolve_table_provider_with_rename(
 +            provider,
@@ -35632,7 +36848,7 @@
      }
  
      pub(super) async fn resolve_query_read_dynamic_table(
-@@ -205,32 +84,6 @@
+@@ -205,32 +84,6 @@ impl PlanResolver<'_> {
          .await
      }
  
@@ -35665,7 +36881,7 @@
      /// Apply TABLESAMPLE clause to a LogicalPlan
      pub(super) async fn apply_table_sample(
          &self,
-@@ -340,158 +193,35 @@
+@@ -340,160 +193,37 @@ impl PlanResolver<'_> {
              });
              self.resolve_query_project(None, vec![expr], state).await
          } else {
@@ -35722,20 +36938,7 @@
 -                                }
 -                            }
 -                        }
-+            if !named_arguments.is_empty() {
-+                return Err(PlanError::unsupported("named table function arguments"));
-+            }
-+            let schema = Arc::new(DFSchema::empty());
-+            let arguments = self.resolve_expressions(arguments, &schema, state).await?;
-+            let table_function = match get_built_in_table_function(&canonical_function_name) {
-+                Ok(f) => f,
-+                _ => match self.ctx.table_function(&canonical_function_name) {
-+                    Ok(f) => f,
-+                    _ => {
-+                        return Err(PlanError::unsupported(format!(
-+                            "unknown table function: {function_name}"
-+                        )));
-                     }
+-                    }
 -                    let arguments = self
 -                        .resolve_named_expressions(positional_args, input.schema(), state)
 -                        .await?;
@@ -35781,10 +36984,37 @@
 -                    None,
 -                    state,
 -                )
--            }
--        }
--    }
--
++            if !named_arguments.is_empty() {
++                return Err(PlanError::unsupported("named table function arguments"));
+             }
++            let schema = Arc::new(DFSchema::empty());
++            let arguments = self.resolve_expressions(arguments, &schema, state).await?;
++            let table_function = match get_built_in_table_function(&canonical_function_name) {
++                Ok(f) => f,
++                _ => match self.ctx.table_function(&canonical_function_name) {
++                    Ok(f) => f,
++                    _ => {
++                        return Err(PlanError::unsupported(format!(
++                            "unknown table function: {function_name}"
++                        )));
++                    }
++                },
++            };
++            let session_state = self.ctx.state();
++            let table_provider = table_function.create_table_provider_with_args(
++                TableFunctionArgs::new(&arguments, &session_state),
++            )?;
++            self.resolve_table_provider_with_rename(
++                table_provider,
++                function_name,
++                None,
++                vec![],
++                None,
++                state,
++            )
+         }
+     }
+ 
 -    pub(super) async fn resolve_query_read_data_source(
 -        &self,
 -        source: spec::ReadDataSource,
@@ -35834,24 +37064,615 @@
 -            None,
 -            state,
 -        )
-+                },
-+            };
-+            let session_state = self.ctx.state();
-+            let table_provider = table_function.create_table_provider_with_args(
-+                TableFunctionArgs::new(&arguments, &session_state),
-+            )?;
-+            self.resolve_table_provider_with_rename(
-+                table_provider,
-+                function_name,
-+                None,
-+                vec![],
-+                None,
-+                state,
-+            )
-+        }
-     }
- 
+-    }
+-
      pub(super) fn resolve_table_provider_with_rename(
+         &self,
+         table_provider: Arc<dyn TableProvider>,
+diff --git a/crates/sail-plan/src/resolver/query/stat.rs b/crates/sail-plan/src/resolver/query/stat.rs
+deleted file mode 100644
+index 639a5d3..0000000
+--- a/crates/sail-plan/src/resolver/query/stat.rs
++++ /dev/null
+@@ -1,595 +0,0 @@
+-use std::collections::HashSet;
+-use std::sync::Arc;
+-
+-use datafusion::arrow::array::{Array, StringArray};
+-use datafusion::arrow::datatypes::DataType;
+-use datafusion::functions_aggregate::approx_median::approx_median_udaf;
+-use datafusion::functions_aggregate::approx_percentile_cont::approx_percentile_cont_udaf;
+-use datafusion::functions_aggregate::average::avg_udaf;
+-use datafusion::functions_aggregate::count::count_udaf;
+-use datafusion::functions_aggregate::min_max::{max_udaf, min_udaf};
+-use datafusion::functions_aggregate::stddev::stddev_udaf;
+-use datafusion::functions_aggregate::sum::sum_udaf;
+-use datafusion_common::{Column, ExprSchema, ScalarValue};
+-use datafusion_expr::expr::{AggregateFunctionParams, ScalarFunction};
+-use datafusion_expr::{
+-    Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, ScalarUDF, and, col, expr, lit, or,
+-};
+-use sail_common::spec;
+-use sail_common_datafusion::utils::items::ItemTaker;
+-use sail_function::scalar::math::random::Random;
+-
+-use crate::error::{PlanError, PlanResult};
+-use crate::resolver::PlanResolver;
+-use crate::resolver::state::PlanResolverState;
+-
+-impl PlanResolver<'_> {
+-    pub(super) async fn resolve_query_stat_summary(
+-        &self,
+-        input: spec::QueryPlan,
+-        columns: Vec<spec::Identifier>,
+-        statistics: Vec<String>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let columns: Vec<Column> = if columns.is_empty() {
+-            input.schema().columns()
+-        } else {
+-            self.resolve_columns(input.schema(), &columns, state)?
+-        };
+-        let statistics: HashSet<String> = if statistics.is_empty() {
+-            HashSet::from([
+-                "count".to_string(),
+-                "mean".to_string(),
+-                "stddev".to_string(),
+-                "min".to_string(),
+-                "25%".to_string(),
+-                "50%".to_string(),
+-                "75%".to_string(),
+-                "max".to_string(),
+-            ])
+-        } else {
+-            statistics
+-                .into_iter()
+-                .map(|x| x.trim().to_lowercase())
+-                .collect()
+-        };
+-
+-        let mut all_aggregates = Vec::new();
+-        for column in &columns {
+-            if statistics.contains("count") {
+-                let count = Expr::AggregateFunction(expr::AggregateFunction {
+-                    func: count_udaf(),
+-                    params: AggregateFunctionParams {
+-                        args: vec![Expr::Column(column.clone())],
+-                        distinct: false,
+-                        filter: None,
+-                        order_by: vec![],
+-                        null_treatment: None,
+-                    },
+-                })
+-                .alias(state.register_field_name(format!("count_{}", column.name())));
+-                all_aggregates.push(count);
+-            }
+-
+-            if let Ok(field) = input.schema().field_from_column(column) {
+-                let original_dtype = field.data_type().clone();
+-                // DataFusion's approx_percentile_cont / approx_median return Float64,
+-                // but Spark's `summary` preserves the input column's integer type for
+-                // percentile rows, so we cast back when the source is integer.
+-                let percentile_cast = original_dtype.is_integer().then(|| original_dtype.clone());
+-                if field.data_type().is_numeric() {
+-                    if statistics.contains("mean") {
+-                        let mean = Expr::AggregateFunction(expr::AggregateFunction {
+-                            func: avg_udaf(),
+-                            params: AggregateFunctionParams {
+-                                args: vec![Expr::Column(column.clone())],
+-                                distinct: false,
+-                                filter: None,
+-                                order_by: vec![],
+-                                null_treatment: None,
+-                            },
+-                        })
+-                        .alias(state.register_field_name(format!("mean_{}", column.name())));
+-                        all_aggregates.push(mean);
+-                    }
+-                    if statistics.contains("stddev") {
+-                        let stddev = Expr::AggregateFunction(expr::AggregateFunction {
+-                            func: stddev_udaf(),
+-                            params: AggregateFunctionParams {
+-                                args: vec![Expr::Column(column.clone())],
+-                                distinct: false,
+-                                filter: None,
+-                                order_by: vec![],
+-                                null_treatment: None,
+-                            },
+-                        })
+-                        .alias(state.register_field_name(format!("stddev_{}", column.name())));
+-                        all_aggregates.push(stddev);
+-                    }
+-                    if statistics.contains("25%") {
+-                        let percentile_25_expr = Expr::AggregateFunction(expr::AggregateFunction {
+-                            func: approx_percentile_cont_udaf(),
+-                            params: AggregateFunctionParams {
+-                                args: vec![
+-                                    Expr::Column(column.clone()),
+-                                    Expr::Literal(ScalarValue::Float64(Some(0.25_f64)), None),
+-                                ],
+-                                distinct: false,
+-                                filter: None,
+-                                order_by: vec![],
+-                                null_treatment: None,
+-                            },
+-                        });
+-                        let percentile_25 = match &percentile_cast {
+-                            Some(dt) => Expr::Cast(expr::Cast::new(
+-                                Box::new(percentile_25_expr),
+-                                dt.clone(),
+-                            )),
+-                            None => percentile_25_expr,
+-                        }
+-                        .alias(state.register_field_name(format!("25%_{}", column.name())));
+-                        all_aggregates.push(percentile_25);
+-                    }
+-                    if statistics.contains("50%") {
+-                        let percentile_50_expr = Expr::AggregateFunction(expr::AggregateFunction {
+-                            func: approx_median_udaf(),
+-                            params: AggregateFunctionParams {
+-                                args: vec![Expr::Column(column.clone())],
+-                                distinct: false,
+-                                filter: None,
+-                                order_by: vec![],
+-                                null_treatment: None,
+-                            },
+-                        });
+-                        let percentile_50 = match &percentile_cast {
+-                            Some(dt) => Expr::Cast(expr::Cast::new(
+-                                Box::new(percentile_50_expr),
+-                                dt.clone(),
+-                            )),
+-                            None => percentile_50_expr,
+-                        }
+-                        .alias(state.register_field_name(format!("50%_{}", column.name())));
+-                        all_aggregates.push(percentile_50);
+-                    }
+-                    if statistics.contains("75%") {
+-                        let percentile_75_expr = Expr::AggregateFunction(expr::AggregateFunction {
+-                            func: approx_percentile_cont_udaf(),
+-                            params: AggregateFunctionParams {
+-                                args: vec![
+-                                    Expr::Column(column.clone()),
+-                                    Expr::Literal(ScalarValue::Float64(Some(0.75_f64)), None),
+-                                ],
+-                                distinct: false,
+-                                filter: None,
+-                                order_by: vec![],
+-                                null_treatment: None,
+-                            },
+-                        });
+-                        let percentile_75 = match &percentile_cast {
+-                            Some(dt) => Expr::Cast(expr::Cast::new(
+-                                Box::new(percentile_75_expr),
+-                                dt.clone(),
+-                            )),
+-                            None => percentile_75_expr,
+-                        }
+-                        .alias(state.register_field_name(format!("75%_{}", column.name())));
+-                        all_aggregates.push(percentile_75);
+-                    }
+-                }
+-            }
+-
+-            if statistics.contains("min") {
+-                let min = Expr::AggregateFunction(expr::AggregateFunction {
+-                    func: min_udaf(),
+-                    params: AggregateFunctionParams {
+-                        args: vec![Expr::Column(column.clone())],
+-                        distinct: false,
+-                        filter: None,
+-                        order_by: vec![],
+-                        null_treatment: None,
+-                    },
+-                })
+-                .alias(state.register_field_name(format!("min_{}", column.name())));
+-                all_aggregates.push(min);
+-            }
+-
+-            if statistics.contains("max") {
+-                let max = Expr::AggregateFunction(expr::AggregateFunction {
+-                    func: max_udaf(),
+-                    params: AggregateFunctionParams {
+-                        args: vec![Expr::Column(column.clone())],
+-                        distinct: false,
+-                        filter: None,
+-                        order_by: vec![],
+-                        null_treatment: None,
+-                    },
+-                })
+-                .alias(state.register_field_name(format!("max_{}", column.name())));
+-                all_aggregates.push(max);
+-            }
+-        }
+-
+-        let stats_plan = LogicalPlanBuilder::from(input)
+-            .aggregate(Vec::<Expr>::new(), all_aggregates)?
+-            .build()?;
+-
+-        let summary_alias = state.register_field_name("summary");
+-        let create_stat_row =
+-            |stat_name: &str, stats_by_column: Vec<(String, Expr)>| -> PlanResult<LogicalPlan> {
+-                let stats_plan_clone = stats_plan.clone();
+-                let mut projections = vec![
+-                    Expr::Literal(ScalarValue::Utf8(Some(stat_name.to_string())), None)
+-                        .alias(&summary_alias),
+-                ];
+-                for (col_name, expr) in stats_by_column {
+-                    let expr = expr.cast_to(&DataType::Utf8, stats_plan_clone.schema())?;
+-                    projections.push(expr.alias(&col_name));
+-                }
+-                let plan = LogicalPlanBuilder::from(stats_plan_clone)
+-                    .project(projections)?
+-                    .build()?;
+-                Ok(plan)
+-            };
+-
+-        let mut union_plan = None;
+-        for stat_type in statistics {
+-            let stat_type = stat_type.as_str();
+-            let mut stats_by_column = Vec::new();
+-            for column in &columns {
+-                let column_name = column.name().to_string();
+-                let stat_expr = match stat_type {
+-                    "count" => Some(Expr::Column(self.resolve_one_column(
+-                        stats_plan.schema(),
+-                        &format!("count_{column_name}"),
+-                        state,
+-                    )?)),
+-                    "mean" => self
+-                        .resolve_optional_column(
+-                            stats_plan.schema(),
+-                            &format!("mean_{column_name}"),
+-                            None,
+-                            state,
+-                        )?
+-                        .map(Expr::Column),
+-                    "stddev" => self
+-                        .resolve_optional_column(
+-                            stats_plan.schema(),
+-                            &format!("stddev_{column_name}"),
+-                            None,
+-                            state,
+-                        )?
+-                        .map(Expr::Column),
+-                    "min" => Some(Expr::Column(self.resolve_one_column(
+-                        stats_plan.schema(),
+-                        &format!("min_{column_name}"),
+-                        state,
+-                    )?)),
+-                    "25%" => Some(Expr::Column(self.resolve_one_column(
+-                        stats_plan.schema(),
+-                        &format!("25%_{column_name}"),
+-                        state,
+-                    )?)),
+-                    "50%" => Some(Expr::Column(self.resolve_one_column(
+-                        stats_plan.schema(),
+-                        &format!("50%_{column_name}"),
+-                        state,
+-                    )?)),
+-                    "75%" => Some(Expr::Column(self.resolve_one_column(
+-                        stats_plan.schema(),
+-                        &format!("75%_{column_name}"),
+-                        state,
+-                    )?)),
+-                    "max" => Some(Expr::Column(self.resolve_one_column(
+-                        stats_plan.schema(),
+-                        &format!("max_{column_name}"),
+-                        state,
+-                    )?)),
+-                    _ => None,
+-                };
+-
+-                if let Some(expr) = stat_expr {
+-                    stats_by_column.push((column_name, expr));
+-                }
+-            }
+-
+-            if !stats_by_column.is_empty() {
+-                let stat_row = create_stat_row(stat_type, stats_by_column)?;
+-                union_plan = Some(match union_plan {
+-                    Some(plan) => LogicalPlanBuilder::from(plan).union(stat_row)?.build()?,
+-                    None => stat_row,
+-                });
+-            }
+-        }
+-        union_plan.ok_or_else(|| PlanError::internal("No describe statistics generated"))
+-    }
+-
+-    pub(super) async fn resolve_query_stat_describe(
+-        &self,
+-        input: spec::QueryPlan,
+-        columns: Vec<spec::Identifier>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let statistics = vec![
+-            "count".to_string(),
+-            "mean".to_string(),
+-            "stddev".to_string(),
+-            "min".to_string(),
+-            "max".to_string(),
+-        ];
+-        self.resolve_query_stat_summary(input, columns, statistics, state)
+-            .await
+-    }
+-
+-    pub(super) async fn resolve_query_stat_cross_tab(
+-        &self,
+-        input: spec::QueryPlan,
+-        left_column: spec::Identifier,
+-        right_column: spec::Identifier,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let cross_tab_alias = state.register_field_name(format!(
+-            "{}_{}",
+-            left_column.as_ref(),
+-            right_column.as_ref()
+-        ));
+-        let left_column = self.resolve_one_column(input.schema(), left_column.as_ref(), state)?;
+-        let right_column = self.resolve_one_column(input.schema(), right_column.as_ref(), state)?;
+-
+-        let projected_plan = LogicalPlanBuilder::from(input.clone())
+-            .project(vec![
+-                Expr::Cast(expr::Cast::new(
+-                    Box::new(col(right_column.clone())),
+-                    DataType::Utf8,
+-                ))
+-                .alias_qualified(right_column.relation.clone(), right_column.name.clone()),
+-            ])?
+-            .build()?;
+-        let distinct_values = LogicalPlanBuilder::from(projected_plan)
+-            .project(vec![Expr::Column(right_column.clone())])?
+-            .distinct()?
+-            .build()?;
+-        // TODO: This can be expensive for large input datasets
+-        let distinct_values_batches = self
+-            .ctx
+-            .execute_logical_plan(distinct_values)
+-            .await?
+-            .collect()
+-            .await?;
+-
+-        let mut unique_values: Vec<(String, String)> = vec![];
+-        for batch in distinct_values_batches {
+-            let array = batch
+-                .column(0)
+-                .as_any()
+-                .downcast_ref::<StringArray>()
+-                .ok_or_else(|| PlanError::internal("Expected string array"))?;
+-
+-            for i in 0..array.len() {
+-                if array.is_valid(i) {
+-                    let value = array.value(i).to_string();
+-                    let alias = state.register_field_name(&value);
+-                    unique_values.push((value, alias));
+-                }
+-            }
+-        }
+-
+-        let mut projection_exprs = vec![col(left_column.clone())];
+-        for (value, alias) in &unique_values {
+-            let column_expr = Expr::Case(expr::Case {
+-                expr: None,
+-                when_then_expr: vec![(
+-                    Box::new(lit(value).eq(col(right_column.clone()))),
+-                    Box::new(lit(1)),
+-                )],
+-                else_expr: Some(Box::new(lit(0))),
+-            })
+-            .alias(alias);
+-            projection_exprs.push(column_expr);
+-        }
+-
+-        let projected_counts_plan = LogicalPlanBuilder::from(input)
+-            .project(projection_exprs)?
+-            .build()?;
+-
+-        let aggregate_exprs = unique_values
+-            .iter()
+-            .map(|(value, alias)| {
+-                Ok(Expr::AggregateFunction(expr::AggregateFunction {
+-                    func: sum_udaf(),
+-                    params: AggregateFunctionParams {
+-                        args: vec![col(alias)],
+-                        distinct: false,
+-                        filter: None,
+-                        order_by: vec![],
+-                        null_treatment: None,
+-                    },
+-                })
+-                .alias(state.register_field_name(value)))
+-            })
+-            .collect::<PlanResult<Vec<Expr>>>()?;
+-
+-        let plan = LogicalPlanBuilder::from(projected_counts_plan)
+-            .aggregate(
+-                vec![col(left_column).alias(cross_tab_alias.as_str())],
+-                aggregate_exprs,
+-            )?
+-            .build()?;
+-        let expr: Vec<Expr> = plan
+-            .schema()
+-            .columns()
+-            .into_iter()
+-            .map(|column| {
+-                if column.name() == cross_tab_alias {
+-                    Expr::Cast(expr::Cast::new(
+-                        Box::new(Expr::Column(column.clone())),
+-                        DataType::Utf8,
+-                    ))
+-                } else {
+-                    Expr::Column(column)
+-                }
+-            })
+-            .collect();
+-        LogicalPlanBuilder::from(plan)
+-            .project(expr)?
+-            .build()
+-            .map_err(Into::into)
+-    }
+-
+-    pub(super) async fn resolve_query_stat_cov(
+-        &self,
+-        input: spec::QueryPlan,
+-        left_column: spec::Identifier,
+-        right_column: spec::Identifier,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let covar_samp = Expr::AggregateFunction(expr::AggregateFunction {
+-            func: datafusion::functions_aggregate::covariance::covar_samp_udaf(),
+-            params: AggregateFunctionParams {
+-                args: vec![
+-                    Expr::Column(self.resolve_one_column(
+-                        input.schema(),
+-                        left_column.as_ref(),
+-                        state,
+-                    )?),
+-                    Expr::Column(self.resolve_one_column(
+-                        input.schema(),
+-                        right_column.as_ref(),
+-                        state,
+-                    )?),
+-                ],
+-                distinct: false,
+-                filter: None,
+-                order_by: vec![],
+-                null_treatment: None,
+-            },
+-        })
+-        .alias(state.register_field_name("cov"));
+-        Ok(LogicalPlanBuilder::from(input)
+-            .aggregate(Vec::<Expr>::new(), vec![covar_samp])?
+-            .build()?)
+-    }
+-
+-    pub(super) async fn resolve_query_stat_corr(
+-        &self,
+-        input: spec::QueryPlan,
+-        left_column: spec::Identifier,
+-        right_column: spec::Identifier,
+-        method: String,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        if !method.eq_ignore_ascii_case("pearson") {
+-            return Err(PlanError::unsupported(format!(
+-                "Unsupported correlation method: {method}. Currently only Pearson is supported.",
+-            )));
+-        }
+-        let input = self.resolve_query_plan(input, state).await?;
+-        let corr = Expr::AggregateFunction(expr::AggregateFunction {
+-            func: datafusion::functions_aggregate::correlation::corr_udaf(),
+-            params: AggregateFunctionParams {
+-                args: vec![
+-                    Expr::Column(self.resolve_one_column(
+-                        input.schema(),
+-                        left_column.as_ref(),
+-                        state,
+-                    )?),
+-                    Expr::Column(self.resolve_one_column(
+-                        input.schema(),
+-                        right_column.as_ref(),
+-                        state,
+-                    )?),
+-                ],
+-                distinct: false,
+-                filter: None,
+-                order_by: vec![],
+-                null_treatment: None,
+-            },
+-        })
+-        .alias(state.register_field_name("corr"));
+-        Ok(LogicalPlanBuilder::from(input)
+-            .aggregate(Vec::<Expr>::new(), vec![corr])?
+-            .build()?)
+-    }
+-
+-    pub(super) async fn resolve_query_stat_sample_by(
+-        &self,
+-        input: spec::QueryPlan,
+-        column: spec::Expr,
+-        fractions: Vec<spec::Fraction>,
+-        seed: Option<i64>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        if fractions
+-            .iter()
+-            .any(|f| f.fraction < 0.0 || f.fraction > 1.0)
+-        {
+-            return Err(PlanError::invalid(
+-                "All fraction values must be >= 0.0 and <= 1.0",
+-            ));
+-        }
+-
+-        let input: LogicalPlan = self
+-            .resolve_query_plan_with_hidden_fields(input, state)
+-            .await?;
+-        let schema = input.schema();
+-        let column_expr: Column = match &column {
+-            spec::Expr::UnresolvedAttribute {
+-                name,
+-                plan_id,
+-                is_metadata_column: false,
+-            } => {
+-                let name: Vec<String> = name.clone().into();
+-                let Ok(name) = name.one() else {
+-                    return Err(PlanError::invalid("Expected simple column name"));
+-                };
+-                match self.resolve_optional_column(schema, &name, *plan_id, state)? {
+-                    Some(col) => col,
+-                    None => {
+-                        return Err(PlanError::invalid(format!(
+-                            "Could not resolve column: {name}"
+-                        )));
+-                    }
+-                }
+-            }
+-            _ => {
+-                return Err(PlanError::invalid("Expected UnresolvedAttribute"));
+-            }
+-        };
+-
+-        let init_exprs: Vec<Expr> = input
+-            .schema()
+-            .columns()
+-            .into_iter()
+-            .map(Expr::Column)
+-            .collect();
+-        let rand_column_name: String = state.register_hidden_field_name("rand_value");
+-
+-        let rand_expr: Expr = Expr::ScalarFunction(ScalarFunction {
+-            func: Arc::new(ScalarUDF::from(Random::new())),
+-            args: vec![Expr::Literal(ScalarValue::Int64(seed), None)],
+-        })
+-        .alias(&rand_column_name);
+-        let mut all_exprs: Vec<Expr> = init_exprs.clone();
+-        all_exprs.push(rand_expr);
+-        let plan_with_rand: LogicalPlan = LogicalPlanBuilder::from(input)
+-            .project(all_exprs)?
+-            .build()?;
+-
+-        let mut acc_exprs: Vec<Expr> = vec![];
+-        for frac in &fractions {
+-            let key_val = self.resolve_literal(frac.stratum.clone(), state)?;
+-            let f = and(
+-                Expr::Column(column_expr.clone()).eq(lit(key_val)),
+-                col(&rand_column_name).lt_eq(lit(frac.fraction)),
+-            );
+-            acc_exprs.push(f);
+-        }
+-
+-        let final_expr: Expr = acc_exprs.into_iter().reduce(or).unwrap_or(lit(false));
+-        Ok(LogicalPlanBuilder::from(plan_with_rand)
+-            .filter(final_expr)?
+-            .build()?)
+-    }
+-}
+diff --git a/crates/sail-plan/src/resolver/query/time_travel.rs b/crates/sail-plan/src/resolver/query/time_travel.rs
+deleted file mode 100644
+index f9de62f..0000000
 --- a/crates/sail-plan/src/resolver/query/time_travel.rs
 +++ /dev/null
 @@ -1,357 +0,0 @@
@@ -36212,6 +38033,9 @@
 -    SnapshotId(i64),
 -    Reference(String),
 -}
+diff --git a/crates/sail-plan/src/resolver/query/udf.rs b/crates/sail-plan/src/resolver/query/udf.rs
+deleted file mode 100644
+index 579a4e7..0000000
 --- a/crates/sail-plan/src/resolver/query/udf.rs
 +++ /dev/null
 @@ -1,525 +0,0 @@
@@ -36740,6 +38564,9 @@
 -    mapper_input_names: Vec<String>,
 -    offsets: Vec<usize>,
 -}
+diff --git a/crates/sail-plan/src/resolver/query/udtf.rs b/crates/sail-plan/src/resolver/query/udtf.rs
+deleted file mode 100644
+index ef3b77f..0000000
 --- a/crates/sail-plan/src/resolver/query/udtf.rs
 +++ /dev/null
 @@ -1,225 +0,0 @@
@@ -36968,6 +38795,8 @@
 -        }))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/tree/mod.rs b/crates/sail-plan/src/resolver/tree/mod.rs
+index 66ba862..7053229 100644
 --- a/crates/sail-plan/src/resolver/tree/mod.rs
 +++ b/crates/sail-plan/src/resolver/tree/mod.rs
 @@ -1,3 +1,4 @@
@@ -36975,7 +38804,7 @@
  use std::sync::Arc;
  
  use datafusion_common::DFSchema;
-@@ -8,7 +9,6 @@
+@@ -8,7 +9,6 @@ use crate::resolver::state::PlanResolverState;
  pub(crate) mod explode;
  pub(crate) mod monotonic_id;
  pub(crate) mod spark_partition_id;
@@ -36983,6 +38812,9 @@
  pub(crate) mod window;
  
  fn empty_logical_plan() -> LogicalPlan {
+diff --git a/crates/sail-plan/src/resolver/tree/table_input.rs b/crates/sail-plan/src/resolver/tree/table_input.rs
+deleted file mode 100644
+index 94d4134..0000000
 --- a/crates/sail-plan/src/resolver/tree/table_input.rs
 +++ /dev/null
 @@ -1,58 +0,0 @@
@@ -37044,10 +38876,16 @@
 -        Ok(Transformed::yes(expr))
 -    }
 -}
+diff --git a/crates/sail-plan/src/streaming/mod.rs b/crates/sail-plan/src/streaming/mod.rs
+deleted file mode 100644
+index deecdbe..0000000
 --- a/crates/sail-plan/src/streaming/mod.rs
 +++ /dev/null
 @@ -1 +0,0 @@
 -pub mod rewriter;
+diff --git a/crates/sail-plan/src/streaming/rewriter.rs b/crates/sail-plan/src/streaming/rewriter.rs
+deleted file mode 100644
+index e55a3bc..0000000
 --- a/crates/sail-plan/src/streaming/rewriter.rs
 +++ /dev/null
 @@ -1,263 +0,0 @@

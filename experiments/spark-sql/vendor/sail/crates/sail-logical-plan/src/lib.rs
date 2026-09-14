@@ -2,7 +2,5 @@
 pub mod monotonic_id;
 pub mod range;
 pub mod repartition;
-pub mod schema_pivot;
-pub mod show_string;
 pub mod sort;
 pub mod spark_partition_id;

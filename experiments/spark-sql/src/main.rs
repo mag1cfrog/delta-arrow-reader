@@ -191,6 +191,73 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn rejects_dataframe_statistics_before_resolving_inputs() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let input = serde_json::to_value(spec::QueryPlan::new(spec::QueryNode::Read {
+            read_type: spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
+                name: spec::ObjectName::bare("missing_table"),
+                temporal: None,
+                sample: None,
+                options: vec![],
+            })),
+            is_streaming: false,
+        }))?;
+        for (name, mut fields) in [
+            ("fillNa", json!({"columns": [], "values": []})),
+            ("dropNa", json!({"columns": [], "minNonNulls": null})),
+            ("replace", json!({"columns": [], "replacements": []})),
+            ("statSummary", json!({"statistics": []})),
+            ("statDescribe", json!({"columns": []})),
+            (
+                "statCrosstab",
+                json!({"leftColumn": "x", "rightColumn": "y"}),
+            ),
+            ("statCov", json!({"leftColumn": "x", "rightColumn": "y"})),
+            (
+                "statCorr",
+                json!({"leftColumn": "x", "rightColumn": "y", "method": "pearson"}),
+            ),
+            (
+                "statApproxQuantile",
+                json!({"columns": [], "probabilities": [], "relativeError": 0.0}),
+            ),
+            ("statFreqItems", json!({"columns": [], "support": null})),
+            (
+                "statSampleBy",
+                json!({"column": {"literal": "null"}, "fractions": [], "seed": null}),
+            ),
+        ] {
+            fields["input"] = input.clone();
+            let node = serde_json::from_value(json!({(name): fields}))?;
+            let error = resolver
+                .resolve_named_plan(spec::Plan::Query(spec::QueryPlan::new(node)))
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(error, PlanError::NotSupported(ref message)
+                if message.contains("DataFrame NA/statistics")),
+                "{name}: {error}"
+            );
+        }
+        let settings =
+            json!({"spark.sql.ansi.enabled": "true", "spark.sql.session.timeZone": "UTC"});
+        let named = resolve(&ctx, "SELECT COUNT(x), AVG(x), COVAR_SAMP(x,y), CORR(x,y), SUM(COALESCE(x,0)) FROM VALUES (1,2), (2,4), (NULL,6) AS t(x,y)", &settings).await?;
+        let batches = ctx
+            .execute_logical_plan(named.plan)
+            .await?
+            .collect()
+            .await?;
+        let row = batches[0]
+            .columns()
+            .iter()
+            .map(|array| array_value_to_string(array.as_ref(), 0))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(row, ["2", "1.5", "1.0", "1.0", "3"]);
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn rejects_streaming_and_checkpoints_before_resolving_inputs() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         ctx.register_table("registered", ctx.sql("SELECT 1 AS x").await?.into_view())?;

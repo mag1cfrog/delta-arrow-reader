@@ -1,10 +1,9 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use datafusion_common::Column;
-use datafusion_expr::{
-    Expr, ExprSchemable, LogicalPlan, Projection, SubqueryAlias, cast, col, lit,
-};
+use datafusion_expr::{Expr, ExprSchemable, LogicalPlan, Projection, SubqueryAlias};
 use indexmap::IndexMap;
 use sail_common::spec;
 use sail_common_datafusion::utils::items::ItemTaker;
@@ -268,104 +267,5 @@ impl PlanResolver<'_> {
         } else {
             Ok(result)
         }
-    }
-
-    pub(super) async fn resolve_query_replace(
-        &self,
-        input: spec::QueryPlan,
-        columns: Vec<spec::Identifier>,
-        replacements: Vec<spec::Replacement>,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<LogicalPlan> {
-        let input = self.resolve_query_plan(input, state).await?;
-        let schema = input.schema();
-        let cols_to_change: Vec<String> = columns
-            .into_iter()
-            .map(|ident| ident.as_ref().to_ascii_lowercase())
-            .collect();
-        let replacements: Vec<(Expr, Expr)> = replacements
-            .into_iter()
-            .map(|r| {
-                Ok((
-                    lit(self.resolve_literal(r.old_value, state)?),
-                    lit(self.resolve_literal(r.new_value, state)?),
-                ))
-            })
-            .collect::<PlanResult<_>>()?;
-
-        let existing_cols_info = schema
-            .iter()
-            .map(|(qualifier, field)| {
-                let field_info = state.get_field_info(field.name())?;
-                Ok::<_, PlanError>((
-                    col((qualifier, field)),
-                    field.data_type(),
-                    field_info.name().to_ascii_lowercase(),
-                ))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let existing_cols_set: HashSet<_> =
-            existing_cols_info.iter().map(|(_, _, name)| name).collect();
-
-        if let Some(missing_colname) = cols_to_change
-            .iter()
-            .find(|col| !existing_cols_set.contains(*col))
-        {
-            let existing_cols = existing_cols_info
-                .iter()
-                .map(|(_, _, name)| name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-
-            return Err(PlanError::AnalysisError(format!(
-                "Cannot resolve column name \"{}\" among ({})",
-                missing_colname, existing_cols
-            )));
-        }
-
-        let cols_to_change_set: HashSet<_> = cols_to_change.iter().collect();
-
-        let replace_exprs = existing_cols_info
-            .into_iter()
-            .map(|(column_expr, column_type, column_name)| {
-                let expr = if cols_to_change.is_empty() || cols_to_change_set.contains(&column_name)
-                {
-                    let when_then_expr = replacements
-                        .iter()
-                        .filter(|(old, _new)| {
-                            old.get_type(schema).is_ok_and(|old_type| {
-                                old_type.is_null()
-                                    || (old_type.is_numeric() && column_type.is_numeric())
-                                    || (old_type == *column_type)
-                            })
-                        })
-                        .map(|(old, new)| {
-                            let old = cast(old.clone(), column_type.clone());
-                            let new = cast(new.clone(), column_type.clone());
-                            (Box::new(column_expr.clone().eq(old)), Box::new(new))
-                        })
-                        .collect::<Vec<_>>();
-
-                    if when_then_expr.is_empty() {
-                        column_expr
-                    } else {
-                        Expr::Case(datafusion_expr::Case {
-                            expr: None,
-                            when_then_expr,
-                            else_expr: Some(Box::new(column_expr)),
-                        })
-                    }
-                } else {
-                    column_expr
-                };
-                Ok(NamedExpr::new(vec![column_name], expr))
-            })
-            .collect::<PlanResult<Vec<_>>>()?;
-
-        Ok(LogicalPlan::Projection(Projection::try_new(
-            self.rewrite_named_expressions(replace_exprs, state)?,
-            Arc::new(input),
-        )?))
     }
 }

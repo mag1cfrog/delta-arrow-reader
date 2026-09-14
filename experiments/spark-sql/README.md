@@ -144,7 +144,7 @@ The resolved graph at that checkpoint remained at 599 packages across all target
 
 ## Service/streaming removal checkpoint
 
-The current subset retains eight Sail crates and 102,630 gross Rust lines, 4,538 fewer than the storage checkpoint. It removes Sail's actor/server runtime, application configuration, telemetry, session/streaming helpers, checkpoint nodes and system-table generation. The range provider uses the existing async-trait crate directly. SQL functions, parser derives and Arrow result streaming remain intact.
+The approved service/streaming slice, committed as `e9f5911`, retained eight Sail crates and 102,630 gross Rust lines, 4,538 fewer than the storage checkpoint. It removes Sail's actor/server runtime, application configuration, telemetry, session/streaming helpers, checkpoint nodes and system-table generation. The range provider uses the existing async-trait crate directly. SQL functions, parser derives and Arrow result streaming remain intact.
 
 Direct specs with `is_streaming: true` now return `PlanError::NotSupported` before resolving any read source. Previously the flag was silently ignored. Watermark specs also return NotSupported, replacing an unimplemented error; remote-checkpoint rejection remains explicit. A new test first reproduced the accepted streaming read, then verified rejection for all four read-source variants, watermarks and remote checkpoints. A batch read from the same registered table still executes.
 
@@ -152,4 +152,14 @@ The resolved graph falls by 42 packages to 557 across all targets and 487 Linux 
 
 All 116 observations match the unchanged import baseline: 83 successes, 18 planning errors and 15 execution errors. The 19 seeds, 18 adapter checks, eight runner tests, eleven Sail planner tests and nine Python tests pass. Spark and full-Sail comparison totals remain unchanged. The parser's shared gold-data test helper is retained; its separate syntax integration test was not run because Cargo rejects selecting that non-member dependency's dev-dependency test from the experiment workspace.
 
-Non-SQL DataFrame NA/statistics resolvers and unused display/schema-pivot nodes remain candidates for a later cut. Missing SQL extension planners, Delta/lifecycle checks and the final adoption decision remain open.
+The following cuts continue from this checkpoint. Missing SQL extension planners, Delta/lifecycle checks and the final adoption decision remain open.
+
+## Further reduction checkpoints
+
+Each cut keeps the fixed inputs, SQL and both checked-in baselines unchanged. The full capture still has 83 successes, 18 planning errors and 15 execution errors, with all 116 observations matching the import baseline. The 19 seeds and 18 adapter checks pass; Spark and full-Sail comparison totals remain unchanged. Counts include comments and blank lines. Detailed counts and provenance are in `UPSTREAM.md` and each commit's `inventory.json`.
+
+| Cut | Gross Rust lines | All-target / Linux build packages | Rust runner / planner tests | Python tests |
+| --- | ---: | ---: | ---: | ---: |
+| DataFrame statistics and display | 101,311 | 549 / 483 | 9 / 11 | 9 |
+
+The DataFrame cut removes NA/statistics resolvers, value replacement and unused ShowString/SchemaPivot nodes. All eleven NA/statistics spec variants now reject before input resolution. The new test first reproduced missing-table lookup, then verified the rejection and successful SQL COUNT, AVG, COVAR_SAMP, CORR and COALESCE execution. Shared value formatting remains because SQL casts and PIVOT use it. No test source was removed from the vendored crates.
