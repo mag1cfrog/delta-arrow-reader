@@ -3,5 +3,6 @@ pub mod config;
 pub mod error;
 pub mod formatter;
 pub mod function;
+pub mod physical_plan;
 pub mod resolver;
 pub use error::PlanResult;

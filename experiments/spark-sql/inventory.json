@@ -1,5 +1,5 @@
 {
-  "source_sha256": "ae21d50ce071745962756ec60956bdf1684a4c1996eadacc82b816c0c2f05d9c",
+  "source_sha256": "a5284989720be88d0850ecc82b80a4644edfa36fd218f3da18bef5e021c6adff",
   "crates": [
     {
       "crate": "sail-common",
@@ -39,12 +39,12 @@
     },
     {
       "crate": "sail-plan",
-      "rust_files": 77,
-      "gross_lines": 18988,
-      "nonblank_lines": 17796,
-      "test_lines": 779,
+      "rust_files": 79,
+      "gross_lines": 19281,
+      "nonblank_lines": 18058,
+      "test_lines": 802,
       "build_script_lines": 0,
-      "production_lines": 18209
+      "production_lines": 18479
     },
     {
       "crate": "sail-sql-analyzer",
@@ -75,12 +75,12 @@
     }
   ],
   "totals": {
-    "rust_files": 348,
-    "gross_lines": 90871,
-    "nonblank_lines": 83534,
-    "test_lines": 8080,
+    "rust_files": 350,
+    "gross_lines": 91164,
+    "nonblank_lines": 83796,
+    "test_lines": 8103,
     "build_script_lines": 80,
-    "production_lines": 82711
+    "production_lines": 82981
   },
   "lock_packages": 524,
   "resolved_packages_all_targets_including_dev": 524,

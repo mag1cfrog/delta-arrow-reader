@@ -12,6 +12,7 @@ use futures_util::StreamExt;
 use sail_common_datafusion::rename::physical_plan::rename_physical_plan;
 use sail_plan::{
     config::PlanConfig,
+    physical_plan::SparkQueryPlanner,
     resolver::{PlanResolver, plan::NamedPlan},
 };
 use serde_json::{Value, json};
@@ -23,6 +24,7 @@ fn session() -> ProbeResult<SessionContext> {
     let state = SessionStateBuilder::new()
         .with_config(SessionConfig::new().with_target_partitions(2))
         .with_default_features()
+        .with_query_planner(Arc::new(SparkQueryPlanner))
         .build();
     Ok(SessionContext::new_with_state(state))
 }
@@ -181,6 +183,128 @@ mod tests {
     use arrow::array::{Array, Int32Array, ListArray, TimestampMicrosecondArray};
     use sail_common::spec;
     use sail_plan::error::PlanError;
+
+    #[tokio::test]
+    async fn spark_partition_ids_follow_execution_partitions() -> ProbeResult<()> {
+        use arrow::{
+            datatypes::{DataType, Field, Schema},
+            record_batch::RecordBatch,
+        };
+        use datafusion::{datasource::MemTable, physical_plan::ExecutionPlanProperties};
+
+        let ctx = session()?;
+        let ctx = SessionContext::new_with_state(
+            SessionStateBuilder::new_from_existing(ctx.state())
+                .with_config(ctx.copied_config().with_batch_size(1))
+                .build(),
+        );
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, true)]));
+        let batch = |values: Vec<Option<i32>>| {
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(Int32Array::from(values))])
+        };
+        ctx.register_table(
+            "partitioned",
+            Arc::new(MemTable::try_new(
+                schema.clone(),
+                vec![
+                    vec![
+                        batch(vec![Some(3), None])?,
+                        batch(vec![])?,
+                        batch(vec![Some(1)])?,
+                    ],
+                    vec![batch(vec![])?, batch(vec![Some(2), Some(2)])?],
+                    vec![],
+                ],
+            )?),
+        )?;
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.session.timeZone":"UTC"});
+        for (suffix, mut expected) in [
+            ("", vec![Some(3), None, Some(1), Some(2), Some(2)]),
+            (" WHERE id >= 2", vec![Some(3), Some(2), Some(2)]),
+            (" WHERE id < 0", vec![]),
+        ] {
+            let named = resolve(
+                &ctx,
+                &format!("SELECT id, spark_partition_id() AS pid, spark_partition_id() AS again FROM partitioned{suffix}"),
+                &settings,
+            )
+            .await?;
+            let physical = ctx
+                .execute_logical_plan(named.plan)
+                .await?
+                .create_physical_plan()
+                .await?;
+            let physical = rename_physical_plan(physical, &named.fields)?;
+            assert_eq!(physical.schema().field(0), schema.field(0));
+            for index in [1, 2] {
+                let output_schema = physical.schema();
+                let field = output_schema.field(index);
+                assert_eq!(field.name(), if index == 1 { "pid" } else { "again" });
+                assert_eq!(field.data_type(), &DataType::Int32);
+                assert!(!field.is_nullable());
+            }
+            assert!(
+                displayable(physical.as_ref())
+                    .indent(true)
+                    .to_string()
+                    .contains("SparkPartitionIdExec")
+            );
+            let mut actual = Vec::new();
+            let mut nonempty_partitions = 0;
+            let mut multiple_batches = false;
+            for partition in 0..physical.output_partitioning().partition_count() {
+                let mut stream = physical.execute(partition, ctx.task_ctx())?;
+                let mut row_count = 0;
+                let mut nonempty_batches = 0;
+                while let Some(batch) = stream.next().await {
+                    let batch = batch?;
+                    let ids = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .unwrap();
+                    let pids = batch
+                        .column(1)
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .unwrap();
+                    let repeated = batch
+                        .column(2)
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .unwrap();
+                    assert_eq!(pids.null_count(), 0);
+                    assert_eq!(pids, repeated);
+                    assert!(
+                        pids.values()
+                            .iter()
+                            .all(|id| *id == i32::try_from(partition).unwrap())
+                    );
+                    actual.extend(ids.iter());
+                    row_count += batch.num_rows();
+                    nonempty_batches += usize::from(batch.num_rows() > 0);
+                }
+                nonempty_partitions += usize::from(row_count > 0);
+                multiple_batches |= nonempty_batches > 1;
+            }
+            if suffix.is_empty() {
+                assert!(
+                    multiple_batches,
+                    "test must exercise multiple batches in one partition"
+                );
+            }
+            if !expected.is_empty() {
+                assert!(
+                    nonempty_partitions > 1,
+                    "test must exercise more than one partition"
+                );
+            }
+            actual.sort();
+            expected.sort();
+            assert_eq!(actual, expected);
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn ntile_keeps_larger_buckets_first() -> ProbeResult<()> {
