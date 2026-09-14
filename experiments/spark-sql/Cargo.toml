@@ -20,6 +20,11 @@ sail-common-datafusion = { path = "vendor/sail/crates/sail-common-datafusion" }
 sail-sql-analyzer = { path = "vendor/sail/crates/sail-sql-analyzer" }
 sail-plan = { path = "vendor/sail/crates/sail-plan" }
 
+[dev-dependencies]
+# Reuse the reader's real-Parquet/DV fixture helper with the same resolved packages.
+delta_kernel = { version = "=0.25.0", default-features = false, features = ["arrow", "internal-api"] }
+parquet = "58.3.0"
+
 [profile.dev]
 debug = 0
 incremental = false

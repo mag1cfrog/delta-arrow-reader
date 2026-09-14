@@ -8,9 +8,9 @@ The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) d
 
 ## Current result and remaining source
 
-The current checkpoint adds monotonic-ID execution on `feat/spark-sql-extraction`, after partition-ID and sorting execution. The retained subset has **8 Sail-owned crates and 91,529 gross Rust lines**, including 83,288 production-source lines, 8,161 test lines and 80 build-script lines. Execution integration adds 658 lines to the 90,871-line cleanup checkpoint, including 297 in this monotonic-ID slice. Compared with the original import, 34,484 lines are gone, a 27.4% reduction. Counts include comments and blank lines.
+The current checkpoint validates Delta snapshots, deletion vectors and stream lifecycle after monotonic-ID execution in `7e9c5fe` on `feat/spark-sql-extraction`. The retained source is unchanged: **8 Sail-owned crates and 91,529 gross Rust lines**, including 83,288 production-source lines, 8,161 test lines and 80 build-script lines. Execution integration added 658 lines to the 90,871-line cleanup checkpoint. Compared with the original import, 34,484 lines are gone, a 27.4% reduction. Counts include comments and blank lines.
 
-The resolved dependency graph has 524 packages across all targets and 452 Linux normal/build packages, including the runner and reader. The extension adds no dependency or crate. The Rust frontend has no Python, Spark Connect service or Sail storage-reader dependency; Delta scans still use the host provider. This is a demonstrated subset, not a minimum or an adoption decision.
+The resolved dependency graph has 524 packages across all targets and 452 Linux normal/build packages, including the runner and reader. The lifecycle tests add direct test references to the existing delta_kernel and parquet packages; resolved package versions and features are unchanged. The Rust frontend has no Python, Spark Connect service or Sail storage-reader dependency; Delta scans still use the host provider. This is a demonstrated subset, not a minimum or an adoption decision.
 
 | Retained crate | Gross Rust lines | Why it remains |
 | --- | ---: | --- |
@@ -36,18 +36,18 @@ The remaining bulk implements SQL behavior. Further substantial reduction would 
 | ABS and other numeric kernels | Per-query ANSI settings, interval/duration types, overflow checks and error behavior still require Spark-specific handling. |
 | Parser derives and command grammar | TreeParser drives parsing and TreeSyntax protects the full syntax graph. Command grammar supports the existing explicit rejection checks. |
 
-The current check passes 24 runner, 13 planner and 9 Python tests. The unchanged function, common DataFusion and analyzer suites passed 303, 6 and 6 tests at the cleanup checkpoint, along with the standalone parser syntax snapshot. The four frozen corpus/baseline files remain unchanged. To run the retained library suites in addition to the runner commands below:
+The current check passes 27 runner, 13 planner and 9 Python tests, plus all 58 root reader integration tests with the datafusion feature enabled. The unchanged function, common DataFusion and analyzer suites passed 303, 6 and 6 tests at the cleanup checkpoint, along with the standalone parser syntax snapshot. The four frozen corpus/baseline files remain unchanged. To run the retained library suites in addition to the runner commands below:
 
 ```bash
 cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
   -p sail-function -p sail-common-datafusion -p sail-sql-analyzer --lib -j 2
 ```
 
-The capture has 87 successful queries, 18 planning errors and 11 execution errors. Of the 116 import-baseline observations, 112 remain unchanged; `sail_partition_id`, `sail_sort_within_partitions`, `aggregation_ordered_first` and `extensions_monotonic_id` change from execution errors to success and match full Sail. The monotonic-ID slice changes only the last case compared with the sorting checkpoint. Against Spark, partition-local sorting and monotonic IDs match strictly; the other two cases differ only in field metadata. Spark comparison is 47 strict matches / 58 differences / 11 pending reference cases; full-Sail comparison is 87 / 18 / 11. Matching an error stage does not establish matching error conditions. The 19 seed checks and 18 adapter checks still pass.
+The capture has 87 successful queries, 18 planning errors and 11 execution errors. All 116 observations match the monotonic-ID checkpoint. Of the 116 import-baseline observations, 112 remain unchanged; `sail_partition_id`, `sail_sort_within_partitions`, `aggregation_ordered_first` and `extensions_monotonic_id` change from execution errors to success and match full Sail. Against Spark, partition-local sorting and monotonic IDs match strictly; the other two cases differ only in field metadata. Spark comparison is 47 strict matches / 58 differences / 11 pending reference cases; full-Sail comparison is 87 / 18 / 11. Matching an error stage does not establish matching error conditions. The 19 seed checks and 18 adapter checks still pass.
 
 The earlier residual cleanup pass removed 1,097 production-source lines and added 152 net vendored test lines, reducing gross Rust source from 91,945 to 91,000 lines. The follow-up removes another 129 production-source lines from ten unused UDF/state/watermark payload types. Minimal rejected variants and child inputs/arguments remain to verify early rejection. These checks preserve the exclusion boundary without serialized function bodies or state configuration.
 
-Deletion-vector/snapshot/stream-lifecycle coverage and the adoption decision remain open. Additional checks before deletion found two existing gaps: projecting EXISTS as a SELECT output fails physical planning, and selecting a qualified join key such as `l.a` after `JOIN ... USING (a)` fails resolution. WHERE EXISTS, the merged USING key and qualified ON-join fields work. These findings remain visible.
+The Delta/lifecycle checks below now pass; the adoption/support decision remains open. Additional checks before deletion found two existing gaps: projecting EXISTS as a SELECT output fails physical planning, and selecting a qualified join key such as `l.a` after `JOIN ... USING (a)` fails resolution. WHERE EXISTS, the merged USING key and qualified ON-join fields work. These findings remain visible.
 
 ## Execution integration checkpoints
 
@@ -59,7 +59,7 @@ The sorting slice, committed as `28c00e3`, added 68 vendored production-source l
 
 The required-ordering test then exposed a second problem: automatic round-robin repartitioning after a global sort changes FIRST/LAST results between runs at small batch sizes. Full Sail 0.7.1 reproduces this with the test's id/k rows and `SAIL_EXECUTION__BATCH_SIZE=1`. SparkQueryPlanner now disables that optimization on a cloned planning state only when a RequiredSortNode demands global ordering. Existing scan partitions remain, and tests verify the host session settings are unchanged. This may reduce aggregation parallelism for such queries. Carrying hidden ordering keys into aggregate state could remove that restriction later; ordinary native SQL and partition-local sorting retain the host optimizer settings.
 
-The monotonic-ID slice copies MonotonicIdExec and its planner branch from the pinned Sail source into `sail-plan`. It adds 239 vendored production-source lines, 58 vendored test lines and 184 runner test lines. Tests first reproduced the missing-planner failure for both an explicit function call and the hidden node used by ordered windows. They now check the partition/row-offset encoding across batches, independent counters, repeated expressions and execution, arithmetic on IDs, filtering, NULL/duplicate input values, empty batches/partitions/results, a query without FROM, output aliases/types/nullability and FIRST_VALUE/LAST_VALUE over ordered input.
+The monotonic-ID slice, committed as `7e9c5fe`, copied MonotonicIdExec and its planner branch from the pinned Sail source into `sail-plan`. It added 239 vendored production-source lines, 58 vendored test lines and 184 runner test lines. Tests first reproduced the missing-planner failure for both an explicit function call and the hidden node used by ordered windows. They check the partition/row-offset encoding across batches, independent counters, repeated expressions and execution, arithmetic on IDs, filtering, NULL/duplicate input values, empty batches/partitions/results, a query without FROM, output aliases/types/nullability and FIRST_VALUE/LAST_VALUE over ordered input.
 
 The copied counter's overflow check also overflowed for a synthetic oversized batch. It now compares the batch length with the remaining 33-bit row capacity before allocating. A partition-range guard rejects indices outside Spark's Int32 partition representation. Tests exercise the last valid row, empty batches at the limit, overflow rejection without advancing the counter, interleaved streams and invalid child counts. The existing 2^33-row limit remains; no new crate or dependency is added. Upstream skips several aggregate-expression tests in `test_monotonically_increasing_id.py`; those cases are outside this checkpoint's verified coverage.
 
@@ -78,6 +78,25 @@ cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
   spark_monotonic_ids
 cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
   -p sail-plan --lib monotonic_ids_check_counter_and_partition_boundaries
+```
+
+## Delta and stream lifecycle checks
+
+`src/delta_lifecycle.rs` adds three Spark SQL tests using the reader's existing `tests/reader/support/real_parquet_delta_table.rs` fixture through a path import. The scenarios adapt the reader's DataFusion adapter tests. No fixture generator, scanner or exporter is copied. This adds 380 test-module lines and three cfg(test) runner lines, with no runtime implementation changes. The lockfile only adds two direct test-dependency references; its package set and versions are unchanged.
+
+| Check | Evidence |
+| --- | --- |
+| Deletion vectors and schema | A 6,000-row file spans two row groups and eight scan partitions. Row filtering preserves original DV coordinates. Exact surviving IDs/customer values, aliases, nullability and Utf8View/Utf8 output pass, as do an empty projection result and native SQL controls. Physical planning succeeds with the data file temporarily unavailable; reader task, row, range-read and byte counters remain zero. |
+| Snapshots and independent streams | An empty version 0, retained version 1 and refreshed version 2 have distinct results. Version 2 removes a file and adds a nullable column. Old plans still return version 1 through concurrent and repeated execution after table registration is replaced and the Delta log is made unavailable. The refreshed plan sees the new column as NULL; native SQL returns the new snapshot. |
+| Early drop and late failure | A 40,000-row, two-file query includes partition and monotonic IDs. Dropping after its first batch leaves at most 512 emitted rows, one started file and no completed file. With the second file unavailable, another stream returns all 20,000 first-file rows before surfacing the typed reader error and terminating. Restoring the file makes the same physical plan executable again; native SQL also returns all rows. |
+
+The stream checks use 256-row batches, one scan partition, no file prefetch, one file reader and one buffered output batch. They verify bounded reading for these streaming projections. Queries with global sorting or aggregation may need to consume their inputs before producing output. The existing frozen corpus continues to cover partition dictionaries, nested NULLs, decimals, timestamps and projection/filter pruning.
+
+Run the focused tests and the reader's integration suite from the repository root:
+
+```bash
+cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml delta_lifecycle
+cargo test --locked --features datafusion --test reader
 ```
 
 ## Run the references
@@ -115,7 +134,7 @@ python3 experiments/spark-sql/oracle.py check target/spark-sql/sail-reference.js
 
 Checks fail on changed values, schema dimensions, error stage/condition, input data/schema or corpus hash. Missing, duplicate, reordered or unknown case IDs also fail. Values and schema checks remain separate: types, names, nested nullability and metadata are reported independently. Decimal strings are compared exactly; the current corpus needs no floating-point tolerance. Spark's internal `__autoGeneratedAlias` metadata and generated expression names can differ without changing result values, but remain visible in the report.
 
-The Sail check currently fails because upstream Sail differs from Spark. Keep the differences visible when testing the extracted implementation; do not rewrite the oracle to match Sail. Host-only cases have no Spark expectations and remain pending in this comparison; the Rust runner checks them separately. Deletion vectors, retained snapshots, early stream drop and mid-stream failure checks remain pending and should reuse the existing `tests/reader/` fixtures.
+The Sail check currently fails because upstream Sail differs from Spark. Keep the differences visible when testing the extracted implementation; do not rewrite the oracle to match Sail. Host-only cases have no Spark expectations and remain pending in this comparison; the Rust runner checks them separately. The Delta and stream lifecycle checks above now cover deletion vectors, retained snapshots, early stream drop and mid-stream failure using the existing reader fixtures.
 
 Refreshing expectations is an explicit operation after reviewing a changed corpus or reference version:
 
@@ -226,7 +245,7 @@ The resolved graph falls by 42 packages to 557 across all targets and 487 Linux 
 
 All 116 observations match the unchanged import baseline: 83 successes, 18 planning errors and 15 execution errors. The 19 seeds, 18 adapter checks, eight runner tests, eleven Sail planner tests and nine Python tests pass. Spark and full-Sail comparison totals remain unchanged. The parser's shared gold-data test helper is retained; its separate syntax integration test was not run because Cargo rejects selecting that non-member dependency's dev-dependency test from the experiment workspace.
 
-The following cuts continue from this checkpoint. Missing SQL extension planners, Delta/lifecycle checks and the final adoption decision remain open.
+The following cuts continue from this checkpoint. Missing SQL extension planners and Delta/lifecycle checks were completed in the later integration checkpoints above; the adoption decision remains open.
 
 ## Further reduction checkpoints
 
@@ -322,7 +341,7 @@ A type-by-type caller audit removes 30 more unused protocol getters across 21 fu
 
 The follow-up JSON audit removes JsonUnion, JsonUnionField and their builder/scalar-conversion implementations. Their only value-construction consumer was the unit test; runtime SQL still uses the separate union type and input-reading helpers. The test constructs the same sparse union with native Arrow/DataFusion APIs and additionally checks array/object extraction and scalar tags. Before deletion, its native fixture was verified equal to the old builder's complete Arrow ArrayData. This removes 146 production lines and adds 22 test lines, for a net reduction of 124 gross Rust lines; no dependency changes. All 116 baseline observations, 19 runner tests, 11 planner tests, 9 Python tests, 302 function tests, 6 common DataFusion tests and 6 analyzer tests pass. The public JSON union type, registered-table inputs and reference comparison totals remain unchanged.
 
-Datetime cleanup removes fields that were written but never read, the fixed-locale wrapper and parsing/formatting branches for letters and widths already rejected by the unchanged pattern validator. Fraction formatting retains its nanosecond path. A focused test passed before and after deletion, checking accepted values, optional sections, offsets and rejection boundaries; all 303 function tests and the unchanged 116-case import baseline pass. This cut removes 461 production-source lines and adds 120 test lines. Physical extension planning and Delta lifecycle coverage remain separate follow-up work.
+Datetime cleanup removes fields that were written but never read, the fixed-locale wrapper and parsing/formatting branches for letters and widths already rejected by the unchanged pattern validator. Fraction formatting retains its nanosecond path. A focused test passed before and after deletion, checking accepted values, optional sections, offsets and rejection boundaries; all 303 function tests and the unchanged 116-case import baseline pass. This cut removes 461 production-source lines and adds 120 test lines. Physical extension planning and Delta lifecycle coverage were handled in the later integration checkpoints.
 
 A further cleanup removes five unreferenced constants, the uncalled macro path extractor and the unused session-locale/case-sensitive configuration fields, totaling 45 vendored production-source lines plus one runner assignment. Unexpected macro paths are still rejected by the unchanged validation, and the complete parser syntax snapshot passes. The case-sensitive setting had no reader in the retained resolver; its existing corpus mismatch stays visible. All 116 import-baseline observations, 19 runner tests, 11 planner tests and 9 Python tests remain unchanged.
 

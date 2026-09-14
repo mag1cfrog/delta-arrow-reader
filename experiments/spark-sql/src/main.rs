@@ -20,6 +20,9 @@ use std::{error::Error, fs, path::Path, sync::Arc};
 
 type ProbeResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
+#[cfg(test)]
+mod delta_lifecycle;
+
 fn session() -> ProbeResult<SessionContext> {
     let state = SessionStateBuilder::new()
         .with_config(SessionConfig::new().with_target_partitions(2))
