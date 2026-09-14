@@ -53,8 +53,7 @@ pub const GEOSPATIAL_DEFAULT_CRS: &str = "OGC:CRS84";
 ///
 /// Spark 4.1 only defines Spherical interpolation for Geography types.
 /// Reference: org.apache.spark.sql.types.EdgeInterpolationAlgorithm
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum EdgeInterpolationAlgorithm {
     /// Spherical edge interpolation (geodetic coordinates on a sphere).
@@ -74,13 +73,8 @@ impl std::fmt::Display for EdgeInterpolationAlgorithm {
 /// Additionally, custom data types are supported for cases not covered by Arrow.
 ///
 /// The style of expressing the type may not always be exactly the same as Arrow's.
-/// The spec is designed to have an easy-to-read JSON representation,
-/// making language interoperability easier in the future.
-/// This is achieved by eliminating the use of tuple structs and using named fields instead.
-///
 /// Some comments for the enum variants are copied from [`arrow_schema::DataType`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DataType {
     /// Null type.
     /// Corresponds to [`arrow_schema::DataType::Null`].
@@ -287,16 +281,14 @@ pub enum DataType {
     ConfiguredBinary,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TimestampType {
     Configured,
     WithLocalTimeZone,
     WithoutTimeZone,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Field {
     pub name: String,
     pub data_type: DataType,
@@ -310,7 +302,7 @@ pub type FieldRef = Arc<Field>;
 
 /// A cheaply cloneable, owned slice of [`FieldRef`].
 /// The implementation is copied from [`arrow_schema::Fields`].
-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Fields(Arc<[FieldRef]>);
 
 impl Fields {
@@ -380,7 +372,7 @@ impl<'a> IntoIterator for &'a Fields {
 
 /// A cheaply cloneable, owned collection of [`FieldRef`] and their corresponding type IDs.
 /// The implementation is copied from [`arrow_schema::UnionFields`].
-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct UnionFields(Arc<[(i8, FieldRef)]>);
 
 impl UnionFields {
@@ -405,8 +397,7 @@ impl FromIterator<(i8, FieldRef)> for UnionFields {
 }
 
 /// Sparse or dense union layouts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum UnionMode {
     /// Sparse union layout.
@@ -425,8 +416,7 @@ impl Display for UnionMode {
 }
 
 /// YEAR_MONTH, DAY_TIME, MONTH_DAY_NANO interval in SQL style.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum IntervalUnit {
     /// Indicates the number of elapsed whole months, stored as 4-byte integers.
@@ -445,8 +435,7 @@ pub enum IntervalUnit {
     MonthDayNano = 2,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(i32)]
 pub enum IntervalFieldType {
     Year = 0,
@@ -457,13 +446,12 @@ pub enum IntervalFieldType {
     Second = 5,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct Schema {
     pub fields: Fields,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TimeUnit {
     Second,
     Millisecond,
@@ -473,8 +461,7 @@ pub enum TimeUnit {
 
 // TODO: Currently the behavior for VarChar and Char is not implemented.
 /// Reference: https://spark.apache.org/docs/3.5.3/sql-ref-datatypes.html#supported-data-types
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Utf8Type {
     Configured,
     /// String which has a length limitation.

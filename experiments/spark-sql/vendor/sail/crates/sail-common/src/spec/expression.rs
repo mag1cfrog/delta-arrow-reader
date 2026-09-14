@@ -1,5 +1,4 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
-use serde::{Deserialize, Serialize};
 
 use crate::spec::data_type::DataType;
 use crate::spec::literal::Literal;
@@ -7,8 +6,7 @@ use crate::spec::{QueryPlan, TimestampType};
 
 pub const DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID: &str = "__sail_default_column_value__";
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Literal),
     UnresolvedAttribute {
@@ -151,7 +149,7 @@ pub enum Expr {
 
 /// An identifier with only one part.
 /// It is the raw value without quotes or escape characters.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Identifier(String);
 
 impl From<String> for Identifier {
@@ -180,7 +178,7 @@ impl AsRef<str> for Identifier {
 
 /// An object name with potentially multiple parts.
 /// Each part is a raw value without quotes or escape characters.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ObjectName(Vec<Identifier>);
 
 impl ObjectName {
@@ -215,32 +213,28 @@ impl From<ObjectName> for Vec<String> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SortOrder {
     pub child: Box<Expr>,
     pub direction: SortDirection,
     pub null_ordering: NullOrdering,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SortDirection {
     Unspecified,
     Ascending,
     Descending,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NullOrdering {
     Unspecified,
     NullsFirst,
     NullsLast,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnresolvedFunction {
     pub function_name: ObjectName,
     /// A list of positional arguments.
@@ -255,8 +249,7 @@ pub struct UnresolvedFunction {
     pub order_by: Option<Vec<SortOrder>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Window {
     Named(Identifier),
     Unnamed {
@@ -267,23 +260,20 @@ pub enum Window {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WindowFrame {
     pub frame_type: WindowFrameType,
     pub lower: WindowFrameBoundary,
     pub upper: WindowFrameBoundary,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WindowFrameType {
     Row,
     Range,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WindowFrameBoundary {
     CurrentRow,
     UnboundedPreceding,
@@ -295,20 +285,17 @@ pub enum WindowFrameBoundary {
     Value(Box<Expr>),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CommonInlineUserDefinedFunction {
     pub function_name: Identifier,
     pub deterministic: bool,
     pub is_distinct: bool,
     pub arguments: Vec<Expr>,
-    #[serde(flatten)]
     pub function: FunctionDefinition,
 }
 
 #[expect(clippy::enum_variant_names)]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FunctionDefinition {
     PythonUdf {
         output_type: DataType,
@@ -331,18 +318,15 @@ pub enum FunctionDefinition {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CommonInlineUserDefinedTableFunction {
     pub function_name: Identifier,
     pub deterministic: bool,
     pub arguments: Vec<Expr>,
-    #[serde(flatten)]
     pub function: TableFunctionDefinition,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum TableFunctionDefinition {
     PythonUdtf {
         /// The return type of the UDTF. When `None`, the UDTF uses an `analyze` static method
@@ -354,8 +338,7 @@ pub enum TableFunctionDefinition {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 #[repr(i32)]
 pub enum PySparkUdfType {
     None = 0,
@@ -390,14 +373,12 @@ pub enum PySparkUdfType {
     ArrowUdtf = 302,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnresolvedNamedLambdaVariable {
     pub name: ObjectName,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct WildcardOptions {
     pub ilike_pattern: Option<String>,
     pub exclude_columns: Option<Vec<Identifier>>,
@@ -406,24 +387,21 @@ pub struct WildcardOptions {
     pub rename_columns: Option<Vec<IdentifierWithAlias>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WildcardReplaceColumn {
     pub expression: Box<Expr>,
     pub column_name: Identifier,
     pub as_keyword: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IdentifierWithAlias {
     pub identifier: Identifier,
     pub alias: Identifier,
 }
 
 /// The type of subquery expression.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SubqueryType {
     In,
     Scalar,

@@ -1,17 +1,13 @@
-use std::str::FromStr;
-
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 pub use arrow_buffer::i256;
 use half::f16;
-use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{CommonError, CommonResult};
 use crate::spec;
 use crate::spec::TimestampType;
 
 /// See [`spec::DataType`] for details on data types.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Null,
     Boolean {
@@ -160,19 +156,11 @@ pub enum Literal {
     Decimal128 {
         precision: u8,
         scale: i8,
-        #[serde(
-            serialize_with = "serialize_optional",
-            deserialize_with = "deserialize_optional"
-        )]
         value: Option<i128>,
     },
     Decimal256 {
         precision: u8,
         scale: i8,
-        #[serde(
-            serialize_with = "serialize_optional",
-            deserialize_with = "deserialize_optional"
-        )]
         value: Option<i256>,
     },
     Map {
@@ -184,40 +172,17 @@ pub enum Literal {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IntervalDayTime {
     pub days: i32,
     pub milliseconds: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct IntervalMonthDayNano {
     pub months: i32,
     pub days: i32,
     pub nanoseconds: i64,
-}
-
-fn serialize_optional<T, S>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    T: ToString,
-    S: Serializer,
-{
-    match value {
-        Some(num) => serializer.serialize_some(&num.to_string()),
-        None => serializer.serialize_none(),
-    }
-}
-
-fn deserialize_optional<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: FromStr,
-    T::Err: std::fmt::Display,
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    Ok(Some(
-        T::from_str(&s).map_err(|e| Error::custom(e.to_string()))?,
-    ))
 }
 
 pub fn data_type_to_null_literal(data_type: spec::DataType) -> CommonResult<Literal> {

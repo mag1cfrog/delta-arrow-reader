@@ -56,7 +56,7 @@ aes-gcm = "0.10.3"
 cbc = { version = "0.1.2", features = ["std"] }
 base64 = "0.22.1"
 datasketches = { version = "0.3.0", features = ["hll", "theta"] }
-half = { version = "2.7.1", features = ["serde", "num-traits", "zerocopy"] }
+half = { version = "2.7.1", features = ["num-traits", "zerocopy"] }
 chumsky = { version = "0.12.0", default-features = false, features = ["pratt"] }
 num = "0.4.3"
 itertools = "0.14.0"

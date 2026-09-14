@@ -578,7 +578,8 @@ mod tests {
     async fn rejects_dataframe_transforms_while_sql_paths_remain() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
-        let input = serde_json::to_value(spec::QueryPlan::new(spec::QueryNode::Read {
+        use spec::QueryNode;
+        let input = Box::new(spec::QueryPlan::new(spec::QueryNode::Read {
             read_type: spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
                 name: spec::ObjectName::bare("missing_table"),
                 temporal: None,
@@ -586,36 +587,78 @@ mod tests {
                 options: vec![],
             })),
             is_streaming: false,
-        }))?;
-        for (name, mut fields) in [
-            ("toDf", json!({"columnNames": []})),
-            ("toSchema", json!({"schema": {"fields": []}})),
-            ("withColumnsRenamed", json!({"renameColumnsMap": []})),
-            ("drop", json!({"columns": [], "columnNames": []})),
-            ("withColumns", json!({"aliases": []})),
-            ("tail", json!({"limit": {"literal": "null"}})),
-            ("hint", json!({"name": "COALESCE", "parameters": []})),
-            ("repartition", json!({"numPartitions": 0, "shuffle": false})),
-            (
-                "repartitionByExpression",
-                json!({"partitionExpressions": [], "numPartitions": null}),
-            ),
-            (
-                "sample",
-                json!({"lowerBound": 0.0, "upperBound": 1.0, "withReplacement": false, "seed": null, "deterministicOrder": false}),
-            ),
-            ("collectMetrics", json!({"name": "unused", "metrics": []})),
-            (
-                "parse",
-                json!({"format": "csv", "schema": null, "options": []}),
-            ),
-            (
-                "pivot",
-                json!({"grouping": null, "aggregate": [], "columns": [], "values": []}),
-            ),
+        }));
+        for node in [
+            QueryNode::ToDf {
+                input: input.clone(),
+                column_names: vec![],
+            },
+            QueryNode::ToSchema {
+                input: input.clone(),
+                schema: spec::Schema {
+                    fields: Default::default(),
+                },
+            },
+            QueryNode::WithColumnsRenamed {
+                input: input.clone(),
+                rename_columns_map: vec![],
+            },
+            QueryNode::Drop {
+                input: input.clone(),
+                columns: vec![],
+                column_names: vec![],
+            },
+            QueryNode::WithColumns {
+                input: input.clone(),
+                aliases: vec![],
+            },
+            QueryNode::Tail {
+                input: input.clone(),
+                limit: spec::Expr::Literal(spec::Literal::Null),
+            },
+            QueryNode::Hint {
+                input: input.clone(),
+                name: "COALESCE".into(),
+                parameters: vec![],
+            },
+            QueryNode::Repartition {
+                input: input.clone(),
+                num_partitions: 0,
+                shuffle: false,
+            },
+            QueryNode::RepartitionByExpression {
+                input: input.clone(),
+                partition_expressions: vec![],
+                num_partitions: None,
+            },
+            QueryNode::Sample(spec::Sample {
+                input: input.clone(),
+                lower_bound: 0.0,
+                upper_bound: 1.0,
+                with_replacement: false,
+                seed: None,
+                deterministic_order: false,
+            }),
+            QueryNode::CollectMetrics {
+                input: input.clone(),
+                name: "unused".into(),
+                metrics: vec![],
+            },
+            QueryNode::Parse(spec::Parse {
+                input: input.clone(),
+                format: spec::ParseFormat::Csv,
+                schema: None,
+                options: vec![],
+            }),
+            QueryNode::Pivot(spec::Pivot {
+                input: input.clone(),
+                grouping: None,
+                aggregate: vec![],
+                columns: vec![],
+                values: vec![],
+            }),
         ] {
-            fields["input"] = input.clone();
-            let node = serde_json::from_value(json!({(name): fields}))?;
+            let name = format!("{node:?}");
             let error = resolver
                 .resolve_named_plan(spec::QueryPlan::new(node))
                 .await
@@ -742,7 +785,8 @@ mod tests {
     async fn rejects_dataframe_statistics_before_resolving_inputs() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
-        let input = serde_json::to_value(spec::QueryPlan::new(spec::QueryNode::Read {
+        use spec::QueryNode;
+        let input = Box::new(spec::QueryPlan::new(spec::QueryNode::Read {
             read_type: spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
                 name: spec::ObjectName::bare("missing_table"),
                 temporal: None,
@@ -750,34 +794,66 @@ mod tests {
                 options: vec![],
             })),
             is_streaming: false,
-        }))?;
-        for (name, mut fields) in [
-            ("fillNa", json!({"columns": [], "values": []})),
-            ("dropNa", json!({"columns": [], "minNonNulls": null})),
-            ("replace", json!({"columns": [], "replacements": []})),
-            ("statSummary", json!({"statistics": []})),
-            ("statDescribe", json!({"columns": []})),
-            (
-                "statCrosstab",
-                json!({"leftColumn": "x", "rightColumn": "y"}),
-            ),
-            ("statCov", json!({"leftColumn": "x", "rightColumn": "y"})),
-            (
-                "statCorr",
-                json!({"leftColumn": "x", "rightColumn": "y", "method": "pearson"}),
-            ),
-            (
-                "statApproxQuantile",
-                json!({"columns": [], "probabilities": [], "relativeError": 0.0}),
-            ),
-            ("statFreqItems", json!({"columns": [], "support": null})),
-            (
-                "statSampleBy",
-                json!({"column": {"literal": "null"}, "fractions": [], "seed": null}),
-            ),
+        }));
+        for node in [
+            QueryNode::FillNa {
+                input: input.clone(),
+                columns: vec![],
+                values: vec![],
+            },
+            QueryNode::DropNa {
+                input: input.clone(),
+                columns: vec![],
+                min_non_nulls: None,
+            },
+            QueryNode::Replace {
+                input: input.clone(),
+                columns: vec![],
+                replacements: vec![],
+            },
+            QueryNode::StatSummary {
+                input: input.clone(),
+                statistics: vec![],
+            },
+            QueryNode::StatDescribe {
+                input: input.clone(),
+                columns: vec![],
+            },
+            QueryNode::StatCrosstab {
+                input: input.clone(),
+                left_column: "x".into(),
+                right_column: "y".into(),
+            },
+            QueryNode::StatCov {
+                input: input.clone(),
+                left_column: "x".into(),
+                right_column: "y".into(),
+            },
+            QueryNode::StatCorr {
+                input: input.clone(),
+                left_column: "x".into(),
+                right_column: "y".into(),
+                method: "pearson".into(),
+            },
+            QueryNode::StatApproxQuantile {
+                input: input.clone(),
+                columns: vec![],
+                probabilities: vec![],
+                relative_error: 0.0,
+            },
+            QueryNode::StatFreqItems {
+                input: input.clone(),
+                columns: vec![],
+                support: None,
+            },
+            QueryNode::StatSampleBy {
+                input: input.clone(),
+                column: spec::Expr::Literal(spec::Literal::Null),
+                fractions: vec![],
+                seed: None,
+            },
         ] {
-            fields["input"] = input.clone();
-            let node = serde_json::from_value(json!({(name): fields}))?;
+            let name = format!("{node:?}");
             let error = resolver
                 .resolve_named_plan(spec::QueryPlan::new(node))
                 .await

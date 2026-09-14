@@ -1,5 +1,5 @@
 diff --git a/Cargo.toml b/Cargo.toml
-index e8af02f..d57376b 100644
+index e8af02f..af9875a 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -95,8 +95,9 @@ index e8af02f..d57376b 100644
 -roaring = "0.11.3"
  datasketches = { version = "0.3.0", features = ["hll", "theta"] }
 -sha1 = "0.10.6"
- half = { version = "2.7.1", features = ["serde", "num-traits", "zerocopy"] }
+-half = { version = "2.7.1", features = ["serde", "num-traits", "zerocopy"] }
 -iana-time-zone = "0.1.65"
++half = { version = "2.7.1", features = ["num-traits", "zerocopy"] }
  chumsky = { version = "0.12.0", default-features = false, features = ["pratt"] }
  num = "0.4.3"
 -hf-hub = { version = "0.5.0", default-features = false, features = ["tokio"] }
@@ -11442,7 +11443,7 @@ index 391f59b..0000000
 -
 -pub use builder::{ServerBuilder, ServerBuilderOptions};
 diff --git a/crates/sail-common/src/spec/data_type.rs b/crates/sail-common/src/spec/data_type.rs
-index 206d070..5be7c00 100644
+index 206d070..3a1c5a1 100644
 --- a/crates/sail-common/src/spec/data_type.rs
 +++ b/crates/sail-common/src/spec/data_type.rs
 @@ -1,12 +1,10 @@
@@ -11459,7 +11460,7 @@ index 206d070..5be7c00 100644
  pub const ARROW_DECIMAL128_MAX_PRECISION: u8 = arrow_schema::DECIMAL128_MAX_PRECISION;
  pub const ARROW_DECIMAL128_MAX_SCALE: i8 = arrow_schema::DECIMAL128_MAX_SCALE;
  pub const ARROW_DECIMAL256_MAX_PRECISION: u8 = arrow_schema::DECIMAL256_MAX_PRECISION;
-@@ -55,33 +53,14 @@ pub const GEOSPATIAL_DEFAULT_CRS: &str = "OGC:CRS84";
+@@ -55,33 +53,13 @@ pub const GEOSPATIAL_DEFAULT_CRS: &str = "OGC:CRS84";
  ///
  /// Spark 4.1 only defines Spherical interpolation for Geography types.
  /// Reference: org.apache.spark.sql.types.EdgeInterpolationAlgorithm
@@ -11476,9 +11477,9 @@ index 206d070..5be7c00 100644
 -    Deserialize,
 -    TryFromPrimitive,
 -)]
-+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[serde(rename_all = "camelCase")]
 -#[num_enum(error_type(name = CommonError, constructor = EdgeInterpolationAlgorithm::invalid))]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
  #[repr(i32)]
  pub enum EdgeInterpolationAlgorithm {
      /// Spherical edge interpolation (geodetic coordinates on a sphere).
@@ -11494,7 +11495,31 @@ index 206d070..5be7c00 100644
  impl std::fmt::Display for EdgeInterpolationAlgorithm {
      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
          match self {
-@@ -316,21 +295,6 @@ pub enum TimestampType {
+@@ -95,13 +73,8 @@ impl std::fmt::Display for EdgeInterpolationAlgorithm {
+ /// Additionally, custom data types are supported for cases not covered by Arrow.
+ ///
+ /// The style of expressing the type may not always be exactly the same as Arrow's.
+-/// The spec is designed to have an easy-to-read JSON representation,
+-/// making language interoperability easier in the future.
+-/// This is achieved by eliminating the use of tuple structs and using named fields instead.
+-///
+ /// Some comments for the enum variants are copied from [`arrow_schema::DataType`].
+-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+ pub enum DataType {
+     /// Null type.
+     /// Corresponds to [`arrow_schema::DataType::Null`].
+@@ -308,31 +281,14 @@ pub enum DataType {
+     ConfiguredBinary,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+ pub enum TimestampType {
+     Configured,
+     WithLocalTimeZone,
      WithoutTimeZone,
  }
  
@@ -11513,10 +11538,31 @@ index 206d070..5be7c00 100644
 -    }
 -}
 -
- #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
  pub struct Field {
-@@ -441,21 +405,8 @@ impl FromIterator<(i8, FieldRef)> for UnionFields {
+     pub name: String,
+     pub data_type: DataType,
+@@ -346,7 +302,7 @@ pub type FieldRef = Arc<Field>;
+ 
+ /// A cheaply cloneable, owned slice of [`FieldRef`].
+ /// The implementation is copied from [`arrow_schema::Fields`].
+-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
++#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+ pub struct Fields(Arc<[FieldRef]>);
+ 
+ impl Fields {
+@@ -416,7 +372,7 @@ impl<'a> IntoIterator for &'a Fields {
+ 
+ /// A cheaply cloneable, owned collection of [`FieldRef`] and their corresponding type IDs.
+ /// The implementation is copied from [`arrow_schema::UnionFields`].
+-#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
++#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+ pub struct UnionFields(Arc<[(i8, FieldRef)]>);
+ 
+ impl UnionFields {
+@@ -441,21 +397,7 @@ impl FromIterator<(i8, FieldRef)> for UnionFields {
  }
  
  /// Sparse or dense union layouts.
@@ -11533,13 +11579,13 @@ index 206d070..5be7c00 100644
 -    Deserialize,
 -    TryFromPrimitive,
 -)]
-+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[serde(rename_all = "camelCase")]
 -#[num_enum(error_type(name = CommonError, constructor = UnionMode::invalid))]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
  #[repr(i32)]
  pub enum UnionMode {
      /// Sparse union layout.
-@@ -464,12 +415,6 @@ pub enum UnionMode {
+@@ -464,12 +406,6 @@ pub enum UnionMode {
      Dense = 1,
  }
  
@@ -11552,7 +11598,7 @@ index 206d070..5be7c00 100644
  impl Display for UnionMode {
      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
          match self {
-@@ -480,21 +425,8 @@ impl Display for UnionMode {
+@@ -480,21 +416,7 @@ impl Display for UnionMode {
  }
  
  /// YEAR_MONTH, DAY_TIME, MONTH_DAY_NANO interval in SQL style.
@@ -11569,13 +11615,13 @@ index 206d070..5be7c00 100644
 -    Deserialize,
 -    TryFromPrimitive,
 -)]
-+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[serde(rename_all = "camelCase")]
 -#[num_enum(error_type(name = CommonError, constructor = IntervalUnit::invalid))]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
  #[repr(i32)]
  pub enum IntervalUnit {
      /// Indicates the number of elapsed whole months, stored as 4-byte integers.
-@@ -513,83 +445,8 @@ pub enum IntervalUnit {
+@@ -513,83 +435,7 @@ pub enum IntervalUnit {
      MonthDayNano = 2,
  }
  
@@ -11654,13 +11700,13 @@ index 206d070..5be7c00 100644
 -    Deserialize,
 -    TryFromPrimitive,
 -)]
-+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[serde(rename_all = "camelCase")]
 -#[num_enum(error_type(name = CommonError, constructor = IntervalFieldType::invalid))]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
  #[repr(i32)]
  pub enum IntervalFieldType {
      Year = 0,
-@@ -600,36 +457,6 @@ pub enum IntervalFieldType {
+@@ -600,43 +446,12 @@ pub enum IntervalFieldType {
      Second = 5,
  }
  
@@ -11694,23 +11740,187 @@ index 206d070..5be7c00 100644
 -    }
 -}
 -
- #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
++#[derive(Default, Debug, Clone, PartialEq)]
  pub struct Schema {
      pub fields: Fields,
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+ pub enum TimeUnit {
+     Second,
+     Millisecond,
+@@ -646,8 +461,7 @@ pub enum TimeUnit {
+ 
+ // TODO: Currently the behavior for VarChar and Char is not implemented.
+ /// Reference: https://spark.apache.org/docs/3.5.3/sql-ref-datatypes.html#supported-data-types
+-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+ pub enum Utf8Type {
+     Configured,
+     /// String which has a length limitation.
 diff --git a/crates/sail-common/src/spec/expression.rs b/crates/sail-common/src/spec/expression.rs
-index 25af46d..fdc4161 100644
+index 25af46d..21f3d02 100644
 --- a/crates/sail-common/src/spec/expression.rs
 +++ b/crates/sail-common/src/spec/expression.rs
-@@ -1,7 +1,6 @@
+@@ -1,15 +1,12 @@
 -use num_enum::{IntoPrimitive, TryFromPrimitive};
+-use serde::{Deserialize, Serialize};
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use serde::{Deserialize, Serialize};
  
 -use crate::error::CommonError;
  use crate::spec::data_type::DataType;
  use crate::spec::literal::Literal;
  use crate::spec::{QueryPlan, TimestampType};
-@@ -355,21 +354,8 @@ pub enum TableFunctionDefinition {
+ 
+ pub const DEFAULT_COLUMN_VALUE_PLACEHOLDER_ID: &str = "__sail_default_column_value__";
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum Expr {
+     Literal(Literal),
+     UnresolvedAttribute {
+@@ -152,7 +149,7 @@ pub enum Expr {
+ 
+ /// An identifier with only one part.
+ /// It is the raw value without quotes or escape characters.
+-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
++#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+ pub struct Identifier(String);
+ 
+ impl From<String> for Identifier {
+@@ -181,7 +178,7 @@ impl AsRef<str> for Identifier {
+ 
+ /// An object name with potentially multiple parts.
+ /// Each part is a raw value without quotes or escape characters.
+-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
++#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+ pub struct ObjectName(Vec<Identifier>);
+ 
+ impl ObjectName {
+@@ -216,32 +213,28 @@ impl From<ObjectName> for Vec<String> {
+     }
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct SortOrder {
+     pub child: Box<Expr>,
+     pub direction: SortDirection,
+     pub null_ordering: NullOrdering,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum SortDirection {
+     Unspecified,
+     Ascending,
+     Descending,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum NullOrdering {
+     Unspecified,
+     NullsFirst,
+     NullsLast,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct UnresolvedFunction {
+     pub function_name: ObjectName,
+     /// A list of positional arguments.
+@@ -256,8 +249,7 @@ pub struct UnresolvedFunction {
+     pub order_by: Option<Vec<SortOrder>>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum Window {
+     Named(Identifier),
+     Unnamed {
+@@ -268,23 +260,20 @@ pub enum Window {
+     },
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct WindowFrame {
+     pub frame_type: WindowFrameType,
+     pub lower: WindowFrameBoundary,
+     pub upper: WindowFrameBoundary,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum WindowFrameType {
+     Row,
+     Range,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum WindowFrameBoundary {
+     CurrentRow,
+     UnboundedPreceding,
+@@ -296,20 +285,17 @@ pub enum WindowFrameBoundary {
+     Value(Box<Expr>),
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct CommonInlineUserDefinedFunction {
+     pub function_name: Identifier,
+     pub deterministic: bool,
+     pub is_distinct: bool,
+     pub arguments: Vec<Expr>,
+-    #[serde(flatten)]
+     pub function: FunctionDefinition,
+ }
+ 
+ #[expect(clippy::enum_variant_names)]
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum FunctionDefinition {
+     PythonUdf {
+         output_type: DataType,
+@@ -332,18 +318,15 @@ pub enum FunctionDefinition {
+     },
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct CommonInlineUserDefinedTableFunction {
+     pub function_name: Identifier,
+     pub deterministic: bool,
+     pub arguments: Vec<Expr>,
+-    #[serde(flatten)]
+     pub function: TableFunctionDefinition,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
+ pub enum TableFunctionDefinition {
+     PythonUdtf {
+         /// The return type of the UDTF. When `None`, the UDTF uses an `analyze` static method
+@@ -355,21 +338,7 @@ pub enum TableFunctionDefinition {
      },
  }
  
@@ -11727,13 +11937,13 @@ index 25af46d..fdc4161 100644
 -    TryFromPrimitive,
 -    IntoPrimitive,
 -)]
-+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[serde(rename_all = "camelCase")]
 -#[num_enum(error_type(name = CommonError, constructor = PySparkUdfType::invalid))]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
  #[repr(i32)]
  pub enum PySparkUdfType {
      None = 0,
-@@ -404,19 +390,6 @@ pub enum PySparkUdfType {
+@@ -404,27 +373,12 @@ pub enum PySparkUdfType {
      ArrowUdtf = 302,
  }
  
@@ -11750,19 +11960,146 @@ index 25af46d..fdc4161 100644
 -    }
 -}
 -
- #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
  pub struct UnresolvedNamedLambdaVariable {
-diff --git a/crates/sail-common/src/spec/plan.rs b/crates/sail-common/src/spec/plan.rs
-index 052a216..a2c2c6c 100644
---- a/crates/sail-common/src/spec/plan.rs
-+++ b/crates/sail-common/src/spec/plan.rs
-@@ -1,41 +1,15 @@
+     pub name: ObjectName,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq, Default)]
+ pub struct WildcardOptions {
+     pub ilike_pattern: Option<String>,
+     pub exclude_columns: Option<Vec<Identifier>>,
+@@ -433,24 +387,21 @@ pub struct WildcardOptions {
+     pub rename_columns: Option<Vec<IdentifierWithAlias>>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct WildcardReplaceColumn {
+     pub expression: Box<Expr>,
+     pub column_name: Identifier,
+     pub as_keyword: bool,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct IdentifierWithAlias {
+     pub identifier: Identifier,
+     pub alias: Identifier,
+ }
+ 
+ /// The type of subquery expression.
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum SubqueryType {
+     In,
+     Scalar,
+diff --git a/crates/sail-common/src/spec/literal.rs b/crates/sail-common/src/spec/literal.rs
+index 7c0705b..b9ef586 100644
+--- a/crates/sail-common/src/spec/literal.rs
++++ b/crates/sail-common/src/spec/literal.rs
+@@ -1,17 +1,13 @@
 -use std::str::FromStr;
 -
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use serde::{Deserialize, Serialize};
+ pub use arrow_buffer::i256;
+ use half::f16;
+-use serde::de::Error;
+-use serde::{Deserialize, Deserializer, Serialize, Serializer};
  
+ use crate::error::{CommonError, CommonResult};
+ use crate::spec;
+ use crate::spec::TimestampType;
+ 
+ /// See [`spec::DataType`] for details on data types.
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum Literal {
+     Null,
+     Boolean {
+@@ -160,19 +156,11 @@ pub enum Literal {
+     Decimal128 {
+         precision: u8,
+         scale: i8,
+-        #[serde(
+-            serialize_with = "serialize_optional",
+-            deserialize_with = "deserialize_optional"
+-        )]
+         value: Option<i128>,
+     },
+     Decimal256 {
+         precision: u8,
+         scale: i8,
+-        #[serde(
+-            serialize_with = "serialize_optional",
+-            deserialize_with = "deserialize_optional"
+-        )]
+         value: Option<i256>,
+     },
+     Map {
+@@ -184,42 +172,19 @@ pub enum Literal {
+     },
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct IntervalDayTime {
+     pub days: i32,
+     pub milliseconds: i32,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct IntervalMonthDayNano {
+     pub months: i32,
+     pub days: i32,
+     pub nanoseconds: i64,
+ }
+ 
+-fn serialize_optional<T, S>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
+-where
+-    T: ToString,
+-    S: Serializer,
+-{
+-    match value {
+-        Some(num) => serializer.serialize_some(&num.to_string()),
+-        None => serializer.serialize_none(),
+-    }
+-}
+-
+-fn deserialize_optional<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+-where
+-    T: FromStr,
+-    T::Err: std::fmt::Display,
+-    D: Deserializer<'de>,
+-{
+-    let s = String::deserialize(deserializer)?;
+-    Ok(Some(
+-        T::from_str(&s).map_err(|e| Error::custom(e.to_string()))?,
+-    ))
+-}
+-
+ pub fn data_type_to_null_literal(data_type: spec::DataType) -> CommonResult<Literal> {
+     let error = |x: &spec::DataType| CommonError::unsupported(format!("null literal for {x:?}"));
+ 
+diff --git a/crates/sail-common/src/spec/plan.rs b/crates/sail-common/src/spec/plan.rs
+index 052a216..b2626e6 100644
+--- a/crates/sail-common/src/spec/plan.rs
++++ b/crates/sail-common/src/spec/plan.rs
+@@ -1,45 +1,16 @@
+-use std::str::FromStr;
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ 
+-use serde::{Deserialize, Serialize};
+-
 -use crate::error::CommonError;
  use crate::spec::data_type::Schema;
  use crate::spec::expression::{
@@ -11798,11 +12135,16 @@ index 052a216..a2c2c6c 100644
 -}
 +use crate::spec::{Identifier, Window};
  
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
 +/// Unresolved query plan for the read-only SQL frontend.
- #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
  pub struct QueryPlan {
-@@ -53,23 +27,6 @@ impl QueryPlan {
+-    #[serde(flatten)]
+     pub node: QueryNode,
+     pub plan_id: Option<i64>,
+ }
+@@ -53,28 +24,9 @@ impl QueryPlan {
      }
  }
  
@@ -11823,10 +12165,16 @@ index 052a216..a2c2c6c 100644
 -    }
 -}
 -
- #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
  pub enum QueryNode {
-@@ -283,357 +240,6 @@ pub enum QueryNode {
+     Read {
+-        #[serde(flatten)]
+         read_type: ReadType,
+         is_streaming: bool,
+     },
+@@ -283,359 +235,7 @@ pub enum QueryNode {
      },
  }
  
@@ -12181,10 +12529,138 @@ index 052a216..a2c2c6c 100644
 -    },
 -}
 -
- #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
  pub enum ReadType {
-@@ -769,15 +375,6 @@ pub struct Range {
+     NamedTable(Box<ReadNamedTable>),
+     Udtf(Box<ReadUdtf>),
+@@ -643,8 +243,7 @@ pub enum ReadType {
+     DynamicTable(Box<ReadDynamicTable>),
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct ReadNamedTable {
+     pub name: ObjectName,
+     pub temporal: Option<TableTemporal>,
+@@ -652,30 +251,26 @@ pub struct ReadNamedTable {
+     pub options: Vec<(String, String)>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct ReadDynamicTable {
+     pub name: Expr,
+     pub sample: Option<TableSample>,
+     pub options: Vec<(String, String)>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum TableTemporal {
+     Version { value: Expr },
+     Timestamp { value: Expr },
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct TableSample {
+     pub method: TableSampleMethod,
+     pub seed: Option<i64>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum TableSampleMethod {
+     Percent {
+         value: Expr,
+@@ -689,8 +284,7 @@ pub enum TableSampleMethod {
+     },
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct ReadUdtf {
+     pub name: ObjectName,
+     pub arguments: Vec<Expr>,
+@@ -698,8 +292,7 @@ pub struct ReadUdtf {
+     pub options: Vec<(String, String)>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct ReadDataSource {
+     pub format: Option<String>,
+     pub schema: Option<Schema>,
+@@ -708,8 +301,7 @@ pub struct ReadDataSource {
+     pub predicates: Vec<Expr>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Join {
+     pub left: Box<QueryPlan>,
+     pub right: Box<QueryPlan>,
+@@ -718,8 +310,7 @@ pub struct Join {
+     pub join_data_type: Option<JoinDataType>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct SetOperation {
+     pub left: Box<QueryPlan>,
+     pub right: Box<QueryPlan>,
+@@ -729,8 +320,7 @@ pub struct SetOperation {
+     pub allow_missing_columns: bool,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Aggregate {
+     pub input: Box<QueryPlan>,
+     pub grouping: Vec<Expr>,
+@@ -740,8 +330,7 @@ pub struct Aggregate {
+     pub with_grouping_expressions: bool,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Sample {
+     pub input: Box<QueryPlan>,
+     pub lower_bound: f64,
+@@ -751,8 +340,7 @@ pub struct Sample {
+     pub deterministic_order: bool,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Deduplicate {
+     pub input: Box<QueryPlan>,
+     pub column_names: Vec<Identifier>,
+@@ -760,8 +348,7 @@ pub struct Deduplicate {
+     pub within_watermark: bool,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Range {
+     pub start: Option<i64>,
+     pub end: i64,
+@@ -769,17 +356,7 @@ pub struct Range {
      pub num_partitions: Option<usize>,
  }
  
@@ -12197,10 +12673,99 @@ index 052a216..a2c2c6c 100644
 -    pub vertical: bool,
 -}
 -
- #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
  pub struct Pivot {
-@@ -885,264 +482,6 @@ pub struct ApplyInPandasWithState {
+     pub input: Box<QueryPlan>,
+     /// The group-by columns for the pivot operation, set for the DataFrame API (possibly
+@@ -790,8 +367,7 @@ pub struct Pivot {
+     pub values: Vec<PivotValue>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct PivotValue {
+     /// The value expressions for a single pivot output column. Each is a foldable expression
+     /// (a literal, typed literal such as `DATE'...'`, or a cast) that the resolver evaluates to a
+@@ -800,8 +376,7 @@ pub struct PivotValue {
+     pub alias: Option<Identifier>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Unpivot {
+     pub input: Box<QueryPlan>,
+     /// When `ids` is [None] (for SQL statements), all remaining columns are included.
+@@ -813,15 +388,13 @@ pub struct Unpivot {
+     pub include_nulls: bool,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct UnpivotValue {
+     pub columns: Vec<Expr>,
+     pub alias: Option<Identifier>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Parse {
+     pub input: Box<QueryPlan>,
+     pub format: ParseFormat,
+@@ -829,8 +402,7 @@ pub struct Parse {
+     pub options: Vec<(String, String)>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct GroupMap {
+     pub input: Box<QueryPlan>,
+     pub grouping_expressions: Vec<Expr>,
+@@ -845,16 +417,14 @@ pub struct GroupMap {
+     pub transform_with_state_info: Option<TransformWithStateInfo>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct TransformWithStateInfo {
+     pub time_mode: String,
+     pub event_time_column_name: Option<Identifier>,
+     pub output_schema: Option<Schema>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct CoGroupMap {
+     pub input: Box<QueryPlan>,
+     pub input_grouping_expressions: Vec<Expr>,
+@@ -865,16 +435,14 @@ pub struct CoGroupMap {
+     pub other_sorting_expressions: Vec<Expr>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct WithWatermark {
+     pub input: Box<QueryPlan>,
+     pub event_time: String,
+     pub delay_threshold: String,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct ApplyInPandasWithState {
+     pub input: Box<QueryPlan>,
+     pub grouping_expressions: Vec<Expr>,
+@@ -885,266 +453,7 @@ pub struct ApplyInPandasWithState {
      pub timeout_conf: String,
  }
  
@@ -12462,10 +13027,63 @@ index 052a216..a2c2c6c 100644
 -    },
 -}
 -
- #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
- #[serde(rename_all = "camelCase")]
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
  pub enum JoinType {
-@@ -1201,221 +540,3 @@ pub struct Replacement {
+     Inner,
+     FullOuter,
+@@ -1157,265 +466,41 @@ pub enum JoinType {
+     Cross,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum JoinCriteria {
+     Natural,
+     On(Expr),
+     Using(Vec<Identifier>),
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct JoinDataType {
+     pub is_left_struct: bool,
+     pub is_right_struct: bool,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum SetOpType {
+     Intersect,
+     Union,
+     Except,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub enum ParseFormat {
+     Unspecified,
+     Csv,
+     Json,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Fraction {
+     pub stratum: Literal,
+     pub fraction: f64,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+-#[serde(rename_all = "camelCase")]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Replacement {
      pub old_value: Literal,
      pub new_value: Literal,
  }
