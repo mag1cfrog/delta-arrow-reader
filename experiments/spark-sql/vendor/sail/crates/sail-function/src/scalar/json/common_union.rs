@@ -6,13 +6,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, OnceLock};
 
-use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, Float64Array, Int64Array, NullArray, StringArray,
-    UnionArray,
-};
-use datafusion::arrow::buffer::Buffer;
+use datafusion::arrow::array::{ArrayRef, AsArray, StringArray, UnionArray};
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
-use datafusion::arrow::error::ArrowError;
 use datafusion::common::ScalarValue;
 
 pub fn is_json_union(data_type: &DataType) -> bool {
@@ -22,7 +17,7 @@ pub fn is_json_union(data_type: &DataType) -> bool {
     }
 }
 
-/// Extract nested JSON from a `JsonUnion` `UnionArray`
+/// Extract nested JSON from a JSON `UnionArray`
 ///
 /// # Arguments
 /// * `array` - The `UnionArray` to extract the nested JSON from
@@ -42,7 +37,7 @@ pub(crate) fn nested_json_array_ref(array: &ArrayRef, object_lookup: bool) -> Op
     Some(union_array.child(type_id))
 }
 
-/// Extract a JSON string from a `JsonUnion` scalar
+/// Extract a JSON string from a JSON union scalar
 pub(crate) fn json_from_union_scalar<'a>(
     type_id_value: Option<&'a (i8, Box<ScalarValue>)>,
     fields: &UnionFields,
@@ -60,112 +55,8 @@ pub(crate) fn json_from_union_scalar<'a>(
     None
 }
 
-pub static JSON_UNION_DATA_TYPE: LazyLock<DataType> = LazyLock::new(JsonUnion::data_type);
-
-#[derive(Debug)]
-pub(crate) struct JsonUnion {
-    bools: Vec<Option<bool>>,
-    ints: Vec<Option<i64>>,
-    floats: Vec<Option<f64>>,
-    strings: Vec<Option<String>>,
-    arrays: Vec<Option<String>>,
-    objects: Vec<Option<String>>,
-    type_ids: Vec<i8>,
-    index: usize,
-    length: usize,
-}
-
-impl JsonUnion {
-    pub fn new(length: usize) -> Self {
-        Self {
-            bools: vec![None; length],
-            ints: vec![None; length],
-            floats: vec![None; length],
-            strings: vec![None; length],
-            arrays: vec![None; length],
-            objects: vec![None; length],
-            type_ids: vec![TYPE_ID_NULL; length],
-            index: 0,
-            length,
-        }
-    }
-
-    pub fn data_type() -> DataType {
-        DataType::Union(union_fields(), UnionMode::Sparse)
-    }
-
-    pub fn push(&mut self, field: JsonUnionField) {
-        self.type_ids[self.index] = field.type_id();
-        match field {
-            JsonUnionField::JsonNull => (),
-            JsonUnionField::Bool(value) => self.bools[self.index] = Some(value),
-            JsonUnionField::Int(value) => self.ints[self.index] = Some(value),
-            JsonUnionField::Float(value) => self.floats[self.index] = Some(value),
-            JsonUnionField::Str(value) => self.strings[self.index] = Some(value),
-            JsonUnionField::Array(value) => self.arrays[self.index] = Some(value),
-            JsonUnionField::Object(value) => self.objects[self.index] = Some(value),
-        }
-        self.index += 1;
-        debug_assert!(self.index <= self.length);
-    }
-
-    pub fn push_none(&mut self) {
-        self.index += 1;
-        debug_assert!(self.index <= self.length);
-    }
-}
-
-/// So we can do `collect::<JsonUnion>()`
-impl FromIterator<Option<JsonUnionField>> for JsonUnion {
-    fn from_iter<I: IntoIterator<Item = Option<JsonUnionField>>>(iter: I) -> Self {
-        let inner = iter.into_iter();
-        let (lower, upper) = inner.size_hint();
-        let mut union = Self::new(upper.unwrap_or(lower));
-
-        for opt_field in inner {
-            if let Some(union_field) = opt_field {
-                union.push(union_field);
-            } else {
-                union.push_none();
-            }
-        }
-        union
-    }
-}
-
-impl TryFrom<JsonUnion> for UnionArray {
-    type Error = ArrowError;
-
-    fn try_from(value: JsonUnion) -> Result<Self, Self::Error> {
-        let children: Vec<Arc<dyn Array>> = vec![
-            Arc::new(NullArray::new(value.length)),
-            Arc::new(BooleanArray::from(value.bools)),
-            Arc::new(Int64Array::from(value.ints)),
-            Arc::new(Float64Array::from(value.floats)),
-            Arc::new(StringArray::from(value.strings)),
-            Arc::new(StringArray::from(value.arrays)),
-            Arc::new(StringArray::from(value.objects)),
-        ];
-        UnionArray::try_new(
-            union_fields(),
-            Buffer::from_vec(value.type_ids).into(),
-            None,
-            children,
-        )
-    }
-}
-
-#[derive(Debug)]
-#[cfg_attr(not(test), expect(dead_code))]
-pub(crate) enum JsonUnionField {
-    JsonNull,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Str(String),
-    Array(String),
-    Object(String),
-}
+pub static JSON_UNION_DATA_TYPE: LazyLock<DataType> =
+    LazyLock::new(|| DataType::Union(union_fields(), UnionMode::Sparse));
 
 pub(crate) const TYPE_ID_NULL: i8 = 0;
 const TYPE_ID_BOOL: i8 = 1;
@@ -221,64 +112,44 @@ fn union_fields() -> UnionFields {
         .clone()
 }
 
-impl JsonUnionField {
-    fn type_id(&self) -> i8 {
-        match self {
-            Self::JsonNull => TYPE_ID_NULL,
-            Self::Bool(_) => TYPE_ID_BOOL,
-            Self::Int(_) => TYPE_ID_INT,
-            Self::Float(_) => TYPE_ID_FLOAT,
-            Self::Str(_) => TYPE_ID_STR,
-            Self::Array(_) => TYPE_ID_ARRAY,
-            Self::Object(_) => TYPE_ID_OBJECT,
-        }
-    }
-
-    #[expect(dead_code)]
-    pub fn scalar_value(f: Option<Self>) -> ScalarValue {
-        ScalarValue::Union(
-            f.map(|f| (f.type_id(), Box::new(f.into()))),
-            union_fields(),
-            UnionMode::Sparse,
-        )
-    }
-}
-
-impl From<JsonUnionField> for ScalarValue {
-    fn from(value: JsonUnionField) -> Self {
-        match value {
-            JsonUnionField::JsonNull => Self::Null,
-            JsonUnionField::Bool(b) => Self::Boolean(Some(b)),
-            JsonUnionField::Int(i) => Self::Int64(Some(i)),
-            JsonUnionField::Float(f) => Self::Float64(Some(f)),
-            JsonUnionField::Str(s) | JsonUnionField::Array(s) | JsonUnionField::Object(s) => {
-                Self::Utf8(Some(s))
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod test {
+    use datafusion::arrow::array::Array;
+
     use super::*;
 
     #[test]
     fn test_json_union() {
-        let json_union = JsonUnion::from_iter(vec![
-            Some(JsonUnionField::JsonNull),
-            Some(JsonUnionField::Bool(true)),
-            Some(JsonUnionField::Bool(false)),
-            Some(JsonUnionField::Int(42)),
-            Some(JsonUnionField::Float(42.0)),
-            Some(JsonUnionField::Str("foo".to_string())),
-            Some(JsonUnionField::Array("[42]".to_string())),
-            Some(JsonUnionField::Object(r#"{"foo": 42}"#.to_string())),
-            None,
-        ]);
-
-        let union_array = UnionArray::try_from(json_union).unwrap();
+        let expected = vec![
+            ScalarValue::Null,
+            ScalarValue::Boolean(Some(true)),
+            ScalarValue::Boolean(Some(false)),
+            ScalarValue::Int64(Some(42)),
+            ScalarValue::Float64(Some(42.0)),
+            ScalarValue::Utf8(Some("foo".into())),
+            ScalarValue::Utf8(Some("[42]".into())),
+            ScalarValue::Utf8(Some(r#"{"foo": 42}"#.into())),
+            ScalarValue::Null,
+        ];
+        let type_ids = vec![0, 1, 1, 2, 3, 4, 5, 6, 0];
+        let children = union_fields()
+            .iter()
+            .map(|(id, field)| {
+                ScalarValue::iter_to_array(type_ids.iter().zip(&expected).map(|(row_id, value)| {
+                    if *row_id == id {
+                        value.clone()
+                    } else {
+                        ScalarValue::try_from(field.data_type()).unwrap()
+                    }
+                }))
+                .unwrap()
+            })
+            .collect();
+        let union_array =
+            UnionArray::try_new(union_fields(), type_ids.into(), None, children).unwrap();
         assert!(is_json_union(union_array.data_type()));
+        assert_eq!(union_array.data_type(), &*JSON_UNION_DATA_TYPE);
         assert_eq!(
             union_array.type_ids().as_ref(),
             &[0, 1, 1, 2, 3, 4, 5, 6, 0]
@@ -289,19 +160,24 @@ mod test {
                     .unwrap()
             })
             .collect();
+        assert_eq!(values_after, expected);
+        let array: ArrayRef = Arc::new(union_array.clone());
+        assert_eq!(nested_json_array(&array, false).unwrap().value(6), "[42]");
         assert_eq!(
-            values_after,
-            vec![
-                ScalarValue::Null,
-                ScalarValue::Boolean(Some(true)),
-                ScalarValue::Boolean(Some(false)),
-                ScalarValue::Int64(Some(42)),
-                ScalarValue::Float64(Some(42.0)),
-                ScalarValue::Utf8(Some("foo".into())),
-                ScalarValue::Utf8(Some("[42]".into())),
-                ScalarValue::Utf8(Some(r#"{"foo": 42}"#.into())),
-                ScalarValue::Null,
-            ]
+            nested_json_array(&array, true).unwrap().value(7),
+            r#"{"foo": 42}"#
         );
+        for (idx, value) in expected.into_iter().enumerate() {
+            let scalar = Some((union_array.type_id(idx), Box::new(value)));
+            let json = match idx {
+                6 => Some("[42]"),
+                7 => Some(r#"{"foo": 42}"#),
+                _ => None,
+            };
+            assert_eq!(
+                json_from_union_scalar(scalar.as_ref(), &union_fields()),
+                json
+            );
+        }
     }
 }
