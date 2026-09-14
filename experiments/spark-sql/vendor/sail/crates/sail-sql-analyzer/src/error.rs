@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt;
 
 use chumsky::error::{Rich, RichReason};
@@ -11,16 +12,12 @@ pub type SqlResult<T> = Result<T, SqlError>;
 pub enum SqlError {
     #[error("error in SQL parser: {0}")]
     SqlParserError(String),
-    #[error("missing argument: {0}")]
-    MissingArgument(String),
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
     #[error("not implemented: {0}")]
     NotImplemented(String),
     #[error("not supported: {0}")]
     NotSupported(String),
-    #[error("internal error: {0}")]
-    InternalError(String),
     #[error("analysis error: {0}")]
     AnalysisError(String),
 }
@@ -32,10 +29,6 @@ impl SqlError {
 
     pub fn unsupported(message: impl Into<String>) -> Self {
         SqlError::NotSupported(message.into())
-    }
-
-    pub fn missing(message: impl Into<String>) -> Self {
-        SqlError::MissingArgument(message.into())
     }
 
     pub fn invalid(message: impl Into<String>) -> Self {
@@ -64,10 +57,7 @@ impl SqlError {
 impl From<CommonError> for SqlError {
     fn from(error: CommonError) -> Self {
         match error {
-            CommonError::MissingArgument(message) => SqlError::MissingArgument(message),
-            CommonError::InvalidArgument(message) => SqlError::InvalidArgument(message),
             CommonError::NotSupported(message) => SqlError::NotSupported(message),
-            CommonError::InternalError(message) => SqlError::InternalError(message),
         }
     }
 }

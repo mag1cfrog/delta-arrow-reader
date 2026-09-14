@@ -210,15 +210,6 @@ impl PlanResolverState {
         self.windows.get(name)
     }
 
-    // TODO:
-    //  1. It's unclear which `PySparkUdfType`s rely on the `arrow_use_large_var_types` config.
-    //     While searching through the Spark codebase provides insight into this config's usage,
-    //      the relationship remains unclear since we use Arrow for all UDFs.
-    //      For now, we're applying this config to all UDFs.
-    //      https://github.com/search?q=repo%3Aapache%2Fspark%20%22useLargeVarTypes%22&type=code
-    //  2. We are likely overly liberal in setting this flag to `true`.
-    //     Evaluate if we are unnecessarily setting this flag to `true` anywhere.
-
     pub fn config(&self) -> &PlanResolverStateConfig {
         &self.config
     }

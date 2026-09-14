@@ -30,8 +30,6 @@ pub enum PlanError {
     DataFusionError(#[from] DataFusionError),
     #[error("error in Arrow: {0}")]
     ArrowError(#[from] ArrowError),
-    #[error("missing argument: {0}")]
-    MissingArgument(String),
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
     #[error("not implemented: {0}")]
@@ -42,8 +40,6 @@ pub enum PlanError {
     InternalError(String),
     #[error("analysis error: {0}")]
     AnalysisError(String),
-    #[error("delta table error: {0}")]
-    DeltaTableError(String),
 }
 
 impl PlanError {
@@ -53,10 +49,6 @@ impl PlanError {
 
     pub fn unsupported(message: impl Into<String>) -> Self {
         PlanError::NotSupported(message.into())
-    }
-
-    pub fn missing(message: impl Into<String>) -> Self {
-        PlanError::MissingArgument(message.into())
     }
 
     pub fn invalid(message: impl Into<String>) -> Self {
@@ -75,10 +67,7 @@ impl PlanError {
 impl From<CommonError> for PlanError {
     fn from(error: CommonError) -> Self {
         match error {
-            CommonError::MissingArgument(message) => PlanError::MissingArgument(message),
-            CommonError::InvalidArgument(message) => PlanError::InvalidArgument(message),
             CommonError::NotSupported(message) => PlanError::NotSupported(message),
-            CommonError::InternalError(message) => PlanError::InternalError(message),
         }
     }
 }
@@ -87,11 +76,9 @@ impl From<SqlError> for PlanError {
     fn from(value: SqlError) -> Self {
         match value {
             SqlError::SqlParserError(message) => PlanError::InvalidArgument(message),
-            SqlError::MissingArgument(message) => PlanError::MissingArgument(message),
             SqlError::InvalidArgument(message) => PlanError::InvalidArgument(message),
             SqlError::NotImplemented(message) => PlanError::NotImplemented(message),
             SqlError::NotSupported(message) => PlanError::NotSupported(message),
-            SqlError::InternalError(message) => PlanError::InternalError(message),
             SqlError::AnalysisError(message) => PlanError::AnalysisError(message),
         }
     }
