@@ -170,19 +170,6 @@ impl ScalarFunctionBuilder {
         )
     }
 
-    #[expect(dead_code)]
-    pub fn scalar_udf<F>(f: F) -> ScalarFunction
-    where
-        F: Fn() -> Arc<ScalarUDF> + Send + Sync + 'static,
-    {
-        Arc::new(
-            move |ScalarFunctionInput {
-                      arguments,
-                      function_context: _,
-                  }| { Ok(f().call(arguments)) },
-        )
-    }
-
     pub fn custom<F>(f: F) -> ScalarFunction
     where
         F: Fn(ScalarFunctionInput) -> PlanResult<expr::Expr> + Send + Sync + 'static,

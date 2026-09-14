@@ -18,7 +18,6 @@ const RANGE_BATCH_SIZE: usize = 1024;
 pub struct RangeExec {
     range: Range,
     num_partitions: usize,
-    original_schema: SchemaRef,
     projected_schema: SchemaRef,
     projection: Vec<usize>,
     properties: Arc<PlanProperties>,
@@ -43,27 +42,10 @@ impl RangeExec {
         Ok(Self {
             range,
             num_partitions,
-            original_schema: schema,
             projected_schema,
             projection,
             properties,
         })
-    }
-
-    pub fn range(&self) -> &Range {
-        &self.range
-    }
-
-    pub fn num_partitions(&self) -> usize {
-        self.num_partitions
-    }
-
-    pub fn original_schema(&self) -> &SchemaRef {
-        &self.original_schema
-    }
-
-    pub fn projection(&self) -> &[usize] {
-        &self.projection
     }
 }
 

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 /// Spark-compatible `array_sort(array, comparator)` higher-order function.
 ///
 /// Unlike `filter`/`transform` (element-wise maps evaluated once over the
@@ -73,13 +74,6 @@ impl SparkArraySort {
             ),
             swapped: true,
         }
-    }
-
-    /// Whether this instance feeds the lambda the comparison columns in
-    /// `[right, left]` order (a right-only comparator rewritten by the planner).
-    /// Used by the serialization codec to reconstruct the correct variant.
-    pub fn is_swapped(&self) -> bool {
-        self.swapped
     }
 }
 

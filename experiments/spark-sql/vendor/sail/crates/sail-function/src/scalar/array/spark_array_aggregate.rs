@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 /// Spark-compatible `aggregate(array, zero, merge[, finish])` higher-order function.
 ///
 /// Spark semantics: see `ArrayAggregate` in
@@ -62,10 +63,6 @@ impl SparkArrayAggregate {
             ),
             element_first: true,
         }
-    }
-
-    pub fn is_element_first(&self) -> bool {
-        self.element_first
     }
 }
 

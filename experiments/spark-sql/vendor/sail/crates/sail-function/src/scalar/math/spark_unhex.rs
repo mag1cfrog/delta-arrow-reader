@@ -1,16 +1,10 @@
-use std::fmt::Write;
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
-use datafusion::arrow::array::{
-    BinaryBuilder, OffsetSizeTrait, StringArray, as_dictionary_array, as_largestring_array,
-    as_string_array,
-};
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Int32Type};
+use datafusion::arrow::array::{BinaryBuilder, OffsetSizeTrait};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
-use datafusion_common::cast::{
-    as_binary_array, as_fixed_size_binary_array, as_generic_string_array, as_int64_array,
-    as_string_view_array,
-};
+use datafusion_common::cast::as_generic_string_array;
 use datafusion_common::{DataFusionError, Result, ScalarValue, exec_err, internal_err};
 use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs};
 use datafusion_expr_common::signature::TypeSignature;
@@ -65,149 +59,6 @@ impl ScalarUDFImpl for SparkUnHex {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
         let ScalarFunctionArgs { args, .. } = args;
         spark_unhex(&args)
-    }
-}
-
-// [Credit]: <https://github.com/apache/datafusion-comet/blob/bfd7054c02950219561428463d3926afaf8edbba/native/spark-expr/src/scalar_funcs/hex.rs>
-
-fn hex_int64(num: i64) -> String {
-    format!("{num:X}")
-}
-
-#[inline(always)]
-fn hex_encode<T: AsRef<[u8]>>(data: T, lower_case: bool) -> Result<String> {
-    let mut s = String::with_capacity(data.as_ref().len() * 2);
-    if lower_case {
-        for b in data.as_ref() {
-            write!(&mut s, "{b:02x}")?;
-        }
-    } else {
-        for b in data.as_ref() {
-            write!(&mut s, "{b:02X}")?;
-        }
-    }
-    Ok(s)
-}
-
-#[inline(always)]
-fn hex_bytes<T: AsRef<[u8]>>(bytes: T) -> Result<String> {
-    let hex_string = hex_encode(bytes, false)?;
-    Ok(hex_string)
-}
-
-/// Spark-compatible `hex` function
-pub fn spark_hex(args: &[ColumnarValue]) -> Result<ColumnarValue, DataFusionError> {
-    if args.len() != 1 {
-        return Err(DataFusionError::Internal(
-            "hex expects exactly one argument".to_string(),
-        ));
-    }
-
-    match &args[0] {
-        ColumnarValue::Array(array) => match array.data_type() {
-            DataType::Int64 => {
-                let array = as_int64_array(array)?;
-
-                let hexed_array: StringArray = array.iter().map(|v| v.map(hex_int64)).collect();
-
-                Ok(ColumnarValue::Array(Arc::new(hexed_array)))
-            }
-            DataType::Utf8 => {
-                let array = as_string_array(array);
-
-                let hexed: StringArray = array
-                    .iter()
-                    .map(|v| v.map(hex_bytes).transpose())
-                    .collect::<Result<_, _>>()?;
-
-                Ok(ColumnarValue::Array(Arc::new(hexed)))
-            }
-            DataType::Utf8View => {
-                let array = as_string_view_array(array)?;
-
-                let hexed: StringArray = array
-                    .iter()
-                    .map(|v| v.map(hex_bytes).transpose())
-                    .collect::<Result<_, _>>()?;
-
-                Ok(ColumnarValue::Array(Arc::new(hexed)))
-            }
-            DataType::LargeUtf8 => {
-                let array = as_largestring_array(array);
-
-                let hexed: StringArray = array
-                    .iter()
-                    .map(|v| v.map(hex_bytes).transpose())
-                    .collect::<Result<_, _>>()?;
-
-                Ok(ColumnarValue::Array(Arc::new(hexed)))
-            }
-            DataType::Binary => {
-                let array = as_binary_array(array)?;
-
-                let hexed: StringArray = array
-                    .iter()
-                    .map(|v| v.map(hex_bytes).transpose())
-                    .collect::<Result<_, _>>()?;
-
-                Ok(ColumnarValue::Array(Arc::new(hexed)))
-            }
-            DataType::FixedSizeBinary(_) => {
-                let array = as_fixed_size_binary_array(array)?;
-
-                let hexed: StringArray = array
-                    .iter()
-                    .map(|v| v.map(hex_bytes).transpose())
-                    .collect::<Result<_, _>>()?;
-
-                Ok(ColumnarValue::Array(Arc::new(hexed)))
-            }
-            DataType::Dictionary(_, value_type) => {
-                let dict = as_dictionary_array::<Int32Type>(&array);
-
-                let values = match **value_type {
-                    DataType::Int64 => as_int64_array(dict.values())?
-                        .iter()
-                        .map(|v| v.map(hex_int64))
-                        .collect::<Vec<_>>(),
-                    DataType::Utf8 => as_string_array(dict.values())
-                        .iter()
-                        .map(|v| v.map(hex_bytes).transpose())
-                        .collect::<Result<_, _>>()?,
-                    DataType::Utf8View => as_string_view_array(dict.values())?
-                        .iter()
-                        .map(|v| v.map(hex_bytes).transpose())
-                        .collect::<Result<_, _>>()?,
-                    DataType::LargeUtf8 => as_largestring_array(dict.values())
-                        .iter()
-                        .map(|v| v.map(hex_bytes).transpose())
-                        .collect::<Result<_, _>>()?,
-                    DataType::Binary => as_binary_array(dict.values())?
-                        .iter()
-                        .map(|v| v.map(hex_bytes).transpose())
-                        .collect::<Result<_, _>>()?,
-                    _ => exec_err!(
-                        "hex got an unexpected argument type: {:?}",
-                        array.data_type()
-                    )?,
-                };
-
-                let new_values: Vec<Option<String>> = dict
-                    .keys()
-                    .iter()
-                    .map(|key| key.map(|k| values[k as usize].clone()).unwrap_or(None))
-                    .collect();
-
-                let string_array_values = StringArray::from(new_values);
-
-                Ok(ColumnarValue::Array(Arc::new(string_array_values)))
-            }
-            _ => exec_err!(
-                "hex got an unexpected argument type: {:?}",
-                array.data_type()
-            ),
-        },
-        _ => exec_err!("native hex does not support scalar values at this time"),
     }
 }
 

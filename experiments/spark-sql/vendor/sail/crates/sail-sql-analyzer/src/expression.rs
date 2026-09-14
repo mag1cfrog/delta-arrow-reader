@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::iter::once;
 
 use sail_common::spec::{self};
@@ -8,7 +9,7 @@ use sail_sql_parser::ast::expression::{
     PatternEscape, PatternQuantifier, TableExpr, TrimExpr, UnaryOperator, WindowFrame,
     WindowFrameBound, WindowModifier, WindowSpec, WithinGroupClause,
 };
-use sail_sql_parser::ast::identifier::{ObjectName, QualifiedWildcard};
+use sail_sql_parser::ast::identifier::ObjectName;
 use sail_sql_parser::ast::query::{
     ClusterByClause, DistributeByClause, IdentList, NamedExpr, OrderByClause, PartitionByClause,
     SortByClause,
@@ -127,15 +128,6 @@ pub fn from_ast_object_name(name: ObjectName) -> SqlResult<spec::ObjectName> {
     Ok(parts
         .into_items()
         .map(|i| i.value)
-        .collect::<Vec<_>>()
-        .into())
-}
-
-pub fn from_ast_qualified_wildcard(wildcard: QualifiedWildcard) -> SqlResult<spec::ObjectName> {
-    let QualifiedWildcard(qualifier, _, _) = wildcard;
-    Ok(qualifier
-        .into_items()
-        .map(|x| x.value)
         .collect::<Vec<_>>()
         .into())
 }

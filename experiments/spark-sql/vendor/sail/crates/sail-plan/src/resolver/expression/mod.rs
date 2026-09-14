@@ -405,7 +405,7 @@ mod tests {
     #[tokio::test]
     async fn test_resolve_expression_with_name() -> PlanResult<()> {
         let ctx = create_session()?;
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
 
         async fn resolve(resolver: &PlanResolver<'_>, expr: spec::Expr) -> PlanResult<NamedExpr> {
             resolver
@@ -530,7 +530,7 @@ mod tests {
     #[tokio::test]
     async fn test_st_geomfromwkb_returns_geometry_metadata() -> PlanResult<()> {
         let ctx = create_session()?;
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
 
         let result = resolver
             .resolve_named_expression(
@@ -574,7 +574,7 @@ mod tests {
     #[tokio::test]
     async fn test_st_geogfromwkb_returns_geography_metadata() -> PlanResult<()> {
         let ctx = create_session()?;
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
 
         let result = resolver
             .resolve_named_expression(

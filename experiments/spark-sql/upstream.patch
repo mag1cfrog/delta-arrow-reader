@@ -1,5 +1,5 @@
 diff --git a/Cargo.toml b/Cargo.toml
-index e8af02f..6c7c82f 100644
+index e8af02f..505c4bc 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -7,15 +7,18 @@ index e8af02f..6c7c82f 100644
  [workspace]
  members = [
      "crates/*",
-@@ -25,39 +26,19 @@ todo = "deny"
+@@ -24,40 +25,20 @@ todo = "deny"
+ 
  [workspace.dependencies]
  thiserror = { version = "2.0.18" }
- tokio = { version = "1.52.3", features = ["full"] }
+-tokio = { version = "1.52.3", features = ["full"] }
 -tokio-util = { version = "0.7.19", features = ["rt"] }
- tokio-stream = { version = "0.1.18", features = ["time", "io-util"] }
+-tokio-stream = { version = "0.1.18", features = ["time", "io-util"] }
 -pbjson = "0.9.0"
 -pbjson-types = "0.9.0"
 -pbjson-build = "0.9.0"
++tokio = { version = "1.52.3", features = ["macros", "rt"] }
++tokio-stream = { version = "0.1.18", default-features = false }
  educe = "0.6.0"
 -tower = { version = "0.5.3", features = ["full"] }
 -uuid = { version = "1.23.2", features = ["serde", "v4"] }
@@ -4514,6 +4517,77 @@ index 50fcccb..0000000
 -        Ok(())
 -    }
 -}
+diff --git a/crates/sail-common-datafusion/src/display.rs b/crates/sail-common-datafusion/src/display.rs
+index b81eed1..e722b0c 100644
+--- a/crates/sail-common-datafusion/src/display.rs
++++ b/crates/sail-common-datafusion/src/display.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ /// [Credit]: <https://github.com/apache/arrow-rs/blob/master/arrow-cast/src/display.rs>
+ use std::fmt::{Display, Formatter, Write};
+ use std::ops::Range;
+@@ -122,14 +123,6 @@ impl<'a> FormatOptions<'a> {
+         }
+     }
+ 
+-    /// Overrides the format used for [`DataType::Date64`] columns
+-    pub const fn with_datetime_format(self, datetime_format: TimeFormat<'a>) -> Self {
+-        Self {
+-            datetime_format,
+-            ..self
+-        }
+-    }
+-
+     /// Overrides the format used for [`DataType::Timestamp`] columns without a timezone
+     pub const fn with_timestamp_format(self, timestamp_format: TimeFormat<'a>) -> Self {
+         Self {
+@@ -138,22 +131,6 @@ impl<'a> FormatOptions<'a> {
+         }
+     }
+ 
+-    /// Overrides the format used for [`DataType::Timestamp`] columns with a timezone
+-    pub const fn with_timestamp_tz_format(self, timestamp_tz_format: TimeFormat<'a>) -> Self {
+-        Self {
+-            timestamp_tz_format,
+-            ..self
+-        }
+-    }
+-
+-    /// Overrides the format used for [`DataType::Time32`] and [`DataType::Time64`] columns
+-    pub const fn with_time_format(self, time_format: TimeFormat<'a>) -> Self {
+-        Self {
+-            time_format,
+-            ..self
+-        }
+-    }
+-
+     /// Overrides the format used for duration columns
+     pub const fn with_duration_format(self, duration_format: DurationFormat) -> Self {
+         Self {
+@@ -994,23 +971,6 @@ pub fn array_value_to_string(column: &dyn Array, row: usize) -> Result<String, A
+     Ok(formatter.value(row).to_string())
+ }
+ 
+-/// Converts numeric type to a `String`
+-pub fn lexical_to_string<N: lexical_core::ToLexical>(n: N) -> String {
+-    let mut buf = Vec::<u8>::with_capacity(N::FORMATTED_SIZE_DECIMAL);
+-    unsafe {
+-        // JUSTIFICATION
+-        //  Benefit
+-        //      Allows using the faster serializer lexical core and convert to string
+-        //  Soundness
+-        //      Length of buf is set as written length afterwards. lexical_core
+-        //      creates a valid string, so doesn't need to be checked.
+-        let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.capacity());
+-        let len = lexical_core::write(n, slice).len();
+-        buf.set_len(len);
+-        String::from_utf8_unchecked(buf)
+-    }
+-}
+-
+ #[cfg(test)]
+ mod tests {
+     use datafusion::arrow::array::builder::StringRunBuilder;
 diff --git a/crates/sail-common-datafusion/src/error.rs b/crates/sail-common-datafusion/src/error.rs
 deleted file mode 100644
 index a9c1a81..0000000
@@ -11367,6 +11441,60 @@ index 391f59b..0000000
 -mod builder;
 -
 -pub use builder::{ServerBuilder, ServerBuilderOptions};
+diff --git a/crates/sail-common/src/spec/data_type.rs b/crates/sail-common/src/spec/data_type.rs
+index 206d070..aa36a44 100644
+--- a/crates/sail-common/src/spec/data_type.rs
++++ b/crates/sail-common/src/spec/data_type.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::fmt::Display;
+ use std::ops::Deref;
+ use std::sync::Arc;
+@@ -316,21 +317,6 @@ pub enum TimestampType {
+     WithoutTimeZone,
+ }
+ 
+-impl DataType {
+-    pub fn into_schema(self, default_field_name: &str, nullable: bool) -> Schema {
+-        let fields = match self {
+-            DataType::Struct { fields } => fields,
+-            x => Fields::from(vec![Field {
+-                name: default_field_name.to_string(),
+-                data_type: x,
+-                nullable,
+-                metadata: vec![],
+-            }]),
+-        };
+-        Schema { fields }
+-    }
+-}
+-
+ #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+ pub struct Field {
+diff --git a/crates/sail-common/src/spec/expression.rs b/crates/sail-common/src/spec/expression.rs
+index 25af46d..31e27a9 100644
+--- a/crates/sail-common/src/spec/expression.rs
++++ b/crates/sail-common/src/spec/expression.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use num_enum::{IntoPrimitive, TryFromPrimitive};
+ use serde::{Deserialize, Serialize};
+ 
+@@ -408,13 +409,6 @@ impl PySparkUdfType {
+     fn invalid(v: i32) -> CommonError {
+         CommonError::invalid(format!("invalid PySpark UDF type: {v}"))
+     }
+-
+-    pub fn is_table_function(&self) -> bool {
+-        matches!(
+-            self,
+-            PySparkUdfType::Table | PySparkUdfType::ArrowTable | PySparkUdfType::ArrowUdtf
+-        )
+-    }
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 diff --git a/crates/sail-common/src/spec/plan.rs b/crates/sail-common/src/spec/plan.rs
 index 052a216..a2c2c6c 100644
 --- a/crates/sail-common/src/spec/plan.rs
@@ -13204,6 +13332,91 @@ index d1d6037..9ff21b7 100644
  jiter = { workspace = true }
  thiserror = { workspace = true }
  serde = { workspace = true }
+diff --git a/crates/sail-function/src/aggregate/utils.rs b/crates/sail-function/src/aggregate/utils.rs
+index e4ed496..2c0d10c 100644
+--- a/crates/sail-function/src/aggregate/utils.rs
++++ b/crates/sail-function/src/aggregate/utils.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{
+@@ -59,32 +60,6 @@ pub fn get_scalar_value(expr: &Arc<dyn PhysicalExpr>) -> Result<ScalarValue> {
+     }
+ }
+ 
+-pub fn validate_percentile(expr: &Arc<dyn PhysicalExpr>) -> Result<f64> {
+-    let scalar_value = get_scalar_value(expr).map_err(|_e| {
+-        DataFusionError::Plan(
+-            "Percentile value for 'PERCENTILE_DISC' must be a literal".to_string(),
+-        )
+-    })?;
+-
+-    let percentile = match scalar_value {
+-        ScalarValue::Float32(Some(value)) => value as f64,
+-        ScalarValue::Float64(Some(value)) => value,
+-        sv => {
+-            return Err(DataFusionError::Plan(format!(
+-                "Percentile value for 'PERCENTILE_DISC' must be Float32 or Float64 literal (got data type {})",
+-                sv.data_type()
+-            )));
+-        }
+-    };
+-
+-    if !(0.0..=1.0).contains(&percentile) {
+-        return Err(DataFusionError::Plan(format!(
+-            "Percentile value must be between 0.0 and 1.0 inclusive, {percentile} is invalid"
+-        )));
+-    }
+-    Ok(percentile)
+-}
+-
+ pub fn filtered_null_mask(
+     opt_filter: Option<&BooleanArray>,
+     input: &dyn Array,
+diff --git a/crates/sail-function/src/scalar/array/spark_array_aggregate.rs b/crates/sail-function/src/scalar/array/spark_array_aggregate.rs
+index 9826c77..2c5c979 100644
+--- a/crates/sail-function/src/scalar/array/spark_array_aggregate.rs
++++ b/crates/sail-function/src/scalar/array/spark_array_aggregate.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ /// Spark-compatible `aggregate(array, zero, merge[, finish])` higher-order function.
+ ///
+ /// Spark semantics: see `ArrayAggregate` in
+@@ -63,10 +64,6 @@ impl SparkArrayAggregate {
+             element_first: true,
+         }
+     }
+-
+-    pub fn is_element_first(&self) -> bool {
+-        self.element_first
+-    }
+ }
+ 
+ impl HigherOrderUDFImpl for SparkArrayAggregate {
+diff --git a/crates/sail-function/src/scalar/array/spark_array_sort.rs b/crates/sail-function/src/scalar/array/spark_array_sort.rs
+index 86e50aa..de6937c 100644
+--- a/crates/sail-function/src/scalar/array/spark_array_sort.rs
++++ b/crates/sail-function/src/scalar/array/spark_array_sort.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ /// Spark-compatible `array_sort(array, comparator)` higher-order function.
+ ///
+ /// Unlike `filter`/`transform` (element-wise maps evaluated once over the
+@@ -74,13 +75,6 @@ impl SparkArraySort {
+             swapped: true,
+         }
+     }
+-
+-    /// Whether this instance feeds the lambda the comparison columns in
+-    /// `[right, left]` order (a right-only comparator rewritten by the planner).
+-    /// Used by the serialization codec to reconstruct the correct variant.
+-    pub fn is_swapped(&self) -> bool {
+-        self.swapped
+-    }
+ }
+ 
+ impl HigherOrderUDFImpl for SparkArraySort {
 diff --git a/crates/sail-function/src/scalar/drop_struct_field.rs b/crates/sail-function/src/scalar/drop_struct_field.rs
 deleted file mode 100644
 index 25573a7..0000000
@@ -13343,6 +13556,210 @@ index 25573a7..0000000
 -        Ok(ColumnarValue::Array(new_array))
 -    }
 -}
+diff --git a/crates/sail-function/src/scalar/explode.rs b/crates/sail-function/src/scalar/explode.rs
+index a00a4d5..d306b32 100644
+--- a/crates/sail-function/src/scalar/explode.rs
++++ b/crates/sail-function/src/scalar/explode.rs
+@@ -1,23 +1,10 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use datafusion::arrow::datatypes::DataType;
+ use datafusion::common::Result;
+ use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
+ use datafusion_common::plan_err;
+ use datafusion_expr::ScalarFunctionArgs;
+ 
+-pub fn explode_name_to_kind(name: &str) -> Result<ExplodeKind> {
+-    match name {
+-        "explode" => Ok(ExplodeKind::Explode),
+-        "explode_outer" => Ok(ExplodeKind::ExplodeOuter),
+-        "posexplode" => Ok(ExplodeKind::PosExplode),
+-        "posexplode_outer" => Ok(ExplodeKind::PosExplodeOuter),
+-        "inline" => Ok(ExplodeKind::Inline),
+-        "inline_outer" => Ok(ExplodeKind::InlineOuter),
+-        _ => Err(datafusion::error::DataFusionError::Plan(
+-            "Invalid explode function name".to_string(),
+-        )),
+-    }
+-}
+-
+ #[derive(Debug, PartialEq, Eq, Hash)]
+ pub struct Explode {
+     signature: Signature,
+diff --git a/crates/sail-function/src/scalar/math/spark_unhex.rs b/crates/sail-function/src/scalar/math/spark_unhex.rs
+index 826643c..534ef76 100644
+--- a/crates/sail-function/src/scalar/math/spark_unhex.rs
++++ b/crates/sail-function/src/scalar/math/spark_unhex.rs
+@@ -1,16 +1,10 @@
+-use std::fmt::Write;
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+-use datafusion::arrow::array::{
+-    BinaryBuilder, OffsetSizeTrait, StringArray, as_dictionary_array, as_largestring_array,
+-    as_string_array,
+-};
+-use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Int32Type};
++use datafusion::arrow::array::{BinaryBuilder, OffsetSizeTrait};
++use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+ use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
+-use datafusion_common::cast::{
+-    as_binary_array, as_fixed_size_binary_array, as_generic_string_array, as_int64_array,
+-    as_string_view_array,
+-};
++use datafusion_common::cast::as_generic_string_array;
+ use datafusion_common::{DataFusionError, Result, ScalarValue, exec_err, internal_err};
+ use datafusion_expr::{ReturnFieldArgs, ScalarFunctionArgs};
+ use datafusion_expr_common::signature::TypeSignature;
+@@ -68,149 +62,6 @@ impl ScalarUDFImpl for SparkUnHex {
+     }
+ }
+ 
+-// [Credit]: <https://github.com/apache/datafusion-comet/blob/bfd7054c02950219561428463d3926afaf8edbba/native/spark-expr/src/scalar_funcs/hex.rs>
+-
+-fn hex_int64(num: i64) -> String {
+-    format!("{num:X}")
+-}
+-
+-#[inline(always)]
+-fn hex_encode<T: AsRef<[u8]>>(data: T, lower_case: bool) -> Result<String> {
+-    let mut s = String::with_capacity(data.as_ref().len() * 2);
+-    if lower_case {
+-        for b in data.as_ref() {
+-            write!(&mut s, "{b:02x}")?;
+-        }
+-    } else {
+-        for b in data.as_ref() {
+-            write!(&mut s, "{b:02X}")?;
+-        }
+-    }
+-    Ok(s)
+-}
+-
+-#[inline(always)]
+-fn hex_bytes<T: AsRef<[u8]>>(bytes: T) -> Result<String> {
+-    let hex_string = hex_encode(bytes, false)?;
+-    Ok(hex_string)
+-}
+-
+-/// Spark-compatible `hex` function
+-pub fn spark_hex(args: &[ColumnarValue]) -> Result<ColumnarValue, DataFusionError> {
+-    if args.len() != 1 {
+-        return Err(DataFusionError::Internal(
+-            "hex expects exactly one argument".to_string(),
+-        ));
+-    }
+-
+-    match &args[0] {
+-        ColumnarValue::Array(array) => match array.data_type() {
+-            DataType::Int64 => {
+-                let array = as_int64_array(array)?;
+-
+-                let hexed_array: StringArray = array.iter().map(|v| v.map(hex_int64)).collect();
+-
+-                Ok(ColumnarValue::Array(Arc::new(hexed_array)))
+-            }
+-            DataType::Utf8 => {
+-                let array = as_string_array(array);
+-
+-                let hexed: StringArray = array
+-                    .iter()
+-                    .map(|v| v.map(hex_bytes).transpose())
+-                    .collect::<Result<_, _>>()?;
+-
+-                Ok(ColumnarValue::Array(Arc::new(hexed)))
+-            }
+-            DataType::Utf8View => {
+-                let array = as_string_view_array(array)?;
+-
+-                let hexed: StringArray = array
+-                    .iter()
+-                    .map(|v| v.map(hex_bytes).transpose())
+-                    .collect::<Result<_, _>>()?;
+-
+-                Ok(ColumnarValue::Array(Arc::new(hexed)))
+-            }
+-            DataType::LargeUtf8 => {
+-                let array = as_largestring_array(array);
+-
+-                let hexed: StringArray = array
+-                    .iter()
+-                    .map(|v| v.map(hex_bytes).transpose())
+-                    .collect::<Result<_, _>>()?;
+-
+-                Ok(ColumnarValue::Array(Arc::new(hexed)))
+-            }
+-            DataType::Binary => {
+-                let array = as_binary_array(array)?;
+-
+-                let hexed: StringArray = array
+-                    .iter()
+-                    .map(|v| v.map(hex_bytes).transpose())
+-                    .collect::<Result<_, _>>()?;
+-
+-                Ok(ColumnarValue::Array(Arc::new(hexed)))
+-            }
+-            DataType::FixedSizeBinary(_) => {
+-                let array = as_fixed_size_binary_array(array)?;
+-
+-                let hexed: StringArray = array
+-                    .iter()
+-                    .map(|v| v.map(hex_bytes).transpose())
+-                    .collect::<Result<_, _>>()?;
+-
+-                Ok(ColumnarValue::Array(Arc::new(hexed)))
+-            }
+-            DataType::Dictionary(_, value_type) => {
+-                let dict = as_dictionary_array::<Int32Type>(&array);
+-
+-                let values = match **value_type {
+-                    DataType::Int64 => as_int64_array(dict.values())?
+-                        .iter()
+-                        .map(|v| v.map(hex_int64))
+-                        .collect::<Vec<_>>(),
+-                    DataType::Utf8 => as_string_array(dict.values())
+-                        .iter()
+-                        .map(|v| v.map(hex_bytes).transpose())
+-                        .collect::<Result<_, _>>()?,
+-                    DataType::Utf8View => as_string_view_array(dict.values())?
+-                        .iter()
+-                        .map(|v| v.map(hex_bytes).transpose())
+-                        .collect::<Result<_, _>>()?,
+-                    DataType::LargeUtf8 => as_largestring_array(dict.values())
+-                        .iter()
+-                        .map(|v| v.map(hex_bytes).transpose())
+-                        .collect::<Result<_, _>>()?,
+-                    DataType::Binary => as_binary_array(dict.values())?
+-                        .iter()
+-                        .map(|v| v.map(hex_bytes).transpose())
+-                        .collect::<Result<_, _>>()?,
+-                    _ => exec_err!(
+-                        "hex got an unexpected argument type: {:?}",
+-                        array.data_type()
+-                    )?,
+-                };
+-
+-                let new_values: Vec<Option<String>> = dict
+-                    .keys()
+-                    .iter()
+-                    .map(|key| key.map(|k| values[k as usize].clone()).unwrap_or(None))
+-                    .collect();
+-
+-                let string_array_values = StringArray::from(new_values);
+-
+-                Ok(ColumnarValue::Array(Arc::new(string_array_values)))
+-            }
+-            _ => exec_err!(
+-                "hex got an unexpected argument type: {:?}",
+-                array.data_type()
+-            ),
+-        },
+-        _ => exec_err!("native hex does not support scalar values at this time"),
+-    }
+-}
+-
+ // [Credit]: <https://github.com/apache/datafusion-comet/blob/bfd7054c02950219561428463d3926afaf8edbba/native/spark-expr/src/scalar_funcs/unhex.rs>
+ 
+ /// Helper function to convert a hex digit to a binary value.
 diff --git a/crates/sail-function/src/scalar/mod.rs b/crates/sail-function/src/scalar/mod.rs
 index 87d7207..31d4125 100644
 --- a/crates/sail-function/src/scalar/mod.rs
@@ -13595,6 +14012,36 @@ index 40f488b..d8e16c1 100644
  pub fn try_parse_string_scalar(scalar: &ScalarValue) -> datafusion_common::Result<Option<&String>> {
      let b = match scalar {
          ScalarValue::Null => return Ok(None),
+diff --git a/crates/sail-function/src/scalar/xml/xpath_typed.rs b/crates/sail-function/src/scalar/xml/xpath_typed.rs
+index 212427e..138c92b 100644
+--- a/crates/sail-function/src/scalar/xml/xpath_typed.rs
++++ b/crates/sail-function/src/scalar/xml/xpath_typed.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{
+@@ -14,20 +15,6 @@ use xee_xpath::{Documents, Queries, Query};
+ 
+ use crate::functions_utils::make_scalar_function;
+ 
+-pub fn xpath_typed_name_to_kind(name: &str) -> Result<XpathTypedKind> {
+-    match name {
+-        "xpath_boolean" => Ok(XpathTypedKind::Boolean),
+-        "xpath_double" => Ok(XpathTypedKind::Double),
+-        "xpath_float" => Ok(XpathTypedKind::Float),
+-        "xpath_int" => Ok(XpathTypedKind::Int),
+-        "xpath_long" => Ok(XpathTypedKind::Long),
+-        "xpath_number" => Ok(XpathTypedKind::Number),
+-        "xpath_short" => Ok(XpathTypedKind::Short),
+-        "xpath_string" => Ok(XpathTypedKind::String),
+-        _ => plan_err!("Invalid xpath typed function name: {name}"),
+-    }
+-}
+-
+ /// The kind of typed XPath function.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+ pub enum XpathTypedKind {
 diff --git a/crates/sail-logical-plan/Cargo.toml b/crates/sail-logical-plan/Cargo.toml
 index c4036e8..1969cac 100644
 --- a/crates/sail-logical-plan/Cargo.toml
@@ -17185,7 +17632,7 @@ index 1024739..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/Cargo.toml b/crates/sail-plan/Cargo.toml
-index f3ed96e..99428a2 100644
+index f3ed96e..c4b6a77 100644
 --- a/crates/sail-plan/Cargo.toml
 +++ b/crates/sail-plan/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -17219,9 +17666,11 @@ index f3ed96e..99428a2 100644
  chrono = { workspace = true }
  chumsky = { workspace = true }
  async-trait = { workspace = true }
-@@ -37,20 +30,12 @@ lazy_static = { workspace = true }
+@@ -36,21 +29,13 @@ async-recursion = { workspace = true }
+ lazy_static = { workspace = true }
  ryu = { workspace = true }
  either = { workspace = true }
++# Keep this test dependency here so Cargo can test the path dependency from the probe workspace.
  tokio = { workspace = true }
 +tokio-stream = { workspace = true }
  rand = { workspace = true }
@@ -17234,7 +17683,7 @@ index f3ed96e..99428a2 100644
  serde_json = { workspace = true }
 -indexmap = { workspace = true }
 -log = { workspace = true }
- regex = { workspace = true }
+-regex = { workspace = true }
  regex-syntax = { workspace = true }
  parquet-variant-compute = { workspace = true }
 -
@@ -30276,10 +30725,10 @@ index 2aae312..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/src/config.rs b/crates/sail-plan/src/config.rs
-index 692c016..3258d94 100644
+index 692c016..6797347 100644
 --- a/crates/sail-plan/src/config.rs
 +++ b/crates/sail-plan/src/config.rs
-@@ -1,9 +1,8 @@
+@@ -1,24 +1,14 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::fmt::Debug;
  use std::hash::Hash;
@@ -30287,10 +30736,11 @@ index 692c016..3258d94 100644
  
 -use sail_python_udf::config::PySparkUdfConfig;
 -
- use crate::error::PlanResult;
- 
+-use crate::error::PlanResult;
+-
  #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
-@@ -12,13 +11,6 @@ pub enum DefaultTimestampType {
+ pub enum DefaultTimestampType {
+     TimestampLtz,
      TimestampNtz,
  }
  
@@ -30304,7 +30754,7 @@ index 692c016..3258d94 100644
  #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
  pub enum MapKeyDedupPolicy {
      #[default]
-@@ -36,16 +28,8 @@ pub struct PlanConfig {
+@@ -36,16 +26,8 @@ pub struct PlanConfig {
      pub default_timestamp_type: DefaultTimestampType,
      /// Whether to use large variable types in Arrow.
      pub arrow_use_large_var_types: bool,
@@ -30321,7 +30771,7 @@ index 692c016..3258d94 100644
      /// Policy for duplicate keys created by map functions.
      pub map_key_dedup_policy: MapKeyDedupPolicy,
      /// Whether to allow cartesian products (cross joins) without explicit `CROSS JOIN` syntax.
-@@ -53,13 +37,6 @@ pub struct PlanConfig {
+@@ -53,27 +35,11 @@ pub struct PlanConfig {
      /// Whether identifiers (e.g. column names) are matched case-sensitively.
      /// Spark defaults to case-insensitive matching (`spark.sql.caseSensitive=false`).
      pub case_sensitive: bool,
@@ -30335,19 +30785,21 @@ index 692c016..3258d94 100644
      /// Whether `COUNT()` is accepted with no arguments. Spark's legacy behavior returns zero;
      /// it does not interpret the call as `COUNT(*)`.
      pub legacy_allow_parameterless_count: bool,
-@@ -67,10 +44,7 @@ pub struct PlanConfig {
+ }
  
- impl PlanConfig {
-     pub fn new() -> PlanResult<Self> {
+-impl PlanConfig {
+-    pub fn new() -> PlanResult<Self> {
 -        Ok(Self {
 -            pyspark_udf_config: Arc::new(PySparkUdfConfig::default()),
 -            ..Default::default()
 -        })
-+        Ok(Self::default())
-     }
- }
- 
-@@ -81,17 +55,11 @@ impl Default for PlanConfig {
+-    }
+-}
+-
+ impl Default for PlanConfig {
+     fn default() -> Self {
+         Self {
+@@ -81,17 +47,11 @@ impl Default for PlanConfig {
              session_locale: Arc::from("en-US"),
              default_timestamp_type: DefaultTimestampType::TimestampLtz,
              arrow_use_large_var_types: false,
@@ -31027,7 +31479,7 @@ index 3561975..5757a6f 100644
  mod tests {
      use std::sync::Arc;
 diff --git a/crates/sail-plan/src/function/common.rs b/crates/sail-plan/src/function/common.rs
-index 8517d29..0471fc1 100644
+index 8517d29..6bb9c44 100644
 --- a/crates/sail-plan/src/function/common.rs
 +++ b/crates/sail-plan/src/function/common.rs
 @@ -1,3 +1,4 @@
@@ -31048,7 +31500,27 @@ index 8517d29..0471fc1 100644
  
  use crate::config::PlanConfig;
  use crate::error::{IntoPlanResult, PlanError, PlanResult};
-@@ -485,33 +480,8 @@ pub(crate) fn theta_args_with_default_lg(
+@@ -175,19 +170,6 @@ impl ScalarFunctionBuilder {
+         )
+     }
+ 
+-    #[expect(dead_code)]
+-    pub fn scalar_udf<F>(f: F) -> ScalarFunction
+-    where
+-        F: Fn() -> Arc<ScalarUDF> + Send + Sync + 'static,
+-    {
+-        Arc::new(
+-            move |ScalarFunctionInput {
+-                      arguments,
+-                      function_context: _,
+-                  }| { Ok(f().call(arguments)) },
+-        )
+-    }
+-
+     pub fn custom<F>(f: F) -> ScalarFunction
+     where
+         F: Fn(ScalarFunctionInput) -> PlanResult<expr::Expr> + Send + Sync + 'static,
+@@ -485,33 +467,8 @@ pub(crate) fn theta_args_with_default_lg(
      }
  }
  
@@ -31405,10 +31877,10 @@ index 01ae060..4d3c4f2 100644
          self.node.schema().inner().clone()
 diff --git a/crates/sail-plan/src/function/table/range_exec.rs b/crates/sail-plan/src/function/table/range_exec.rs
 new file mode 100644
-index 0000000..ae0e8f7
+index 0000000..dcce944
 --- /dev/null
 +++ b/crates/sail-plan/src/function/table/range_exec.rs
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,128 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 +use std::sync::Arc;
 +
@@ -31429,7 +31901,6 @@ index 0000000..ae0e8f7
 +pub struct RangeExec {
 +    range: Range,
 +    num_partitions: usize,
-+    original_schema: SchemaRef,
 +    projected_schema: SchemaRef,
 +    projection: Vec<usize>,
 +    properties: Arc<PlanProperties>,
@@ -31454,27 +31925,10 @@ index 0000000..ae0e8f7
 +        Ok(Self {
 +            range,
 +            num_partitions,
-+            original_schema: schema,
 +            projected_schema,
 +            projection,
 +            properties,
 +        })
-+    }
-+
-+    pub fn range(&self) -> &Range {
-+        &self.range
-+    }
-+
-+    pub fn num_partitions(&self) -> usize {
-+        self.num_partitions
-+    }
-+
-+    pub fn original_schema(&self) -> &SchemaRef {
-+        &self.original_schema
-+    }
-+
-+    pub fn projection(&self) -> &[usize] {
-+        &self.projection
 +    }
 +}
 +
@@ -38611,6 +39065,46 @@ index 15c4a4b..0000000
 -        Ok(Constraints::new_unverified(constraints))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/data_type.rs b/crates/sail-plan/src/resolver/data_type.rs
+index b62d050..4ac7556 100644
+--- a/crates/sail-plan/src/resolver/data_type.rs
++++ b/crates/sail-plan/src/resolver/data_type.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::sync::Arc;
+ 
+@@ -81,14 +82,6 @@ impl PlanResolver<'_> {
+         }
+     }
+ 
+-    pub fn resolve_data_type_for_plan(
+-        &self,
+-        data_type: &spec::DataType,
+-    ) -> PlanResult<adt::DataType> {
+-        let mut state = PlanResolverState::new();
+-        self.resolve_data_type(data_type, &mut state)
+-    }
+-
+     /// References:
+     ///   org.apache.spark.sql.util.ArrowUtils#toArrowType
+     ///   org.apache.spark.sql.connect.common.DataTypeProtoConverter
+@@ -386,15 +379,6 @@ impl PlanResolver<'_> {
+         Ok(adt::Fields::from(fields))
+     }
+ 
+-    pub(super) fn resolve_schema(
+-        &self,
+-        schema: spec::Schema,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<adt::Schema> {
+-        let fields = self.resolve_fields(&schema.fields, state)?;
+-        Ok(adt::Schema::new(fields))
+-    }
+-
+     pub fn resolve_time_unit(time_unit: &spec::TimeUnit) -> PlanResult<adt::TimeUnit> {
+         match time_unit {
+             spec::TimeUnit::Second => Ok(adt::TimeUnit::Second),
 diff --git a/crates/sail-plan/src/resolver/expression/attribute.rs b/crates/sail-plan/src/resolver/expression/attribute.rs
 index 52d5e84..b498cfe 100644
 --- a/crates/sail-plan/src/resolver/expression/attribute.rs
@@ -39348,7 +39842,7 @@ index fd946d2..c923e0f 100644
 -    }
  }
 diff --git a/crates/sail-plan/src/resolver/expression/mod.rs b/crates/sail-plan/src/resolver/expression/mod.rs
-index 6e1d2ce..e731e80 100644
+index 6e1d2ce..d0331ae 100644
 --- a/crates/sail-plan/src/resolver/expression/mod.rs
 +++ b/crates/sail-plan/src/resolver/expression/mod.rs
 @@ -1,3 +1,4 @@
@@ -39471,7 +39965,7 @@ index 6e1d2ce..e731e80 100644
              Expr::InList {
                  expr,
                  list,
-@@ -411,43 +388,17 @@ mod tests {
+@@ -411,50 +388,24 @@ mod tests {
      use datafusion_common::{DFSchema, ScalarValue};
      use datafusion_expr::expr::{Alias, Expr};
      use datafusion_expr::{BinaryExpr, Operator};
@@ -39516,6 +40010,32 @@ index 6e1d2ce..e731e80 100644
          Ok(SessionContext::new_with_state(state))
      }
  
+     #[tokio::test]
+     async fn test_resolve_expression_with_name() -> PlanResult<()> {
+         let ctx = create_session()?;
+-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
++        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
+ 
+         async fn resolve(resolver: &PlanResolver<'_>, expr: spec::Expr) -> PlanResult<NamedExpr> {
+             resolver
+@@ -579,7 +530,7 @@ mod tests {
+     #[tokio::test]
+     async fn test_st_geomfromwkb_returns_geometry_metadata() -> PlanResult<()> {
+         let ctx = create_session()?;
+-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
++        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
+ 
+         let result = resolver
+             .resolve_named_expression(
+@@ -623,7 +574,7 @@ mod tests {
+     #[tokio::test]
+     async fn test_st_geogfromwkb_returns_geography_metadata() -> PlanResult<()> {
+         let ctx = create_session()?;
+-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
++        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
+ 
+         let result = resolver
+             .resolve_named_expression(
 diff --git a/crates/sail-plan/src/resolver/expression/subquery.rs b/crates/sail-plan/src/resolver/expression/subquery.rs
 index 65c7b37..56849a8 100644
 --- a/crates/sail-plan/src/resolver/expression/subquery.rs
@@ -42253,7 +42773,7 @@ index 21ad91e..0000000
 -    }
 -}
 diff --git a/crates/sail-plan/src/resolver/query/pivoting.rs b/crates/sail-plan/src/resolver/query/pivoting.rs
-index e98baaf..9b2daf8 100644
+index e98baaf..e893535 100644
 --- a/crates/sail-plan/src/resolver/query/pivoting.rs
 +++ b/crates/sail-plan/src/resolver/query/pivoting.rs
 @@ -1,3 +1,4 @@
@@ -42261,7 +42781,18 @@ index e98baaf..9b2daf8 100644
  use std::collections::{HashMap, HashSet};
  use std::sync::Arc;
  
-@@ -38,6 +39,12 @@ impl PlanResolver<'_> {
+@@ -6,9 +7,7 @@ use datafusion::functions_aggregate::count::count_udaf;
+ use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+ use datafusion_common::{Column, DFSchema, DFSchemaRef, ScalarValue};
+ use datafusion_expr::expr::{AggregateFunctionParams, NullTreatment};
+-use datafusion_expr::{
+-    ExprSchemable, LogicalPlan, LogicalPlanBuilder, Projection, ScalarUDF, col, expr, lit, when,
+-};
++use datafusion_expr::{ExprSchemable, LogicalPlan, Projection, ScalarUDF, col, expr, lit, when};
+ use datafusion_functions_nested::expr_fn as nested_fn;
+ use sail_common::spec;
+ use sail_common_datafusion::display::{ArrayFormatter, FormatOptions};
+@@ -38,6 +37,12 @@ impl PlanResolver<'_> {
              values,
          } = pivot;
  
@@ -42274,7 +42805,7 @@ index e98baaf..9b2daf8 100644
          let input = self.resolve_query_plan(*input, state).await?;
          let schema = input.schema().clone();
  
-@@ -74,17 +81,8 @@ impl PlanResolver<'_> {
+@@ -74,17 +79,8 @@ impl PlanResolver<'_> {
              None => Self::implicit_pivot_grouping(&schema, &pivot_column, &aggregates, state)?,
          };
  
@@ -42294,7 +42825,7 @@ index e98baaf..9b2daf8 100644
              // Each pivot value is a foldable expression (literal, typed literal such as
              // `DATE'...'`, or cast). Resolve it against an empty schema and fold it to a scalar
              // with `LiteralEvaluator`, mirroring how SHOW PARTITIONS resolves partition values.
-@@ -198,58 +196,6 @@ impl PlanResolver<'_> {
+@@ -198,58 +194,6 @@ impl PlanResolver<'_> {
          self.rewrite_aggregate(input, projections, grouping, None, false, state)
      }
  
@@ -42353,7 +42884,7 @@ index e98baaf..9b2daf8 100644
      /// Compute the implicit grouping columns for a SQL `PIVOT` with no explicit
      /// grouping: every input column that is not referenced by the pivot column or
      /// any of the aggregate expressions.
-@@ -462,14 +408,6 @@ fn make_pivot_struct(exprs: Vec<expr::Expr>) -> expr::Expr {
+@@ -462,14 +406,6 @@ fn make_pivot_struct(exprs: Vec<expr::Expr>) -> expr::Expr {
      .call(exprs)
  }
  
@@ -45664,25 +46195,71 @@ index e55a3bc..0000000
 -        Ok(plan)
 -    }
 -}
+diff --git a/crates/sail-sql-analyzer/src/expression.rs b/crates/sail-sql-analyzer/src/expression.rs
+index 409d1ac..8fbda84 100644
+--- a/crates/sail-sql-analyzer/src/expression.rs
++++ b/crates/sail-sql-analyzer/src/expression.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::iter::once;
+ 
+ use sail_common::spec::{self};
+@@ -8,7 +9,7 @@ use sail_sql_parser::ast::expression::{
+     PatternEscape, PatternQuantifier, TableExpr, TrimExpr, UnaryOperator, WindowFrame,
+     WindowFrameBound, WindowModifier, WindowSpec, WithinGroupClause,
+ };
+-use sail_sql_parser::ast::identifier::{ObjectName, QualifiedWildcard};
++use sail_sql_parser::ast::identifier::ObjectName;
+ use sail_sql_parser::ast::query::{
+     ClusterByClause, DistributeByClause, IdentList, NamedExpr, OrderByClause, PartitionByClause,
+     SortByClause,
+@@ -131,15 +132,6 @@ pub fn from_ast_object_name(name: ObjectName) -> SqlResult<spec::ObjectName> {
+         .into())
+ }
+ 
+-pub fn from_ast_qualified_wildcard(wildcard: QualifiedWildcard) -> SqlResult<spec::ObjectName> {
+-    let QualifiedWildcard(qualifier, _, _) = wildcard;
+-    Ok(qualifier
+-        .into_items()
+-        .map(|x| x.value)
+-        .collect::<Vec<_>>()
+-        .into())
+-}
+-
+ fn from_ast_unary_operator(op: UnaryOperator) -> SqlResult<String> {
+     match op {
+         UnaryOperator::Plus(_) => Ok("+".to_string()),
 diff --git a/crates/sail-sql-analyzer/src/parser.rs b/crates/sail-sql-analyzer/src/parser.rs
-index 2729fef..026d4f0 100644
+index 2729fef..f9112d0 100644
 --- a/crates/sail-sql-analyzer/src/parser.rs
 +++ b/crates/sail-sql-analyzer/src/parser.rs
-@@ -1,3 +1,4 @@
+@@ -1,19 +1,18 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use chumsky::Parser;
  use chumsky::input::Input;
  use chumsky::span::SimpleSpan;
-@@ -13,7 +14,7 @@ use sail_sql_parser::parser::{
-     create_named_expression_parser, create_object_name_parser, create_parser,
-     create_qualified_wildcard_parser,
+ use sail_sql_parser::ast::data_type::DataType;
+-use sail_sql_parser::ast::expression::{Expr, IntervalLiteral};
+-use sail_sql_parser::ast::identifier::{ObjectName, QualifiedWildcard};
+-use sail_sql_parser::ast::query::NamedExpr;
++use sail_sql_parser::ast::expression::IntervalLiteral;
++use sail_sql_parser::ast::identifier::ObjectName;
+ use sail_sql_parser::ast::statement::Statement;
+ use sail_sql_parser::lexer::create_lexer;
+ use sail_sql_parser::options::ParserOptions;
+ use sail_sql_parser::parser::{
+-    create_data_type_parser, create_expression_parser, create_interval_literal_parser,
+-    create_named_expression_parser, create_object_name_parser, create_parser,
+-    create_qualified_wildcard_parser,
++    create_data_type_parser, create_interval_literal_parser, create_object_name_parser,
++    create_parser,
  };
 -use sail_sql_parser::token::{Punctuation, Token};
 +use sail_sql_parser::token::Token;
  
  use crate::error::{SqlError, SqlResult};
  use crate::literal::datetime::{
-@@ -52,27 +53,6 @@ macro_rules! parse_simple {
+@@ -52,35 +51,10 @@ macro_rules! parse_simple {
      }};
  }
  
@@ -45709,6 +46286,29 @@ index 2729fef..026d4f0 100644
 -
  pub fn parse_data_type(s: &str) -> SqlResult<DataType> {
      parse!(s, create_data_type_parser)
+ }
+ 
+-pub fn parse_expression(s: &str) -> SqlResult<Expr> {
+-    parse!(s, create_expression_parser)
+-}
+-
+ pub fn parse_statements(s: &str) -> SqlResult<Vec<Statement>> {
+     parse!(s, create_parser)
+ }
+@@ -98,14 +72,6 @@ pub fn parse_object_name(s: &str) -> SqlResult<ObjectName> {
+     parse!(s, create_object_name_parser)
+ }
+ 
+-pub fn parse_qualified_wildcard(s: &str) -> SqlResult<QualifiedWildcard> {
+-    parse!(s, create_qualified_wildcard_parser)
+-}
+-
+-pub fn parse_named_expression(s: &str) -> SqlResult<NamedExpr> {
+-    parse!(s, create_named_expression_parser)
+-}
+-
+ pub(crate) fn parse_interval_literal(s: &str) -> SqlResult<IntervalLiteral> {
+     parse!(s, create_interval_literal_parser)
  }
 diff --git a/crates/sail-sql-analyzer/src/statement.rs b/crates/sail-sql-analyzer/src/statement.rs
 index fec7256..dbcc2e5 100644
@@ -48048,6 +48648,105 @@ index 57f0b83..f7159e3 100644
  
  [build-dependencies]
  prettyplease = { workspace = true }
+diff --git a/crates/sail-sql-parser/src/parser.rs b/crates/sail-sql-parser/src/parser.rs
+index cd992bf..bf42826 100644
+--- a/crates/sail-sql-parser/src/parser.rs
++++ b/crates/sail-sql-parser/src/parser.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::extra::ParserExtra;
+ use chumsky::input::{Input, ValueInput};
+ use chumsky::label::LabelError;
+@@ -6,9 +7,9 @@ use chumsky::{IterParser, Parser};
+ 
+ use crate::ast::data_type::DataType;
+ use crate::ast::expression::{Expr, IntervalLiteral};
+-use crate::ast::identifier::{Ident, ObjectName, QualifiedWildcard};
++use crate::ast::identifier::ObjectName;
+ use crate::ast::operator::Semicolon;
+-use crate::ast::query::{NamedExpr, Query, TableWithJoins};
++use crate::ast::query::{Query, TableWithJoins};
+ use crate::ast::statement::Statement;
+ use crate::options::ParserOptions;
+ use crate::span::TokenSpan;
+@@ -77,18 +78,6 @@ where
+     ObjectName::parser((), options)
+ }
+ 
+-fn qualified_wildcard<'a, I, E>(
+-    options: &'a ParserOptions,
+-) -> impl Parser<'a, I, QualifiedWildcard, E> + Clone
+-where
+-    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+-    I::Span: Into<TokenSpan> + Clone,
+-    E: ParserExtra<'a, I> + 'a,
+-    E::Error: LabelError<'a, I, TokenLabel>,
+-{
+-    QualifiedWildcard::parser((), options)
+-}
+-
+ fn expression<'a, I, E>(options: &'a ParserOptions) -> impl Parser<'a, I, Expr, E> + Clone
+ where
+     I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+@@ -118,19 +107,6 @@ where
+     expression
+ }
+ 
+-fn named_expression<'a, I, E>(
+-    options: &'a ParserOptions,
+-) -> impl Parser<'a, I, NamedExpr, E> + Clone
+-where
+-    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
+-    I::Span: Into<TokenSpan> + Clone,
+-    E: ParserExtra<'a, I> + 'a,
+-    E::Error: LabelError<'a, I, TokenLabel>,
+-{
+-    let ident = Ident::parser((), options);
+-    NamedExpr::parser((expression(options), ident), options)
+-}
+-
+ fn interval_literal<'a, I, E>(
+     options: &'a ParserOptions,
+ ) -> impl Parser<'a, I, IntervalLiteral, E> + Clone
+@@ -186,13 +162,6 @@ macro_rules! define_sub_parser {
+ 
+ define_sub_parser!(create_data_type_parser, DataType, data_type);
+ define_sub_parser!(create_object_name_parser, ObjectName, object_name);
+-define_sub_parser!(
+-    create_qualified_wildcard_parser,
+-    QualifiedWildcard,
+-    qualified_wildcard,
+-);
+-define_sub_parser!(create_expression_parser, Expr, expression);
+-define_sub_parser!(create_named_expression_parser, NamedExpr, named_expression);
+ define_sub_parser!(
+     create_interval_literal_parser,
+     IntervalLiteral,
+diff --git a/crates/sail-sql-parser/src/span.rs b/crates/sail-sql-parser/src/span.rs
+index 79b56c4..d672610 100644
+--- a/crates/sail-sql-parser/src/span.rs
++++ b/crates/sail-sql-parser/src/span.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::prelude::SimpleSpan;
+ 
+ /// A span in the source code.
+@@ -27,15 +28,6 @@ impl TokenSpan {
+             },
+         }
+     }
+-
+-    pub fn union_all<I>(iter: I) -> Self
+-    where
+-        I: IntoIterator<Item = TokenSpan>,
+-    {
+-        iter.into_iter()
+-            .reduce(|acc, span| acc.union(&span))
+-            .unwrap_or_default()
+-    }
+ }
+ 
+ impl<C> From<SimpleSpan<usize, C>> for TokenSpan {
 diff --git a/crates/sail-sql-parser/tests/syntax.rs b/crates/sail-sql-parser/tests/syntax.rs
 index a2258b2..8fd74da 100644
 --- a/crates/sail-sql-parser/tests/syntax.rs

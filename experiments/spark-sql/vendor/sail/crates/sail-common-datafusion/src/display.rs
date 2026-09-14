@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 /// [Credit]: <https://github.com/apache/arrow-rs/blob/master/arrow-cast/src/display.rs>
 use std::fmt::{Display, Formatter, Write};
 use std::ops::Range;
@@ -122,34 +123,10 @@ impl<'a> FormatOptions<'a> {
         }
     }
 
-    /// Overrides the format used for [`DataType::Date64`] columns
-    pub const fn with_datetime_format(self, datetime_format: TimeFormat<'a>) -> Self {
-        Self {
-            datetime_format,
-            ..self
-        }
-    }
-
     /// Overrides the format used for [`DataType::Timestamp`] columns without a timezone
     pub const fn with_timestamp_format(self, timestamp_format: TimeFormat<'a>) -> Self {
         Self {
             timestamp_format,
-            ..self
-        }
-    }
-
-    /// Overrides the format used for [`DataType::Timestamp`] columns with a timezone
-    pub const fn with_timestamp_tz_format(self, timestamp_tz_format: TimeFormat<'a>) -> Self {
-        Self {
-            timestamp_tz_format,
-            ..self
-        }
-    }
-
-    /// Overrides the format used for [`DataType::Time32`] and [`DataType::Time64`] columns
-    pub const fn with_time_format(self, time_format: TimeFormat<'a>) -> Self {
-        Self {
-            time_format,
             ..self
         }
     }
@@ -992,23 +969,6 @@ pub fn array_value_to_string(column: &dyn Array, row: usize) -> Result<String, A
     let options = FormatOptions::default().with_display_error(true);
     let formatter = ArrayFormatter::try_new(column, &options)?;
     Ok(formatter.value(row).to_string())
-}
-
-/// Converts numeric type to a `String`
-pub fn lexical_to_string<N: lexical_core::ToLexical>(n: N) -> String {
-    let mut buf = Vec::<u8>::with_capacity(N::FORMATTED_SIZE_DECIMAL);
-    unsafe {
-        // JUSTIFICATION
-        //  Benefit
-        //      Allows using the faster serializer lexical core and convert to string
-        //  Soundness
-        //      Length of buf is set as written length afterwards. lexical_core
-        //      creates a valid string, so doesn't need to be checked.
-        let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.capacity());
-        let len = lexical_core::write(n, slice).len();
-        buf.set_len(len);
-        String::from_utf8_unchecked(buf)
-    }
 }
 
 #[cfg(test)]

@@ -3,16 +3,14 @@ use chumsky::Parser;
 use chumsky::input::Input;
 use chumsky::span::SimpleSpan;
 use sail_sql_parser::ast::data_type::DataType;
-use sail_sql_parser::ast::expression::{Expr, IntervalLiteral};
-use sail_sql_parser::ast::identifier::{ObjectName, QualifiedWildcard};
-use sail_sql_parser::ast::query::NamedExpr;
+use sail_sql_parser::ast::expression::IntervalLiteral;
+use sail_sql_parser::ast::identifier::ObjectName;
 use sail_sql_parser::ast::statement::Statement;
 use sail_sql_parser::lexer::create_lexer;
 use sail_sql_parser::options::ParserOptions;
 use sail_sql_parser::parser::{
-    create_data_type_parser, create_expression_parser, create_interval_literal_parser,
-    create_named_expression_parser, create_object_name_parser, create_parser,
-    create_qualified_wildcard_parser,
+    create_data_type_parser, create_interval_literal_parser, create_object_name_parser,
+    create_parser,
 };
 use sail_sql_parser::token::Token;
 
@@ -57,10 +55,6 @@ pub fn parse_data_type(s: &str) -> SqlResult<DataType> {
     parse!(s, create_data_type_parser)
 }
 
-pub fn parse_expression(s: &str) -> SqlResult<Expr> {
-    parse!(s, create_expression_parser)
-}
-
 pub fn parse_statements(s: &str) -> SqlResult<Vec<Statement>> {
     parse!(s, create_parser)
 }
@@ -76,14 +70,6 @@ pub fn parse_one_statement(s: &str) -> SqlResult<Statement> {
 
 pub fn parse_object_name(s: &str) -> SqlResult<ObjectName> {
     parse!(s, create_object_name_parser)
-}
-
-pub fn parse_qualified_wildcard(s: &str) -> SqlResult<QualifiedWildcard> {
-    parse!(s, create_qualified_wildcard_parser)
-}
-
-pub fn parse_named_expression(s: &str) -> SqlResult<NamedExpr> {
-    parse!(s, create_named_expression_parser)
 }
 
 pub(crate) fn parse_interval_literal(s: &str) -> SqlResult<IntervalLiteral> {

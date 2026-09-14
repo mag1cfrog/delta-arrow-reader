@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use chumsky::prelude::SimpleSpan;
 
 /// A span in the source code.
@@ -26,15 +27,6 @@ impl TokenSpan {
                 end: self.end.max(other.end),
             },
         }
-    }
-
-    pub fn union_all<I>(iter: I) -> Self
-    where
-        I: IntoIterator<Item = TokenSpan>,
-    {
-        iter.into_iter()
-            .reduce(|acc, span| acc.union(&span))
-            .unwrap_or_default()
     }
 }
 

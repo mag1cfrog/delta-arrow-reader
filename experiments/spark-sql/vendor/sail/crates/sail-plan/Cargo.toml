@@ -29,6 +29,7 @@ async-recursion = { workspace = true }
 lazy_static = { workspace = true }
 ryu = { workspace = true }
 either = { workspace = true }
+# Keep this test dependency here so Cargo can test the path dependency from the probe workspace.
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 rand = { workspace = true }
@@ -36,6 +37,5 @@ half = { workspace = true }
 arrow = { workspace = true }
 arrow-schema = { workspace = true }
 serde_json = { workspace = true }
-regex = { workspace = true }
 regex-syntax = { workspace = true }
 parquet-variant-compute = { workspace = true }

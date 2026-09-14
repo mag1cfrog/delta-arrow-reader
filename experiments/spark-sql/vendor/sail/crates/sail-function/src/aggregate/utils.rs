@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
@@ -57,32 +58,6 @@ pub fn get_scalar_value(expr: &Arc<dyn PhysicalExpr>) -> Result<ScalarValue> {
             "Didn't expect ColumnarValue::Array".to_string(),
         )),
     }
-}
-
-pub fn validate_percentile(expr: &Arc<dyn PhysicalExpr>) -> Result<f64> {
-    let scalar_value = get_scalar_value(expr).map_err(|_e| {
-        DataFusionError::Plan(
-            "Percentile value for 'PERCENTILE_DISC' must be a literal".to_string(),
-        )
-    })?;
-
-    let percentile = match scalar_value {
-        ScalarValue::Float32(Some(value)) => value as f64,
-        ScalarValue::Float64(Some(value)) => value,
-        sv => {
-            return Err(DataFusionError::Plan(format!(
-                "Percentile value for 'PERCENTILE_DISC' must be Float32 or Float64 literal (got data type {})",
-                sv.data_type()
-            )));
-        }
-    };
-
-    if !(0.0..=1.0).contains(&percentile) {
-        return Err(DataFusionError::Plan(format!(
-            "Percentile value must be between 0.0 and 1.0 inclusive, {percentile} is invalid"
-        )));
-    }
-    Ok(percentile)
 }
 
 pub fn filtered_null_mask(

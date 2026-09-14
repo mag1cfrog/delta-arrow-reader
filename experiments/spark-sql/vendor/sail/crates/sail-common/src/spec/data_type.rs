@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -314,21 +315,6 @@ pub enum TimestampType {
     Configured,
     WithLocalTimeZone,
     WithoutTimeZone,
-}
-
-impl DataType {
-    pub fn into_schema(self, default_field_name: &str, nullable: bool) -> Schema {
-        let fields = match self {
-            DataType::Struct { fields } => fields,
-            x => Fields::from(vec![Field {
-                name: default_field_name.to_string(),
-                data_type: x,
-                nullable,
-                metadata: vec![],
-            }]),
-        };
-        Schema { fields }
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]

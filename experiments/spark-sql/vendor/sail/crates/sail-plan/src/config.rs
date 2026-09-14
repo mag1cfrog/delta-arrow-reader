@@ -3,8 +3,6 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
 
-use crate::error::PlanResult;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
 pub enum DefaultTimestampType {
     TimestampLtz,
@@ -40,12 +38,6 @@ pub struct PlanConfig {
     /// Whether `COUNT()` is accepted with no arguments. Spark's legacy behavior returns zero;
     /// it does not interpret the call as `COUNT(*)`.
     pub legacy_allow_parameterless_count: bool,
-}
-
-impl PlanConfig {
-    pub fn new() -> PlanResult<Self> {
-        Ok(Self::default())
-    }
 }
 
 impl Default for PlanConfig {

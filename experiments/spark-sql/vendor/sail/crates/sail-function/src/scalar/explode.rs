@@ -1,22 +1,9 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::Result;
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
 use datafusion_common::plan_err;
 use datafusion_expr::ScalarFunctionArgs;
-
-pub fn explode_name_to_kind(name: &str) -> Result<ExplodeKind> {
-    match name {
-        "explode" => Ok(ExplodeKind::Explode),
-        "explode_outer" => Ok(ExplodeKind::ExplodeOuter),
-        "posexplode" => Ok(ExplodeKind::PosExplode),
-        "posexplode_outer" => Ok(ExplodeKind::PosExplodeOuter),
-        "inline" => Ok(ExplodeKind::Inline),
-        "inline_outer" => Ok(ExplodeKind::InlineOuter),
-        _ => Err(datafusion::error::DataFusionError::Plan(
-            "Invalid explode function name".to_string(),
-        )),
-    }
-}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Explode {

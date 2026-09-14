@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
@@ -13,20 +14,6 @@ use datafusion_expr::{
 use xee_xpath::{Documents, Queries, Query};
 
 use crate::functions_utils::make_scalar_function;
-
-pub fn xpath_typed_name_to_kind(name: &str) -> Result<XpathTypedKind> {
-    match name {
-        "xpath_boolean" => Ok(XpathTypedKind::Boolean),
-        "xpath_double" => Ok(XpathTypedKind::Double),
-        "xpath_float" => Ok(XpathTypedKind::Float),
-        "xpath_int" => Ok(XpathTypedKind::Int),
-        "xpath_long" => Ok(XpathTypedKind::Long),
-        "xpath_number" => Ok(XpathTypedKind::Number),
-        "xpath_short" => Ok(XpathTypedKind::Short),
-        "xpath_string" => Ok(XpathTypedKind::String),
-        _ => plan_err!("Invalid xpath typed function name: {name}"),
-    }
-}
 
 /// The kind of typed XPath function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

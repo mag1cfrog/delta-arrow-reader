@@ -30,7 +30,7 @@ fn session() -> ProbeResult<SessionContext> {
 async fn resolve(ctx: &SessionContext, sql: &str, settings: &Value) -> ProbeResult<NamedPlan> {
     let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
     let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
-    let mut config = PlanConfig::new()?;
+    let mut config = PlanConfig::default();
     config.ansi_mode = settings["spark.sql.ansi.enabled"] == "true";
     config.case_sensitive = settings["spark.sql.caseSensitive"] == "true";
     config.session_timezone = settings["spark.sql.session.timeZone"]
@@ -184,6 +184,34 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn hex_sql_uses_the_retained_implementations() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        let named = resolve(
+            &ctx,
+            "SELECT hex(255), hex('Spark'), hex(unhex('f')), unhex('bad!') IS NULL",
+            &settings,
+        )
+        .await?;
+        let batches = ctx
+            .execute_logical_plan(named.plan)
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        let values = batches[0]
+            .columns()
+            .iter()
+            .map(|column| array_value_to_string(column.as_ref(), 0))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(values, ["FF", "537061726B", "0F", "true"]);
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn rejects_dataframe_expressions_while_sql_fields_remain() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
@@ -218,7 +246,7 @@ mod tests {
                 .collect::<Result<Vec<_>, _>>()?;
             assert_eq!(values, expected, "{sql}");
         }
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         let missing = spec::Expr::UnresolvedAttribute {
             name: spec::ObjectName::bare("missing"),
             plan_id: None,
@@ -315,7 +343,7 @@ mod tests {
                 .collect::<Result<Vec<_>, _>>()?;
             assert_eq!(values, expected, "{sql}");
         }
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         let missing = sail_sql_analyzer::statement::from_ast_statement(
             sail_sql_analyzer::parser::parse_one_statement("SELECT * FROM missing_table")?,
         )?;
@@ -401,7 +429,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_dataframe_transforms_while_sql_paths_remain() -> ProbeResult<()> {
         let ctx = SessionContext::new();
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         let input = serde_json::to_value(spec::QueryPlan::new(spec::QueryNode::Read {
             read_type: spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
                 name: spec::ObjectName::bare("missing_table"),
@@ -510,7 +538,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_inline_arrow_payloads_before_decoding() -> ProbeResult<()> {
         let ctx = SessionContext::new();
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         for data in [None, Some(vec![]), Some(vec![0xff, 0x00, 0x01])] {
             let plan = spec::QueryPlan::new(spec::QueryNode::LocalRelation { data, schema: None });
             let error = resolver.resolve_named_plan(plan).await.unwrap_err();
@@ -565,7 +593,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_dataframe_statistics_before_resolving_inputs() -> ProbeResult<()> {
         let ctx = SessionContext::new();
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         let input = serde_json::to_value(spec::QueryPlan::new(spec::QueryNode::Read {
             read_type: spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
                 name: spec::ObjectName::bare("missing_table"),
@@ -633,7 +661,7 @@ mod tests {
     async fn rejects_streaming_and_checkpoints_before_resolving_inputs() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         ctx.register_table("registered", ctx.sql("SELECT 1 AS x").await?.into_view())?;
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         let named = spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
             name: spec::ObjectName::bare("registered"),
             temporal: None,
@@ -708,7 +736,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_external_sources_before_format_or_predicate_resolution() -> ProbeResult<()> {
         let ctx = SessionContext::new();
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         for format in [
             Some("parquet"),
             Some("delta"),
@@ -742,7 +770,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_writes_and_snapshot_modifiers_before_table_lookup() -> ProbeResult<()> {
         let ctx = SessionContext::new();
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         for sql in [
             "CREATE TABLE unwanted (x INT)",
             "INSERT INTO missing_table VALUES (1)",
@@ -927,7 +955,7 @@ mod tests {
     async fn rejects_python_entrypoints_before_payload_or_input_resolution() -> ProbeResult<()> {
         use spec::{CommonInlineUserDefinedFunction, QueryNode, QueryPlan};
         let ctx = session()?;
-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
         let function = CommonInlineUserDefinedFunction {
             function_name: "python_fn".into(),
             deterministic: true,

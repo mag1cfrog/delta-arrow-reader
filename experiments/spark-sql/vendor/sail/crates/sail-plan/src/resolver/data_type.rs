@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -79,14 +80,6 @@ impl PlanResolver<'_> {
         } else {
             adt::DataType::Utf8
         }
-    }
-
-    pub fn resolve_data_type_for_plan(
-        &self,
-        data_type: &spec::DataType,
-    ) -> PlanResult<adt::DataType> {
-        let mut state = PlanResolverState::new();
-        self.resolve_data_type(data_type, &mut state)
     }
 
     /// References:
@@ -384,15 +377,6 @@ impl PlanResolver<'_> {
             .map(|f| self.resolve_field(f, state))
             .collect::<PlanResult<Vec<_>>>()?;
         Ok(adt::Fields::from(fields))
-    }
-
-    pub(super) fn resolve_schema(
-        &self,
-        schema: spec::Schema,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<adt::Schema> {
-        let fields = self.resolve_fields(&schema.fields, state)?;
-        Ok(adt::Schema::new(fields))
     }
 
     pub fn resolve_time_unit(time_unit: &spec::TimeUnit) -> PlanResult<adt::TimeUnit> {

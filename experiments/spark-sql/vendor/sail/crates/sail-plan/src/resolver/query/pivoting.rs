@@ -7,9 +7,7 @@ use datafusion::functions_aggregate::count::count_udaf;
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{Column, DFSchema, DFSchemaRef, ScalarValue};
 use datafusion_expr::expr::{AggregateFunctionParams, NullTreatment};
-use datafusion_expr::{
-    ExprSchemable, LogicalPlan, LogicalPlanBuilder, Projection, ScalarUDF, col, expr, lit, when,
-};
+use datafusion_expr::{ExprSchemable, LogicalPlan, Projection, ScalarUDF, col, expr, lit, when};
 use datafusion_functions_nested::expr_fn as nested_fn;
 use sail_common::spec;
 use sail_common_datafusion::display::{ArrayFormatter, FormatOptions};

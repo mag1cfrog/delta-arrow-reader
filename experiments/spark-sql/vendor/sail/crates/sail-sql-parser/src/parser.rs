@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use chumsky::extra::ParserExtra;
 use chumsky::input::{Input, ValueInput};
 use chumsky::label::LabelError;
@@ -6,9 +7,9 @@ use chumsky::{IterParser, Parser};
 
 use crate::ast::data_type::DataType;
 use crate::ast::expression::{Expr, IntervalLiteral};
-use crate::ast::identifier::{Ident, ObjectName, QualifiedWildcard};
+use crate::ast::identifier::ObjectName;
 use crate::ast::operator::Semicolon;
-use crate::ast::query::{NamedExpr, Query, TableWithJoins};
+use crate::ast::query::{Query, TableWithJoins};
 use crate::ast::statement::Statement;
 use crate::options::ParserOptions;
 use crate::span::TokenSpan;
@@ -77,18 +78,6 @@ where
     ObjectName::parser((), options)
 }
 
-fn qualified_wildcard<'a, I, E>(
-    options: &'a ParserOptions,
-) -> impl Parser<'a, I, QualifiedWildcard, E> + Clone
-where
-    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
-    I::Span: Into<TokenSpan> + Clone,
-    E: ParserExtra<'a, I> + 'a,
-    E::Error: LabelError<'a, I, TokenLabel>,
-{
-    QualifiedWildcard::parser((), options)
-}
-
 fn expression<'a, I, E>(options: &'a ParserOptions) -> impl Parser<'a, I, Expr, E> + Clone
 where
     I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
@@ -116,19 +105,6 @@ where
     ));
 
     expression
-}
-
-fn named_expression<'a, I, E>(
-    options: &'a ParserOptions,
-) -> impl Parser<'a, I, NamedExpr, E> + Clone
-where
-    I: Input<'a, Token = Token<'a>> + ValueInput<'a>,
-    I::Span: Into<TokenSpan> + Clone,
-    E: ParserExtra<'a, I> + 'a,
-    E::Error: LabelError<'a, I, TokenLabel>,
-{
-    let ident = Ident::parser((), options);
-    NamedExpr::parser((expression(options), ident), options)
 }
 
 fn interval_literal<'a, I, E>(
@@ -186,13 +162,6 @@ macro_rules! define_sub_parser {
 
 define_sub_parser!(create_data_type_parser, DataType, data_type);
 define_sub_parser!(create_object_name_parser, ObjectName, object_name);
-define_sub_parser!(
-    create_qualified_wildcard_parser,
-    QualifiedWildcard,
-    qualified_wildcard,
-);
-define_sub_parser!(create_expression_parser, Expr, expression);
-define_sub_parser!(create_named_expression_parser, NamedExpr, named_expression);
 define_sub_parser!(
     create_interval_literal_parser,
     IntervalLiteral,

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
@@ -407,13 +408,6 @@ pub enum PySparkUdfType {
 impl PySparkUdfType {
     fn invalid(v: i32) -> CommonError {
         CommonError::invalid(format!("invalid PySpark UDF type: {v}"))
-    }
-
-    pub fn is_table_function(&self) -> bool {
-        matches!(
-            self,
-            PySparkUdfType::Table | PySparkUdfType::ArrowTable | PySparkUdfType::ArrowUdtf
-        )
     }
 }
 
