@@ -184,6 +184,56 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn ntile_keeps_larger_buckets_first() -> ProbeResult<()> {
+        use arrow::datatypes::DataType;
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        for batch_size in [1, 3, 1024] {
+            let ctx =
+                SessionContext::new_with_config(SessionConfig::new().with_batch_size(batch_size));
+            for rows in [0, 1, 2, 7, 10, 16] {
+                for buckets in [1, 2, 3, 4, 20] {
+                    let sql = format!(
+                        "SELECT ntile({buckets}) OVER (ORDER BY id) AS bucket FROM range({rows}) ORDER BY id"
+                    );
+                    let named = resolve(&ctx, &sql, &settings).await?;
+                    assert_eq!(named.fields, ["bucket"]);
+                    let field = &named.plan.schema().fields()[0];
+                    assert_eq!(field.data_type(), &DataType::Int32);
+                    assert!(!field.is_nullable());
+                    let batches = ctx
+                        .execute_logical_plan(named.plan)
+                        .await?
+                        .collect()
+                        .await?;
+                    let actual = batches
+                        .iter()
+                        .flat_map(|batch| {
+                            batch
+                                .column(0)
+                                .as_any()
+                                .downcast_ref::<Int32Array>()
+                                .unwrap()
+                                .values()
+                                .iter()
+                                .copied()
+                        })
+                        .collect::<Vec<_>>();
+                    let expected = (0..buckets)
+                        .flat_map(|bucket| {
+                            std::iter::repeat_n(
+                                (bucket + 1) as i32,
+                                rows / buckets + usize::from(bucket < rows % buckets),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    assert_eq!(actual, expected, "batch size {batch_size}: {sql}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn sql_literals_decode_without_reconstructing_sql_text() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
