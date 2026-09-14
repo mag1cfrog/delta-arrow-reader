@@ -161,5 +161,8 @@ Each cut keeps the fixed inputs, SQL and both checked-in baselines unchanged. Th
 | Cut | Gross Rust lines | All-target / Linux build packages | Rust runner / planner tests | Python tests |
 | --- | ---: | ---: | ---: | ---: |
 | DataFrame statistics and display | 101,311 | 549 / 483 | 9 / 11 | 9 |
+| Command analysis | 99,020 | 549 / 483 | 10 / 11 | 9 |
 
 The DataFrame cut removes NA/statistics resolvers, value replacement and unused ShowString/SchemaPivot nodes. All eleven NA/statistics spec variants now reject before input resolution. The new test first reproduced missing-table lookup, then verified the rejection and successful SQL COUNT, AVG, COVAR_SAMP, CORR and COALESCE execution. Shared value formatting remains because SQL casts and PIVOT use it. No test source was removed from the vendored crates.
+
+The command-analysis cut replaces command conversion with an explicit NotSupported error at AST dispatch. It removes 2,291 Rust lines of write/catalog/metadata command translation without changing query analysis or SQL grammar. The new test covers 23 command forms, including CTAS, views, writes, cache operations, EXPLAIN and session settings. Existing write/snapshot boundary checks now accept rejection at analysis or resolution, while still requiring NotSupported. Parsed commands therefore fail earlier; the fixed corpus still records the same planning-error stages. No vendored test source or resolved package changed.

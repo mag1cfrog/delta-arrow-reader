@@ -31,9 +31,6 @@ fn session() -> ProbeResult<SessionContext> {
 async fn resolve(ctx: &SessionContext, sql: &str, settings: &Value) -> ProbeResult<NamedPlan> {
     let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
     let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
-    if !matches!(&spec, spec::Plan::Query(_)) {
-        return Err("extraction probe accepts queries only".into());
-    }
     let mut config = PlanConfig::new()?;
     config.ansi_mode = settings["spark.sql.ansi.enabled"] == "true";
     config.case_sensitive = settings["spark.sql.caseSensitive"] == "true";
@@ -189,6 +186,45 @@ mod tests {
     use super::*;
     use arrow::array::{Array, Int32Array, ListArray, TimestampMicrosecondArray};
     use sail_plan::error::PlanError;
+
+    #[test]
+    fn rejects_commands_during_analysis() -> ProbeResult<()> {
+        use sail_sql_analyzer::error::SqlError;
+        for sql in [
+            "CREATE DATABASE unwanted",
+            "CREATE TABLE unwanted (x INT)",
+            "CREATE TABLE unwanted AS SELECT * FROM missing_table",
+            "CREATE VIEW unwanted AS SELECT * FROM missing_table",
+            "ALTER TABLE missing_table ADD COLUMNS (x INT)",
+            "DROP TABLE missing_table",
+            "INSERT INTO missing_table VALUES (1)",
+            "INSERT OVERWRITE DIRECTORY '/nonexistent/output' USING parquet SELECT 1",
+            "UPDATE missing_table SET x = 1",
+            "DELETE FROM missing_table",
+            "MERGE INTO missing_table t USING missing_source s ON t.x = s.x WHEN MATCHED THEN DELETE",
+            "LOAD DATA INPATH '/nonexistent/input' INTO TABLE missing_table",
+            "CACHE TABLE missing_table",
+            "UNCACHE TABLE missing_table",
+            "CLEAR CACHE",
+            "REFRESH TABLE missing_table",
+            "ANALYZE TABLE missing_table COMPUTE STATISTICS",
+            "SHOW TABLES",
+            "DESCRIBE TABLE missing_table",
+            "EXPLAIN SELECT * FROM missing_table",
+            "USE DATABASE unwanted",
+            "SET spark.sql.ansi.enabled = false",
+            "COMMENT ON TABLE missing_table IS 'unused'",
+        ] {
+            let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
+            let error = sail_sql_analyzer::statement::from_ast_statement(ast).unwrap_err();
+            assert!(
+                matches!(error, SqlError::NotSupported(ref message)
+                if message == "extraction probe accepts queries only"),
+                "{sql}: {error}"
+            );
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn rejects_dataframe_statistics_before_resolving_inputs() -> ProbeResult<()> {
@@ -383,8 +419,10 @@ mod tests {
             "SELECT * FROM missing_table TIMESTAMP AS OF '2024-01-01'",
         ] {
             let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
-            let plan = sail_sql_analyzer::statement::from_ast_statement(ast)?;
-            let error = resolver.resolve_named_plan(plan).await.unwrap_err();
+            let error = match sail_sql_analyzer::statement::from_ast_statement(ast) {
+                Ok(plan) => resolver.resolve_named_plan(plan).await.unwrap_err(),
+                Err(error) => PlanError::from(error),
+            };
             assert!(
                 matches!(error, PlanError::NotSupported(_)),
                 "{sql}: {error}"
