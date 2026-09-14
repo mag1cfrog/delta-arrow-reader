@@ -3,10 +3,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use num_enum::TryFromPrimitive;
 use serde::{Deserialize, Serialize};
-
-use crate::error::{CommonError, CommonResult};
 
 pub const ARROW_DECIMAL128_MAX_PRECISION: u8 = arrow_schema::DECIMAL128_MAX_PRECISION;
 pub const ARROW_DECIMAL128_MAX_SCALE: i8 = arrow_schema::DECIMAL128_MAX_SCALE;
@@ -56,31 +53,12 @@ pub const GEOSPATIAL_DEFAULT_CRS: &str = "OGC:CRS84";
 ///
 /// Spark 4.1 only defines Spherical interpolation for Geography types.
 /// Reference: org.apache.spark.sql.types.EdgeInterpolationAlgorithm
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    TryFromPrimitive,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[num_enum(error_type(name = CommonError, constructor = EdgeInterpolationAlgorithm::invalid))]
 #[repr(i32)]
 pub enum EdgeInterpolationAlgorithm {
     /// Spherical edge interpolation (geodetic coordinates on a sphere).
     Spherical = 0,
-}
-
-impl EdgeInterpolationAlgorithm {
-    fn invalid(value: i32) -> CommonError {
-        CommonError::invalid(format!("edge interpolation algorithm: {value}"))
-    }
 }
 
 impl std::fmt::Display for EdgeInterpolationAlgorithm {
@@ -427,33 +405,14 @@ impl FromIterator<(i8, FieldRef)> for UnionFields {
 }
 
 /// Sparse or dense union layouts.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    TryFromPrimitive,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[num_enum(error_type(name = CommonError, constructor = UnionMode::invalid))]
 #[repr(i32)]
 pub enum UnionMode {
     /// Sparse union layout.
     Sparse = 0,
     /// Dense union layout.
     Dense = 1,
-}
-
-impl UnionMode {
-    fn invalid(value: i32) -> CommonError {
-        CommonError::invalid(format!("interval union mode: {value}"))
-    }
 }
 
 impl Display for UnionMode {
@@ -466,21 +425,8 @@ impl Display for UnionMode {
 }
 
 /// YEAR_MONTH, DAY_TIME, MONTH_DAY_NANO interval in SQL style.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    TryFromPrimitive,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[num_enum(error_type(name = CommonError, constructor = IntervalUnit::invalid))]
 #[repr(i32)]
 pub enum IntervalUnit {
     /// Indicates the number of elapsed whole months, stored as 4-byte integers.
@@ -499,83 +445,8 @@ pub enum IntervalUnit {
     MonthDayNano = 2,
 }
 
-impl IntervalUnit {
-    fn invalid(value: i32) -> CommonError {
-        CommonError::invalid(format!("interval unit field: {value}"))
-    }
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    TryFromPrimitive,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[num_enum(error_type(name = CommonError, constructor = DayTimeIntervalField::invalid))]
-#[repr(i32)]
-pub enum DayTimeIntervalField {
-    Day = 0,
-    Hour = 1,
-    Minute = 2,
-    Second = 3,
-}
-
-impl DayTimeIntervalField {
-    fn invalid(value: i32) -> CommonError {
-        CommonError::invalid(format!("day time interval field: {value}"))
-    }
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    TryFromPrimitive,
-)]
-#[serde(rename_all = "camelCase")]
-#[num_enum(error_type(name = CommonError, constructor = YearMonthIntervalField::invalid))]
-#[repr(i32)]
-pub enum YearMonthIntervalField {
-    Year = 0,
-    Month = 1,
-}
-
-impl YearMonthIntervalField {
-    fn invalid(value: i32) -> CommonError {
-        CommonError::invalid(format!("year month interval field: {value}"))
-    }
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    TryFromPrimitive,
-)]
-#[serde(rename_all = "camelCase")]
-#[num_enum(error_type(name = CommonError, constructor = IntervalFieldType::invalid))]
 #[repr(i32)]
 pub enum IntervalFieldType {
     Year = 0,
@@ -584,36 +455,6 @@ pub enum IntervalFieldType {
     Hour = 3,
     Minute = 4,
     Second = 5,
-}
-
-impl IntervalFieldType {
-    fn invalid(value: i32) -> CommonError {
-        CommonError::invalid(format!("interval field type: {value}"))
-    }
-}
-
-impl TryFrom<DayTimeIntervalField> for IntervalFieldType {
-    type Error = CommonError;
-
-    fn try_from(field_type: DayTimeIntervalField) -> CommonResult<IntervalFieldType> {
-        match field_type {
-            DayTimeIntervalField::Day => Ok(IntervalFieldType::Day),
-            DayTimeIntervalField::Hour => Ok(IntervalFieldType::Hour),
-            DayTimeIntervalField::Minute => Ok(IntervalFieldType::Minute),
-            DayTimeIntervalField::Second => Ok(IntervalFieldType::Second),
-        }
-    }
-}
-
-impl TryFrom<YearMonthIntervalField> for IntervalFieldType {
-    type Error = CommonError;
-
-    fn try_from(field_type: YearMonthIntervalField) -> CommonResult<IntervalFieldType> {
-        match field_type {
-            YearMonthIntervalField::Year => Ok(IntervalFieldType::Year),
-            YearMonthIntervalField::Month => Ok(IntervalFieldType::Month),
-        }
-    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

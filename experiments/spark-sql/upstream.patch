@@ -1,5 +1,5 @@
 diff --git a/Cargo.toml b/Cargo.toml
-index e8af02f..505c4bc 100644
+index e8af02f..d57376b 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -50,7 +50,7 @@ index e8af02f..505c4bc 100644
  syn = "2.0.117"
  quote = "1.0.45"
  paste = "1.0.15"
-@@ -66,97 +47,21 @@ prettyplease = "0.2.37"
+@@ -66,97 +47,20 @@ prettyplease = "0.2.37"
  phf = { version = "0.13.1", features = ["macros"] }
  ryu = "1.0.23"
  either = "1.16.0"
@@ -68,7 +68,7 @@ index e8af02f..505c4bc 100644
 -aws-smithy-types = "1.4.7"
 -aws-smithy-async = "1.2.14"
 -clap = { version = "4.6.1", features = ["derive"] }
- num_enum = "0.7.6"
+-num_enum = "0.7.6"
 -num-traits = "0.2.19"
 -log = "0.4.31"
 -env_logger = "0.11.10"
@@ -148,7 +148,7 @@ index e8af02f..505c4bc 100644
  datafusion = { version = "54.1.0", default-features = false, features = [
      "nested_expressions",
      "crypto_expressions",
-@@ -167,44 +72,22 @@ datafusion = { version = "54.1.0", default-features = false, features = [
+@@ -167,44 +71,22 @@ datafusion = { version = "54.1.0", default-features = false, features = [
      "unicode_expressions",
      "compression",
      "parquet",
@@ -8509,7 +8509,7 @@ index 54d01e4..2f1e66e 100644
 -    }
 -}
 diff --git a/crates/sail-common/Cargo.toml b/crates/sail-common/Cargo.toml
-index 7ac30bf..91a8385 100644
+index 7ac30bf..bce6ee7 100644
 --- a/crates/sail-common/Cargo.toml
 +++ b/crates/sail-common/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -8517,7 +8517,7 @@ index 7ac30bf..91a8385 100644
  [package]
  name = "sail-common"
  version = { workspace = true }
-@@ -12,27 +13,10 @@ workspace = true
+@@ -12,27 +13,9 @@ workspace = true
  [dependencies]
  # Ideally we should use the re-exported version of Arrow in DataFusion,
  # but here we depend on the Arrow crates directly so that this crate can be built without DataFusion.
@@ -8529,7 +8529,7 @@ index 7ac30bf..91a8385 100644
  serde_json = { workspace = true }
 -serde_yaml = { workspace = true }
 -glob = { workspace = true }
- num_enum = { workspace = true }
+-num_enum = { workspace = true }
 -num-traits = { workspace = true }
 -figment = { workspace = true }
  half = { workspace = true }
@@ -11442,15 +11442,59 @@ index 391f59b..0000000
 -
 -pub use builder::{ServerBuilder, ServerBuilderOptions};
 diff --git a/crates/sail-common/src/spec/data_type.rs b/crates/sail-common/src/spec/data_type.rs
-index 206d070..aa36a44 100644
+index 206d070..5be7c00 100644
 --- a/crates/sail-common/src/spec/data_type.rs
 +++ b/crates/sail-common/src/spec/data_type.rs
-@@ -1,3 +1,4 @@
+@@ -1,12 +1,10 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::fmt::Display;
  use std::ops::Deref;
  use std::sync::Arc;
-@@ -316,21 +317,6 @@ pub enum TimestampType {
+ 
+-use num_enum::TryFromPrimitive;
+ use serde::{Deserialize, Serialize};
+ 
+-use crate::error::{CommonError, CommonResult};
+-
+ pub const ARROW_DECIMAL128_MAX_PRECISION: u8 = arrow_schema::DECIMAL128_MAX_PRECISION;
+ pub const ARROW_DECIMAL128_MAX_SCALE: i8 = arrow_schema::DECIMAL128_MAX_SCALE;
+ pub const ARROW_DECIMAL256_MAX_PRECISION: u8 = arrow_schema::DECIMAL256_MAX_PRECISION;
+@@ -55,33 +53,14 @@ pub const GEOSPATIAL_DEFAULT_CRS: &str = "OGC:CRS84";
+ ///
+ /// Spark 4.1 only defines Spherical interpolation for Geography types.
+ /// Reference: org.apache.spark.sql.types.EdgeInterpolationAlgorithm
+-#[derive(
+-    Debug,
+-    Clone,
+-    Copy,
+-    PartialEq,
+-    Eq,
+-    Hash,
+-    PartialOrd,
+-    Ord,
+-    Serialize,
+-    Deserialize,
+-    TryFromPrimitive,
+-)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+-#[num_enum(error_type(name = CommonError, constructor = EdgeInterpolationAlgorithm::invalid))]
+ #[repr(i32)]
+ pub enum EdgeInterpolationAlgorithm {
+     /// Spherical edge interpolation (geodetic coordinates on a sphere).
+     Spherical = 0,
+ }
+ 
+-impl EdgeInterpolationAlgorithm {
+-    fn invalid(value: i32) -> CommonError {
+-        CommonError::invalid(format!("edge interpolation algorithm: {value}"))
+-    }
+-}
+-
+ impl std::fmt::Display for EdgeInterpolationAlgorithm {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+         match self {
+@@ -316,21 +295,6 @@ pub enum TimestampType {
      WithoutTimeZone,
  }
  
@@ -11472,19 +11516,231 @@ index 206d070..aa36a44 100644
  #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
  #[serde(rename_all = "camelCase")]
  pub struct Field {
+@@ -441,21 +405,8 @@ impl FromIterator<(i8, FieldRef)> for UnionFields {
+ }
+ 
+ /// Sparse or dense union layouts.
+-#[derive(
+-    Debug,
+-    Clone,
+-    Copy,
+-    PartialEq,
+-    Eq,
+-    Hash,
+-    PartialOrd,
+-    Ord,
+-    Serialize,
+-    Deserialize,
+-    TryFromPrimitive,
+-)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+-#[num_enum(error_type(name = CommonError, constructor = UnionMode::invalid))]
+ #[repr(i32)]
+ pub enum UnionMode {
+     /// Sparse union layout.
+@@ -464,12 +415,6 @@ pub enum UnionMode {
+     Dense = 1,
+ }
+ 
+-impl UnionMode {
+-    fn invalid(value: i32) -> CommonError {
+-        CommonError::invalid(format!("interval union mode: {value}"))
+-    }
+-}
+-
+ impl Display for UnionMode {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+         match self {
+@@ -480,21 +425,8 @@ impl Display for UnionMode {
+ }
+ 
+ /// YEAR_MONTH, DAY_TIME, MONTH_DAY_NANO interval in SQL style.
+-#[derive(
+-    Debug,
+-    Clone,
+-    Copy,
+-    PartialEq,
+-    Eq,
+-    Hash,
+-    PartialOrd,
+-    Ord,
+-    Serialize,
+-    Deserialize,
+-    TryFromPrimitive,
+-)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+-#[num_enum(error_type(name = CommonError, constructor = IntervalUnit::invalid))]
+ #[repr(i32)]
+ pub enum IntervalUnit {
+     /// Indicates the number of elapsed whole months, stored as 4-byte integers.
+@@ -513,83 +445,8 @@ pub enum IntervalUnit {
+     MonthDayNano = 2,
+ }
+ 
+-impl IntervalUnit {
+-    fn invalid(value: i32) -> CommonError {
+-        CommonError::invalid(format!("interval unit field: {value}"))
+-    }
+-}
+-
+-#[derive(
+-    Debug,
+-    Clone,
+-    Copy,
+-    PartialEq,
+-    Eq,
+-    Hash,
+-    PartialOrd,
+-    Ord,
+-    Serialize,
+-    Deserialize,
+-    TryFromPrimitive,
+-)]
+-#[serde(rename_all = "camelCase")]
+-#[num_enum(error_type(name = CommonError, constructor = DayTimeIntervalField::invalid))]
+-#[repr(i32)]
+-pub enum DayTimeIntervalField {
+-    Day = 0,
+-    Hour = 1,
+-    Minute = 2,
+-    Second = 3,
+-}
+-
+-impl DayTimeIntervalField {
+-    fn invalid(value: i32) -> CommonError {
+-        CommonError::invalid(format!("day time interval field: {value}"))
+-    }
+-}
+-
+-#[derive(
+-    Debug,
+-    Clone,
+-    Copy,
+-    PartialEq,
+-    Eq,
+-    Hash,
+-    PartialOrd,
+-    Ord,
+-    Serialize,
+-    Deserialize,
+-    TryFromPrimitive,
+-)]
+-#[serde(rename_all = "camelCase")]
+-#[num_enum(error_type(name = CommonError, constructor = YearMonthIntervalField::invalid))]
+-#[repr(i32)]
+-pub enum YearMonthIntervalField {
+-    Year = 0,
+-    Month = 1,
+-}
+-
+-impl YearMonthIntervalField {
+-    fn invalid(value: i32) -> CommonError {
+-        CommonError::invalid(format!("year month interval field: {value}"))
+-    }
+-}
+-
+-#[derive(
+-    Debug,
+-    Clone,
+-    Copy,
+-    PartialEq,
+-    Eq,
+-    Hash,
+-    PartialOrd,
+-    Ord,
+-    Serialize,
+-    Deserialize,
+-    TryFromPrimitive,
+-)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+-#[num_enum(error_type(name = CommonError, constructor = IntervalFieldType::invalid))]
+ #[repr(i32)]
+ pub enum IntervalFieldType {
+     Year = 0,
+@@ -600,36 +457,6 @@ pub enum IntervalFieldType {
+     Second = 5,
+ }
+ 
+-impl IntervalFieldType {
+-    fn invalid(value: i32) -> CommonError {
+-        CommonError::invalid(format!("interval field type: {value}"))
+-    }
+-}
+-
+-impl TryFrom<DayTimeIntervalField> for IntervalFieldType {
+-    type Error = CommonError;
+-
+-    fn try_from(field_type: DayTimeIntervalField) -> CommonResult<IntervalFieldType> {
+-        match field_type {
+-            DayTimeIntervalField::Day => Ok(IntervalFieldType::Day),
+-            DayTimeIntervalField::Hour => Ok(IntervalFieldType::Hour),
+-            DayTimeIntervalField::Minute => Ok(IntervalFieldType::Minute),
+-            DayTimeIntervalField::Second => Ok(IntervalFieldType::Second),
+-        }
+-    }
+-}
+-
+-impl TryFrom<YearMonthIntervalField> for IntervalFieldType {
+-    type Error = CommonError;
+-
+-    fn try_from(field_type: YearMonthIntervalField) -> CommonResult<IntervalFieldType> {
+-        match field_type {
+-            YearMonthIntervalField::Year => Ok(IntervalFieldType::Year),
+-            YearMonthIntervalField::Month => Ok(IntervalFieldType::Month),
+-        }
+-    }
+-}
+-
+ #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+ pub struct Schema {
+     pub fields: Fields,
 diff --git a/crates/sail-common/src/spec/expression.rs b/crates/sail-common/src/spec/expression.rs
-index 25af46d..31e27a9 100644
+index 25af46d..fdc4161 100644
 --- a/crates/sail-common/src/spec/expression.rs
 +++ b/crates/sail-common/src/spec/expression.rs
-@@ -1,3 +1,4 @@
+@@ -1,7 +1,6 @@
+-use num_enum::{IntoPrimitive, TryFromPrimitive};
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use num_enum::{IntoPrimitive, TryFromPrimitive};
  use serde::{Deserialize, Serialize};
  
-@@ -408,13 +409,6 @@ impl PySparkUdfType {
-     fn invalid(v: i32) -> CommonError {
-         CommonError::invalid(format!("invalid PySpark UDF type: {v}"))
-     }
+-use crate::error::CommonError;
+ use crate::spec::data_type::DataType;
+ use crate::spec::literal::Literal;
+ use crate::spec::{QueryPlan, TimestampType};
+@@ -355,21 +354,8 @@ pub enum TableFunctionDefinition {
+     },
+ }
+ 
+-#[derive(
+-    Debug,
+-    Clone,
+-    Copy,
+-    PartialEq,
+-    Eq,
+-    Hash,
+-    PartialOrd,
+-    Serialize,
+-    Deserialize,
+-    TryFromPrimitive,
+-    IntoPrimitive,
+-)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+-#[num_enum(error_type(name = CommonError, constructor = PySparkUdfType::invalid))]
+ #[repr(i32)]
+ pub enum PySparkUdfType {
+     None = 0,
+@@ -404,19 +390,6 @@ pub enum PySparkUdfType {
+     ArrowUdtf = 302,
+ }
+ 
+-impl PySparkUdfType {
+-    fn invalid(v: i32) -> CommonError {
+-        CommonError::invalid(format!("invalid PySpark UDF type: {v}"))
+-    }
 -
 -    pub fn is_table_function(&self) -> bool {
 -        matches!(
@@ -11492,9 +11748,11 @@ index 25af46d..31e27a9 100644
 -            PySparkUdfType::Table | PySparkUdfType::ArrowTable | PySparkUdfType::ArrowUdtf
 -        )
 -    }
- }
- 
+-}
+-
  #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+ pub struct UnresolvedNamedLambdaVariable {
 diff --git a/crates/sail-common/src/spec/plan.rs b/crates/sail-common/src/spec/plan.rs
 index 052a216..a2c2c6c 100644
 --- a/crates/sail-common/src/spec/plan.rs

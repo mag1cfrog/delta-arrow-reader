@@ -1,8 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
-use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
-use crate::error::CommonError;
 use crate::spec::data_type::DataType;
 use crate::spec::literal::Literal;
 use crate::spec::{QueryPlan, TimestampType};
@@ -356,21 +354,8 @@ pub enum TableFunctionDefinition {
     },
 }
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Serialize,
-    Deserialize,
-    TryFromPrimitive,
-    IntoPrimitive,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[num_enum(error_type(name = CommonError, constructor = PySparkUdfType::invalid))]
 #[repr(i32)]
 pub enum PySparkUdfType {
     None = 0,
@@ -403,12 +388,6 @@ pub enum PySparkUdfType {
     Table = 300,
     ArrowTable = 301,
     ArrowUdtf = 302,
-}
-
-impl PySparkUdfType {
-    fn invalid(v: i32) -> CommonError {
-        CommonError::invalid(format!("invalid PySpark UDF type: {v}"))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

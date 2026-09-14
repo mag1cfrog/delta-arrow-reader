@@ -1,14 +1,14 @@
 {
-  "source_sha256": "1f4c878c007d962b00ebd372bc94ca39ef7e82ad7cb5f63117e217b47a04a939",
+  "source_sha256": "cd0393c54bb4bad83a00d9df75a8578e30d38414c6eda1b79aeb33d4c44d8fbb",
   "crates": [
     {
       "crate": "sail-common",
       "rust_files": 13,
-      "gross_lines": 2281,
-      "nonblank_lines": 2125,
+      "gross_lines": 2101,
+      "nonblank_lines": 1959,
       "test_lines": 0,
       "build_script_lines": 0,
-      "production_lines": 2281
+      "production_lines": 2101
     },
     {
       "crate": "sail-common-datafusion",
@@ -76,15 +76,15 @@
   ],
   "totals": {
     "rust_files": 351,
-    "gross_lines": 92879,
-    "nonblank_lines": 85376,
+    "gross_lines": 92699,
+    "nonblank_lines": 85210,
     "test_lines": 7816,
     "build_script_lines": 80,
-    "production_lines": 84983
+    "production_lines": 84803
   },
-  "lock_packages": 539,
-  "resolved_packages_all_targets_including_dev": 539,
-  "linux_normal_build_packages_including_runner": 472,
+  "lock_packages": 537,
+  "resolved_packages_all_targets_including_dev": 537,
+  "linux_normal_build_packages_including_runner": 465,
   "python_packages_in_linux_build": [],
   "build_generated_rust": {
     "sail-sql-parser": {

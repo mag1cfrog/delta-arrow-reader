@@ -18,5 +18,4 @@ arrow-schema = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-num_enum = { workspace = true }
 half = { workspace = true }
