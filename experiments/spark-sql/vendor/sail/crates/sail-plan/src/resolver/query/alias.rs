@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion_common::TableReference;
@@ -9,22 +10,6 @@ use crate::resolver::PlanResolver;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
-    pub(super) async fn resolve_query_subquery_alias(
-        &self,
-        input: spec::QueryPlan,
-        alias: spec::Identifier,
-        qualifier: Vec<spec::Identifier>,
-        state: &mut PlanResolverState,
-    ) -> PlanResult<LogicalPlan> {
-        let input = self
-            .resolve_query_plan_with_hidden_fields(input, state)
-            .await?;
-        Ok(LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(
-            Arc::new(input),
-            self.resolve_table_reference(&spec::ObjectName::from(qualifier).child(alias))?,
-        )?))
-    }
-
     pub(super) async fn resolve_query_table_alias(
         &self,
         input: spec::QueryPlan,

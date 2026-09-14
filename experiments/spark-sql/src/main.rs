@@ -184,6 +184,97 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn rejects_connect_scopes_while_sql_subqueries_remain() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        for (sql, expected) in [
+            (
+                "WITH source AS (SELECT * FROM VALUES (1,2),(3,4) AS v(a,b)) SELECT
+                (SELECT MAX(a) FROM source)",
+                vec!["3"],
+            ),
+            (
+                "WITH source AS (SELECT * FROM VALUES (1,2),(3,4) AS v(a,b)) SELECT MAX(a)
+                FROM source WHERE EXISTS(SELECT * FROM source WHERE a=3)",
+                vec!["3"],
+            ),
+            (
+                "WITH source AS (SELECT * FROM VALUES (1,2),(3,4) AS v(a,b)) SELECT a,b
+                FROM source WHERE (a,b) IN (SELECT a,b FROM source WHERE a=1)",
+                vec!["1", "2"],
+            ),
+            (
+                "WITH source AS (SELECT * FROM VALUES (1,2),(3,4) AS v(a,b)) SELECT a,b
+                FROM source WHERE (a,b) NOT IN (SELECT a,b FROM source WHERE a=1)",
+                vec!["3", "4"],
+            ),
+            ("SELECT IDENTIFIER('a') FROM VALUES (7) AS v(a)", vec!["7"]),
+        ] {
+            let named = resolve(&ctx, sql, &settings).await?;
+            let batches = ctx
+                .execute_logical_plan(named.plan)
+                .await?
+                .collect()
+                .await?;
+            assert_eq!(
+                batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+                1
+            );
+            let values = batches[0]
+                .columns()
+                .iter()
+                .map(|column| array_value_to_string(column.as_ref(), 0))
+                .collect::<Result<Vec<_>, _>>()?;
+            assert_eq!(values, expected, "{sql}");
+        }
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let missing = sail_sql_analyzer::statement::from_ast_statement(
+            sail_sql_analyzer::parser::parse_one_statement("SELECT * FROM missing_table")?,
+        )?;
+        let mut nodes = vec![
+            spec::QueryNode::WithParameters {
+                input: Box::new(missing.clone()),
+                positional_arguments: vec![],
+                named_arguments: vec![],
+            },
+            spec::QueryNode::WithRelations {
+                root: Box::new(missing.clone()),
+                references: vec![],
+            },
+            spec::QueryNode::SubqueryAlias {
+                input: Box::new(missing),
+                alias: "alias".into(),
+                qualifier: vec![],
+            },
+        ];
+        for subquery_type in [
+            spec::SubqueryType::In,
+            spec::SubqueryType::Scalar,
+            spec::SubqueryType::Exists,
+        ] {
+            for negated in [false, true] {
+                nodes.push(spec::QueryNode::Project {
+                    input: None,
+                    expressions: vec![spec::Expr::Subquery {
+                        plan_id: 42,
+                        subquery_type: subquery_type.clone(),
+                        in_subquery_values: vec![],
+                        negated,
+                    }],
+                });
+            }
+        }
+        for node in nodes {
+            let error = resolver
+                .resolve_named_plan(spec::QueryPlan::new(node))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, PlanError::NotSupported(_)), "{error}");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn variant_sql_survives_storage_removal() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});

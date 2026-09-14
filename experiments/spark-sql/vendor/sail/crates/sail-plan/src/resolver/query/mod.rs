@@ -25,7 +25,6 @@ mod set_op;
 mod sort;
 mod values;
 mod window;
-mod with_relations;
 
 impl PlanResolver<'_> {
     /// Resolve query plan.
@@ -101,18 +100,15 @@ impl PlanResolver<'_> {
             QueryNode::Aggregate(aggregate) => {
                 self.resolve_query_aggregate(aggregate, state).await?
             }
-            QueryNode::WithParameters {
-                input,
-                positional_arguments,
-                named_arguments,
-            } => {
-                self.resolve_query_with_parameters(
-                    *input,
-                    positional_arguments,
-                    named_arguments,
-                    state,
-                )
-                .await?
+            QueryNode::WithParameters { .. } => {
+                return Err(PlanError::unsupported(
+                    "extraction probe: parameter binding",
+                ));
+            }
+            QueryNode::WithRelations { .. } | QueryNode::SubqueryAlias { .. } => {
+                return Err(PlanError::unsupported(
+                    "extraction probe: Spark Connect relations",
+                ));
             }
             QueryNode::LocalRelation { .. } => {
                 return Err(PlanError::unsupported(
@@ -125,14 +121,6 @@ impl PlanResolver<'_> {
             }
             QueryNode::Deduplicate(deduplicate) => {
                 self.resolve_query_deduplicate(deduplicate, state).await?
-            }
-            QueryNode::SubqueryAlias {
-                input,
-                alias,
-                qualifier,
-            } => {
-                self.resolve_query_subquery_alias(*input, alias, qualifier, state)
-                    .await?
             }
             QueryNode::Sample(_)
             | QueryNode::Range(_)
@@ -204,10 +192,6 @@ impl PlanResolver<'_> {
                 ctes,
             } => {
                 self.resolve_query_with_ctes(*input, recursive, ctes, state)
-                    .await?
-            }
-            QueryNode::WithRelations { root, references } => {
-                self.resolve_query_with_relations(*root, references, state)
                     .await?
             }
             QueryNode::LateralView {

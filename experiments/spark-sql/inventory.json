@@ -1,5 +1,5 @@
 {
-  "source_sha256": "6ed3775c1ca97373ee1662b97d4f1938f9844747f46e4e389f918ba56954273e",
+  "source_sha256": "62159c55cf8af1fd77ad31fb6ab81c5bc6609112865f3116e20988342b423c5b",
   "crates": [
     {
       "crate": "sail-common",
@@ -39,21 +39,21 @@
     },
     {
       "crate": "sail-plan",
-      "rust_files": 78,
-      "gross_lines": 19672,
-      "nonblank_lines": 18428,
+      "rust_files": 77,
+      "gross_lines": 19313,
+      "nonblank_lines": 18090,
       "test_lines": 779,
       "build_script_lines": 0,
-      "production_lines": 18893
+      "production_lines": 18534
     },
     {
       "crate": "sail-sql-analyzer",
       "rust_files": 14,
-      "gross_lines": 4414,
-      "nonblank_lines": 4195,
+      "gross_lines": 4394,
+      "nonblank_lines": 4177,
       "test_lines": 299,
       "build_script_lines": 0,
-      "production_lines": 4115
+      "production_lines": 4095
     },
     {
       "crate": "sail-sql-macro",
@@ -75,12 +75,12 @@
     }
   ],
   "totals": {
-    "rust_files": 357,
-    "gross_lines": 94554,
-    "nonblank_lines": 86871,
+    "rust_files": 356,
+    "gross_lines": 94175,
+    "nonblank_lines": 86515,
     "test_lines": 7816,
     "build_script_lines": 80,
-    "production_lines": 86658
+    "production_lines": 86279
   },
   "lock_packages": 540,
   "resolved_packages_all_targets_including_dev": 540,

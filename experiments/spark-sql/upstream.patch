@@ -38635,7 +38635,7 @@ index 309481e..63b0b79 100644
              vec![name],
              expr::Expr::Literal(literal, None),
 diff --git a/crates/sail-plan/src/resolver/expression/misc.rs b/crates/sail-plan/src/resolver/expression/misc.rs
-index fd946d2..ad46128 100644
+index fd946d2..ab97f82 100644
 --- a/crates/sail-plan/src/resolver/expression/misc.rs
 +++ b/crates/sail-plan/src/resolver/expression/misc.rs
 @@ -1,3 +1,4 @@
@@ -38661,7 +38661,65 @@ index fd946d2..ad46128 100644
  use crate::resolver::PlanResolver;
  use crate::resolver::expression::NamedExpr;
  use crate::resolver::state::PlanResolverState;
-@@ -287,10 +287,9 @@ impl PlanResolver<'_> {
+@@ -84,7 +84,7 @@ impl PlanResolver<'_> {
+         state: &mut PlanResolverState,
+     ) -> PlanResult<NamedExpr> {
+         let resolved = self.resolve_expression(expr, schema, state).await?;
+-        let name = self.evaluate_identifier_expr(resolved, state)?;
++        let name = self.evaluate_identifier_expr(resolved)?;
+         let object_name = sail_sql_analyzer::expression::from_ast_object_name(
+             sail_sql_analyzer::parser::parse_object_name(&name)?,
+         )?;
+@@ -93,48 +93,11 @@ impl PlanResolver<'_> {
+ 
+     /// Evaluates a resolved DataFusion expression as an identifier string.
+     ///
+-    /// Named parameter placeholders (e.g. `:col`) are substituted from the
+-    /// current parameter scope in `state` before constant-folding, which
+-    /// allows expressions like `IDENTIFIER(:col)` or
+-    /// `IDENTIFIER(:tab || '.' || :col)` to work inside parameterized SQL.
+     pub(in super::super) fn evaluate_identifier_expr(
+         &self,
+         expr: expr::Expr,
+-        state: &PlanResolverState,
+     ) -> PlanResult<String> {
+-        use datafusion_common::tree_node::{Transformed, TreeNode};
+-        let expr = expr
+-            .transform(|e| {
+-                if let expr::Expr::Placeholder(expr::Placeholder { id, .. }) = &e {
+-                    if id.is_empty() {
+-                        return Ok(Transformed::no(e));
+-                    }
+-                    // Strip the leading prefix character (e.g. ':' or '$') from the
+-                    // placeholder id to get the param key, mirroring DataFusion's own
+-                    // `get_placeholders_with_values` which does `id[1..]`.
+-                    let key = &id[1..];
+-                    // Try named parameter.
+-                    if let Some(scalar) = state.get_param_value(key) {
+-                        return Ok(Transformed::yes(expr::Expr::Literal(scalar.clone(), None)));
+-                    }
+-                    // Try positional parameter (key is a 1-based integer index).
+-                    if let Ok(index) = key.parse::<usize>()
+-                        && index > 0
+-                        && let Some(scalar) = state.get_positional_param_value(index - 1)
+-                    {
+-                        return Ok(Transformed::yes(expr::Expr::Literal(scalar.clone(), None)));
+-                    }
+-                }
+-                Ok(Transformed::no(e))
+-            })
+-            .map_err(|e| {
+-                PlanError::invalid(format!("IDENTIFIER placeholder substitution failed: {e}"))
+-            })?
+-            .data;
+         let evaluator = LiteralEvaluator::new();
+-        // Any placeholder that was not substituted above (e.g. because it had no
+-        // matching parameter) will cause the evaluation to fail here, since the
+-        // LiteralEvaluator cannot constant-fold an unresolved placeholder expression.
+         let scalar = evaluator.evaluate(&expr).map_err(|e| {
+             PlanError::invalid(format!("IDENTIFIER expression must be a constant: {e}"))
+         })?;
+@@ -287,10 +250,9 @@ impl PlanResolver<'_> {
              _ => return Err(PlanError::invalid("extraction must be a literal")),
          };
          let extraction = self.resolve_literal(extraction, state)?;
@@ -38676,7 +38734,7 @@ index fd946d2..ad46128 100644
              DataType::Struct(_) => {
                  format!("{}.{}", name.one()?, extraction_name)
 diff --git a/crates/sail-plan/src/resolver/expression/mod.rs b/crates/sail-plan/src/resolver/expression/mod.rs
-index 6e1d2ce..9f614e0 100644
+index 6e1d2ce..70cc9f6 100644
 --- a/crates/sail-plan/src/resolver/expression/mod.rs
 +++ b/crates/sail-plan/src/resolver/expression/mod.rs
 @@ -1,3 +1,4 @@
@@ -38704,7 +38762,33 @@ index 6e1d2ce..9f614e0 100644
              }
              Expr::CallFunction {
                  function_name,
-@@ -411,43 +410,17 @@ mod tests {
+@@ -240,22 +239,9 @@ impl PlanResolver<'_> {
+                 self.resolve_expression_exists(*subquery, negated, schema, state)
+                     .await
+             }
+-            Expr::Subquery {
+-                plan_id,
+-                subquery_type,
+-                in_subquery_values,
+-                negated,
+-            } => {
+-                self.resolve_expression_subquery(
+-                    plan_id,
+-                    subquery_type,
+-                    in_subquery_values,
+-                    negated,
+-                    schema,
+-                    state,
+-                )
+-                .await
+-            }
++            Expr::Subquery { .. } => Err(PlanError::unsupported(
++                "extraction probe: Spark Connect subquery references",
++            )),
+             Expr::InList {
+                 expr,
+                 list,
+@@ -411,43 +397,17 @@ mod tests {
      use datafusion_common::{DFSchema, ScalarValue};
      use datafusion_expr::expr::{Alias, Expr};
      use datafusion_expr::{BinaryExpr, Operator};
@@ -38749,6 +38833,69 @@ index 6e1d2ce..9f614e0 100644
          Ok(SessionContext::new_with_state(state))
      }
  
+diff --git a/crates/sail-plan/src/resolver/expression/subquery.rs b/crates/sail-plan/src/resolver/expression/subquery.rs
+index 65c7b37..56849a8 100644
+--- a/crates/sail-plan/src/resolver/expression/subquery.rs
++++ b/crates/sail-plan/src/resolver/expression/subquery.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion_common::DFSchemaRef;
+@@ -142,53 +143,4 @@ impl PlanResolver<'_> {
+         };
+         Ok(NamedExpr::new(vec!["in_subquery".to_string()], exists_expr))
+     }
+-
+-    /// Resolves a Subquery by looking up the referenced plan from state and delegating to existing subquery resolvers.
+-    pub(super) async fn resolve_expression_subquery(
+-        &self,
+-        plan_id: i64,
+-        subquery_type: spec::SubqueryType,
+-        in_subquery_values: Vec<spec::Expr>,
+-        negated: bool,
+-        schema: &DFSchemaRef,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<NamedExpr> {
+-        let subquery_plan = state.get_subquery_reference(plan_id).ok_or_else(|| {
+-            PlanError::invalid(format!(
+-                "subquery plan_id {plan_id} not found in WithRelations references"
+-            ))
+-        })?;
+-
+-        match subquery_type {
+-            spec::SubqueryType::In => {
+-                if in_subquery_values.is_empty() {
+-                    return Err(PlanError::invalid("IN subquery missing value expression"));
+-                }
+-                if in_subquery_values.len() == 1 {
+-                    let expr = in_subquery_values.into_iter().next().ok_or_else(|| {
+-                        PlanError::invalid("IN subquery missing value expression")
+-                    })?;
+-                    self.resolve_expression_in_subquery(expr, subquery_plan, negated, schema, state)
+-                        .await
+-                } else {
+-                    self.resolve_multi_column_in_subquery(
+-                        in_subquery_values,
+-                        subquery_plan,
+-                        negated,
+-                        schema,
+-                        state,
+-                    )
+-                    .await
+-                }
+-            }
+-            spec::SubqueryType::Scalar => {
+-                self.resolve_expression_scalar_subquery(subquery_plan, schema, state)
+-                    .await
+-            }
+-            spec::SubqueryType::Exists => {
+-                self.resolve_expression_exists(subquery_plan, negated, schema, state)
+-                    .await
+-            }
+-        }
+-    }
+ }
 diff --git a/crates/sail-plan/src/resolver/expression/udf.rs b/crates/sail-plan/src/resolver/expression/udf.rs
 deleted file mode 100644
 index e77dd70..0000000
@@ -39849,6 +39996,38 @@ index 7cc3f5e..ec52f93 100644
 -        Ok(())
 -    }
  }
+diff --git a/crates/sail-plan/src/resolver/query/alias.rs b/crates/sail-plan/src/resolver/query/alias.rs
+index a2b8513..f6bef66 100644
+--- a/crates/sail-plan/src/resolver/query/alias.rs
++++ b/crates/sail-plan/src/resolver/query/alias.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion_common::TableReference;
+@@ -9,22 +10,6 @@ use crate::resolver::PlanResolver;
+ use crate::resolver::state::PlanResolverState;
+ 
+ impl PlanResolver<'_> {
+-    pub(super) async fn resolve_query_subquery_alias(
+-        &self,
+-        input: spec::QueryPlan,
+-        alias: spec::Identifier,
+-        qualifier: Vec<spec::Identifier>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let input = self
+-            .resolve_query_plan_with_hidden_fields(input, state)
+-            .await?;
+-        Ok(LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(
+-            Arc::new(input),
+-            self.resolve_table_reference(&spec::ObjectName::from(qualifier).child(alias))?,
+-        )?))
+-    }
+-
+     pub(super) async fn resolve_query_table_alias(
+         &self,
+         input: spec::QueryPlan,
 diff --git a/crates/sail-plan/src/resolver/query/column_op.rs b/crates/sail-plan/src/resolver/query/column_op.rs
 deleted file mode 100644
 index 284f933..0000000
@@ -40497,34 +40676,40 @@ index 2ed9ee9..d5773ad 100644
 -    }
  }
 diff --git a/crates/sail-plan/src/resolver/query/misc.rs b/crates/sail-plan/src/resolver/query/misc.rs
-index 7c60188..a019a21 100644
+index 7c60188..85d4a1e 100644
 --- a/crates/sail-plan/src/resolver/query/misc.rs
 +++ b/crates/sail-plan/src/resolver/query/misc.rs
-@@ -1,17 +1,11 @@
+@@ -1,21 +1,10 @@
+-use std::collections::HashMap;
+-use std::sync::Arc;
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use std::collections::HashMap;
- use std::sync::Arc;
  
 -use datafusion::catalog::MemTable;
 -use datafusion_common::{DFSchema, DFSchemaRef, ParamValues, ScalarValue};
 -use datafusion_expr::{EmptyRelation, Expr, Extension, LogicalPlan, UNNAMED_TABLE};
 -use log::warn;
-+use datafusion_common::{DFSchema, DFSchemaRef, ParamValues};
-+use datafusion_expr::{EmptyRelation, LogicalPlan};
- use sail_common::spec;
+-use sail_common::spec;
 -use sail_common_datafusion::array::record_batch::{
 -    cast_record_batch_positionally, read_record_batches,
 -};
- use sail_common_datafusion::literal::LiteralEvaluator;
+-use sail_common_datafusion::literal::LiteralEvaluator;
 -use sail_logical_plan::range::RangeNode;
 -use sail_logical_plan::repartition::{ExplicitRepartitionKind, ExplicitRepartitionNode};
++use datafusion_common::{DFSchema, DFSchemaRef};
++use datafusion_expr::{EmptyRelation, LogicalPlan};
  
- use crate::error::{PlanError, PlanResult};
+-use crate::error::{PlanError, PlanResult};
++use crate::error::PlanResult;
  use crate::resolver::PlanResolver;
-@@ -27,31 +21,6 @@ impl PlanResolver<'_> {
+-use crate::resolver::state::PlanResolverState;
+ 
+ impl PlanResolver<'_> {
+     /// Resolves a query plan that produces an empty relation.
+@@ -26,233 +15,4 @@ impl PlanResolver<'_> {
+             schema: DFSchemaRef::new(DFSchema::empty()),
          }))
      }
- 
+-
 -    pub(super) async fn resolve_query_range(
 -        &self,
 -        range: spec::Range,
@@ -40550,13 +40735,60 @@ index 7c60188..a019a21 100644
 -        }))
 -    }
 -
-     pub(super) async fn resolve_query_with_parameters(
-         &self,
-         input: spec::QueryPlan,
-@@ -106,153 +75,4 @@ impl PlanResolver<'_> {
-             Ok(input)
-         }
-     }
+-    pub(super) async fn resolve_query_with_parameters(
+-        &self,
+-        input: spec::QueryPlan,
+-        positional: Vec<spec::Expr>,
+-        named: Vec<(String, spec::Expr)>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let evaluator = LiteralEvaluator::new();
+-        let schema = Arc::new(DFSchema::empty());
+-        // Evaluate named arguments eagerly so that IDENTIFIER(:col) expressions
+-        // inside the query body can substitute their placeholder values at plan-resolution
+-        // time (before `with_param_values` is applied to the resolved plan).
+-        let named_params = {
+-            let mut params = HashMap::new();
+-            for (name, arg) in named {
+-                let expr = self.resolve_expression(arg, &schema, state).await?;
+-                let param = evaluator
+-                    .evaluate(&expr)
+-                    .map_err(|e| PlanError::invalid(e.to_string()))?;
+-                params.insert(name, param);
+-            }
+-            params
+-        };
+-        // Evaluate positional arguments eagerly for the same reason.
+-        let positional_params = {
+-            let mut params = vec![];
+-            for arg in positional {
+-                let expr = self.resolve_expression(arg, &schema, state).await?;
+-                let param = evaluator
+-                    .evaluate(&expr)
+-                    .map_err(|e| PlanError::invalid(e.to_string()))?;
+-                params.push(param);
+-            }
+-            params
+-        };
+-        // Enter a scope that makes both named and positional parameter values
+-        // available for IDENTIFIER clause evaluation inside the query body.
+-        let mut scope =
+-            state.enter_param_values_scope(named_params.clone(), positional_params.clone());
+-        let state = scope.state();
+-        let input = self
+-            .resolve_query_plan_with_hidden_fields(input, state)
+-            .await?;
+-        let input = if !positional_params.is_empty() {
+-            input.with_param_values(ParamValues::from(positional_params))?
+-        } else {
+-            input
+-        };
+-        if !named_params.is_empty() {
+-            Ok(input.with_param_values(ParamValues::from(named_params))?)
+-        } else {
+-            Ok(input)
+-        }
+-    }
 -
 -    pub(super) async fn resolve_query_local_relation(
 -        &self,
@@ -40708,7 +40940,7 @@ index 7c60188..a019a21 100644
 -    }
  }
 diff --git a/crates/sail-plan/src/resolver/query/mod.rs b/crates/sail-plan/src/resolver/query/mod.rs
-index fb117e5..01c1cb4 100644
+index fb117e5..f7894bc 100644
 --- a/crates/sail-plan/src/resolver/query/mod.rs
 +++ b/crates/sail-plan/src/resolver/query/mod.rs
 @@ -1,12 +1,7 @@
@@ -40734,7 +40966,7 @@ index fb117e5..01c1cb4 100644
  mod cte;
  mod dedup;
  mod filter;
-@@ -23,19 +17,12 @@ mod lateral;
+@@ -23,22 +17,14 @@ mod lateral;
  mod lateral_join;
  mod limit;
  mod misc;
@@ -40753,8 +40985,11 @@ index fb117e5..01c1cb4 100644
 -mod udtf;
  mod values;
  mod window;
- mod with_relations;
-@@ -69,16 +56,23 @@ impl PlanResolver<'_> {
+-mod with_relations;
+ 
+ impl PlanResolver<'_> {
+     /// Resolve query plan.
+@@ -69,16 +55,23 @@ impl PlanResolver<'_> {
  
          let plan_id = plan.plan_id;
          let plan = match plan.node {
@@ -40781,13 +41016,35 @@ index fb117e5..01c1cb4 100644
                  }
                  spec::ReadType::DynamicTable(table) => {
                      self.resolve_query_read_dynamic_table(*table, state).await?
-@@ -120,11 +114,11 @@ impl PlanResolver<'_> {
-                 )
-                 .await?
+@@ -107,24 +100,21 @@ impl PlanResolver<'_> {
+             QueryNode::Aggregate(aggregate) => {
+                 self.resolve_query_aggregate(aggregate, state).await?
+             }
+-            QueryNode::WithParameters {
+-                input,
+-                positional_arguments,
+-                named_arguments,
+-            } => {
+-                self.resolve_query_with_parameters(
+-                    *input,
+-                    positional_arguments,
+-                    named_arguments,
+-                    state,
+-                )
+-                .await?
++            QueryNode::WithParameters { .. } => {
++                return Err(PlanError::unsupported(
++                    "extraction probe: parameter binding",
++                ));
              }
 -            QueryNode::LocalRelation { data, schema } => {
 -                self.resolve_query_local_relation(data, schema, state)
 -                    .await?
++            QueryNode::WithRelations { .. } | QueryNode::SubqueryAlias { .. } => {
++                return Err(PlanError::unsupported(
++                    "extraction probe: Spark Connect relations",
++                ));
++            }
 +            QueryNode::LocalRelation { .. } => {
 +                return Err(PlanError::unsupported(
 +                    "extraction probe: inline Arrow input",
@@ -40797,18 +41054,19 @@ index fb117e5..01c1cb4 100644
              QueryNode::TableSample { input, sample } => {
                  let plan = self.resolve_query_plan(*input, state).await?;
                  self.apply_table_sample(plan, sample, state).await?
-@@ -132,7 +126,6 @@ impl PlanResolver<'_> {
+@@ -132,204 +122,59 @@ impl PlanResolver<'_> {
              QueryNode::Deduplicate(deduplicate) => {
                  self.resolve_query_deduplicate(deduplicate, state).await?
              }
 -            QueryNode::Range(range) => self.resolve_query_range(range, state).await?,
-             QueryNode::SubqueryAlias {
-                 input,
-                 alias,
-@@ -141,195 +134,59 @@ impl PlanResolver<'_> {
-                 self.resolve_query_subquery_alias(*input, alias, qualifier, state)
-                     .await?
-             }
+-            QueryNode::SubqueryAlias {
+-                input,
+-                alias,
+-                qualifier,
+-            } => {
+-                self.resolve_query_subquery_alias(*input, alias, qualifier, state)
+-                    .await?
+-            }
 -            QueryNode::Repartition {
 -                input,
 -                num_partitions,
@@ -40980,7 +41238,7 @@ index fb117e5..01c1cb4 100644
 -            } => {
 -                self.resolve_query_replace(*input, columns, replacements, state)
 -                    .await?
-             }
+-            }
 -            QueryNode::StatSummary { input, statistics } => {
 -                self.resolve_query_stat_summary(*input, vec![], statistics, state)
 -                    .await?
@@ -41019,7 +41277,7 @@ index fb117e5..01c1cb4 100644
 -            }
 -            QueryNode::StatFreqItems { .. } => {
 -                return Err(PlanError::todo("freq items"));
--            }
+             }
 -            QueryNode::StatSampleBy {
 -                input,
 -                column,
@@ -41045,6 +41303,17 @@ index fb117e5..01c1cb4 100644
              }
              QueryNode::Empty { produce_one_row } => self.resolve_query_empty(produce_one_row)?,
              QueryNode::Values(values) => self.resolve_query_values(values, state).await?,
+@@ -349,10 +194,6 @@ impl PlanResolver<'_> {
+                 self.resolve_query_with_ctes(*input, recursive, ctes, state)
+                     .await?
+             }
+-            QueryNode::WithRelations { root, references } => {
+-                self.resolve_query_with_relations(*root, references, state)
+-                    .await?
+-            }
+             QueryNode::LateralView {
+                 input,
+                 function,
 diff --git a/crates/sail-plan/src/resolver/query/na.rs b/crates/sail-plan/src/resolver/query/na.rs
 deleted file mode 100644
 index 21ad91e..0000000
@@ -41338,7 +41607,7 @@ index e98baaf..9b2daf8 100644
      let mut bare_column = None;
  
 diff --git a/crates/sail-plan/src/resolver/query/read.rs b/crates/sail-plan/src/resolver/query/read.rs
-index f2cf965..2160849 100644
+index f2cf965..66ba27e 100644
 --- a/crates/sail-plan/src/resolver/query/read.rs
 +++ b/crates/sail-plan/src/resolver/query/read.rs
 @@ -1,30 +1,29 @@
@@ -41535,6 +41804,15 @@ index f2cf965..2160849 100644
      }
  
      pub(super) async fn resolve_query_read_dynamic_table(
+@@ -189,7 +72,7 @@ impl PlanResolver<'_> {
+         } = table;
+         let schema = Arc::new(DFSchema::empty());
+         let resolved = self.resolve_expression(name, &schema, state).await?;
+-        let name_str = self.evaluate_identifier_expr(resolved, state)?;
++        let name_str = self.evaluate_identifier_expr(resolved)?;
+         let name = sail_sql_analyzer::expression::from_ast_object_name(
+             sail_sql_analyzer::parser::parse_object_name(&name_str)?,
+         )?;
 @@ -205,32 +88,6 @@ impl PlanResolver<'_> {
          .await
      }
@@ -43882,16 +44160,114 @@ index ef3b77f..0000000
 -        }))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/query/with_relations.rs b/crates/sail-plan/src/resolver/query/with_relations.rs
+deleted file mode 100644
+index 70d55b2..0000000
+--- a/crates/sail-plan/src/resolver/query/with_relations.rs
++++ /dev/null
+@@ -1,58 +0,0 @@
+-use std::sync::Arc;
+-
+-use datafusion_expr::{LogicalPlan, SubqueryAlias};
+-use sail_common::spec;
+-
+-use crate::error::{PlanError, PlanResult};
+-use crate::resolver::PlanResolver;
+-use crate::resolver::state::PlanResolverState;
+-
+-impl PlanResolver<'_> {
+-    /// Resolves a WithRelations node by storing references in state, then resolving the root.
+-    pub(super) async fn resolve_query_with_relations(
+-        &self,
+-        root: spec::QueryPlan,
+-        references: Vec<spec::QueryPlan>,
+-        state: &mut PlanResolverState,
+-    ) -> PlanResult<LogicalPlan> {
+-        let mut scope = state.enter_with_relations_scope();
+-        let state = scope.state();
+-        // Enter a CTE scope so that DataFrame aliases registered below do not leak
+-        // into the outer query scope.
+-        let mut scope = state.enter_cte_scope();
+-        let state = scope.state();
+-        for ref_plan in references {
+-            // If the reference is a SubqueryAlias, register it as a named table so that
+-            // SQL queries can reference the DataFrame by its alias name.
+-            // This enables the `spark.sql("SELECT * FROM {df}", df=dataframe)` pattern where
+-            // PySpark replaces `{df}` with a generated temp view name and wraps the DataFrame
+-            // in a SubqueryAlias within a WithRelations node.
+-            if let spec::QueryNode::SubqueryAlias {
+-                ref input,
+-                ref alias,
+-                ref qualifier,
+-            } = ref_plan.node
+-            {
+-                let resolved = self.resolve_query_plan((**input).clone(), state).await?;
+-                let table_ref = self.resolve_table_reference(
+-                    &spec::ObjectName::from(qualifier.clone()).child(alias.clone()),
+-                )?;
+-                let aliased = LogicalPlan::SubqueryAlias(SubqueryAlias::try_new(
+-                    Arc::new(resolved),
+-                    table_ref.clone(),
+-                )?);
+-                state.insert_cte(table_ref, aliased);
+-            }
+-            let plan_id = ref_plan
+-                .plan_id
+-                .ok_or_else(|| PlanError::invalid("subquery reference missing plan_id"))?;
+-            if state.insert_subquery_reference(plan_id, ref_plan).is_some() {
+-                return Err(PlanError::invalid(format!(
+-                    "duplicate subquery reference for plan_id {}",
+-                    plan_id
+-                )));
+-            }
+-        }
+-        self.resolve_query_plan(root, scope.state()).await
+-    }
+-}
 diff --git a/crates/sail-plan/src/resolver/state.rs b/crates/sail-plan/src/resolver/state.rs
-index 3e02a51..ea17645 100644
+index 3e02a51..0b9b407 100644
 --- a/crates/sail-plan/src/resolver/state.rs
 +++ b/crates/sail-plan/src/resolver/state.rs
-@@ -1,3 +1,4 @@
+@@ -1,8 +1,9 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::collections::{HashMap, HashSet};
  use std::sync::Arc;
  
-@@ -170,17 +171,6 @@ impl PlanResolverState {
+ use datafusion_common::arrow::datatypes::{Field, FieldRef};
+-use datafusion_common::{DFSchemaRef, ScalarValue, TableReference};
++use datafusion_common::{DFSchemaRef, TableReference};
+ use datafusion_expr::LogicalPlan;
+ use sail_common::spec;
+ 
+@@ -75,16 +76,7 @@ pub(super) struct PlanResolverState {
+     aggregate_state: AggregateState,
+     /// The CTEs for the current query.
+     ctes: HashMap<TableReference, Arc<LogicalPlan>>,
+-    /// Unresolved subquery references from a WithRelations node, keyed by plan_id.
+-    subquery_references: HashMap<i64, spec::QueryPlan>,
+     config: PlanResolverStateConfig,
+-    /// Named parameter values available for IDENTIFIER clause evaluation.
+-    /// Set when resolving a `WithParameters` query node so that IDENTIFIER expressions
+-    /// can substitute placeholders before constant-folding them.
+-    param_values: HashMap<String, ScalarValue>,
+-    /// Positional parameter values available for IDENTIFIER clause evaluation.
+-    /// Set alongside `param_values` when resolving a `WithParameters` query node.
+-    positional_param_values: Vec<ScalarValue>,
+     /// Stack of in-scope lambda parameter frames (innermost last).
+     /// Each frame holds the declared parameter names of one enclosing lambda
+     /// function, along with the parameter field when the enclosing
+@@ -108,10 +100,7 @@ impl PlanResolverState {
+             outer_query_schema: None,
+             aggregate_state: AggregateState::default(),
+             ctes: HashMap::new(),
+-            subquery_references: HashMap::new(),
+             config: PlanResolverStateConfig::default(),
+-            param_values: HashMap::new(),
+-            positional_param_values: Vec::new(),
+             lambda_param_scopes: Vec::new(),
+             windows: HashMap::new(),
+         }
+@@ -170,17 +159,6 @@ impl PlanResolverState {
              .collect()
      }
  
@@ -43909,6 +44285,131 @@ index 3e02a51..ea17645 100644
      pub fn register_plan_id_for_field(&mut self, field_id: &str, plan_id: i64) -> PlanResult<()> {
          let field_info = self
              .fields
+@@ -241,24 +219,6 @@ impl PlanResolverState {
+         self.ctes.insert(table_ref, Arc::new(plan));
+     }
+ 
+-    /// Returns a subquery reference plan from state by plan_id.
+-    pub fn get_subquery_reference(&self, plan_id: i64) -> Option<spec::QueryPlan> {
+-        self.subquery_references.get(&plan_id).cloned()
+-    }
+-
+-    /// Stores a subquery reference plan in state, returning the previous value if any.
+-    pub fn insert_subquery_reference(
+-        &mut self,
+-        plan_id: i64,
+-        plan: spec::QueryPlan,
+-    ) -> Option<spec::QueryPlan> {
+-        self.subquery_references.insert(plan_id, plan)
+-    }
+-
+-    pub fn enter_with_relations_scope(&mut self) -> WithRelationsScope<'_> {
+-        WithRelationsScope::new(self)
+-    }
+-
+     pub fn enter_config_scope(&mut self) -> ConfigScope<'_> {
+         ConfigScope::new(self)
+     }
+@@ -291,16 +251,6 @@ impl PlanResolverState {
+         &mut self.config
+     }
+ 
+-    /// Returns the named parameter value for the given name, if any.
+-    pub fn get_param_value(&self, name: &str) -> Option<&ScalarValue> {
+-        self.param_values.get(name)
+-    }
+-
+-    /// Returns the positional parameter value at the given 0-based index, if any.
+-    pub fn get_positional_param_value(&self, index: usize) -> Option<&ScalarValue> {
+-        self.positional_param_values.get(index)
+-    }
+-
+     /// Enters a scope where the given lambda function parameters are in scope.
+     /// The frame is popped when the scope is dropped.
+     pub fn enter_lambda_scope(
+@@ -325,52 +275,6 @@ impl PlanResolverState {
+     pub fn in_lambda_scope(&self) -> bool {
+         !self.lambda_param_scopes.is_empty()
+     }
+-
+-    /// Enters a scope where named and positional parameter values are set.
+-    /// The previous parameter values are restored when the scope is dropped.
+-    pub fn enter_param_values_scope(
+-        &mut self,
+-        named: HashMap<String, ScalarValue>,
+-        positional: Vec<ScalarValue>,
+-    ) -> ParamValuesScope<'_> {
+-        ParamValuesScope::new(self, named, positional)
+-    }
+-}
+-
+-/// Scope for parameter values used by IDENTIFIER clause evaluation.
+-pub(crate) struct ParamValuesScope<'a> {
+-    state: &'a mut PlanResolverState,
+-    previous_param_values: HashMap<String, ScalarValue>,
+-    previous_positional_param_values: Vec<ScalarValue>,
+-}
+-
+-impl<'a> ParamValuesScope<'a> {
+-    fn new(
+-        state: &'a mut PlanResolverState,
+-        named: HashMap<String, ScalarValue>,
+-        positional: Vec<ScalarValue>,
+-    ) -> Self {
+-        let previous_param_values = std::mem::replace(&mut state.param_values, named);
+-        let previous_positional_param_values =
+-            std::mem::replace(&mut state.positional_param_values, positional);
+-        Self {
+-            state,
+-            previous_param_values,
+-            previous_positional_param_values,
+-        }
+-    }
+-
+-    pub(crate) fn state(&mut self) -> &mut PlanResolverState {
+-        self.state
+-    }
+-}
+-
+-impl Drop for ParamValuesScope<'_> {
+-    fn drop(&mut self) {
+-        self.state.param_values = std::mem::take(&mut self.previous_param_values);
+-        self.state.positional_param_values =
+-            std::mem::take(&mut self.previous_positional_param_values);
+-    }
+ }
+ 
+ pub(crate) struct QueryScope<'a> {
+@@ -495,29 +399,3 @@ impl Drop for LambdaScope<'_> {
+         self.state.lambda_param_scopes.pop();
+     }
+ }
+-
+-/// Scope for WithRelations subquery references.
+-pub(crate) struct WithRelationsScope<'a> {
+-    state: &'a mut PlanResolverState,
+-    previous_subquery_references: HashMap<i64, spec::QueryPlan>,
+-}
+-
+-impl<'a> WithRelationsScope<'a> {
+-    fn new(state: &'a mut PlanResolverState) -> Self {
+-        let previous_subquery_references = std::mem::take(&mut state.subquery_references);
+-        Self {
+-            state,
+-            previous_subquery_references,
+-        }
+-    }
+-
+-    pub(crate) fn state(&mut self) -> &mut PlanResolverState {
+-        self.state
+-    }
+-}
+-
+-impl Drop for WithRelationsScope<'_> {
+-    fn drop(&mut self) {
+-        self.state.subquery_references = std::mem::take(&mut self.previous_subquery_references);
+-    }
+-}
 diff --git a/crates/sail-plan/src/resolver/tree/mod.rs b/crates/sail-plan/src/resolver/tree/mod.rs
 index 66ba862..7053229 100644
 --- a/crates/sail-plan/src/resolver/tree/mod.rs
@@ -44266,6 +44767,52 @@ index e55a3bc..0000000
 -        Ok(plan)
 -    }
 -}
+diff --git a/crates/sail-sql-analyzer/src/parser.rs b/crates/sail-sql-analyzer/src/parser.rs
+index 2729fef..026d4f0 100644
+--- a/crates/sail-sql-analyzer/src/parser.rs
++++ b/crates/sail-sql-analyzer/src/parser.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chumsky::Parser;
+ use chumsky::input::Input;
+ use chumsky::span::SimpleSpan;
+@@ -13,7 +14,7 @@ use sail_sql_parser::parser::{
+     create_named_expression_parser, create_object_name_parser, create_parser,
+     create_qualified_wildcard_parser,
+ };
+-use sail_sql_parser::token::{Punctuation, Token};
++use sail_sql_parser::token::Token;
+ 
+ use crate::error::{SqlError, SqlResult};
+ use crate::literal::datetime::{
+@@ -52,27 +53,6 @@ macro_rules! parse_simple {
+     }};
+ }
+ 
+-pub fn rewrite_positional_parameter_markers(s: &str) -> SqlResult<(String, usize)> {
+-    let options = ParserOptions::default();
+-    let lexer = create_lexer::<_, chumsky::extra::Err<chumsky::error::Rich<_, _>>>(&options);
+-    let tokens = lexer.parse(s).into_result().map_err(SqlError::parser)?;
+-
+-    let mut output = String::with_capacity(s.len());
+-    let mut last = 0;
+-    let mut count = 0;
+-    for (token, span) in tokens {
+-        if matches!(token, Token::Punctuation(Punctuation::QuestionMark)) {
+-            count += 1;
+-            output.push_str(&s[last..span.start]);
+-            output.push('$');
+-            output.push_str(&count.to_string());
+-            last = span.end;
+-        }
+-    }
+-    output.push_str(&s[last..]);
+-    Ok((output, count))
+-}
+-
+ pub fn parse_data_type(s: &str) -> SqlResult<DataType> {
+     parse!(s, create_data_type_parser)
+ }
 diff --git a/crates/sail-sql-analyzer/src/statement.rs b/crates/sail-sql-analyzer/src/statement.rs
 index fec7256..dbcc2e5 100644
 --- a/crates/sail-sql-analyzer/src/statement.rs
