@@ -1,8 +1,9 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion_common::{Result, exec_err};
 
 use super::pattern::{
-    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionField,
-    FractionSpec, PatternUse, ResolverStyle, SignStyle, ZoneField, ZoneSpec, ZoneStyle,
+    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionSpec,
+    PatternUse, ZoneField, ZoneSpec,
 };
 
 pub(crate) fn parse_datetime_pattern(
@@ -15,11 +16,7 @@ pub(crate) fn parse_datetime_pattern(
     if position != chars.len() {
         return exec_err!("invalid datetime pattern: unexpected closing optional section");
     }
-    Ok(DateTimeFormat {
-        items,
-        locale: Default::default(),
-        resolver_style: ResolverStyle::Strict,
-    })
+    Ok(DateTimeFormat { items })
 }
 
 fn parse_items(
@@ -178,36 +175,13 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             width: count,
             style: match count {
                 1..=3 => FieldStyle::TextShort,
-                4 => FieldStyle::TextFull,
-                _ => FieldStyle::TextNarrow,
+                _ => FieldStyle::TextFull,
             },
-            sign_style: SignStyle::Normal,
         })),
         'y' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::YearOfEra,
             width: count,
             style: FieldStyle::Numeric,
-            sign_style: if count == 2 {
-                SignStyle::Never
-            } else {
-                SignStyle::Normal
-            },
-        })),
-        'u' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
-            kind: DateTimeField::ProlepticYear,
-            width: count,
-            style: FieldStyle::Numeric,
-            sign_style: SignStyle::Normal,
-        })),
-        'Y' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
-            kind: DateTimeField::WeekBasedYear,
-            width: count,
-            style: FieldStyle::Numeric,
-            sign_style: if count == 2 {
-                SignStyle::Never
-            } else {
-                SignStyle::Normal
-            },
         })),
         'Q' | 'q' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::QuarterOfYear,
@@ -215,10 +189,8 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             style: match count {
                 1 | 2 => FieldStyle::Numeric,
                 3 => FieldStyle::TextShort,
-                4 => FieldStyle::TextFull,
-                _ => FieldStyle::TextNarrow,
+                _ => FieldStyle::TextFull,
             },
-            sign_style: SignStyle::NotNegative,
         })),
         'M' | 'L' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::MonthOfYear,
@@ -227,10 +199,8 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
                 1 => FieldStyle::Numeric,
                 2 => FieldStyle::LocalizedNumeric,
                 3 => FieldStyle::TextShort,
-                4 => FieldStyle::TextFull,
-                _ => FieldStyle::TextNarrow,
+                _ => FieldStyle::TextFull,
             },
-            sign_style: SignStyle::NotNegative,
         })),
         'd' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::DayOfMonth,
@@ -240,62 +210,29 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             } else {
                 FieldStyle::LocalizedNumeric
             },
-            sign_style: SignStyle::NotNegative,
         })),
         'D' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::DayOfYear,
             width: count,
             style: FieldStyle::LocalizedNumeric,
-            sign_style: SignStyle::NotNegative,
         })),
         'E' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::DayOfWeek,
             width: count,
             style: match count {
                 1..=3 => FieldStyle::TextShort,
-                4 => FieldStyle::TextFull,
-                _ => FieldStyle::TextNarrow,
+                _ => FieldStyle::TextFull,
             },
-            sign_style: SignStyle::Normal,
-        })),
-        'e' | 'c' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
-            kind: DateTimeField::DayOfWeek,
-            width: count,
-            style: match count {
-                1 | 2 => FieldStyle::Numeric,
-                3 => FieldStyle::TextShort,
-                4 => FieldStyle::TextFull,
-                _ => FieldStyle::TextNarrow,
-            },
-            sign_style: SignStyle::NotNegative,
-        })),
-        'w' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
-            kind: DateTimeField::WeekOfWeekBasedYear,
-            width: count,
-            style: if count == 1 {
-                FieldStyle::Numeric
-            } else {
-                FieldStyle::LocalizedNumeric
-            },
-            sign_style: SignStyle::NotNegative,
-        })),
-        'W' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
-            kind: DateTimeField::WeekOfMonth,
-            width: count,
-            style: FieldStyle::Numeric,
-            sign_style: SignStyle::NotNegative,
         })),
         'F' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::AlignedWeekOfMonth,
             width: count,
             style: FieldStyle::Numeric,
-            sign_style: SignStyle::NotNegative,
         })),
         'a' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::AmPmOfDay,
             width: count,
             style: FieldStyle::TextShort,
-            sign_style: SignStyle::Normal,
         })),
         'H' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::HourOfDay,
@@ -305,7 +242,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             } else {
                 FieldStyle::LocalizedNumeric
             },
-            sign_style: SignStyle::NotNegative,
         })),
         'k' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::ClockHourOfDay,
@@ -315,7 +251,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             } else {
                 FieldStyle::LocalizedNumeric
             },
-            sign_style: SignStyle::NotNegative,
         })),
         'K' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::HourOfAmPm,
@@ -325,7 +260,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             } else {
                 FieldStyle::LocalizedNumeric
             },
-            sign_style: SignStyle::NotNegative,
         })),
         'h' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::ClockHourOfAmPm,
@@ -335,7 +269,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             } else {
                 FieldStyle::LocalizedNumeric
             },
-            sign_style: SignStyle::NotNegative,
         })),
         'm' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::MinuteOfHour,
@@ -345,7 +278,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             } else {
                 FieldStyle::LocalizedNumeric
             },
-            sign_style: SignStyle::NotNegative,
         })),
         's' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
             kind: DateTimeField::SecondOfMinute,
@@ -355,45 +287,19 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             } else {
                 FieldStyle::LocalizedNumeric
             },
-            sign_style: SignStyle::NotNegative,
         })),
         'S' => Ok(DateTimeItem::Fraction(FractionSpec {
-            field: FractionField::NanoOfSecond,
             min_width: if pattern_use == PatternUse::Parsing {
                 1
             } else {
                 count
             },
             max_width: count.min(9),
-            decimal_point: false,
-        })),
-        'A' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
-            kind: DateTimeField::MilliOfDay,
-            width: count,
-            style: FieldStyle::LocalizedNumeric,
-            sign_style: SignStyle::NotNegative,
-        })),
-        'n' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
-            kind: DateTimeField::NanoOfSecond,
-            width: count,
-            style: FieldStyle::LocalizedNumeric,
-            sign_style: SignStyle::NotNegative,
-        })),
-        'N' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
-            kind: DateTimeField::NanoOfDay,
-            width: count,
-            style: FieldStyle::LocalizedNumeric,
-            sign_style: SignStyle::NotNegative,
         })),
         'X' | 'x' => Ok(DateTimeItem::Zone(ZoneSpec {
             kind: ZoneField::IsoOffset,
             width: count,
             zero_as_z: symbol == 'X',
-            style: match count {
-                1..=2 => ZoneStyle::Short,
-                3..=4 => ZoneStyle::Full,
-                _ => ZoneStyle::Full,
-            },
         })),
         'Z' => Ok(DateTimeItem::Zone(ZoneSpec {
             kind: if count == 4 {
@@ -405,37 +311,21 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
             },
             width: count,
             zero_as_z: count == 5,
-            style: match count {
-                1..=3 => ZoneStyle::Short,
-                4 => ZoneStyle::Full,
-                _ => ZoneStyle::Full,
-            },
         })),
         'O' => Ok(DateTimeItem::Zone(ZoneSpec {
             kind: ZoneField::LocalizedOffset,
             width: count,
             zero_as_z: false,
-            style: if count == 1 {
-                ZoneStyle::Short
-            } else {
-                ZoneStyle::Full
-            },
         })),
         'V' => Ok(DateTimeItem::Zone(ZoneSpec {
             kind: ZoneField::ZoneId,
             width: count,
             zero_as_z: false,
-            style: ZoneStyle::Id,
         })),
         'z' => Ok(DateTimeItem::Zone(ZoneSpec {
             kind: ZoneField::ZoneName,
             width: count,
             zero_as_z: false,
-            style: if count <= 3 {
-                ZoneStyle::Short
-            } else {
-                ZoneStyle::Full
-            },
         })),
         _ => exec_err!("unsupported datetime pattern symbol: '{}'", symbol),
     }

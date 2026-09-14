@@ -18,9 +18,7 @@ use crate::scalar::csv::options::{
     CsvFunction, find_option, find_option_with_alias, parse_bool_option, reject_null_entries,
     validate_options,
 };
-use crate::scalar::datetime::format::{
-    DateTimeFormat, DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind,
-};
+use crate::scalar::datetime::format::{DateTimeFormat, DateTimeFormatInput, TimeZoneDisplay};
 
 fn default_timestamp_format() -> DateTimeFormat {
     #[expect(clippy::expect_used)]
@@ -430,8 +428,6 @@ fn format_timestamp_field(
                 name: Some(session_timezone),
             }),
             zone_id: Some(session_timezone),
-            timestamp_kind: TimestampKind::Normal,
-            precision: TimePrecision::Microsecond,
         };
         if options.timestamp_format == *DEFAULT_TIMESTAMP_FORMAT {
             DEFAULT_LTZ_FORMAT.format(input)
@@ -449,8 +445,6 @@ fn format_timestamp_field(
             datetime: naive,
             timezone: None,
             zone_id: None,
-            timestamp_kind: TimestampKind::Normal,
-            precision: TimePrecision::Microsecond,
         })
     }
 }
@@ -493,8 +487,6 @@ fn format_field_to_csv(
                 })?,
                 timezone: None,
                 zone_id: None,
-                timestamp_kind: TimestampKind::Normal,
-                precision: TimePrecision::Second,
             })
         }
 
@@ -516,8 +508,6 @@ fn format_field_to_csv(
                 })?,
                 timezone: None,
                 zone_id: None,
-                timestamp_kind: TimestampKind::Normal,
-                precision: TimePrecision::Second,
             })
         }
 

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::cmp::Ordering;
 use std::sync::{Arc, OnceLock};
 
@@ -541,9 +542,7 @@ fn struct_to_values_array(
 fn format_timestamp(value: i64, tz: Option<&str>, format: &DateTimeFormat) -> String {
     use chrono::Offset;
 
-    use crate::scalar::datetime::format::{
-        DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind,
-    };
+    use crate::scalar::datetime::format::{DateTimeFormatInput, TimeZoneDisplay};
 
     if let Some(dt_utc) = Utc.timestamp_micros(value).single() {
         let (datetime, timezone) = if let Some(tz_str) = tz {
@@ -568,8 +567,6 @@ fn format_timestamp(value: i64, tz: Option<&str>, format: &DateTimeFormat) -> St
             datetime,
             timezone,
             zone_id: tz,
-            timestamp_kind: TimestampKind::Normal,
-            precision: TimePrecision::Microsecond,
         };
 
         format.format(input).unwrap_or_else(|_| value.to_string())
@@ -579,7 +576,7 @@ fn format_timestamp(value: i64, tz: Option<&str>, format: &DateTimeFormat) -> St
 }
 
 fn format_date(days: i32, format: &DateTimeFormat) -> String {
-    use crate::scalar::datetime::format::{DateTimeFormatInput, TimePrecision, TimestampKind};
+    use crate::scalar::datetime::format::DateTimeFormatInput;
 
     chrono::DateTime::from_timestamp(days as i64 * 24 * 3600, 0)
         .map(|date| {
@@ -587,8 +584,6 @@ fn format_date(days: i32, format: &DateTimeFormat) -> String {
                 datetime: date.naive_utc(),
                 timezone: None,
                 zone_id: None,
-                timestamp_kind: TimestampKind::Normal,
-                precision: TimePrecision::Second,
             };
             format.format(input).unwrap_or_else(|_| days.to_string())
         })

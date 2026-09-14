@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion_common::Result;
 
 use super::parser::parse_datetime_pattern;
@@ -5,22 +6,6 @@ use super::parser::parse_datetime_pattern;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DateTimeFormat {
     pub(crate) items: Vec<DateTimeItem>,
-    pub(crate) locale: LocaleSpec,
-    pub(crate) resolver_style: ResolverStyle,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
-pub enum LocaleSpec {
-    #[default]
-    Default,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
-pub enum ResolverStyle {
-    Strict,
-    #[default]
-    Smart,
-    Lenient,
 }
 
 impl DateTimeFormat {
@@ -53,22 +38,17 @@ pub(crate) struct DateTimeFieldSpec {
     pub(crate) kind: DateTimeField,
     pub(crate) width: usize,
     pub(crate) style: FieldStyle,
-    pub(crate) sign_style: SignStyle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum DateTimeField {
     Era,
-    ProlepticYear,
     YearOfEra,
-    WeekBasedYear,
     QuarterOfYear,
     MonthOfYear,
     DayOfMonth,
     DayOfYear,
     DayOfWeek,
-    WeekOfWeekBasedYear,
-    WeekOfMonth,
     AlignedWeekOfMonth,
     AmPmOfDay,
     ClockHourOfAmPm,
@@ -77,47 +57,20 @@ pub(crate) enum DateTimeField {
     HourOfDay,
     MinuteOfHour,
     SecondOfMinute,
-    MilliOfDay,
-    NanoOfSecond,
-    NanoOfDay,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[expect(dead_code)]
 pub(crate) enum FieldStyle {
     Numeric,
     TextShort,
     TextFull,
-    TextNarrow,
-    StandaloneTextShort,
-    StandaloneTextFull,
     LocalizedNumeric,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[expect(dead_code)]
-pub(crate) enum SignStyle {
-    Normal,
-    Never,
-    NotNegative,
-    ExceedsPad,
-    Always,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FractionSpec {
-    pub(crate) field: FractionField,
     pub(crate) min_width: usize,
     pub(crate) max_width: usize,
-    pub(crate) decimal_point: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[expect(dead_code)]
-pub(crate) enum FractionField {
-    NanoOfSecond,
-    NanoOfDay,
-    MilliOfDay,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -125,7 +78,6 @@ pub(crate) struct ZoneSpec {
     pub(crate) kind: ZoneField,
     pub(crate) width: usize,
     pub(crate) zero_as_z: bool,
-    pub(crate) style: ZoneStyle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -135,11 +87,4 @@ pub(crate) enum ZoneField {
     LocalizedOffset,
     ZoneId,
     ZoneName,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum ZoneStyle {
-    Short,
-    Full,
-    Id,
 }

@@ -1,10 +1,11 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use chrono::{Datelike, FixedOffset, NaiveDateTime, Timelike};
 use datafusion_common::Result;
 
-use super::locale::LocaleData;
+use super::locale::{EN_US, LocaleData};
 use super::pattern::{
-    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionField,
-    FractionSpec, ZoneField, ZoneSpec,
+    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FractionSpec, ZoneField,
+    ZoneSpec,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -13,34 +14,17 @@ pub struct TimeZoneDisplay<'a> {
     pub name: Option<&'a str>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TimestampKind {
-    Normal,
-    LocalTimestamp,
-    NonlocalTimestamp,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TimePrecision {
-    Second,
-    Millisecond,
-    Microsecond,
-    Nanosecond,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct DateTimeFormatInput<'a> {
     pub datetime: NaiveDateTime,
     pub timezone: Option<TimeZoneDisplay<'a>>,
     pub zone_id: Option<&'a str>,
-    pub timestamp_kind: TimestampKind,
-    pub precision: TimePrecision,
 }
 
 impl DateTimeFormat {
     pub fn format(&self, input: DateTimeFormatInput<'_>) -> Result<String> {
         let mut output = String::new();
-        format_items(&self.items, input, self.locale.data(), &mut output)?;
+        format_items(&self.items, input, &EN_US, &mut output)?;
         Ok(output)
     }
 }
@@ -84,25 +68,15 @@ fn format_month(month: u32, count: usize, locale: &LocaleData, output: &mut Stri
         1 => output.push_str(&month.to_string()),
         2 => push_exact_padded(month as i64, 2, output),
         3 => output.push_str(locale.months_short[(month - 1) as usize]),
-        4 => output.push_str(locale.months_full[(month - 1) as usize]),
-        _ => output.push_str(first_char(locale.months_full[(month - 1) as usize])),
+        _ => output.push_str(locale.months_full[(month - 1) as usize]),
     }
 }
 
 fn format_weekday_text(weekday: usize, count: usize, locale: &LocaleData, output: &mut String) {
     match count {
         4 => output.push_str(locale.weekdays_full[weekday]),
-        5.. => output.push_str(first_char(locale.weekdays_full[weekday])),
         _ => output.push_str(locale.weekdays_short[weekday]),
     }
-}
-
-fn first_char(value: &str) -> &str {
-    value
-        .char_indices()
-        .nth(1)
-        .map(|(index, _)| &value[..index])
-        .unwrap_or(value)
 }
 
 fn format_quarter(quarter: u32, count: usize, locale: &LocaleData, output: &mut String) {
@@ -110,9 +84,7 @@ fn format_quarter(quarter: u32, count: usize, locale: &LocaleData, output: &mut 
         1 => output.push_str(&quarter.to_string()),
         2 => push_exact_padded(quarter as i64, 2, output),
         3 => output.push_str(locale.quarters_short[(quarter - 1) as usize]),
-        4 => output.push_str(locale.quarters_full[(quarter - 1) as usize]),
-        5 => output.push_str(&quarter.to_string()), // narrow style
-        _ => output.push_str(&quarter.to_string()),
+        _ => output.push_str(locale.quarters_full[(quarter - 1) as usize]),
     }
 }
 
@@ -126,7 +98,6 @@ fn format_era(is_bc: bool, count: usize, locale: &LocaleData, output: &mut Strin
     match count {
         1..=3 => output.push_str(locale.eras_short[index]),
         4 => output.push_str(locale.eras_full[index]),
-        5 => output.push_str(locale.eras_narrow[index]),
         _ => output.push_str(locale.eras_short[index]),
     }
 }
@@ -231,16 +202,10 @@ fn format_field_spec(
         DateTimeField::Era => {
             format_era(datetime.year() <= 0, spec.width, locale, output);
         }
-        DateTimeField::ProlepticYear => {
-            format_year(datetime.year(), spec.width, output);
-        }
         DateTimeField::YearOfEra => {
             let year = datetime.year();
             let year_of_era = if year <= 0 { 1 - year } else { year };
             format_year(year_of_era, spec.width, output);
-        }
-        DateTimeField::WeekBasedYear => {
-            format_year(datetime.iso_week().year(), spec.width, output);
         }
         DateTimeField::QuarterOfYear => {
             format_quarter((datetime.month0() / 3) + 1, spec.width, locale, output);
@@ -258,34 +223,11 @@ fn format_field_spec(
         DateTimeField::DayOfYear => {
             push_padded(datetime.ordinal() as i64, spec.width, output);
         }
-        DateTimeField::DayOfWeek => match spec.style {
-            FieldStyle::Numeric | FieldStyle::LocalizedNumeric => {
-                push_padded(
-                    datetime.weekday().number_from_monday() as i64,
-                    if spec.width == 1 { 0 } else { spec.width },
-                    output,
-                );
-            }
-            _ => {
-                format_weekday_text(
-                    datetime.weekday().num_days_from_monday() as usize,
-                    spec.width,
-                    locale,
-                    output,
-                );
-            }
-        },
-        DateTimeField::WeekOfWeekBasedYear => {
-            push_padded(
-                datetime.iso_week().week() as i64,
-                if spec.width == 1 { 0 } else { spec.width },
-                output,
-            );
-        }
-        DateTimeField::WeekOfMonth => {
-            push_padded(
-                ((datetime.day() - 1) / 7 + 1) as i64,
-                if spec.width == 1 { 0 } else { spec.width },
+        DateTimeField::DayOfWeek => {
+            format_weekday_text(
+                datetime.weekday().num_days_from_monday() as usize,
+                spec.width,
+                locale,
                 output,
             );
         }
@@ -347,73 +289,11 @@ fn format_field_spec(
                 output,
             );
         }
-        DateTimeField::MilliOfDay => {
-            let millis = ((((datetime.hour() * 60) + datetime.minute()) * 60 + datetime.second())
-                * 1000)
-                + datetime.nanosecond() / 1_000_000;
-            push_padded(
-                millis as i64,
-                if spec.width == 1 { 0 } else { spec.width },
-                output,
-            );
-        }
-        DateTimeField::NanoOfSecond => {
-            push_padded(
-                datetime.nanosecond() as i64,
-                if spec.width == 1 { 0 } else { spec.width },
-                output,
-            );
-        }
-        DateTimeField::NanoOfDay => {
-            let nanos = (((datetime.hour() as u64 * 60 + datetime.minute() as u64) * 60
-                + datetime.second() as u64)
-                * 1_000_000_000)
-                + datetime.nanosecond() as u64;
-            push_padded(
-                nanos as i64,
-                if spec.width == 1 { 0 } else { spec.width },
-                output,
-            );
-        }
     }
 }
 
 fn format_fraction_spec(spec: &FractionSpec, input: DateTimeFormatInput<'_>, output: &mut String) {
-    let datetime = input.datetime;
-    match spec.field {
-        FractionField::NanoOfSecond => {
-            format_fraction(datetime.nanosecond(), spec.min_width, output)
-        }
-        FractionField::NanoOfDay => {
-            let nanos = ((datetime.hour() as u64 * 60 + datetime.minute() as u64) * 60
-                + datetime.second() as u64)
-                * 1_000_000_000
-                + datetime.nanosecond() as u64;
-            push_padded(
-                nanos as i64,
-                if spec.min_width == 1 {
-                    0
-                } else {
-                    spec.min_width
-                },
-                output,
-            );
-        }
-        FractionField::MilliOfDay => {
-            let millis = ((((datetime.hour() * 60) + datetime.minute()) * 60 + datetime.second())
-                * 1000)
-                + datetime.nanosecond() / 1_000_000;
-            push_padded(
-                millis as i64,
-                if spec.min_width == 1 {
-                    0
-                } else {
-                    spec.min_width
-                },
-                output,
-            );
-        }
-    }
+    format_fraction(input.datetime.nanosecond(), spec.min_width, output);
 }
 
 fn format_zone_spec(spec: &ZoneSpec, input: DateTimeFormatInput<'_>, output: &mut String) {

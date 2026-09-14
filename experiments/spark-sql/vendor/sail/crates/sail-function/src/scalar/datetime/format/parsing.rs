@@ -1,11 +1,12 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use chrono::format::Parsed;
 use chrono::{Datelike, FixedOffset, NaiveDate, NaiveDateTime, Weekday};
 use datafusion_common::{Result, exec_datafusion_err};
 
-use super::locale::LocaleData;
+use super::locale::{EN_US, LocaleData};
 use super::pattern::{
-    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionField,
-    FractionSpec, ZoneField, ZoneSpec,
+    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionSpec,
+    ZoneField, ZoneSpec,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,10 +24,7 @@ struct ParseState {
     clock_hour_of_day: Option<u32>,
     hour_of_ampm: Option<u32>,
     clock_hour_of_ampm: Option<u32>,
-    week_of_month: Option<u32>,
     aligned_week_of_month: Option<u32>,
-    milli_of_day: Option<u32>,
-    nano_of_day: Option<u64>,
     timezone: Option<String>,
 }
 
@@ -66,7 +64,7 @@ impl DateTimeFormat {
             &self.items,
             value,
             0,
-            self.locale.data(),
+            &EN_US,
             &mut state,
             AdjacentNumericRun::None,
         )?;
@@ -145,9 +143,7 @@ fn parse_items(
 
 fn field_has_variable_width_in_numeric_run(spec: &DateTimeFieldSpec) -> bool {
     match spec.kind {
-        DateTimeField::YearOfEra | DateTimeField::ProlepticYear | DateTimeField::WeekBasedYear => {
-            spec.width != 2
-        }
+        DateTimeField::YearOfEra => spec.width != 2,
         DateTimeField::DayOfYear => spec.width < 3,
         _ => spec.width == 1,
     }
@@ -186,7 +182,6 @@ fn parse_quarter(
         }
         4 => parse_text(value, position, &locale.quarters_full)
             .map(|(next, index)| (next, index as i32 + 1))?,
-        5 => parse_number(value, position, (1, 1))?,
         _ => unreachable!(),
     };
     if !(1..=4).contains(&quarter) {
@@ -267,10 +262,6 @@ fn parse_era(
     let choices = match style {
         FieldStyle::TextShort => [(locale.eras_short[0], true), (locale.eras_short[1], false)],
         FieldStyle::TextFull => [(locale.eras_full[0], true), (locale.eras_full[1], false)],
-        FieldStyle::TextNarrow => [
-            (locale.eras_narrow[0], true),
-            (locale.eras_narrow[1], false),
-        ],
         _ => {
             return Err(exec_datafusion_err!(
                 "unsupported datetime era field style: {style:?}"
@@ -518,20 +509,6 @@ fn parse_zone_name(value: &str, position: usize) -> Result<(usize, String)> {
     }
 }
 
-fn parse_week_of_month_field(
-    value: &str,
-    position: usize,
-    count: usize,
-    state: &mut ParseState,
-) -> Result<usize> {
-    let (next, week) = parse_number(value, position, number_bounds(count, 1))?;
-    if !(1..=5).contains(&week) {
-        return Err(exec_datafusion_err!("invalid week-of-month: {week}"));
-    }
-    state.week_of_month = Some(week as u32);
-    Ok(next)
-}
-
 fn parse_aligned_week_of_month_field(
     value: &str,
     position: usize,
@@ -549,14 +526,6 @@ fn parse_aligned_week_of_month_field(
 }
 
 fn validate_week_of_month(state: &ParseState, date: NaiveDate) -> Result<()> {
-    if let Some(expected) = state.week_of_month {
-        let actual = (date.day() - 1) / 7 + 1;
-        if expected != actual {
-            return Err(exec_datafusion_err!(
-                "week-of-month {expected} is inconsistent with resolved date {date}"
-            ));
-        }
-    }
     if let Some(expected) = state.aligned_week_of_month {
         let actual = (date.day() - 1) % 7 + 1;
         if expected != actual {
@@ -610,23 +579,6 @@ impl ParseState {
             self.set_year(year)?;
         }
 
-        if let Some(nanos) = self.nano_of_day {
-            let seconds = nanos / 1_000_000_000;
-            let nanosecond = (nanos % 1_000_000_000) as u32;
-            if seconds > 86_399 {
-                return Err(exec_datafusion_err!("invalid nano-of-day: {nanos}"));
-            }
-            self.set_time_of_day(seconds as u32, nanosecond)?;
-        }
-        if let Some(millis) = self.milli_of_day {
-            let seconds = millis / 1000;
-            let nanosecond = (millis % 1000) * 1_000_000;
-            if seconds > 86_399 {
-                return Err(exec_datafusion_err!("invalid milli-of-day: {millis}"));
-            }
-            self.set_time_of_day(seconds, nanosecond)?;
-        }
-
         if let Some(hour) = self.clock_hour_of_day {
             if !(1..=24).contains(&hour) {
                 return Err(exec_datafusion_err!(
@@ -646,7 +598,7 @@ impl ParseState {
     }
 
     fn apply_defaults(&mut self) -> Result<()> {
-        if self.parsed.year.is_none() && self.parsed.isoyear.is_none() {
+        if self.parsed.year.is_none() {
             self.set_year(1970)?;
         }
         // Convert quarter to month if quarter is set and month is not
@@ -661,25 +613,11 @@ impl ParseState {
             let month = (quarter - 1) * 3 + 1;
             self.set_month(month as i32)?;
         }
-        if self.parsed.month.is_none()
-            && self.parsed.ordinal.is_none()
-            && self.parsed.isoweek.is_none()
-            && self.parsed.week_from_mon.is_none()
-            && self.parsed.week_from_sun.is_none()
-        {
+        if self.parsed.month.is_none() && self.parsed.ordinal.is_none() {
             self.set_month(1)?;
         }
-        if self.parsed.day.is_none()
-            && self.parsed.ordinal.is_none()
-            && self.parsed.isoweek.is_none()
-            && self.parsed.week_from_mon.is_none()
-            && self.parsed.week_from_sun.is_none()
-        {
-            let day = self
-                .week_of_month
-                .map(|week| (week - 1) * 7 + 1)
-                .unwrap_or(1);
-            self.set_day(day as i32)?;
+        if self.parsed.day.is_none() && self.parsed.ordinal.is_none() {
+            self.set_day(1)?;
         }
         if self.parsed.hour_div_12.is_none() && self.parsed.hour_mod_12.is_none() {
             self.set_hour(0)?;
@@ -693,23 +631,10 @@ impl ParseState {
         Ok(())
     }
 
-    fn set_time_of_day(&mut self, seconds: u32, nanosecond: u32) -> Result<()> {
-        self.set_hour((seconds / 3600) as i32)?;
-        self.set_minute((seconds % 3600 / 60) as i32)?;
-        self.set_second((seconds % 60) as i32)?;
-        self.set_nanosecond(nanosecond as i32)
-    }
-
     fn set_year(&mut self, value: i32) -> Result<()> {
         self.parsed
             .set_year(value as i64)
             .map_err(|e| exec_datafusion_err!("invalid parsed year: {e}"))
-    }
-
-    fn set_isoyear(&mut self, value: i32) -> Result<()> {
-        self.parsed
-            .set_isoyear(value as i64)
-            .map_err(|e| exec_datafusion_err!("invalid parsed ISO year: {e}"))
     }
 
     fn set_quarter(&mut self, value: i32) -> Result<()> {
@@ -734,12 +659,6 @@ impl ParseState {
         self.parsed
             .set_ordinal(value as i64)
             .map_err(|e| exec_datafusion_err!("invalid parsed ordinal: {e}"))
-    }
-
-    fn set_isoweek(&mut self, value: i32) -> Result<()> {
-        self.parsed
-            .set_isoweek(value as i64)
-            .map_err(|e| exec_datafusion_err!("invalid parsed ISO week: {e}"))
     }
 
     fn set_weekday(&mut self, value: Weekday) -> Result<()> {
@@ -821,20 +740,6 @@ fn parse_field_spec(
                 },
             )
         }
-        DateTimeField::ProlepticYear => {
-            parse_signed_number(value, position, number_bounds(spec.width, 10)).and_then(
-                |(next, year)| {
-                    state.set_year(expand_year(year, spec.width))?;
-                    Ok(next)
-                },
-            )
-        }
-        DateTimeField::WeekBasedYear => {
-            parse_number(value, position, number_bounds(spec.width, 10)).and_then(|(next, year)| {
-                state.set_isoyear(expand_year(year, spec.width))?;
-                Ok(next)
-            })
-        }
         DateTimeField::QuarterOfYear => parse_quarter(value, position, spec.width, locale, state),
         DateTimeField::MonthOfYear => parse_month(value, position, spec.width, locale, state),
         DateTimeField::DayOfMonth => parse_number(value, position, number_bounds(spec.width, 2))
@@ -847,21 +752,7 @@ fn parse_field_spec(
                 state.set_ordinal(ordinal)?;
                 Ok(next)
             }),
-        DateTimeField::DayOfWeek => match spec.style {
-            FieldStyle::Numeric => parse_number(value, position, number_bounds(spec.width, 1))
-                .and_then(|(next, weekday)| {
-                    state.set_weekday(weekday_from_monday(weekday as u32)?)?;
-                    Ok(next)
-                }),
-            _ => parse_weekday_text(value, position, locale, state),
-        },
-        DateTimeField::WeekOfWeekBasedYear => {
-            parse_number(value, position, number_bounds(spec.width, 2)).and_then(|(next, week)| {
-                state.set_isoweek(week)?;
-                Ok(next)
-            })
-        }
-        DateTimeField::WeekOfMonth => parse_week_of_month_field(value, position, spec.width, state),
+        DateTimeField::DayOfWeek => parse_weekday_text(value, position, locale, state),
         DateTimeField::AlignedWeekOfMonth => {
             parse_aligned_week_of_month_field(value, position, spec.width, state)
         }
@@ -916,19 +807,6 @@ fn parse_field_spec(
                 },
             )
         }
-        DateTimeField::MilliOfDay => parse_number(value, position, (1, 8)).map(|(next, millis)| {
-            state.milli_of_day = Some(millis as u32);
-            next
-        }),
-        DateTimeField::NanoOfSecond => parse_number(value, position, number_bounds(spec.width, 9))
-            .and_then(|(next, nanos)| {
-                state.set_nanosecond(nanos)?;
-                Ok(next)
-            }),
-        DateTimeField::NanoOfDay => parse_number(value, position, (1, 14)).map(|(next, nanos)| {
-            state.nano_of_day = Some(nanos as u64);
-            next
-        }),
     }
 }
 
@@ -938,24 +816,10 @@ fn parse_fraction_spec(
     position: usize,
     state: &mut ParseState,
 ) -> Result<usize> {
-    match spec.field {
-        FractionField::NanoOfSecond => {
-            parse_fraction(value, position, spec.min_width, spec.max_width).and_then(
-                |(next, nanos)| {
-                    state.set_nanosecond(nanos as i32)?;
-                    Ok(next)
-                },
-            )
-        }
-        FractionField::NanoOfDay => parse_number(value, position, (1, 14)).map(|(next, nanos)| {
-            state.nano_of_day = Some(nanos as u64);
-            next
-        }),
-        FractionField::MilliOfDay => parse_number(value, position, (1, 8)).map(|(next, millis)| {
-            state.milli_of_day = Some(millis as u32);
-            next
-        }),
-    }
+    parse_fraction(value, position, spec.min_width, spec.max_width).and_then(|(next, nanos)| {
+        state.set_nanosecond(nanos as i32)?;
+        Ok(next)
+    })
 }
 
 fn parse_zone_spec(

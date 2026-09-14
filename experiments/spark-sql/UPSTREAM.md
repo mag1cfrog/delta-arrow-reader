@@ -11,7 +11,7 @@ sail-plan                sail-sql-analyzer
 sail-sql-macro           sail-sql-parser
 ```
 
-`upstream.patch` records the changes within that selection: 1,118 added lines and 47,121 deleted lines, including 144 deleted files. It also adds `sail-plan/src/function/table/range_exec.rs`, copied from upstream `sail-physical-plan/src/range.rs`. The initial copy preserved all 145 source lines apart from the modification notice. A later cut removes its uncalled getters and unused original-schema storage; range execution and projection behavior remain. Crates outside the selection are omitted, rather than represented as deletions in the patch.
+`upstream.patch` records the changes within that selection: 1,288 added lines and 47,632 deleted lines, including 144 deleted files. It also adds `sail-plan/src/function/table/range_exec.rs`, copied from upstream `sail-physical-plan/src/range.rs`. The initial copy preserved all 145 source lines apart from the modification notice. A later cut removes its uncalled getters and unused original-schema storage; range execution and projection behavior remain. Crates outside the selection are omitted, rather than represented as deletions in the patch.
 
 The retained source is adapted at these boundaries:
 
@@ -60,6 +60,7 @@ To reproduce the import, copy the three root files and the 8 directories above f
 | Unused DataFusion file-source features | 8 | 349 | 92,169 | 84,728 | 84,183 | 7,906 | 80 | 524 | 452 |
 | Remaining protocol configuration getters | 8 | 349 | 92,069 | 84,658 | 84,083 | 7,906 | 80 | 524 | 452 |
 | Unused JSON union builder | 8 | 349 | 91,945 | 84,547 | 83,937 | 7,928 | 80 | 524 | 452 |
+| Unreachable datetime format paths | 8 | 349 | 91,604 | 84,218 | 83,476 | 8,048 | 80 | 524 | 452 |
 
 Gross/production/test/build-script counts include comments and blank lines. The test count includes files under `tests/` and formatted `#[cfg(test)]` modules/constants. The counter rejects unrecognized test-item shapes; it uses upstream indentation to identify module boundaries. Production count means source outside those test sections and build scripts, not live code reached by this corpus. Unused functions still count.
 
@@ -71,4 +72,4 @@ Dependency counts include the runner and reader. The all-target graph also inclu
 
 `upstream.patch` describes changes within the eight retained crates. The four omitted Python/catalog crates are excluded from its selection; their removal remains visible in the repository diff against the import commit.
 
-The checkpoint was built with Rust 1.97.1, DataFusion 54.1.0 and Arrow 58.4.0, with `PROTOC`, `PYO3_PYTHON` and `PYO3_CONFIG_FILE` set to nonexistent paths. Sail declares Rust 1.96.0; the reader's lower MSRV is unchanged. Builds reused a local Cargo cache, so no cold-build timing claim is made. The debug-profile runner with debug information disabled is 412,473,312 bytes; this is a host binary measurement, not a wheel-size estimate or release-build measurement. The result is a demonstrated subset, not a minimum.
+The checkpoint was built with Rust 1.97.1, DataFusion 54.1.0 and Arrow 58.4.0, with `PROTOC`, `PYO3_PYTHON` and `PYO3_CONFIG_FILE` set to nonexistent paths. Sail declares Rust 1.96.0; the reader's lower MSRV is unchanged. Builds reused a local Cargo cache, so no cold-build timing claim is made. The debug-profile runner with debug information disabled is 412,439,072 bytes; this is a host binary measurement, not a wheel-size estimate or release-build measurement. The result is a demonstrated subset, not a minimum.

@@ -741,7 +741,7 @@ fn format_field_to_xml(
 }
 
 fn format_date_xml(date: chrono::NaiveDate, format: &DateTimeFormat) -> Result<String> {
-    use crate::scalar::datetime::format::{DateTimeFormatInput, TimePrecision, TimestampKind};
+    use crate::scalar::datetime::format::DateTimeFormatInput;
 
     let datetime = date.and_hms_opt(0, 0, 0).ok_or_else(|| {
         DataFusionError::Execution("Failed to create datetime from date".to_string())
@@ -751,8 +751,6 @@ fn format_date_xml(date: chrono::NaiveDate, format: &DateTimeFormat) -> Result<S
         datetime,
         timezone: None,
         zone_id: None,
-        timestamp_kind: TimestampKind::Normal,
-        precision: TimePrecision::Second,
     };
 
     format
@@ -930,9 +928,7 @@ fn format_timestamp_field(
 
         use chrono::Offset;
 
-        use crate::scalar::datetime::format::{
-            DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind,
-        };
+        use crate::scalar::datetime::format::{DateTimeFormatInput, TimeZoneDisplay};
 
         let offset = local_dt.offset().fix();
         let input = DateTimeFormatInput {
@@ -942,8 +938,6 @@ fn format_timestamp_field(
                 name: Some(&options.session_timezone),
             }),
             zone_id: Some(&options.session_timezone),
-            timestamp_kind: TimestampKind::Normal,
-            precision: TimePrecision::Microsecond,
         };
 
         if let Some(ref fmt) = options.timestamp_ltz_format {
@@ -967,14 +961,12 @@ fn format_timestamp_field(
                 DataFusionError::Execution(format!("Timestamp out of range: {micros}"))
             })?;
 
-        use crate::scalar::datetime::format::{DateTimeFormatInput, TimePrecision, TimestampKind};
+        use crate::scalar::datetime::format::DateTimeFormatInput;
 
         let input = DateTimeFormatInput {
             datetime: naive,
             timezone: None,
             zone_id: None,
-            timestamp_kind: TimestampKind::Normal,
-            precision: TimePrecision::Microsecond,
         };
 
         Ok(options

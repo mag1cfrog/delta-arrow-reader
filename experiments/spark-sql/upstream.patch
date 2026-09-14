@@ -14611,7 +14611,7 @@ index 4f8a681..83756e4 100644
  
  impl ScalarUDFImpl for SparkFromCSV {
 diff --git a/crates/sail-function/src/scalar/csv/spark_to_csv.rs b/crates/sail-function/src/scalar/csv/spark_to_csv.rs
-index cd97616..3019125 100644
+index cd97616..60bc8c8 100644
 --- a/crates/sail-function/src/scalar/csv/spark_to_csv.rs
 +++ b/crates/sail-function/src/scalar/csv/spark_to_csv.rs
 @@ -1,3 +1,4 @@
@@ -14619,7 +14619,18 @@ index cd97616..3019125 100644
  use std::sync::Arc;
  
  use chrono::prelude::*;
-@@ -197,10 +198,6 @@ impl SparkToCsv {
+@@ -17,9 +18,7 @@ use crate::scalar::csv::options::{
+     CsvFunction, find_option, find_option_with_alias, parse_bool_option, reject_null_entries,
+     validate_options,
+ };
+-use crate::scalar::datetime::format::{
+-    DateTimeFormat, DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind,
+-};
++use crate::scalar::datetime::format::{DateTimeFormat, DateTimeFormatInput, TimeZoneDisplay};
+ 
+ fn default_timestamp_format() -> DateTimeFormat {
+     #[expect(clippy::expect_used)]
+@@ -197,10 +196,6 @@ impl SparkToCsv {
          }
      }
  
@@ -14630,6 +14641,42 @@ index cd97616..3019125 100644
      fn column_name(args: &[Expr]) -> String {
          let Some(input) = args.first() else {
              return format!("{}()", Self::TO_CSV_NAME);
+@@ -433,8 +428,6 @@ fn format_timestamp_field(
+                 name: Some(session_timezone),
+             }),
+             zone_id: Some(session_timezone),
+-            timestamp_kind: TimestampKind::Normal,
+-            precision: TimePrecision::Microsecond,
+         };
+         if options.timestamp_format == *DEFAULT_TIMESTAMP_FORMAT {
+             DEFAULT_LTZ_FORMAT.format(input)
+@@ -452,8 +445,6 @@ fn format_timestamp_field(
+             datetime: naive,
+             timezone: None,
+             zone_id: None,
+-            timestamp_kind: TimestampKind::Normal,
+-            precision: TimePrecision::Microsecond,
+         })
+     }
+ }
+@@ -496,8 +487,6 @@ fn format_field_to_csv(
+                 })?,
+                 timezone: None,
+                 zone_id: None,
+-                timestamp_kind: TimestampKind::Normal,
+-                precision: TimePrecision::Second,
+             })
+         }
+ 
+@@ -519,8 +508,6 @@ fn format_field_to_csv(
+                 })?,
+                 timezone: None,
+                 zone_id: None,
+-                timestamp_kind: TimestampKind::Normal,
+-                precision: TimePrecision::Second,
+             })
+         }
+ 
 diff --git a/crates/sail-function/src/scalar/datetime/convert_tz.rs b/crates/sail-function/src/scalar/datetime/convert_tz.rs
 index c73874d..16d05f6 100644
 --- a/crates/sail-function/src/scalar/datetime/convert_tz.rs
@@ -14669,6 +14716,1111 @@ index c73874d..16d05f6 100644
  }
  
  impl HigherOrderUDFImpl for ConvertTzLazy {
+diff --git a/crates/sail-function/src/scalar/datetime/format/formatting.rs b/crates/sail-function/src/scalar/datetime/format/formatting.rs
+index 3fcbc0b..bdc2845 100644
+--- a/crates/sail-function/src/scalar/datetime/format/formatting.rs
++++ b/crates/sail-function/src/scalar/datetime/format/formatting.rs
+@@ -1,10 +1,11 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chrono::{Datelike, FixedOffset, NaiveDateTime, Timelike};
+ use datafusion_common::Result;
+ 
+-use super::locale::LocaleData;
++use super::locale::{EN_US, LocaleData};
+ use super::pattern::{
+-    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionField,
+-    FractionSpec, ZoneField, ZoneSpec,
++    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FractionSpec, ZoneField,
++    ZoneSpec,
+ };
+ 
+ #[derive(Debug, Clone, Copy)]
+@@ -13,34 +14,17 @@ pub struct TimeZoneDisplay<'a> {
+     pub name: Option<&'a str>,
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+-pub enum TimestampKind {
+-    Normal,
+-    LocalTimestamp,
+-    NonlocalTimestamp,
+-}
+-
+-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+-pub enum TimePrecision {
+-    Second,
+-    Millisecond,
+-    Microsecond,
+-    Nanosecond,
+-}
+-
+ #[derive(Debug, Clone, Copy)]
+ pub struct DateTimeFormatInput<'a> {
+     pub datetime: NaiveDateTime,
+     pub timezone: Option<TimeZoneDisplay<'a>>,
+     pub zone_id: Option<&'a str>,
+-    pub timestamp_kind: TimestampKind,
+-    pub precision: TimePrecision,
+ }
+ 
+ impl DateTimeFormat {
+     pub fn format(&self, input: DateTimeFormatInput<'_>) -> Result<String> {
+         let mut output = String::new();
+-        format_items(&self.items, input, self.locale.data(), &mut output)?;
++        format_items(&self.items, input, &EN_US, &mut output)?;
+         Ok(output)
+     }
+ }
+@@ -84,35 +68,23 @@ fn format_month(month: u32, count: usize, locale: &LocaleData, output: &mut Stri
+         1 => output.push_str(&month.to_string()),
+         2 => push_exact_padded(month as i64, 2, output),
+         3 => output.push_str(locale.months_short[(month - 1) as usize]),
+-        4 => output.push_str(locale.months_full[(month - 1) as usize]),
+-        _ => output.push_str(first_char(locale.months_full[(month - 1) as usize])),
++        _ => output.push_str(locale.months_full[(month - 1) as usize]),
+     }
+ }
+ 
+ fn format_weekday_text(weekday: usize, count: usize, locale: &LocaleData, output: &mut String) {
+     match count {
+         4 => output.push_str(locale.weekdays_full[weekday]),
+-        5.. => output.push_str(first_char(locale.weekdays_full[weekday])),
+         _ => output.push_str(locale.weekdays_short[weekday]),
+     }
+ }
+ 
+-fn first_char(value: &str) -> &str {
+-    value
+-        .char_indices()
+-        .nth(1)
+-        .map(|(index, _)| &value[..index])
+-        .unwrap_or(value)
+-}
+-
+ fn format_quarter(quarter: u32, count: usize, locale: &LocaleData, output: &mut String) {
+     match count {
+         1 => output.push_str(&quarter.to_string()),
+         2 => push_exact_padded(quarter as i64, 2, output),
+         3 => output.push_str(locale.quarters_short[(quarter - 1) as usize]),
+-        4 => output.push_str(locale.quarters_full[(quarter - 1) as usize]),
+-        5 => output.push_str(&quarter.to_string()), // narrow style
+-        _ => output.push_str(&quarter.to_string()),
++        _ => output.push_str(locale.quarters_full[(quarter - 1) as usize]),
+     }
+ }
+ 
+@@ -126,7 +98,6 @@ fn format_era(is_bc: bool, count: usize, locale: &LocaleData, output: &mut Strin
+     match count {
+         1..=3 => output.push_str(locale.eras_short[index]),
+         4 => output.push_str(locale.eras_full[index]),
+-        5 => output.push_str(locale.eras_narrow[index]),
+         _ => output.push_str(locale.eras_short[index]),
+     }
+ }
+@@ -231,17 +202,11 @@ fn format_field_spec(
+         DateTimeField::Era => {
+             format_era(datetime.year() <= 0, spec.width, locale, output);
+         }
+-        DateTimeField::ProlepticYear => {
+-            format_year(datetime.year(), spec.width, output);
+-        }
+         DateTimeField::YearOfEra => {
+             let year = datetime.year();
+             let year_of_era = if year <= 0 { 1 - year } else { year };
+             format_year(year_of_era, spec.width, output);
+         }
+-        DateTimeField::WeekBasedYear => {
+-            format_year(datetime.iso_week().year(), spec.width, output);
+-        }
+         DateTimeField::QuarterOfYear => {
+             format_quarter((datetime.month0() / 3) + 1, spec.width, locale, output);
+         }
+@@ -258,34 +223,11 @@ fn format_field_spec(
+         DateTimeField::DayOfYear => {
+             push_padded(datetime.ordinal() as i64, spec.width, output);
+         }
+-        DateTimeField::DayOfWeek => match spec.style {
+-            FieldStyle::Numeric | FieldStyle::LocalizedNumeric => {
+-                push_padded(
+-                    datetime.weekday().number_from_monday() as i64,
+-                    if spec.width == 1 { 0 } else { spec.width },
+-                    output,
+-                );
+-            }
+-            _ => {
+-                format_weekday_text(
+-                    datetime.weekday().num_days_from_monday() as usize,
+-                    spec.width,
+-                    locale,
+-                    output,
+-                );
+-            }
+-        },
+-        DateTimeField::WeekOfWeekBasedYear => {
+-            push_padded(
+-                datetime.iso_week().week() as i64,
+-                if spec.width == 1 { 0 } else { spec.width },
+-                output,
+-            );
+-        }
+-        DateTimeField::WeekOfMonth => {
+-            push_padded(
+-                ((datetime.day() - 1) / 7 + 1) as i64,
+-                if spec.width == 1 { 0 } else { spec.width },
++        DateTimeField::DayOfWeek => {
++            format_weekday_text(
++                datetime.weekday().num_days_from_monday() as usize,
++                spec.width,
++                locale,
+                 output,
+             );
+         }
+@@ -347,73 +289,11 @@ fn format_field_spec(
+                 output,
+             );
+         }
+-        DateTimeField::MilliOfDay => {
+-            let millis = ((((datetime.hour() * 60) + datetime.minute()) * 60 + datetime.second())
+-                * 1000)
+-                + datetime.nanosecond() / 1_000_000;
+-            push_padded(
+-                millis as i64,
+-                if spec.width == 1 { 0 } else { spec.width },
+-                output,
+-            );
+-        }
+-        DateTimeField::NanoOfSecond => {
+-            push_padded(
+-                datetime.nanosecond() as i64,
+-                if spec.width == 1 { 0 } else { spec.width },
+-                output,
+-            );
+-        }
+-        DateTimeField::NanoOfDay => {
+-            let nanos = (((datetime.hour() as u64 * 60 + datetime.minute() as u64) * 60
+-                + datetime.second() as u64)
+-                * 1_000_000_000)
+-                + datetime.nanosecond() as u64;
+-            push_padded(
+-                nanos as i64,
+-                if spec.width == 1 { 0 } else { spec.width },
+-                output,
+-            );
+-        }
+     }
+ }
+ 
+ fn format_fraction_spec(spec: &FractionSpec, input: DateTimeFormatInput<'_>, output: &mut String) {
+-    let datetime = input.datetime;
+-    match spec.field {
+-        FractionField::NanoOfSecond => {
+-            format_fraction(datetime.nanosecond(), spec.min_width, output)
+-        }
+-        FractionField::NanoOfDay => {
+-            let nanos = ((datetime.hour() as u64 * 60 + datetime.minute() as u64) * 60
+-                + datetime.second() as u64)
+-                * 1_000_000_000
+-                + datetime.nanosecond() as u64;
+-            push_padded(
+-                nanos as i64,
+-                if spec.min_width == 1 {
+-                    0
+-                } else {
+-                    spec.min_width
+-                },
+-                output,
+-            );
+-        }
+-        FractionField::MilliOfDay => {
+-            let millis = ((((datetime.hour() * 60) + datetime.minute()) * 60 + datetime.second())
+-                * 1000)
+-                + datetime.nanosecond() / 1_000_000;
+-            push_padded(
+-                millis as i64,
+-                if spec.min_width == 1 {
+-                    0
+-                } else {
+-                    spec.min_width
+-                },
+-                output,
+-            );
+-        }
+-    }
++    format_fraction(input.datetime.nanosecond(), spec.min_width, output);
+ }
+ 
+ fn format_zone_spec(spec: &ZoneSpec, input: DateTimeFormatInput<'_>, output: &mut String) {
+diff --git a/crates/sail-function/src/scalar/datetime/format/locale.rs b/crates/sail-function/src/scalar/datetime/format/locale.rs
+index a962301..7d1819c 100644
+--- a/crates/sail-function/src/scalar/datetime/format/locale.rs
++++ b/crates/sail-function/src/scalar/datetime/format/locale.rs
+@@ -1,5 +1,4 @@
+-use super::pattern::LocaleSpec;
+-
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ #[derive(Debug, Clone, Copy)]
+ pub(crate) struct LocaleData {
+     pub(crate) months_short: [&'static str; 12],
+@@ -10,7 +9,6 @@ pub(crate) struct LocaleData {
+     pub(crate) quarters_full: [&'static str; 4],
+     pub(crate) eras_short: [&'static str; 2],
+     pub(crate) eras_full: [&'static str; 2],
+-    pub(crate) eras_narrow: [&'static str; 2],
+     pub(crate) am_pm: [&'static str; 2],
+ }
+ 
+@@ -46,12 +44,5 @@ pub(crate) const EN_US: LocaleData = LocaleData {
+     quarters_full: ["1st quarter", "2nd quarter", "3rd quarter", "4th quarter"],
+     eras_short: ["BC", "AD"],
+     eras_full: ["Before Christ", "Anno Domini"],
+-    eras_narrow: ["B", "A"],
+     am_pm: ["AM", "PM"],
+ };
+-
+-impl LocaleSpec {
+-    pub(crate) fn data(&self) -> &'static LocaleData {
+-        &EN_US
+-    }
+-}
+diff --git a/crates/sail-function/src/scalar/datetime/format/mod.rs b/crates/sail-function/src/scalar/datetime/format/mod.rs
+index f00779d..f3dc551 100644
+--- a/crates/sail-function/src/scalar/datetime/format/mod.rs
++++ b/crates/sail-function/src/scalar/datetime/format/mod.rs
+@@ -1,9 +1,131 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ mod formatting;
+ mod locale;
+ mod parser;
+ mod parsing;
+ mod pattern;
+ 
+-pub use formatting::{DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind};
++pub use formatting::{DateTimeFormatInput, TimeZoneDisplay};
+ pub use parsing::ParsedDateTime;
+-pub use pattern::{DateTimeFormat, LocaleSpec, ResolverStyle};
++pub use pattern::DateTimeFormat;
++
++#[cfg(test)]
++#[expect(clippy::unwrap_used)]
++mod tests {
++    use chrono::{FixedOffset, NaiveDate};
++
++    use super::*;
++
++    #[test]
++    fn datetime_patterns_keep_values_and_rejection_boundaries() -> datafusion_common::Result<()> {
++        let datetime = NaiveDate::from_ymd_opt(2024, 2, 29)
++            .unwrap()
++            .and_hms_nano_opt(13, 5, 9, 123_456_789)
++            .unwrap();
++        let input = DateTimeFormatInput {
++            datetime,
++            timezone: Some(TimeZoneDisplay {
++                offset: FixedOffset::east_opt(0).unwrap(),
++                name: Some("UTC"),
++            }),
++            zone_id: Some("UTC"),
++        };
++        for (pattern, expected) in [
++            (
++                "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
++                "2024-02-29 13:05:09.123456789",
++            ),
++            ("G GG GGG GGGG", "AD AD AD Anno Domini"),
++            (
++                "y yy yyy yyyy yyyyy yyyyyy",
++                "2024 24 2024 2024 02024 002024",
++            ),
++            (
++                "M MM MMM MMMM L LL LLL LLLL",
++                "2 02 Feb February 2 02 Feb February",
++            ),
++            ("E EE EEE EEEE", "Thu Thu Thu Thursday"),
++            (
++                "Q QQ QQQ QQQQ q qq qqq qqqq",
++                "1 01 Q1 1st quarter 1 01 Q1 1st quarter",
++            ),
++            ("D DD DDD F", "60 60 060 1"),
++            (
++                "H HH k kk K KK h hh m mm s ss a",
++                "13 13 13 13 1 01 1 01 5 05 9 09 PM",
++            ),
++            ("S SS SSS SSSSSSSSS", "1 12 123 123456789"),
++            ("X XX XXX XXXX XXXXX", "Z Z Z Z Z"),
++            ("yyyy-MM-dd['T'HH:mm:ss]", "2024-02-29T13:05:09"),
++            ("'Y W w u e c A B n N p'", "Y W w u e c A B n N p"),
++        ] {
++            assert_eq!(
++                DateTimeFormat::for_formatting(pattern)?.format(input)?,
++                expected,
++                "{pattern}"
++            );
++        }
++        for (pattern, value) in [
++            (
++                "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
++                "2024-02-29 13:05:09.123456789",
++            ),
++            (
++                "yyyy-MM-dd['T'HH:mm:ss[.SSSSSSSSS]]",
++                "2024-02-29T13:05:09.123456789",
++            ),
++        ] {
++            assert_eq!(
++                DateTimeFormat::for_parsing(pattern)?
++                    .parse_datetime_value(value)?
++                    .datetime,
++                datetime
++            );
++        }
++        assert_eq!(
++            DateTimeFormat::for_parsing("yy-MMM-dd")?.parse_date_value("24-Feb-29")?,
++            datetime.date()
++        );
++        let offset = DateTimeFormat::for_parsing("yyyy-MM-dd HH:mm:ssXXX")?
++            .parse_datetime_value("2024-02-29 13:05:09+05:30")?;
++        assert_eq!(offset.offset.unwrap().local_minus_utc(), 19_800);
++        for symbol in ['Y', 'W', 'w', 'u', 'e', 'c', 'A', 'B', 'n', 'N', 'p'] {
++            for width in 1..=10 {
++                let pattern = symbol.to_string().repeat(width);
++                let reason = if "YWwuec".contains(symbol) {
++                    "week-based"
++                } else {
++                    "unsupported"
++                };
++                for result in [
++                    DateTimeFormat::for_parsing(&pattern),
++                    DateTimeFormat::for_formatting(&pattern),
++                ] {
++                    assert!(
++                        result.unwrap_err().to_string().contains(reason),
++                        "{pattern}"
++                    );
++                }
++            }
++        }
++        for pattern in ["E", "F", "Q", "q"] {
++            assert!(DateTimeFormat::for_parsing(pattern).is_err());
++        }
++        for pattern in ["MMMMM", "yyyyyyy", "SSSSSSSSSS", "[yyyy", "'unfinished"] {
++            assert!(DateTimeFormat::for_parsing(pattern).is_err());
++            assert!(DateTimeFormat::for_formatting(pattern).is_err());
++        }
++        for value in [
++            "2024-02-30 13:05:09",
++            "2024-02-29 25:05:09",
++            "2024-02-29 13:05:09 trailing",
++        ] {
++            assert!(
++                DateTimeFormat::for_parsing("yyyy-MM-dd HH:mm:ss")?
++                    .parse_datetime_value(value)
++                    .is_err()
++            );
++        }
++        Ok(())
++    }
++}
+diff --git a/crates/sail-function/src/scalar/datetime/format/parser.rs b/crates/sail-function/src/scalar/datetime/format/parser.rs
+index 25ae5fb..9e14689 100644
+--- a/crates/sail-function/src/scalar/datetime/format/parser.rs
++++ b/crates/sail-function/src/scalar/datetime/format/parser.rs
+@@ -1,8 +1,9 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use datafusion_common::{Result, exec_err};
+ 
+ use super::pattern::{
+-    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionField,
+-    FractionSpec, PatternUse, ResolverStyle, SignStyle, ZoneField, ZoneSpec, ZoneStyle,
++    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionSpec,
++    PatternUse, ZoneField, ZoneSpec,
+ };
+ 
+ pub(crate) fn parse_datetime_pattern(
+@@ -15,11 +16,7 @@ pub(crate) fn parse_datetime_pattern(
+     if position != chars.len() {
+         return exec_err!("invalid datetime pattern: unexpected closing optional section");
+     }
+-    Ok(DateTimeFormat {
+-        items,
+-        locale: Default::default(),
+-        resolver_style: ResolverStyle::Strict,
+-    })
++    Ok(DateTimeFormat { items })
+ }
+ 
+ fn parse_items(
+@@ -178,36 +175,13 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             width: count,
+             style: match count {
+                 1..=3 => FieldStyle::TextShort,
+-                4 => FieldStyle::TextFull,
+-                _ => FieldStyle::TextNarrow,
++                _ => FieldStyle::TextFull,
+             },
+-            sign_style: SignStyle::Normal,
+         })),
+         'y' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::YearOfEra,
+             width: count,
+             style: FieldStyle::Numeric,
+-            sign_style: if count == 2 {
+-                SignStyle::Never
+-            } else {
+-                SignStyle::Normal
+-            },
+-        })),
+-        'u' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+-            kind: DateTimeField::ProlepticYear,
+-            width: count,
+-            style: FieldStyle::Numeric,
+-            sign_style: SignStyle::Normal,
+-        })),
+-        'Y' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+-            kind: DateTimeField::WeekBasedYear,
+-            width: count,
+-            style: FieldStyle::Numeric,
+-            sign_style: if count == 2 {
+-                SignStyle::Never
+-            } else {
+-                SignStyle::Normal
+-            },
+         })),
+         'Q' | 'q' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::QuarterOfYear,
+@@ -215,10 +189,8 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             style: match count {
+                 1 | 2 => FieldStyle::Numeric,
+                 3 => FieldStyle::TextShort,
+-                4 => FieldStyle::TextFull,
+-                _ => FieldStyle::TextNarrow,
++                _ => FieldStyle::TextFull,
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'M' | 'L' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::MonthOfYear,
+@@ -227,10 +199,8 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+                 1 => FieldStyle::Numeric,
+                 2 => FieldStyle::LocalizedNumeric,
+                 3 => FieldStyle::TextShort,
+-                4 => FieldStyle::TextFull,
+-                _ => FieldStyle::TextNarrow,
++                _ => FieldStyle::TextFull,
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'd' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::DayOfMonth,
+@@ -240,62 +210,29 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             } else {
+                 FieldStyle::LocalizedNumeric
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'D' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::DayOfYear,
+             width: count,
+             style: FieldStyle::LocalizedNumeric,
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'E' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::DayOfWeek,
+             width: count,
+             style: match count {
+                 1..=3 => FieldStyle::TextShort,
+-                4 => FieldStyle::TextFull,
+-                _ => FieldStyle::TextNarrow,
++                _ => FieldStyle::TextFull,
+             },
+-            sign_style: SignStyle::Normal,
+-        })),
+-        'e' | 'c' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+-            kind: DateTimeField::DayOfWeek,
+-            width: count,
+-            style: match count {
+-                1 | 2 => FieldStyle::Numeric,
+-                3 => FieldStyle::TextShort,
+-                4 => FieldStyle::TextFull,
+-                _ => FieldStyle::TextNarrow,
+-            },
+-            sign_style: SignStyle::NotNegative,
+-        })),
+-        'w' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+-            kind: DateTimeField::WeekOfWeekBasedYear,
+-            width: count,
+-            style: if count == 1 {
+-                FieldStyle::Numeric
+-            } else {
+-                FieldStyle::LocalizedNumeric
+-            },
+-            sign_style: SignStyle::NotNegative,
+-        })),
+-        'W' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+-            kind: DateTimeField::WeekOfMonth,
+-            width: count,
+-            style: FieldStyle::Numeric,
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'F' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::AlignedWeekOfMonth,
+             width: count,
+             style: FieldStyle::Numeric,
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'a' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::AmPmOfDay,
+             width: count,
+             style: FieldStyle::TextShort,
+-            sign_style: SignStyle::Normal,
+         })),
+         'H' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::HourOfDay,
+@@ -305,7 +242,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             } else {
+                 FieldStyle::LocalizedNumeric
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'k' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::ClockHourOfDay,
+@@ -315,7 +251,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             } else {
+                 FieldStyle::LocalizedNumeric
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'K' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::HourOfAmPm,
+@@ -325,7 +260,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             } else {
+                 FieldStyle::LocalizedNumeric
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'h' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::ClockHourOfAmPm,
+@@ -335,7 +269,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             } else {
+                 FieldStyle::LocalizedNumeric
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'm' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::MinuteOfHour,
+@@ -345,7 +278,6 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             } else {
+                 FieldStyle::LocalizedNumeric
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         's' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+             kind: DateTimeField::SecondOfMinute,
+@@ -355,45 +287,19 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             } else {
+                 FieldStyle::LocalizedNumeric
+             },
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'S' => Ok(DateTimeItem::Fraction(FractionSpec {
+-            field: FractionField::NanoOfSecond,
+             min_width: if pattern_use == PatternUse::Parsing {
+                 1
+             } else {
+                 count
+             },
+             max_width: count.min(9),
+-            decimal_point: false,
+-        })),
+-        'A' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+-            kind: DateTimeField::MilliOfDay,
+-            width: count,
+-            style: FieldStyle::LocalizedNumeric,
+-            sign_style: SignStyle::NotNegative,
+-        })),
+-        'n' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+-            kind: DateTimeField::NanoOfSecond,
+-            width: count,
+-            style: FieldStyle::LocalizedNumeric,
+-            sign_style: SignStyle::NotNegative,
+-        })),
+-        'N' => Ok(DateTimeItem::Field(DateTimeFieldSpec {
+-            kind: DateTimeField::NanoOfDay,
+-            width: count,
+-            style: FieldStyle::LocalizedNumeric,
+-            sign_style: SignStyle::NotNegative,
+         })),
+         'X' | 'x' => Ok(DateTimeItem::Zone(ZoneSpec {
+             kind: ZoneField::IsoOffset,
+             width: count,
+             zero_as_z: symbol == 'X',
+-            style: match count {
+-                1..=2 => ZoneStyle::Short,
+-                3..=4 => ZoneStyle::Full,
+-                _ => ZoneStyle::Full,
+-            },
+         })),
+         'Z' => Ok(DateTimeItem::Zone(ZoneSpec {
+             kind: if count == 4 {
+@@ -405,37 +311,21 @@ fn build_field_item(symbol: char, count: usize, pattern_use: PatternUse) -> Resu
+             },
+             width: count,
+             zero_as_z: count == 5,
+-            style: match count {
+-                1..=3 => ZoneStyle::Short,
+-                4 => ZoneStyle::Full,
+-                _ => ZoneStyle::Full,
+-            },
+         })),
+         'O' => Ok(DateTimeItem::Zone(ZoneSpec {
+             kind: ZoneField::LocalizedOffset,
+             width: count,
+             zero_as_z: false,
+-            style: if count == 1 {
+-                ZoneStyle::Short
+-            } else {
+-                ZoneStyle::Full
+-            },
+         })),
+         'V' => Ok(DateTimeItem::Zone(ZoneSpec {
+             kind: ZoneField::ZoneId,
+             width: count,
+             zero_as_z: false,
+-            style: ZoneStyle::Id,
+         })),
+         'z' => Ok(DateTimeItem::Zone(ZoneSpec {
+             kind: ZoneField::ZoneName,
+             width: count,
+             zero_as_z: false,
+-            style: if count <= 3 {
+-                ZoneStyle::Short
+-            } else {
+-                ZoneStyle::Full
+-            },
+         })),
+         _ => exec_err!("unsupported datetime pattern symbol: '{}'", symbol),
+     }
+diff --git a/crates/sail-function/src/scalar/datetime/format/parsing.rs b/crates/sail-function/src/scalar/datetime/format/parsing.rs
+index d9016c6..0e2148b 100644
+--- a/crates/sail-function/src/scalar/datetime/format/parsing.rs
++++ b/crates/sail-function/src/scalar/datetime/format/parsing.rs
+@@ -1,11 +1,12 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use chrono::format::Parsed;
+ use chrono::{Datelike, FixedOffset, NaiveDate, NaiveDateTime, Weekday};
+ use datafusion_common::{Result, exec_datafusion_err};
+ 
+-use super::locale::LocaleData;
++use super::locale::{EN_US, LocaleData};
+ use super::pattern::{
+-    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionField,
+-    FractionSpec, ZoneField, ZoneSpec,
++    DateTimeField, DateTimeFieldSpec, DateTimeFormat, DateTimeItem, FieldStyle, FractionSpec,
++    ZoneField, ZoneSpec,
+ };
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+@@ -23,10 +24,7 @@ struct ParseState {
+     clock_hour_of_day: Option<u32>,
+     hour_of_ampm: Option<u32>,
+     clock_hour_of_ampm: Option<u32>,
+-    week_of_month: Option<u32>,
+     aligned_week_of_month: Option<u32>,
+-    milli_of_day: Option<u32>,
+-    nano_of_day: Option<u64>,
+     timezone: Option<String>,
+ }
+ 
+@@ -66,7 +64,7 @@ impl DateTimeFormat {
+             &self.items,
+             value,
+             0,
+-            self.locale.data(),
++            &EN_US,
+             &mut state,
+             AdjacentNumericRun::None,
+         )?;
+@@ -145,9 +143,7 @@ fn parse_items(
+ 
+ fn field_has_variable_width_in_numeric_run(spec: &DateTimeFieldSpec) -> bool {
+     match spec.kind {
+-        DateTimeField::YearOfEra | DateTimeField::ProlepticYear | DateTimeField::WeekBasedYear => {
+-            spec.width != 2
+-        }
++        DateTimeField::YearOfEra => spec.width != 2,
+         DateTimeField::DayOfYear => spec.width < 3,
+         _ => spec.width == 1,
+     }
+@@ -186,7 +182,6 @@ fn parse_quarter(
+         }
+         4 => parse_text(value, position, &locale.quarters_full)
+             .map(|(next, index)| (next, index as i32 + 1))?,
+-        5 => parse_number(value, position, (1, 1))?,
+         _ => unreachable!(),
+     };
+     if !(1..=4).contains(&quarter) {
+@@ -267,10 +262,6 @@ fn parse_era(
+     let choices = match style {
+         FieldStyle::TextShort => [(locale.eras_short[0], true), (locale.eras_short[1], false)],
+         FieldStyle::TextFull => [(locale.eras_full[0], true), (locale.eras_full[1], false)],
+-        FieldStyle::TextNarrow => [
+-            (locale.eras_narrow[0], true),
+-            (locale.eras_narrow[1], false),
+-        ],
+         _ => {
+             return Err(exec_datafusion_err!(
+                 "unsupported datetime era field style: {style:?}"
+@@ -518,20 +509,6 @@ fn parse_zone_name(value: &str, position: usize) -> Result<(usize, String)> {
+     }
+ }
+ 
+-fn parse_week_of_month_field(
+-    value: &str,
+-    position: usize,
+-    count: usize,
+-    state: &mut ParseState,
+-) -> Result<usize> {
+-    let (next, week) = parse_number(value, position, number_bounds(count, 1))?;
+-    if !(1..=5).contains(&week) {
+-        return Err(exec_datafusion_err!("invalid week-of-month: {week}"));
+-    }
+-    state.week_of_month = Some(week as u32);
+-    Ok(next)
+-}
+-
+ fn parse_aligned_week_of_month_field(
+     value: &str,
+     position: usize,
+@@ -549,14 +526,6 @@ fn parse_aligned_week_of_month_field(
+ }
+ 
+ fn validate_week_of_month(state: &ParseState, date: NaiveDate) -> Result<()> {
+-    if let Some(expected) = state.week_of_month {
+-        let actual = (date.day() - 1) / 7 + 1;
+-        if expected != actual {
+-            return Err(exec_datafusion_err!(
+-                "week-of-month {expected} is inconsistent with resolved date {date}"
+-            ));
+-        }
+-    }
+     if let Some(expected) = state.aligned_week_of_month {
+         let actual = (date.day() - 1) % 7 + 1;
+         if expected != actual {
+@@ -610,23 +579,6 @@ impl ParseState {
+             self.set_year(year)?;
+         }
+ 
+-        if let Some(nanos) = self.nano_of_day {
+-            let seconds = nanos / 1_000_000_000;
+-            let nanosecond = (nanos % 1_000_000_000) as u32;
+-            if seconds > 86_399 {
+-                return Err(exec_datafusion_err!("invalid nano-of-day: {nanos}"));
+-            }
+-            self.set_time_of_day(seconds as u32, nanosecond)?;
+-        }
+-        if let Some(millis) = self.milli_of_day {
+-            let seconds = millis / 1000;
+-            let nanosecond = (millis % 1000) * 1_000_000;
+-            if seconds > 86_399 {
+-                return Err(exec_datafusion_err!("invalid milli-of-day: {millis}"));
+-            }
+-            self.set_time_of_day(seconds, nanosecond)?;
+-        }
+-
+         if let Some(hour) = self.clock_hour_of_day {
+             if !(1..=24).contains(&hour) {
+                 return Err(exec_datafusion_err!(
+@@ -646,7 +598,7 @@ impl ParseState {
+     }
+ 
+     fn apply_defaults(&mut self) -> Result<()> {
+-        if self.parsed.year.is_none() && self.parsed.isoyear.is_none() {
++        if self.parsed.year.is_none() {
+             self.set_year(1970)?;
+         }
+         // Convert quarter to month if quarter is set and month is not
+@@ -661,25 +613,11 @@ impl ParseState {
+             let month = (quarter - 1) * 3 + 1;
+             self.set_month(month as i32)?;
+         }
+-        if self.parsed.month.is_none()
+-            && self.parsed.ordinal.is_none()
+-            && self.parsed.isoweek.is_none()
+-            && self.parsed.week_from_mon.is_none()
+-            && self.parsed.week_from_sun.is_none()
+-        {
++        if self.parsed.month.is_none() && self.parsed.ordinal.is_none() {
+             self.set_month(1)?;
+         }
+-        if self.parsed.day.is_none()
+-            && self.parsed.ordinal.is_none()
+-            && self.parsed.isoweek.is_none()
+-            && self.parsed.week_from_mon.is_none()
+-            && self.parsed.week_from_sun.is_none()
+-        {
+-            let day = self
+-                .week_of_month
+-                .map(|week| (week - 1) * 7 + 1)
+-                .unwrap_or(1);
+-            self.set_day(day as i32)?;
++        if self.parsed.day.is_none() && self.parsed.ordinal.is_none() {
++            self.set_day(1)?;
+         }
+         if self.parsed.hour_div_12.is_none() && self.parsed.hour_mod_12.is_none() {
+             self.set_hour(0)?;
+@@ -693,25 +631,12 @@ impl ParseState {
+         Ok(())
+     }
+ 
+-    fn set_time_of_day(&mut self, seconds: u32, nanosecond: u32) -> Result<()> {
+-        self.set_hour((seconds / 3600) as i32)?;
+-        self.set_minute((seconds % 3600 / 60) as i32)?;
+-        self.set_second((seconds % 60) as i32)?;
+-        self.set_nanosecond(nanosecond as i32)
+-    }
+-
+     fn set_year(&mut self, value: i32) -> Result<()> {
+         self.parsed
+             .set_year(value as i64)
+             .map_err(|e| exec_datafusion_err!("invalid parsed year: {e}"))
+     }
+ 
+-    fn set_isoyear(&mut self, value: i32) -> Result<()> {
+-        self.parsed
+-            .set_isoyear(value as i64)
+-            .map_err(|e| exec_datafusion_err!("invalid parsed ISO year: {e}"))
+-    }
+-
+     fn set_quarter(&mut self, value: i32) -> Result<()> {
+         self.parsed
+             .set_quarter(value as i64)
+@@ -736,12 +661,6 @@ impl ParseState {
+             .map_err(|e| exec_datafusion_err!("invalid parsed ordinal: {e}"))
+     }
+ 
+-    fn set_isoweek(&mut self, value: i32) -> Result<()> {
+-        self.parsed
+-            .set_isoweek(value as i64)
+-            .map_err(|e| exec_datafusion_err!("invalid parsed ISO week: {e}"))
+-    }
+-
+     fn set_weekday(&mut self, value: Weekday) -> Result<()> {
+         self.parsed
+             .set_weekday(value)
+@@ -821,20 +740,6 @@ fn parse_field_spec(
+                 },
+             )
+         }
+-        DateTimeField::ProlepticYear => {
+-            parse_signed_number(value, position, number_bounds(spec.width, 10)).and_then(
+-                |(next, year)| {
+-                    state.set_year(expand_year(year, spec.width))?;
+-                    Ok(next)
+-                },
+-            )
+-        }
+-        DateTimeField::WeekBasedYear => {
+-            parse_number(value, position, number_bounds(spec.width, 10)).and_then(|(next, year)| {
+-                state.set_isoyear(expand_year(year, spec.width))?;
+-                Ok(next)
+-            })
+-        }
+         DateTimeField::QuarterOfYear => parse_quarter(value, position, spec.width, locale, state),
+         DateTimeField::MonthOfYear => parse_month(value, position, spec.width, locale, state),
+         DateTimeField::DayOfMonth => parse_number(value, position, number_bounds(spec.width, 2))
+@@ -847,21 +752,7 @@ fn parse_field_spec(
+                 state.set_ordinal(ordinal)?;
+                 Ok(next)
+             }),
+-        DateTimeField::DayOfWeek => match spec.style {
+-            FieldStyle::Numeric => parse_number(value, position, number_bounds(spec.width, 1))
+-                .and_then(|(next, weekday)| {
+-                    state.set_weekday(weekday_from_monday(weekday as u32)?)?;
+-                    Ok(next)
+-                }),
+-            _ => parse_weekday_text(value, position, locale, state),
+-        },
+-        DateTimeField::WeekOfWeekBasedYear => {
+-            parse_number(value, position, number_bounds(spec.width, 2)).and_then(|(next, week)| {
+-                state.set_isoweek(week)?;
+-                Ok(next)
+-            })
+-        }
+-        DateTimeField::WeekOfMonth => parse_week_of_month_field(value, position, spec.width, state),
++        DateTimeField::DayOfWeek => parse_weekday_text(value, position, locale, state),
+         DateTimeField::AlignedWeekOfMonth => {
+             parse_aligned_week_of_month_field(value, position, spec.width, state)
+         }
+@@ -916,19 +807,6 @@ fn parse_field_spec(
+                 },
+             )
+         }
+-        DateTimeField::MilliOfDay => parse_number(value, position, (1, 8)).map(|(next, millis)| {
+-            state.milli_of_day = Some(millis as u32);
+-            next
+-        }),
+-        DateTimeField::NanoOfSecond => parse_number(value, position, number_bounds(spec.width, 9))
+-            .and_then(|(next, nanos)| {
+-                state.set_nanosecond(nanos)?;
+-                Ok(next)
+-            }),
+-        DateTimeField::NanoOfDay => parse_number(value, position, (1, 14)).map(|(next, nanos)| {
+-            state.nano_of_day = Some(nanos as u64);
+-            next
+-        }),
+     }
+ }
+ 
+@@ -938,24 +816,10 @@ fn parse_fraction_spec(
+     position: usize,
+     state: &mut ParseState,
+ ) -> Result<usize> {
+-    match spec.field {
+-        FractionField::NanoOfSecond => {
+-            parse_fraction(value, position, spec.min_width, spec.max_width).and_then(
+-                |(next, nanos)| {
+-                    state.set_nanosecond(nanos as i32)?;
+-                    Ok(next)
+-                },
+-            )
+-        }
+-        FractionField::NanoOfDay => parse_number(value, position, (1, 14)).map(|(next, nanos)| {
+-            state.nano_of_day = Some(nanos as u64);
+-            next
+-        }),
+-        FractionField::MilliOfDay => parse_number(value, position, (1, 8)).map(|(next, millis)| {
+-            state.milli_of_day = Some(millis as u32);
+-            next
+-        }),
+-    }
++    parse_fraction(value, position, spec.min_width, spec.max_width).and_then(|(next, nanos)| {
++        state.set_nanosecond(nanos as i32)?;
++        Ok(next)
++    })
+ }
+ 
+ fn parse_zone_spec(
+diff --git a/crates/sail-function/src/scalar/datetime/format/pattern.rs b/crates/sail-function/src/scalar/datetime/format/pattern.rs
+index eb75733..1cf871a 100644
+--- a/crates/sail-function/src/scalar/datetime/format/pattern.rs
++++ b/crates/sail-function/src/scalar/datetime/format/pattern.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use datafusion_common::Result;
+ 
+ use super::parser::parse_datetime_pattern;
+@@ -5,22 +6,6 @@ use super::parser::parse_datetime_pattern;
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+ pub struct DateTimeFormat {
+     pub(crate) items: Vec<DateTimeItem>,
+-    pub(crate) locale: LocaleSpec,
+-    pub(crate) resolver_style: ResolverStyle,
+-}
+-
+-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+-pub enum LocaleSpec {
+-    #[default]
+-    Default,
+-}
+-
+-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+-pub enum ResolverStyle {
+-    Strict,
+-    #[default]
+-    Smart,
+-    Lenient,
+ }
+ 
+ impl DateTimeFormat {
+@@ -53,22 +38,17 @@ pub(crate) struct DateTimeFieldSpec {
+     pub(crate) kind: DateTimeField,
+     pub(crate) width: usize,
+     pub(crate) style: FieldStyle,
+-    pub(crate) sign_style: SignStyle,
+ }
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+ pub(crate) enum DateTimeField {
+     Era,
+-    ProlepticYear,
+     YearOfEra,
+-    WeekBasedYear,
+     QuarterOfYear,
+     MonthOfYear,
+     DayOfMonth,
+     DayOfYear,
+     DayOfWeek,
+-    WeekOfWeekBasedYear,
+-    WeekOfMonth,
+     AlignedWeekOfMonth,
+     AmPmOfDay,
+     ClockHourOfAmPm,
+@@ -77,47 +57,20 @@ pub(crate) enum DateTimeField {
+     HourOfDay,
+     MinuteOfHour,
+     SecondOfMinute,
+-    MilliOfDay,
+-    NanoOfSecond,
+-    NanoOfDay,
+ }
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+-#[expect(dead_code)]
+ pub(crate) enum FieldStyle {
+     Numeric,
+     TextShort,
+     TextFull,
+-    TextNarrow,
+-    StandaloneTextShort,
+-    StandaloneTextFull,
+     LocalizedNumeric,
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+-#[expect(dead_code)]
+-pub(crate) enum SignStyle {
+-    Normal,
+-    Never,
+-    NotNegative,
+-    ExceedsPad,
+-    Always,
+-}
+-
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+ pub(crate) struct FractionSpec {
+-    pub(crate) field: FractionField,
+     pub(crate) min_width: usize,
+     pub(crate) max_width: usize,
+-    pub(crate) decimal_point: bool,
+-}
+-
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+-#[expect(dead_code)]
+-pub(crate) enum FractionField {
+-    NanoOfSecond,
+-    NanoOfDay,
+-    MilliOfDay,
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+@@ -125,7 +78,6 @@ pub(crate) struct ZoneSpec {
+     pub(crate) kind: ZoneField,
+     pub(crate) width: usize,
+     pub(crate) zero_as_z: bool,
+-    pub(crate) style: ZoneStyle,
+ }
+ 
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+@@ -136,10 +88,3 @@ pub(crate) enum ZoneField {
+     ZoneId,
+     ZoneName,
+ }
+-
+-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+-pub(crate) enum ZoneStyle {
+-    Short,
+-    Full,
+-    Id,
+-}
 diff --git a/crates/sail-function/src/scalar/datetime/mod.rs b/crates/sail-function/src/scalar/datetime/mod.rs
 index 735941a..8dfb514 100644
 --- a/crates/sail-function/src/scalar/datetime/mod.rs
@@ -14707,7 +15859,7 @@ index 9116fc4..e94c51a 100644
          match parse_date(value).and_then(|date| Ok(Date32Type::from_naive_date(date.try_into()?))) {
              Ok(v) => Ok(Some(v)),
 diff --git a/crates/sail-function/src/scalar/datetime/spark_date_format.rs b/crates/sail-function/src/scalar/datetime/spark_date_format.rs
-index 2e22cfc..21f7522 100644
+index 2e22cfc..a9369f5 100644
 --- a/crates/sail-function/src/scalar/datetime/spark_date_format.rs
 +++ b/crates/sail-function/src/scalar/datetime/spark_date_format.rs
 @@ -1,3 +1,4 @@
@@ -14715,7 +15867,18 @@ index 2e22cfc..21f7522 100644
  use std::collections::HashMap;
  use std::collections::hash_map::Entry;
  use std::sync::Arc;
-@@ -36,10 +37,6 @@ impl SparkDateFormat {
+@@ -19,9 +20,7 @@ use sail_common_datafusion::utils::datetime::localize_with_fallback;
+ use sail_common_datafusion::utils::items::ItemTaker;
+ use sail_sql_analyzer::parser::parse_timestamp;
+ 
+-use crate::scalar::datetime::format::{
+-    DateTimeFormat, DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind,
+-};
++use crate::scalar::datetime::format::{DateTimeFormat, DateTimeFormatInput, TimeZoneDisplay};
+ 
+ #[derive(Debug, PartialEq, Eq, Hash)]
+ pub struct SparkDateFormat {
+@@ -36,10 +35,6 @@ impl SparkDateFormat {
              signature: Signature::variadic_any(Volatility::Immutable),
          }
      }
@@ -14726,6 +15889,41 @@ index 2e22cfc..21f7522 100644
  }
  
  impl ScalarUDFImpl for SparkDateFormat {
+@@ -564,16 +559,12 @@ fn format_timestamp_value(
+                     name: Some(tz_str),
+                 }),
+                 zone_id: Some(tz_str),
+-                timestamp_kind: TimestampKind::Normal,
+-                precision: TimePrecision::Microsecond,
+             })
+         }
+         None => format.format(DateTimeFormatInput {
+             datetime: naive_datetime,
+             timezone: None,
+             zone_id: None,
+-            timestamp_kind: TimestampKind::Normal,
+-            precision: TimePrecision::Microsecond,
+         }),
+     }
+ }
+@@ -586,8 +577,6 @@ fn format_date32_value(value: i32, format: &DateTimeFormat) -> Result<String> {
+         datetime,
+         timezone: None,
+         zone_id: None,
+-        timestamp_kind: TimestampKind::Normal,
+-        precision: TimePrecision::Microsecond,
+     })
+ }
+ 
+@@ -599,8 +588,6 @@ fn format_date64_value(value: i64, format: &DateTimeFormat) -> Result<String> {
+         datetime,
+         timezone: None,
+         zone_id: None,
+-        timestamp_kind: TimestampKind::Normal,
+-        precision: TimePrecision::Microsecond,
+     })
+ }
+ 
 diff --git a/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs b/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs
 index 4c146ac..a8bf64a 100644
 --- a/crates/sail-function/src/scalar/datetime/spark_make_timestamp_ntz.rs
@@ -15508,6 +16706,53 @@ index 2b596d4..03a4d3a 100644
  pub use from_json::SparkFromJson;
  pub use json_as_text::{JsonAsText, json_as_text_udf};
  pub use json_length::{JsonLength, json_length_udf};
+diff --git a/crates/sail-function/src/scalar/json/to_json.rs b/crates/sail-function/src/scalar/json/to_json.rs
+index 36005d1..82f2f1f 100644
+--- a/crates/sail-function/src/scalar/json/to_json.rs
++++ b/crates/sail-function/src/scalar/json/to_json.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::cmp::Ordering;
+ use std::sync::{Arc, OnceLock};
+ 
+@@ -541,9 +542,7 @@ fn struct_to_values_array(
+ fn format_timestamp(value: i64, tz: Option<&str>, format: &DateTimeFormat) -> String {
+     use chrono::Offset;
+ 
+-    use crate::scalar::datetime::format::{
+-        DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind,
+-    };
++    use crate::scalar::datetime::format::{DateTimeFormatInput, TimeZoneDisplay};
+ 
+     if let Some(dt_utc) = Utc.timestamp_micros(value).single() {
+         let (datetime, timezone) = if let Some(tz_str) = tz {
+@@ -568,8 +567,6 @@ fn format_timestamp(value: i64, tz: Option<&str>, format: &DateTimeFormat) -> St
+             datetime,
+             timezone,
+             zone_id: tz,
+-            timestamp_kind: TimestampKind::Normal,
+-            precision: TimePrecision::Microsecond,
+         };
+ 
+         format.format(input).unwrap_or_else(|_| value.to_string())
+@@ -579,7 +576,7 @@ fn format_timestamp(value: i64, tz: Option<&str>, format: &DateTimeFormat) -> St
+ }
+ 
+ fn format_date(days: i32, format: &DateTimeFormat) -> String {
+-    use crate::scalar::datetime::format::{DateTimeFormatInput, TimePrecision, TimestampKind};
++    use crate::scalar::datetime::format::DateTimeFormatInput;
+ 
+     chrono::DateTime::from_timestamp(days as i64 * 24 * 3600, 0)
+         .map(|date| {
+@@ -587,8 +584,6 @@ fn format_date(days: i32, format: &DateTimeFormat) -> String {
+                 datetime: date.naive_utc(),
+                 timezone: None,
+                 zone_id: None,
+-                timestamp_kind: TimestampKind::Normal,
+-                precision: TimePrecision::Second,
+             };
+             format.format(input).unwrap_or_else(|_| days.to_string())
+         })
 diff --git a/crates/sail-function/src/scalar/map/map_from.rs b/crates/sail-function/src/scalar/map/map_from.rs
 index d74c7c6..82218d1 100644
 --- a/crates/sail-function/src/scalar/map/map_from.rs
@@ -16238,7 +17483,7 @@ index 8a18044..1900375 100644
  
  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 diff --git a/crates/sail-function/src/scalar/xml/to_xml.rs b/crates/sail-function/src/scalar/xml/to_xml.rs
-index ecfc2b4..bb16045 100644
+index ecfc2b4..43ec5a0 100644
 --- a/crates/sail-function/src/scalar/xml/to_xml.rs
 +++ b/crates/sail-function/src/scalar/xml/to_xml.rs
 @@ -1,3 +1,4 @@
@@ -16257,6 +17502,60 @@ index ecfc2b4..bb16045 100644
      fn column_name(args: &[datafusion_expr::Expr]) -> String {
          let Some(input) = args.first() else {
              return format!("{}()", Self::TO_XML_NAME);
+@@ -744,7 +741,7 @@ fn format_field_to_xml(
+ }
+ 
+ fn format_date_xml(date: chrono::NaiveDate, format: &DateTimeFormat) -> Result<String> {
+-    use crate::scalar::datetime::format::{DateTimeFormatInput, TimePrecision, TimestampKind};
++    use crate::scalar::datetime::format::DateTimeFormatInput;
+ 
+     let datetime = date.and_hms_opt(0, 0, 0).ok_or_else(|| {
+         DataFusionError::Execution("Failed to create datetime from date".to_string())
+@@ -754,8 +751,6 @@ fn format_date_xml(date: chrono::NaiveDate, format: &DateTimeFormat) -> Result<S
+         datetime,
+         timezone: None,
+         zone_id: None,
+-        timestamp_kind: TimestampKind::Normal,
+-        precision: TimePrecision::Second,
+     };
+ 
+     format
+@@ -933,9 +928,7 @@ fn format_timestamp_field(
+ 
+         use chrono::Offset;
+ 
+-        use crate::scalar::datetime::format::{
+-            DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind,
+-        };
++        use crate::scalar::datetime::format::{DateTimeFormatInput, TimeZoneDisplay};
+ 
+         let offset = local_dt.offset().fix();
+         let input = DateTimeFormatInput {
+@@ -945,8 +938,6 @@ fn format_timestamp_field(
+                 name: Some(&options.session_timezone),
+             }),
+             zone_id: Some(&options.session_timezone),
+-            timestamp_kind: TimestampKind::Normal,
+-            precision: TimePrecision::Microsecond,
+         };
+ 
+         if let Some(ref fmt) = options.timestamp_ltz_format {
+@@ -970,14 +961,12 @@ fn format_timestamp_field(
+                 DataFusionError::Execution(format!("Timestamp out of range: {micros}"))
+             })?;
+ 
+-        use crate::scalar::datetime::format::{DateTimeFormatInput, TimePrecision, TimestampKind};
++        use crate::scalar::datetime::format::DateTimeFormatInput;
+ 
+         let input = DateTimeFormatInput {
+             datetime: naive,
+             timezone: None,
+             zone_id: None,
+-            timestamp_kind: TimestampKind::Normal,
+-            precision: TimePrecision::Microsecond,
+         };
+ 
+         Ok(options
 diff --git a/crates/sail-function/src/scalar/xml/xpath_typed.rs b/crates/sail-function/src/scalar/xml/xpath_typed.rs
 index 212427e..138c92b 100644
 --- a/crates/sail-function/src/scalar/xml/xpath_typed.rs

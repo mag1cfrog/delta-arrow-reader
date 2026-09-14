@@ -8,7 +8,7 @@ The [owning issue](https://github.com/mag1cfrog/delta-arrow-reader/issues/113) d
 
 ## Current result and remaining source
 
-The latest cut is `ad98dd4` on `feat/spark-sql-extraction`. The retained subset has **8 Sail-owned crates and 91,945 gross Rust lines**, including 83,937 production-source lines, 7,928 test lines and 80 build-script lines. All eight crate directories contain retained Sail source. Compared with the reviewed service/streaming checkpoint, the subsequent cuts remove another 10,685 lines. Compared with the original import, 34,068 lines are gone, a 27.0% reduction. Counts include comments and blank lines.
+The latest verified cut is unreachable datetime format paths on `feat/spark-sql-extraction`. The retained subset has **8 Sail-owned crates and 91,604 gross Rust lines**, including 83,476 production-source lines, 8,048 test lines and 80 build-script lines. Compared with the reviewed service/streaming checkpoint, the subsequent cuts remove another 11,026 lines. Compared with the original import, 34,409 lines are gone, a 27.3% reduction. Counts include comments and blank lines.
 
 The resolved dependency graph has 524 packages across all targets and 452 Linux normal/build packages, including the runner and reader. No reduction checkpoint adds or upgrades a package. The Rust frontend has no Python, Spark Connect service or Sail storage-reader dependency; Delta scans still use the host provider. This is the smallest subset demonstrated by these cuts, not a minimum or an adoption decision.
 
@@ -16,14 +16,14 @@ The resolved dependency graph has 524 packages across all targets and 452 Linux 
 | --- | ---: | --- |
 | `sail-common` | 1,978 | In-process query/expression/type specs and required Arrow metadata. Rejected protocol payload descriptors remain for boundary checks; they have no decoder or executor. |
 | `sail-common-datafusion` | 2,131 | Spark value formatting, constant evaluation, output/schema renaming and Variant metadata detection. |
-| `sail-function` | 57,237 | Spark scalar and aggregate kernels, coercion, NULL/ANSI behavior, datetime formats and nested values. The small NTILE adapter retains parameter validation. |
+| `sail-function` | 56,896 | Spark scalar and aggregate kernels, coercion, NULL/ANSI behavior, datetime formats and nested values. The small NTILE adapter retains parameter validation. |
 | `sail-logical-plan` | 518 | SQL range, required ordering, partition IDs and monotonic-ID descriptors. Some still need physical extension planning. |
 | `sail-plan` | 19,009 | SQL function dispatch, name/type resolution, relational planning, field naming, native table lookup and range execution. |
 | `sail-sql-analyzer` | 4,349 | Typed conversion from Spark SQL ASTs to query specs, including literals and SQL data types. |
 | `sail-sql-macro` | 626 | TreeParser derives used by the grammar and TreeSyntax derives used by the complete syntax snapshot. |
 | `sail-sql-parser` | 6,097 | Tokenizer, query/command grammar, ASTs and syntax snapshot support. Commands are rejected by analysis before their bodies are translated. |
 
-The 57,237 lines in `sail-function` include its tests. Its largest groups implement aggregates, datetime/math/string functions, arrays, JSON, CSV and XML. Variant, map, binary/hash, sketch, spatial and other SQL functions also have live registrations. Removing whole families would narrow the support boundary; absence from the 116-case sample does not make them unused.
+The 56,896 lines in `sail-function` include its tests. Its largest groups implement aggregates, datetime/math/string functions, arrays, JSON, CSV and XML. Variant, map, binary/hash, sketch, spatial and other SQL functions also have live registrations. Removing whole families would narrow the support boundary; absence from the 116-case sample does not make them unused.
 
 The remaining bulk implements SQL behavior. Further substantial reduction would require replacing those implementations or narrowing the supported SQL. Several same-name native replacements were considered and left in place:
 
@@ -36,7 +36,7 @@ The remaining bulk implements SQL behavior. Further substantial reduction would 
 | ABS and other numeric kernels | Per-query ANSI settings, interval/duration types, overflow checks and error behavior still require Spark-specific handling. |
 | Parser derives and command grammar | TreeParser drives parsing and TreeSyntax protects the full syntax graph. Command grammar supports the existing explicit rejection checks. |
 
-The final check passes 19 runner, 11 planner and 9 Python tests, plus 302 function, 6 common DataFusion and 6 analyzer unit tests. The standalone parser syntax snapshot also passes; neither its expected graph nor the four frozen corpus/baseline files changed during reduction. To run the retained library suites in addition to the runner commands below:
+The final check passes 19 runner, 11 planner and 9 Python tests, plus 303 function, 6 common DataFusion and 6 analyzer unit tests. The standalone parser syntax snapshot also passes; neither its expected graph nor the four frozen corpus/baseline files changed during reduction. To run the retained library suites in addition to the runner commands below:
 
 ```bash
 cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml \
@@ -224,6 +224,7 @@ Each cut keeps the fixed inputs, SQL and both checked-in baselines unchanged. Th
 | Unused DataFusion file-source features | 92,169 | 524 / 452 | 19 / 11 | 9 |
 | Remaining protocol configuration getters | 92,069 | 524 / 452 | 19 / 11 | 9 |
 | Unused JSON union builder | 91,945 | 524 / 452 | 19 / 11 | 9 |
+| Unreachable datetime format paths | 91,604 | 524 / 452 | 19 / 11 | 9 |
 
 The DataFrame cut removes NA/statistics resolvers, value replacement and unused ShowString/SchemaPivot nodes. All eleven NA/statistics spec variants now reject before input resolution. The new test first reproduced missing-table lookup, then verified the rejection and successful SQL COUNT, AVG, COVAR_SAMP, CORR and COALESCE execution. Shared value formatting remains because SQL casts and PIVOT use it. No test source was removed from the vendored crates.
 
@@ -282,3 +283,5 @@ The probe and Sail workspace no longer enable DataFusion parquet or compression 
 A type-by-type caller audit removes 30 more unused protocol getters across 21 function files. Several shared method names had hidden them from a simple symbol-count search; the remaining sequence and timezone calls were only forwarding between unused getters. ANSI, timezone, null-short-circuit and safe-mode fields still drive the same SQL implementations directly. TimestampNow's active getters, aggregate moment accessors, Explode.kind and the host-facing TableInput.plan accessor remain. This removes 120 source lines and adds 20 required modification notices, a net reduction of 100 gross/production Rust lines; no tests or dependencies are removed. All 116 baseline observations, 19 runner tests, 11 planner tests, 9 Python tests, 302 function tests, 6 common DataFusion tests and 6 analyzer tests pass. Reference comparison totals remain unchanged.
 
 The follow-up JSON audit removes JsonUnion, JsonUnionField and their builder/scalar-conversion implementations. Their only value-construction consumer was the unit test; runtime SQL still uses the separate union type and input-reading helpers. The test constructs the same sparse union with native Arrow/DataFusion APIs and additionally checks array/object extraction and scalar tags. Before deletion, its native fixture was verified equal to the old builder's complete Arrow ArrayData. This removes 146 production lines and adds 22 test lines, for a net reduction of 124 gross Rust lines; no dependency changes. All 116 baseline observations, 19 runner tests, 11 planner tests, 9 Python tests, 302 function tests, 6 common DataFusion tests and 6 analyzer tests pass. The public JSON union type, registered-table inputs and reference comparison totals remain unchanged.
+
+Datetime cleanup removes fields that were written but never read, the fixed-locale wrapper and parsing/formatting branches for letters and widths already rejected by the unchanged pattern validator. Fraction formatting retains its nanosecond path. A focused test passed before and after deletion, checking accepted values, optional sections, offsets and rejection boundaries; all 303 function tests and the unchanged 116-case import baseline pass. This cut removes 461 production-source lines and adds 120 test lines. Physical extension planning and Delta lifecycle coverage remain separate follow-up work.

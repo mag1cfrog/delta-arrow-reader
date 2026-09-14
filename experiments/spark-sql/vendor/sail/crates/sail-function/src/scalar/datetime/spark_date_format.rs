@@ -20,9 +20,7 @@ use sail_common_datafusion::utils::datetime::localize_with_fallback;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_sql_analyzer::parser::parse_timestamp;
 
-use crate::scalar::datetime::format::{
-    DateTimeFormat, DateTimeFormatInput, TimePrecision, TimeZoneDisplay, TimestampKind,
-};
+use crate::scalar::datetime::format::{DateTimeFormat, DateTimeFormatInput, TimeZoneDisplay};
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparkDateFormat {
@@ -561,16 +559,12 @@ fn format_timestamp_value(
                     name: Some(tz_str),
                 }),
                 zone_id: Some(tz_str),
-                timestamp_kind: TimestampKind::Normal,
-                precision: TimePrecision::Microsecond,
             })
         }
         None => format.format(DateTimeFormatInput {
             datetime: naive_datetime,
             timezone: None,
             zone_id: None,
-            timestamp_kind: TimestampKind::Normal,
-            precision: TimePrecision::Microsecond,
         }),
     }
 }
@@ -583,8 +577,6 @@ fn format_date32_value(value: i32, format: &DateTimeFormat) -> Result<String> {
         datetime,
         timezone: None,
         zone_id: None,
-        timestamp_kind: TimestampKind::Normal,
-        precision: TimePrecision::Microsecond,
     })
 }
 
@@ -596,8 +588,6 @@ fn format_date64_value(value: i64, format: &DateTimeFormat) -> Result<String> {
         datetime,
         timezone: None,
         zone_id: None,
-        timestamp_kind: TimestampKind::Normal,
-        precision: TimePrecision::Microsecond,
     })
 }
 

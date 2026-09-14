@@ -1,5 +1,4 @@
-use super::pattern::LocaleSpec;
-
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LocaleData {
     pub(crate) months_short: [&'static str; 12],
@@ -10,7 +9,6 @@ pub(crate) struct LocaleData {
     pub(crate) quarters_full: [&'static str; 4],
     pub(crate) eras_short: [&'static str; 2],
     pub(crate) eras_full: [&'static str; 2],
-    pub(crate) eras_narrow: [&'static str; 2],
     pub(crate) am_pm: [&'static str; 2],
 }
 
@@ -46,12 +44,5 @@ pub(crate) const EN_US: LocaleData = LocaleData {
     quarters_full: ["1st quarter", "2nd quarter", "3rd quarter", "4th quarter"],
     eras_short: ["BC", "AD"],
     eras_full: ["Before Christ", "Anno Domini"],
-    eras_narrow: ["B", "A"],
     am_pm: ["AM", "PM"],
 };
-
-impl LocaleSpec {
-    pub(crate) fn data(&self) -> &'static LocaleData {
-        &EN_US
-    }
-}
