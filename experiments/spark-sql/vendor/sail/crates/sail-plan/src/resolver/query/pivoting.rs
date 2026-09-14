@@ -10,7 +10,7 @@ use datafusion_expr::expr::{AggregateFunctionParams, NullTreatment};
 use datafusion_expr::{ExprSchemable, LogicalPlan, Projection, ScalarUDF, col, expr, lit, when};
 use datafusion_functions_nested::expr_fn as nested_fn;
 use sail_common::spec;
-use sail_common_datafusion::display::{ArrayFormatter, FormatOptions};
+use sail_common_datafusion::display::ArrayFormatter;
 use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_function::scalar::explode;
 use sail_function::scalar::struct_function::StructFunction;
@@ -391,8 +391,8 @@ fn pivot_value_name(scalar: &ScalarValue) -> PlanResult<String> {
     let array = scalar
         .to_array()
         .map_err(|e| PlanError::invalid(e.to_string()))?;
-    let formatter = ArrayFormatter::try_new(array.as_ref(), &FormatOptions::default())
-        .map_err(|e| PlanError::invalid(e.to_string()))?;
+    let formatter =
+        ArrayFormatter::try_new(array.as_ref()).map_err(|e| PlanError::invalid(e.to_string()))?;
     formatter
         .value(0)
         .try_to_string()

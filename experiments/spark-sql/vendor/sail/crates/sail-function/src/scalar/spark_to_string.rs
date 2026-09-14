@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::array::{
@@ -7,7 +8,7 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::common::Result;
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
 use datafusion_expr::ScalarFunctionArgs;
-use sail_common_datafusion::display::{ArrayFormatter, FormatOptions};
+use sail_common_datafusion::display::ArrayFormatter;
 use sail_common_datafusion::utils::items::ItemTaker;
 
 macro_rules! define_to_string_udf {
@@ -15,7 +16,6 @@ macro_rules! define_to_string_udf {
         #[derive(Debug, PartialEq, Eq, Hash)]
         pub struct $udf {
             signature: Signature,
-            options: FormatOptions<'static>,
         }
 
         impl Default for $udf {
@@ -28,7 +28,6 @@ macro_rules! define_to_string_udf {
             pub fn new() -> Self {
                 Self {
                     signature: Signature::any(1, Volatility::Immutable),
-                    options: FormatOptions::default(),
                 }
             }
         }
@@ -50,7 +49,7 @@ macro_rules! define_to_string_udf {
                 let ScalarFunctionArgs { args, .. } = args;
                 let args = ColumnarValue::values_to_arrays(&args)?;
                 let arg = args.one()?;
-                let array = $func(&arg, &self.options)?;
+                let array = $func(&arg)?;
                 Ok(ColumnarValue::Array(array))
             }
         }
@@ -80,12 +79,9 @@ define_to_string_udf!(
 
 // [Credit]: <https://github.com/apache/arrow-rs/blob/main/arrow-cast/src/cast/string.rs>
 
-fn value_to_string<O: OffsetSizeTrait>(
-    array: &dyn Array,
-    options: &FormatOptions<'static>,
-) -> Result<ArrayRef> {
+fn value_to_string<O: OffsetSizeTrait>(array: &dyn Array) -> Result<ArrayRef> {
     let mut builder = GenericStringBuilder::<O>::new();
-    let formatter = ArrayFormatter::try_new(array, options)?;
+    let formatter = ArrayFormatter::try_new(array)?;
     let nulls = array.nulls();
     for i in 0..array.len() {
         match nulls.map(|x| x.is_null(i)).unwrap_or_default() {
@@ -100,9 +96,9 @@ fn value_to_string<O: OffsetSizeTrait>(
     Ok(Arc::new(builder.finish()))
 }
 
-fn value_to_string_view(array: &dyn Array, options: &FormatOptions<'static>) -> Result<ArrayRef> {
+fn value_to_string_view(array: &dyn Array) -> Result<ArrayRef> {
     let mut builder = StringViewBuilder::with_capacity(array.len());
-    let formatter = ArrayFormatter::try_new(array, options)?;
+    let formatter = ArrayFormatter::try_new(array)?;
     let nulls = array.nulls();
     // buffer to avoid reallocating on each value
     // TODO: replace with write to builder after https://github.com/apache/arrow-rs/issues/6373
