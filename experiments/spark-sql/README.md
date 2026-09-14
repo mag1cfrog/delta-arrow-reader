@@ -55,19 +55,20 @@ Only a complete capture from the pinned Apache Spark runtime may create the orac
 
 The experiment has its own Cargo workspace and lockfile. [Source provenance and measurements](UPSTREAM.md) describe the pinned Sail subset and its patch. The root crate does not depend on this workspace, and `cargo package` excludes the experiment.
 
-Use Rust 1.97.1 (the tested version), `protoc`, and the same Python environment for building PyO3 and running the capture tool. The import still links Python; removing that dependency is the next source reduction. PyArrow 25.0.1 is the only Python package needed by `extracted.py`. The Sail environment above can supply it:
+Use Rust 1.97.1 (the tested version) and `protoc` to build the frontend. Building and running the Rust binary requires no Python installation or development libraries. The external capture tool uses Python with PyArrow 25.0.1; the Sail environment above can supply it:
 
 ```bash
-export PYO3_PYTHON=/absolute/path/to/venv-sail/bin/python
-uv pip install --python "$PYO3_PYTHON" pyarrow==25.0.1
+export SPARK_TEST_PYTHON=/absolute/path/to/venv-sail/bin/python
+uv pip install --python "$SPARK_TEST_PYTHON" pyarrow==25.0.1
 export CARGO_TARGET_DIR="$PWD/target/spark-sql-build"
 mkdir -p target
 cargo build --locked --manifest-path experiments/spark-sql/Cargo.toml -j 2 \
   --message-format=json > target/spark-sql-build.jsonl
-"$PYO3_PYTHON" experiments/spark-sql/extracted.py \
+"$SPARK_TEST_PYTHON" experiments/spark-sql/extracted.py \
   --binary "$CARGO_TARGET_DIR/debug/delta-reader-sail-extraction-probe" \
   --run-dir target/spark-sql/extracted-run
-"$PYO3_PYTHON" -m unittest discover -s experiments/spark-sql -p 'test_*.py'
+cargo test --locked --manifest-path experiments/spark-sql/Cargo.toml -j 2
+"$SPARK_TEST_PYTHON" -m unittest discover -s experiments/spark-sql -p 'test_*.py'
 ```
 
 Run from the repository root, set the Python path to your environment and use a new run directory each time. The tool creates four Delta fixtures from the fixed inputs, with two partitioned Parquet files for `t`. It registers every table through the existing DeltaTableProvider. The Rust runner applies each case's settings, resolves Spark SQL to a native DataFusion plan, restores output names and writes Arrow IPC streams batch by batch. The Python capture tool collects these tiny test results for comparison.
@@ -102,4 +103,14 @@ python3 experiments/spark-sql/inventory.py --build-messages target/spark-sql-bui
   --out target/spark-sql/inventory.json
 ```
 
-The import baseline and source reduction remain experimental. Python UDF removal, missing extension planners and the remaining Delta/lifecycle checks must be reviewed before an adoption decision.
+## Python UDF removal checkpoint
+
+The current frontend retains ten Sail crates. It removes sail-python-udf, sail-pyarrow, PyO3 and the linked resolver/configuration paths. Source shrank from 126,013 to 120,537 gross Rust lines, a reduction of 5,476 lines. `inventory.json` reports 610 resolved packages across all targets and 540 Linux normal/build packages. The dependency test checks the full resolved graph for Python bridge packages.
+
+The build succeeded with `PYO3_PYTHON` and `PYO3_CONFIG_FILE` set to nonexistent paths. The binary has no libpython dependency or CPython symbol imports. `extracted.py` runs it with an empty usable PATH, no LD_LIBRARY_PATH and an invalid PYO3_PYTHON, while Python/PyArrow remain outside the Rust process as fixture/capture tools.
+
+All 116 observations match the committed import baseline, including schemas, rows and error stages. The 19 query seeds and 18 adapter checks pass, along with three Rust tests and nine Python tests. The Rust tests exercise seven Python plan/expression entrypoints, reject scalar/table named arguments, and verify the remaining SEQUENCE and CONVERT_TIMEZONE paths. The frozen query corpus and both checked-in behavior baselines are unchanged; existing reference differences remain visible.
+
+The common spec still describes Python functions so the resolver can reject those variants. It contains no Python execution implementation. Named scalar/table arguments now fail explicitly; the removed Python keyword handling had discarded names on native-function paths. Named-argument support would need parameter binding before it could be enabled safely.
+
+Missing extension planners, catalog/session coupling and the remaining Delta/lifecycle checks still need work before an adoption decision.

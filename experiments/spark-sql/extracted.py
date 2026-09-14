@@ -5,7 +5,6 @@ import hashlib
 import json
 import os
 import subprocess
-import sysconfig
 from collections import Counter, defaultdict
 from datetime import date, timezone
 from pathlib import Path
@@ -137,8 +136,10 @@ def main():
     files_before = {str(path.relative_to(run)): hashlib.sha256(path.read_bytes()).hexdigest()
                     for path in (run / "delta").rglob("*") if path.is_file()}
     env = os.environ.copy()
-    python_lib = sysconfig.get_config_var("LIBDIR") or ""
-    env["LD_LIBRARY_PATH"] = python_lib + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    # The Rust process must not need Python discovery or a Python library path.
+    env.pop("LD_LIBRARY_PATH", None)
+    env["PATH"] = "/nonexistent"
+    env["PYO3_PYTHON"] = "/nonexistent/no-python"
     subprocess.run([str(args.binary.resolve()), str(run)], env=env, check=True)
     files_after = {str(path.relative_to(run)): hashlib.sha256(path.read_bytes()).hexdigest()
                    for path in (run / "delta").rglob("*") if path.is_file()}

@@ -8,7 +8,6 @@ use datafusion::datasource::{TableProvider, provider_as_source, source_as_provid
 use datafusion_common::{DFSchema, ScalarValue, TableReference};
 use datafusion_expr::{Expr, LogicalPlan, SubqueryAlias, TableScan, TableSource, UNNAMED_TABLE};
 use rand::{RngExt, rng};
-use sail_catalog::manager::CatalogManager;
 use sail_common::spec;
 use sail_common_datafusion::catalog::TableColumnStatus;
 use sail_common_datafusion::datasource::{OptionLayer, SourceInfo, TableFormatRegistry};
@@ -17,13 +16,11 @@ use sail_common_datafusion::literal::LiteralEvaluator;
 use sail_common_datafusion::rename::logical_plan::rename_logical_plan;
 use sail_common_datafusion::rename::table_provider::RenameTableProvider;
 use sail_common_datafusion::utils::items::ItemTaker;
-use sail_python_udf::udf::pyspark_unresolved_udf::PySparkUnresolvedUDF;
 
 use super::sample::SAMPLE_ROUNDING_EPSILON;
 use crate::error::{PlanError, PlanResult};
 use crate::function::{get_built_in_table_function, is_built_in_generator_function};
 use crate::resolver::PlanResolver;
-use crate::resolver::function::PythonUdtf;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
@@ -53,7 +50,12 @@ impl PlanResolver<'_> {
         }
         let provider = self.ctx.table_provider(table_reference.clone()).await?;
         self.resolve_table_provider_with_rename(
-            provider, table_reference, None, vec![], None, state,
+            provider,
+            table_reference,
+            None,
+            vec![],
+            None,
+            state,
         )
     }
 
@@ -220,106 +222,34 @@ impl PlanResolver<'_> {
             });
             self.resolve_query_project(None, vec![expr], state).await
         } else {
-            let catalog_manager = self.ctx.extension::<CatalogManager>()?;
-            let udf = catalog_manager.get_function(&canonical_function_name)?;
-            if let Some(f) = udf
-                .as_ref()
-                .and_then(|x| x.inner().downcast_ref::<PySparkUnresolvedUDF>())
-            {
-                if f.eval_type().is_table_function() {
-                    let udtf = PythonUdtf {
-                        python_version: f.python_version().to_string(),
-                        eval_type: f.eval_type(),
-                        command: f.command().to_vec(),
-                        return_type: f.output_type().cloned(),
-                    };
-                    let input = self.resolve_query_empty(true)?;
-                    // Combine positional arguments with named_arguments (SQL kwargs like a => 10).
-                    // Named arguments are appended after positional ones, wrapped as NamedArgument
-                    // expressions so that extract_kwargs can process them uniformly.
-                    let all_arguments: Vec<spec::Expr> = arguments
-                        .into_iter()
-                        .chain(named_arguments.into_iter().map(|(key, value)| {
-                            spec::Expr::NamedArgument {
-                                key: key.into(),
-                                value: Box::new(value),
-                            }
-                        }))
-                        .collect();
-                    let (positional_args, kwarg_names) = Self::extract_kwargs(all_arguments);
-                    // Validate: no duplicate kwarg names and no positional arg after a named arg.
-                    {
-                        let mut seen_kwarg_names = std::collections::HashSet::new();
-                        let mut seen_named = false;
-                        for kwarg in &kwarg_names {
-                            match kwarg {
-                                Some(name) => {
-                                    if !seen_kwarg_names.insert(name.as_str()) {
-                                        return Err(PlanError::AnalysisError(format!(
-                                            "[DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE] \
-                                             Duplicate named argument: '{name}' is assigned more than once."
-                                        )));
-                                    }
-                                    seen_named = true;
-                                }
-                                None => {
-                                    if seen_named {
-                                        return Err(PlanError::AnalysisError(
-                                            "[UNEXPECTED_POSITIONAL_ARGUMENT] \
-                                             Positional argument follows a named (keyword) argument."
-                                                .to_string(),
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    let arguments = self
-                        .resolve_named_expressions(positional_args, input.schema(), state)
-                        .await?;
-                    self.resolve_python_udtf_plan(
-                        udtf,
-                        &function_name,
-                        input,
-                        arguments,
-                        &kwarg_names,
-                        None,
-                        None,
-                        f.deterministic(),
-                        state,
-                    )
-                } else {
-                    Err(PlanError::invalid(format!(
-                        "user-defined function is not a table function: {function_name}"
-                    )))
-                }
-            } else {
-                let schema = Arc::new(DFSchema::empty());
-                let arguments = self.resolve_expressions(arguments, &schema, state).await?;
-                let table_function = match self.ctx.table_function(&canonical_function_name) {
-                    Ok(f) => f,
-                    _ => match get_built_in_table_function(&canonical_function_name) {
-                        Ok(f) => f,
-                        _ => {
-                            return Err(PlanError::unsupported(format!(
-                                "unknown table function: {function_name}"
-                            )));
-                        }
-                    },
-                };
-                let session_state = self.ctx.state();
-                let table_provider = table_function.create_table_provider_with_args(
-                    TableFunctionArgs::new(&arguments, &session_state),
-                )?;
-                self.resolve_table_provider_with_rename(
-                    table_provider,
-                    function_name,
-                    None,
-                    vec![],
-                    None,
-                    state,
-                )
+            if !named_arguments.is_empty() {
+                return Err(PlanError::unsupported("named table function arguments"));
             }
+            let schema = Arc::new(DFSchema::empty());
+            let arguments = self.resolve_expressions(arguments, &schema, state).await?;
+            let table_function = match self.ctx.table_function(&canonical_function_name) {
+                Ok(f) => f,
+                _ => match get_built_in_table_function(&canonical_function_name) {
+                    Ok(f) => f,
+                    _ => {
+                        return Err(PlanError::unsupported(format!(
+                            "unknown table function: {function_name}"
+                        )));
+                    }
+                },
+            };
+            let session_state = self.ctx.state();
+            let table_provider = table_function.create_table_provider_with_args(
+                TableFunctionArgs::new(&arguments, &session_state),
+            )?;
+            self.resolve_table_provider_with_rename(
+                table_provider,
+                function_name,
+                None,
+                vec![],
+                None,
+                state,
+            )
         }
     }
 

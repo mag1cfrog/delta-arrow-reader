@@ -1,16 +1,25 @@
 """Transport checks require the same PyArrow environment as extracted.py."""
 
 import unittest
+import json
+import subprocess
 from datetime import datetime, timezone
 from decimal import Decimal
 
 import pyarrow as pa
 
 from extracted import fixture_table, observation, read_arrow
-from reference import load_corpus
+from reference import ROOT, load_corpus
 
 
 class ArrowTransportTests(unittest.TestCase):
+    def test_resolved_dependencies_do_not_include_python_bridges(self):
+        metadata = json.loads(subprocess.check_output([
+            "cargo", "metadata", "--locked", "--format-version=1", "--manifest-path", str(ROOT / "Cargo.toml")]))
+        forbidden = [package["name"] for package in metadata["packages"]
+                     if package["name"].startswith("pyo3") or package["name"] in {"sail-python-udf", "sail-pyarrow"}]
+        self.assertEqual(forbidden, [])
+
     def test_inputs_and_nested_nulls(self):
         inputs, _ = load_corpus()
         for name, table in inputs["tables"].items():

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion_common::DFSchema;
@@ -8,7 +9,6 @@ use crate::resolver::state::PlanResolverState;
 pub(crate) mod explode;
 pub(crate) mod monotonic_id;
 pub(crate) mod spark_partition_id;
-pub(crate) mod table_input;
 pub(crate) mod window;
 
 fn empty_logical_plan() -> LogicalPlan {

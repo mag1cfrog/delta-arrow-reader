@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion_common::DFSchemaRef;
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::utils::{expand_qualified_wildcard, expand_wildcard};
@@ -8,7 +9,6 @@ use sail_common_datafusion::extension::SessionExtensionAccessor;
 use sail_common_datafusion::session::plan::PlanService;
 use sail_common_datafusion::utils::items::ItemTaker;
 use sail_function::scalar::multi_expr::MultiExpr;
-use sail_python_udf::udf::pyspark_unresolved_udf::PySparkUnresolvedUDF;
 
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{AggFunctionInput, FunctionContextInput, ScalarFunctionInput};
@@ -18,7 +18,6 @@ use crate::function::{
 use crate::resolver::PlanResolver;
 use crate::resolver::expression::NamedExpr;
 use crate::resolver::expression::lambda::is_spec_lambda_argument;
-use crate::resolver::function::PythonUdf;
 use crate::resolver::state::PlanResolverState;
 
 impl PlanResolver<'_> {
@@ -45,40 +44,16 @@ impl PlanResolver<'_> {
         let Ok(function_name) = <Vec<String>>::from(function_name).one() else {
             return Err(PlanError::unsupported("qualified function name"));
         };
-        // Extract any NamedArgument entries embedded in arguments (Spark Connect inline path).
-        // PySpark encodes kwargs as NamedArgumentExpression inside the arguments[] repeated field,
-        // which are converted to spec::Expr::NamedArgument. extract_kwargs peels those out before
-        // resolve_expressions_and_names, which would otherwise reject them as standalone expressions.
-        let (mut arguments, mut kwarg_names) = Self::extract_kwargs(arguments);
-        // Also merge named_arguments from spec::UnresolvedFunction (SQL analyzer path).
-        // PySpark sends registered-UDF kwargs here rather than as embedded NamedArgument entries.
-        for (key, value) in named_arguments {
-            kwarg_names.push(Some(key.into()));
-            arguments.push(value);
-        }
-
-        // Validate named arguments: reject duplicate kwarg names early so we surface
-        // a proper AnalysisException instead of letting it crash in the Python worker.
+        if !named_arguments.is_empty()
+            || arguments
+                .iter()
+                .any(|arg| matches!(arg, spec::Expr::NamedArgument { .. }))
         {
-            let mut seen_kwarg_names = std::collections::HashSet::new();
-            for name in kwarg_names.iter().flatten() {
-                if !seen_kwarg_names.insert(name.as_str()) {
-                    return Err(PlanError::AnalysisError(format!(
-                        "[DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE] \
-                         Duplicate named argument: '{name}' is assigned more than once."
-                    )));
-                }
-            }
+            return Err(PlanError::unsupported("named function arguments"));
         }
 
         let canonical_function_name = function_name.to_ascii_lowercase();
         let catalog_manager = self.ctx.extension::<CatalogManager>()?;
-        if let Some(udf) = catalog_manager.get_function(&canonical_function_name)?
-            && udf.inner().is::<PySparkUnresolvedUDF>()
-        {
-            state.config_mut().arrow_allow_large_var_types = true;
-        }
-
         // For functions that accept a date-part keyword as the first argument
         // (e.g., DATEDIFF(DAY, start, end)), convert the unresolved attribute
         // to a string literal before resolution.
@@ -118,40 +93,10 @@ impl PlanResolver<'_> {
                 if ignore_nulls.is_some() || filter.is_some() || order_by.is_some() {
                     return Err(PlanError::invalid("invalid scalar function clause"));
                 }
-                if let Some(f) = udf.inner().downcast_ref::<PySparkUnresolvedUDF>() {
-                    if f.eval_type().is_table_function() {
-                        return Err(PlanError::AnalysisError(format!(
-                            "user-defined table function cannot be used as a scalar function: {function_name}"
-                        )));
-                    }
-                    let output_type = f.output_type().cloned().ok_or_else(|| {
-                        PlanError::internal(format!(
-                            "unresolved UDF {function_name} has no scalar return type"
-                        ))
-                    })?;
-                    let function = PythonUdf {
-                        python_version: f.python_version().to_string(),
-                        eval_type: f.eval_type(),
-                        command: f.command().to_vec(),
-                        output_type,
-                    };
-                    self.resolve_python_udf_expr(
-                        function,
-                        &function_name,
-                        arguments,
-                        &argument_display_names,
-                        &kwarg_names, // pass kwargs from named_arguments
-                        schema,
-                        f.deterministic(),
-                        is_distinct,
-                        state,
-                    )?
-                } else {
-                    expr::Expr::ScalarFunction(ScalarFunction {
-                        func: std::sync::Arc::new(udf),
-                        args: arguments,
-                    })
-                }
+                expr::Expr::ScalarFunction(ScalarFunction {
+                    func: std::sync::Arc::new(udf),
+                    args: arguments,
+                })
             }
             _ => {
                 match get_built_in_function(&canonical_function_name) {

@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::functions_aggregate::{average, bit_and_or_xor, bool_and_or, count, min_max, sum};
@@ -21,8 +22,6 @@ use sail_function::scalar::explode::Explode;
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::{RequiredSortNode, SortWithinPartitionsNode};
 use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
-use sail_python_udf::get_udf_display_name;
-use sail_python_udf::udf::pyspark_udaf::PySparkGroupAggregateUDF;
 
 use crate::error::{PlanError, PlanResult};
 use crate::resolver::PlanResolver;
@@ -118,10 +117,6 @@ impl PlanResolver<'_> {
                 )));
             }
         }
-
-        // Spark CheckAnalysis: GroupedAgg Pandas/Arrow UDFs cannot be mixed with regular
-        // (non-UDF) aggregate functions in the same .agg() call.
-        Self::check_no_mixed_grouped_agg_udf(&projections)?;
 
         let having = {
             let mut scope = state.enter_aggregate_scope(AggregateState::Having {
@@ -1013,39 +1008,5 @@ impl PlanResolver<'_> {
                 expr.schema_name().to_string(),
             ))),
         }
-    }
-
-    /// Spark CheckAnalysis: GroupedAgg Pandas/Arrow UDFs cannot be mixed with regular
-    /// (non-UDF) aggregate functions in the same `.agg()` call.
-    fn check_no_mixed_grouped_agg_udf(projections: &[NamedExpr]) -> PlanResult<()> {
-        let mut pyspark_agg_name: Option<String> = None;
-        let mut has_regular_agg = false;
-        for proj in projections {
-            let _ = proj.expr.apply(|e| {
-                if let Expr::AggregateFunction(agg) = e {
-                    if agg.func.inner().is::<PySparkGroupAggregateUDF>() {
-                        if pyspark_agg_name.is_none() {
-                            let full = agg.func.name();
-                            pyspark_agg_name = Some(get_udf_display_name(full).to_string());
-                        }
-                    } else {
-                        has_regular_agg = true;
-                    }
-                    // Don't recurse into the aggregate's args — no nested aggs here
-                    return Ok(TreeNodeRecursion::Jump);
-                }
-                Ok(TreeNodeRecursion::Continue)
-            });
-        }
-        if let Some(udf_name) = pyspark_agg_name
-            && has_regular_agg
-        {
-            return Err(PlanError::AnalysisError(format!(
-                // Spark tests expect this error message. Typo is intended.
-                "The group aggregate pandas UDF `{udf_name}` cannot be invoked \
-                     together with as other, non-pandas aggregate functions."
-            )));
-        }
-        Ok(())
     }
 }

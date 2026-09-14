@@ -216,3 +216,173 @@ fn main() -> ProbeResult<()> {
         .build()?
         .block_on(run())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arrow::array::{Array, Int32Array, ListArray, TimestampMicrosecondArray};
+    use sail_plan::error::PlanError;
+
+    #[tokio::test]
+    async fn native_sequence_and_timezone_paths_still_execute() -> ProbeResult<()> {
+        let ctx = session()?;
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        let named = resolve(&ctx, "SELECT SEQUENCE(1, 3), CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', CAST('2024-01-01 08:00:00' AS TIMESTAMP_NTZ))", &settings).await?;
+        let batches = ctx
+            .execute_logical_plan(named.plan)
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            batches.iter().map(|batch| batch.num_rows()).sum::<usize>(),
+            1
+        );
+        let values = batches[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<ListArray>()
+            .unwrap()
+            .value(0);
+        assert_eq!(
+            values
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .unwrap()
+                .values()
+                .as_ref(),
+            &[1, 2, 3]
+        );
+        let timestamp = batches[0]
+            .column(1)
+            .as_any()
+            .downcast_ref::<TimestampMicrosecondArray>()
+            .unwrap();
+        assert_eq!(timestamp.value(0), 1_704_067_200_000_000);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rejects_python_entrypoints_before_payload_or_input_resolution() -> ProbeResult<()> {
+        use spec::{CommonInlineUserDefinedFunction, QueryNode, QueryPlan};
+        let ctx = session()?;
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let function = CommonInlineUserDefinedFunction {
+            function_name: "python_fn".into(),
+            deterministic: true,
+            is_distinct: false,
+            arguments: vec![],
+            function: spec::FunctionDefinition::PythonUdf {
+                output_type: spec::DataType::Int32,
+                eval_type: spec::PySparkUdfType::Batched,
+                command: vec![0xff],
+                python_version: "not-a-python-version".into(),
+                additional_includes: vec![],
+            },
+        };
+        // If a removed path starts resolving its input, this missing table makes
+        // the test fail with a different error before any row reads are possible.
+        let missing = match sail_sql_analyzer::statement::from_ast_statement(
+            sail_sql_analyzer::parser::parse_one_statement("SELECT * FROM missing_table")?,
+        )? {
+            spec::Plan::Query(query) => Box::new(query),
+            _ => unreachable!(),
+        };
+        let expression = spec::Expr::CommonInlineUserDefinedFunction(function.clone());
+        let nodes = vec![
+            QueryNode::Project {
+                input: None,
+                expressions: vec![expression.clone()],
+            },
+            QueryNode::Project {
+                input: None,
+                expressions: vec![spec::Expr::Window {
+                    window_function: Box::new(expression),
+                    window: spec::Window::Unnamed {
+                        cluster_by: vec![],
+                        partition_by: vec![],
+                        order_by: vec![],
+                        frame: None,
+                    },
+                }],
+            },
+            QueryNode::MapPartitions {
+                input: missing.clone(),
+                function: function.clone(),
+                is_barrier: false,
+            },
+            QueryNode::GroupMap(spec::GroupMap {
+                input: missing.clone(),
+                grouping_expressions: vec![],
+                function: function.clone(),
+                sorting_expressions: vec![],
+                initial_input: None,
+                initial_grouping_expressions: vec![],
+                is_map_groups_with_state: None,
+                output_mode: None,
+                timeout_conf: None,
+                state_schema: None,
+                transform_with_state_info: None,
+            }),
+            QueryNode::CoGroupMap(spec::CoGroupMap {
+                input: missing.clone(),
+                input_grouping_expressions: vec![],
+                other: missing.clone(),
+                other_grouping_expressions: vec![],
+                function: function.clone(),
+                input_sorting_expressions: vec![],
+                other_sorting_expressions: vec![],
+            }),
+            QueryNode::ApplyInPandasWithState(spec::ApplyInPandasWithState {
+                input: missing,
+                grouping_expressions: vec![],
+                function,
+                output_schema: spec::Schema {
+                    fields: Default::default(),
+                },
+                state_schema: spec::Schema {
+                    fields: Default::default(),
+                },
+                output_mode: "append".into(),
+                timeout_conf: "NoTimeout".into(),
+            }),
+            QueryNode::CommonInlineUserDefinedTableFunction(
+                spec::CommonInlineUserDefinedTableFunction {
+                    function_name: "python_table_fn".into(),
+                    deterministic: true,
+                    arguments: vec![],
+                    function: spec::TableFunctionDefinition::PythonUdtf {
+                        return_type: None,
+                        eval_type: spec::PySparkUdfType::Table,
+                        command: vec![0xff],
+                        python_version: "not-a-python-version".into(),
+                    },
+                },
+            ),
+        ];
+        for node in nodes {
+            let error = resolver
+                .resolve_named_plan(spec::Plan::Query(QueryPlan::new(node)))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, PlanError::NotSupported(_)), "{error:?}");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rejects_named_arguments_instead_of_discarding_their_names() -> ProbeResult<()> {
+        let ctx = session()?;
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        for sql in ["SELECT ABS(value => -1)", "SELECT * FROM range(end => 3)"] {
+            let error = resolve(&ctx, sql, &settings).await.unwrap_err();
+            assert!(
+                matches!(
+                    error.downcast_ref::<PlanError>(),
+                    Some(PlanError::NotSupported(_))
+                ),
+                "{sql}: {error}"
+            );
+        }
+        Ok(())
+    }
+}

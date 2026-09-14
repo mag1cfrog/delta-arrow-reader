@@ -1,3 +1,4 @@
+# Modified from Sail v0.7.1. See experiments/spark-sql/UPSTREAM.md in the host repository.
 [workspace]
 members = [
     "crates/*",
@@ -184,7 +185,6 @@ datafusion-functions-nested = { version = "54.1.0", default-features = false }
 datafusion-physical-expr = { version = "54.1.0" }
 datafusion-session = { version = "54.1.0" }
 datafusion-spark = { version = "54.1.0", features = ["core"] }
-pyo3 = { version = "0.29.0", features = ["serde"] }
 jiter = { version = "0.15.0", default-features = false }
 arrow = { version = "58.3.0", features = ["chrono-tz"] }
 arrow-array = { version = "58.3.0", features = ["ffi"] }

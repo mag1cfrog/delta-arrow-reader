@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::compute::can_cast_types;
@@ -42,8 +43,7 @@ use super::lambda::lambda_with_fresh_parameter;
 use crate::config::DefaultTimestampType;
 use crate::error::{PlanError, PlanResult};
 use crate::function::common::{
-    ScalarFunction, ScalarFunctionInput, expr_contains_python_udf,
-    expr_contains_spark_cast_to_variant,
+    ScalarFunction, ScalarFunctionInput, expr_contains_spark_cast_to_variant,
 };
 
 fn integer_part(expr: Expr, part: &str) -> Expr {
@@ -841,8 +841,7 @@ fn convert_timezone(input: ScalarFunctionInput) -> PlanResult<Expr> {
                 if found {
                     PlanResult::Ok(true)
                 } else {
-                    Ok(expr_contains_python_udf(argument)?
-                        || expr_contains_spark_cast_to_variant(argument)?)
+                    expr_contains_spark_cast_to_variant(argument)
                 }
             })?;
 

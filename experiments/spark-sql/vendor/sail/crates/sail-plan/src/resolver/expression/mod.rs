@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::fmt::Debug;
 
 use async_recursion::async_recursion;
@@ -20,7 +21,6 @@ mod misc;
 mod predicate;
 mod sort;
 mod subquery;
-mod udf;
 mod wildcard;
 mod window;
 
@@ -186,9 +186,8 @@ impl PlanResolver<'_> {
                 self.resolve_expression_named_lambda_variable(variable, schema, state)
                     .await
             }
-            Expr::CommonInlineUserDefinedFunction(function) => {
-                self.resolve_expression_common_inline_udf(function, schema, state)
-                    .await
+            Expr::CommonInlineUserDefinedFunction(_) => {
+                Err(PlanError::unsupported("inline user-defined functions"))
             }
             Expr::CallFunction {
                 function_name,

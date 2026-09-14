@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::{DataType, TimeUnit};
@@ -27,7 +28,7 @@ use sail_function::scalar::misc::raise_error::RaiseError;
 
 use super::lambda::lambda_with_fresh_parameter;
 use crate::error::{PlanError, PlanResult};
-use crate::function::common::{ScalarFunction, ScalarFunctionInput, expr_contains_python_udf};
+use crate::function::common::{ScalarFunction, ScalarFunctionInput};
 use crate::function::is_spark_compatible_arrow_fixed_offset;
 
 fn array_repeat(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
@@ -397,19 +398,6 @@ fn sequence(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
             sequence_cast(argument, &source_type, &target_type, config.ansi_mode)
         })
         .collect::<PlanResult<Vec<_>>>()?;
-
-    let has_pyspark_udf = arguments.iter().try_fold(false, |found, argument| {
-        if found {
-            Ok(true)
-        } else {
-            expr_contains_python_udf(argument)
-        }
-    })?;
-    if has_pyspark_udf {
-        // TODO: Extract only the Python UDF subtrees, as Spark does, while preserving
-        //  expression-local lazy evaluation around the extracted values.
-        return Ok(ScalarUDF::from(udf).call(arguments));
-    }
 
     // TODO: Fold all-foldable arguments in Spark's left-to-right order.
     //  Optimizing independent lambda bodies can change which NULL or error wins.

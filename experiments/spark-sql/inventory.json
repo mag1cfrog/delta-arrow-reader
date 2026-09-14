@@ -1,5 +1,5 @@
 {
-  "source_sha256": "d6173581a9c9c0a850558e7bfafc76751d67dc32a8bce4faa7f89bfc24a7598e",
+  "source_sha256": "f455393f20e73da4284d6e861186a420c6034eabb34df78d09b5b378c5e96d55",
   "crates": [
     {
       "crate": "sail-catalog",
@@ -57,30 +57,12 @@
     },
     {
       "crate": "sail-plan",
-      "rust_files": 92,
-      "gross_lines": 24492,
-      "nonblank_lines": 23024,
+      "rust_files": 87,
+      "gross_lines": 22645,
+      "nonblank_lines": 21239,
       "test_lines": 805,
       "build_script_lines": 238,
-      "production_lines": 23449
-    },
-    {
-      "crate": "sail-pyarrow",
-      "rust_files": 1,
-      "gross_lines": 633,
-      "nonblank_lines": 546,
-      "test_lines": 0,
-      "build_script_lines": 0,
-      "production_lines": 633
-    },
-    {
-      "crate": "sail-python-udf",
-      "rust_files": 23,
-      "gross_lines": 2996,
-      "nonblank_lines": 2707,
-      "test_lines": 0,
-      "build_script_lines": 0,
-      "production_lines": 2996
+      "production_lines": 21602
     },
     {
       "crate": "sail-sql-analyzer",
@@ -111,25 +93,17 @@
     }
   ],
   "totals": {
-    "rust_files": 489,
-    "gross_lines": 126013,
-    "nonblank_lines": 115841,
+    "rust_files": 460,
+    "gross_lines": 120537,
+    "nonblank_lines": 110803,
     "test_lines": 10528,
     "build_script_lines": 785,
-    "production_lines": 114700
+    "production_lines": 109224
   },
-  "lock_packages": 618,
-  "resolved_packages_all_targets_including_dev": 618,
-  "linux_normal_build_packages_including_runner": 548,
-  "python_packages_in_linux_build": [
-    "pyo3 v0.29.2",
-    "pyo3-build-config v0.29.2",
-    "pyo3-ffi v0.29.2",
-    "pyo3-macros v0.29.2 (proc-macro)",
-    "pyo3-macros-backend v0.29.2",
-    "sail-pyarrow v0.7.1 ($EXPERIMENT/vendor/sail/crates/sail-pyarrow)",
-    "sail-python-udf v0.7.1 ($EXPERIMENT/vendor/sail/crates/sail-python-udf)"
-  ],
+  "lock_packages": 610,
+  "resolved_packages_all_targets_including_dev": 610,
+  "linux_normal_build_packages_including_runner": 540,
+  "python_packages_in_linux_build": [],
   "build_generated_rust": {
     "sail-common-datafusion": {
       "files": 5,

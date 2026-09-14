@@ -29,8 +29,6 @@ mod set_op;
 mod sort;
 mod stat;
 mod time_travel;
-mod udf;
-mod udtf;
 mod values;
 mod window;
 mod with_relations;
@@ -199,13 +197,12 @@ impl PlanResolver<'_> {
                 )
                 .await?
             }
-            QueryNode::MapPartitions {
-                input,
-                function,
-                is_barrier,
-            } => {
-                self.resolve_query_map_partitions(*input, function, is_barrier, state)
-                    .await?
+            QueryNode::MapPartitions { .. }
+            | QueryNode::GroupMap(_)
+            | QueryNode::CoGroupMap(_)
+            | QueryNode::ApplyInPandasWithState(_)
+            | QueryNode::CommonInlineUserDefinedTableFunction(_) => {
+                return Err(PlanError::unsupported("Python user-defined functions"));
             }
             QueryNode::CollectMetrics {
                 input,
@@ -216,23 +213,16 @@ impl PlanResolver<'_> {
                     .await?
             }
             QueryNode::Parse(parse) => self.resolve_query_parse(parse, state).await?,
-            QueryNode::GroupMap(map) => self.resolve_query_group_map(map, state).await?,
-            QueryNode::CoGroupMap(map) => self.resolve_query_co_group_map(map, state).await?,
             QueryNode::WithWatermark(watermark) => {
                 self.resolve_query_with_watermark(watermark, state).await?
-            }
-            QueryNode::ApplyInPandasWithState(apply) => {
-                self.resolve_query_apply_in_pandas_with_state(apply, state)
-                    .await?
             }
             QueryNode::CachedLocalRelation { .. } => {
                 return Err(PlanError::todo("cached local relation"));
             }
             QueryNode::CachedRemoteRelation { .. } => {
-                return Err(PlanError::unsupported("extraction probe: remote checkpoints"));
-            }
-            QueryNode::CommonInlineUserDefinedTableFunction(udtf) => {
-                self.resolve_query_common_inline_udtf(udtf, state).await?
+                return Err(PlanError::unsupported(
+                    "extraction probe: remote checkpoints",
+                ));
             }
             QueryNode::FillNa {
                 input,

@@ -1,8 +1,8 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::DataFusionError;
 use sail_catalog::error::CatalogError;
 use sail_common::error::CommonError;
-use sail_python_udf::error::PyUdfError;
 use sail_sql_analyzer::error::SqlError;
 use thiserror::Error;
 
@@ -122,20 +122,6 @@ impl From<SqlError> for PlanError {
             SqlError::NotSupported(message) => PlanError::NotSupported(message),
             SqlError::InternalError(message) => PlanError::InternalError(message),
             SqlError::AnalysisError(message) => PlanError::AnalysisError(message),
-        }
-    }
-}
-
-impl From<PyUdfError> for PlanError {
-    fn from(error: PyUdfError) -> Self {
-        match error {
-            PyUdfError::PythonError(e) => {
-                PlanError::DataFusionError(DataFusionError::External(e.into()))
-            }
-            PyUdfError::IoError(e) => PlanError::DataFusionError(DataFusionError::IoError(e)),
-            PyUdfError::InvalidArgument(message) => PlanError::InvalidArgument(message),
-            PyUdfError::InternalError(message) => PlanError::InternalError(message),
-            PyUdfError::AnalysisError(message) => PlanError::AnalysisError(message),
         }
     }
 }
