@@ -2,7 +2,6 @@
 use std::fmt;
 
 use chumsky::error::{Rich, RichReason};
-use sail_common::error::CommonError;
 use sail_sql_parser::span::TokenSpan;
 use thiserror::Error;
 
@@ -51,14 +50,6 @@ impl SqlError {
                 .collect::<Vec<_>>()
                 .join("; "),
         )
-    }
-}
-
-impl From<CommonError> for SqlError {
-    fn from(error: CommonError) -> Self {
-        match error {
-            CommonError::NotSupported(message) => SqlError::NotSupported(message),
-        }
     }
 }
 

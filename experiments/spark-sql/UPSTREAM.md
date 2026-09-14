@@ -11,13 +11,13 @@ sail-plan                sail-sql-analyzer
 sail-sql-macro           sail-sql-parser
 ```
 
-`upstream.patch` records the changes within that selection: 1,470 added lines and 48,224 deleted lines, including 144 deleted files. It also adds `sail-plan/src/function/table/range_exec.rs`, copied from upstream `sail-physical-plan/src/range.rs`. The initial copy preserved all 145 source lines apart from the modification notice. A later cut removes its uncalled getters and unused original-schema storage; range execution and projection behavior remain. Crates outside the selection are omitted, rather than represented as deletions in the patch.
+`upstream.patch` records the changes within that selection: 1,469 added lines and 48,418 deleted lines, including 145 deleted files. It also adds `sail-plan/src/function/table/range_exec.rs`, copied from upstream `sail-physical-plan/src/range.rs`. The initial copy preserved all 145 source lines apart from the modification notice. A later cut removes its uncalled getters and unused original-schema storage; range execution and projection behavior remain. Crates outside the selection are omitted, rather than represented as deletions in the patch.
 
 The retained source is adapted at these boundaries:
 
 - Named tables and views use DataFusion's registry. Spark builtin functions keep precedence, session catalog/schema functions read native configuration, and output names are restored after planning.
 - Python execution, Spark Connect services, catalogs, storage/writes, streaming/checkpoints, DataFrame-only transforms and eager query collection are removed. Unsupported entrypoints reject before resolving their inputs. SQL TABLESAMPLE retains its Bernoulli filter.
-- Analysis and resolution exchange QueryPlan directly. Protocol serializers, error envelopes, unused getters, command descriptors and inline Arrow imports are removed. Required Arrow metadata codecs remain.
+- Analysis and resolution exchange QueryPlan directly. Protocol serializers, error envelopes, unused getters, command descriptors, the orphan NULL-literal helper and inline Arrow imports are removed. Required Arrow metadata codecs remain.
 - Scalar expansion, first/last window evaluation and NTILE bucket allocation reuse DataFusion. NTILE retains Sail's parameter checks. Runtime SQL function semantics and field/type handling remain in the retained crates.
 - The unused AST-to-SQL printer and JSON union encoder/builder are removed. TreeParser, TreeSyntax, keyword generation, SQL value formatting, JSON union input readers and Arrow result streams remain. The syntax test compares directly with the unchanged snapshot.
 - Datetime patterns retain their existing input validation while unreachable formats and unread fields are removed. SQL value display uses the fixed Spark format; unused generic display options and their alternative formatters are removed.
@@ -25,7 +25,7 @@ The retained source is adapted at these boundaries:
 
 The [experiment README](README.md) records each checkpoint, current crate roles, validation and known limitations.
 
-To reproduce the import, copy the three root files and the 8 directories above from the pinned upstream commit into a temporary Git checkout, then apply `upstream.patch` with `git apply`. An archive of that selection plus the patch was checked against all 362 vendored files byte-for-byte. Normal builds use the committed files directly; they need no upstream checkout.
+To reproduce the import, copy the three root files and the 8 directories above from the pinned upstream commit into a temporary Git checkout, then apply `upstream.patch` with `git apply`. An archive of that selection plus the patch was checked against all 361 vendored files byte-for-byte. Normal builds use the committed files directly; they need no upstream checkout.
 
 ## Source measurements
 
@@ -65,6 +65,7 @@ To reproduce the import, copy the three root files and the 8 directories above f
 | Orphan constants, macro helper and configuration | 8 | 349 | 91,559 | 84,176 | 83,431 | 8,048 | 80 | 524 | 452 |
 | Unused generic display options | 8 | 349 | 91,226 | 83,872 | 83,066 | 8,080 | 80 | 524 | 452 |
 | Unused internal parameter plumbing | 8 | 349 | 91,194 | 83,840 | 83,034 | 8,080 | 80 | 524 | 452 |
+| Orphan recursive NULL-literal helper | 8 | 348 | 91,000 | 83,653 | 82,840 | 8,080 | 80 | 524 | 452 |
 
 Gross/production/test/build-script counts include comments and blank lines. The test count includes files under `tests/` and formatted `#[cfg(test)]` modules/constants. The counter rejects unrecognized test-item shapes; it uses upstream indentation to identify module boundaries. Production count means source outside those test sections and build scripts, not live code reached by this corpus. Unused functions still count.
 
@@ -76,4 +77,4 @@ Dependency counts include the runner and reader. The all-target graph also inclu
 
 `upstream.patch` describes changes within the eight retained crates. The four omitted Python/catalog crates are excluded from its selection; their removal remains visible in the repository diff against the import commit.
 
-The checkpoint was built with Rust 1.97.1, DataFusion 54.1.0 and Arrow 58.4.0, with `PROTOC`, `PYO3_PYTHON` and `PYO3_CONFIG_FILE` set to nonexistent paths. Sail declares Rust 1.96.0; the reader's lower MSRV is unchanged. Builds reused a local Cargo cache, so no cold-build timing claim is made. The debug-profile runner with debug information disabled is 412,366,976 bytes; this is a host binary measurement, not a wheel-size estimate or release-build measurement. The result is a demonstrated subset, not a minimum.
+The checkpoint was built with Rust 1.97.1, DataFusion 54.1.0 and Arrow 58.4.0, with `PROTOC`, `PYO3_PYTHON` and `PYO3_CONFIG_FILE` set to nonexistent paths. Sail declares Rust 1.96.0; the reader's lower MSRV is unchanged. Builds reused a local Cargo cache, so no cold-build timing claim is made. The debug-profile runner with debug information disabled is 412,414,080 bytes; this is a host binary measurement, not a wheel-size estimate or release-build measurement. The result is a demonstrated subset, not a minimum.

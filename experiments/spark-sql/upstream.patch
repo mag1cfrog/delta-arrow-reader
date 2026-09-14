@@ -9456,7 +9456,7 @@ index 54d01e4..2f1e66e 100644
 -    }
 -}
 diff --git a/crates/sail-common/Cargo.toml b/crates/sail-common/Cargo.toml
-index 7ac30bf..bce6ee7 100644
+index 7ac30bf..44a4cbd 100644
 --- a/crates/sail-common/Cargo.toml
 +++ b/crates/sail-common/Cargo.toml
 @@ -1,3 +1,4 @@
@@ -9464,14 +9464,14 @@ index 7ac30bf..bce6ee7 100644
  [package]
  name = "sail-common"
  version = { workspace = true }
-@@ -12,27 +13,9 @@ workspace = true
+@@ -12,27 +13,8 @@ workspace = true
  [dependencies]
  # Ideally we should use the re-exported version of Arrow in DataFusion,
  # but here we depend on the Arrow crates directly so that this crate can be built without DataFusion.
 -arrow = { workspace = true }
  arrow-buffer = { workspace = true }
  arrow-schema = { workspace = true }
- thiserror = { workspace = true }
+-thiserror = { workspace = true }
  serde = { workspace = true }
  serde_json = { workspace = true }
 -serde_yaml = { workspace = true }
@@ -12161,28 +12161,28 @@ index 07d770f..0000000
 -    s.serialize_str("[REDACTED]")
 -}
 diff --git a/crates/sail-common/src/error.rs b/crates/sail-common/src/error.rs
-index 529a535..9ddbd38 100644
+deleted file mode 100644
+index 529a535..0000000
 --- a/crates/sail-common/src/error.rs
-+++ b/crates/sail-common/src/error.rs
-@@ -1,33 +1,16 @@
-+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use thiserror::Error;
- 
- pub type CommonResult<T> = Result<T, CommonError>;
- 
- #[derive(Debug, Error)]
- pub enum CommonError {
++++ /dev/null
+@@ -1,33 +0,0 @@
+-use thiserror::Error;
+-
+-pub type CommonResult<T> = Result<T, CommonError>;
+-
+-#[derive(Debug, Error)]
+-pub enum CommonError {
 -    #[error("missing argument: {0}")]
 -    MissingArgument(String),
 -    #[error("invalid argument: {0}")]
 -    InvalidArgument(String),
-     #[error("not supported: {0}")]
-     NotSupported(String),
+-    #[error("not supported: {0}")]
+-    NotSupported(String),
 -    #[error("internal error: {0}")]
 -    InternalError(String),
- }
- 
- impl CommonError {
+-}
+-
+-impl CommonError {
 -    pub fn missing(message: impl Into<String>) -> Self {
 -        CommonError::MissingArgument(message.into())
 -    }
@@ -12191,23 +12191,23 @@ index 529a535..9ddbd38 100644
 -        CommonError::InvalidArgument(message.into())
 -    }
 -
-     pub fn unsupported(message: impl Into<String>) -> Self {
-         CommonError::NotSupported(message.into())
-     }
+-    pub fn unsupported(message: impl Into<String>) -> Self {
+-        CommonError::NotSupported(message.into())
+-    }
 -
 -    pub fn internal(message: impl Into<String>) -> Self {
 -        CommonError::InternalError(message.into())
 -    }
- }
+-}
 diff --git a/crates/sail-common/src/lib.rs b/crates/sail-common/src/lib.rs
-index 5b2d68f..628a722 100644
+index 5b2d68f..4e95f63 100644
 --- a/crates/sail-common/src/lib.rs
 +++ b/crates/sail-common/src/lib.rs
-@@ -1,10 +1,5 @@
+@@ -1,10 +1,4 @@
 -pub mod actor;
 -pub mod config;
+-pub mod error;
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- pub mod error;
  pub mod geoarrow;
 -pub mod runtime;
 -pub mod server;
@@ -13011,10 +13011,10 @@ index 25af46d..21f3d02 100644
      In,
      Scalar,
 diff --git a/crates/sail-common/src/spec/literal.rs b/crates/sail-common/src/spec/literal.rs
-index 7c0705b..b9ef586 100644
+index 7c0705b..d31edd0 100644
 --- a/crates/sail-common/src/spec/literal.rs
 +++ b/crates/sail-common/src/spec/literal.rs
-@@ -1,17 +1,13 @@
+@@ -1,17 +1,12 @@
 -use std::str::FromStr;
 -
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
@@ -13023,7 +13023,7 @@ index 7c0705b..b9ef586 100644
 -use serde::de::Error;
 -use serde::{Deserialize, Deserializer, Serialize, Serializer};
  
- use crate::error::{CommonError, CommonResult};
+-use crate::error::{CommonError, CommonResult};
  use crate::spec;
  use crate::spec::TimestampType;
  
@@ -13034,7 +13034,7 @@ index 7c0705b..b9ef586 100644
  pub enum Literal {
      Null,
      Boolean {
-@@ -160,19 +156,11 @@ pub enum Literal {
+@@ -160,19 +155,11 @@ pub enum Literal {
      Decimal128 {
          precision: u8,
          scale: i8,
@@ -13054,7 +13054,7 @@ index 7c0705b..b9ef586 100644
          value: Option<i256>,
      },
      Map {
-@@ -184,42 +172,19 @@ pub enum Literal {
+@@ -184,196 +171,15 @@ pub enum Literal {
      },
  }
  
@@ -13072,7 +13072,7 @@ index 7c0705b..b9ef586 100644
      pub days: i32,
      pub nanoseconds: i64,
  }
- 
+-
 -fn serialize_optional<T, S>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
 -where
 -    T: ToString,
@@ -13096,9 +13096,163 @@ index 7c0705b..b9ef586 100644
 -    ))
 -}
 -
- pub fn data_type_to_null_literal(data_type: spec::DataType) -> CommonResult<Literal> {
-     let error = |x: &spec::DataType| CommonError::unsupported(format!("null literal for {x:?}"));
- 
+-pub fn data_type_to_null_literal(data_type: spec::DataType) -> CommonResult<Literal> {
+-    let error = |x: &spec::DataType| CommonError::unsupported(format!("null literal for {x:?}"));
+-
+-    match data_type {
+-        spec::DataType::Null => Ok(Literal::Null),
+-        spec::DataType::Boolean => Ok(Literal::Boolean { value: None }),
+-        spec::DataType::Int8 => Ok(Literal::Int8 { value: None }),
+-        spec::DataType::Int16 => Ok(Literal::Int16 { value: None }),
+-        spec::DataType::Int32 => Ok(Literal::Int32 { value: None }),
+-        spec::DataType::Int64 => Ok(Literal::Int64 { value: None }),
+-        spec::DataType::UInt8 => Ok(Literal::UInt8 { value: None }),
+-        spec::DataType::UInt16 => Ok(Literal::UInt16 { value: None }),
+-        spec::DataType::UInt32 => Ok(Literal::UInt32 { value: None }),
+-        spec::DataType::UInt64 => Ok(Literal::UInt64 { value: None }),
+-        spec::DataType::Float16 => Ok(Literal::Float16 { value: None }),
+-        spec::DataType::Float32 => Ok(Literal::Float32 { value: None }),
+-        spec::DataType::Float64 => Ok(Literal::Float64 { value: None }),
+-        spec::DataType::Timestamp {
+-            time_unit,
+-            timestamp_type,
+-        } => match time_unit {
+-            spec::TimeUnit::Second => Ok(Literal::TimestampSecond {
+-                seconds: None,
+-                timestamp_type,
+-            }),
+-            spec::TimeUnit::Millisecond => Ok(Literal::TimestampMillisecond {
+-                milliseconds: None,
+-                timestamp_type,
+-            }),
+-            spec::TimeUnit::Microsecond => Ok(Literal::TimestampMicrosecond {
+-                microseconds: None,
+-                timestamp_type,
+-            }),
+-            spec::TimeUnit::Nanosecond => Ok(Literal::TimestampNanosecond {
+-                nanoseconds: None,
+-                timestamp_type,
+-            }),
+-        },
+-        spec::DataType::Date32 => Ok(Literal::Date32 { days: None }),
+-        spec::DataType::Date64 => Ok(Literal::Date64 { milliseconds: None }),
+-        spec::DataType::Time32 { time_unit } => match time_unit {
+-            spec::TimeUnit::Second => Ok(Literal::Time32Second { seconds: None }),
+-            spec::TimeUnit::Millisecond => Ok(Literal::Time32Millisecond { milliseconds: None }),
+-            spec::TimeUnit::Microsecond | spec::TimeUnit::Nanosecond => Err(error(&data_type)),
+-        },
+-        spec::DataType::Time64 { time_unit } => match time_unit {
+-            spec::TimeUnit::Second | spec::TimeUnit::Millisecond => Err(error(&data_type)),
+-            spec::TimeUnit::Microsecond => Ok(Literal::Time64Microsecond { microseconds: None }),
+-            spec::TimeUnit::Nanosecond => Ok(Literal::Time64Nanosecond { nanoseconds: None }),
+-        },
+-        spec::DataType::Duration { time_unit } => match time_unit {
+-            spec::TimeUnit::Second => Ok(Literal::DurationSecond { seconds: None }),
+-            spec::TimeUnit::Millisecond => Ok(Literal::DurationMillisecond { milliseconds: None }),
+-            spec::TimeUnit::Microsecond => Ok(Literal::DurationMicrosecond { microseconds: None }),
+-            spec::TimeUnit::Nanosecond => Ok(Literal::DurationNanosecond { nanoseconds: None }),
+-        },
+-        spec::DataType::Interval {
+-            interval_unit,
+-            start_field: _,
+-            end_field: _,
+-        } => match interval_unit {
+-            spec::IntervalUnit::YearMonth => Ok(Literal::IntervalYearMonth { months: None }),
+-            spec::IntervalUnit::DayTime => Ok(Literal::IntervalDayTime { value: None }),
+-            spec::IntervalUnit::MonthDayNano => Ok(Literal::IntervalMonthDayNano { value: None }),
+-        },
+-        spec::DataType::Binary => Ok(Literal::Binary { value: None }),
+-        spec::DataType::FixedSizeBinary { size } => {
+-            Ok(Literal::FixedSizeBinary { size, value: None })
+-        }
+-        spec::DataType::LargeBinary => Ok(Literal::LargeBinary { value: None }),
+-        spec::DataType::BinaryView => Ok(Literal::BinaryView { value: None }),
+-        spec::DataType::Utf8 => Ok(Literal::Utf8 { value: None }),
+-        spec::DataType::LargeUtf8 => Ok(Literal::LargeUtf8 { value: None }),
+-        spec::DataType::Utf8View => Ok(Literal::Utf8View { value: None }),
+-        spec::DataType::List {
+-            data_type,
+-            nullable,
+-        } => Ok(Literal::List {
+-            data_type: *data_type,
+-            nullable,
+-            values: None,
+-        }),
+-        spec::DataType::FixedSizeList {
+-            data_type,
+-            nullable,
+-            length,
+-        } => Ok(Literal::FixedSizeList {
+-            length,
+-            data_type: *data_type,
+-            nullable,
+-            values: None,
+-        }),
+-        spec::DataType::LargeList {
+-            data_type,
+-            nullable,
+-        } => Ok(Literal::LargeList {
+-            data_type: *data_type,
+-            nullable,
+-            values: None,
+-        }),
+-        spec::DataType::Struct { fields } => Ok(Literal::Struct {
+-            data_type: spec::DataType::Struct { fields },
+-            values: None,
+-        }),
+-        spec::DataType::Union {
+-            union_fields,
+-            union_mode,
+-        } => Ok(Literal::Union {
+-            union_fields,
+-            union_mode,
+-            value: None,
+-        }),
+-        spec::DataType::Dictionary {
+-            key_type,
+-            value_type,
+-        } => Ok(Literal::Dictionary {
+-            key_type: *key_type,
+-            value_type: *value_type,
+-            value: None,
+-        }),
+-        spec::DataType::Decimal128 { precision, scale } => Ok(Literal::Decimal128 {
+-            precision,
+-            scale,
+-            value: None,
+-        }),
+-        spec::DataType::Decimal256 { precision, scale } => Ok(Literal::Decimal256 {
+-            precision,
+-            scale,
+-            value: None,
+-        }),
+-        spec::DataType::Map {
+-            key_type,
+-            value_type,
+-            value_type_nullable,
+-            keys_sorted: _,
+-        } => Ok(Literal::Map {
+-            key_type: *key_type,
+-            value_type: *value_type,
+-            value_type_nullable,
+-            keys: None,
+-            values: None,
+-        }),
+-        spec::DataType::ConfiguredUtf8 { .. } => Ok(Literal::Utf8 { value: None }),
+-        spec::DataType::ConfiguredBinary => Ok(Literal::Binary { value: None }),
+-        spec::DataType::UserDefined { sql_type, .. } => data_type_to_null_literal(*sql_type),
+-        spec::DataType::Variant => {
+-            // For null variant, use the Variant type directly
+-            Ok(Literal::Struct {
+-                data_type: spec::DataType::Variant,
+-                values: None,
+-            })
+-        }
+-        // Geometry and Geography are stored as WKB-encoded Binary at the Arrow level
+-        spec::DataType::Geometry { .. } => Ok(Literal::Binary { value: None }),
+-        spec::DataType::Geography { .. } => Ok(Literal::Binary { value: None }),
+-    }
+-}
 diff --git a/crates/sail-common/src/spec/plan.rs b/crates/sail-common/src/spec/plan.rs
 index 052a216..b2626e6 100644
 --- a/crates/sail-common/src/spec/plan.rs
@@ -35997,20 +36151,20 @@ index 692c016..770fb62 100644
          }
      }
 diff --git a/crates/sail-plan/src/error.rs b/crates/sail-plan/src/error.rs
-index 5fdb1c3..1b6f7fd 100644
+index 5fdb1c3..d4959de 100644
 --- a/crates/sail-plan/src/error.rs
 +++ b/crates/sail-plan/src/error.rs
-@@ -1,8 +1,7 @@
+@@ -1,8 +1,6 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use datafusion::arrow::error::ArrowError;
  use datafusion::common::DataFusionError;
 -use sail_catalog::error::CatalogError;
- use sail_common::error::CommonError;
+-use sail_common::error::CommonError;
 -use sail_python_udf::error::PyUdfError;
  use sail_sql_analyzer::error::SqlError;
  use thiserror::Error;
  
-@@ -31,8 +30,6 @@ pub enum PlanError {
+@@ -31,8 +29,6 @@ pub enum PlanError {
      DataFusionError(#[from] DataFusionError),
      #[error("error in Arrow: {0}")]
      ArrowError(#[from] ArrowError),
@@ -36019,7 +36173,7 @@ index 5fdb1c3..1b6f7fd 100644
      #[error("invalid argument: {0}")]
      InvalidArgument(String),
      #[error("not implemented: {0}")]
-@@ -43,8 +40,6 @@ pub enum PlanError {
+@@ -43,8 +39,6 @@ pub enum PlanError {
      InternalError(String),
      #[error("analysis error: {0}")]
      AnalysisError(String),
@@ -36028,7 +36182,7 @@ index 5fdb1c3..1b6f7fd 100644
  }
  
  impl PlanError {
-@@ -56,10 +51,6 @@ impl PlanError {
+@@ -56,10 +50,6 @@ impl PlanError {
          PlanError::NotSupported(message.into())
      }
  
@@ -36039,13 +36193,16 @@ index 5fdb1c3..1b6f7fd 100644
      pub fn invalid(message: impl Into<String>) -> Self {
          PlanError::InvalidArgument(message.into())
      }
-@@ -76,38 +67,7 @@ impl PlanError {
- impl From<CommonError> for PlanError {
-     fn from(error: CommonError) -> Self {
-         match error {
+@@ -73,69 +63,14 @@ impl PlanError {
+     }
+ }
+ 
+-impl From<CommonError> for PlanError {
+-    fn from(error: CommonError) -> Self {
+-        match error {
 -            CommonError::MissingArgument(message) => PlanError::MissingArgument(message),
 -            CommonError::InvalidArgument(message) => PlanError::InvalidArgument(message),
-             CommonError::NotSupported(message) => PlanError::NotSupported(message),
+-            CommonError::NotSupported(message) => PlanError::NotSupported(message),
 -            CommonError::InternalError(message) => PlanError::InternalError(message),
 -        }
 -    }
@@ -36075,10 +36232,11 @@ index 5fdb1c3..1b6f7fd 100644
 -            | CatalogError::RemoteProtocol(message) => PlanError::AnalysisError(message),
 -            CatalogError::Internal(message) => PlanError::InternalError(message),
 -            CatalogError::External(message) => PlanError::AnalysisError(message),
-         }
-     }
- }
-@@ -116,26 +76,10 @@ impl From<SqlError> for PlanError {
+-        }
+-    }
+-}
+-
+ impl From<SqlError> for PlanError {
      fn from(value: SqlError) -> Self {
          match value {
              SqlError::SqlParserError(message) => PlanError::InvalidArgument(message),
@@ -51574,15 +51732,19 @@ index e55a3bc..0000000
 -    }
 -}
 diff --git a/crates/sail-sql-analyzer/src/error.rs b/crates/sail-sql-analyzer/src/error.rs
-index bfb0382..cd80726 100644
+index bfb0382..e0028f9 100644
 --- a/crates/sail-sql-analyzer/src/error.rs
 +++ b/crates/sail-sql-analyzer/src/error.rs
-@@ -1,3 +1,4 @@
+@@ -1,7 +1,7 @@
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
  use std::fmt;
  
  use chumsky::error::{Rich, RichReason};
-@@ -11,16 +12,12 @@ pub type SqlResult<T> = Result<T, SqlError>;
+-use sail_common::error::CommonError;
+ use sail_sql_parser::span::TokenSpan;
+ use thiserror::Error;
+ 
+@@ -11,16 +11,12 @@ pub type SqlResult<T> = Result<T, SqlError>;
  pub enum SqlError {
      #[error("error in SQL parser: {0}")]
      SqlParserError(String),
@@ -51599,7 +51761,7 @@ index bfb0382..cd80726 100644
      #[error("analysis error: {0}")]
      AnalysisError(String),
  }
-@@ -34,10 +31,6 @@ impl SqlError {
+@@ -34,10 +30,6 @@ impl SqlError {
          SqlError::NotSupported(message.into())
      }
  
@@ -51610,17 +51772,24 @@ index bfb0382..cd80726 100644
      pub fn invalid(message: impl Into<String>) -> Self {
          SqlError::InvalidArgument(message.into())
      }
-@@ -64,10 +57,7 @@ impl SqlError {
- impl From<CommonError> for SqlError {
-     fn from(error: CommonError) -> Self {
-         match error {
--            CommonError::MissingArgument(message) => SqlError::MissingArgument(message),
--            CommonError::InvalidArgument(message) => SqlError::InvalidArgument(message),
-             CommonError::NotSupported(message) => SqlError::NotSupported(message),
--            CommonError::InternalError(message) => SqlError::InternalError(message),
-         }
+@@ -61,17 +53,6 @@ impl SqlError {
      }
  }
+ 
+-impl From<CommonError> for SqlError {
+-    fn from(error: CommonError) -> Self {
+-        match error {
+-            CommonError::MissingArgument(message) => SqlError::MissingArgument(message),
+-            CommonError::InvalidArgument(message) => SqlError::InvalidArgument(message),
+-            CommonError::NotSupported(message) => SqlError::NotSupported(message),
+-            CommonError::InternalError(message) => SqlError::InternalError(message),
+-        }
+-    }
+-}
+-
+ struct ParserErrorDisplay<'e, 'a, T, S>(&'e Rich<'a, T, S>);
+ 
+ impl<T, S> fmt::Display for ParserErrorDisplay<'_, '_, T, S>
 diff --git a/crates/sail-sql-analyzer/src/expression.rs b/crates/sail-sql-analyzer/src/expression.rs
 index 409d1ac..8fbda84 100644
 --- a/crates/sail-sql-analyzer/src/expression.rs

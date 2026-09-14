@@ -15,7 +15,6 @@ workspace = true
 # but here we depend on the Arrow crates directly so that this crate can be built without DataFusion.
 arrow-buffer = { workspace = true }
 arrow-schema = { workspace = true }
-thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 half = { workspace = true }

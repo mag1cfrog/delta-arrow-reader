@@ -1,7 +1,6 @@
 // Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::DataFusionError;
-use sail_common::error::CommonError;
 use sail_sql_analyzer::error::SqlError;
 use thiserror::Error;
 
@@ -61,14 +60,6 @@ impl PlanError {
 
     pub fn analysis(message: impl Into<String>) -> Self {
         PlanError::AnalysisError(message.into())
-    }
-}
-
-impl From<CommonError> for PlanError {
-    fn from(error: CommonError) -> Self {
-        match error {
-            CommonError::NotSupported(message) => PlanError::NotSupported(message),
-        }
     }
 }
 
