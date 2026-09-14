@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -212,14 +213,6 @@ impl PlanResolver<'_> {
         _state: &mut PlanResolverState,
     ) -> PlanResult<LogicalPlan> {
         Err(PlanError::todo("parse"))
-    }
-
-    pub(super) async fn resolve_query_with_watermark(
-        &self,
-        _watermark: spec::WithWatermark,
-        _state: &mut PlanResolverState,
-    ) -> PlanResult<LogicalPlan> {
-        Err(PlanError::todo("with watermark"))
     }
 }
 

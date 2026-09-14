@@ -55,7 +55,7 @@ Only a complete capture from the pinned Apache Spark runtime may create the orac
 
 The experiment has its own Cargo workspace and lockfile. [Source provenance and measurements](UPSTREAM.md) describe the pinned Sail subset and its patch. The root crate does not depend on this workspace, and `cargo package` excludes the experiment.
 
-Use Rust 1.97.1 (the tested version) and `protoc` to build the frontend. Building and running the Rust binary requires no Python installation or development libraries. The external capture tool uses Python with PyArrow 25.0.1; the Sail environment above can supply it:
+Use Rust 1.97.1 (the tested version) to build the frontend. Building and running the Rust binary requires neither `protoc` nor a Python installation or development libraries. The external capture tool uses Python with PyArrow 25.0.1; the Sail environment above can supply it:
 
 ```bash
 export SPARK_TEST_PYTHON=/absolute/path/to/venv-sail/bin/python
@@ -132,7 +132,7 @@ All 116 observations still match the import baseline, with the same 83 successes
 
 ## Storage/write removal checkpoint
 
-The current subset retains eight Sail crates and 107,168 gross Rust lines, a reduction of 6,666 lines from the catalog checkpoint. It removes MERGE/write-constraint nodes, shared catalog/data-source types, unused schema-evolution and time-travel helpers, and storage/write configuration fields. Registered tables still use the existing DeltaTableProvider and native DataFusion execution.
+The approved storage/write slice, committed as `63dee61`, retained eight Sail crates and 107,168 gross Rust lines, a reduction of 6,666 lines from the catalog checkpoint. It removed MERGE/write-constraint nodes, shared catalog/data-source types, unused schema-evolution and time-travel helpers, and storage/write configuration fields. Registered tables still use the existing DeltaTableProvider and native DataFusion execution.
 
 The removed catalog types had one remaining function-help consumer. Removing that unused consumer also removes its build script, function-name listing helpers and 24 YAML files containing 12,447 lines of help metadata. YAML is counted separately from Rust. Executable scalar, aggregate, window and table-function registries remain intact. Build-generated Rust falls from seven files / 1,251 lines to six files / 685 lines.
 
@@ -140,4 +140,16 @@ A direct `ReadType::DataSource` spec now returns `PlanError::NotSupported` befor
 
 All 116 observations match the unchanged import baseline: 83 successes, 18 planning errors and 15 execution errors. The 19 seeds, 18 adapter checks, seven runner tests, eleven Sail planner tests and nine Python tests pass. Comparisons still report 45 matches / 60 differences / 11 pending reference cases against Spark, and 83 / 22 / 11 against full Sail. Inputs, queries and both checked-in baselines are unchanged.
 
-The resolved graph remains at 599 packages across all targets and 529 Linux normal/build packages, with identical package versions. Removed direct dependency edges point to packages still used elsewhere. Service/streaming code and system-table generation remain for later cuts, along with missing extension planners and the outstanding Delta/lifecycle checks.
+The resolved graph at that checkpoint remained at 599 packages across all targets and 529 Linux normal/build packages, with identical package versions. Removed direct dependency edges pointed to packages still used elsewhere.
+
+## Service/streaming removal checkpoint
+
+The current subset retains eight Sail crates and 102,630 gross Rust lines, 4,538 fewer than the storage checkpoint. It removes Sail's actor/server runtime, application configuration, telemetry, session/streaming helpers, checkpoint nodes and system-table generation. The range provider uses the existing async-trait crate directly. SQL functions, parser derives and Arrow result streaming remain intact.
+
+Direct specs with `is_streaming: true` now return `PlanError::NotSupported` before resolving any read source. Previously the flag was silently ignored. Watermark specs also return NotSupported, replacing an unimplemented error; remote-checkpoint rejection remains explicit. A new test first reproduced the accepted streaming read, then verified rejection for all four read-source variants, watermarks and remote checkpoints. A batch read from the same registered table still executes.
+
+The resolved graph falls by 42 packages to 557 across all targets and 487 Linux normal/build packages, with no additions or version upgrades. The dependency test rejects tonic, prost, figment and fastrace as well as the previously removed Python/catalog packages. The build succeeds with `PROTOC`, `PYO3_PYTHON` and `PYO3_CONFIG_FILE` pointing to nonexistent paths. Only parser keyword generation remains: one generated Rust file / 269 lines. Unused dependency declarations in the retained upstream workspace manifest do not enter the resolved graph.
+
+All 116 observations match the unchanged import baseline: 83 successes, 18 planning errors and 15 execution errors. The 19 seeds, 18 adapter checks, eight runner tests, eleven Sail planner tests and nine Python tests pass. Spark and full-Sail comparison totals remain unchanged. The parser's shared gold-data test helper is retained; its separate syntax integration test was not run because Cargo rejects selecting that non-member dependency's dev-dependency test from the experiment workspace.
+
+Non-SQL DataFrame NA/statistics resolvers and unused display/schema-pivot nodes remain candidates for a later cut. Missing SQL extension planners, Delta/lifecycle checks and the final adoption decision remain open.

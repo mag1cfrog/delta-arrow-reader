@@ -62,8 +62,13 @@ impl PlanResolver<'_> {
         let plan_id = plan.plan_id;
         let plan = match plan.node {
             QueryNode::Read {
+                is_streaming: true, ..
+            } => {
+                return Err(PlanError::unsupported("extraction probe: streaming reads"));
+            }
+            QueryNode::Read {
                 read_type,
-                is_streaming: _,
+                is_streaming: false,
             } => match read_type {
                 spec::ReadType::NamedTable(table) => {
                     self.resolve_query_read_named_table(*table, state).await?
@@ -214,8 +219,10 @@ impl PlanResolver<'_> {
                     .await?
             }
             QueryNode::Parse(parse) => self.resolve_query_parse(parse, state).await?,
-            QueryNode::WithWatermark(watermark) => {
-                self.resolve_query_with_watermark(watermark, state).await?
+            QueryNode::WithWatermark(_) => {
+                return Err(PlanError::unsupported(
+                    "extraction probe: streaming watermarks",
+                ));
             }
             QueryNode::CachedLocalRelation { .. } => {
                 return Err(PlanError::todo("cached local relation"));

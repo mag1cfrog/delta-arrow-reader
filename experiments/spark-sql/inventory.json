@@ -1,23 +1,23 @@
 {
-  "source_sha256": "63360a31404418c23e85d84af973e0ba1ff8c2f0829b06208fdfb27ffac32557",
+  "source_sha256": "f04579ae621a49990cefb69af451cd1d3420d7c2446e73a52c0c2490ea439f4f",
   "crates": [
     {
       "crate": "sail-common",
-      "rust_files": 35,
-      "gross_lines": 5799,
-      "nonblank_lines": 5318,
-      "test_lines": 296,
+      "rust_files": 16,
+      "gross_lines": 3440,
+      "nonblank_lines": 3206,
+      "test_lines": 0,
       "build_script_lines": 0,
-      "production_lines": 5503
+      "production_lines": 3440
     },
     {
       "crate": "sail-common-datafusion",
-      "rust_files": 38,
-      "gross_lines": 5854,
-      "nonblank_lines": 5293,
-      "test_lines": 718,
-      "build_script_lines": 467,
-      "production_lines": 4669
+      "rust_files": 22,
+      "gross_lines": 4418,
+      "nonblank_lines": 4031,
+      "test_lines": 671,
+      "build_script_lines": 0,
+      "production_lines": 3747
     },
     {
       "crate": "sail-function",
@@ -30,18 +30,18 @@
     },
     {
       "crate": "sail-logical-plan",
-      "rust_files": 17,
-      "gross_lines": 1769,
-      "nonblank_lines": 1529,
+      "rust_files": 8,
+      "gross_lines": 1026,
+      "nonblank_lines": 894,
       "test_lines": 0,
       "build_script_lines": 0,
-      "production_lines": 1769
+      "production_lines": 1026
     },
     {
       "crate": "sail-plan",
       "rust_files": 83,
       "gross_lines": 21588,
-      "nonblank_lines": 20249,
+      "nonblank_lines": 20250,
       "test_lines": 779,
       "build_script_lines": 0,
       "production_lines": 20809
@@ -75,25 +75,21 @@
     }
   ],
   "totals": {
-    "rust_files": 419,
-    "gross_lines": 107168,
-    "nonblank_lines": 98530,
-    "test_lines": 8612,
-    "build_script_lines": 547,
-    "production_lines": 98009
+    "rust_files": 375,
+    "gross_lines": 102630,
+    "nonblank_lines": 94522,
+    "test_lines": 8269,
+    "build_script_lines": 80,
+    "production_lines": 94281
   },
-  "lock_packages": 599,
-  "resolved_packages_all_targets_including_dev": 599,
-  "linux_normal_build_packages_including_runner": 529,
+  "lock_packages": 557,
+  "resolved_packages_all_targets_including_dev": 557,
+  "linux_normal_build_packages_including_runner": 487,
   "python_packages_in_linux_build": [],
   "build_generated_rust": {
     "sail-sql-parser": {
       "files": 1,
       "lines": 269
-    },
-    "sail-common-datafusion": {
-      "files": 5,
-      "lines": 416
     }
   }
 }

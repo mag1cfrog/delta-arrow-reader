@@ -1,10 +1,6 @@
-pub mod actor;
-pub mod config;
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 pub mod error;
 pub mod geoarrow;
-pub mod runtime;
-pub mod server;
 pub mod spec;
-pub mod telemetry;
 pub mod tests;
 pub mod utils;

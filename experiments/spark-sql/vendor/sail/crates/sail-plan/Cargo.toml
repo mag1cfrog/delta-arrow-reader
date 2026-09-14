@@ -23,7 +23,6 @@ datafusion-functions-nested = { workspace = true }
 datafusion-spark = { workspace = true }
 educe = { workspace = true }
 thiserror = { workspace = true }
-tonic = { workspace = true }
 chrono = { workspace = true }
 chumsky = { workspace = true }
 async-trait = { workspace = true }

@@ -1,6 +1,5 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 pub mod datetime;
 pub mod debug;
-pub mod http;
 pub mod object;
-pub mod retry;
 pub mod string;

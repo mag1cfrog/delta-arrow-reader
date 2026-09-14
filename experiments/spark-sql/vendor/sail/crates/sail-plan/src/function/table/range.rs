@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use super::range_exec::RangeExec;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::catalog::{Session, TableFunctionImpl, TableProvider};
 use datafusion::physical_plan::ExecutionPlan;
@@ -10,14 +11,13 @@ use datafusion_common::{Result, exec_err};
 use datafusion_expr::{Expr, LogicalPlan, TableType, UserDefinedLogicalNodeCore, logical_plan};
 use sail_common_datafusion::literal::{LiteralEvaluator, LiteralValue};
 use sail_logical_plan::range::RangeNode;
-use super::range_exec::RangeExec;
 
 #[derive(Debug)]
 struct RangeTableProvider {
     node: Arc<RangeNode>,
 }
 
-#[tonic::async_trait]
+#[async_trait::async_trait]
 impl TableProvider for RangeTableProvider {
     fn schema(&self) -> SchemaRef {
         self.node.schema().inner().clone()

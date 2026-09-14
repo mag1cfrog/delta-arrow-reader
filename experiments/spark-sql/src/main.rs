@@ -191,6 +191,84 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn rejects_streaming_and_checkpoints_before_resolving_inputs() -> ProbeResult<()> {
+        let ctx = SessionContext::new();
+        ctx.register_table("registered", ctx.sql("SELECT 1 AS x").await?.into_view())?;
+        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));
+        let named = spec::ReadType::NamedTable(Box::new(spec::ReadNamedTable {
+            name: spec::ObjectName::bare("registered"),
+            temporal: None,
+            sample: None,
+            options: vec![],
+        }));
+        let batch = spec::QueryPlan::new(spec::QueryNode::Read {
+            read_type: named.clone(),
+            is_streaming: false,
+        });
+        for read_type in [
+            named,
+            spec::ReadType::Udtf(Box::new(spec::ReadUdtf {
+                name: spec::ObjectName::bare("range"),
+                arguments: vec![],
+                named_arguments: vec![],
+                options: vec![],
+            })),
+            spec::ReadType::DynamicTable(Box::new(spec::ReadDynamicTable {
+                name: spec::Expr::Literal(spec::Literal::Null),
+                sample: None,
+                options: vec![],
+            })),
+            spec::ReadType::DataSource(Box::new(spec::ReadDataSource {
+                format: None,
+                schema: None,
+                options: vec![],
+                paths: vec![],
+                predicates: vec![],
+            })),
+        ] {
+            let plan = spec::Plan::Query(spec::QueryPlan::new(spec::QueryNode::Read {
+                read_type,
+                is_streaming: true,
+            }));
+            let error = resolver.resolve_named_plan(plan).await.unwrap_err();
+            assert!(
+                matches!(error, PlanError::NotSupported(ref message)
+                if message.contains("streaming reads")),
+                "{error}"
+            );
+        }
+        for node in [
+            spec::QueryNode::WithWatermark(spec::WithWatermark {
+                input: Box::new(batch.clone()),
+                event_time: "missing_column".into(),
+                delay_threshold: "invalid".into(),
+            }),
+            spec::QueryNode::CachedRemoteRelation {
+                relation_id: "missing_checkpoint".into(),
+            },
+        ] {
+            let error = resolver
+                .resolve_named_plan(spec::Plan::Query(spec::QueryPlan::new(node)))
+                .await
+                .unwrap_err();
+            assert!(matches!(error, PlanError::NotSupported(_)), "{error}");
+        }
+        let named = resolver
+            .resolve_named_plan(spec::Plan::Query(batch))
+            .await?;
+        let batches = ctx
+            .execute_logical_plan(named.plan)
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            array_value_to_string(batches[0].column(0).as_ref(), 0)?,
+            "1"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn rejects_external_sources_before_format_or_predicate_resolution() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::new()?));

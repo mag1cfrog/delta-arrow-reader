@@ -17,7 +17,8 @@ class ArrowTransportTests(unittest.TestCase):
         metadata = json.loads(subprocess.check_output([
             "cargo", "metadata", "--locked", "--format-version=1", "--manifest-path", str(ROOT / "Cargo.toml")]))
         forbidden = [package["name"] for package in metadata["packages"]
-                     if package["name"].startswith("pyo3") or package["name"] in {"sail-python-udf", "sail-pyarrow", "sail-catalog", "sail-catalog-memory"}]
+                     if package["name"].startswith(("pyo3", "tonic", "prost"))
+                     or package["name"] in {"sail-python-udf", "sail-pyarrow", "sail-catalog", "sail-catalog-memory", "figment", "fastrace"}]
         self.assertEqual(forbidden, [])
 
     def test_inputs_and_nested_nulls(self):
