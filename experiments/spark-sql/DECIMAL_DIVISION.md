@@ -136,7 +136,41 @@ The wide paths improve, but this patch should not be adopted as written. `DECIMA
 
 Some literal timings remain strongly variable. For `DECIMAL(10,2) / 3` with ANSI off, process medians span 24.16-34.94 ms before and 25.30-36.28 ms after. Its pooled 21.5% increase is not a stable estimate of the optimization's intrinsic cost. No samples were discarded. These observations do not distinguish the cost of the prepared closure from compiler code layout or other process-dependent effects, and are not a formal statistical estimate. They do establish that this build is not a universal improvement. The source change removes repeated parameter work; it leaves the two wide quotient/remainder operations, division, casts and rescaling in place.
 
-[Raw samples, plans, hashes and validation counts](decimal-round-performance.json) retain both variants and the individual process medians. The next bounded experiment should restrict preparation to Decimal256 and check that narrow paths keep their previous performance. Sharing wide quotient/remainder work would be a separate optimization. Neither experiment resolves the remaining 16 SQL compatibility differences. No dependency fork or performance patch is enabled by this report.
+[Raw samples, plans, hashes and validation counts](decimal-round-performance.json) retain both variants and the individual process medians. That result motivated the Decimal256-only experiment below. Sharing wide quotient/remainder work would be a separate optimization. Neither experiment resolves the remaining 16 SQL compatibility differences. No dependency fork or performance patch is enabled by this report.
+
+## Decimal256-only preparation
+
+The [narrowed optional patch](datafusion-round-decimal256.patch) prepares factors only in the Decimal256 array branch of DataFusion's `round` function. It restores the Decimal32/64/128 array branches, scalar dispatch and original numeric helpers byte-for-byte. Their source hashes are recorded with the measurements. This also keeps ordinary ROUND calls on Decimal128 inputs on the original implementation. Decimal256 calls with dynamic or negative scales, and calls requiring rescaling, still use the original helper.
+
+This patch is an alternative to `datafusion-round-constant.patch`; apply either one to the original DataFusion 54.1.0 source, without stacking them. It adds 163 lines and removes seven, a net 39 runtime lines and 117 test lines including comments and formatting. A small copy of the HALF_UP arithmetic stays inside the prepared Decimal256 closure so the shared helper can remain unchanged for narrow and scalar execution. The regression test compares that calculation against the unmodified helper and exercises all four array widths with NULLs, halfway values and empty arrays. Both patches remain experimental and are disabled in the host workspace.
+
+The original-rounding benchmark executable is reused, with fresh timing runs. Both variants include the same Sail arithmetic candidate. SQL, output types, first values, NULL counts and physical plans are identical across all 26 cases and eight processes. The same CPU affinity, input, build profile, warmups and sampling schedule apply. All 1,872 timed executions and 416 warmups pass their row/NULL checks.
+
+The 168 Decimal observations, including logical plans and error text, remain identical to the original-rounding candidate. Spark agreement stays at 152/168 with the same 16 differences. All 116 Delta corpus observations agree, all 18 adapter checks pass, and the six rounding tests and 27 extraction tests pass. The default release executables are restored, and the default benchmark binary still matches the original unmodified-vendor binary byte-for-byte.
+
+The table retains the pooled median used in the earlier experiments; negative changes mean lower elapsed time. Means and individual process summaries are also recorded for every case.
+
+| Input and divisor | Before ms, ANSI on | After ms, ANSI on | ANSI on elapsed change | ANSI off elapsed change |
+| --- | ---: | ---: | ---: | ---: |
+| DECIMAL(10,2) / column | 34.98 | 35.05 | +0.2% | +0.1% |
+| DECIMAL(10,2) / typed literal 3 | 32.76 | 32.75 | 0.0% | -0.1% |
+| DECIMAL(10,2) / integer literal 3 | 33.25 | 37.33 | +12.3% | -0.1% |
+| DECIMAL(18,4) / column | 139.90 | 121.33 | -13.3% | -14.9% |
+| DECIMAL(18,4) / typed literal 3 | 117.58 | 97.92 | -16.7% | -20.8% |
+| DECIMAL(18,4) / integer literal 3 | 26.44 | 26.31 | -0.5% | -0.9% |
+| DECIMAL(38,6) / column | 139.02 | 114.77 | -17.4% | -17.4% |
+| DECIMAL(38,6) / typed literal 3 | 121.62 | 96.47 | -20.7% | -22.8% |
+| DECIMAL(38,6) / integer literal 3 | 121.80 | 96.48 | -20.8% | -21.0% |
+| DECIMAL(10,2), NULL masks / column | 26.19 | 26.08 | -0.4% | 0.0% |
+| DECIMAL(10,2), NULL masks / typed literal 3 | 25.72 | 25.67 | -0.2% | -0.1% |
+| DOUBLE / column | 1.09 | 1.10 | +0.6% | +0.3% |
+| DOUBLE / typed literal 3 | 0.63 | 0.62 | -0.1% | 0.0% |
+
+The previously consistent narrow-column regression does not recur. Under ANSI, `DECIMAL(10,2)` column division changes from 34.98 to 35.05 ms (+0.2%); before process medians range from 34.89 to 35.45 ms and after medians from 34.93 to 35.18 ms. The narrow NULL-mask cases and `DECIMAL(18,4) / 3` remain within 1% of their control medians. Wide execution retains a measurable benefit: `DECIMAL(38,6)` column division falls from 139.02 to 114.77 ms (-17.4%), and its typed-literal ANSI case falls by 20.7%.
+
+One narrow literal case still needs care. `DECIMAL(10,2) / 3` under ANSI has a pooled median increase of 12.3%. Individual samples occupy two bands near 33 and 37 ms in both variants; one optimized process stays in the higher band. The four before process medians are 33.32, 33.45, 32.75 and 32.70 ms, versus 37.65, 32.77, 32.67 and 33.55 ms after. The pooled means are 34.98 and 35.53 ms (+1.6%). Changing the statistic does not make the difference disappear, but shows why the pooled median alone overstates a uniform per-execution change. No samples are excluded. The cause of the two timing bands has not been isolated, so this experiment does not establish zero regression for every narrow literal case.
+
+[Raw samples, plans, medians, means and source hashes](decimal-round256-performance.json) retain that limitation. The narrowed patch is a better candidate for further evaluation than the all-width patch: the stable narrow-column overhead is gone, while the wide benefit persists. Literal timing variability remains a measurement question before a broader performance claim. Further arithmetic optimization can investigate repeated wide quotient/remainder computation; no such change is included here. These measurements compare two versions that already include the same Spark arithmetic rules and do not eliminate the earlier cost relative to unmodified Sail. The 16 semantic differences and the adoption decision remain open.
 
 ## Reproduce
 
@@ -224,11 +258,12 @@ perf report --stdio --no-children -g none --percent-limit 1 -t ';' \
   -i "$perf_dir/candidate.data" > "$perf_dir/candidate-self.txt"
 ```
 
-For the constant-scale experiment, start from a commit containing the optional patches. Use a separate checkout so the main source and lockfile stay unchanged. Both timed variants must use the same dependency copy and Cargo configuration:
+For either constant-scale experiment, start from a commit containing the optional patches. Set `round_patch` to `datafusion-round-decimal256.patch` for the narrowed variant, or `datafusion-round-constant.patch` for the all-width variant. Apply one patch to a fresh dependency copy. Use a separate checkout so the main source and lockfile stay unchanged. Both timed variants must use the same dependency copy and Cargo configuration:
 
 ```bash
 set -e
 host_repo="$PWD"
+round_patch=datafusion-round-decimal256.patch
 round_dir="$(mktemp -d /tmp/delta-round.XXXXXX)"
 git worktree add --detach "$round_dir/checkout" HEAD
 cd "$round_dir/checkout"
@@ -254,7 +289,7 @@ cargo build --release --config "$round_dir/override.toml" \
 cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$round_dir/before"
 cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$round_dir/before-probe"
 git -C "$round_dir/datafusion-functions" apply \
-  "$PWD/experiments/spark-sql/datafusion-round-constant.patch"
+  "$PWD/experiments/spark-sql/$round_patch"
 cargo build --release --locked --config "$round_dir/override.toml" \
   --manifest-path experiments/spark-sql/Cargo.toml --examples -j 4
 cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$round_dir/after"
@@ -277,4 +312,4 @@ cd "$host_repo"
 
 Pool all four runs' `samples_ms` per case and variant as in the earlier benchmark, using `before` and `after` instead of `baseline` and `candidate`. Compare all non-timing case fields across both variants before interpreting the medians. Keep the detached checkout for inspection; it contains the temporary arithmetic patch and dependency override lockfile.
 
-The constant-scale experiment improves wide Decimal execution but regresses some narrow paths, so it remains an optional patch. The next performance slice should test preparation only for Decimal256 before considering adoption. NULL/zero handling for non-Decimal columns remains separate semantic work. High-scale Decimal arithmetic still needs explicit treatment before general Spark division support can be claimed. String conversion and other operators remain separate work; importing the entire arithmetic PR would expand scope without resolving all of these gaps. This evaluation does not close the adoption decision in the owning issue.
+The Decimal256-only experiment retains the wide benefit and removes the previous stable narrow-column regression. Both rounding patches remain optional; literal timing variability still limits broader performance claims. Further work can isolate that variability and investigate repeated wide quotient/remainder computation. NULL/zero handling for non-Decimal columns remains separate semantic work. High-scale Decimal arithmetic still needs explicit treatment before general Spark division support can be claimed. String conversion and other operators remain separate work; importing the entire arithmetic PR would expand scope without resolving all of these gaps. This evaluation does not close the adoption decision in the owning issue.

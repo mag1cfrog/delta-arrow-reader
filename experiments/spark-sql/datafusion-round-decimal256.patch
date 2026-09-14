@@ -1,0 +1,208 @@
+diff --git a/src/math/round.rs b/src/math/round.rs
+--- a/src/math/round.rs
++++ b/src/math/round.rs
+@@ -21,6 +21,7 @@
+ use arrow::datatypes::DataType::{
+     Decimal32, Decimal64, Decimal128, Decimal256, Float32, Float64,
+ };
++use arrow::datatypes::i256;
+ use arrow::datatypes::{
+     ArrowNativeTypeOp, DataType, Decimal32Type, Decimal64Type, Decimal128Type,
+     Decimal256Type, DecimalType, Float32Type, Float64Type, Int32Type,
+@@ -588,6 +589,8 @@
+             result as _
+         }
+         (Decimal256(input_precision, scale), Decimal256(precision, new_scale)) => {
++            let round =
++                decimal256_rounder(*input_precision, *scale, *new_scale, decimal_places);
+             let result = calculate_binary_decimal_math::<
+                 Decimal256Type,
+                 Int32Type,
+@@ -597,13 +600,7 @@
+                 value_array.as_ref(),
+                 decimal_places,
+                 |v, dp| {
+-                    let rounded = round_decimal_or_zero(
+-                        v,
+-                        *input_precision,
+-                        *scale,
+-                        *new_scale,
+-                        dp,
+-                    )?;
++                    let rounded = round(v, dp)?;
+                     if *precision == Decimal256Type::MAX_PRECISION
+                         && (decimal_places_is_array || (*scale == 0 && dp < 0))
+                     {
+@@ -642,6 +639,48 @@
+     Ok((value * factor).round() / factor)
+ }
+ 
++// Prepare only wide Decimal arrays: narrow types retain their original helper.
++// Failed preparation falls back so NULL/empty arrays keep deferred errors.
++fn decimal256_rounder(
++    precision: u8,
++    input_scale: i8,
++    output_scale: i8,
++    decimal_places: &ColumnarValue,
++) -> impl Fn(i256, i32) -> Result<i256, ArrowError> {
++    let cached = match decimal_places {
++        ColumnarValue::Scalar(ScalarValue::Int32(Some(dp)))
++            if *dp >= 0
++                && *dp < i32::from(input_scale)
++                && *dp == i32::from(output_scale) =>
++        {
++            i256::from_i128(10)
++                .pow_checked((i32::from(input_scale) - *dp) as u32)
++                .ok()
++                .map(|factor| (factor, factor.div_wrapping(i256::from_i128(2))))
++        }
++        _ => None,
++    };
++    move |value, dp| match cached {
++        Some((factor, threshold)) => {
++            // Same HALF_UP arithmetic as round_decimal; keep that helper unchanged
++            // for narrow types and scalar calls.
++            let mut quotient = value.div_wrapping(factor);
++            let remainder = value.mod_wrapping(factor);
++            if remainder >= threshold {
++                quotient = quotient.add_checked(i256::ONE).map_err(|_| {
++                    ArrowError::ComputeError("Overflow while rounding decimal".into())
++                })?;
++            } else if remainder <= threshold.neg_wrapping() {
++                quotient = quotient.sub_checked(i256::ONE).map_err(|_| {
++                    ArrowError::ComputeError("Overflow while rounding decimal".into())
++                })?;
++            }
++            Ok(quotient)
++        }
++        None => round_decimal_or_zero(value, precision, input_scale, output_scale, dp),
++    }
++}
++
+ fn round_decimal<V: ArrowNativeTypeOp>(
+     value: V,
+     input_scale: i8,
+@@ -756,6 +795,123 @@
+     }
+ 
+     #[test]
++    fn decimal256_preparation_matches_original_rounding() {
++        use arrow::array::{Array, Int32Array, PrimitiveArray};
++        use arrow::datatypes::{ArrowNativeType, i256};
++        use arrow::datatypes::{
++            ArrowNativeTypeOp, Decimal32Type, Decimal64Type, Decimal128Type,
++            Decimal256Type, DecimalType,
++        };
++
++        {
++            let precision = Decimal256Type::MAX_PRECISION;
++            let max = i256::from_i128(10)
++                .pow_checked(u32::from(precision))
++                .unwrap()
++                .sub_wrapping(i256::ONE);
++            let values = [
++                i256::ZERO,
++                i256::from_i128(5),
++                i256::from_i128(15),
++                i256::from_i128(25),
++                max,
++            ];
++            for scale in [-2, 0, 2, precision as i8] {
++                for dp in [i32::MIN, -2, 0, 1, 2, i32::from(precision), i32::MAX] {
++                    for output_scale in
++                        [super::output_scale_for_decimal(precision, scale, dp), scale]
++                    {
++                        for places in [
++                            ColumnarValue::Scalar(ScalarValue::Int32(Some(dp))),
++                            ColumnarValue::Array(Arc::new(Int32Array::from(vec![dp]))),
++                        ] {
++                            let round = super::decimal256_rounder(
++                                precision,
++                                scale,
++                                output_scale,
++                                &places,
++                            );
++                            for value in values {
++                                for value in [value, value.neg_wrapping()] {
++                                    let expected = super::round_decimal_or_zero(
++                                        value,
++                                        precision,
++                                        scale,
++                                        output_scale,
++                                        dp,
++                                    );
++                                    let actual = round(value, dp);
++                                    assert_eq!(
++                                        format!("{actual:?}"),
++                                        format!("{expected:?}"),
++                                        "precision={precision}, scale={scale}, output_scale={output_scale}, dp={dp}, value={value:?}"
++                                    );
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
++
++        fn check_arrays<T: DecimalType>() {
++            let precision = T::MAX_PRECISION;
++            // Exercise all four array branches, including empty and NULL arrays.
++            for raw in [
++                vec![],
++                vec![None],
++                vec![None, Some(124), Some(125), Some(-125)],
++            ] {
++                let input = PrimitiveArray::<T>::from_iter(raw.iter().map(|v| {
++                    v.map(|v: i32| {
++                        let magnitude = T::Native::usize_as(v.unsigned_abs() as usize);
++                        if v < 0 {
++                            magnitude.neg_wrapping()
++                        } else {
++                            magnitude
++                        }
++                    })
++                }))
++                .with_precision_and_scale(precision, 2)
++                .unwrap();
++                for dp in [Some(1), None] {
++                    let expected = PrimitiveArray::<T>::from_iter(raw.iter().map(|v| {
++                        v.and_then(|v| {
++                            dp.map(|_| {
++                                let magnitude = T::Native::usize_as(
++                                    ((v.unsigned_abs() + 5) / 10) as usize,
++                                );
++                                if v < 0 {
++                                    magnitude.neg_wrapping()
++                                } else {
++                                    magnitude
++                                }
++                            })
++                        })
++                    }))
++                    .with_precision_and_scale(precision, 1)
++                    .unwrap();
++                    let actual = super::round_columnar(
++                        &ColumnarValue::Array(Arc::new(input.clone())),
++                        &ColumnarValue::Scalar(ScalarValue::Int32(dp)),
++                        raw.len(),
++                        &T::TYPE_CONSTRUCTOR(precision, 1),
++                    )
++                    .unwrap();
++                    let ColumnarValue::Array(actual) = actual else {
++                        panic!("expected array")
++                    };
++                    assert_eq!(actual.to_data(), expected.to_data());
++                }
++            }
++        }
++        check_arrays::<Decimal32Type>();
++        check_arrays::<Decimal64Type>();
++        check_arrays::<Decimal128Type>();
++        check_arrays::<Decimal256Type>();
++    }
++
++    #[test]
+     fn test_round_f32() {
+         let args: Vec<ArrayRef> = vec![
+             Arc::new(Float32Array::from(vec![125.2345; 10])), // input
