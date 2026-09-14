@@ -1,3 +1,4 @@
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
@@ -11,7 +12,6 @@ use datafusion_expr::expr::{WindowFunction, WindowFunctionDefinition};
 use datafusion_expr::{
     Expr, Extension, LogicalPlan, SortExpr, WindowFrame, WindowFrameUnits, ident,
 };
-use sail_function::window::SparkFirstLastValue;
 use sail_logical_plan::monotonic_id::MonotonicIdNode;
 use sail_logical_plan::sort::RequiredSortNode;
 
@@ -43,11 +43,10 @@ impl WindowRewriter<'_> {
                     schema,
                 )?
             }
-            WindowFunctionDefinition::WindowUDF(udwf) => {
-                udwf.inner().downcast_ref::<NthValue>().is_some_and(|nth| {
-                    matches!(nth.kind(), NthValueKind::First | NthValueKind::Last)
-                }) || udwf.inner().is::<SparkFirstLastValue>()
-            }
+            WindowFunctionDefinition::WindowUDF(udwf) => udwf
+                .inner()
+                .downcast_ref::<NthValue>()
+                .is_some_and(|nth| matches!(nth.kind(), NthValueKind::First | NthValueKind::Last)),
         };
         let frame_requires_order =
             matches!(&function.fun, WindowFunctionDefinition::AggregateUDF(_))

@@ -184,6 +184,151 @@ mod tests {
     use sail_plan::error::PlanError;
 
     #[tokio::test]
+    async fn first_last_windows_preserve_nulls_frames_and_batches() -> ProbeResult<()> {
+        use arrow::datatypes::DataType;
+        use arrow::record_batch::RecordBatch;
+        use datafusion::datasource::MemTable;
+
+        let groups = [
+            vec![None, None],
+            vec![None, Some(2), None, Some(4), None],
+            vec![Some(7)],
+        ];
+        let batch = RecordBatch::try_from_iter([
+            (
+                "id",
+                Arc::new(Int32Array::from_iter_values(0..8)) as arrow::array::ArrayRef,
+            ),
+            (
+                "g",
+                Arc::new(Int32Array::from_iter_values([0, 0, 1, 1, 1, 1, 1, 2])),
+            ),
+            ("v", Arc::new(Int32Array::from(groups.concat()))),
+        ])?;
+        let calls = [
+            ("first_value(v) IGNORE NULLS", true, true),
+            ("first(v, true)", true, true),
+            ("first_value(v) RESPECT NULLS", true, false),
+            ("first(v, false)", true, false),
+            ("first_value(v)", true, false),
+            ("last_value(v) IGNORE NULLS", false, true),
+            ("last(v, true)", false, true),
+            ("last_value(v) RESPECT NULLS", false, false),
+            ("last(v, false)", false, false),
+            ("last_value(v)", false, false),
+        ];
+        let frames = [
+            (
+                "UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING",
+                i32::MIN,
+                i32::MAX,
+            ),
+            ("UNBOUNDED PRECEDING AND CURRENT ROW", i32::MIN, 0),
+            ("CURRENT ROW AND UNBOUNDED FOLLOWING", 0, i32::MAX),
+            ("1 PRECEDING AND 1 FOLLOWING", -1, 1),
+            ("1 FOLLOWING AND 2 FOLLOWING", 1, 2),
+        ];
+        let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});
+        for batch_size in [1, 3, 1024] {
+            let ctx =
+                SessionContext::new_with_config(SessionConfig::new().with_batch_size(batch_size));
+            let batches = (0..batch.num_rows())
+                .step_by(batch_size)
+                .map(|start| batch.slice(start, batch_size.min(batch.num_rows() - start)))
+                .collect();
+            ctx.register_table(
+                "window_input",
+                Arc::new(MemTable::try_new(batch.schema(), vec![batches])?),
+            )?;
+            for descending in [false, true] {
+                for (frame, lower, upper) in frames {
+                    let order = if descending { "DESC" } else { "ASC" };
+                    let expressions = calls.iter().enumerate().map(|(i, (call, _, _))| {
+                        format!("{call} OVER (PARTITION BY g ORDER BY id {order} ROWS BETWEEN {frame}) AS c{i}")
+                    }).collect::<Vec<_>>().join(", ");
+                    let sql = format!("SELECT {expressions} FROM window_input ORDER BY id");
+                    let named = resolve(&ctx, &sql, &settings).await?;
+                    assert_eq!(
+                        named.fields,
+                        (0..calls.len())
+                            .map(|i| format!("c{i}"))
+                            .collect::<Vec<_>>()
+                    );
+                    for field in named.plan.schema().fields() {
+                        assert_eq!(field.data_type(), &DataType::Int32, "{sql}");
+                        assert!(field.is_nullable(), "{sql}");
+                    }
+                    let batches = ctx
+                        .execute_logical_plan(named.plan)
+                        .await?
+                        .collect()
+                        .await?;
+                    let actual = batches
+                        .iter()
+                        .flat_map(|batch| {
+                            (0..batch.num_rows()).map(|row| {
+                                batch
+                                    .columns()
+                                    .iter()
+                                    .map(|column| {
+                                        let column =
+                                            column.as_any().downcast_ref::<Int32Array>().unwrap();
+                                        (!column.is_null(row)).then(|| column.value(row))
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    let expected = groups
+                        .iter()
+                        .flat_map(|group| {
+                            (0..group.len()).map(|row| {
+                                let ordered = if descending {
+                                    group.iter().rev().copied().collect::<Vec<_>>()
+                                } else {
+                                    group.clone()
+                                };
+                                let position = if descending {
+                                    group.len() - row - 1
+                                } else {
+                                    row
+                                } as i32;
+                                let start =
+                                    position.saturating_add(lower).clamp(0, group.len() as i32)
+                                        as usize;
+                                let end = position
+                                    .saturating_add(upper)
+                                    .saturating_add(1)
+                                    .clamp(0, group.len() as i32)
+                                    as usize;
+                                let values = &ordered[start..end];
+                                calls
+                                    .iter()
+                                    .map(|(_, first, ignore)| {
+                                        if *ignore {
+                                            if *first {
+                                                values.iter().copied().flatten().next()
+                                            } else {
+                                                values.iter().copied().flatten().last()
+                                            }
+                                        } else if *first {
+                                            values.first().copied().flatten()
+                                        } else {
+                                            values.last().copied().flatten()
+                                        }
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    assert_eq!(actual, expected, "batch size {batch_size}: {sql}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn sql_functions_use_the_retained_implementations() -> ProbeResult<()> {
         let ctx = SessionContext::new();
         let settings = json!({"spark.sql.ansi.enabled":"true", "spark.sql.caseSensitive":"false", "spark.sql.session.timeZone":"UTC"});

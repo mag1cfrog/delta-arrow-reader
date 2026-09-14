@@ -14525,26 +14525,195 @@ index 212427e..138c92b 100644
  /// The kind of typed XPath function.
  #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
  pub enum XpathTypedKind {
-diff --git a/crates/sail-function/src/window/spark_first_last_value.rs b/crates/sail-function/src/window/spark_first_last_value.rs
-index 4386c5c..c2143c2 100644
---- a/crates/sail-function/src/window/spark_first_last_value.rs
-+++ b/crates/sail-function/src/window/spark_first_last_value.rs
-@@ -1,3 +1,4 @@
+diff --git a/crates/sail-function/src/window/mod.rs b/crates/sail-function/src/window/mod.rs
+index 4fbd7cb..093bd21 100644
+--- a/crates/sail-function/src/window/mod.rs
++++ b/crates/sail-function/src/window/mod.rs
+@@ -1,7 +1,4 @@
+-mod spark_first_last_value;
 +// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
- use std::fmt::Debug;
- use std::ops::Range;
- use std::sync::Arc;
-@@ -47,10 +48,6 @@ impl SparkFirstLastValue {
-         self.kind
-     }
+ mod spark_ntile;
  
+-pub use spark_first_last_value::{
+-    SparkFirstLastValue, SparkFirstLastValueKind, spark_first_value_udwf, spark_last_value_udwf,
+-};
+ pub use spark_ntile::{SparkNtile, spark_ntile_udwf};
+diff --git a/crates/sail-function/src/window/spark_first_last_value.rs b/crates/sail-function/src/window/spark_first_last_value.rs
+deleted file mode 100644
+index 4386c5c..0000000
+--- a/crates/sail-function/src/window/spark_first_last_value.rs
++++ /dev/null
+@@ -1,170 +0,0 @@
+-use std::fmt::Debug;
+-use std::ops::Range;
+-use std::sync::Arc;
+-
+-use datafusion::arrow::array::ArrayRef;
+-use datafusion::arrow::buffer::NullBuffer;
+-use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+-use datafusion::error::Result;
+-use datafusion::logical_expr::function::{PartitionEvaluatorArgs, WindowUDFFieldArgs};
+-use datafusion::logical_expr::{
+-    LimitEffect, PartitionEvaluator, ReversedUDWF, Signature, TypeSignature, Volatility, WindowUDF,
+-    WindowUDFImpl,
+-};
+-use datafusion::scalar::ScalarValue;
+-
+-pub fn spark_first_value_udwf(ignore_nulls: bool) -> Arc<WindowUDF> {
+-    Arc::new(WindowUDF::from(SparkFirstLastValue::first(ignore_nulls)))
+-}
+-
+-pub fn spark_last_value_udwf(ignore_nulls: bool) -> Arc<WindowUDF> {
+-    Arc::new(WindowUDF::from(SparkFirstLastValue::last(ignore_nulls)))
+-}
+-
+-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+-pub enum SparkFirstLastValueKind {
+-    First,
+-    Last,
+-}
+-
+-#[derive(Debug, PartialEq, Eq, Hash)]
+-pub struct SparkFirstLastValue {
+-    kind: SparkFirstLastValueKind,
+-    ignore_nulls: bool,
+-    signature: Signature,
+-}
+-
+-impl SparkFirstLastValue {
+-    pub fn first(ignore_nulls: bool) -> Self {
+-        Self::new(SparkFirstLastValueKind::First, ignore_nulls)
+-    }
+-
+-    pub fn last(ignore_nulls: bool) -> Self {
+-        Self::new(SparkFirstLastValueKind::Last, ignore_nulls)
+-    }
+-
+-    pub fn kind(&self) -> SparkFirstLastValueKind {
+-        self.kind
+-    }
+-
 -    pub fn ignore_nulls(&self) -> bool {
 -        self.ignore_nulls
 -    }
 -
-     fn new(kind: SparkFirstLastValueKind, ignore_nulls: bool) -> Self {
-         Self {
-             kind,
+-    fn new(kind: SparkFirstLastValueKind, ignore_nulls: bool) -> Self {
+-        Self {
+-            kind,
+-            ignore_nulls,
+-            signature: Signature::one_of(
+-                vec![TypeSignature::Nullary, TypeSignature::Any(1)],
+-                Volatility::Immutable,
+-            ),
+-        }
+-    }
+-}
+-
+-impl WindowUDFImpl for SparkFirstLastValue {
+-    fn name(&self) -> &str {
+-        match self.kind {
+-            SparkFirstLastValueKind::First => "first_value",
+-            SparkFirstLastValueKind::Last => "last_value",
+-        }
+-    }
+-
+-    fn signature(&self) -> &Signature {
+-        &self.signature
+-    }
+-
+-    fn partition_evaluator(
+-        &self,
+-        _partition_evaluator_args: PartitionEvaluatorArgs,
+-    ) -> Result<Box<dyn PartitionEvaluator>> {
+-        Ok(Box::new(SparkFirstLastValueEvaluator {
+-            kind: self.kind,
+-            ignore_nulls: self.ignore_nulls,
+-        }))
+-    }
+-
+-    fn field(&self, field_args: WindowUDFFieldArgs) -> Result<FieldRef> {
+-        let input_field = field_args
+-            .input_fields()
+-            .first()
+-            .cloned()
+-            .unwrap_or_else(|| Arc::new(Field::new(field_args.name(), DataType::Null, true)));
+-        Ok(input_field
+-            .as_ref()
+-            .clone()
+-            .with_name(field_args.name())
+-            .with_nullable(true)
+-            .into())
+-    }
+-
+-    fn reverse_expr(&self) -> ReversedUDWF {
+-        match self.kind {
+-            SparkFirstLastValueKind::First => {
+-                ReversedUDWF::Reversed(spark_last_value_udwf(self.ignore_nulls))
+-            }
+-            SparkFirstLastValueKind::Last => {
+-                ReversedUDWF::Reversed(spark_first_value_udwf(self.ignore_nulls))
+-            }
+-        }
+-    }
+-
+-    fn limit_effect(
+-        &self,
+-        _args: &[Arc<dyn datafusion_physical_expr::PhysicalExpr>],
+-    ) -> LimitEffect {
+-        LimitEffect::None
+-    }
+-}
+-
+-#[derive(Debug)]
+-struct SparkFirstLastValueEvaluator {
+-    kind: SparkFirstLastValueKind,
+-    ignore_nulls: bool,
+-}
+-
+-impl PartitionEvaluator for SparkFirstLastValueEvaluator {
+-    fn evaluate(&mut self, values: &[ArrayRef], range: &Range<usize>) -> Result<ScalarValue> {
+-        let array = &values[0];
+-        if range.start == range.end {
+-            return ScalarValue::try_from(array.data_type());
+-        }
+-        match self.valid_index(array, range) {
+-            Some(index) => ScalarValue::try_from_array(array, index),
+-            None => ScalarValue::try_from(array.data_type()),
+-        }
+-    }
+-
+-    fn supports_bounded_execution(&self) -> bool {
+-        true
+-    }
+-
+-    fn uses_window_frame(&self) -> bool {
+-        true
+-    }
+-}
+-
+-impl SparkFirstLastValueEvaluator {
+-    fn valid_index(&self, array: &ArrayRef, range: &Range<usize>) -> Option<usize> {
+-        if self.ignore_nulls {
+-            let slice = array.slice(range.start, range.end - range.start);
+-            if let Some(nulls) = slice.nulls()
+-                && nulls.null_count() > 0
+-            {
+-                return self.valid_index_with_nulls(nulls, range.start);
+-            }
+-        }
+-        match self.kind {
+-            SparkFirstLastValueKind::First => Some(range.start),
+-            SparkFirstLastValueKind::Last => Some(range.end - 1),
+-        }
+-    }
+-
+-    fn valid_index_with_nulls(&self, nulls: &NullBuffer, offset: usize) -> Option<usize> {
+-        match self.kind {
+-            SparkFirstLastValueKind::First => nulls.valid_indices().next().map(|idx| idx + offset),
+-            SparkFirstLastValueKind::Last => nulls.valid_indices().last().map(|idx| idx + offset),
+-        }
+-    }
+-}
 diff --git a/crates/sail-logical-plan/Cargo.toml b/crates/sail-logical-plan/Cargo.toml
 index c4036e8..1969cac 100644
 --- a/crates/sail-logical-plan/Cargo.toml
@@ -32513,7 +32682,7 @@ index 0000000..dcce944
 +    }
 +}
 diff --git a/crates/sail-plan/src/function/window.rs b/crates/sail-plan/src/function/window.rs
-index d2ee562..68da34b 100644
+index d2ee562..be6cfda 100644
 --- a/crates/sail-plan/src/function/window.rs
 +++ b/crates/sail-plan/src/function/window.rs
 @@ -1,3 +1,4 @@
@@ -32521,7 +32690,57 @@ index d2ee562..68da34b 100644
  use std::collections::HashMap;
  use std::sync::Arc;
  
-@@ -854,10 +855,6 @@ pub(crate) fn get_built_in_window_function(name: &str) -> PlanResult<WinFunction
+@@ -13,7 +14,7 @@ use datafusion::functions_window::nth_value::{first_value_udwf, last_value_udwf,
+ use datafusion::functions_window::rank::{dense_rank_udwf, percent_rank_udwf, rank_udwf};
+ use datafusion::functions_window::row_number::row_number_udwf;
+ use datafusion_common::ScalarValue;
+-use datafusion_expr::expr::{NullTreatment, WindowFunctionParams};
++use datafusion_expr::expr::WindowFunctionParams;
+ use datafusion_expr::{
+     AggregateUDF, ExprSchemable, WindowFrame, WindowFunctionDefinition, cast, expr, lit, when,
+ };
+@@ -38,7 +39,7 @@ use sail_function::aggregate::theta_sketch::{
+     ThetaIntersectionAggFunction, ThetaSketchAggFunction, ThetaUnionAggFunction,
+ };
+ use sail_function::aggregate::try_avg::TryAvgFunction;
+-use sail_function::window::{spark_first_value_udwf, spark_last_value_udwf, spark_ntile_udwf};
++use sail_function::window::spark_ntile_udwf;
+ 
+ use crate::error::{PlanError, PlanResult};
+ use crate::function::aggregate::coerce_string_sum_arguments;
+@@ -166,15 +167,8 @@ fn first_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
+         function_context: _,
+     } = input;
+     let (args, null_treatment) = get_arguments_and_null_treatment(arguments, ignore_nulls)?;
+-    // DataFusion physical proto drops IGNORE NULLS for WindowUDFExpr, so use a
+-    // Sail UDWF with the null treatment encoded in the function state.
+-    let fun = if matches!(null_treatment, Some(NullTreatment::IgnoreNulls)) {
+-        WindowFunctionDefinition::WindowUDF(spark_first_value_udwf(true))
+-    } else {
+-        WindowFunctionDefinition::WindowUDF(first_value_udwf())
+-    };
+     Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
+-        fun,
++        fun: WindowFunctionDefinition::WindowUDF(first_value_udwf()),
+         params: WindowFunctionParams {
+             args,
+             partition_by,
+@@ -198,13 +192,8 @@ fn last_value(input: WinFunctionInput) -> PlanResult<expr::Expr> {
+         function_context: _,
+     } = input;
+     let (args, null_treatment) = get_arguments_and_null_treatment(arguments, ignore_nulls)?;
+-    let fun = if matches!(null_treatment, Some(NullTreatment::IgnoreNulls)) {
+-        WindowFunctionDefinition::WindowUDF(spark_last_value_udwf(true))
+-    } else {
+-        WindowFunctionDefinition::WindowUDF(last_value_udwf())
+-    };
+     Ok(expr::Expr::WindowFunction(Box::new(expr::WindowFunction {
+-        fun,
++        fun: WindowFunctionDefinition::WindowUDF(last_value_udwf()),
+         params: WindowFunctionParams {
+             args,
+             partition_by,
+@@ -854,10 +843,6 @@ pub(crate) fn get_built_in_window_function(name: &str) -> PlanResult<WinFunction
          .clone())
  }
  
@@ -46422,6 +46641,39 @@ index 94d4134..0000000
 -        Ok(Transformed::yes(expr))
 -    }
 -}
+diff --git a/crates/sail-plan/src/resolver/tree/window.rs b/crates/sail-plan/src/resolver/tree/window.rs
+index b028d17..12c372d 100644
+--- a/crates/sail-plan/src/resolver/tree/window.rs
++++ b/crates/sail-plan/src/resolver/tree/window.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::collections::HashMap;
+ use std::mem;
+ use std::sync::Arc;
+@@ -11,7 +12,6 @@ use datafusion_expr::expr::{WindowFunction, WindowFunctionDefinition};
+ use datafusion_expr::{
+     Expr, Extension, LogicalPlan, SortExpr, WindowFrame, WindowFrameUnits, ident,
+ };
+-use sail_function::window::SparkFirstLastValue;
+ use sail_logical_plan::monotonic_id::MonotonicIdNode;
+ use sail_logical_plan::sort::RequiredSortNode;
+ 
+@@ -43,11 +43,10 @@ impl WindowRewriter<'_> {
+                     schema,
+                 )?
+             }
+-            WindowFunctionDefinition::WindowUDF(udwf) => {
+-                udwf.inner().downcast_ref::<NthValue>().is_some_and(|nth| {
+-                    matches!(nth.kind(), NthValueKind::First | NthValueKind::Last)
+-                }) || udwf.inner().is::<SparkFirstLastValue>()
+-            }
++            WindowFunctionDefinition::WindowUDF(udwf) => udwf
++                .inner()
++                .downcast_ref::<NthValue>()
++                .is_some_and(|nth| matches!(nth.kind(), NthValueKind::First | NthValueKind::Last)),
+         };
+         let frame_requires_order =
+             matches!(&function.fun, WindowFunctionDefinition::AggregateUDF(_))
 diff --git a/crates/sail-plan/src/streaming/mod.rs b/crates/sail-plan/src/streaming/mod.rs
 deleted file mode 100644
 index deecdbe..0000000

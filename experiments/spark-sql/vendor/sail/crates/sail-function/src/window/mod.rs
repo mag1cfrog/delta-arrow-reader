@@ -1,7 +1,4 @@
-mod spark_first_last_value;
+// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
 mod spark_ntile;
 
-pub use spark_first_last_value::{
-    SparkFirstLastValue, SparkFirstLastValueKind, spark_first_value_udwf, spark_last_value_udwf,
-};
 pub use spark_ntile::{SparkNtile, spark_ntile_udwf};
