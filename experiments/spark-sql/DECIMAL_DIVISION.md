@@ -2,7 +2,7 @@
 
 The division core and numeric/NULL operand coercion from [Sail PR 2225](https://github.com/lakehq/sail/pull/2225), plus a local adjustment to use Arrow's Decimal NULL/zero handling, fix the frozen `2 / 3` discrepancy and the tested Decimal division boundaries. They do not provide complete Spark division semantics. The candidate is saved as optional patches; the normal vendored source and its checkpoint remain unchanged. The [high-scale follow-up](#high-scale-intermediate-overflow) adds a local fallback and raises the original probe agreement to 158/168.
 
-The [filter/projection follow-up](#filter-and-projection-evaluation-order) fixes the exact-scale prototype's filtering regression while preserving column pruning.
+The [filter/projection follow-up](#filter-and-projection-evaluation-order) fixes the exact-scale prototype's filtering regression while preserving column pruning. The [normalization re-evaluation](#exact-scale-normalization-after-the-filter-fix) removes unnecessary shifts and measures the candidate with that fix in place.
 
 ## Candidate and provenance
 
@@ -251,7 +251,7 @@ Six rounding unit tests pass, including 1,120 wide helper comparisons and NULL/e
 
 Nine of the ten wide median comparisons improve by 3.9-8.8%. The scale-4 typed-literal non-ANSI case is an outlier (-29.4% median, -19.7% mean); do not generalize that larger number. The scale-4 ANSI column has prepared process medians of 107.83, 121.24, 117.77 and 120.18 ms, versus 113.23, 113.31, 109.45 and 109.45 ms with reuse. The first pair looked slower with reuse, which did not persist in the pooled result. The scale-6 non-ANSI column median improves 6.3%, but its mean improves only 0.1%. Narrow-column/NULL medians range from -0.1% to +2.2% while those source paths are unchanged; literal samples retain variability. No samples are removed. This supports further review of the small change, not a universal per-query speedup or a zero-regression guarantee.
 
-**Shift high-scale inputs before dividing.** [decimal-division-normalized.patch](decimal-division-normalized.patch) applies after the high-scale fallback. When both operand scales permit it, exact multiplication by a common power of ten reduces the intermediate needed by the ordinary Arrow expression. The hard mixed-scale cases retain the old fallback. This preserves the source coefficients and Spark result type; it is not a lossy cast to fewer fractional digits.
+**Shift high-scale inputs before dividing.** The prototype measured here is the normalization patch at `1434e5b`; the narrowed condition is evaluated below. [decimal-division-normalized.patch](decimal-division-normalized.patch) applies after the high-scale fallback. When both operand scales permit it, exact multiplication by a common power of ten reduces the intermediate needed by the ordinary Arrow expression. The hard mixed-scale cases retain the old fallback. This preserves the source coefficients and Spark result type; it is not a lossy cast to fewer fractional digits.
 
 **Fuse final-scale division and rounding.** [decimal-division-fused.patch](decimal-division-fused.patch) is an alternative applied directly after the base arithmetic patch, without the high-scale fallback or either dependency optimization. It computes the final coefficient using `a * 10^(result_scale + s2 - s1) / b`, then rounds from the exact remainder. Checked i128 multiplication selects a narrow path using the actual values; larger intermediates use i256. Both paths derive the remainder from the already-computed quotient. This removes guard digits, several intermediate arrays and the separate ROUND/final-cast steps. If the i256 multiplication overflows, a representable 38-digit result is impossible: its coefficient times a source coefficient of at most 38 digits, plus the remainder, fits within 76 digits. Actual result overflow and division by zero retain ANSI error/non-ANSI NULL behavior.
 
@@ -319,7 +319,7 @@ The restriction is conservative: even a harmless computed expression stays after
 
 The direct DataFusion regression test first fails with `ArrowError(DivideByZero)` on the original implementation, then passes with the guard. It executes masked-zero, live-zero and empty-result cases with both ordinary and reordered embedded projections, checks that the unused column is pruned, and verifies that plain column selection with an alias still crosses the filter. All 38 tests in DataFusion's filter module pass.
 
-The complete SQL evaluation uses the previous exact-scale prototype unchanged, with only this dependency patch added. Neither ROUND optimization nor the fused UDF prototype is applied. The [60-query corpus](decimal-filter-order.jsonl) runs with ANSI on and off, using batch sizes 1 and 4. It covers three Decimal division types, final-result overflow, invalid and narrowing CAST, NULL numerators with zero divisors, TRY_CAST, repeated expressions, CASE, nested filters and empty results.
+The complete SQL evaluation uses the exact-scale prototype at `1434e5b` unchanged, with only this dependency patch added. Neither ROUND optimization nor the fused UDF prototype is applied. The [60-query corpus](decimal-filter-order.jsonl) runs with ANSI on and off, using batch sizes 1 and 4. It covers three Decimal division types, final-result overflow, invalid and narrowing CAST, NULL numerators with zero divisors, TRY_CAST, repeated expressions, CASE, nested filters and empty results.
 
 | Check | Before | After |
 | --- | ---: | ---: |
@@ -359,6 +359,42 @@ python3 experiments/spark-sql/decimal_division.py compare \
 ```
 
 The comparison reports 116/120 and exits nonzero for the four documented CAST differences. Run the dependency regression with `cargo test --release --lib filter::tests --manifest-path /absolute/path/to/patched-datafusion-physical-plan/Cargo.toml`, using the same resolved dependency versions. For the failing control, keep the test and remove only the runtime guard.
+
+## Exact-scale normalization after the filter fix
+
+The [normalization patch](decimal-division-normalized.patch) now shifts both operands only when the shift lets division use the ordinary Arrow expression instead of the whole/remainder fallback. It still calculates Spark's result type first and preserves the input coefficients. The patch adds 23 lines after the high-scale patch, using the existing Arrow precision and scale-increment constants. It adds no arithmetic UDF, kernel or dependency.
+
+Of the 880 nonnegative-scale Decimal128 type pairs above the original 76-digit limit, 670 can avoid the fallback through this exact shift. Another 195 permit no positive shift. The previous prototype also shifted the remaining 15 pairs even though they still needed the fallback, adding two intermediate multiplication/cast expressions. The revised condition leaves all 210 unsuccessful pairs on their original plans. For example, `DECIMAL(38,6) / DECIMAL(38,38)` still needs the fallback; changing the numerator scale to 7 lets the shifted intermediate fit exactly within 76 digits.
+
+A separate mixed-scale diagnostic reproduced the extra cost of the original prototype: the ANSI scale-6 column median increased from 393.14 to 436.61 ms (+11.1%). Across column cases with and without NULL masks, both ANSI modes, increases were 11.1-19.5%. Those samples used two processes per variant in reversed order. They are kept separately from the final comparison; the narrowed condition removes those extra expressions.
+
+The final comparison includes the same filter/projection fix on both sides, with no ROUND optimization or fused UDF. `Before` is the existing high-scale fallback; `after` adds the narrowed normalization patch. The benchmark retains all 38 existing cases and adds 12 mixed-scale cases, with column/typed-literal divisors and NULL controls. All 26 ordinary plans and the eight mixed-scale fallback plans are identical across variants. SQL, output types, first values and NULL counts agree in all 50 cases.
+
+| Input/divisor, ANSI enabled | Before ms | After ms | Median change |
+| --- | ---: | ---: | ---: |
+| DECIMAL(10,2) / column | 35.05 | 35.13 | +0.2% |
+| DECIMAL(18,4) / column | 131.32 | 130.47 | -0.6% |
+| DECIMAL(38,6) / column | 139.85 | 138.87 | -0.7% |
+| DECIMAL(38,35) / column | 379.55 | 169.66 | -55.3% |
+| DECIMAL(38,38) / column | 361.69 | 169.50 | -53.1% |
+| DECIMAL(38,38) / typed 0.3 | 259.81 | 141.79 | -45.4% |
+| DECIMAL(38,7) / DECIMAL(38,38) column | 375.19 | 170.20 | -54.6% |
+| DECIMAL(38,6) / DECIMAL(38,38) column | 396.98 | 392.09 | -1.2% |
+| DECIMAL(38,6), NULL masks / DECIMAL(38,38) literal | 302.37 | 315.89 | +4.5% |
+
+Timing uses the previous release settings, 1,048,576 preloaded rows, batch size 8,192, one partition and CPU 2. All compilation and correctness checks finish before the final series. Each suite runs in four fresh processes per variant, with two warmups and nine samples per case. The order is before, after, after, before, after, before, before, after, running ordinary, high-scale and mixed-scale suites in that order per pass. All 3,600 timed executions and 800 warmups pass row/NULL checks; the preliminary diagnostic adds 432 timed executions and 96 warmups. No samples are discarded.
+
+The selected high-scale expressions show a large reduction in both medians and means. The unchanged controls need a narrower conclusion. Twenty-five ordinary pooled medians move between -3.6% and +2.0%. The unchanged scale-6 integer-literal ANSI plan has a -15.2% median change but a -6.0% mean change; process medians occupy bands near 101 and 122 ms in both variants. This is not evidence of removed arithmetic on the ordinary path.
+
+Slower samples are also retained. Ordinary narrow NULL-column division under non-ANSI has a +0.7% median change but a +14.2% mean change: one after process has a 39.32 ms median, while the others are near 25 ms. The unchanged mixed-scale NULL/typed-literal ANSI plan has a +4.5% median and +8.4% mean change. Its after process medians range from 308.52 to 388.03 ms, versus 301.60 to 310.37 ms before. The cause of these timing shifts is not isolated. Identical plans do not justify a zero-regression claim, and the large base cost of ordinary Spark Decimal division remains. These are execution measurements on one machine, not whole-query Delta latency.
+
+The final candidate preserves the before variant's 314/314 high-scale, 158/168 original and 116/120 filter-corpus agreement with Spark. It passes all 4,064 exact-integer comparisons over 187,410 returned rows, plus all 116 Delta observations and 18 adapter checks. The 15 previously over-shifted type pairs receive 60 additional observations: all physical plans, values, types and success/error statuses match before. Some overflow messages name a different failing row; repeated runs of the same before binary also do this with the probe's two partitions. The raw messages are retained rather than counted as identical error text.
+
+Five fresh processes per variant recheck the 28 context observations. All remaining differences are the existing ordered-row differences in nested correlated subqueries, with no new failure category. The four live non-ANSI CAST controls and ten original Decimal differences remain unresolved. This does not establish complete Spark SQL or structured error compatibility.
+
+[Raw samples, plans, hashes and correctness results](decimal-normalized-performance.json) retain the final comparison and the rejected mixed-scale behavior. The default release executable is restored and matches all 168 frozen baseline observations. Host vendor and lockfiles remain unchanged. The candidate remains optional; adoption is pending.
+
+To reproduce, use the filter-patched scratch checkout described above, with the base arithmetic and high-scale patches on both sides. Apply the current normalization patch only to the after variant. Build separate release binaries before timing. Use the existing `decimal_bench OUTPUT_JSON` and `decimal_bench OUTPUT_JSON high-scale` commands, adding `decimal_bench OUTPUT_JSON high-scale-mixed` for the new boundary cases. Re-run the three Decimal corpora and `decimal_division_properties.py` with the candidate probe; the existing corpus comparators retain their documented nonzero exits. Historical normalization at `1434e5b` reproduces the preliminary mixed-scale diagnostic.
 
 ## Reproduce
 

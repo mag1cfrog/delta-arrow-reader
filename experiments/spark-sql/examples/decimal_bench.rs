@@ -24,21 +24,24 @@ const WARMUPS: usize = 2;
 const SAMPLES: usize = 9;
 
 // In-memory projection only. Measure Delta I/O and concurrent queries separately.
-fn input(precision: u8, scale: i8, nulls: bool) -> Result<MemTable> {
-    let data_type = if precision == 0 {
-        DataType::Float64
-    } else {
-        DataType::Decimal128(precision, scale)
+fn input(precision: u8, scale: i8, divisor_scale: i8, nulls: bool) -> Result<MemTable> {
+    let data_type = |scale| {
+        if precision == 0 {
+            DataType::Float64
+        } else {
+            DataType::Decimal128(precision, scale)
+        }
     };
     let schema = Arc::new(Schema::new(vec![
-        Field::new("a", data_type.clone(), nulls),
-        Field::new("b", data_type, nulls),
+        Field::new("a", data_type(scale), nulls),
+        Field::new("b", data_type(divisor_scale), nulls),
     ]));
     let mut batches = Vec::new();
     for start in (0..ROWS).step_by(BATCH_SIZE) {
         let columns = [false, true]
             .into_iter()
             .map(|divisor| -> Result<ArrayRef> {
+                let scale = if divisor { divisor_scale } else { scale };
                 let values = (start..(start + BATCH_SIZE).min(ROWS)).map(|i| {
                     let period = if divisor { 13 } else { 10 };
                     if nulls && i % period == period - 1 {
@@ -87,18 +90,24 @@ async fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
     let output = args
         .get(1)
-        .ok_or("usage: decimal_bench OUTPUT_JSON [high-scale]")?;
+        .ok_or("usage: decimal_bench OUTPUT_JSON [high-scale|high-scale-35|high-scale-mixed]")?;
     let inputs = match args.get(2).map(String::as_str) {
         None => vec![
-            (10, 2, false),
-            (18, 4, false),
-            (38, 6, false),
-            (10, 2, true),
-            (0, 2, false),
+            (10, 2, 2, false),
+            (18, 4, 4, false),
+            (38, 6, 6, false),
+            (10, 2, 2, true),
+            (0, 2, 2, false),
         ],
-        Some("high-scale") => vec![(38, 35, false), (38, 38, false), (38, 38, true)],
-        Some("high-scale-35") => vec![(38, 35, false)],
-        Some(_) => return Err("expected high-scale, high-scale-35 or no extra argument".into()),
+        Some("high-scale") => vec![(38, 35, 35, false), (38, 38, 38, false), (38, 38, 38, true)],
+        Some("high-scale-35") => vec![(38, 35, 35, false)],
+        // Scale 6 still needs the fallback after shifting; scale 7 just fits i256.
+        Some("high-scale-mixed") => vec![(38, 6, 38, false), (38, 7, 38, false), (38, 6, 38, true)],
+        Some(_) => {
+            return Err(
+                "expected high-scale, high-scale-35, high-scale-mixed or no extra argument".into(),
+            );
+        }
     };
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
@@ -112,11 +121,15 @@ async fn main() -> Result<()> {
             .build(),
     );
     let mut results = Vec::new();
-    for (precision, scale, nulls) in inputs {
+    for (precision, scale, divisor_scale, nulls) in inputs {
         ctx.deregister_table("bench_input")?;
-        ctx.register_table("bench_input", Arc::new(input(precision, scale, nulls)?))?;
+        ctx.register_table(
+            "bench_input",
+            Arc::new(input(precision, scale, divisor_scale, nulls)?),
+        )?;
         for divisor_kind in ["column", "typed_literal", "integer_literal"] {
-            if divisor_kind == "integer_literal" && (nulls || precision == 0 || scale >= 35) {
+            if divisor_kind == "integer_literal" && (nulls || precision == 0 || divisor_scale >= 35)
+            {
                 continue;
             }
             let scalar = divisor_kind != "column";
@@ -126,10 +139,10 @@ async fn main() -> Result<()> {
                 "3".to_owned()
             } else if precision == 0 {
                 "CAST(3 AS DOUBLE)".to_owned()
-            } else if scale >= 35 {
-                format!("CAST('0.3' AS DECIMAL({precision},{scale}))")
+            } else if divisor_scale >= 35 {
+                format!("CAST('0.3' AS DECIMAL({precision},{divisor_scale}))")
             } else {
-                format!("CAST(3 AS DECIMAL({precision},{scale}))")
+                format!("CAST(3 AS DECIMAL({precision},{divisor_scale}))")
             };
             let sql = format!("SELECT a / {denominator} AS quotient FROM bench_input");
             let expected_nulls = (0..ROWS)
@@ -166,7 +179,14 @@ async fn main() -> Result<()> {
                 let mut sorted = elapsed_ms.clone();
                 sorted.sort_by(f64::total_cmp);
                 let median_ms = sorted[SAMPLES / 2];
-                let id = format!("p{precision}_s{scale}_nulls{nulls}_{divisor_kind}_ansi{ansi}");
+                let divisor_id = if scale == divisor_scale {
+                    String::new()
+                } else {
+                    format!("_divisor_s{divisor_scale}")
+                };
+                let id = format!(
+                    "p{precision}_s{scale}{divisor_id}_nulls{nulls}_{divisor_kind}_ansi{ansi}"
+                );
                 eprintln!("{id}: {median_ms:.3} ms");
                 results.push(json!({
                     "id": id, "sql": sql, "ansi": ansi,
