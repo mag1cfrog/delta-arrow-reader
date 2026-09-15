@@ -733,6 +733,68 @@ cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
 
 Run `decimal_probe experiments/spark-sql/decimal-fused-null.jsonl OUTPUT_JSON --physical-plans`, compare it against both the saved before capture and the Spark capture using `decimal_division.py compare --cases`, and use `decimal_bench OUTPUT_JSON subquery-check` before timing. The before/after SQL comparison must match all 60 observations; the Spark comparison currently matches 50 and returns exit 1 for the documented differences. Reuse the preceding `subqueries` and FIFO counter commands with the recorded process order. The patch remains optional, and broader compatibility, Delta I/O latency and concurrent execution remain outside this result.
 
+## Numeric Decimal casts from Sail
+
+The optional [numeric CAST patch](sail-decimal-cast.patch) copies the 27 runtime lines for explicit numeric-to-Decimal casts from [Sail PR 2575](https://github.com/lakehq/sail/pull/2575), pinned at `2ad5d780d999751fde1edd4d0eccadca4760bc8f`. The PR was open when inspected. Only its CAST change is selected. A local Rust regression test checks values, ANSI errors and output nullability. [Results and measurements](decimal-cast-results.json) record this comparison against the reviewed fused candidate at `2b2edb0`.
+
+### Where the tests came from
+
+The earlier four filter failures and six NULL/subquery differences came from local regression SQL, rather than a Sail CI case list:
+
+- `decimal-filter-order.jsonl`, introduced in `b2d2726`, tests projection evaluation around filters. Its four remaining non-ANSI observations were two query shapes, malformed string input and numeric precision overflow, each at batch sizes 1 and 4.
+- `decimal-fused-null.jsonl`, introduced in `2b2edb0`, tests NULL simplification around subqueries. Its six non-ANSI CAST differences place a malformed string conversion beside a typed NULL on either side, or inside matched/unmatched MAX and COUNT queries.
+
+These are counts of observations, not ten independent bugs. `decimal_division.py` runs each fixed SQL statement with ANSI enabled and disabled on real Spark 4.2.0. `decimal_probe` runs the same statements through the extracted Rust frontend. Comparison checks exact ordered Decimal values, logical types and error stage; structured Spark error codes and complete schema parity are outside its match count. The existing corpus and reference files are unchanged.
+
+Sail has two relevant test sources. Its [Python test CI](https://github.com/lakehq/sail/blob/9544c9253e981a82c5f9e493c43ce98a4d9d41b7/.github/workflows/python-tests.yml) runs its own pytest suite, including declarative `.feature` scenarios and doctests. Its [Spark test runner](https://github.com/lakehq/sail/blob/9544c9253e981a82c5f9e493c43ce98a4d9d41b7/scripts/spark-tests/run-tests.sh) also runs Apache PySpark Connect tests and API doctests against Sail. That complete runner requires the Connect service. This extraction can reuse the SQL scenarios directly through its existing probe.
+
+The [new corpus](decimal-cast.jsonl) adapts 25 queries from PR 2575's [Decimal CAST scenarios](https://github.com/lakehq/sail/blob/2ad5d780d999751fde1edd4d0eccadca4760bc8f/python/pysail/tests/spark/function/features/conversion/cast_decimal.feature), expanding example tables and adding explicit ordering to multirow results. Another 16 local queries cover strings, mixed valid/overflow/NULL rows, filters, high scales and the retained STRING-to-INT behavior at two batch sizes. Both ANSI settings produce 82 observations. Expected results are captured from Spark, rather than inferred from the proposed Rust code.
+
+### Scope and correctness
+
+The copied rule selects DataFusion's native TRY_CAST for non-ANSI numeric conversions that can overflow the target Decimal precision. A type-level check leaves safe widening on the ordinary CAST path, preserving non-null fields. Explicit TRY_CAST and ANSI error behavior retain their existing paths. Execution uses Arrow's native conversion kernels. There is no new UDF, optimizer pass or dependency.
+
+The selected code fixes the two numeric-overflow observations in the old filter corpus, improving agreement from 116/120 to 118/120. The other 856 existing observations retain their values/types or error stage, including complete messages for remaining errors. All 20 subquery benchmark cases retain correct rows, NULLs and ordering. The 4,064 exact-integer comparisons over 187,410 rows, 116 Delta comparisons and 18 adapter checks pass.
+
+The new corpus improves from 53/82 to 67/82. Its remaining 15 differences already existed: three ANSI floating NaN/Infinity-to-Decimal cases and twelve string-conversion observations. The old two malformed-string filter failures and six malformed-string subquery differences also remain.
+
+String conversion needs a separate change. The current Arrow string parser accepts an empty string as zero and rejects the tested scientific notation `1e2`. Existing TRY_CAST returns `0.00` for the empty string and NULL for `1e2`; Spark returns NULL and `100.00`. Merely routing these strings through TRY_CAST would preserve incorrect values. No string-conversion patch is included here. The inspected Sail main revision, `d0595c2dff95f1cf971c2bfd381a71d680a8178b`, still has the same CAST resolver as the pinned v0.7.1 source.
+
+### Performance
+
+Both builds use the same corrected fused arithmetic, Sail alias patch and four DataFusion overrides. The new `decimal_bench ... casts` suite measures 12 direct conversion cases, including ANSI, safe-widening and string controls. String arrays are prepared before timing. The existing 20-case subquery suite checks the four non-ANSI COUNT/LATERAL plans whose casts change.
+
+Each variant runs in four processes, with two warmups and nine samples per case, using 1,048,576 rows, batch size 8192 and one partition. Builds and candidate correctness checks finish before timing. Every result value is checked before a timing process measures execution; every warmup and sample checks row/NULL counts. All 2,664 timed executions and 592 warmups pass. Forty separate FIFO-controlled counter processes measure execution only, with all six counters running for 100% of their enabled intervals.
+
+| Non-ANSI conversion | Before median | After median | Execution change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| DECIMAL(18,4) to DECIMAL(10,2), no NULL input | 7.855 ms | 6.100 ms | -22.3% | -26.7% |
+| Same conversion, nullable input | 7.596 ms | 6.168 ms | -18.8% | -17.3% |
+
+The other ten cast plans are unchanged; their median changes range from -0.8% to +1.5%. The four affected subquery execution medians decrease by 0.4-3.0%, and their planning medians change by -0.05% to +0.06%. Selected subquery counter runs are less uniform: COUNT elapsed time increases 3.1%, while its instruction count changes by +0.0002% and its full-suite median decreases 0.6%. All samples remain in the artifact. These measurements show a clear benefit for the narrow casts, with small, inconsistent subquery timing shifts. CPU frequency is unfixed and the host is not isolated from other work. Delta I/O and concurrent workloads are unmeasured.
+
+### Reproducing this slice
+
+Use the corrected fused candidate and dependency overrides described above in an isolated checkout. Build both variants with the new benchmark source. Save the before binaries, apply only `sail-decimal-cast.patch`, and build the after binaries. The runtime additions are copied from the pinned PR; the patch's final test module is local.
+
+```sh
+git apply experiments/spark-sql/sail-decimal-cast.patch
+cargo test --release --offline --locked \
+  --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-plan --lib \
+  numeric_decimal_cast_preserves_values_errors_and_nullability
+python experiments/spark-sql/decimal_division.py spark "$run_dir/spark-cast.json" \
+  --cases experiments/spark-sql/decimal-cast.jsonl
+"$run_dir/after-probe" experiments/spark-sql/decimal-cast.jsonl \
+  "$run_dir/after-cast.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-cast.json" "$run_dir/after-cast.json" \
+  --cases experiments/spark-sql/decimal-cast.jsonl --report "$run_dir/cast-check.json"
+"$run_dir/after-bench" "$run_dir/cast-timing.json" casts
+```
+
+The comparison deliberately returns exit 1 for the 15 documented differences. Reuse the earlier build and FIFO-counter commands with `casts` or `subqueries`; the artifact records the complete process order, selected cases, commands, source hashes and samples. The optional patch is not enabled in the default vendor. Scratch sources and default executables are restored, and all 168 prior default observations match, including logical plans and complete errors.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

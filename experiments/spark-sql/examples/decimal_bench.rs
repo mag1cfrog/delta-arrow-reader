@@ -412,6 +412,93 @@ async fn subquery_bench(
     Ok(())
 }
 
+async fn cast_bench(ctx: &SessionContext, output: &str, selected: Option<&str>) -> Result<()> {
+    let mut results = Vec::new();
+    for nulls in [false, true] {
+        ctx.deregister_table("bench_input")?;
+        ctx.deregister_table("bench_strings")?;
+        ctx.register_table("bench_input", Arc::new(input(18, 4, 4, nulls)?))?;
+        // Prepare strings before timing so only the string-to-Decimal cast is measured.
+        let strings = ctx
+            .sql("SELECT CAST(a AS VARCHAR) AS a FROM bench_input")
+            .await?;
+        let schema = Arc::new(strings.schema().as_arrow().clone());
+        ctx.register_table(
+            "bench_strings",
+            Arc::new(MemTable::try_new(schema, vec![strings.collect().await?])?),
+        )?;
+        for (kind, table, precision, scale) in [
+            ("narrow", "bench_input", 10, 2),
+            ("widen", "bench_input", 38, 4),
+            ("string", "bench_strings", 18, 4),
+        ] {
+            let sql = format!("SELECT CAST(a AS DECIMAL({precision},{scale})) AS r FROM {table}");
+            for ansi in [true, false] {
+                let id = format!("cast_{kind}_nulls{nulls}_ansi{ansi}");
+                if selected.is_some_and(|s| s != id) {
+                    continue;
+                }
+                let plan = plan_query(ctx, &sql, ansi).await?;
+                let mut stream = execute_stream(plan.clone(), ctx.task_ctx())?;
+                let (mut rows, mut output_nulls, mut coefficient_sum) = (0, 0, 0_i128);
+                while let Some(batch) = stream.next().await {
+                    let batch = batch?;
+                    let values = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<Decimal128Array>()
+                        .ok_or("expected Decimal128 output")?;
+                    assert_eq!(values.data_type(), &DataType::Decimal128(precision, scale));
+                    for value in values.iter() {
+                        let expected = if nulls && rows % 10 == 9 {
+                            None
+                        } else {
+                            Some((rows % 10000 + 2) as i128 * 10_i128.pow((scale - 2) as u32))
+                        };
+                        assert_eq!(value, expected, "{id}, row {rows}");
+                        rows += 1;
+                        output_nulls += usize::from(value.is_none());
+                        coefficient_sum += value.unwrap_or(0);
+                    }
+                }
+                assert_eq!(rows, ROWS);
+                for _ in 0..WARMUPS {
+                    assert_eq!(consume(ctx, plan.clone()).await?, (rows, output_nulls));
+                }
+                let mut samples_ms = Vec::new();
+                perf_command(b"enable\n")?;
+                for _ in 0..SAMPLES {
+                    let start = Instant::now();
+                    let counts = consume(ctx, plan.clone()).await?;
+                    samples_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+                    assert_eq!(counts, (rows, output_nulls));
+                }
+                perf_command(b"disable\n")?;
+                eprintln!("{id}: validated {rows} rows, {output_nulls} NULLs");
+                results.push(json!({
+                    "id": id, "sql": sql, "validated_rows": rows,
+                    "output_nulls": output_nulls, "coefficient_sum": coefficient_sum.to_string(),
+                    "output_nullable": plan.schema().field(0).is_nullable(),
+                    "output_type": format!("{:?}", plan.schema().field(0).data_type()),
+                    "physical_plan": displayable(plan.as_ref()).indent(true).to_string(),
+                    "samples_ms": samples_ms,
+                }));
+            }
+        }
+    }
+    if results.is_empty() {
+        return Err("no benchmark case matched CASE_ID".into());
+    }
+    fs::write(
+        output,
+        serde_json::to_vec_pretty(&json!({
+            "rows": ROWS, "batch_size": BATCH_SIZE, "partitions": 1,
+            "warmups": WARMUPS, "samples": SAMPLES, "results": results,
+        }))?,
+    )?;
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     if cfg!(debug_assertions) {
@@ -433,6 +520,7 @@ async fn main() -> Result<()> {
             .build(),
     );
     let inputs = match args.get(2).map(String::as_str) {
+        Some("casts") => return cast_bench(&ctx, output, args.get(3).map(String::as_str)).await,
         Some(mode @ ("subqueries" | "subquery-check")) => {
             return subquery_bench(
                 &ctx,
@@ -455,7 +543,7 @@ async fn main() -> Result<()> {
         Some("high-scale-mixed") => vec![(38, 6, 38, false), (38, 7, 38, false), (38, 6, 38, true)],
         Some(_) => {
             return Err(
-                "expected normal, high-scale, high-scale-35, high-scale-mixed, subqueries or subquery-check"
+                "expected normal, high-scale, high-scale-35, high-scale-mixed, subqueries, subquery-check or casts"
                     .into(),
             );
         }

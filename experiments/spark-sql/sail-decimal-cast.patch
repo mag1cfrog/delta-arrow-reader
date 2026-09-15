@@ -1,0 +1,138 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
+@@ -230,10 +230,37 @@
+                     cast(renamed, to)
+                 }
+             }
++            (
++                from,
++                DataType::Decimal128(precision, scale) | DataType::Decimal256(precision, scale),
++                _,
++            ) if from.is_numeric()
++                && !self.config.ansi_mode
++                && (is_try || decimal_cast_can_overflow(&from, precision, scale)) =>
++            {
++                try_cast(expr, cast_to_type)
++            }
+             (_, to, true) => try_cast(expr, to),
+             (_, to, _) => cast(expr, to),
+         };
+         Ok(NamedExpr::new(name, expr))
++    }
++}
++
++fn decimal_cast_can_overflow(from: &DataType, precision: u8, scale: i8) -> bool {
++    let integer_digits = i16::from(precision) - i16::from(scale);
++    match from {
++        DataType::Decimal128(from_precision, from_scale)
++        | DataType::Decimal256(from_precision, from_scale) => {
++            let source_integer_digits = i16::from(*from_precision) - i16::from(*from_scale);
++            integer_digits < source_integer_digits
++                || (integer_digits == source_integer_digits && scale < *from_scale)
++        }
++        DataType::Int8 | DataType::UInt8 => scale < 0 || integer_digits < 3,
++        DataType::Int16 | DataType::UInt16 => scale < 0 || integer_digits < 5,
++        DataType::Int32 | DataType::UInt32 => scale < 0 || integer_digits < 10,
++        DataType::Int64 | DataType::UInt64 => scale < 0 || integer_digits < 20,
++        _ => true,
+     }
+ }
+ 
+@@ -351,3 +378,96 @@
+         _ => true,
+     }
+ }
++
++#[cfg(test)]
++mod decimal_cast_tests {
++    use super::*;
++    use crate::config::PlanConfig;
++    use datafusion::arrow::array::Decimal128Array;
++    use datafusion::prelude::SessionContext;
++
++    #[tokio::test]
++    async fn numeric_decimal_cast_preserves_values_errors_and_nullability()
++    -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
++        for ansi in [true, false] {
++            // Safe widening keeps Spark's non-null field even outside ANSI mode.
++            for (source, target) in [
++                ("TINYINT", "DECIMAL(3,0)"),
++                ("SMALLINT", "DECIMAL(5,0)"),
++                ("INT", "DECIMAL(10,0)"),
++                ("BIGINT", "DECIMAL(20,0)"),
++                ("DECIMAL(20,0)", "DECIMAL(21,0)"),
++            ] {
++                let ctx = SessionContext::new();
++                let sql =
++                    format!("SELECT CAST(CAST(id AS {source}) AS {target}) AS r FROM range(1)");
++                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode: ansi,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                assert!(
++                    !named.plan.schema().field(0).is_nullable(),
++                    "{sql}, ANSI {ansi}"
++                );
++                let batches = ctx
++                    .execute_logical_plan(named.plan)
++                    .await?
++                    .collect()
++                    .await?;
++                assert!(
++                    !batches[0].schema().field(0).is_nullable(),
++                    "{sql}, ANSI {ansi}"
++                );
++                let values = batches[0]
++                    .column(0)
++                    .as_any()
++                    .downcast_ref::<Decimal128Array>()
++                    .unwrap();
++                assert_eq!(values.iter().collect::<Vec<_>>(), vec![Some(0)]);
++            }
++            for is_try in [true, false] {
++                let ctx = SessionContext::new();
++                let keyword = if is_try { "TRY_CAST" } else { "CAST" };
++                let sql = format!(
++                    "SELECT {keyword}(id AS DECIMAL(2,0)) AS r FROM range(98,102) ORDER BY id"
++                );
++                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode: ansi,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                if is_try || !ansi {
++                    assert!(named.plan.schema().field(0).is_nullable());
++                }
++                let batches = ctx.execute_logical_plan(named.plan).await?.collect().await;
++                if ansi && !is_try {
++                    assert!(batches.is_err(), "ANSI CAST must raise on 100");
++                } else {
++                    let mut values = Vec::new();
++                    for batch in batches? {
++                        assert!(batch.schema().field(0).is_nullable());
++                        values.extend(
++                            batch
++                                .column(0)
++                                .as_any()
++                                .downcast_ref::<Decimal128Array>()
++                                .unwrap()
++                                .iter(),
++                        );
++                    }
++                    assert_eq!(values, vec![Some(98), Some(99), None, None]);
++                }
++            }
++        }
++        Ok(())
++    }
++}
