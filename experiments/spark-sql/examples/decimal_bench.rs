@@ -190,6 +190,7 @@ fn expected_subquery_value(case: &str, id: usize) -> Option<i128> {
     let count = if key < 256 { 1 + key % 3 } else { 0 };
     match case {
         "no_division" => Some(id as i128 * 1_000_000),
+        "negative_literal" => Some((id % 97 + 2) as i128 * -2_500),
         "plain_projection" | "plain_sorted" | "scalar_projection" | "scalar_sorted" => {
             Some((id % 97 + 2) as i128 * 2_500)
         }
@@ -269,6 +270,12 @@ async fn subquery_bench(
         (
             "plain_projection",
             "o.a / CAST(4 AS DECIMAL(18,4))".into(),
+            "".into(),
+            false,
+        ),
+        (
+            "negative_literal",
+            "o.a / CAST(-4 AS DECIMAL(18,4))".into(),
             "".into(),
             false,
         ),

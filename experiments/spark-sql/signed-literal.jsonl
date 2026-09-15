@@ -1,0 +1,56 @@
+{"id": "byte_min", "sql": "SELECT -128Y AS r"}
+{"id": "byte_near_min", "sql": "SELECT -127Y AS r"}
+{"id": "byte_max", "sql": "SELECT 127Y AS r"}
+{"id": "byte_positive_overflow", "sql": "SELECT 128Y AS r"}
+{"id": "byte_negative_overflow", "sql": "SELECT -129Y AS r"}
+{"id": "byte_negative_parenthesized_positive", "sql": "SELECT -(128Y) AS r"}
+{"id": "byte_parenthesized_negative", "sql": "SELECT (-128Y) AS r"}
+{"id": "byte_plus_negative", "sql": "SELECT + -128Y AS r"}
+{"id": "short_min", "sql": "SELECT -32768S AS r"}
+{"id": "short_near_min", "sql": "SELECT -32767S AS r"}
+{"id": "short_max", "sql": "SELECT 32767S AS r"}
+{"id": "short_positive_overflow", "sql": "SELECT 32768S AS r"}
+{"id": "short_negative_overflow", "sql": "SELECT -32769S AS r"}
+{"id": "short_negative_parenthesized_positive", "sql": "SELECT -(32768S) AS r"}
+{"id": "short_parenthesized_negative", "sql": "SELECT (-32768S) AS r"}
+{"id": "short_plus_negative", "sql": "SELECT + -32768S AS r"}
+{"id": "long_min", "sql": "SELECT -9223372036854775808L AS r"}
+{"id": "long_near_min", "sql": "SELECT -9223372036854775807L AS r"}
+{"id": "long_max", "sql": "SELECT 9223372036854775807L AS r"}
+{"id": "long_positive_overflow", "sql": "SELECT 9223372036854775808L AS r"}
+{"id": "long_negative_overflow", "sql": "SELECT -9223372036854775809L AS r"}
+{"id": "long_negative_parenthesized_positive", "sql": "SELECT -(9223372036854775808L) AS r"}
+{"id": "long_parenthesized_negative", "sql": "SELECT (-9223372036854775808L) AS r"}
+{"id": "long_plus_negative", "sql": "SELECT + -9223372036854775808L AS r"}
+{"id": "int_min", "sql": "SELECT -2147483648 AS r"}
+{"id": "int_below", "sql": "SELECT -2147483649 AS r"}
+{"id": "int_positive_boundary", "sql": "SELECT 2147483648 AS r"}
+{"id": "long_min_unsuffixed", "sql": "SELECT -9223372036854775808 AS r"}
+{"id": "long_below_unsuffixed", "sql": "SELECT -9223372036854775809 AS r"}
+{"id": "long_positive_unsuffixed", "sql": "SELECT 9223372036854775808 AS r"}
+{"id": "int_parenthesized_positive", "sql": "SELECT -(2147483648) AS r"}
+{"id": "int_plus_positive", "sql": "SELECT - +2147483648 AS r"}
+{"id": "long_whitespace", "sql": "SELECT - 9223372036854775808L AS r"}
+{"id": "long_comment", "sql": "SELECT - /* sign */ 9223372036854775808l AS r"}
+{"id": "repeated_negative", "sql": "SELECT - -3L AS r"}
+{"id": "repeated_positive", "sql": "SELECT - +3L AS r"}
+{"id": "double_min", "sql": "SELECT - -9223372036854775808L AS r"}
+{"id": "decimal", "sql": "SELECT -12.30 AS r"}
+{"id": "decimal_suffix", "sql": "SELECT -12.30BD AS r"}
+{"id": "decimal_exponent", "sql": "SELECT -123E-2BD AS r"}
+{"id": "float", "sql": "SELECT -1.25F AS r"}
+{"id": "double", "sql": "SELECT -1.25D AS r"}
+{"id": "exponent", "sql": "SELECT -1.25E2 AS r"}
+{"id": "double_negative_zero", "sql": "SELECT -0.0D AS r"}
+{"id": "float_negative_zero", "sql": "SELECT -0.0F AS r"}
+{"id": "integer_negative_zero", "sql": "SELECT -0L AS r"}
+{"id": "decimal_negative_zero", "sql": "SELECT -0.00BD AS r"}
+{"id": "long_division", "sql": "SELECT -9223372036854775808L / CAST(3 AS DECIMAL(10,2)) AS r"}
+{"id": "int_division", "sql": "SELECT -2147483648 / CAST(3 AS DECIMAL(10,2)) AS r"}
+{"id": "values", "sql": "SELECT a AS r FROM VALUES (-9223372036854775808L), (-3L), (0L) t(a) ORDER BY a"}
+{"id": "where", "sql": "SELECT a AS r FROM VALUES (-9223372036854775808L), (1L) t(a) WHERE a = -9223372036854775808L"}
+{"id": "scalar_subquery", "sql": "SELECT (SELECT -9223372036854775808L) AS r"}
+{"id": "case", "sql": "SELECT CASE WHEN id = 0 THEN -9223372036854775808L ELSE -3L END AS r FROM range(2) ORDER BY id"}
+{"id": "arithmetic_column_control", "sql": "SELECT -id AS r FROM range(3) ORDER BY id"}
+{"id": "arithmetic_parenthesized_control", "sql": "SELECT -(id + 1L) AS r FROM range(3) ORDER BY id"}
+{"id": "cast_min_negation_control", "sql": "SELECT -CAST('-9223372036854775808' AS BIGINT) AS r"}

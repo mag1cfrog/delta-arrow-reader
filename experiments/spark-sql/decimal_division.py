@@ -50,8 +50,10 @@ def capture(out, cases_path=ROOT / "decimal-division.jsonl"):
 
 
 def types(actual):
+    names = {"Int8": "byte", "Int16": "short", "Int32": "integer", "Int64": "long",
+             "Float32": "float", "Float64": "double", "Null": "void"}
     return [re.sub(r"Decimal128\((\d+), (-?\d+)\)", r"decimal(\1,\2)", t)
-            .replace("Float64", "double").replace("Null", "void") for t in actual["types"]]
+            if t not in names else names[t] for t in actual["types"]]
 
 
 def rows(actual):

@@ -1150,6 +1150,63 @@ CHECK
 
 Reuse the existing `subquery-check` and `subqueries` benchmark modes; they now include both NULL operand positions. Measure planning and execution separately with `DECIMAL_BENCH_PERF_PHASE`. The patch round trip reproduces the built sources exactly. Scratch sources and lockfile are restored; the default executables are restored using the repository build manifest, and all 168 default observations, including plans and complete errors, match the previous checkpoint.
 
+## Negative numeric literals
+
+The optional [signed-literal patch](sail-signed-literal.patch) fixes `-9223372036854775808L` and the same boundary problem for other integer widths. It adds eight net production lines to the shared SQL AST conversion and reuses Sail's existing numeric parsers. The [56-query corpus](signed-literal.jsonl) and [results](signed-literal-results.json) record the evaluation against the optional candidate at `aeecd84`.
+
+Spark's [number grammar](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1769) includes an optional minus before the numeric token. Its [AST builder](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/parser/AstBuilder.scala#L4151) selects the type and checks the range of that signed value. The extracted Sail path instead parsed the positive token first, rejecting valid negative minima or assigning a wider type. The patch incorporates a direct minus before calling the existing parser. Parentheses and additional operators retain their expression semantics: `-2147483648` is INT, while `-(2147483648)` is BIGINT; `-(9223372036854775808L)` still rejects the out-of-range positive literal.
+
+This is a local frontend fix. The inspected [Sail main revision](https://github.com/lakehq/sail/blob/732fded6f720465415a687218835db1b909165e5/crates/sail-sql-analyzer/src/expression.rs) retains the original conversion. [Sail PR 2031](https://github.com/lakehq/sail/pull/2031) handles runtime negation and constant folding in the planner; it does not change this earlier SQL conversion. The patch adds no dependency, UDF, arithmetic kernel or execution node.
+
+The new corpus is a locally designed boundary matrix, not an upstream CI list. It covers suffixed integer limits, inferred integer types, overflow, parentheses, repeated signs, whitespace/comments, Decimal and floating literals, negative zero, VALUES, filters, CASE, scalar subqueries and Decimal division. Both ANSI modes run against Spark 4.2.0. The numeric comparator adds Arrow-to-Spark names for integer widths and FLOAT; its old baseline remains 1890/1900 after that change.
+
+| Observations | Parent | Candidate |
+| --- | ---: | ---: |
+| Existing numeric SQL corpus | 1890/1900 | 1892/1900 |
+| New literal boundary corpus | 74/112 | 112/112 |
+| Combined | 1964/2012 | 2004/2012 |
+
+There are no new numeric SQL mismatches. The eight remaining observations concern composed ROUND types, string peers, other Decimal operators and non-Decimal NULL division. Only the two repaired queries acquire different physical plans in the old corpus. The new checks also verify 20 numeric error causes and four floating negative-zero results; the previous 22 CAST and 24 scalar-column-count error checks still pass. Seven native analyzer tests, including the new literal test, pass. The exact integer reference retains 4064/4064 comparisons over 187410 rows, and all four Delta lifecycle tests pass.
+
+The 116 Delta observations preserve values, types, nullability, metadata and error stages. Four generated column names change because a negative literal now formats directly. For example, `CAST((- 2.9) AS INT)` becomes `CAST(-2.9 AS INT)`, matching Spark's field name. Window and function name formatting still has other differences. The artifact retains all four name changes; it does not treat them as byte-identical captures. All 18 adapter checks and 19 existing seeds for values and specified names pass.
+
+The existing benchmark gains a negative-literal divisor, `CAST(-4 AS DECIMAL(18,4))`. All 26 cases validate every one of their 1048576 output values and preserve identical physical plans across variants. The minimum BIGINT case cannot be timed against the parent because the parent rejects it. Four balanced processes per variant run on CPU 2 with one partition, batch size 8192, two warmups and nine samples. Another 32 FIFO-controlled counter runs measure four ANSI cases in separate planning and execution intervals, without counter multiplexing.
+
+| ANSI case | Planning before / after (ms) | Execution before / after (ms) | Planning instructions | Execution instructions |
+| --- | ---: | ---: | ---: | ---: |
+| No division | 0.345 / 0.344 | 4.659 / 4.655 | +0.0014% | +0.0067% |
+| Ordinary Decimal division | 0.414 / 0.414 | 16.837 / 16.864 | +0.0736% | -0.0067% |
+| Negative-literal divisor | 0.436 / 0.428 | 17.116 / 17.110 | -0.0779% | +0.0061% |
+| Correlated MAX | 1.262 / 1.268 | 68.751 / 69.695 | -0.0272% | -0.0017% |
+
+Across all 26 cases, planning medians change by -1.85% to +3.26%, and execution medians by -0.53% to +2.62%. Negative-literal planning changes by -1.85% with ANSI enabled and +0.70% with ANSI disabled, so the timing does not show a consistent speedup. The four profiled execution instruction counts remain within 0.007%. This change has no new per-row execution path; these measurements do not prove zero wall-time overhead or remove the earlier analyzer rule's planning cost. CPU frequency was not fixed and the host was not isolated.
+
+To reproduce, use an experimental checkout with the reviewed optional patches through `sail-decimal-null-analyzer.patch` and the same dependency overrides. Keep the expanded benchmark identical in both variants. Use the environment variables established in the preceding sections:
+
+```sh
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/before-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/before-bench"
+git apply --check experiments/spark-sql/sail-signed-literal.patch
+git apply experiments/spark-sql/sail-signed-literal.patch
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-sql-analyzer --lib
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark "$run_dir/spark-literals.json" \
+  --cases experiments/spark-sql/signed-literal.jsonl
+"$run_dir/after-probe" experiments/spark-sql/signed-literal.jsonl \
+  "$run_dir/after-literals.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-literals.json" "$run_dir/after-literals.json" \
+  --cases experiments/spark-sql/signed-literal.jsonl --report "$run_dir/literals-check.json"
+```
+
+Reuse `subquery-check` and `subqueries` for benchmark validation and balanced timing. Finish candidate builds and correctness checks before timing. The patch round trip reproduces the built sources exactly. Use a separate target directory for each checkout: this evaluation detected a stale candidate analyzer in the shared default build cache. Cleaning `sail-sql-analyzer` and rebuilding the repository defaults resolves that cache collision. Scratch sources and lockfile are restored, and all 168 default observations, including plans and complete errors, match the previous checkpoint. The performance runs use separate copied binaries.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

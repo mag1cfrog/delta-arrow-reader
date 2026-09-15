@@ -1,0 +1,134 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/expression.rs b/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/expression.rs
+index 8fbda84..087a8ab 100644
+--- a/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/expression.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/expression.rs
+@@ -240,7 +240,15 @@ fn from_ast_window_frame_bound(bound: WindowFrameBound) -> SqlResult<spec::Windo
+ pub fn from_ast_expression(expr: Expr) -> SqlResult<spec::Expr> {
+     match expr {
+         Expr::Atom(atom) => from_ast_atom_expression(atom),
+-        Expr::UnaryOperator(op, expr) => {
++        Expr::UnaryOperator(op, mut expr) => {
++            // Spark includes a direct minus in the numeric literal before checking its range.
++            // Keep parentheses and other unary operators on the ordinary expression path.
++            if matches!(op, UnaryOperator::Minus(_))
++                && let Expr::Atom(AtomExpr::NumberLiteral(value)) = expr.as_mut()
++            {
++                value.value.insert(0, '-');
++                return from_ast_expression(*expr);
++            }
+             Ok(spec::Expr::UnresolvedFunction(spec::UnresolvedFunction {
+                 function_name: spec::ObjectName::bare(from_ast_unary_operator(op)?),
+                 arguments: vec![from_ast_expression(*expr)?],
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/parser.rs b/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/parser.rs
+index 6b1d17a..6cbc3ce 100644
+--- a/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/parser.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/parser.rs
+@@ -129,4 +129,108 @@ mod tests {
+         }
+         Ok(())
+     }
++
++    #[test]
++    fn test_signed_numeric_literals() -> SqlResult<()> {
++        use crate::statement::from_ast_statement;
++        use sail_common::spec::{Expr, Literal, QueryNode};
++
++        for (text, expected) in [
++            (
++                "-128Y",
++                Literal::Int8 {
++                    value: Some(i8::MIN),
++                },
++            ),
++            (
++                "-32768S",
++                Literal::Int16 {
++                    value: Some(i16::MIN),
++                },
++            ),
++            (
++                "-2147483648",
++                Literal::Int32 {
++                    value: Some(i32::MIN),
++                },
++            ),
++            (
++                "-9223372036854775808L",
++                Literal::Int64 {
++                    value: Some(i64::MIN),
++                },
++            ),
++            (
++                "-9223372036854775808",
++                Literal::Int64 {
++                    value: Some(i64::MIN),
++                },
++            ),
++            (
++                "(-9223372036854775808L)",
++                Literal::Int64 {
++                    value: Some(i64::MIN),
++                },
++            ),
++            (
++                "- /* sign */ 9223372036854775808l",
++                Literal::Int64 {
++                    value: Some(i64::MIN),
++                },
++            ),
++            (
++                "2147483648",
++                Literal::Int64 {
++                    value: Some(2147483648),
++                },
++            ),
++        ] {
++            let plan = from_ast_statement(parse_one_statement(&format!("SELECT {text}"))?)?;
++            assert!(
++                matches!(plan.node, QueryNode::Project { expressions, .. }
++                if expressions == vec![Expr::Literal(expected)]),
++                "{text}"
++            );
++        }
++        for text in [
++            "128Y",
++            "-129Y",
++            "32768S",
++            "-32769S",
++            "9223372036854775808L",
++            "-9223372036854775809L",
++            "-(9223372036854775808L)",
++        ] {
++            assert!(
++                from_ast_statement(parse_one_statement(&format!("SELECT {text}"))?).is_err(),
++                "{text}"
++            );
++        }
++        for text in [
++            "-(2147483648)",
++            "- +2147483648",
++            "- -9223372036854775808L",
++            "-x",
++        ] {
++            let plan = from_ast_statement(parse_one_statement(&format!("SELECT {text}"))?)?;
++            assert!(
++                matches!(plan.node, QueryNode::Project { expressions, .. }
++                if matches!(expressions.as_slice(), [Expr::UnresolvedFunction(_)])),
++                "{text}"
++            );
++        }
++        for text in ["-0.0F", "-0.0D"] {
++            let plan = from_ast_statement(parse_one_statement(&format!("SELECT {text}"))?)?;
++            assert!(
++                matches!(plan.node, QueryNode::Project { expressions, .. }
++                if match expressions.as_slice() {
++                    [Expr::Literal(Literal::Float32 { value: Some(v) })] => v.to_bits() == (-0.0f32).to_bits(),
++                    [Expr::Literal(Literal::Float64 { value: Some(v) })] => v.to_bits() == (-0.0f64).to_bits(),
++                    _ => false,
++                }),
++                "{text}"
++            );
++        }
++        Ok(())
++    }
+ }
