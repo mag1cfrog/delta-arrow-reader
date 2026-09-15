@@ -2,6 +2,8 @@
 
 The division core and numeric/NULL operand coercion from [Sail PR 2225](https://github.com/lakehq/sail/pull/2225), plus a local adjustment to use Arrow's Decimal NULL/zero handling, fix the frozen `2 / 3` discrepancy and the tested Decimal division boundaries. They do not provide complete Spark division semantics. The candidate is saved as optional patches; the normal vendored source and its checkpoint remain unchanged. The [high-scale follow-up](#high-scale-intermediate-overflow) adds a local fallback and raises the original probe agreement to 158/168.
 
+The [filter/projection follow-up](#filter-and-projection-evaluation-order) fixes the exact-scale prototype's filtering regression while preserving column pruning.
+
 ## Candidate and provenance
 
 The PR revision evaluated is `c9fda1f3281d383ee0efbd371d2b43d957d01939`, which was open and unmerged when checked on September 14, 2026. Its [division expression](https://github.com/lakehq/sail/blob/c9fda1f3281d383ee0efbd371d2b43d957d01939/crates/sail-plan/src/function/scalar/math.rs#L1373) and [decimal type rules](https://github.com/lakehq/sail/blob/c9fda1f3281d383ee0efbd371d2b43d957d01939/crates/sail-plan/src/function/decimal.rs) are covered by Sail's Apache-2.0 [license](vendor/sail/LICENSE).
@@ -306,6 +308,57 @@ python3 experiments/spark-sql/decimal_division.py compare \
 ```
 
 The context comparison is expected to fail for the documented cases. The property command requires a new output directory. Apply each optional patch in its stated order in a scratch checkout, and use the existing release benchmark commands for timings. Historical arithmetic candidates can be recovered with `git show COMMIT:experiments/spark-sql/decimal-division.patch` and applied to the unchanged default vendor. The dependency remainder patch applies to `src/math/round.rs` in the locked DataFusion functions crate after the Decimal256 preparation patch.
+
+## Filter and projection evaluation order
+
+[datafusion-filter-projection.patch](datafusion-filter-projection.patch) fixes the filtering regression that blocked the exact-scale prototype. It changes one condition in DataFusion 54.1.0's `FilterExec::try_swapping_with_projection`: a narrowing projection can move below the filter only when its expressions are columns. Computed expressions stay after filtering. The existing `try_embed_projection` fallback still removes unused output columns and remaps the remaining expressions, so this does not disable column pruning or the optimizer.
+
+The patch reuses DataFusion's `all_columns` helper, already used by `RepartitionExec`. The runtime diff adds seven lines and removes three, including the import and comments; its regression test adds 99 lines. This is a local fix, not a copied upstream fix or another Sail execution node. The same unguarded swap remains in [upstream main at 6bbd3f4](https://github.com/apache/datafusion/blob/6bbd3f42c3e8a321b19f50253576e92e2765e5f4/datafusion/physical-plan/src/filter.rs), checked on September 14, 2026. Searches did not find a matching fix to reuse. No host dependency version changes.
+
+The restriction is conservative: even a harmless computed expression stays after the filter. It avoids maintaining a partial list of supposedly safe arithmetic, casts and UDFs. An expression-level guarantee of safe earlier evaluation could permit more movement later. The guard runs during physical optimization; it adds no per-row check, arithmetic kernel or error-swallowing wrapper.
+
+The direct DataFusion regression test first fails with `ArrowError(DivideByZero)` on the original implementation, then passes with the guard. It executes masked-zero, live-zero and empty-result cases with both ordinary and reordered embedded projections, checks that the unused column is pruned, and verifies that plain column selection with an alias still crosses the filter. All 38 tests in DataFusion's filter module pass.
+
+The complete SQL evaluation uses the previous exact-scale prototype unchanged, with only this dependency patch added. Neither ROUND optimization nor the fused UDF prototype is applied. The [60-query corpus](decimal-filter-order.jsonl) runs with ANSI on and off, using batch sizes 1 and 4. It covers three Decimal division types, final-result overflow, invalid and narrowing CAST, NULL numerators with zero divisors, TRY_CAST, repeated expressions, CASE, nested filters and empty results.
+
+| Check | Before | After |
+| --- | ---: | ---: |
+| New filter corpus, Spark value/type or error-stage agreement | 96/120 | 116/120 |
+| Existing high-scale corpus | 313/314 | 314/314 |
+| Original Decimal corpus | 158/168 | 158/168 |
+| Existing Delta corpus compared with the earlier arithmetic checkpoint | Reference | 116/116 |
+
+All 20 filtering failures in the new corpus are fixed. The four remaining differences are live invalid/narrowing CAST under non-ANSI mode, repeated across batch sizes: the existing Sail cast path raises where Spark returns NULL. These are preserved controls, not regressions from this patch. Live division-by-zero and division-result overflow retain their tested ANSI error/non-ANSI NULL behavior. The original ten Decimal-probe differences remain unchanged.
+
+The captured scale-38 plan now evaluates `ProjectionExec` above `FilterExec`. The filter keeps the two arithmetic input columns and drops its predicate-only column from the output before division. All 18 reader adapter checks pass. The 26 ordinary benchmark plans, output types, first values and NULL counts remain identical to the exact-scale control. That is a plan/control check, not a new throughput comparison or a claim about end-to-end query speed.
+
+[decimal-filter-order-results.json](decimal-filter-order-results.json) records the Spark reference, before/after observations and physical plans, test results, source/binary hashes and unchanged-plan checks. The probe now accepts optional `--physical-plans` so these plans are reproducible. Without the flag, its output is unchanged; the restored default executable matches all 168 frozen baseline observations exactly. Enabling the flag preserves every existing observation field.
+
+This slice resolves the filter-order blocker for the exact-scale candidate. It does not adopt the arithmetic prototypes or fix the fused UDF's nested-subquery limitation or the previously observed correlated-query ordering gap. The dependency patch remains optional; the normal vendored source and host lockfiles are unchanged.
+
+For reproduction, start with the scratch candidate described in the previous section: base arithmetic patch, high-scale fallback, then exact-scale normalization. Copy the locked `datafusion-physical-plan` 54.1.0 crate into a scratch directory, apply `datafusion-filter-projection.patch` there, and point an external Cargo config at it:
+
+```toml
+[patch.crates-io]
+datafusion-physical-plan = { path = "/absolute/path/to/patched-datafusion-physical-plan" }
+```
+
+Build the candidate with `cargo build --release --offline --config /absolute/path/to/filter-override.toml --manifest-path experiments/spark-sql/Cargo.toml --example decimal_probe`. The scratch lockfile changes only the physical-plan package from registry to path; subsequent builds can use `--locked`. Reuse the Spark environment from the reproduction section and capture the new cases with:
+
+```bash
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark \
+  target/spark-sql/filter-spark.json \
+  --cases experiments/spark-sql/decimal-filter-order.jsonl
+/absolute/path/to/candidate-decimal-probe \
+  experiments/spark-sql/decimal-filter-order.jsonl \
+  target/spark-sql/filter-candidate.json --physical-plans
+python3 experiments/spark-sql/decimal_division.py compare \
+  target/spark-sql/filter-spark.json target/spark-sql/filter-candidate.json \
+  --cases experiments/spark-sql/decimal-filter-order.jsonl \
+  --report target/spark-sql/filter-check.json
+```
+
+The comparison reports 116/120 and exits nonzero for the four documented CAST differences. Run the dependency regression with `cargo test --release --lib filter::tests --manifest-path /absolute/path/to/patched-datafusion-physical-plan/Cargo.toml`, using the same resolved dependency versions. For the failing control, keep the test and remove only the runtime guard.
 
 ## Reproduce
 

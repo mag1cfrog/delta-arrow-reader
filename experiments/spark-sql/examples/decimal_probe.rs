@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 
-async fn observe(case: &Value) -> Result<Value> {
+async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
@@ -39,9 +39,17 @@ async fn observe(case: &Value) -> Result<Value> {
         Err(e) => return Ok(json!({"status":"planning_error","error":e.to_string()})),
     };
     let logical_plan = named.plan.display_indent().to_string();
+    let mut physical_plan = None;
     let executed: datafusion::common::Result<_> = async {
         let frame = ctx.execute_logical_plan(named.plan).await?;
         let physical = frame.create_physical_plan().await?;
+        if include_physical_plan {
+            physical_plan = Some(
+                datafusion::physical_plan::displayable(physical.as_ref())
+                    .indent(true)
+                    .to_string(),
+            );
+        }
         let schema = physical.schema();
         let batches = datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
         Ok((schema, batches))
@@ -50,9 +58,11 @@ async fn observe(case: &Value) -> Result<Value> {
     let (schema, batches) = match executed {
         Ok(result) => result,
         Err(e) => {
-            return Ok(
-                json!({"status":"execution_error","error":e.to_string(),"logical_plan":logical_plan}),
-            );
+            let mut actual = json!({"status":"execution_error","error":e.to_string(),"logical_plan":logical_plan});
+            if let Some(plan) = physical_plan {
+                actual["physical_plan"] = json!(plan);
+            }
+            return Ok(actual);
         }
     };
     let types = schema
@@ -78,12 +88,21 @@ async fn observe(case: &Value) -> Result<Value> {
             );
         }
     }
-    Ok(json!({"status":"ok","types":types,"rows":rows,"logical_plan":logical_plan}))
+    let mut actual = json!({"status":"ok","types":types,"rows":rows,"logical_plan":logical_plan});
+    if let Some(plan) = physical_plan {
+        actual["physical_plan"] = json!(plan);
+    }
+    Ok(actual)
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
+    let include_physical_plan = match args.get(3).map(String::as_str) {
+        None => false,
+        Some("--physical-plans") => true,
+        Some(_) => return Err("expected --physical-plans or no extra argument".into()),
+    };
     let cases = fs::read_to_string(args.get(1).ok_or("expected JSONL cases path")?)?
         .lines()
         .map(serde_json::from_str::<Value>)
@@ -93,7 +112,7 @@ async fn main() -> Result<()> {
         let mut case = case.clone();
         for ansi in [true, false] {
             case["ansi"] = json!(ansi);
-            let actual = observe(&case).await?;
+            let actual = observe(&case, include_physical_plan).await?;
             results.push(json!({"id":format!("{}_{}",case["id"].as_str().ok_or("missing ID")?,ansi),"actual":actual}));
         }
     }

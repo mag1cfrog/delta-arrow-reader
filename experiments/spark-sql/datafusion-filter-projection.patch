@@ -1,0 +1,133 @@
+diff --git a/src/filter.rs b/src/filter.rs
+--- a/src/filter.rs
++++ b/src/filter.rs
+@@ -39,7 +39,7 @@
+ use crate::limit::LocalLimitExec;
+ use crate::metrics::{MetricBuilder, MetricType};
+ use crate::projection::{
+-    EmbeddedProjection, ProjectionExec, ProjectionExpr, make_with_child,
++    EmbeddedProjection, ProjectionExec, ProjectionExpr, all_columns, make_with_child,
+     try_embed_projection, update_expr,
+ };
+ use crate::stream::EmptyRecordBatchStream;
+@@ -591,8 +591,12 @@
+         &self,
+         projection: &ProjectionExec,
+     ) -> Result<Option<Arc<dyn ExecutionPlan>>> {
+-        // If the projection does not narrow the schema, we should not try to push it down:
+-        if projection.expr().len() < projection.input().schema().fields().len() {
++        // Expressions can fail on rows that the filter would discard.
++        // ponytail: only columns cross filters until expression fallibility is known.
++        // Computed projections can still prune columns through try_embed_projection.
++        if projection.expr().len() < projection.input().schema().fields().len()
++            && all_columns(projection.expr())
++        {
+             // Each column in the predicate expression must exist after the projection.
+             if let Some(new_predicate) =
+                 update_expr(self.predicate(), projection.expr(), false)?
+@@ -3143,6 +3147,105 @@
+         }
+     }
+ 
++    #[tokio::test]
++    async fn test_filter_projection_preserves_evaluation_order() -> Result<()> {
++        use crate::projection::remove_unnecessary_projections;
++        use crate::test::TestMemoryExec;
++        use arrow::array::{ArrayRef, AsArray, Int32Array};
++        use arrow::datatypes::Int32Type;
++
++        let batch = RecordBatch::try_from_iter(vec![
++            ("id", Arc::new(Int32Array::from(vec![0, 1])) as ArrayRef),
++            (
++                "divisor",
++                Arc::new(Int32Array::from(vec![0, 2])) as ArrayRef,
++            ),
++            ("unused", Arc::new(Int32Array::from(vec![9, 9])) as ArrayRef),
++        ])?;
++        let schema = batch.schema();
++        let input: Arc<dyn ExecutionPlan> =
++            TestMemoryExec::try_new_exec(&[vec![batch]], Arc::clone(&schema), None)?;
++        for selected in [1, 2, 0] {
++            for embedded in [None, Some(vec![2, 0, 1])] {
++                let filter: Arc<dyn ExecutionPlan> = Arc::new(
++                    FilterExecBuilder::new(
++                        binary(
++                            col("id", &schema)?,
++                            Operator::Eq,
++                            lit(selected),
++                            &schema,
++                        )?,
++                        Arc::clone(&input),
++                    )
++                    .apply_projection(embedded)?
++                    .build()?,
++                );
++                let filtered_schema = filter.schema();
++                let projection: Arc<dyn ExecutionPlan> =
++                    Arc::new(ProjectionExec::try_new(
++                        vec![
++                            ProjectionExpr {
++                                expr: binary(
++                                    lit(10i32),
++                                    Operator::Divide,
++                                    col("divisor", &filtered_schema)?,
++                                    &filtered_schema,
++                                )?,
++                                alias: "quotient".into(),
++                            },
++                            ProjectionExpr {
++                                expr: col("id", &filtered_schema)?,
++                                alias: "key".into(),
++                            },
++                        ],
++                        filter,
++                    )?);
++                let optimized = remove_unnecessary_projections(projection)?.data;
++                let result = crate::collect(
++                    Arc::clone(&optimized),
++                    Arc::new(TaskContext::default()),
++                )
++                .await;
++                if selected == 0 {
++                    assert!(result.unwrap_err().to_string().contains("Divide by zero"));
++                } else {
++                    let batches = result?;
++                    assert_eq!(
++                        batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
++                        usize::from(selected == 1)
++                    );
++                    if selected == 1 {
++                        let row = batches.iter().find(|b| b.num_rows() > 0).unwrap();
++                        assert_eq!(row.column(0).as_primitive::<Int32Type>().value(0), 5);
++                        assert_eq!(row.column(1).as_primitive::<Int32Type>().value(0), 1);
++                    }
++                }
++                // Computation stays after filtering, while the unused column is pruned.
++                let projection = optimized.downcast_ref::<ProjectionExec>().unwrap();
++                let filter = projection.input().downcast_ref::<FilterExec>().unwrap();
++                assert_eq!(filter.schema().fields().len(), 2);
++            }
++        }
++        // Plain column selection and aliases can still cross the filter.
++        let filter = Arc::new(FilterExec::try_new(
++            binary(col("id", &schema)?, Operator::Eq, lit(1i32), &schema)?,
++            input,
++        )?);
++        let projection = ProjectionExec::try_new(
++            vec![ProjectionExpr {
++                expr: col("id", &schema)?,
++                alias: "key".into(),
++            }],
++            filter.clone(),
++        )?;
++        let optimized = filter.try_swapping_with_projection(&projection)?.unwrap();
++        assert!(optimized.is::<FilterExec>());
++        let batches = crate::collect(optimized, Arc::new(TaskContext::default())).await?;
++        assert_eq!(batches[0].column(0).as_primitive::<Int32Type>().value(0), 1);
++        assert_eq!(batches[0].schema().field(0).name(), "key");
++        Ok(())
++    }
++
+     /// Regression test: ProjectionExec on top of a FilterExec that already has
+     /// an explicit projection must not panic when `try_swapping_with_projection`
+     /// attempts to swap the two nodes.
