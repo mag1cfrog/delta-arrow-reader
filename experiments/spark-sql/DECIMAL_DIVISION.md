@@ -927,6 +927,70 @@ FROM range(1114112)
 
 The artifact records all 680 classified code points, JVM version, frozen Spark outputs, source and binary hashes, commands and samples. Reuse the preceding exact-integer, Delta, benchmark and FIFO-counter commands. Reapplying the optional patch to the before sources reproduces the built candidate exactly. Scratch sources and default executables are restored; all 168 default observations, including logical/physical plans and complete errors, match the preceding checkpoint.
 
+## Non-finite floating casts
+
+The optional [non-finite CAST patch](sail-decimal-nonfinite-cast.patch) repairs the three remaining ANSI numeric CAST observations from the preceding checkpoint at `c3a0006`. Spark returns NULL when FLOAT or DOUBLE NaN, positive infinity or negative infinity is cast to Decimal, while finite precision overflow still follows ANSI error handling. The [results and measurements](decimal-nonfinite-cast-results.json) record this distinction. The patch adds no dependency and is not enabled in the default vendor.
+
+### Implementation and reuse
+
+The adapter uses `ColumnarValue::cast_to`, the same DataFusion method used by its native physical CAST expression. It first attempts the strict conversion. A successful finite conversion returns immediately. On failure, it replaces non-finite inputs with NULL and retries the same strict conversion. Scalars use `Option::filter`; arrays use Arrow's `unary_opt`. Finite overflow therefore still raises an error, including when it follows a NaN in the same batch. Child-expression errors occur before this conversion and still propagate. The adapter implements no floating-to-Decimal arithmetic or rounding of its own.
+
+Explicit ANSI CAST and ANSI `decimal(float)` use the same native Rust UDF. Explicit TRY_CAST and non-ANSI CAST retain their existing native plans. Non-ANSI `decimal(float)` also uses native TRY_CAST, fixing its previously inconsistent overflow behavior. The new UDF declares nullable output because a non-null floating input can contain NaN or infinity. Integer, string and implicit conversions retain their existing implementations; the adapter targets Decimal128.
+
+The numeric examples in [Sail PR 2575](https://github.com/lakehq/sail/blob/2ad5d780d999751fde1edd4d0eccadca4760bc8f/python/pysail/tests/spark/function/features/conversion/cast_decimal.feature) supplied the original three cases. [Sail PR 1723](https://github.com/lakehq/sail/pull/1723) adds related NaN/Infinity tests, without runtime code. At the inspected main revision, [Sail's CAST resolver](https://github.com/lakehq/sail/blob/732fded6f720465415a687218835db1b909165e5/crates/sail-plan/src/resolver/expression/cast.rs) still delegates these conversions to DataFusion. Spark's [CAST implementation](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/Cast.scala) handles the non-finite Decimal conversion failure separately from finite precision overflow. The runtime adapter is local and reuses DataFusion/Arrow's native kernels.
+
+### Compatibility and regression results
+
+The [new corpus](decimal-nonfinite-cast.jsonl) contains 123 queries, run with both ANSI settings for 246 observations. It expands the original cases locally across FLOAT/DOUBLE, CAST/TRY_CAST, Decimal precisions/scales, scalar and column input, mixed finite/non-finite/NULL rows, finite overflow before and after NaN, constructors, filters, CASE, empty input, arithmetic-generated NaN and scalar/correlated subqueries. Array cases use batch sizes 1 and 4. Direct string-to-Decimal NaN/Infinity controls retain Spark's separate malformed-string behavior. Expected outcomes come from real Spark 4.2.0.
+
+| SQL comparison | Before | After |
+| --- | ---: | ---: |
+| Previous CAST corpus | 79/82 | 82/82 |
+| New non-finite corpus | 190/246 | 246/246 |
+| All corpora, including the new cases | 1675/1748 | 1734/1748 |
+
+All 59 repaired observations are recorded, with no new mismatch. Full SQL compatibility is still incomplete: ten original Decimal and four NULL/subquery observations remain different. The regression check passes because the targeted repairs succeed and no new differences appear. It does not mean all compatibility tests pass. Comparison checks ordered Decimal values/types and error stage, without claiming complete schema or structured Spark error-code parity.
+
+The native test covers Float32/Float64 scalars and arrays, slices, empty arrays, typed/untyped NULLs and finite overflow beside NaN. All 4,064 exact-integer comparisons over 187,410 rows, 116 Delta comparisons and 18 adapter checks pass. All 20 subquery benchmark cases retain identical physical plans and results.
+
+### Performance
+
+The existing `casts` benchmark now also prepares FLOAT and DOUBLE arrays before timing. Its original 12 cases retain the same SQL, values, types and physical plans; eight float cases extend the suite to 20. Both variants use the same expanded benchmark and dependency overrides. The table measures ordinary finite input, with and without NULLs, over 1,048,576 rows.
+
+| ANSI conversion to DECIMAL(18,4) | Before median | After median | Change |
+| --- | ---: | ---: | ---: |
+| FLOAT, no input NULLs | 6.855 ms | 6.866 ms | +0.16% |
+| DOUBLE, no input NULLs | 6.727 ms | 6.744 ms | +0.25% |
+| FLOAT, nullable input | 6.494 ms | 6.513 ms | +0.29% |
+| DOUBLE, nullable input | 6.437 ms | 6.467 ms | +0.47% |
+
+Only the four ANSI float plans change to the adapter. Their instruction counts increase by 0.11-0.12%; separate counter runs change elapsed time by -0.01% to +1.26%. The 16 unchanged plans have median changes from -3.3% to +0.24%. String control instructions decrease by about 0.73-0.75%, despite unchanged string kernel source and plans; these control shifts are not attributed to a new string algorithm. All samples remain in the artifact. The result shows a small local cost for ordinary ANSI floating casts, not universal zero overhead.
+
+Each variant runs in four processes in the order `before, after, after, before, after, before, before, after`. Each case has two warmups and nine samples, with batch size 8192 and one partition. Forty separate FIFO-controlled counter processes cover affected casts and unchanged controls; all six events run for 100% of their enabled interval. All 1,800 timed executions, 400 warmups and 200 full-value validation passes succeed. Builds and correctness checks finish before timing. CPU 2 uses an unfixed frequency on the shared Ryzen 7 8845HS host. Failed batches pay for a retry; throughput for non-finite-heavy input, planning, Delta I/O and concurrent workloads is unmeasured. Finite arithmetic remains Arrow's implementation; this slice does not establish general high-precision float conversion parity with Spark.
+
+### Reproducing this slice
+
+Start with the reviewed optional Unicode candidate and the same four DataFusion overrides described above. Build the before benchmark with the expanded `casts` suite, save its binaries, apply the new patch and build the after variant with identical dependency sources and settings.
+
+```sh
+git apply experiments/spark-sql/sail-decimal-nonfinite-cast.patch
+cargo test --release --offline --locked \
+  --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-function --lib \
+  nonfinite_float_cast_preserves_finite_overflow_and_nulls
+python experiments/spark-sql/decimal_division.py spark "$run_dir/spark-nonfinite.json" \
+  --cases experiments/spark-sql/decimal-nonfinite-cast.jsonl
+"$run_dir/after-probe" experiments/spark-sql/decimal-nonfinite-cast.jsonl \
+  "$run_dir/after-nonfinite.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-nonfinite.json" "$run_dir/after-nonfinite.json" \
+  --cases experiments/spark-sql/decimal-nonfinite-cast.jsonl \
+  --report "$run_dir/nonfinite-check.json"
+"$run_dir/after-bench" "$run_dir/nonfinite-timing.json" casts
+```
+
+The new corpus and previous CAST corpus comparisons now return exit 0. Reuse the preceding integer-reference, Delta, subquery and FIFO-counter commands. The artifact retains the Spark outputs, plans, samples, source hashes and commands. Both measured binaries use the same benchmark source; the published benchmark differs only by rustfmt wrapping one `format!` expression, with both hashes recorded. Reapplying the patch to the before sources reproduces the built candidate exactly. Scratch sources and default executables are restored, and all 168 default observations, including plans and complete errors, match the preceding checkpoint.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

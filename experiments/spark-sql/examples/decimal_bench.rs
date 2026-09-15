@@ -416,21 +416,31 @@ async fn cast_bench(ctx: &SessionContext, output: &str, selected: Option<&str>) 
     let mut results = Vec::new();
     for nulls in [false, true] {
         ctx.deregister_table("bench_input")?;
-        ctx.deregister_table("bench_strings")?;
         ctx.register_table("bench_input", Arc::new(input(18, 4, 4, nulls)?))?;
-        // Prepare strings before timing so only the string-to-Decimal cast is measured.
-        let strings = ctx
-            .sql("SELECT CAST(a AS VARCHAR) AS a FROM bench_input")
-            .await?;
-        let schema = Arc::new(strings.schema().as_arrow().clone());
-        ctx.register_table(
-            "bench_strings",
-            Arc::new(MemTable::try_new(schema, vec![strings.collect().await?])?),
-        )?;
+        // Prepare converted input arrays outside the measured cast.
+        for (table, data_type) in [
+            ("bench_strings", "VARCHAR"),
+            ("bench_float32", "REAL"),
+            ("bench_float64", "DOUBLE"),
+        ] {
+            ctx.deregister_table(table)?;
+            let frame = ctx
+                .sql(&format!(
+                    "SELECT CAST(a AS {data_type}) AS a FROM bench_input"
+                ))
+                .await?;
+            let schema = Arc::new(frame.schema().as_arrow().clone());
+            ctx.register_table(
+                table,
+                Arc::new(MemTable::try_new(schema, vec![frame.collect().await?])?),
+            )?;
+        }
         for (kind, table, precision, scale) in [
             ("narrow", "bench_input", 10, 2),
             ("widen", "bench_input", 38, 4),
             ("string", "bench_strings", 18, 4),
+            ("float32", "bench_float32", 18, 4),
+            ("float64", "bench_float64", 18, 4),
         ] {
             let sql = format!("SELECT CAST(a AS DECIMAL({precision},{scale})) AS r FROM {table}");
             for ansi in [true, false] {
