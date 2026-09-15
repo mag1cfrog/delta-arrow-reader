@@ -1414,6 +1414,70 @@ The comparison intentionally exits 1 for the 84 recorded differences. Inspect th
 
 The patch applies and reverses exactly. All 24 saved scratch paths and saved default executables are restored, the modified Sail package caches are invalidated, and all 168 default observations match the parent checkpoint including complete errors and plans. The restored default benchmark remains the saved 26-case executable.
 
+## Reject floating operands for DIV
+
+The optional [DIV type patch](sail-div-types.patch) rejects floating operands during planning, before the existing literal-zero shortcut. For example, `CAST(7 AS FLOAT) DIV 0` reports an invalid input type in either ANSI mode. Previously it could report division by zero or return an untyped NULL. The [76-query corpus](div-types.jsonl) and [results](div-types-results.json) compare the patch with the optional candidate committed as `42dc870`.
+
+Spark's [IntegralDivide](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/arithmetic.scala) accepts long, Decimal and interval types. Its [integral division coercion](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/IntegralDivisionTypeCoercion.scala) widens smaller integers to long. This patch only adds the floating-input rejection. It moves the two existing type lookups ahead of zero handling and reuses Arrow's `is_floating` check and Sail's argument error. Both operator syntax and `div(a, b)` resolve through the same handler. The inspected [Sail revision](https://github.com/lakehq/sail/blob/732fded6f720465415a687218835db1b909165e5/crates/sail-plan/src/function/scalar/math.rs) retains the permissive lowering, so this is a local planner fix, not an imported upstream fix. One runtime file changes; no UDF, execution node, arithmetic kernel or dependency is added.
+
+The corpus tests FLOAT/DOUBLE on either side of integer, Decimal, string and NULL operands, both function syntaxes, literal zero, typed NULL, invalid CAST, TRY_CAST, dead conditionals, unused CTEs/projections, filters, sorting, aggregates, windows and scalar subqueries. Integer widths, Decimal, intervals, NULLs, overflow and string coercion provide controls. Multirow controls have explicit ordering. These are locally designed cases captured against Spark 4.2.0, not an upstream CI list; the previous corpus supplies another 60 floating DIV observations, including empty results and LIMIT 0.
+
+| Value/type or error-stage agreement | Parent | Candidate |
+| --- | ---: | ---: |
+| Existing 19 numeric SQL corpora | 2563/2736 | 2623/2736 |
+| New DIV type corpus | 64/152 | 148/152 |
+| Combined | 2627/2888 | 2771/2888 |
+
+No previously agreeing observation regresses. The patch repairs 60 prior and 84 new value/type or error-stage differences. Another 18 new observations already matched at the coarse planning-error level but reported the wrong cause; they now explicitly reject floating operands. Focused checks verify 158 explicit floating-input errors across the two corpora and preserve all 188 prior error-cause/signed-zero checks. Four ORDER BY observations also reject the query, but the existing [sort resolver](vendor/sail/crates/sail-plan/src/resolver/query/sort.rs) replaces the underlying type error with a generic sort-expression diagnostic. Those four are recorded separately, not claimed to expose the correct error cause. The five previously recorded same-stage error-cause differences remain.
+
+The four new remaining differences are outside floating rejection: `INT_MIN DIV -1` fails to widen to BIGINT in both modes, `BIGINT_MIN DIV -1` raises an overflow error in non-ANSI mode, and ANSI `'7' DIV 2` lacks Spark's string coercion. Prior corpora retain four original, 20 ROUND, 65 floating division and 24 floating-zero differences. These counts cover repeated shapes and ANSI modes, not distinct bugs. Numeric comparison still omits full schema metadata and structured error-condition equality.
+
+The native test protects type rejection before zero folding for Float16/32/64, either operand position and typed NULL, while accepting integer and Decimal operands. It and all four Delta lifecycle tests pass. All 4064 exact-integer comparisons over 187410 rows pass; all 116 Delta observations match the parent, including schema names, nullability and metadata. The 18 adapter checks and 19 specified seeds pass. Both benchmark variants validate every output of all 36 subquery-suite cases and 12 Float64 cases, and their physical plans match. The benchmark adds integer constant-divisor, integer column-divisor and Decimal DIV cases, each in both ANSI modes, using the existing row validator and timing machinery.
+
+Measurement covers those six DIV cases and four existing controls, with separate planning and execution counters. It uses four balanced timing processes and two counter processes per variant, CPU 2, 1048576 rows, one partition, batch size 8192, two warmups and nine samples. Counters are enabled only for the measured phase and are not multiplexed. Builds and correctness checks finish before measurement.
+
+| DIV expression | ANSI | Planning time change | Planning instruction change | Execution time change |
+| --- | --- | ---: | ---: | ---: |
+| BIGINT id DIV 4 | On | -2.62% | -0.005% | -0.40% |
+| BIGINT id DIV 4 | Off | +0.68% | +0.152% | +0.04% |
+| Decimal id DIV 4 | On | -0.42% | -0.072% | +0.21% |
+| Decimal id DIV 4 | Off | +0.20% | -0.005% | -0.48% |
+| BIGINT id DIV (k + 1) | On | +0.13% | -0.028% | -1.38% |
+| BIGINT id DIV (k + 1) | Off | +0.29% | -0.003% | -0.32% |
+
+DIV execution instructions change by less than 0.00003%. The non-division, plain Decimal and correlated Decimal controls move by +0.17%, +0.31% and +0.10% in execution time, with instruction changes below 0.003%. The change adds no per-row work to accepted DIV queries. The planning measurements cover these successful queries; they do not establish zero overhead for every query shape or measure rejection latency.
+
+The unchanged ROUND control again has an allocator-sensitive default median, 11.708 / 14.480 ms (+23.67%), despite effectively identical execution instructions and +0.03% measured cycles. Fixing both diagnostic allocation thresholds at 1048576 bytes gives 8.925 / 8.965 ms (+0.46%), +0.006% instructions, +1.00% cycles and 64 page faults per measured interval. Both runs remain in the artifact. Production allocator settings are untouched; the host is not isolated and CPU frequency is not fixed.
+
+To reproduce, prepare the optional candidate through `sail-float-zero.patch`, use the current benchmark source for both variants, and retain the preceding sections' dependency overrides:
+
+```sh
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/before-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/before-bench"
+git apply --check experiments/spark-sql/sail-div-types.patch
+git apply experiments/spark-sql/sail-div-types.patch
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-plan --lib div_rejects_floating_types_before_zero_folding
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark "$run_dir/spark-div.json" \
+  --cases experiments/spark-sql/div-types.jsonl
+"$run_dir/after-probe" experiments/spark-sql/div-types.jsonl \
+  "$run_dir/after-div.json" --physical-plans
+python3 experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-div.json" "$run_dir/after-div.json" \
+  --cases experiments/spark-sql/div-types.jsonl --report "$run_dir/div-check.json"
+taskset -c 2 "$run_dir/after-bench" "$run_dir/div-bench.json" subqueries div_integer_ansitrue
+```
+
+The comparison intentionally exits 1 for the four recorded non-floating differences. Inspect the report, then run timing separately. Repeat with `before-bench` and the other recorded case IDs in a balanced order. The artifact retains SQL, observations, plans, source hashes, timing samples, counters and the allocator diagnostic.
+
+The patch applies and reverses exactly. All 24 saved scratch paths and saved default executables are restored, modified Sail package caches are invalidated, and all 168 default observations match the parent checkpoint including complete errors and plans. The default vendor is unchanged. The restored default benchmark remains the saved 26-case executable; measured candidates use the same expanded harness.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

@@ -191,6 +191,8 @@ fn expected_subquery_value(case: &str, id: usize) -> Option<i128> {
     match case {
         "no_division" | "round_wide" => Some(id as i128 * 1_000_000),
         "round_decimal" => Some((id % 97 + 2) as i128 * 10_000),
+        "div_integer" | "div_decimal" => Some((id / 4) as i128 * 1_000_000),
+        "div_column" => Some((id / (key + 1)) as i128 * 1_000_000),
         "negative_literal" => Some((id % 97 + 2) as i128 * -2_500),
         "plain_projection" | "plain_sorted" | "scalar_projection" | "scalar_sorted" => {
             Some((id % 97 + 2) as i128 * 2_500)
@@ -281,6 +283,14 @@ async fn subquery_bench(
             false,
         ),
         ("round_decimal", "ROUND(o.a, 2)".into(), "".into(), false),
+        ("div_integer", "o.id DIV 4".into(), "".into(), false),
+        (
+            "div_decimal",
+            "CAST(o.id AS DECIMAL(18,2)) DIV CAST(4 AS DECIMAL(18,2))".into(),
+            "".into(),
+            false,
+        ),
+        ("div_column", "o.id DIV (o.k + 1)".into(), "".into(), false),
         (
             "round_wide",
             "ROUND(CAST(o.id AS DECIMAL(38,4)), 2)".into(),

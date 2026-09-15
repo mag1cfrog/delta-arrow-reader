@@ -1,0 +1,76 @@
+{"id": "float_integer_left", "sql": "SELECT CAST(7.5 AS FLOAT) DIV 3 AS q"}
+{"id": "float_integer_right", "sql": "SELECT 3 DIV CAST(7.5 AS FLOAT) AS q"}
+{"id": "float_decimal_left", "sql": "SELECT CAST(7.5 AS FLOAT) DIV CAST(3.25 AS DECIMAL(12,2)) AS q"}
+{"id": "float_decimal_right", "sql": "SELECT CAST(3.25 AS DECIMAL(12,2)) DIV CAST(7.5 AS FLOAT) AS q"}
+{"id": "float_string_left", "sql": "SELECT CAST(7.5 AS FLOAT) DIV '3' AS q"}
+{"id": "float_string_right", "sql": "SELECT '3' DIV CAST(7.5 AS FLOAT) AS q"}
+{"id": "float_null_left", "sql": "SELECT CAST(7.5 AS FLOAT) DIV NULL AS q"}
+{"id": "float_null_right", "sql": "SELECT NULL DIV CAST(7.5 AS FLOAT) AS q"}
+{"id": "float_literal_zero_integer", "sql": "SELECT CAST(7.5 AS FLOAT) DIV 0 AS q"}
+{"id": "float_literal_zero_positive", "sql": "SELECT CAST(7.5 AS FLOAT) DIV CAST(0.0 AS FLOAT) AS q"}
+{"id": "float_literal_zero_negative", "sql": "SELECT CAST(7.5 AS FLOAT) DIV CAST(-0.0 AS FLOAT) AS q"}
+{"id": "float_function", "sql": "SELECT div(CAST(7.5 AS FLOAT), CAST(2 AS FLOAT)) AS q"}
+{"id": "float_null_literal", "sql": "SELECT CAST(NULL AS FLOAT) DIV 0 AS q"}
+{"id": "float_bad_cast", "sql": "SELECT CAST('bad' AS FLOAT) DIV 0 AS q"}
+{"id": "float_try_cast", "sql": "SELECT TRY_CAST('bad' AS FLOAT) DIV 0 AS q"}
+{"id": "float_case_dead", "sql": "SELECT CASE WHEN false THEN CAST(7.5 AS FLOAT) DIV 2 ELSE 1 END AS q"}
+{"id": "float_if_dead", "sql": "SELECT IF(true, 1, CAST(7.5 AS FLOAT) DIV 2) AS q"}
+{"id": "float_unused_cte", "sql": "WITH x AS (SELECT CAST(7.5 AS FLOAT) DIV 2 AS q) SELECT 1 AS q"}
+{"id": "float_unused_projection", "sql": "SELECT id FROM (SELECT id, CAST(id AS FLOAT) DIV 2 AS q FROM range(3))"}
+{"id": "float_filter", "sql": "SELECT id FROM range(3) WHERE CAST(id AS FLOAT) DIV 2 = 0"}
+{"id": "float_order", "sql": "SELECT id FROM range(3) ORDER BY CAST(id AS FLOAT) DIV 2"}
+{"id": "float_aggregate", "sql": "SELECT SUM(CAST(id AS FLOAT) DIV 2) AS q FROM range(3)"}
+{"id": "float_scalar_subquery", "sql": "SELECT (SELECT CAST(7.5 AS FLOAT)) DIV 2 AS q"}
+{"id": "float_nullifzero", "sql": "SELECT NULLIFZERO(CAST(7.5 AS FLOAT)) DIV 2 AS q"}
+{"id": "double_integer_left", "sql": "SELECT CAST(7.5 AS DOUBLE) DIV 3 AS q"}
+{"id": "double_integer_right", "sql": "SELECT 3 DIV CAST(7.5 AS DOUBLE) AS q"}
+{"id": "double_decimal_left", "sql": "SELECT CAST(7.5 AS DOUBLE) DIV CAST(3.25 AS DECIMAL(12,2)) AS q"}
+{"id": "double_decimal_right", "sql": "SELECT CAST(3.25 AS DECIMAL(12,2)) DIV CAST(7.5 AS DOUBLE) AS q"}
+{"id": "double_string_left", "sql": "SELECT CAST(7.5 AS DOUBLE) DIV '3' AS q"}
+{"id": "double_string_right", "sql": "SELECT '3' DIV CAST(7.5 AS DOUBLE) AS q"}
+{"id": "double_null_left", "sql": "SELECT CAST(7.5 AS DOUBLE) DIV NULL AS q"}
+{"id": "double_null_right", "sql": "SELECT NULL DIV CAST(7.5 AS DOUBLE) AS q"}
+{"id": "double_literal_zero_integer", "sql": "SELECT CAST(7.5 AS DOUBLE) DIV 0 AS q"}
+{"id": "double_literal_zero_positive", "sql": "SELECT CAST(7.5 AS DOUBLE) DIV CAST(0.0 AS DOUBLE) AS q"}
+{"id": "double_literal_zero_negative", "sql": "SELECT CAST(7.5 AS DOUBLE) DIV CAST(-0.0 AS DOUBLE) AS q"}
+{"id": "double_function", "sql": "SELECT div(CAST(7.5 AS DOUBLE), CAST(2 AS DOUBLE)) AS q"}
+{"id": "double_null_literal", "sql": "SELECT CAST(NULL AS DOUBLE) DIV 0 AS q"}
+{"id": "double_bad_cast", "sql": "SELECT CAST('bad' AS DOUBLE) DIV 0 AS q"}
+{"id": "double_try_cast", "sql": "SELECT TRY_CAST('bad' AS DOUBLE) DIV 0 AS q"}
+{"id": "double_case_dead", "sql": "SELECT CASE WHEN false THEN CAST(7.5 AS DOUBLE) DIV 2 ELSE 1 END AS q"}
+{"id": "double_if_dead", "sql": "SELECT IF(true, 1, CAST(7.5 AS DOUBLE) DIV 2) AS q"}
+{"id": "double_unused_cte", "sql": "WITH x AS (SELECT CAST(7.5 AS DOUBLE) DIV 2 AS q) SELECT 1 AS q"}
+{"id": "double_unused_projection", "sql": "SELECT id FROM (SELECT id, CAST(id AS DOUBLE) DIV 2 AS q FROM range(3))"}
+{"id": "double_filter", "sql": "SELECT id FROM range(3) WHERE CAST(id AS DOUBLE) DIV 2 = 0"}
+{"id": "double_order", "sql": "SELECT id FROM range(3) ORDER BY CAST(id AS DOUBLE) DIV 2"}
+{"id": "double_aggregate", "sql": "SELECT SUM(CAST(id AS DOUBLE) DIV 2) AS q FROM range(3)"}
+{"id": "double_scalar_subquery", "sql": "SELECT (SELECT CAST(7.5 AS DOUBLE)) DIV 2 AS q"}
+{"id": "double_nullifzero", "sql": "SELECT NULLIFZERO(CAST(7.5 AS DOUBLE)) DIV 2 AS q"}
+{"id": "rand_div", "sql": "SELECT RAND() DIV 2 AS q"}
+{"id": "avg_div", "sql": "SELECT AVG(id) DIV 2 AS q FROM range(3)"}
+{"id": "window_avg_div", "sql": "SELECT AVG(id) OVER () DIV 2 AS q FROM range(3)"}
+{"id": "control_tinyint_operator", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_tinyint_function", "sql": "SELECT div(a,b) AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_tinyint_zero", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(b AS TINYINT) AS q FROM VALUES (7,0) t(a,b)"}
+{"id": "control_smallint_operator", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_smallint_function", "sql": "SELECT div(a,b) AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_smallint_zero", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(b AS SMALLINT) AS q FROM VALUES (7,0) t(a,b)"}
+{"id": "control_int_operator", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_int_function", "sql": "SELECT div(a,b) AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_int_zero", "sql": "SELECT CAST(a AS INT) DIV CAST(b AS INT) AS q FROM VALUES (7,0) t(a,b)"}
+{"id": "control_bigint_operator", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS BIGINT) a, CAST(b AS BIGINT) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_bigint_function", "sql": "SELECT div(a,b) AS q FROM (SELECT id, CAST(a AS BIGINT) a, CAST(b AS BIGINT) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_bigint_zero", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (7,0) t(a,b)"}
+{"id": "control_decimal12_2_operator", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS DECIMAL(12,2)) a, CAST(b AS DECIMAL(12,2)) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_decimal12_2_function", "sql": "SELECT div(a,b) AS q FROM (SELECT id, CAST(a AS DECIMAL(12,2)) a, CAST(b AS DECIMAL(12,2)) b FROM VALUES (0,7,2),(1,-7,2),(2,7,-2),(3,NULL,2),(4,7,NULL) t(id,a,b)) ORDER BY id"}
+{"id": "control_decimal12_2_zero", "sql": "SELECT CAST(a AS DECIMAL(12,2)) DIV CAST(b AS DECIMAL(12,2)) AS q FROM VALUES (7,0) t(a,b)"}
+{"id": "control_smallest_int", "sql": "SELECT CAST(-2147483648 AS INT) DIV -1 AS q"}
+{"id": "control_bigint_overflow", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) DIV CAST(-1 AS BIGINT) AS q"}
+{"id": "control_decimal_integer", "sql": "SELECT CAST(7.5 AS DECIMAL(12,2)) DIV 2 AS q"}
+{"id": "control_string_integer", "sql": "SELECT '7' DIV 2 AS q"}
+{"id": "control_null_integer", "sql": "SELECT NULL DIV 2 AS q"}
+{"id": "control_null_null", "sql": "SELECT NULL DIV NULL AS q"}
+{"id": "control_yearmonth", "sql": "SELECT INTERVAL '7' MONTH DIV INTERVAL '2' MONTH AS q"}
+{"id": "control_daytime", "sql": "SELECT INTERVAL '7' DAY DIV INTERVAL '2' DAY AS q"}
+{"id": "control_interval_mismatch", "sql": "SELECT INTERVAL '7' MONTH DIV INTERVAL '2' DAY AS q"}
+{"id": "control_boolean", "sql": "SELECT true DIV false AS q"}

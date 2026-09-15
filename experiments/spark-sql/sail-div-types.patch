@@ -1,0 +1,87 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -1010,6 +1010,18 @@
+ 
+     let (dividend, divisor) = arguments.two()?;
+ 
++    let dividend_type = dividend.get_type(function_context.schema);
++    let divisor_type = divisor.get_type(function_context.schema);
++    // Spark rejects floating DIV before constant folding or zero handling.
++    if [&dividend_type, &divisor_type]
++        .iter()
++        .any(|data_type| data_type.as_ref().is_ok_and(DataType::is_floating))
++    {
++        return Err(PlanError::invalid(
++            "DIV does not accept floating-point operands",
++        ));
++    }
++
+     // Plan-time check for literal zero divisors.
+     if is_zero_literal(&divisor) {
+         if function_context.plan_config.ansi_mode {
+@@ -1020,8 +1032,6 @@
+     }
+ 
+     let ansi_mode = function_context.plan_config.ansi_mode;
+-    let dividend_type = dividend.get_type(function_context.schema);
+-    let divisor_type = divisor.get_type(function_context.schema);
+ 
+     // Apply runtime zero-divisor guard to the divisor before building the division expression.
+     let effective_divisor_type = divisor_type.as_ref().cloned().unwrap_or(DataType::Int32);
+@@ -1053,6 +1063,55 @@
+     };
+ 
+     Ok(cast(div_expr, DataType::Int64))
++}
++
++#[tokio::test]
++async fn div_rejects_floating_types_before_zero_folding() {
++    use crate::config::PlanConfig;
++    use crate::function::common::FunctionContextInput;
++    use datafusion::prelude::SessionContext;
++    use datafusion_common::DFSchema;
++
++    let ctx = SessionContext::new();
++    let schema = Arc::new(DFSchema::empty());
++    for ansi_mode in [true, false] {
++        let config = Arc::new(PlanConfig {
++            ansi_mode,
++            ..Default::default()
++        });
++        let resolve = |left, right| {
++            spark_div(ScalarFunctionInput {
++                arguments: vec![left, right],
++                function_context: FunctionContextInput {
++                    argument_display_names: &[],
++                    plan_config: &config,
++                    session_context: &ctx,
++                    schema: &schema,
++                },
++            })
++        };
++        for data_type in [DataType::Float16, DataType::Float32, DataType::Float64] {
++            for (left, right) in [
++                (cast(lit(7), data_type.clone()), lit(0)),
++                (lit(7), cast(lit(0), data_type.clone())),
++                (cast(lit(ScalarValue::Null), data_type.clone()), lit(0)),
++                (lit(0), cast(lit(2), data_type)),
++            ] {
++                assert!(
++                    matches!(resolve(left, right), Err(PlanError::InvalidArgument(message))
++                    if message == "DIV does not accept floating-point operands")
++                );
++            }
++        }
++        assert!(resolve(lit(7), lit(2)).is_ok());
++        assert!(
++            resolve(
++                lit(ScalarValue::Decimal128(Some(750), 12, 2)),
++                lit(ScalarValue::Decimal128(Some(200), 12, 2)),
++            )
++            .is_ok()
++        );
++    }
+ }
+ 
+ fn power(base: Expr, exponent: Expr) -> Expr {
