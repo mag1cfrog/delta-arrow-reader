@@ -1,0 +1,230 @@
+diff --git a/src/decorrelate.rs b/src/decorrelate.rs
+--- a/src/decorrelate.rs
++++ b/src/decorrelate.rs
+@@ -30,6 +30,7 @@
+     Column, DFSchemaRef, HashMap, Result, ScalarValue, assert_or_internal_err, plan_err,
+ };
+ use datafusion_expr::expr::Alias;
++use datafusion_expr::expr_rewriter::replace_col;
+ use datafusion_expr::simplify::SimplifyContext;
+ use datafusion_expr::utils::{
+     collect_subquery_cols, conjunction, find_join_exprs, split_conjunction,
+@@ -345,20 +346,38 @@
+                     &self.correlated_subquery_cols_map,
+                     &mut local_correlated_cols,
+                 );
++                let mut new_plan = Transformed::no(plan.clone());
+                 let mut new_correlated_cols = BTreeSet::new();
+-                for col in local_correlated_cols.iter() {
+-                    new_correlated_cols
+-                        .insert(Column::new(Some(alias.alias.clone()), col.name.clone()));
++                if !local_correlated_cols.is_empty() {
++                    // Rebuild the schema for pulled-up keys and compensation fields.
++                    // Aliases can rename duplicate fields, so map keys by position.
++                    new_plan = Transformed::yes(plan.clone().recompute_schema()?);
++                    let new_columns = local_correlated_cols
++                        .iter()
++                        .map(|col| {
++                            let index = alias.input.schema().index_of_column(col)?;
++                            Ok(Column::new(
++                                Some(alias.alias.clone()),
++                                new_plan.data.schema().field(index).name(),
++                            ))
++                        })
++                        .collect::<Result<Vec<_>>>()?;
++                    let replacements =
++                        local_correlated_cols.iter().zip(&new_columns).collect();
++                    for filter in &mut self.join_filters {
++                        *filter = replace_col(filter.clone(), &replacements)?;
++                    }
++                    new_correlated_cols.extend(new_columns);
+                 }
+                 self.correlated_subquery_cols_map
+-                    .insert(plan.clone(), new_correlated_cols);
++                    .insert(new_plan.data.clone(), new_correlated_cols);
+                 if let Some(input_map) =
+                     self.collected_count_expr_map.get(alias.input.deref())
+                 {
+                     self.collected_count_expr_map
+-                        .insert(plan.clone(), input_map.clone());
+-                }
+-                Ok(Transformed::no(plan))
++                        .insert(new_plan.data.clone(), input_map.clone());
++                }
++                Ok(new_plan)
+             }
+             LogicalPlan::Limit(limit) => {
+                 let input_expr_map = self
+@@ -646,3 +665,69 @@
+     };
+     Ok(pull_up_expr)
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::test::test_table_scan_with_name;
++    use arrow::datatypes::DataType;
++    use datafusion_common::TableReference;
++    use datafusion_expr::{col, out_ref_col};
++    use datafusion_functions_aggregate::expr_fn::count;
++
++    #[test]
++    fn aliases_preserve_pulled_up_fields_and_filters() -> Result<()> {
++        let alias = TableReference::bare("Z.Mixed");
++        let filtered = LogicalPlanBuilder::from(test_table_scan_with_name("i")?)
++            .filter(col("i.a").eq(out_ref_col(DataType::UInt32, "o.a")))?
++            .build()?;
++        for (alias_above_aggregate, output_name, key_name) in
++            [(true, "n", "a"), (false, "n", "a"), (true, "a", "a:1")]
++        {
++            let aggregate = |input: LogicalPlan| {
++                LogicalPlanBuilder::from(input)
++                    .aggregate(Vec::<Expr>::new(), vec![count(lit(1_i64))])?
++                    .project(vec![count(lit(1_i64)).alias_qualified(
++                        (output_name == "a").then(|| TableReference::bare("agg")),
++                        output_name,
++                    )])?
++                    .build()
++            };
++            let input = if alias_above_aggregate {
++                aggregate(filtered.clone())?
++            } else {
++                // Projection pruning can hide a key while its correlated filter
++                // still waits for the next lateral-decorrelation pass.
++                LogicalPlanBuilder::from(filtered.clone())
++                    .project(Vec::<Expr>::new())?
++                    .build()?
++            };
++            let aliased = LogicalPlanBuilder::from(input)
++                .alias(alias.clone())?
++                .build()?;
++            let plan = if alias_above_aggregate {
++                LogicalPlanBuilder::from(aliased)
++                    .project(vec![Expr::Column(Column::new(
++                        Some(alias.clone()),
++                        output_name,
++                    ))])?
++                    .build()?
++            } else {
++                aggregate(aliased)?
++            };
++            let mut pull_up =
++                PullUpCorrelatedExpr::new().with_need_handle_count_bug(true);
++            let rewritten = plan.rewrite(&mut pull_up).data()?;
++            let key = Column::new(Some(alias.clone()), key_name);
++            assert!(rewritten.schema().has_column(&key));
++            assert!(
++                rewritten
++                    .schema()
++                    .has_column(&Column::new_unqualified(UN_MATCHED_ROW_INDICATOR,))
++            );
++            assert_eq!(pull_up.join_filters, vec![Expr::Column(key).eq(col("o.a"))],);
++            assert!(pull_up.can_pull_up);
++        }
++        Ok(())
++    }
++}
+diff --git a/src/decorrelate_lateral_join.rs b/src/decorrelate_lateral_join.rs
+--- a/src/decorrelate_lateral_join.rs
++++ b/src/decorrelate_lateral_join.rs
+@@ -223,6 +223,7 @@
+             (correlation_filter, original_join_filter, None)
+         };
+ 
++    let original_columns = join.schema.columns();
+     let left_field_count = join.left.schema().fields().len();
+     let new_plan = LogicalPlanBuilder::from(join.left)
+         .join_on(right_plan, join_type, join_filter)?
+@@ -326,7 +327,18 @@
+         new_plan
+     };
+ 
+-    Ok(Transformed::new(new_plan, true, TreeNodeRecursion::Jump))
++    // Keep helper columns inside this join so parent projections keep their
++    // original input positions when another lateral join is decorrelated.
++    let new_plan = if new_plan.schema().fields().len() != original_columns.len() {
++        LogicalPlanBuilder::from(new_plan)
++            .project(original_columns.into_iter().map(Expr::Column))?
++            .build()?
++    } else {
++        new_plan
++    };
++
++    // Finish nested joins in this pass before other rules move their filters.
++    Ok(Transformed::yes(new_plan))
+ }
+ 
+ /// Extract the Subquery and optional alias from a lateral join's right side.
+@@ -371,3 +383,71 @@
+         })
+         .data()
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::test::test_table_scan_with_name;
++    use crate::{Optimizer, OptimizerContext};
++    use arrow::datatypes::DataType;
++    use datafusion_common::Spans;
++    use datafusion_expr::{cast, col, lit, out_ref_col};
++    use datafusion_functions_aggregate::expr_fn::count;
++
++    #[test]
++    fn chained_lateral_joins_preserve_outputs_in_one_pass() -> Result<()> {
++        let lateral =
++            |left, table: &str, alias: &str, outer: &str, data_type: DataType| {
++                let input = LogicalPlanBuilder::from(test_table_scan_with_name(table)?)
++                    .filter(
++                        cast(col(format!("{table}.a")), data_type.clone())
++                            .eq(out_ref_col(data_type, outer)),
++                    )?
++                    .aggregate(Vec::<Expr>::new(), vec![count(lit(1_i64))])?
++                    .project(vec![count(lit(1_i64)).alias("n")])?
++                    .build()?;
++                let outer_ref_columns = input.all_out_ref_exprs();
++                let right = LogicalPlanBuilder::from(LogicalPlan::Subquery(Subquery {
++                    subquery: Arc::new(input),
++                    outer_ref_columns,
++                    spans: Spans::new(),
++                }))
++                .alias(alias)?
++                .build()?;
++                LogicalPlanBuilder::from(left).cross_join(right)?.build()
++            };
++        let first = lateral(
++            test_table_scan_with_name("o")?,
++            "i",
++            "t",
++            "o.a",
++            DataType::UInt32,
++        )?;
++        let rule = DecorrelateLateralJoin::new();
++        let config = OptimizerContext::new().with_max_passes(1);
++        let rewritten = rule.rewrite(first.clone(), &config)?.data;
++        assert_eq!(rewritten.schema().columns(), first.schema().columns());
++
++        let chained = lateral(first, "j", "u", "t.n", DataType::Int64)?;
++        let expected = chained.schema().columns();
++        let optimized = Optimizer::with_rules(vec![Arc::new(rule)]).optimize(
++            chained,
++            &config,
++            |_, _| {},
++        )?;
++        assert_eq!(optimized.schema().columns(), expected);
++        assert_eq!(
++            optimized.apply_with_subqueries(|plan| Ok(
++                if plan.contains_outer_reference() {
++                    TreeNodeRecursion::Stop
++                } else {
++                    TreeNodeRecursion::Continue
++                }
++            ))?,
++            TreeNodeRecursion::Continue,
++            "{}",
++            optimized.display_indent_schema(),
++        );
++        Ok(())
++    }
++}
