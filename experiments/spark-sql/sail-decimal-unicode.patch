@@ -1,0 +1,90 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs
+@@ -95,6 +95,26 @@
+     }
+ }
+ 
++// Java 21 Character.digit(char, 10): each non-ASCII BMP range has ten digits.
++// Captured with the Spark 4.2.0 oracle. Supplementary characters stay invalid.
++const JAVA_DECIMAL_ZEROS: [u32; 36] = [
++    0x0660, 0x06f0, 0x07c0, 0x0966, 0x09e6, 0x0a66, 0x0ae6, 0x0b66, 0x0be6, 0x0c66, 0x0ce6, 0x0d66,
++    0x0de6, 0x0e50, 0x0ed0, 0x0f20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90,
++    0x1b50, 0x1bb0, 0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0, 0xa9f0, 0xaa50, 0xabf0, 0xff10,
++];
++
++fn decimal_digit_to_ascii(c: char) -> Option<char> {
++    if c.is_ascii() {
++        return Some(c);
++    }
++    let code = u32::from(c);
++    let i = JAVA_DECIMAL_ZEROS
++        .partition_point(|&zero| zero <= code)
++        .checked_sub(1)?;
++    let digit = code - JAVA_DECIMAL_ZEROS[i];
++    (digit < 10).then(|| char::from(b'0' + digit as u8))
++}
++
+ fn parse_input(input: &str) -> Option<BigDecimal> {
+     // Spark Decimal.fromString uses Java String.trim, not Unicode whitespace trimming.
+     let input = input.trim_matches(|c| c <= '\u{20}');
+@@ -110,8 +130,6 @@
+     };
+     let (integer, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+     // bigdecimal accepts underscores and a sign after '.', which Spark rejects.
+-    // ponytail: Unicode digits remain unsupported; add Java-compatible normalization
+-    // if non-ASCII numeric strings become part of the adoption contract.
+     if integer.is_empty() && fraction.is_empty()
+         || !integer
+             .bytes()
+@@ -126,7 +144,34 @@
+     Some(decimal)
+ }
+ 
++// Keep ordinary input at one conversion call, without a separate wrapper call.
++#[inline(always)]
+ fn parse_decimal(input: &str, precision: u8, scale: i8) -> Result<Option<i128>> {
++    let value = parse_ascii_decimal(input, precision, scale)?;
++    if value.is_some() {
++        return Ok(value);
++    }
++    parse_unicode_decimal(input, precision, scale)
++}
++
++// Keep allocation and normalization outside the ordinary ASCII conversion.
++#[cold]
++#[inline(never)]
++fn parse_unicode_decimal(input: &str, precision: u8, scale: i8) -> Result<Option<i128>> {
++    if input.is_ascii() {
++        return Ok(None);
++    }
++    let Some(normalized) = input
++        .chars()
++        .map(decimal_digit_to_ascii)
++        .collect::<Option<String>>()
++    else {
++        return Ok(None);
++    };
++    parse_ascii_decimal(&normalized, precision, scale)
++}
++
++fn parse_ascii_decimal(input: &str, precision: u8, scale: i8) -> Result<Option<i128>> {
+     let Some(decimal) = parse_input(input) else {
+         return Ok(None);
+     };
+@@ -161,6 +206,16 @@
+     fn decimal_string_values_arrays_and_scalar() -> Result<()> {
+         let cases = [
+             ("1.235", Some(124)),
++            ("\u{ff11}.\u{ff12}\u{ff13}\u{ff15}", Some(124)),
++            ("-\u{661}.\u{662}\u{663}\u{665}", Some(-124)),
++            ("\u{967}.\u{968}\u{96b}e+\u{662}", Some(12500)),
++            ("1e\u{ff12}", Some(10000)),
++            ("\u{1d7d9}.25", None),
++            ("1e\u{1d7da}", None),
++            ("\u{00b2}", None),
++            ("\u{2460}", None),
++            ("\u{ff0b}\u{ff11}", None),
++            ("\u{ff11}\u{ff0e}\u{ff12}", None),
+             ("-1.235", Some(-124)),
+             ("1e2", Some(10000)),
+             (" +1.25\0", Some(125)),

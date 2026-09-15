@@ -860,6 +860,73 @@ python experiments/spark-sql/decimal_division.py compare \
 
 The comparison returns exit 1 for the six recorded Unicode differences. Reuse the earlier exact-integer, Delta, benchmark and FIFO-counter commands; the artifact records the commands, source hashes, samples and new oracle results. The patch was reapplied to the before sources and reproduced the built candidate exactly. Scratch sources and default executables are restored. All 168 default observations, including logical/physical plans and complete errors, match the preceding checkpoint.
 
+## Unicode decimal digits
+
+The optional [Unicode patch](sail-decimal-unicode.patch) repairs the six remaining string CAST observations from the preceding slice at `7ba2009`. It adds no dependency and changes only the shared string parser and its existing native test. CAST, TRY_CAST and `decimal(string)` retain the same entrypoints. The default vendor is unchanged. [Reference data, results and measurements](decimal-unicode-results.json) record the comparison.
+
+Java [BigDecimal](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/BigDecimal.html) accepts decimal digits recognized by `Character.digit(char, 10)`. The `char` overload processes UTF-16 code units, so it cannot recognize supplementary characters. Querying the same Java 21 runtime used by Spark 4.2.0 found 370 BMP digits in 37 groups, including ASCII, and another 310 decimal digits outside the BMP. The patch maps the 36 non-ASCII BMP groups to ASCII before retrying the existing parser. Signs, decimal points and exponent markers still require ASCII characters. Supplementary digits, Unicode whitespace and other numeric-looking characters remain invalid, matching the Spark oracle. The table is pinned to that JVM repertoire and needs rechecking if the target Java version changes.
+
+The original ASCII parsing, validation and rounding function is retained. If it returns no value, the shared wrapper calls a cold function that checks for non-ASCII input, normalizes its digits and retries that same conversion. The small wrapper is inlined so successful ASCII input still makes one conversion call, with no preliminary character scan or normalization allocation. Existing conversion errors still propagate.
+
+### Correctness
+
+The [new corpus](decimal-unicode.jsonl) contains 191 local queries, producing 382 observations across both ANSI modes. It is generated from Java's digit classification and grammar boundaries, with expected outcomes captured from real Spark. Every one of the 680 classified code points occurs in the SQL. Cases cover all BMP digit groups, adjacent invalid characters, supplementary digits, mixed scripts, Unicode exponents, rounding, precision/scale 38, overflow, extreme exponents, whitespace, NULL, filters, CASE and constructor parity. Multirow queries specify ordering; array cases use batch sizes 1 and 4. These are local differential tests, not a Sail CI case list.
+
+| Corpus | Before | After |
+| --- | ---: | ---: |
+| Previous string CAST corpus | 174/180 | 180/180 |
+| New Unicode corpus | 50/382 | 382/382 |
+
+There is no new mismatch across 1,502 observations. The 17 broader differences remain: ten original Decimal cases, four other NULL/subquery cases and three ANSI floating NaN/Infinity casts. Agreement checks ordered Decimal values/types or error stage; it does not establish complete schema or structured Spark error-code parity. Parallel execution can change which invalid row is reported first without changing the error stage.
+
+The expanded native test passes for Utf8, LargeUtf8, Utf8View, scalar, NULL and empty-array inputs. All 4,064 exact-integer comparisons over 187,410 rows, 116 Delta comparisons and 18 adapter checks pass. All 20 subquery benchmark cases retain identical physical plans and results over 1,048,576 rows each.
+
+### Performance
+
+| STRING to DECIMAL(18,4) | Before median | After median | Change |
+| --- | ---: | ---: | ---: |
+| No input NULLs, ANSI enabled | 82.276 ms | 81.129 ms | -1.4% |
+| No input NULLs, ANSI disabled | 81.831 ms | 81.401 ms | -0.5% |
+| Nullable input, ANSI enabled | 80.106 ms | 75.489 ms | -5.8% |
+| Nullable input, ANSI disabled | 80.655 ms | 75.366 ms | -6.6% |
+
+String instruction counts increase by 0.048-0.058%. Separate counter runs change string elapsed time by -4.9% to +0.3%. These runs no longer show the earlier material ASCII slowdown; they do not establish zero overhead for every input or workload. All 12 physical plans are identical. The eight numeric control medians change by -0.8% to +1.9%, with the largest percentage on a roughly 0.07 ms widening case; both numeric instruction controls change by less than 0.01%.
+
+Four earlier parser layouts added about 1.5-2.6% to string instruction counts. Their complete measurements are retained in the artifact, including the slower runs. The final layout preserves the original ASCII conversion function and confines normalization to a cold retry when conversion returns no value.
+
+Measurements reuse the unchanged `casts` benchmark and preceding slice's binary as the before variant. Each variant runs in four processes, in the order `before, after, after, before, after, before, before, after`, with 1,048,576 rows, batch size 8192, one partition, two warmups and nine samples per case. String preparation and planning are outside timing. Each round also has 24 FIFO-controlled counter processes covering the four string cases and two numeric controls; all six events run for 100% of their enabled interval. Each round passes 1,080 timed executions, 240 warmups and 120 full-value validation passes. CPU 2 uses an unfixed frequency on the same shared Ryzen 7 8845HS host. Unicode, scientific, malformed and long-string throughput, Delta I/O and concurrent workloads are unmeasured.
+
+### Reproducing this slice
+
+Start with the optional string CAST candidate and the same four DataFusion overrides described above. Save its binaries, apply the Unicode patch and build the after binaries with identical dependency sources and build settings.
+
+```sh
+git apply experiments/spark-sql/sail-decimal-unicode.patch
+cargo test --release --offline --locked \
+  --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-function --lib \
+  decimal_string_values_arrays_and_scalar
+python experiments/spark-sql/decimal_division.py spark "$run_dir/spark-unicode.json" \
+  --cases experiments/spark-sql/decimal-unicode.jsonl
+"$run_dir/after-probe" experiments/spark-sql/decimal-unicode.jsonl \
+  "$run_dir/after-unicode.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-unicode.json" "$run_dir/after-unicode.json" \
+  --cases experiments/spark-sql/decimal-unicode.jsonl \
+  --report "$run_dir/unicode-check.json"
+"$run_dir/after-bench" "$run_dir/unicode-cast-timing.json" casts
+```
+
+The Unicode and previous string corpus comparisons now return exit 0. To recheck the JVM digit table, run this query on the target Spark/JVM and retain rows where `digit >= 0`, ordered by `id`:
+
+```sql
+SELECT id,
+       int(java_method('java.lang.Character', 'digit', cast(id AS INT), 10)) AS digit
+FROM range(1114112)
+```
+
+The artifact records all 680 classified code points, JVM version, frozen Spark outputs, source and binary hashes, commands and samples. Reuse the preceding exact-integer, Delta, benchmark and FIFO-counter commands. Reapplying the optional patch to the before sources reproduces the built candidate exactly. Scratch sources and default executables are restored; all 168 default observations, including logical/physical plans and complete errors, match the preceding checkpoint.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
