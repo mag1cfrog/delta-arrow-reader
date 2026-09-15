@@ -1,0 +1,358 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/Cargo.toml b/experiments/spark-sql/vendor/sail/crates/sail-function/Cargo.toml
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/Cargo.toml
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/Cargo.toml
+@@ -8,6 +8,7 @@
+ workspace = true
+ 
+ [dependencies]
++bigdecimal = "=0.4.10"
+ sail-common = { path = "../sail-common" }
+ sail-common-datafusion = { path = "../sail-common-datafusion" }
+ sail-sql-analyzer = { path = "../sail-sql-analyzer" }
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/mod.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/mod.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/mod.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/mod.rs
+@@ -13,6 +13,7 @@
+ pub mod misc;
+ pub mod multi_expr;
+ pub mod predicate;
++pub mod spark_cast_string_to_decimal;
+ pub mod spark_cast_string_to_int32;
+ pub mod spark_struct_rename;
+ pub mod spark_to_string;
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -12,6 +12,7 @@
+     WindowFunctionDefinition, WindowUDF, cast, expr, lit,
+ };
+ use sail_common_datafusion::utils::items::ItemTaker;
++use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+ use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
+ use sail_function::sketch::{DEFAULT_HLL_LG_CONFIG_K, DEFAULT_THETA_LG_NOM_ENTRIES};
+ 
+@@ -152,8 +153,24 @@
+         Arc::new(
+             move |ScalarFunctionInput {
+                       arguments,
+-                      function_context: _,
+-                  }| { Ok(cast(arguments.one()?, data_type.clone())) },
++                      function_context,
++                  }| {
++                let arg = arguments.one()?;
++                if let DataType::Decimal128(precision, scale) = data_type
++                    && matches!(
++                        arg.get_type(function_context.schema)?,
++                        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View
++                    )
++                {
++                    return Ok(ScalarUDF::new_from_impl(SparkCastStringToDecimal::new(
++                        precision,
++                        scale,
++                        !function_context.plan_config.ansi_mode,
++                    ))
++                    .call(vec![arg]));
++                }
++                Ok(cast(arg, data_type.clone()))
++            },
+         )
+     }
+ 
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
+@@ -15,6 +15,7 @@
+     SparkCalendarInterval, SparkDayTimeInterval, SparkYearMonthInterval,
+ };
+ use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
++use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+ use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInt32;
+ use sail_function::scalar::spark_struct_rename::SparkStructRename;
+ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
+@@ -142,6 +143,16 @@
+                     lit(data_type_string),
+                 ])
+             }
++            (
++                DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
++                DataType::Decimal128(precision, scale),
++                _,
++            ) => ScalarUDF::new_from_impl(SparkCastStringToDecimal::new(
++                precision,
++                scale,
++                is_try || !self.config.ansi_mode,
++            ))
++            .call(vec![expr]),
+             (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View, DataType::Int32, false)
+                 if !self.config.ansi_mode =>
+             {
+diff --git a/experiments/spark-sql/Cargo.lock b/experiments/spark-sql/Cargo.lock
+--- a/experiments/spark-sql/Cargo.lock
++++ b/experiments/spark-sql/Cargo.lock
+@@ -4218,6 +4218,7 @@
+  "arrow",
+  "arrow-schema",
+  "base64 0.22.1",
++ "bigdecimal",
+  "cbc",
+  "chrono",
+  "chrono-tz",
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs
+new file mode 100644
+--- /dev/null
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs
+@@ -0,0 +1,254 @@
++// Local Spark CAST adapter. Parsing and HALF_UP rounding use bigdecimal 0.4.10.
++use std::sync::Arc;
++
++use arrow::array::{ArrayRef, Decimal128Array, new_null_array};
++use arrow::datatypes::{DataType, Field, FieldRef, is_validate_decimal_precision};
++use bigdecimal::{BigDecimal, RoundingMode, ToPrimitive, Zero};
++use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
++use datafusion_common::{Result, exec_err};
++use datafusion_expr::{
++    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
++};
++
++use crate::functions_utils::make_scalar_function;
++
++#[derive(Debug, PartialEq, Eq, Hash)]
++pub struct SparkCastStringToDecimal {
++    precision: u8,
++    scale: i8,
++    safe: bool,
++    signature: Signature,
++}
++
++impl SparkCastStringToDecimal {
++    pub fn new(precision: u8, scale: i8, safe: bool) -> Self {
++        Self {
++            precision,
++            scale,
++            safe,
++            signature: Signature::uniform(
++                1,
++                vec![DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View],
++                Volatility::Immutable,
++            ),
++        }
++    }
++
++    fn convert<'a>(&self, values: impl Iterator<Item = Option<&'a str>>) -> Result<ArrayRef> {
++        let mut output = Decimal128Array::builder(values.size_hint().0)
++            .with_precision_and_scale(self.precision, self.scale)?;
++        for value in values {
++            let result = value
++                .map(|s| parse_decimal(s, self.precision, self.scale))
++                .transpose()?
++                .flatten();
++            if value.is_some() && result.is_none() && !self.safe {
++                return exec_err!(
++                    "Cannot cast {value:?} to DECIMAL({},{})",
++                    self.precision,
++                    self.scale
++                );
++            }
++            output.append_option(result);
++        }
++        Ok(Arc::new(output.finish()))
++    }
++
++    fn invoke_array(&self, args: &[ArrayRef]) -> Result<ArrayRef> {
++        let [array] = args else {
++            return exec_err!("string-to-Decimal CAST expects one argument");
++        };
++        match array.data_type() {
++            DataType::Null => Ok(new_null_array(&self.return_type(&[])?, array.len())),
++            DataType::Utf8 => self.convert(as_string_array(array)?.iter()),
++            DataType::LargeUtf8 => self.convert(as_large_string_array(array)?.iter()),
++            DataType::Utf8View => self.convert(as_string_view_array(array)?.iter()),
++            other => exec_err!("string-to-Decimal CAST does not accept {other}"),
++        }
++    }
++}
++
++impl ScalarUDFImpl for SparkCastStringToDecimal {
++    fn name(&self) -> &str {
++        "spark_cast_string_to_decimal"
++    }
++
++    fn signature(&self) -> &Signature {
++        &self.signature
++    }
++
++    fn return_type(&self, _: &[DataType]) -> Result<DataType> {
++        Ok(DataType::Decimal128(self.precision, self.scale))
++    }
++
++    fn return_field_from_args(&self, _: ReturnFieldArgs) -> Result<FieldRef> {
++        Ok(Arc::new(Field::new(
++            self.name(),
++            self.return_type(&[])?,
++            true,
++        )))
++    }
++
++    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
++        let udf = Self::new(self.precision, self.scale, self.safe);
++        make_scalar_function(move |a| udf.invoke_array(a), vec![])(&args.args)
++    }
++}
++
++fn parse_input(input: &str) -> Option<BigDecimal> {
++    // Spark Decimal.fromString uses Java String.trim, not Unicode whitespace trimming.
++    let input = input.trim_matches(|c| c <= '\u{20}');
++    let unsigned = input.strip_prefix(['+', '-']).unwrap_or(input);
++    let mantissa = if let Some((mantissa, exponent)) = unsigned.split_once(['e', 'E']) {
++        // Java BigDecimal limits the exponent magnitude and effective scale to i32.
++        if exponent.parse::<i32>().ok()? == i32::MIN {
++            return None;
++        }
++        mantissa
++    } else {
++        unsigned
++    };
++    let (integer, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
++    // bigdecimal accepts underscores and a sign after '.', which Spark rejects.
++    // ponytail: Unicode digits remain unsupported; add Java-compatible normalization
++    // if non-ASCII numeric strings become part of the adoption contract.
++    if integer.is_empty() && fraction.is_empty()
++        || !integer
++            .bytes()
++            .chain(fraction.bytes())
++            .all(|b| b.is_ascii_digit())
++    {
++        return None;
++    }
++    let decimal = input.parse::<BigDecimal>().ok()?;
++    let source_scale = decimal.as_bigint_and_scale().1;
++    i32::try_from(source_scale).ok()?;
++    Some(decimal)
++}
++
++fn parse_decimal(input: &str, precision: u8, scale: i8) -> Result<Option<i128>> {
++    let Some(decimal) = parse_input(input) else {
++        return Ok(None);
++    };
++    let source_scale = decimal.as_bigint_and_scale().1 as i32;
++    // Spark computes this subtraction as a Java/Scala Int, including wraparound.
++    if (decimal.digits() as i32).wrapping_sub(source_scale) > 38 {
++        return Ok(None);
++    }
++    // BigInteger.TEN.pow checks 4 * exponent / 32 > MAX_MAG_LENGTH (2^26).
++    // Spark propagates this JVM range error even from TRY_CAST. Reject it without
++    // allocating the enormous power of ten; zero needs no rescaling work.
++    let rescale = (i64::from(scale) - i64::from(source_scale)).abs();
++    if !decimal.is_zero() && 4 * rescale / 32 > (1 << 26) {
++        return exec_err!("BigInteger would overflow supported range");
++    }
++    let value = decimal
++        .with_scale_round(i64::from(scale), RoundingMode::HalfUp)
++        .into_bigint_and_scale()
++        .0
++        .to_i128();
++    Ok(value.filter(|v| is_validate_decimal_precision(*v, precision)))
++}
++
++#[cfg(test)]
++mod tests {
++    use arrow::array::{Array, LargeStringArray, StringArray, StringViewArray};
++    use datafusion_common::ScalarValue;
++
++    use super::*;
++
++    #[test]
++    fn decimal_string_values_arrays_and_scalar() -> Result<()> {
++        let cases = [
++            ("1.235", Some(124)),
++            ("-1.235", Some(-124)),
++            ("1e2", Some(10000)),
++            (" +1.25\0", Some(125)),
++            (".5", Some(50)),
++            ("1.", Some(100)),
++            ("0e37", Some(0)),
++            ("0e38", None),
++            ("1e-100", Some(0)),
++            ("1e-2147483648", None),
++            ("0e2147483647", Some(0)),
++            ("", None),
++            (".", None),
++            ("+", None),
++            ("bad", None),
++            ("NaN", None),
++            ("Infinity", None),
++            ("1_2", None),
++            (".+2", None),
++            ("1e", None),
++            ("1e2-3", None),
++            ("1.2.3", None),
++            ("1\0.25", None),
++            ("\u{7f}1.25", None),
++            ("\u{a0}1.25", None),
++            ("99999999.995", None),
++            (
++                "1.23499999999999999999999999999999999999999999999999",
++                Some(123),
++            ),
++        ];
++        for (value, expected) in cases {
++            assert_eq!(parse_decimal(value, 10, 2)?, expected, "{value:?}");
++        }
++        for value in ["1e2147483647", "1e-2147483647"] {
++            assert!(parse_decimal(value, 10, 2).is_err());
++            for safe in [true, false] {
++                assert!(
++                    SparkCastStringToDecimal::new(10, 2, safe)
++                        .invoke_array(&[Arc::new(StringArray::from(vec![value]))])
++                        .is_err()
++                );
++            }
++        }
++        let nulls = new_null_array(&DataType::Null, 3);
++        for safe in [true, false] {
++            let result =
++                SparkCastStringToDecimal::new(10, 2, safe).invoke_array(&[nulls.clone()])?;
++            assert_eq!(result.data_type(), &DataType::Decimal128(10, 2));
++            assert_eq!((result.len(), result.null_count()), (3, 3));
++        }
++        let values = cases
++            .iter()
++            .map(|c| Some(c.0))
++            .chain([None])
++            .collect::<Vec<_>>();
++        let expected = cases.iter().map(|c| c.1).chain([None]).collect::<Vec<_>>();
++        for input in [
++            Arc::new(StringArray::from(values.clone())) as ArrayRef,
++            Arc::new(LargeStringArray::from(values.clone())) as ArrayRef,
++            Arc::new(StringViewArray::from(values)) as ArrayRef,
++        ] {
++            let udf = SparkCastStringToDecimal::new(10, 2, true);
++            let output = udf.invoke_array(&[input.clone()])?;
++            assert_eq!(
++                output
++                    .as_any()
++                    .downcast_ref::<Decimal128Array>()
++                    .unwrap()
++                    .iter()
++                    .collect::<Vec<_>>(),
++                expected
++            );
++            assert!(
++                SparkCastStringToDecimal::new(10, 2, false)
++                    .invoke_array(&[input.clone()])
++                    .is_err()
++            );
++            assert_eq!(udf.invoke_array(&[input.slice(0, 0)])?.len(), 0);
++        }
++        let udf = SparkCastStringToDecimal::new(10, 2, true);
++        let result =
++            make_scalar_function(move |a| udf.invoke_array(a), vec![])(&[ColumnarValue::Scalar(
++                ScalarValue::Utf8(Some("1e2".into())),
++            )])?;
++        let ColumnarValue::Scalar(result) = result else {
++            return exec_err!("expected scalar result");
++        };
++        assert_eq!(result, ScalarValue::Decimal128(Some(10000), 10, 2));
++        Ok(())
++    }
++}

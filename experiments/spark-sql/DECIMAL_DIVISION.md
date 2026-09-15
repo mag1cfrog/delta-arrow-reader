@@ -795,6 +795,71 @@ python experiments/spark-sql/decimal_division.py compare \
 
 The comparison deliberately returns exit 1 for the 15 documented differences. Reuse the earlier build and FIFO-counter commands with `casts` or `subqueries`; the artifact records the complete process order, selected cases, commands, source hashes and samples. The optional patch is not enabled in the default vendor. Scratch sources and default executables are restored, and all 168 prior default observations match, including logical plans and complete errors.
 
+## Native string-to-Decimal casts
+
+The optional [string CAST patch](sail-decimal-string-cast.patch) adds a local Rust adapter around `bigdecimal` 0.4.10, which DataFusion already brings into the resolved dependency graph. It adds one direct dependency edge from `sail-function`, with no new package or version change. [Results and measurements](decimal-string-cast-results.json) compare this patch against the reviewed numeric CAST candidate at `7cae495`. The default vendor remains unchanged.
+
+### Reuse and scope
+
+The adapter uses the library's parser and HALF_UP rescaling. Local validation rejects syntax that the library accepts but Spark rejects, including underscores and a sign after the decimal point. Trimming follows Java `String.trim`. Precision checks and extreme-exponent handling follow Spark 4.2.0's [Decimal conversion](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/api/src/main/scala/org/apache/spark/sql/types/Decimal.scala) and [CAST implementation](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/Cast.scala).
+
+The existing Sail JSON parser uses an i128 coefficient, so long fractional strings can overflow before being rounded to a representable result. Arrow 58.4.0's CAST parser accepts empty input as zero and rejects scientific notation; its separate `parse_decimal` helper truncates excess fractional digits. The inspected [Comet parser](https://github.com/apache/datafusion-comet/blob/9b63e7dacf70ac5428a7aa3ddb6f18f20f685778/native/spark-expr/src/conversion_funcs/string.rs) also builds an i128 mantissa and rejects fractional parts longer than 38 digits. These implementations do not cover the tested string-conversion contract directly. No additional Sail or Comet crate is imported.
+
+Explicit CAST, TRY_CAST and `decimal(string)` use the same conversion function for Utf8, LargeUtf8 and Utf8View inputs targeting Decimal128. Ordinary CAST returns NULL on malformed input or precision overflow with ANSI disabled and errors with ANSI enabled. TRY_CAST returns NULL for those conversion failures. Child-expression and scalar-subquery errors still propagate. The function also accepts the untyped NULL that DataFusion inserts when decorrelating an empty aggregate group. Numeric casts, implicit coercions and Decimal256 conversions retain their existing paths.
+
+Spark has an additional extreme-exponent boundary: `1e2147483647` and `1e-2147483647` raise a JVM BigInteger range error even through TRY_CAST, while `0e2147483647` produces zero. The adapter preserves these observed outcomes using Spark's integer-digit calculation and the [OpenJDK 21 BigInteger power range check](https://github.com/openjdk/jdk21u/blob/master/src/java.base/share/classes/java/math/BigInteger.java). It performs the check before rescaling, without allocating an enormous power of ten. The artifact records the inspected source hashes.
+
+### Correctness
+
+The [new corpus](decimal-string-cast.jsonl) contains 90 local queries, each run with both ANSI settings on real Spark 4.2.0. It covers ordinary and scientific notation, positive/negative HALF_UP ties, precision overflow, long fractions, scale 38, malformed strings, whitespace, extreme exponents, constructor parity, filters, CASE, NULLs and child/subquery errors. Multirow queries specify ordering and run at batch sizes 1 and 4. Extreme exponents have separate literal cases so their errors do not hide ordinary string results. The native regression test additionally checks all three Arrow string representations, scalar output, empty arrays and optimizer-inserted NULL arrays.
+
+| Corpus | Before | After |
+| --- | ---: | ---: |
+| Existing filter cases | 118/120 | 120/120 |
+| Existing NULL/subquery cases | 50/60 | 56/60 |
+| Previous CAST corpus | 67/82 | 79/82 |
+| New string CAST corpus | 86/180 | 174/180 |
+
+All other existing agreements are unchanged, with no new mismatch across 1,120 observations. This repairs all eight remaining observations from the original four filter failures and six NULL/subquery differences; the previous numeric patch repaired the other two. All 4,064 exact-integer comparisons over 187,410 rows, 116 Delta comparisons and 18 adapter checks pass. All 20 subquery benchmark cases retain identical physical plans, values, NULLs and ordering.
+
+The six new observations that still differ contain BMP Unicode decimal digits, such as fullwidth and Arabic digits. The adapter currently validates ASCII digits. The previous CAST corpus still has three ANSI floating NaN/Infinity differences; the ten original Decimal differences and four other NULL/subquery differences also remain. Match counts compare ordered Decimal values/types and error stage, without claiming complete schema or structured Spark error-code parity.
+
+### Performance
+
+The unchanged `casts` benchmark prepares string arrays before timing. Both variants use the same corrected fused arithmetic and four DataFusion overrides. Each runs in four processes in the order `before, after, after, before, after, before, before, after`, with 1,048,576 rows, batch size 8192, one partition, two warmups and nine samples per case. Twenty-four additional FIFO-controlled counter processes cover the four string cases and two numeric controls. All 1,080 timed executions, 240 warmups and 120 full-value validation passes succeed.
+
+| STRING to DECIMAL(18,4) | Before median | After median | Change |
+| --- | ---: | ---: | ---: |
+| No input NULLs, ANSI enabled | 90.196 ms | 80.832 ms | -10.4% |
+| No input NULLs, ANSI disabled | 90.379 ms | 81.494 ms | -9.8% |
+| Nullable input, ANSI enabled | 81.969 ms | 79.664 ms | -2.8% |
+| Nullable input, ANSI disabled | 82.085 ms | 79.630 ms | -3.0% |
+
+The other eight CAST plans are identical; median changes range from -0.3% to +2.8%, with the largest percentage change on a roughly 0.07 ms widening case. String instruction counts decrease by 1.6-2.8%; the two numeric instruction controls change by less than 0.01%. Counter elapsed times are much noisier: even unchanged numeric controls shift by about 27-34%. All samples remain in the artifact. CPU 2 uses an unfixed frequency on a shared Ryzen 7 8845HS host. These results cover ordinary decimal strings with and without input NULLs. Rounding-heavy, scientific, malformed, Unicode and long-string throughput, Delta I/O and concurrent workloads are unmeasured.
+
+### Reproducing this slice
+
+Start with the reviewed numeric CAST candidate and the four dependency overrides described above. Save its binaries as the before variant, then apply the string patch and build the after variant with the same manifest, release profile and overrides. The patch includes the direct dependency and its lockfile edge.
+
+```sh
+git apply experiments/spark-sql/sail-decimal-string-cast.patch
+cargo test --release --offline --locked \
+  --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-function --lib \
+  decimal_string_values_arrays_and_scalar
+python experiments/spark-sql/decimal_division.py spark "$run_dir/spark-string.json" \
+  --cases experiments/spark-sql/decimal-string-cast.jsonl
+"$run_dir/after-probe" experiments/spark-sql/decimal-string-cast.jsonl \
+  "$run_dir/after-string.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-string.json" "$run_dir/after-string.json" \
+  --cases experiments/spark-sql/decimal-string-cast.jsonl \
+  --report "$run_dir/string-check.json"
+"$run_dir/after-bench" "$run_dir/string-timing.json" casts
+```
+
+The comparison returns exit 1 for the six recorded Unicode differences. Reuse the earlier exact-integer, Delta, benchmark and FIFO-counter commands; the artifact records the commands, source hashes, samples and new oracle results. The patch was reapplied to the before sources and reproduced the built candidate exactly. Scratch sources and default executables are restored. All 168 default observations, including logical/physical plans and complete errors, match the preceding checkpoint.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
