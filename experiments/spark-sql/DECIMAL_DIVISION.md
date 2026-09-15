@@ -396,6 +396,66 @@ Five fresh processes per variant recheck the 28 context observations. All remain
 
 To reproduce, use the filter-patched scratch checkout described above, with the base arithmetic and high-scale patches on both sides. Apply the current normalization patch only to the after variant. Build separate release binaries before timing. Use the existing `decimal_bench OUTPUT_JSON` and `decimal_bench OUTPUT_JSON high-scale` commands, adding `decimal_bench OUTPUT_JSON high-scale-mixed` for the new boundary cases. Re-run the three Decimal corpora and `decimal_division_properties.py` with the candidate probe; the existing corpus comparators retain their documented nonzero exits. Historical normalization at `1434e5b` reproduces the preliminary mixed-scale diagnostic.
 
+## Targeted variance check
+
+This follow-up repeats the two anomalous NULL cases and one ordinary control from the normalization comparison. The arithmetic, filter fix and candidate lockfile match the previous hashes. The benchmark adds exact case selection and optional native `perf stat` control, so both binaries are relinked. Selected-case runs skip the other suite queries. Their absolute times do not replace the earlier full-suite measurements.
+
+Each case runs in eight fresh processes per variant, with two warmups and nine measured executions per process. The schedule contains four before/after pairs and four after/before pairs; case order rotates between passes. CPU affinity, row count, batch size and partition count remain unchanged. All 432 timed executions and 96 warmups pass row/NULL assertions. SQL, output types, first values, NULL counts and physical plans match the previous captures in all 48 processes. Seven pilot processes are retained separately.
+
+The benchmark uses [perf's FIFO control](https://man7.org/linux/man-pages/man1/perf-stat.1.html) to enable counters after setup and warmups, then disable them after the nine executions. Counters include the control handshake and loop bookkeeping. Instructions and cycles count user-mode work; CPU time below is the captured `task-clock:u` divided by nine. Every counter reports 100% running time. Counters cover each group of nine executions, not individual timing samples.
+
+| Case | Mean elapsed before / after, ms | Mean CPU before / after, ms | Pooled median change | Mean elapsed change | User instructions per execution, millions, both variants |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| DECIMAL(10,2), column, ANSI on, no NULLs | 35.621 / 35.602 | 35.621 / 35.598 | -0.26% | -0.05% | 523.981 |
+| DECIMAL(10,2), column, ANSI off, NULL masks | 34.282 / 34.778 | 34.279 / 34.782 | +0.16% | +1.45% | 431.107 |
+| DECIMAL(38,6), typed DECIMAL(38,38) literal, ANSI on, NULL masks | 294.758 / 286.749 | 294.671 / 286.704 | -0.22% | -2.72% | 5,045.744 |
+
+For each case, the full instruction-count range across all 16 processes is below 0.00004%. CPU time tracks mean elapsed time within 0.36 ms per execution. There is no evidence of additional user instructions in these unchanged plans, but instruction equality alone does not establish equal performance.
+
+The same before binary also produces a slow mixed-literal run: process 6 averages 347.64 ms, versus 286.04 ms in process 1. Its CPU time increases from 285.69 to 347.54 ms and user cycles per instruction from 0.2480 to 0.2917, with effectively unchanged instructions. The after binary's narrow NULL process 6 averages 37.28 ms, versus 34.27 ms in process 1, again with unchanged instructions and increased CPU time and cycles per instruction. Activity on CPU 2's SMT sibling also rises during those processes. Those activity snapshots span the whole subprocess, so they show correlation, not an isolated cause. No CPU frequency is inferred from user cycles divided by task-clock time.
+
+This series does not reproduce consistently slower after-version execution in the three selected cases. The +1.45% narrow NULL mean increase and every slow sample remain in the result. The counters do not identify a hardware, allocator, kernel or code-layout cause, and these newly linked binaries do not resolve the historical anomalies. The earlier ordinary Decimal costs and the restriction to an in-memory projection still apply. No global zero-regression claim follows.
+
+[Raw samples, counters, per-process statistics and provenance](decimal-variance-performance.json) include the seven pilots and a separate counter-control smoke check. The default benchmark is rebuilt after the scratch candidates. Vendored arithmetic, dependency patches, manifests and lockfiles are unchanged; the existing arithmetic correctness suites are not rerun for this harness-only change.
+
+Build separate before/after binaries as described in the normalization section, using the updated benchmark on both sides. The three selected invocations are:
+
+```text
+normal p10_s2_nullsfalse_column_ansitrue
+normal p10_s2_nullstrue_column_ansifalse
+high-scale-mixed p38_s6_divisor_s38_nullstrue_typed_literal_ansitrue
+```
+
+For one measured process, set `bench_binary`, `bench_suite` and `bench_case`, then run:
+
+```bash
+bench_binary=/absolute/path/to/after-bench
+bench_suite=normal
+bench_case=p10_s2_nullstrue_column_ansifalse
+variance_dir="$(mktemp -d)"
+mkfifo "$variance_dir/control" "$variance_dir/ack"
+DECIMAL_BENCH_PERF_DIR="$variance_dir" perf stat --delay=-1 \
+  --control="fifo:$variance_dir/control,$variance_dir/ack" \
+  --json-output -o "$variance_dir/counters.jsonl" \
+  -e '{instructions:u,cycles:u},task-clock:u,context-switches:u,cpu-migrations:u,page-faults:u' \
+  -- taskset -c 2 "$bench_binary" "$variance_dir/capture.json" \
+  "$bench_suite" "$bench_case"
+python3 - "$variance_dir" "$bench_case" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+capture = json.loads((root / "capture.json").read_text())
+assert len(capture["results"]) == 1
+assert capture["results"][0]["id"] == sys.argv[2]
+assert len(capture["results"][0]["samples_ms"]) == 9
+counters = [json.loads(line) for line in (root / "counters.jsonl").read_text().splitlines()
+            if line.startswith("{")]
+assert len(counters) == 6 and all(c["pcnt-running"] == 100 for c in counters)
+PY
+```
+
+Use a fresh directory for every process. Repeat the three cases with the variant and case order recorded in the artifact; retain all samples. Omitting `DECIMAL_BENCH_PERF_DIR` keeps the existing timing mode. An unknown case ID must exit nonzero without creating a capture.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

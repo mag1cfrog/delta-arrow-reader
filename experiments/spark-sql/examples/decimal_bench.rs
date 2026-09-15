@@ -1,4 +1,12 @@
-use std::{error::Error, fs, hint::black_box, sync::Arc, time::Instant};
+use std::{
+    error::Error,
+    fs,
+    hint::black_box,
+    io::{BufRead, BufReader, Write},
+    path::PathBuf,
+    sync::Arc,
+    time::Instant,
+};
 
 use arrow::{
     array::{Array, ArrayRef, Decimal128Array, Float64Array},
@@ -82,6 +90,24 @@ async fn consume(ctx: &SessionContext, plan: Arc<dyn ExecutionPlan>) -> Result<(
     Ok((rows, nulls))
 }
 
+// perf stat --delay=-1 --control=fifo:DIR/control,DIR/ack
+// Counting covers only the measured executions and the control handshake.
+fn perf_command(command: &[u8]) -> Result<()> {
+    if let Some(dir) = std::env::var_os("DECIMAL_BENCH_PERF_DIR") {
+        let dir = PathBuf::from(dir);
+        fs::OpenOptions::new()
+            .write(true)
+            .open(dir.join("control"))?
+            .write_all(command)?;
+        let mut ack = String::new();
+        BufReader::new(fs::File::open(dir.join("ack"))?).read_line(&mut ack)?;
+        if ack != "ack\n" {
+            return Err("unexpected perf control acknowledgement".into());
+        }
+    }
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     if cfg!(debug_assertions) {
@@ -90,9 +116,9 @@ async fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
     let output = args
         .get(1)
-        .ok_or("usage: decimal_bench OUTPUT_JSON [high-scale|high-scale-35|high-scale-mixed]")?;
+        .ok_or("usage: decimal_bench OUTPUT_JSON [SUITE [CASE_ID]]")?;
     let inputs = match args.get(2).map(String::as_str) {
-        None => vec![
+        None | Some("normal") => vec![
             (10, 2, 2, false),
             (18, 4, 4, false),
             (38, 6, 6, false),
@@ -105,7 +131,8 @@ async fn main() -> Result<()> {
         Some("high-scale-mixed") => vec![(38, 6, 38, false), (38, 7, 38, false), (38, 6, 38, true)],
         Some(_) => {
             return Err(
-                "expected high-scale, high-scale-35, high-scale-mixed or no extra argument".into(),
+                "expected normal, high-scale, high-scale-35, high-scale-mixed or no extra argument"
+                    .into(),
             );
         }
     };
@@ -149,6 +176,17 @@ async fn main() -> Result<()> {
                 .filter(|i| nulls && (i % 10 == 9 || (!scalar && i % 13 == 12)))
                 .count();
             for ansi in [true, false] {
+                let divisor_id = if scale == divisor_scale {
+                    String::new()
+                } else {
+                    format!("_divisor_s{divisor_scale}")
+                };
+                let id = format!(
+                    "p{precision}_s{scale}{divisor_id}_nulls{nulls}_{divisor_kind}_ansi{ansi}"
+                );
+                if args.get(3).is_some_and(|selected| selected != &id) {
+                    continue;
+                }
                 let mut config = PlanConfig::default();
                 config.ansi_mode = ansi;
                 config.session_timezone = "UTC".into();
@@ -170,23 +208,17 @@ async fn main() -> Result<()> {
                     assert_eq!(consume(&ctx, plan.clone()).await?, (ROWS, expected_nulls));
                 }
                 let mut elapsed_ms = Vec::new();
+                perf_command(b"enable\n")?;
                 for _ in 0..SAMPLES {
                     let start = Instant::now();
                     let counts = consume(&ctx, plan.clone()).await?;
                     elapsed_ms.push(start.elapsed().as_secs_f64() * 1000.0);
                     assert_eq!(counts, (ROWS, expected_nulls));
                 }
+                perf_command(b"disable\n")?;
                 let mut sorted = elapsed_ms.clone();
                 sorted.sort_by(f64::total_cmp);
                 let median_ms = sorted[SAMPLES / 2];
-                let divisor_id = if scale == divisor_scale {
-                    String::new()
-                } else {
-                    format!("_divisor_s{divisor_scale}")
-                };
-                let id = format!(
-                    "p{precision}_s{scale}{divisor_id}_nulls{nulls}_{divisor_kind}_ansi{ansi}"
-                );
                 eprintln!("{id}: {median_ms:.3} ms");
                 results.push(json!({
                     "id": id, "sql": sql, "ansi": ansi,
@@ -199,6 +231,9 @@ async fn main() -> Result<()> {
                 }));
             }
         }
+    }
+    if results.is_empty() {
+        return Err("no benchmark case matched CASE_ID".into());
     }
     let capture: Value = json!({
         "rows": ROWS, "batch_size": BATCH_SIZE, "partitions": 1,
