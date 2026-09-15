@@ -1,0 +1,140 @@
+diff --git a/src/output_requirements.rs b/src/output_requirements.rs
+--- a/src/output_requirements.rs
++++ b/src/output_requirements.rs
+@@ -36,6 +36,7 @@
+ use datafusion_physical_plan::projection::{
+     ProjectionExec, make_with_child, update_expr, update_ordering_requirement,
+ };
++use datafusion_physical_plan::scalar_subquery::ScalarSubqueryExec;
+ use datafusion_physical_plan::sorts::sort::SortExec;
+ use datafusion_physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
+ use datafusion_physical_plan::{
+@@ -347,9 +348,10 @@
+ fn require_top_ordering_helper(
+     plan: Arc<dyn ExecutionPlan>,
+ ) -> Result<(Arc<dyn ExecutionPlan>, bool)> {
+-    let mut children = plan.children();
++    let children = plan.children();
+     // Global ordering defines desired ordering in the final result.
+-    if children.len() != 1 {
++    // ScalarSubqueryExec forwards child 0; its other children only supply scalars.
++    if children.len() != 1 && !plan.is::<ScalarSubqueryExec>() {
+         Ok((plan, false))
+     } else if let Some(sort_exec) = plan.downcast_ref::<SortExec>() {
+         // In case of constant columns, output ordering of the `SortExec` would
+@@ -391,10 +393,12 @@
+         // When an operator requires an ordering, any `SortExec` below can not
+         // be responsible for (i.e. the originator of) the global ordering.
+         let (new_child, is_changed) =
+-            require_top_ordering_helper(Arc::clone(children.swap_remove(0)))?;
++            require_top_ordering_helper(Arc::clone(children[0]))?;
+ 
+         let plan = if is_changed {
+-            plan.with_new_children(vec![new_child])?
++            let mut children = children.into_iter().cloned().collect::<Vec<_>>();
++            children[0] = new_child;
++            plan.with_new_children(children)?
+         } else {
+             plan
+         };
+@@ -407,3 +411,100 @@
+ }
+ 
+ // See tests in datafusion/core/tests/physical_optimizer
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use arrow::array::AsArray;
++    use arrow::compute::SortOptions;
++    use arrow::datatypes::Int32Type;
++    use datafusion_common::{ScalarValue, record_batch};
++    use datafusion_expr::execution_props::{ScalarSubqueryResults, SubqueryIndex};
++    use datafusion_physical_expr::expressions::col;
++    use datafusion_physical_expr::{LexOrdering, PhysicalSortExpr};
++    use datafusion_physical_plan::scalar_subquery::{
++        ScalarSubqueryExec, ScalarSubqueryLink,
++    };
++    use datafusion_physical_plan::test::TestMemoryExec;
++    use datafusion_physical_plan::{collect, displayable};
++
++    #[tokio::test]
++    async fn scalar_subquery_preserves_hidden_sort_key() -> Result<()> {
++        for (ordered, fetch) in [(true, None), (true, Some(2)), (false, None)] {
++            let batch = record_batch!(
++                ("key", Int32, vec![3, 1, 2]),
++                ("value", Int32, vec![30, 10, 20])
++            )?;
++            let mut input: Arc<dyn ExecutionPlan> = TestMemoryExec::try_new_exec(
++                &[vec![batch.clone()]],
++                batch.schema(),
++                None,
++            )?;
++            if ordered {
++                let ordering = LexOrdering::new([PhysicalSortExpr::new(
++                    col("key", &input.schema())?,
++                    SortOptions::default(),
++                )])
++                .unwrap();
++                input = Arc::new(SortExec::new(ordering, input).with_fetch(fetch));
++            }
++            let input = Arc::new(ProjectionExec::try_new(
++                vec![(col("value", &input.schema())?, "value".to_owned())],
++                input,
++            )?);
++            let results = ScalarSubqueryResults::new(2);
++            let mut subqueries = Vec::new();
++            for (i, value) in [7, 9].into_iter().enumerate() {
++                let batch = record_batch!(("s", Int32, vec![value]))?;
++                subqueries.push(ScalarSubqueryLink {
++                    plan: TestMemoryExec::try_new_exec(
++                        &[vec![batch.clone()]],
++                        batch.schema(),
++                        None,
++                    )?,
++                    index: SubqueryIndex::new(i),
++                });
++            }
++            let mut plan: Arc<dyn ExecutionPlan> =
++                Arc::new(ScalarSubqueryExec::new(input, subqueries, results.clone()));
++            let mut trace = Vec::new();
++            for rule in crate::optimizer::PhysicalOptimizer::new().rules {
++                plan = rule.optimize(plan, &ConfigOptions::default())?;
++                if matches!(rule.name(), "OutputRequirements" | "EnforceSorting") {
++                    trace.push((
++                        rule.name().to_owned(),
++                        displayable(plan.as_ref()).indent(true).to_string(),
++                    ));
++                }
++            }
++            let batches = collect(plan, Arc::new(TaskContext::default())).await?;
++            let mut actual: Vec<i32> = batches
++                .iter()
++                .flat_map(|b| {
++                    b.column(0)
++                        .as_primitive::<Int32Type>()
++                        .values()
++                        .iter()
++                        .copied()
++                })
++                .collect();
++            if !ordered {
++                // Without ORDER BY, only the values are part of the contract.
++                actual.sort_unstable();
++            }
++            let expected = match (ordered, fetch) {
++                (true, Some(2)) => vec![10, 20],
++                (true, _) => vec![10, 20, 30],
++                (false, _) => vec![10, 20, 30],
++            };
++            assert_eq!(actual, expected, "{trace:#?}");
++            for (i, value) in [7, 9].into_iter().enumerate() {
++                assert_eq!(
++                    results.get(SubqueryIndex::new(i)),
++                    Some(ScalarValue::Int32(Some(value)))
++                );
++            }
++        }
++        Ok(())
++    }
++}

@@ -528,6 +528,38 @@ datafusion-optimizer = { path = "/absolute/path/to/subquery-patched-datafusion-o
 
 Build `decimal_probe` with that Cargo configuration using the existing release commands. Run the existing Spark capture/comparison commands with `--cases experiments/spark-sql/decimal-subquery.jsonl`, and pass that JSONL to the candidate probe with `--physical-plans`. Also rerun the unchanged context corpus. The comparisons intentionally exit nonzero for the documented ordering/LATERAL differences. Run the direct regression with `cargo test --release --lib utils::tests::evaluates_to_null_with_scalar_subquery` in the patched optimizer crate.
 
+## ORDER BY with scalar subqueries
+
+[datafusion-subquery-order.patch](datafusion-subquery-order.patch) preserves the main query's ordering requirements through DataFusion 54.1.0's `ScalarSubqueryExec`. The optional patch changes one helper in `datafusion-physical-optimizer`: eight added lines and four removed, including the import/comment, plus a 97-line regression test using existing DataFusion test helpers.
+
+`ScalarSubqueryExec` forwards batches from child 0; its remaining children populate scalar results. `require_top_ordering_helper` previously stopped at every node with multiple children. It therefore missed the main query's Sort beneath this wrapper, especially when a projection hid the sorting column. The regression trace shows `OutputRequirements` recording an empty ordering requirement, then `EnforceSorting` deleting Sort. Execution returns `[30, 10, 20]` instead of `[10, 20, 30]`.
+
+The fix lets the existing search continue through the wrapper's main input and rebuilds the complete child list with only child 0 replaced. Keeping the other children in order preserves the mapping between subqueries and their result slots. Other multi-input operators retain the existing stopping rule. In the repaired correlated query, the hidden key survives through local Sort and SortPreservingMerge, then the final projection removes it.
+
+The direct regression fails on the original helper and passes after the fix. It exercises the default physical optimizer pipeline, full ordering, LIMIT selection, an unordered control and two distinct scalar-result slots. All 28 available physical-optimizer library tests pass. The unit-test lockfile was seeded from the probe lockfile to retain Arrow 58.4.0. The end-to-end candidate reuses the previous fused arithmetic, filter fix and subquery NULL-check fix; its lockfile changes only the physical optimizer's source from registry to local path.
+
+The [capture](subquery-order-checks.json) retains ordered comparisons and physical plans:
+
+| Check | Before | After |
+| --- | --- | --- |
+| New ordering corpus, three processes | 6/30, 7/30, 6/30 strict Spark agreement | 30/30 in every process |
+| Existing context corpus, five processes | Previously 24-27/28, with missing ORDER BY | 28/28 in every process |
+| Existing additional subquery corpus, three processes | Previously 30/54 | 46/54 in every process; only the eight LATERAL errors remain |
+| Original/high-scale/filter corpora | 602 observations | All parsed captures identical, including plans and errors |
+| Delta corpus and adapter checks | 116 observations; 18 adapter checks | All preserved, with matching input data/schema |
+
+The new [15-query corpus](subquery-order.jsonl) covers hidden/projected sorting keys, ASC/DESC, NULLS FIRST/LAST, batch sizes 1/4, multiple and nested scalar subqueries, a subquery in the sort expression, LIMIT/OFFSET and a scalar subquery's own top-K. Both ANSI modes run. Its control without scalar subqueries preserves the entire observation, including the physical plan. The historical expression/ROUND binary also matches only 6/30, confirming that the failure reaches beyond fused Decimal arithmetic.
+
+All SQL corpus comparisons use ordered rows. The 11 expected runtime errors and eight remaining LATERAL errors in the existing subquery corpus keep their exact messages from the preceding candidate. LATERAL compensation-field handling remains the next correctness slice. This repair restores sorting work required by affected queries; its execution cost belongs in the subsequent candidate performance comparison. No timing measurements were taken here, and the patch remains optional.
+
+To reproduce, extend the preceding section's candidate configuration with a local copy of `datafusion-physical-optimizer` 54.1.0 after applying the new patch:
+
+```toml
+datafusion-physical-optimizer = { path = "/absolute/path/to/order-patched-datafusion-physical-optimizer" }
+```
+
+Keep this entry under `[patch.crates-io]` alongside the physical-plan and logical-optimizer overrides. Reuse the build and Spark capture/comparison commands with `--cases experiments/spark-sql/subquery-order.jsonl`, and give the candidate probe that JSONL with `--physical-plans`. The new corpus and unchanged context corpus must compare successfully; the existing `decimal-subquery.jsonl` comparison still exits nonzero for the eight LATERAL cases. Run the direct regression with `cargo test --release --lib output_requirements::tests::scalar_subquery_preserves_hidden_sort_key` in the patched physical optimizer crate.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
