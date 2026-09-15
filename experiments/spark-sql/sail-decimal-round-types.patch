@@ -1,0 +1,233 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ use std::cmp::{max, min};
+ use datafusion::arrow::datatypes::{DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION};
+@@ -5,12 +6,15 @@
+ use datafusion::arrow::datatypes::{DataType, IntervalUnit, TimeUnit, i256};
+ use datafusion::arrow::error::ArrowError;
+ use datafusion::functions::expr_fn;
++use datafusion::optimizer::simplify_expressions::ExprSimplifier;
+ use datafusion_common::{DFSchemaRef, ScalarValue};
++use datafusion_expr::simplify::SimplifyContextBuilder;
+ use datafusion_expr::{
+     BinaryExpr, Expr, ExprSchemable, Operator, ScalarUDF, cast, expr, lit, try_cast,
+ };
+ use datafusion_spark::function::math::expr_fn as math_fn;
+ use half::f16;
++use sail_common_datafusion::literal::{LiteralEvaluator, LiteralValue};
+ use sail_common_datafusion::utils::items::ItemTaker;
+ use sail_function::error::generic_exec_err;
+ use sail_function::scalar::datetime::negate_duration::NegateDuration;
+@@ -24,6 +28,7 @@
+ use sail_function::scalar::math::spark_bround::SparkBRound;
+ use sail_function::scalar::math::spark_ceil_floor::{SparkCeil, SparkFloor};
+ use sail_function::scalar::math::spark_conv::SparkConv;
++use sail_function::scalar::math::spark_decimal_round::SparkDecimalRound;
+ use sail_function::scalar::math::spark_div::SparkIntervalDiv;
+ use sail_function::scalar::math::spark_negative::SparkNegative;
+ use sail_function::scalar::math::spark_pmod::SparkPmod;
+@@ -1130,6 +1135,52 @@
+     ))
+ }
+ 
++fn spark_decimal_round(input: ScalarFunctionInput) -> PlanResult<Expr> {
++    let ScalarFunctionInput {
++        mut arguments,
++        function_context,
++    } = input;
++    if !(1..=2).contains(&arguments.len()) {
++        return Ok(expr_fn::round(arguments));
++    }
++    let DataType::Decimal128(precision, scale) = arguments[0].get_type(function_context.schema)?
++    else {
++        return Ok(expr_fn::round(arguments));
++    };
++    let target = arguments.get(1).cloned().unwrap_or_else(|| lit(0_i32));
++    let target_type = target.get_type(function_context.schema)?;
++    // Leave other coercions on the existing ROUND path.
++    if !target_type.is_integer() && !target_type.is_null() {
++        return Ok(expr_fn::round(arguments));
++    }
++    if target.is_volatile() {
++        return Err(PlanError::invalid("ROUND scale must be a constant integer"));
++    }
++    let target = match target {
++        Expr::Literal(value, _) => value,
++        expr => {
++            let context = SimplifyContextBuilder::default()
++                .with_schema(function_context.schema.clone())
++                .build();
++            let coerced = ExprSimplifier::new(context).coerce(expr, function_context.schema)?;
++            LiteralEvaluator::new().evaluate(&coerced).map_err(|e| {
++                PlanError::invalid(format!("ROUND scale must be a constant integer: {e}"))
++            })?
++        }
++    };
++    let target = if target.is_null() {
++        None
++    } else {
++        Some(LiteralValue(&target).try_to_i32()?)
++    };
++    let udf = ScalarUDF::from(SparkDecimalRound::new(
++        precision,
++        scale,
++        target.unwrap_or(0),
++    ));
++    Ok(udf.call(vec![arguments.remove(0), lit(ScalarValue::Int32(target))]))
++}
++
+ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunction)> {
+     use crate::function::common::ScalarFunctionBuilder as F;
+ 
+@@ -1186,7 +1237,7 @@
+         ("randn", F::udf(Randn::new())),
+         ("random", F::udf(Random::new())),
+         ("rint", F::unary(rint)),
+-        ("round", F::var_arg(expr_fn::round)),
++        ("round", F::custom(spark_decimal_round)),
+         ("sec", F::unary(double(|arg| lit(1.0) / expr_fn::cos(arg)))),
+         ("sign", F::udf(SparkSignum::new())),
+         ("signum", F::udf(SparkSignum::new())),
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ pub mod java_random;
+ pub mod rand_poisson;
+ pub mod randn;
+@@ -7,6 +8,7 @@
+ pub mod spark_bround;
+ pub mod spark_ceil_floor;
+ pub mod spark_conv;
++pub mod spark_decimal_round;
+ pub mod spark_div;
+ pub mod spark_negative;
+ pub mod spark_pmod;
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/utils/decimal.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/utils/decimal.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/utils/decimal.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/utils/decimal.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::cmp::{max, min};
+ 
+ use datafusion::arrow::datatypes::{DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION};
+@@ -12,11 +13,21 @@
+ ) -> (u8, i8) {
+     let integral_least_num_digits = precision - scale + 1;
+     if target_scale < 0 {
+-        let new_precision = max(integral_least_num_digits, -target_scale + 1) as u8;
++        // Match Spark's Int arithmetic, and cap precision before narrowing to u8.
++        let new_precision = max(
++            integral_least_num_digits,
++            target_scale.wrapping_neg().wrapping_add(1),
++        );
+         if decimal_128 {
+-            (min(new_precision, DECIMAL128_MAX_PRECISION), 0)
++            (
++                min(new_precision, i32::from(DECIMAL128_MAX_PRECISION)) as u8,
++                0,
++            )
+         } else {
+-            (min(new_precision, DECIMAL256_MAX_PRECISION), 0)
++            (
++                min(new_precision, i32::from(DECIMAL256_MAX_PRECISION)) as u8,
++                0,
++            )
+         }
+     } else {
+         let new_scale = min(scale, target_scale);
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_decimal_round.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_decimal_round.rs
+new file mode 100644
+--- /dev/null
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_decimal_round.rs
+@@ -0,0 +1,85 @@
++use datafusion::arrow::datatypes::DataType;
++use datafusion::functions::math::round::RoundFunc;
++use datafusion_common::Result;
++use datafusion_expr::sort_properties::{ExprProperties, SortProperties};
++use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature};
++
++use super::utils::decimal::round_decimal_base;
++
++/// Spark's Decimal result type with DataFusion's existing ROUND kernel.
++#[derive(Debug, PartialEq, Eq, Hash)]
++pub struct SparkDecimalRound {
++    inner: RoundFunc,
++    data_type: DataType,
++}
++
++impl SparkDecimalRound {
++    pub fn new(precision: u8, scale: i8, target_scale: i32) -> Self {
++        let (precision, scale) =
++            round_decimal_base(i32::from(precision), i32::from(scale), target_scale, true);
++        Self {
++            inner: RoundFunc::new(),
++            data_type: DataType::Decimal128(precision, scale),
++        }
++    }
++}
++
++impl ScalarUDFImpl for SparkDecimalRound {
++    fn name(&self) -> &str {
++        self.inner.name()
++    }
++
++    fn signature(&self) -> &Signature {
++        self.inner.signature()
++    }
++
++    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
++        Ok(self.data_type.clone())
++    }
++
++    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
++        self.inner.invoke_with_args(args)
++    }
++
++    fn output_ordering(&self, input: &[ExprProperties]) -> Result<SortProperties> {
++        self.inner.output_ordering(input)
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn spark_decimal_result_types_and_ordering() -> Result<()> {
++        for (precision, scale, target, expected_precision, expected_scale) in [
++            (23, 13, 2, 13, 2),
++            (3, 2, 0, 2, 0),
++            (3, 2, -1, 2, 0),
++            (3, 2, -255, 38, 0),
++            (10, 2, -256, 38, 0),
++            (10, 2, -1000, 38, 0),
++            (10, 2, i32::MAX, 11, 2),
++            (38, 0, -1, 38, 0),
++            (38, 38, 0, 1, 0),
++            (38, 38, i32::MAX, 38, 38),
++        ] {
++            let round = SparkDecimalRound::new(precision, scale, target);
++            assert_eq!(
++                round.return_type(&[DataType::Decimal128(precision, scale), DataType::Int32])?,
++                DataType::Decimal128(expected_precision, expected_scale),
++                "ROUND(decimal({precision},{scale}), {target})",
++            );
++        }
++        let round = SparkDecimalRound::new(10, 2, 0);
++        let order = SortProperties::Ordered(Default::default());
++        assert_eq!(
++            round.output_ordering(&[
++                ExprProperties::new_unknown().with_order(order),
++                ExprProperties::new_unknown().with_order(SortProperties::Singleton),
++            ])?,
++            order,
++        );
++        Ok(())
++    }
++}

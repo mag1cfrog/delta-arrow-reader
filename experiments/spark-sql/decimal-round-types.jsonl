@@ -1,0 +1,117 @@
+{"id": "p3s2_default_literal", "sql": "SELECT ROUND(CAST('9.99' AS DECIMAL(3,2))) AS r"}
+{"id": "p3s2_default_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(3,2))) AS r FROM VALUES (0,'9.99'),(1,'-9.99'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p3s2_dp0_literal", "sql": "SELECT ROUND(CAST('9.99' AS DECIMAL(3,2)), 0) AS r"}
+{"id": "p3s2_dp0_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(3,2)), 0) AS r FROM VALUES (0,'9.99'),(1,'-9.99'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p3s2_dp2_literal", "sql": "SELECT ROUND(CAST('9.99' AS DECIMAL(3,2)), 2) AS r"}
+{"id": "p3s2_dp2_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(3,2)), 2) AS r FROM VALUES (0,'9.99'),(1,'-9.99'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p3s2_dp3_literal", "sql": "SELECT ROUND(CAST('9.99' AS DECIMAL(3,2)), 3) AS r"}
+{"id": "p3s2_dp3_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(3,2)), 3) AS r FROM VALUES (0,'9.99'),(1,'-9.99'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p3s2_dp-1_literal", "sql": "SELECT ROUND(CAST('9.99' AS DECIMAL(3,2)), -1) AS r"}
+{"id": "p3s2_dp-1_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(3,2)), -1) AS r FROM VALUES (0,'9.99'),(1,'-9.99'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p3s2_dp-38_literal", "sql": "SELECT ROUND(CAST('9.99' AS DECIMAL(3,2)), -38) AS r"}
+{"id": "p3s2_dp-38_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(3,2)), -38) AS r FROM VALUES (0,'9.99'),(1,'-9.99'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p3s2_dp-255_literal", "sql": "SELECT ROUND(CAST('9.99' AS DECIMAL(3,2)), -255) AS r"}
+{"id": "p3s2_dp-255_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(3,2)), -255) AS r FROM VALUES (0,'9.99'),(1,'-9.99'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p10s2_default_literal", "sql": "SELECT ROUND(CAST('123.45' AS DECIMAL(10,2))) AS r"}
+{"id": "p10s2_default_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(10,2))) AS r FROM VALUES (0,'123.45'),(1,'-123.45'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p10s2_dp0_literal", "sql": "SELECT ROUND(CAST('123.45' AS DECIMAL(10,2)), 0) AS r"}
+{"id": "p10s2_dp0_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(10,2)), 0) AS r FROM VALUES (0,'123.45'),(1,'-123.45'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p10s2_dp2_literal", "sql": "SELECT ROUND(CAST('123.45' AS DECIMAL(10,2)), 2) AS r"}
+{"id": "p10s2_dp2_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(10,2)), 2) AS r FROM VALUES (0,'123.45'),(1,'-123.45'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p10s2_dp3_literal", "sql": "SELECT ROUND(CAST('123.45' AS DECIMAL(10,2)), 3) AS r"}
+{"id": "p10s2_dp3_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(10,2)), 3) AS r FROM VALUES (0,'123.45'),(1,'-123.45'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p10s2_dp-1_literal", "sql": "SELECT ROUND(CAST('123.45' AS DECIMAL(10,2)), -1) AS r"}
+{"id": "p10s2_dp-1_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(10,2)), -1) AS r FROM VALUES (0,'123.45'),(1,'-123.45'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p10s2_dp-38_literal", "sql": "SELECT ROUND(CAST('123.45' AS DECIMAL(10,2)), -38) AS r"}
+{"id": "p10s2_dp-38_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(10,2)), -38) AS r FROM VALUES (0,'123.45'),(1,'-123.45'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p10s2_dp-255_literal", "sql": "SELECT ROUND(CAST('123.45' AS DECIMAL(10,2)), -255) AS r"}
+{"id": "p10s2_dp-255_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(10,2)), -255) AS r FROM VALUES (0,'123.45'),(1,'-123.45'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p18s4_default_literal", "sql": "SELECT ROUND(CAST('123.4567' AS DECIMAL(18,4))) AS r"}
+{"id": "p18s4_default_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(18,4))) AS r FROM VALUES (0,'123.4567'),(1,'-123.4567'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p18s4_dp0_literal", "sql": "SELECT ROUND(CAST('123.4567' AS DECIMAL(18,4)), 0) AS r"}
+{"id": "p18s4_dp0_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(18,4)), 0) AS r FROM VALUES (0,'123.4567'),(1,'-123.4567'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p18s4_dp2_literal", "sql": "SELECT ROUND(CAST('123.4567' AS DECIMAL(18,4)), 2) AS r"}
+{"id": "p18s4_dp2_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(18,4)), 2) AS r FROM VALUES (0,'123.4567'),(1,'-123.4567'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p18s4_dp5_literal", "sql": "SELECT ROUND(CAST('123.4567' AS DECIMAL(18,4)), 5) AS r"}
+{"id": "p18s4_dp5_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(18,4)), 5) AS r FROM VALUES (0,'123.4567'),(1,'-123.4567'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p18s4_dp-1_literal", "sql": "SELECT ROUND(CAST('123.4567' AS DECIMAL(18,4)), -1) AS r"}
+{"id": "p18s4_dp-1_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(18,4)), -1) AS r FROM VALUES (0,'123.4567'),(1,'-123.4567'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p18s4_dp-38_literal", "sql": "SELECT ROUND(CAST('123.4567' AS DECIMAL(18,4)), -38) AS r"}
+{"id": "p18s4_dp-38_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(18,4)), -38) AS r FROM VALUES (0,'123.4567'),(1,'-123.4567'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p18s4_dp-255_literal", "sql": "SELECT ROUND(CAST('123.4567' AS DECIMAL(18,4)), -255) AS r"}
+{"id": "p18s4_dp-255_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(18,4)), -255) AS r FROM VALUES (0,'123.4567'),(1,'-123.4567'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s0_default_literal", "sql": "SELECT ROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))) AS r"}
+{"id": "p38s0_default_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,0))) AS r FROM VALUES (0,'99999999999999999999999999999999999999'),(1,'-99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s0_dp0_literal", "sql": "SELECT ROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), 0) AS r"}
+{"id": "p38s0_dp0_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,0)), 0) AS r FROM VALUES (0,'99999999999999999999999999999999999999'),(1,'-99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s0_dp2_literal", "sql": "SELECT ROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), 2) AS r"}
+{"id": "p38s0_dp2_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,0)), 2) AS r FROM VALUES (0,'99999999999999999999999999999999999999'),(1,'-99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s0_dp1_literal", "sql": "SELECT ROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), 1) AS r"}
+{"id": "p38s0_dp1_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,0)), 1) AS r FROM VALUES (0,'99999999999999999999999999999999999999'),(1,'-99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s0_dp-1_literal", "sql": "SELECT ROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), -1) AS r"}
+{"id": "p38s0_dp-1_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,0)), -1) AS r FROM VALUES (0,'99999999999999999999999999999999999999'),(1,'-99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s0_dp-38_literal", "sql": "SELECT ROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), -38) AS r"}
+{"id": "p38s0_dp-38_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,0)), -38) AS r FROM VALUES (0,'99999999999999999999999999999999999999'),(1,'-99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s0_dp-255_literal", "sql": "SELECT ROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), -255) AS r"}
+{"id": "p38s0_dp-255_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,0)), -255) AS r FROM VALUES (0,'99999999999999999999999999999999999999'),(1,'-99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s18_default_literal", "sql": "SELECT ROUND(CAST('99999999999999999999.999999999999999999' AS DECIMAL(38,18))) AS r"}
+{"id": "p38s18_default_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,18))) AS r FROM VALUES (0,'99999999999999999999.999999999999999999'),(1,'-99999999999999999999.999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s18_dp0_literal", "sql": "SELECT ROUND(CAST('99999999999999999999.999999999999999999' AS DECIMAL(38,18)), 0) AS r"}
+{"id": "p38s18_dp0_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,18)), 0) AS r FROM VALUES (0,'99999999999999999999.999999999999999999'),(1,'-99999999999999999999.999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s18_dp2_literal", "sql": "SELECT ROUND(CAST('99999999999999999999.999999999999999999' AS DECIMAL(38,18)), 2) AS r"}
+{"id": "p38s18_dp2_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,18)), 2) AS r FROM VALUES (0,'99999999999999999999.999999999999999999'),(1,'-99999999999999999999.999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s18_dp19_literal", "sql": "SELECT ROUND(CAST('99999999999999999999.999999999999999999' AS DECIMAL(38,18)), 19) AS r"}
+{"id": "p38s18_dp19_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,18)), 19) AS r FROM VALUES (0,'99999999999999999999.999999999999999999'),(1,'-99999999999999999999.999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s18_dp-1_literal", "sql": "SELECT ROUND(CAST('99999999999999999999.999999999999999999' AS DECIMAL(38,18)), -1) AS r"}
+{"id": "p38s18_dp-1_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,18)), -1) AS r FROM VALUES (0,'99999999999999999999.999999999999999999'),(1,'-99999999999999999999.999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s18_dp-38_literal", "sql": "SELECT ROUND(CAST('99999999999999999999.999999999999999999' AS DECIMAL(38,18)), -38) AS r"}
+{"id": "p38s18_dp-38_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,18)), -38) AS r FROM VALUES (0,'99999999999999999999.999999999999999999'),(1,'-99999999999999999999.999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s18_dp-255_literal", "sql": "SELECT ROUND(CAST('99999999999999999999.999999999999999999' AS DECIMAL(38,18)), -255) AS r"}
+{"id": "p38s18_dp-255_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,18)), -255) AS r FROM VALUES (0,'99999999999999999999.999999999999999999'),(1,'-99999999999999999999.999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s38_default_literal", "sql": "SELECT ROUND(CAST('0.99999999999999999999999999999999999999' AS DECIMAL(38,38))) AS r"}
+{"id": "p38s38_default_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,38))) AS r FROM VALUES (0,'0.99999999999999999999999999999999999999'),(1,'-0.99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s38_dp0_literal", "sql": "SELECT ROUND(CAST('0.99999999999999999999999999999999999999' AS DECIMAL(38,38)), 0) AS r"}
+{"id": "p38s38_dp0_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,38)), 0) AS r FROM VALUES (0,'0.99999999999999999999999999999999999999'),(1,'-0.99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s38_dp2_literal", "sql": "SELECT ROUND(CAST('0.99999999999999999999999999999999999999' AS DECIMAL(38,38)), 2) AS r"}
+{"id": "p38s38_dp2_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,38)), 2) AS r FROM VALUES (0,'0.99999999999999999999999999999999999999'),(1,'-0.99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s38_dp39_literal", "sql": "SELECT ROUND(CAST('0.99999999999999999999999999999999999999' AS DECIMAL(38,38)), 39) AS r"}
+{"id": "p38s38_dp39_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,38)), 39) AS r FROM VALUES (0,'0.99999999999999999999999999999999999999'),(1,'-0.99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s38_dp-1_literal", "sql": "SELECT ROUND(CAST('0.99999999999999999999999999999999999999' AS DECIMAL(38,38)), -1) AS r"}
+{"id": "p38s38_dp-1_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,38)), -1) AS r FROM VALUES (0,'0.99999999999999999999999999999999999999'),(1,'-0.99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s38_dp-38_literal", "sql": "SELECT ROUND(CAST('0.99999999999999999999999999999999999999' AS DECIMAL(38,38)), -38) AS r"}
+{"id": "p38s38_dp-38_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,38)), -38) AS r FROM VALUES (0,'0.99999999999999999999999999999999999999'),(1,'-0.99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "p38s38_dp-255_literal", "sql": "SELECT ROUND(CAST('0.99999999999999999999999999999999999999' AS DECIMAL(38,38)), -255) AS r"}
+{"id": "p38s38_dp-255_column", "sql": "SELECT ROUND(CAST(x AS DECIMAL(38,38)), -255) AS r FROM VALUES (0,'0.99999999999999999999999999999999999999'),(1,'-0.99999999999999999999999999999999999999'),(2,NULL) t(id,x) ORDER BY id", "batch_size": 2}
+{"id": "extreme_dp-2147483648", "sql": "SELECT ROUND(CAST(123.45 AS DECIMAL(10,2)), -2147483648) AS r"}
+{"id": "extreme_dp-2147483647", "sql": "SELECT ROUND(CAST(123.45 AS DECIMAL(10,2)), -2147483647) AS r"}
+{"id": "extreme_dp-1000", "sql": "SELECT ROUND(CAST(123.45 AS DECIMAL(10,2)), -1000) AS r"}
+{"id": "extreme_dp-256", "sql": "SELECT ROUND(CAST(123.45 AS DECIMAL(10,2)), -256) AS r"}
+{"id": "extreme_dp2147483647", "sql": "SELECT ROUND(CAST(123.45 AS DECIMAL(10,2)), 2147483647) AS r"}
+{"id": "scale_fold_add", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 1+1) AS r"}
+{"id": "scale_cast_int", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), CAST(2 AS INT)) AS r"}
+{"id": "scale_cast_long", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), CAST(2 AS BIGINT)) AS r"}
+{"id": "scale_typed_null", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), CAST(NULL AS INT)) AS r"}
+{"id": "scale_null", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), NULL) AS r"}
+{"id": "scale_long", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2L) AS r"}
+{"id": "scale_short", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2S) AS r"}
+{"id": "scale_string", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), '2') AS r"}
+{"id": "scale_bad_string", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 'bad') AS r"}
+{"id": "scale_decimal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2.0) AS r"}
+{"id": "dynamic_scale", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), id) AS r FROM range(3) ORDER BY id"}
+{"id": "dynamic_null_value", "sql": "SELECT ROUND(CAST(NULL AS DECIMAL(10,3)), id) AS r FROM range(3) ORDER BY id"}
+{"id": "scalar_subquery_scale", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), (SELECT 2)) AS r"}
+{"id": "round_composed", "sql": "SELECT ROUND(CAST(2 AS DECIMAL(10,2)) / CAST(3 AS DECIMAL(10,2)), 2) AS r"}
+{"id": "round_composed_column", "sql": "SELECT ROUND(CAST(a AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)), 2) AS r FROM VALUES (0,2,3),(1,4,3),(2,NULL,3) t(id,a,b) ORDER BY id"}
+{"id": "nested_round", "sql": "SELECT ROUND(ROUND(CAST(1.255 AS DECIMAL(10,3)), 2), 1) AS r"}
+{"id": "round_null_bad_cast", "sql": "SELECT ROUND(CAST('bad' AS DECIMAL(10,3)), CAST(NULL AS INT)) AS r"}
+{"id": "control_integer", "sql": "SELECT ROUND(25, 2) AS r"}
+{"id": "control_long", "sql": "SELECT ROUND(25L, 2) AS r"}
+{"id": "control_float", "sql": "SELECT ROUND(2.675F, 2) AS r"}
+{"id": "control_double", "sql": "SELECT ROUND(2.675D, 2) AS r"}
+{"id": "control_string", "sql": "SELECT ROUND('2.675', 2) AS r"}
+{"id": "control_null", "sql": "SELECT ROUND(NULL, 2) AS r"}
+{"id": "volatile_scale", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), CAST(rand() AS INT)) AS r"}
+{"id": "long_scale_overflow", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2147483648L) AS r"}
+{"id": "long_scale_underflow", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), -2147483649L) AS r"}
+{"id": "round_null_bad_local", "sql": "SELECT ROUND((SELECT CAST(v AS DECIMAL(10,3)) FROM VALUES ('bad') t(v)), CAST(NULL AS INT)) AS r"}
+{"id": "round_null_multirow", "sql": "SELECT ROUND((SELECT CAST(v AS DECIMAL(10,3)) FROM VALUES (1), (2) t(v)), CAST(NULL AS INT)) AS r"}

@@ -1207,6 +1207,81 @@ python experiments/spark-sql/decimal_division.py compare \
 
 Reuse `subquery-check` and `subqueries` for benchmark validation and balanced timing. Finish candidate builds and correctness checks before timing. The patch round trip reproduces the built sources exactly. Use a separate target directory for each checkout: this evaluation detected a stale candidate analyzer in the shared default build cache. Cleaning `sail-sql-analyzer` and rebuilding the repository defaults resolves that cache collision. Scratch sources and lockfile are restored, and all 168 default observations, including plans and complete errors, match the previous checkpoint. The performance runs use separate copied binaries.
 
+## Decimal ROUND result types
+
+The optional [ROUND type patch](sail-decimal-round-types.patch) fixes the composed ROUND discrepancy: `0.67` now has Spark's `DECIMAL(13,2)` type instead of `DECIMAL(23,2)`. The [117-query corpus](decimal-round-types.jsonl) and [results](decimal-round-types-results.json) compare it with the reviewed optional candidate at `f545c95`. The default vendor remains unchanged.
+
+The planner reuses Sail's constant evaluator and [Decimal rounding type helper](https://github.com/lakehq/sail/blob/732fded6f720465415a687218835db1b909165e5/crates/sail-function/src/scalar/math/utils/decimal.rs). That helper follows Spark's [RoundBase type rule](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/mathExpressions.scala). The patch caps precision before converting to `u8`, fixing large negative scales such as `-255`. Its existing CEIL/FLOOR callers retain their behavior: their supported scales do not reach this narrowing boundary.
+
+A small Rust UDF adapter supplies the resulting Decimal128 type to [DataFusion's existing ROUND kernel](https://github.com/apache/datafusion/blob/54.1.0/datafusion/functions/src/math/round.rs), which already accepts the desired output type. It also forwards the native function's sorting properties. There is no extra result cast, new arithmetic kernel, Python execution, dependency or physical node. This is a local adapter: the inspected Sail main revision still maps SQL ROUND to the generic DataFusion function. Switching to [datafusion-spark's ROUND](https://github.com/apache/datafusion/blob/54.1.0/datafusion/spark/src/function/math/round.rs) would not fix this gap because that implementation retains the input type.
+
+For Decimal128 input, the adapter resolves an integer or NULL scale before choosing the result type. Constant expressions such as `1 + 1` work. Column, volatile and scalar-subquery scales produce planning errors, matching the tested Spark requirement that scale be foldable. Other input types and scale coercions stay on the existing path. The corpus is a locally designed boundary matrix, not an upstream CI list. It covers both ANSI modes, scalar and column inputs, NULLs, six precision/scale pairs through 38 digits, positive and negative scales, integer extremes, constant expressions, nested ROUND, composed division and controls outside the repaired scope.
+
+| Value/type or error-stage agreement | Parent | Candidate |
+| --- | ---: | ---: |
+| Existing numeric SQL corpus | 2004/2012 | 2006/2012 |
+| New ROUND corpus | 74/234 | 214/234 |
+| Combined | 2078/2246 | 2220/2246 |
+
+No previously agreeing observation regresses. Six original differences remain. The new corpus retains 20 differences: nine implicit-conversion cases, four INT/BIGINT result types, two FLOAT rounding values, four extreme negative-scale execution errors and one ANSI CAST with a NULL ROUND scale. These are existing gaps. The adapter keeps the value expression when the scale is NULL, preserving the early errors required by the local-subquery controls.
+
+The agreement count excludes names, nullability, metadata and structured error conditions. Focused checks verify 21 ROUND error causes, including nonconstant scales, output overflow and local-subquery failures. One same-stage agreement still has the wrong cause: with ANSI enabled, a malformed string scale produces Spark's CAST error but the candidate reports a signature mismatch. The previous 70 error-cause and signed-zero checks remain intact. Parallel execution can change which invalid row appears in a CAST error without changing its cause or stage.
+
+The native test checks result types and sorting properties. All four Delta lifecycle tests and 4064 exact-integer comparisons over 187410 rows pass. The 116 Delta observations match the parent in values, names, types, nullability, metadata and error stages; all 18 adapter checks and 19 existing value/name seeds pass.
+
+The benchmark adds ordinary and wide Decimal ROUND to the existing 26 controls. All 30 cases validate every one of their 1048576 output values. The controls retain identical rendered physical plans. ROUND retains the same plan structure and native kernel, with the result type changed by the adapter. Four balanced processes per variant run on CPU 2 with one partition, batch size 8192, two warmups and nine samples. Another 32 FIFO-controlled counter runs measure four ANSI cases in separate planning and execution intervals, without multiplexing.
+
+Ordinary ROUND execution medians change by +0.31% with ANSI enabled and +0.46% with ANSI disabled; its profiled execution instructions change by +0.019%. Planning instructions increase by 0.27%-0.29% for the two ROUND cases. Across the 28 cases excluding wide ROUND, execution medians change by -0.37% to +1.40%. This is a small measured planning cost, with no added per-row cast or arithmetic pass.
+
+Wide ROUND timings remain unstable with the default allocator. The first default-allocator series reports -33.49% execution time with ANSI enabled and +62.83% with ANSI disabled. Samples form distinct modes, including roughly 19/29 ms for ANSI execution. Counter runs show tens of thousands of page faults per nine executions despite similar user instruction counts. Those large median differences cannot establish a stable speedup or slowdown.
+
+The follow-up uses the same binaries and validates every row. Each allocator setting gets four balanced timing processes and two execution-counter processes per variant and ANSI mode. Isolated default calls still vary. Fixing only the mmap threshold makes pooled times close but leaves substantial faults. Fixing both [glibc allocation thresholds](https://sourceware.org/glibc/manual/latest/html_node/Memory-Allocation-Tunables.html) at 1048576 bytes reduces measured faults to 64-96, with these results:
+
+| Wide ROUND, fixed mmap and trim thresholds | Execution before / after (ms) | Time change | Instruction change | Cycle change |
+| --- | ---: | ---: | ---: | ---: |
+| ANSI enabled | 18.979 / 19.074 | +0.50% | -0.72% | +0.023% |
+| ANSI disabled | 16.266 / 16.241 | -0.15% | -0.83% | +0.008% |
+
+This intervention supports allocator sensitivity as a contributor to the large timing modes. It does not prove equal performance for every workload with the default allocator. The original default runs and both intermediate follow-ups remain in the artifact. CPU frequency is not fixed and the host is not isolated. No production allocator setting changes, and these measurements do not erase the earlier analyzer's planning cost.
+
+To reproduce, prepare an experimental checkout with the reviewed optional patches through `sail-signed-literal.patch` and the same dependency overrides. Keep the expanded benchmark source identical in both variants. Use the environment variables established in the preceding sections:
+
+```sh
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/before-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/before-bench"
+git apply --check experiments/spark-sql/sail-decimal-round-types.patch
+git apply experiments/spark-sql/sail-decimal-round-types.patch
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-function --lib spark_decimal_result_types
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark "$run_dir/spark-round.json" \
+  --cases experiments/spark-sql/decimal-round-types.jsonl
+"$run_dir/after-probe" experiments/spark-sql/decimal-round-types.jsonl \
+  "$run_dir/after-round.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-round.json" "$run_dir/after-round.json" \
+  --cases experiments/spark-sql/decimal-round-types.jsonl --report "$run_dir/round-check.json"
+```
+
+The last command intentionally returns exit 1 for the 20 recorded differences. Reuse `subquery-check` and `subqueries` for benchmark validation and balanced timing. Finish builds and correctness checks before timing. The artifact retains the SQL, observations, plans, samples, counters, commands and source hashes.
+
+The patch round trip reproduces all four candidate source files. All 23 saved scratch paths are restored. The modified Sail package build caches are invalidated, and the exact default executables saved before this slice are restored; all 168 default observations, including plans and complete errors, match the parent checkpoint. The restored default benchmark retains its saved 26-case harness. Both measured binaries use the same expanded 30-case source.
+
+For the allocator diagnostic, set the two environment variables only on each benchmark child process, and run before/after binaries in the same balanced order:
+
+```sh
+MALLOC_MMAP_THRESHOLD_=1048576 MALLOC_TRIM_THRESHOLD_=1048576 \
+  taskset -c 2 "$run_dir/after-bench" "$run_dir/round-wide.json" \
+  subqueries round_wide_ansitrue
+```
+
+Repeat with `before-bench` and `round_wide_ansifalse`; preserve the untouched default-allocator measurements as well.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
