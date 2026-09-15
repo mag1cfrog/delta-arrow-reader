@@ -456,6 +456,44 @@ PY
 
 Use a fresh directory for every process. Repeat the three cases with the variant and case order recorded in the artifact; retain all samples. Omitting `DECIMAL_BENCH_PERF_DIR` keeps the existing timing mode. An unknown case ID must exit nonzero without creating a capture.
 
+## ROUND on the normalized candidate
+
+The existing [Decimal256 preparation](datafusion-round-decimal256.patch) and [quotient-reuse](datafusion-round-remainder.patch) patches retain their benefit on the selectively normalized candidate. All 34 benchmark cases with Decimal256 intermediates have lower pooled medians, by 6.4-30.8%, and lower means, by 2.7-30.5%. This supports keeping both patches in the candidate combination. The integration reuses their source exactly; it adds no runtime patch.
+
+Both builds include the base Decimal/coercion patch, high-scale fallback, selective normalization and filter/projection fix. They use identical local dependency paths and one lockfile. The only runtime source difference between builds is DataFusion's `src/math/round.rs`. Scalar dispatch, Float32/64 and narrow Decimal array branches, and the common rounding helpers remain byte-for-byte identical. The optimized branch prepares the fixed scale once per array and derives the remainder from the quotient it already computed.
+
+The table uses ANSI mode except where specified. Times are pooled medians over four fresh processes per variant, with nine samples per case in each process.
+
+| Input/divisor | Before ms | After ms | Median change | Mean change |
+| --- | ---: | ---: | ---: | ---: |
+| DECIMAL(10,2) / column | 34.89 | 34.77 | -0.35% | -0.44% |
+| DECIMAL(18,4) / column | 139.02 | 108.42 | -22.01% | -22.97% |
+| DECIMAL(38,6) / column | 140.07 | 105.11 | -24.96% | -28.26% |
+| DECIMAL(38,38) / column | 169.87 | 142.06 | -16.37% | -17.39% |
+| DECIMAL(38,6) / DECIMAL(38,38) column | 394.66 | 366.00 | -7.26% | -6.12% |
+| DECIMAL(38,6), NULL masks / DECIMAL(38,38) literal | 302.05 | 282.80 | -6.37% | -2.74% |
+| DECIMAL(10,2) / integer 3, ANSI off | 24.28 | 24.16 | -0.50% | +1.19% |
+
+The 16 narrow Decimal/Float64 controls have median changes from -1.31% to +0.46% and mean changes from -2.09% to +2.58%. All 50 SQL strings, physical plans, output types, first values and NULL counts match across variants and the previous normalized candidate. Measurements retain the existing 1,048,576 rows, batch size 8,192, one partition and CPU 2. Each process performs two warmups. All builds and correctness checks finish before timing; the artifact records the balanced variant order and retains every sample.
+
+Separate counter runs cover one narrow control and three wide paths, with two fresh processes per variant/case. The existing FIFO control counts only the nine measured executions plus control and loop overhead. User instructions decrease 30.6% for the ordinary scale-4 column case, 22.2% for the normalized scale-38 column case and 11.0% for the mixed-scale NULL literal. Their mean task-clock time decreases 11.3-16.7%. These counters confirm less execution work in the measured wide paths. Counter-run timings remain separate from the full-suite timings because case selection skips other queries.
+
+The narrow integer-literal case initially appears slower: the first after process has a 34.60 ms median while the first before processes are near 24.1 ms. The fourth before process also reaches 34.62 ms, and the other three after processes are near 24.1 ms. All these runs remain in the pooled result. A targeted follow-up runs this case alone in four fresh processes per variant, using the same binaries. Mean elapsed time is 30.95 ms before and 30.83 ms after; user instruction counts differ by less than 0.0003%. The original narrow column counter control also has an instruction difference below 0.0003%. These checks do not reproduce a persistent slowdown in the selected narrow paths, but do not isolate the cause of the full-suite spikes or establish a global zero-regression guarantee.
+
+All 602 observations in the original, high-scale and filter corpora match between variants, including reported errors and logical/physical plans. Spark agreement remains 158/168, 314/314 and 116/120 respectively. The ten original differences and four live non-ANSI CAST differences remain open. The optimized candidate passes all 4,064 exact-integer comparisons over 187,410 rows. Five context runs per variant retain only the known correlated-subquery ordering differences; their statuses, types and exact row multisets match the reference. Both variants match all 116 previous Delta observations and pass all 18 adapter checks. All six ROUND unit tests pass, including the 1,120 helper comparisons and NULL/empty array checks already included in the preparation patch.
+
+Across the full suites and separate counter runs, all 3,816 timed executions and 848 warmups pass row/NULL assertions. [Raw samples, counters, hashes and validation results](decimal-round-integrated-performance.json) retain the complete comparison and the narrow follow-up. The default executable is restored and matches all 168 frozen baseline observations. Host vendor, manifests and lockfiles are unchanged. The combination reduces part of the existing Decimal execution cost; adoption remains pending, with the earlier semantic and performance limitations still recorded.
+
+To reproduce, start with the selectively normalized, filter-patched scratch checkout from the earlier section. Add a local copy of `datafusion-functions` 54.1.0 to the same external Cargo configuration as the patched `datafusion-physical-plan`:
+
+```toml
+[patch.crates-io]
+datafusion-physical-plan = { path = "/absolute/path/to/patched-datafusion-physical-plan" }
+datafusion-functions = { path = "/absolute/path/to/datafusion-functions" }
+```
+
+Build and save the before binaries with the original `round.rs`. Apply `datafusion-round-decimal256.patch`, then `datafusion-round-remainder.patch`, to that functions copy and build the after binaries with the same configuration and lockfile. Run the existing ROUND unit test, Decimal corpora, integer oracle and Delta checks before timing. Use the `normal`, `high-scale` and `high-scale-mixed` suites with the four-process-per-variant schedule recorded in the artifact. The preceding section's counter command also applies; the artifact records the four initially selected case IDs and the separate narrow follow-up. These measurements evaluate the two ROUND patches together and do not separately estimate their contributions on this candidate.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
