@@ -606,9 +606,42 @@ The [capture](lateral-nested-checks.json) records the final comparisons against 
 
 The [18-query corpus](lateral-nested.jsonl) runs both ANSI modes, with batch sizes 1 and 4 distributed across its queries. It covers nested COUNT/MAX/COALESCE, column aliases, two derived-alias levels, quoted names, LEFT ON conditions, two/three chained lateral joins, NULL correlation keys, missing groups and all-NULL groups. Scalar COUNT/MAX and WHERE EXISTS/IN exercise the shared helper's other callers. The uncorrelated control retains its entire observation, including plans. SELECT-list EXISTS/IN is outside this repair; the predicate rule handles Filter nodes.
 
-All Spark comparisons use ordered rows, exact values and types, with error-stage agreement for expected failures. The existing subquery corpus retains its 43 successful executions and all 11 complete runtime error messages. Delta retains 87 successes, 18 planning errors and 11 execution errors. The original ten Decimal differences and four live non-ANSI CAST differences remain unchanged. This slice does not establish full Spark compatibility or measure performance. The patch remains optional; the next step is the planned comparison of the corrected fused candidate with expression/ROUND.
+All Spark comparisons use ordered rows, exact values and types, with error-stage agreement for expected failures. The existing subquery corpus retains its 43 successful executions and all 11 complete runtime error messages. Delta retains 87 successes, 18 planning errors and 11 execution errors. The original ten Decimal differences and four live non-ANSI CAST differences remain unchanged. This slice does not establish full Spark compatibility or measure performance. The patch remains optional; the following section compares the corrected fused candidate with expression/ROUND.
 
 To reproduce, apply this patch at the root of the local `datafusion-optimizer` copy already carrying `datafusion-subquery-null.patch`. Keep the preceding arithmetic, Sail alias and physical optimizer patches, and reuse the same three `[patch.crates-io]` overrides. Build the release probe and run the existing Spark capture/comparison commands with `--cases experiments/spark-sql/lateral-nested.jsonl`, then `lateral-alias.jsonl`; pass `--physical-plans` to the Rust probe. Both comparisons must now succeed. For the library tests, seed the standalone optimizer lockfile from the candidate lockfile to retain Arrow 58.4.0, resolve its development dependencies offline, then run `cargo test --release --offline --locked --lib --manifest-path /absolute/path/to/patched-datafusion-optimizer/Cargo.toml`.
+
+## Fused division after the planning repairs
+
+The existing [fused prototype](decimal-division-fused.patch) is faster than selectively normalized expression/ROUND division in all 46 Decimal cases of this fresh 50-case comparison. Pooled medians decrease by 35.0-87.3%, and means decrease by 36.8-87.5%. This slice reuses the arithmetic implementations without changes. [Samples, plans, counters and correctness checks](decimal-fused-integrated-performance.json) retain the complete comparison.
+
+The expression build includes the base coercion/division patch, high-scale fallback, selective normalization and both Decimal256 ROUND optimizations. The fused build uses the previously tested direct final-scale calculation. Both include the same Sail LATERAL fix, filter/projection fix, subquery NULL guard, ordering repair and nested/chained LATERAL repair. Both also use the same optimized ROUND source. Only Sail's scalar `math.rs` changes between builds; all 524 dependency versions, local dependency paths, the candidate lockfile and benchmark source are identical.
+
+The table uses ANSI mode unless marked otherwise. Times are milliseconds per execution over 1,048,576 preloaded rows, with batch size 8,192 and one partition.
+
+| Input/divisor | Expression/ROUND ms | Fused ms | Median change | Mean change |
+| --- | ---: | ---: | ---: | ---: |
+| DECIMAL(10,2) / column | 34.82 | 15.15 | -56.5% | -57.0% |
+| DECIMAL(18,4) / column | 107.41 | 17.54 | -83.7% | -83.6% |
+| DECIMAL(38,6) / column | 105.17 | 14.81 | -85.9% | -85.9% |
+| DECIMAL(38,38) / column | 142.24 | 60.27 | -57.6% | -57.8% |
+| DECIMAL(38,6) / DECIMAL(38,38) column | 364.47 | 60.70 | -83.3% | -83.3% |
+| DECIMAL(38,6), NULL masks / DECIMAL(38,38) literal | 274.70 | 54.00 | -80.3% | -80.2% |
+| DECIMAL(10,2) / integer 3, ANSI off | 24.15 | 11.30 | -53.2% | -55.6% |
+| DOUBLE / column | 1.11 | 1.08 | -3.0% | -7.5% |
+
+Measurements use Rust 1.97.1, release builds and CPU 2 on the same Ryzen 7 8845HS. Each suite runs in four fresh processes per variant, with two warmups and nine samples per case. The variant order is expression, fused, fused, expression, fused, expression, expression, fused; each pass runs normal, high-scale and mixed-scale suites. All compilation and correctness checks finish before timing. Every sample is retained, including a 30.89 ms expression-process median for the narrow integer-literal case whose other process medians are near 24 ms. All 50 SQL strings, output types, first values and NULL counts match across variants; plans select the fused function for the 46 Decimal cases and remain identical for the four DOUBLE controls.
+
+Separate counter runs cover five Decimal paths and one DOUBLE control, with two processes per variant/case in balanced order. The existing FIFO control excludes setup, planning and warmups. User instructions decrease by 51.8-83.3% on all five Decimal paths, while mean task-clock time decreases by 50.4-82.5%. The reduced work comes from the existing single-pass Rust calculation, which uses i128 when the scaled coefficient fits and i256 otherwise, avoiding the expression chain's intermediate arrays and ROUND operations. No Python runtime participates.
+
+The four DOUBLE controls have median changes of -3.0% to -0.3% and mean changes of -7.5% to -3.2%. Their physical plans are unchanged. The selected DOUBLE counter comparison has an instruction-count difference below 0.00001%, yet elapsed/CPU time decreases by about 10%. That timing variation is retained and is not attributed to Decimal arithmetic. This remains a single-machine experiment with unfixed CPU frequency and possible SMT/background interference.
+
+Both variants agree in all 798 SQL-corpus observations on exact ordered values/types or error stage. The subquery, ordering, context, LATERAL and nested/chained corpora match Spark in three processes per variant. The original ten Decimal differences and four live non-ANSI CAST differences remain. Thirteen expected ANSI overflow observations change diagnostic text: expression/ROUND reports its cast or precision check, while fused division reports its own result-precision check. Their complete messages are retained; other tested error messages are unchanged. The fused variant preserves all 798 complete parsed captures from the preceding candidate, including plans and errors.
+
+Each variant also passes all 4,064 exact-integer comparisons over 187,410 returned rows, preserves all 116 previous Delta observations with matching input data/schema, and passes all 18 adapter checks. All 3,816 timed executions and 848 warmups pass row/NULL checks. The default executables and initial scratch sources are restored, and the default probe matches all 168 prior observations. Host vendor sources, manifests and lockfiles remain unchanged.
+
+These measurements support the fused implementation over expression/ROUND for the tested execution paths. The candidate remains optional. Planning latency, the sorting/compensation work required by correlated queries, Delta I/O and concurrent queries were not timed, so this does not establish that every earlier performance concern is resolved.
+
+To reproduce, keep the four local DataFusion overrides: physical-plan, logical optimizer, physical optimizer and functions, with the patches described above applied on both sides. Build expression/ROUND from the base, high-scale and normalization arithmetic patches; build fused from the base and fused arithmetic patches instead. Keep both ROUND patches and the Sail alias patch in both builds. Save distinct release binaries and verify their physical plans before timing. Reuse `decimal_bench OUTPUT_JSON normal`, `high-scale` and `high-scale-mixed` in the recorded order, and the earlier FIFO counter command with the six selected case IDs in the artifact. Run the eight SQL corpora, exact-integer oracle and Delta checks before measuring.
 
 ## Reproduce
 
