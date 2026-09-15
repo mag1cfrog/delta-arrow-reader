@@ -575,13 +575,14 @@ async fn main() -> Result<()> {
             (10, 2, 2, true),
             (0, 2, 2, false),
         ],
+        Some("float") => vec![(0, 2, 2, false), (0, 2, 2, true)],
         Some("high-scale") => vec![(38, 35, 35, false), (38, 38, 38, false), (38, 38, 38, true)],
         Some("high-scale-35") => vec![(38, 35, 35, false)],
         // Scale 6 still needs the fallback after shifting; scale 7 just fits i256.
         Some("high-scale-mixed") => vec![(38, 6, 38, false), (38, 7, 38, false), (38, 6, 38, true)],
         Some(_) => {
             return Err(
-                "expected normal, high-scale, high-scale-35, high-scale-mixed, subqueries, subquery-check or casts"
+                "expected normal, float, high-scale, high-scale-35, high-scale-mixed, subqueries, subquery-check or casts"
                     .into(),
             );
         }
@@ -593,12 +594,21 @@ async fn main() -> Result<()> {
             "bench_input",
             Arc::new(input(precision, scale, divisor_scale, nulls)?),
         )?;
-        for divisor_kind in ["column", "typed_literal", "integer_literal"] {
+        for divisor_kind in [
+            "column",
+            "typed_literal",
+            "integer_literal",
+            "numerator_literal",
+        ] {
+            if divisor_kind == "numerator_literal" && precision != 0 {
+                continue;
+            }
             if divisor_kind == "integer_literal" && (nulls || precision == 0 || divisor_scale >= 35)
             {
                 continue;
             }
-            let scalar = divisor_kind != "column";
+            let numerator_scalar = divisor_kind == "numerator_literal";
+            let scalar = !matches!(divisor_kind, "column" | "numerator_literal");
             let denominator = if !scalar {
                 "b".to_owned()
             } else if divisor_kind == "integer_literal" {
@@ -610,9 +620,16 @@ async fn main() -> Result<()> {
             } else {
                 format!("CAST(3 AS DECIMAL({precision},{divisor_scale}))")
             };
-            let sql = format!("SELECT a / {denominator} AS quotient FROM bench_input");
+            let numerator = if numerator_scalar {
+                "CAST(3 AS DOUBLE)"
+            } else {
+                "a"
+            };
+            let sql = format!("SELECT {numerator} / {denominator} AS quotient FROM bench_input");
             let expected_nulls = (0..ROWS)
-                .filter(|i| nulls && (i % 10 == 9 || (!scalar && i % 13 == 12)))
+                .filter(|i| {
+                    nulls && ((!numerator_scalar && i % 10 == 9) || (!scalar && i % 13 == 12))
+                })
                 .count();
             for ansi in [true, false] {
                 let divisor_id = if scale == divisor_scale {
@@ -634,6 +651,39 @@ async fn main() -> Result<()> {
                     .map(|i| array_value_to_string(first.column(0).as_ref(), i))
                     .collect::<std::result::Result<Vec<_>, _>>()?;
                 drop(stream);
+                if precision == 0 {
+                    // Validate every float output outside the timed section.
+                    let mut stream = execute_stream(plan.clone(), ctx.task_ctx())?;
+                    let mut offset = 0;
+                    while let Some(batch) = stream.next().await {
+                        let batch = batch?;
+                        let output = batch
+                            .column(0)
+                            .as_any()
+                            .downcast_ref::<Float64Array>()
+                            .ok_or("expected Float64 quotient")?;
+                        for (row, actual) in output.iter().enumerate() {
+                            let i = offset + row;
+                            let a = if numerator_scalar {
+                                Some(3.0)
+                            } else if nulls && i % 10 == 9 {
+                                None
+                            } else {
+                                Some((i % 10000 + 2) as f64 / 100.0)
+                            };
+                            let b = if scalar {
+                                Some(3.0)
+                            } else if nulls && i % 13 == 12 {
+                                None
+                            } else {
+                                Some((i % 97 + 3) as f64 / 100.0)
+                            };
+                            assert_eq!(actual, a.zip(b).map(|(a, b)| a / b), "{id}, row {i}");
+                        }
+                        offset += batch.num_rows();
+                    }
+                    assert_eq!(offset, ROWS);
+                }
                 for _ in 0..WARMUPS {
                     assert_eq!(consume(&ctx, plan.clone()).await?, (ROWS, expected_nulls));
                 }

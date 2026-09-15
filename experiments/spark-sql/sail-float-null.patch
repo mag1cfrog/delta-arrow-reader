@@ -1,0 +1,199 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -690,6 +690,175 @@
+     }
+ }
+ 
++// Keep Arrow's vectorized float division, checking zero only on non-NULL rows.
++#[derive(Debug, PartialEq, Eq, Hash)]
++struct SparkCheckedDivide {
++    signature: datafusion_expr::Signature,
++}
++
++impl datafusion_expr::ScalarUDFImpl for SparkCheckedDivide {
++    fn name(&self) -> &str {
++        "spark_checked_divide"
++    }
++
++    fn signature(&self) -> &datafusion_expr::Signature {
++        &self.signature
++    }
++
++    fn return_type(&self, _arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
++        Ok(DataType::Float64)
++    }
++
++    fn simplify(
++        &self,
++        args: Vec<Expr>,
++        _info: &datafusion_expr::simplify::SimplifyContext,
++    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
++        use datafusion_expr::simplify::ExprSimplifyResult;
++        // Preserve the NULL propagation of the BinaryExpr this replaces, including
++        // the untyped NULL sentinel used while decorrelating empty aggregates.
++        if args
++            .iter()
++            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
++        {
++            return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::Float64(
++                None,
++            ))));
++        }
++        // A proven nonzero constant needs no runtime zero check. Keep the native
++        // expression so nullable arrays retain Arrow's vectorized scalar division.
++        if matches!(&args[1], Expr::Literal(ScalarValue::Float64(Some(b)), _) if *b != 0.0) {
++            let (left, right) = args.two()?;
++            return Ok(ExprSimplifyResult::Simplified(left / right));
++        }
++        Ok(ExprSimplifyResult::Original(args))
++    }
++
++    fn invoke_with_args(
++        &self,
++        input: datafusion_expr::ScalarFunctionArgs,
++    ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
++        use datafusion::arrow::array::{Array, AsArray, BooleanArray};
++        use datafusion::arrow::compute::kernels::numeric::div;
++        use datafusion::arrow::datatypes::Float64Type;
++        use datafusion::physical_expr_common::datum::apply;
++        let [left, right] = input.args.as_slice() else {
++            return datafusion_common::internal_err!("spark_checked_divide requires two arguments");
++        };
++        apply(left, right, |left, right| {
++            let (a, a_scalar) = left.get();
++            let (b, b_scalar) = right.get();
++            let a = a.as_primitive::<Float64Type>();
++            let b = b.as_primitive::<Float64Type>();
++            let has_zero = if b_scalar {
++                b.is_valid(0) && b.value(0) == 0.0 && a.null_count() != a.len()
++            } else if a_scalar {
++                a.is_valid(0) && BooleanArray::from_unary(b, |b| b == 0.0).has_true()
++            } else {
++                if a.len() != b.len() {
++                    return Err(ArrowError::ComputeError(
++                        "division array lengths differ".into(),
++                    ));
++                }
++                // from_binary combines both validity masks. The predicate uses
++                // IEEE equality so +0.0 and -0.0 both count as zero.
++                BooleanArray::from_binary(a, b, |_, b| b == 0.0).has_true()
++            };
++            if has_zero {
++                Err(ArrowError::DivideByZero)
++            } else {
++                div(left, right)
++            }
++        })
++    }
++}
++
++#[test]
++fn checked_divide_masks_and_scalar_positions() -> datafusion_common::Result<()> {
++    use datafusion::arrow::array::{AsArray, Float64Array};
++    use datafusion::arrow::datatypes::{Field, Float64Type};
++    use datafusion_common::config::ConfigOptions;
++    use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl};
++    let udf = SparkCheckedDivide {
++        signature: datafusion_expr::Signature::exact(
++            vec![DataType::Float64, DataType::Float64],
++            datafusion_expr::Volatility::Immutable,
++        ),
++    };
++    let run = |left, right, rows| {
++        udf.invoke_with_args(ScalarFunctionArgs {
++            args: vec![left, right],
++            arg_fields: vec![Arc::new(Field::new("arg", DataType::Float64, true)); 2],
++            number_rows: rows,
++            return_field: Arc::new(Field::new("r", DataType::Float64, true)),
++            config_options: Arc::new(ConfigOptions::default()),
++        })
++    };
++    let array = |v| ColumnarValue::Array(Arc::new(Float64Array::from(v)));
++    let scalar = |v| ColumnarValue::Scalar(ScalarValue::Float64(v));
++    for (a, b, expected) in [
++        (
++            array(vec![None, Some(2.0), Some(4.0)]),
++            array(vec![Some(0.0), None, Some(2.0)]),
++            vec![None, None, Some(2.0)],
++        ),
++        (
++            array(vec![None, Some(4.0)]),
++            scalar(Some(2.0)),
++            vec![None, Some(2.0)],
++        ),
++        (
++            scalar(Some(4.0)),
++            array(vec![None, Some(2.0)]),
++            vec![None, Some(2.0)],
++        ),
++        (
++            array(vec![None, None]),
++            scalar(Some(-0.0)),
++            vec![None, None],
++        ),
++        (
++            scalar(None),
++            array(vec![Some(-0.0), Some(0.0)]),
++            vec![None, None],
++        ),
++        (array(vec![]), scalar(Some(0.0)), vec![]),
++        (scalar(Some(4.0)), array(vec![]), vec![]),
++    ] {
++        let out = run(a, b, expected.len())?.into_array(expected.len())?;
++        assert_eq!(
++            out.as_primitive::<Float64Type>().iter().collect::<Vec<_>>(),
++            expected
++        );
++    }
++    assert!(matches!(
++        run(scalar(None), scalar(Some(0.0)), 1)?,
++        ColumnarValue::Scalar(ScalarValue::Float64(None))
++    ));
++    assert!(
++        matches!(run(scalar(Some(4.0)), scalar(Some(2.0)), 1)?, ColumnarValue::Scalar(ScalarValue::Float64(Some(v))) if v == 2.0)
++    );
++    for zero in [0.0, -0.0] {
++        for a in [0.0, 2.0, f64::NAN, f64::INFINITY] {
++            assert!(
++                run(scalar(Some(a)), scalar(Some(zero)), 1)
++                    .unwrap_err()
++                    .to_string()
++                    .contains("Divide by zero")
++            );
++            assert!(
++                run(
++                    array(vec![None, Some(a)]),
++                    array(vec![Some(zero), Some(zero)]),
++                    2
++                )
++                .is_err()
++            );
++        }
++    }
++    Ok(())
++}
++
+ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
+     let ScalarFunctionInput {
+         arguments,
+@@ -724,6 +893,19 @@
+             ansi: ansi_mode,
+         };
+         return Ok(ScalarUDF::from(udf).call(vec![dividend, divisor]));
++    }
++
++    if ansi_mode
++        && [&dividend_type, &divisor_type].iter().all(|t| {
++            t.as_ref().is_ok_and(|t| t.is_integer() || t.is_floating() || *t == DataType::Null)
++        })
++    {
++        return Ok(ScalarUDF::from(SparkCheckedDivide {
++            signature: datafusion_expr::Signature::exact(
++                vec![DataType::Float64, DataType::Float64],
++                datafusion_expr::Volatility::Immutable,
++            ),
++        }).call(vec![cast(dividend, DataType::Float64), cast(divisor, DataType::Float64)]));
+     }
+ 
+     // Apply runtime zero-divisor guard to the divisor before building the division expression.

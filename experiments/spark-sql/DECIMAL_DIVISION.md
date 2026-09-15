@@ -1282,6 +1282,72 @@ MALLOC_MMAP_THRESHOLD_=1048576 MALLOC_TRIM_THRESHOLD_=1048576 \
 
 Repeat with `before-bench` and `round_wide_ansifalse`; preserve the untouched default-allocator measurements as well.
 
+## ANSI floating division NULL and zero checks
+
+The optional [floating division patch](sail-float-null.patch) fixes the two remaining original NULL-mask failures. An INT or DOUBLE NULL numerator divided by a zero column now returns NULL; a non-NULL numerator still raises an ANSI divide-by-zero error. It also recognizes a negative-zero divisor. The [125-query corpus](float-null.jsonl) and [results](float-null-results.json) compare the patch with the reviewed optional candidate committed as `eb368ae`.
+
+The old divisor-only CASE checked zero before considering the numerator's NULL mask. Its floating equality check also missed `-0.0`. The replacement uses Arrow's [BooleanArray helpers](https://github.com/apache/arrow-rs/blob/58.4.0/arrow-array/src/array/boolean_array.rs) to combine validity masks and check IEEE zero equality, then calls Arrow's existing division through [DataFusion's scalar/array adapter](https://github.com/apache/datafusion/blob/54.1.0/datafusion/physical-expr-common/src/datum.rs). Both input masks matter. NULL rows do not raise an error, and both signs of zero raise an error on valid rows.
+
+The native UDF adapter replaces only ANSI division whose numeric/NULL operands resolve to Float64, including existing Decimal/float coercions. A proven nonzero constant divisor simplifies to native division during planning. The existing NULL-literal simplification is retained. Decimal/Decimal division, non-ANSI division, DIV and remainder retain their paths. This is local adapter code using installed Arrow 58.4.0 and DataFusion 54.1.0. It imports no further Sail code and adds no dependency, Python execution, arithmetic kernel or physical node. Only one runtime source file changes; the default vendor remains unchanged.
+
+The corpus extends the original failure across six numeric types, independent NULL masks, batch sizes, scalar positions, empty results, windows, mixed Decimal/float inputs, positive and negative zero, Infinity and NaN. It also reuses the earlier NULL-order and analyzer queries with Decimal operands changed to DOUBLE, removing duplicate SQL. These are locally designed comparisons against Spark 4.2.0, not an upstream CI list.
+
+| Value/type or error-stage agreement | Parent | Candidate |
+| --- | ---: | ---: |
+| Existing numeric SQL corpora | 2220/2246 | 2222/2246 |
+| New floating division corpus | 160/250 | 181/250 |
+| Combined | 2380/2496 | 2403/2496 |
+
+No previously agreeing observation regresses. The original corpus is now 164/168: its four remaining differences concern string peers and other Decimal operators. The prior ROUND corpus retains 20 differences. The new corpus retains 69 differences: 31 with ANSI enabled and 38 disabled, including non-ANSI negative zero, string-to-double conversion and NULL/subquery evaluation order. Four additional new-corpus agreements have the wrong error cause: Spark reports an invalid CAST, while the candidate rejects an unaggregated correlated scalar subquery. Those four causes already differed in the parent. The previous ROUND same-stage cause difference also remains.
+
+The numeric comparator checks ordered values, numeric types and coarse error stage; it does not cover complete schema metadata or structured error conditions. Focused checks verify 56 new error causes and two signed-zero outputs, and preserve all 91 prior error-cause and signed-zero checks. The native test covers scalar/array combinations, independent masks, empty arrays, both zero signs and nonfinite numerators. All four Delta lifecycle tests and 4064 exact-integer comparisons over 187410 rows pass. All 116 Delta observations match the parent, including names, nullability and metadata; the 18 adapter checks and 19 specified value/name seeds pass.
+
+The first implementation used Arrow's checked scalar division through DataFusion's `calculate_binary_math`. It passed the correctness checks but caused local execution regressions of up to 82.85%: a checked loop prevented the existing vectorized constant-division path. Its source adapter, comparison checks, timing samples and counters are retained in the results. The final patch uses Arrow's bitmap check and ordinary vectorized division, and removes the check entirely for a proven nonzero constant.
+
+Both benchmark variants use the same expanded harness. Twelve float cases validate every one of their 1048576 outputs outside timing. All 30 existing subquery cases also pass full-value checks. Timing covers the 12 float cases and four existing Decimal/non-division controls, with four balanced processes per variant on CPU 2, one partition, batch size 8192, two warmups and nine samples. Separate FIFO-controlled counters cover eight float execution cases and four controls in both planning and execution, with two processes per variant and no multiplexing. Builds and correctness checks finish before timing.
+
+| ANSI float expression | NULL inputs | Parent / candidate execution (ms) | Time change | Instruction change |
+| --- | --- | ---: | ---: | ---: |
+| a / b | No | 1.074 / 0.987 | -8.09% | -15.42% |
+| a / b | Yes | 1.106 / 1.021 | -7.71% | -12.85% |
+| 3 / b | No | 1.004 / 0.894 | -10.92% | -15.93% |
+| 3 / b | Yes | 1.020 / 0.917 | -10.14% | -15.42% |
+| a / 3 | No | 0.622 / 0.623 | +0.12% | -0.05% |
+| a / 3 | Yes | 0.619 / 0.622 | +0.44% | -0.02% |
+
+Non-ANSI float execution medians move between -0.08% and +0.77%. The non-division, plain Decimal and correlated Decimal controls move by +0.63%, +0.35% and +0.87%, with execution instructions changing by at most 0.0063%. The four controls' planning instruction changes are between -0.007% and +0.005%. Float planning is not separately timed. These measurements do not establish zero overhead for every query or remove earlier planning costs.
+
+The unchanged ordinary ROUND control shows the allocator sensitivity recorded in the preceding section. Its default-allocator pooled median changes from 11.933 to 14.547 ms (+21.91%), with samples clustered near 9 and 14.6 ms. Fixing both allocation thresholds at 1048576 bytes for diagnostic child processes gives 8.955 / 8.962 ms (+0.08%), effectively unchanged instructions, -0.20% cycles and 64 page faults in each measured counter interval. The intervention supports allocator sensitivity, rather than establishing a stable ROUND kernel slowdown. All default measurements remain in the artifact. Production allocator settings are untouched, CPU frequency is not fixed and the host is not isolated.
+
+To reproduce, prepare the reviewed optional candidate through `sail-decimal-round-types.patch`, keeping the current benchmark source identical in both variants. Reuse the preceding sections' dependency overrides and environment variables:
+
+```sh
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/before-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/before-bench"
+git apply --check experiments/spark-sql/sail-float-null.patch
+git apply experiments/spark-sql/sail-float-null.patch
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-plan --lib checked_divide_masks_and_scalar_positions
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark "$run_dir/spark-float.json" \
+  --cases experiments/spark-sql/float-null.jsonl
+"$run_dir/after-probe" experiments/spark-sql/float-null.jsonl \
+  "$run_dir/after-float.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-float.json" "$run_dir/after-float.json" \
+  --cases experiments/spark-sql/float-null.jsonl --report "$run_dir/float-check.json"
+taskset -c 2 "$run_dir/after-bench" "$run_dir/float-bench.json" float
+```
+
+The comparison command intentionally exits 1 for the 69 recorded differences; run the benchmark separately or continue after inspecting that report. Repeat benchmark calls with `before-bench` in a balanced order. The `float` suite checks every output before timing. The artifact records all SQL, observations, plans, source hashes, timing samples, counters and the ROUND allocator diagnostic.
+
+The final patch applies and reverses exactly. All 23 saved scratch paths and the saved default executables are restored; all 168 default observations, including complete errors and plans, match the parent checkpoint. The modified Sail package build caches are invalidated. The restored default benchmark is the saved 26-case executable; the two measured candidates use the same current expanded harness.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

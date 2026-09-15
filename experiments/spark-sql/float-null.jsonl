@@ -1,0 +1,125 @@
+{"id": "tinyint_masked_batch1", "sql": "SELECT CAST(a AS TINYINT) / CAST(b AS TINYINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "tinyint_masked_batch3", "sql": "SELECT CAST(a AS TINYINT) / CAST(b AS TINYINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "tinyint_live_zero_batch1", "sql": "SELECT CAST(a AS TINYINT) / CAST(b AS TINYINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "tinyint_live_zero_batch3", "sql": "SELECT CAST(a AS TINYINT) / CAST(b AS TINYINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "smallint_masked_batch1", "sql": "SELECT CAST(a AS SMALLINT) / CAST(b AS SMALLINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "smallint_masked_batch3", "sql": "SELECT CAST(a AS SMALLINT) / CAST(b AS SMALLINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "smallint_live_zero_batch1", "sql": "SELECT CAST(a AS SMALLINT) / CAST(b AS SMALLINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "smallint_live_zero_batch3", "sql": "SELECT CAST(a AS SMALLINT) / CAST(b AS SMALLINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "int_masked_batch1", "sql": "SELECT CAST(a AS INT) / CAST(b AS INT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "int_masked_batch3", "sql": "SELECT CAST(a AS INT) / CAST(b AS INT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "int_live_zero_batch1", "sql": "SELECT CAST(a AS INT) / CAST(b AS INT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "int_live_zero_batch3", "sql": "SELECT CAST(a AS INT) / CAST(b AS INT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "bigint_masked_batch1", "sql": "SELECT CAST(a AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "bigint_masked_batch3", "sql": "SELECT CAST(a AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "bigint_live_zero_batch1", "sql": "SELECT CAST(a AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "bigint_live_zero_batch3", "sql": "SELECT CAST(a AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_masked_batch1", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_masked_batch3", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_live_zero_batch1", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_live_zero_batch3", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_masked_batch1", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_masked_batch3", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,NULL,'2'),(3,'2',NULL),(4,'-2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_live_zero_batch1", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_live_zero_batch3", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'0'),(1,'2','3'),(2,'2','0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "array_scalar", "sql": "SELECT CAST(a AS DOUBLE) / CAST(3 AS DOUBLE) AS r FROM VALUES (0,NULL),(1,2),(2,-2) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "scalar_array", "sql": "SELECT CAST(2 AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL),(1,3),(2,-3) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "array_null_scalar_zero", "sql": "SELECT CAST(a AS DOUBLE) / CAST(0 AS DOUBLE) AS r FROM VALUES (0,CAST(NULL AS INT)),(1,CAST(NULL AS INT)) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "array_live_scalar_zero", "sql": "SELECT CAST(a AS DOUBLE) / CAST(0 AS DOUBLE) AS r FROM VALUES (0,NULL),(1,2) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "null_scalar_array", "sql": "SELECT CAST(NULL AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,0),(1,2) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "scalar_live_array_zero", "sql": "SELECT CAST(2 AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL),(1,0) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "null_window", "sql": "SELECT CAST(SUM(a) OVER () AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,CAST(NULL AS INT),0),(1,CAST(NULL AS INT),2) t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "filtered_zero", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,0),(1,2,0),(2,2,3) t(id,a,b) WHERE b<>0 ORDER BY id", "batch_size": 3}
+{"id": "empty_filter", "sql": "SELECT CAST(a AS DOUBLE) / CAST(0 AS DOUBLE) AS r FROM VALUES (1) t(a) WHERE false", "batch_size": 3}
+{"id": "empty_limit", "sql": "SELECT CAST(a AS DOUBLE) / CAST(0 AS DOUBLE) AS r FROM VALUES (1) t(a) LIMIT 0", "batch_size": 3}
+{"id": "decimal_double", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,0),(1,2,3) t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_decimal", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES (0,NULL,0),(1,2,3) t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "zero_NULL_0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES (NULL,'0') t(a,b)", "batch_size": 3}
+{"id": "zero_NULL_-0.0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES (NULL,'-0.0') t(a,b)", "batch_size": 3}
+{"id": "zero_2_0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES ('2','0') t(a,b)", "batch_size": 3}
+{"id": "zero_2_-0.0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b)", "batch_size": 3}
+{"id": "zero_NaN_0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES ('NaN','0') t(a,b)", "batch_size": 3}
+{"id": "zero_NaN_-0.0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES ('NaN','-0.0') t(a,b)", "batch_size": 3}
+{"id": "zero_Infinity_0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES ('Infinity','0') t(a,b)", "batch_size": 3}
+{"id": "zero_Infinity_-0.0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES ('Infinity','-0.0') t(a,b)", "batch_size": 3}
+{"id": "zero_-Infinity_0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES ('-Infinity','0') t(a,b)", "batch_size": 3}
+{"id": "zero_-Infinity_-0.0", "sql": "SELECT CAST(a AS DOUBLE)/CAST(b AS DOUBLE) AS r FROM VALUES ('-Infinity','-0.0') t(a,b)", "batch_size": 3}
+{"id": "dead_case", "sql": "SELECT CASE WHEN false THEN CAST(2 AS DOUBLE)/0 ELSE CAST(1 AS DOUBLE) END AS r", "batch_size": 3}
+{"id": "dead_if", "sql": "SELECT IF(true,CAST(1 AS DOUBLE),CAST(2 AS DOUBLE)/0) AS r", "batch_size": 3}
+{"id": "null_bad_cast", "sql": "SELECT CAST(NULL AS DOUBLE)/CAST('bad' AS DOUBLE) AS r", "batch_size": 3}
+{"id": "bad_cast_null", "sql": "SELECT CAST('bad' AS DOUBLE)/CAST(NULL AS DOUBLE) AS r", "batch_size": 3}
+{"id": "negative_zero", "sql": "SELECT (CAST('-0.0' AS DOUBLE)/CAST(2 AS DOUBLE)) AS r", "batch_size": 3}
+{"id": "infinity_control", "sql": "SELECT CAST('Infinity' AS DOUBLE)/CAST(2 AS DOUBLE) AS r", "batch_size": 3}
+{"id": "nan_control", "sql": "SELECT CAST(isnan(CAST('NaN' AS DOUBLE)/CAST(2 AS DOUBLE)) AS INT) AS r", "batch_size": 3}
+{"id": "decimal-null-order_values_bad_many_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES ('4'),('bad') u(x)) AS r", "batch_size": 1}
+{"id": "decimal-null-order_values_bad_many_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES ('4'),('bad') u(x)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_values_bad_empty_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES ('bad') u(x) WHERE false) AS r", "batch_size": 1}
+{"id": "decimal-null-order_values_bad_empty_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES ('bad') u(x) WHERE false) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_values_bad_limit0_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES ('bad') u(x) LIMIT 0) AS r", "batch_size": 1}
+{"id": "decimal-null-order_values_bad_limit0_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES ('bad') u(x) LIMIT 0) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_many_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(id AS DOUBLE) FROM range(2)) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_many_right", "sql": "SELECT (SELECT CAST(id AS DOUBLE) FROM range(2)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_bad_column_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(concat('bad', CAST(id AS STRING)) AS DOUBLE) FROM range(2)) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_bad_column_right", "sql": "SELECT (SELECT CAST(concat('bad', CAST(id AS STRING)) AS DOUBLE) FROM range(2)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_bad_literal_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST('bad' AS DOUBLE) FROM range(2)) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_bad_literal_right", "sql": "SELECT (SELECT CAST('bad' AS DOUBLE) FROM range(2)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_divide0_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(4 AS DOUBLE) / CAST(id AS DOUBLE) FROM range(2)) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_divide0_right", "sql": "SELECT (SELECT CAST(4 AS DOUBLE) / CAST(id AS DOUBLE) FROM range(2)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_values_nested_bad_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST((SELECT x FROM VALUES ('bad') u(x)) AS DOUBLE)) AS r", "batch_size": 1}
+{"id": "decimal-null-order_values_nested_bad_right", "sql": "SELECT (SELECT CAST((SELECT x FROM VALUES ('bad') u(x)) AS DOUBLE)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_literal_bad_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST('bad' AS DOUBLE)) AS r", "batch_size": 1}
+{"id": "decimal-null-order_literal_bad_right", "sql": "SELECT (SELECT CAST('bad' AS DOUBLE)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_literal_div0_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(4 AS DOUBLE) / CAST(0 AS DOUBLE)) AS r", "batch_size": 1}
+{"id": "decimal-null-order_literal_div0_right", "sql": "SELECT (SELECT CAST(4 AS DOUBLE) / CAST(0 AS DOUBLE)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 1}
+{"id": "decimal-null-order_range_correlated_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(id AS DOUBLE) FROM range(4) WHERE id >= o.k) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "decimal-null-order_range_correlated_right", "sql": "SELECT (SELECT CAST(id AS DOUBLE) FROM range(4) WHERE id >= o.k) / CAST(NULL AS DOUBLE) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "decimal-null-order_values_correlated_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'5') i(k,x) WHERE i.k >= o.k) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "decimal-null-order_values_correlated_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'5') i(k,x) WHERE i.k >= o.k) / CAST(NULL AS DOUBLE) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "decimal-null-order_values_correlated_bad_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k >= o.k) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "decimal-null-order_values_correlated_bad_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k >= o.k) / CAST(NULL AS DOUBLE) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "decimal-null-analyzer_literal_cast_empty_values_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) u(k) WHERE false) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_literal_cast_empty_values_right", "sql": "SELECT (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) u(k) WHERE false) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_literal_cast_empty_range_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST('bad' AS DOUBLE) FROM range(2) WHERE false) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_literal_cast_empty_range_right", "sql": "SELECT (SELECT CAST('bad' AS DOUBLE) FROM range(2) WHERE false) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_literal_cast_empty_sort_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) u(k) WHERE false ORDER BY k) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_literal_cast_empty_sort_right", "sql": "SELECT (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) u(k) WHERE false ORDER BY k) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_local_dead_case_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CASE WHEN k=1 THEN CAST('bad' AS DOUBLE) ELSE CAST(4 AS DOUBLE) END FROM VALUES (0),(0) u(k)) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_local_dead_case_right", "sql": "SELECT (SELECT CASE WHEN k=1 THEN CAST('bad' AS DOUBLE) ELSE CAST(4 AS DOUBLE) END FROM VALUES (0),(0) u(k)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_local_live_case_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CASE WHEN k=1 THEN CAST('bad' AS DOUBLE) ELSE CAST(4 AS DOUBLE) END FROM VALUES (0),(1) u(k)) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_local_live_case_right", "sql": "SELECT (SELECT CASE WHEN k=1 THEN CAST('bad' AS DOUBLE) ELSE CAST(4 AS DOUBLE) END FROM VALUES (0),(1) u(k)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_runtime_case_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CASE WHEN id=1 THEN CAST('bad' AS DOUBLE) ELSE CAST(4 AS DOUBLE) END FROM range(2)) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_runtime_case_right", "sql": "SELECT (SELECT CASE WHEN id=1 THEN CAST('bad' AS DOUBLE) ELSE CAST(4 AS DOUBLE) END FROM range(2)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_limit1_hidden_bad_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES ('4'),('bad') u(x) LIMIT 1) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_limit1_hidden_bad_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES ('4'),('bad') u(x) LIMIT 1) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_local_bad_filtered_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES ('4'),('bad') u(x) WHERE x <> 'bad') AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_local_bad_filtered_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES ('4'),('bad') u(x) WHERE x <> 'bad') / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_correlated_bad_filtered_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k>=o.k AND x <> 'bad') AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 4}
+{"id": "decimal-null-analyzer_correlated_bad_filtered_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k>=o.k AND x <> 'bad') / CAST(NULL AS DOUBLE) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 4}
+{"id": "decimal-null-analyzer_correlated_false_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k>=o.k AND false) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 4}
+{"id": "decimal-null-analyzer_correlated_false_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k>=o.k AND false) / CAST(NULL AS DOUBLE) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 4}
+{"id": "decimal-null-analyzer_correlated_or_bad_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k>=o.k OR x='bad') AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 4}
+{"id": "decimal-null-analyzer_correlated_or_bad_right", "sql": "SELECT (SELECT CAST(x AS DOUBLE) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k>=o.k OR x='bad') / CAST(NULL AS DOUBLE) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 4}
+{"id": "decimal-null-analyzer_correlated_case_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CASE WHEN o.k=1 THEN CAST(x AS DOUBLE) ELSE CAST(4 AS DOUBLE) END FROM VALUES ('bad') i(x)) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 4}
+{"id": "decimal-null-analyzer_correlated_case_right", "sql": "SELECT (SELECT CASE WHEN o.k=1 THEN CAST(x AS DOUBLE) ELSE CAST(4 AS DOUBLE) END FROM VALUES ('bad') i(x)) / CAST(NULL AS DOUBLE) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 4}
+{"id": "decimal-null-analyzer_nested_null_bad_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES ('bad') i(x))) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_nested_null_bad_right", "sql": "SELECT (SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(x AS DOUBLE) FROM VALUES ('bad') i(x))) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_literal_cast_empty_union_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST('bad' AS DOUBLE) FROM (SELECT 1 AS k WHERE false UNION ALL SELECT 2 AS k WHERE false) u) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_literal_cast_empty_union_right", "sql": "SELECT (SELECT CAST('bad' AS DOUBLE) FROM (SELECT 1 AS k WHERE false UNION ALL SELECT 2 AS k WHERE false) u) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_sort_bad_literal_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(id AS DOUBLE) FROM range(2) ORDER BY CAST('bad' AS DOUBLE)) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_sort_bad_literal_right", "sql": "SELECT (SELECT CAST(id AS DOUBLE) FROM range(2) ORDER BY CAST('bad' AS DOUBLE)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_safe_try_cast_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT TRY_CAST(x AS DOUBLE) FROM VALUES ('bad'),('4') u(x)) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_safe_try_cast_right", "sql": "SELECT (SELECT TRY_CAST(x AS DOUBLE) FROM VALUES ('bad'),('4') u(x)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_dead_filter_cast_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(k AS DOUBLE) FROM VALUES (1),(2) u(k) WHERE false AND CAST('bad' AS INT)=1) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_dead_filter_cast_right", "sql": "SELECT (SELECT CAST(k AS DOUBLE) FROM VALUES (1),(2) u(k) WHERE false AND CAST('bad' AS INT)=1) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_no_from_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(1 AS DOUBLE), 2) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_no_from_right", "sql": "SELECT (SELECT CAST(1 AS DOUBLE), 2) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_values_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(a AS DOUBLE), b FROM VALUES (1,2),(3,4) AS t(a,b)) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_values_right", "sql": "SELECT (SELECT CAST(a AS DOUBLE), b FROM VALUES (1,2),(3,4) AS t(a,b)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_range_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST(id AS DOUBLE), id FROM range(2)) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_range_right", "sql": "SELECT (SELECT CAST(id AS DOUBLE), id FROM range(2)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_nested_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT (SELECT CAST(1 AS DOUBLE), 2)) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_nested_right", "sql": "SELECT (SELECT (SELECT CAST(1 AS DOUBLE), 2)) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_bad_cast_left", "sql": "SELECT CAST(NULL AS DOUBLE) / (SELECT CAST('bad' AS DOUBLE), 2) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_bad_cast_right", "sql": "SELECT (SELECT CAST('bad' AS DOUBLE), 2) / CAST(NULL AS DOUBLE) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_live_scalar", "sql": "SELECT (SELECT CAST(1 AS DOUBLE), 2) AS r", "batch_size": 4}
+{"id": "decimal-null-analyzer_width_live_divide", "sql": "SELECT CAST(1 AS DOUBLE) / (SELECT CAST(1 AS DOUBLE), 2) AS r", "batch_size": 4}
