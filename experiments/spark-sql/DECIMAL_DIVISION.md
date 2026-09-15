@@ -494,6 +494,40 @@ datafusion-functions = { path = "/absolute/path/to/datafusion-functions" }
 
 Build and save the before binaries with the original `round.rs`. Apply `datafusion-round-decimal256.patch`, then `datafusion-round-remainder.patch`, to that functions copy and build the after binaries with the same configuration and lockfile. Run the existing ROUND unit test, Decimal corpora, integer oracle and Delta checks before timing. Use the `normal`, `high-scale` and `high-scale-mixed` suites with the four-process-per-variant schedule recorded in the artifact. The preceding section's counter command also applies; the artifact records the four initially selected case IDs and the separate narrow follow-up. These measurements evaluate the two ROUND patches together and do not separately estimate their contributions on this candidate.
 
+## Fused division and nested subquery planning
+
+[datafusion-subquery-null.patch](datafusion-subquery-null.patch) fixes the fused prototype's four `ScalarSubquery` planning failures. This optional DataFusion 54.1.0 patch adds seven lines of implementation/documentation and a 26-line regression test. The existing fused arithmetic and filter/projection patches are reused unchanged.
+
+During decorrelation, DataFusion computes what an aggregate projection should return for an empty group. A left join supplies NULL for missing groups, but COUNT needs 0, and COALESCE can also require compensation. The shared `evaluates_to_null` helper tries to execute that empty-group expression using a dummy batch. If a nested scalar subquery survives simplification, physical expression creation fails because the evaluator has no subquery execution context. The fused UDF exposes this path even with MAX; the expression/ROUND control also fails for COUNT and COALESCE in the additional corpus.
+
+The fix reuses `Expr::contains_scalar_subquery`. When a scalar subquery remains, the helper returns false, meaning it cannot establish an always-NULL result. Its scalar-subquery and lateral-join callers then retain their existing runtime compensation expression. Returning true would incorrectly discard non-NULL empty-group results. This adds a planning-time check; affected queries can execute an additional CASE expression. Its performance has not been measured here.
+
+The direct regression fails on the original helper with the same error and passes with the guard. Four selected utility tests and all 21 scalar-subquery optimizer tests pass. The attempted lateral unit-test filter selects no tests; the SQL corpus below exercises that caller. The [capture](decimal-subquery-checks.json) records the remaining checks:
+
+| Check | Result |
+| --- | --- |
+| Original/high-scale/filter corpora | All 602 parsed observations identical before/after, including plans and errors; Spark agreement remains 158/168, 314/314 and 116/120 |
+| Exact-integer oracle | 4,064/4,064 comparisons; 187,410 returned rows |
+| Delta corpus | All 116 observations preserved, matching input data/schema; 18 adapter checks pass |
+| Context corpus, five processes | All four formerly failing observations execute in every process; strict ordered agreement is 25, 27, 24, 25 and 25 out of 28 |
+| Additional subquery corpus | Unsupported `ScalarSubquery` errors decrease from 50/54 to 0/54; strict Spark agreement is 30/54 |
+
+The context differences are 14 occurrences of the previously recorded missing ORDER BY behavior. Types and exact row multisets match in every run. Unordered equality is diagnostic, not a passing SQL result.
+
+The new [27-query corpus](decimal-subquery.jsonl) covers both ANSI modes, operand positions, scales 2/38, batch sizes 1/4, NULL and missing groups, COUNT, COALESCE, HAVING, empty/multirow scalar subqueries, zero divisors, result overflow and LATERAL. After the guard, 35 observations return matching types and exact row multisets, 11 raise the expected divide-by-zero, overflow or scalar-cardinality error, and eight LATERAL observations still fail. Sixteen successful executions have incorrect row order, giving the strict 30/54 result. The concrete runtime error categories were checked separately from the comparator's error-stage count.
+
+The eight LATERAL failures now report a missing `__always_true` compensation field. The expression/ROUND control also fails all eight, although its MAX cases reach a different field-resolution error. Its 25 successful observations retain their types and exact row multisets with the guarded fused candidate. Ordering and LATERAL field handling remain separate follow-ups. This slice establishes the narrower planning fix; the fused prototype remains optional pending those boundaries and a fresh performance comparison.
+
+To reproduce, apply the base arithmetic and fused patches in a scratch checkout. Keep the filter/projection override and add a local copy of the locked `datafusion-optimizer` 54.1.0 with the new patch applied:
+
+```toml
+[patch.crates-io]
+datafusion-physical-plan = { path = "/absolute/path/to/filter-patched-datafusion-physical-plan" }
+datafusion-optimizer = { path = "/absolute/path/to/subquery-patched-datafusion-optimizer" }
+```
+
+Build `decimal_probe` with that Cargo configuration using the existing release commands. Run the existing Spark capture/comparison commands with `--cases experiments/spark-sql/decimal-subquery.jsonl`, and pass that JSONL to the candidate probe with `--physical-plans`. Also rerun the unchanged context corpus. The comparisons intentionally exit nonzero for the documented ordering/LATERAL differences. Run the direct regression with `cargo test --release --lib utils::tests::evaluates_to_null_with_scalar_subquery` in the patched optimizer crate.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

@@ -1,0 +1,54 @@
+diff --git a/src/utils.rs b/src/utils.rs
+--- a/src/utils.rs
++++ b/src/utils.rs
+@@ -143,10 +143,17 @@
+ /// `c0 + 8` return true
+ /// `c0 IS NULL` return false
+ /// `CASE WHEN c0 > 1 then 0 else 1` return false
++/// Returns false if a scalar subquery prevents evaluation at optimization time.
+ pub fn evaluates_to_null<'a>(
+     predicate: Expr,
+     null_columns: impl IntoIterator<Item = &'a Column>,
+ ) -> Result<bool> {
++    // Scalar subqueries need runtime context that this evaluator does not have.
++    // Keep the caller's compensation expression instead of trying to execute it.
++    if predicate.contains_scalar_subquery() {
++        return Ok(false);
++    }
++
+     if matches!(predicate, Expr::Column(_)) {
+         return Ok(true);
+     }
+@@ -197,6 +204,32 @@
+     use datafusion_expr::{Operator, binary_expr, case, col, in_list, is_null, lit};
+ 
+     #[test]
++    fn evaluates_to_null_with_scalar_subquery() -> Result<()> {
++        use datafusion_expr::{LogicalPlanBuilder, scalar_subquery};
++
++        let subquery = scalar_subquery(Arc::new(
++            LogicalPlanBuilder::empty(true)
++                .project([lit(7_i64)])?
++                .build()?,
++        ));
++        let column = Column::from_name("a");
++        for expr in [
++            subquery.clone(),
++            col("a") + subquery.clone(),
++            case(col("a").is_null())
++                .when(lit(true), subquery)
++                .otherwise(lit(0_i64))?,
++        ] {
++            // Unknown at optimization time: retain runtime compensation.
++            assert!(!evaluates_to_null(expr, [&column])?);
++        }
++        assert!(evaluates_to_null(lit(ScalarValue::Int64(None)), [])?);
++        assert!(!evaluates_to_null(lit(0_i64), [])?);
++        assert!(evaluates_to_null(col("a"), [&column])?);
++        Ok(())
++    }
++
++    #[test]
+     fn expr_is_restrict_null_predicate() -> Result<()> {
+         let test_cases = vec![
+             // a
