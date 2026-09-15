@@ -639,9 +639,64 @@ Both variants agree in all 798 SQL-corpus observations on exact ordered values/t
 
 Each variant also passes all 4,064 exact-integer comparisons over 187,410 returned rows, preserves all 116 previous Delta observations with matching input data/schema, and passes all 18 adapter checks. All 3,816 timed executions and 848 warmups pass row/NULL checks. The default executables and initial scratch sources are restored, and the default probe matches all 168 prior observations. Host vendor sources, manifests and lockfiles remain unchanged.
 
-These measurements support the fused implementation over expression/ROUND for the tested execution paths. The candidate remains optional. Planning latency, the sorting/compensation work required by correlated queries, Delta I/O and concurrent queries were not timed, so this does not establish that every earlier performance concern is resolved.
+These measurements support the fused implementation over expression/ROUND for the tested execution paths. The candidate remains optional. This projection comparison did not time planning, correlated-query sorting/compensation, Delta I/O or concurrent queries. The following section measures planning and subquery execution.
 
 To reproduce, keep the four local DataFusion overrides: physical-plan, logical optimizer, physical optimizer and functions, with the patches described above applied on both sides. Build expression/ROUND from the base, high-scale and normalization arithmetic patches; build fused from the base and fused arithmetic patches instead. Keep both ROUND patches and the Sail alias patch in both builds. Save distinct release binaries and verify their physical plans before timing. Reuse `decimal_bench OUTPUT_JSON normal`, `high-scale` and `high-scale-mixed` in the recorded order, and the earlier FIFO counter command with the six selected case IDs in the artifact. Run the eight SQL corpora, exact-integer oracle and Delta checks before measuring.
+
+## Subquery planning and execution
+
+The subquery comparison finds a remaining local regression. Fused division reduces execution medians in 16 of the 18 Decimal cases by 4.4-82.6%, but correlated MAX is 10.2-11.9% slower. Both variants return the correct values, NULLs and row order in all 20 cases, including two controls without division. The [complete samples, plans and counters](decimal-subquery-performance.json) record this follow-up to `a5080f1`.
+
+Both corrected builds reuse the arithmetic and dependency sources from the preceding comparison. The third build, `legacy`, keeps fused arithmetic and the ROUND/filter optimizations but omits the four subquery NULL, ordering and LATERAL repairs. It uses the same dependency versions and paths. Its eight valid observations, including physical plans, exactly match corrected fused. Two other cases lose ORDER BY, and ten fail planning. Those twelve invalid cases are excluded from before/after performance comparisons.
+
+The benchmark adds `subqueries` and validation-only `subquery-check` modes to the existing example. The fixture contains 1,048,576 permuted outer rows and 511 inner rows, with one partition and batch size 8,192. Half the outer keys have no inner group; every eighth inner group contains only NULL MAX inputs. COUNT values vary by key, chained LATERAL depends on the preceding COUNT, and LEFT LATERAL filters on the aggregate result. Each corrected variant checks all 20,971,520 output coefficients and NULLs against integer expectations before measurement. Sorted cases check their required sequence; projection controls check the deterministic input sequence. All outputs have type `Decimal128(38,6)`.
+
+Planning timing includes SQL parsing, Sail resolution and DataFusion logical/physical optimization in a session whose tables are already registered. Execution timing includes complete stream consumption, scalar subqueries, join build/probe, compensation and sorting. Each execution receives a newly constructed physical plan: reusing a plan would retain scalar-subquery results and hash-join build state. The benchmark times nine plan constructions, then executes those nine plans once each, retaining them until execution counters stop. Table setup and plan destruction are excluded. These separately measured phases are not an end-to-end latency measurement.
+
+The table gives pooled medians in milliseconds, with expression/ROUND first and fused second. All rows use ANSI mode; the artifact also includes ANSI off.
+
+| Query shape | Planning expression / fused ms | Execution expression / fused ms | Execution change |
+| --- | ---: | ---: | ---: |
+| No division | 0.356 / 0.347 | 4.74 / 4.70 | -0.8% |
+| Plain division projection | 0.522 / 0.417 | 96.83 / 16.89 | -82.6% |
+| Plain division with ORDER BY | 0.659 / 0.531 | 141.72 / 73.80 | -47.9% |
+| Scalar-subquery divisor | 0.790 / 0.626 | 75.24 / 16.76 | -77.7% |
+| Scalar-subquery divisor with ORDER BY | 0.906 / 0.750 | 139.55 / 73.44 | -47.4% |
+| Correlated MAX | 1.420 / 1.799 | 72.10 / 79.47 | +10.2% |
+| Correlated COUNT | 1.835 / 1.582 | 78.58 / 73.85 | -6.0% |
+| Nested LATERAL | 2.060 / 1.825 | 147.97 / 91.92 | -37.9% |
+| Chained LATERAL | 2.673 / 2.442 | 160.95 / 96.26 | -40.2% |
+| LEFT LATERAL with ON condition | 2.243 / 2.008 | 119.93 / 94.39 | -21.3% |
+
+The same 16 Decimal cases have lower execution means and planning medians. Correlated MAX also regresses with ANSI off: execution goes from 71.29 to 79.76 ms, and planning from 1.546 to 1.794 ms. Across both modes, its planning medians increase by 16.0-26.7%, or 0.25-0.38 ms. This query divides the aggregate inside the correlated subquery:
+
+```sql
+SELECT CAST((
+  SELECT max(i.x) / (SELECT min(d) FROM bench_inner)
+  FROM bench_inner i WHERE i.k = o.k
+) AS DECIMAL(38,6)) AS r
+FROM bench_outer o ORDER BY o.id
+```
+
+The expression plan divides the 256 aggregate groups, then joins them to the outer rows. Fused also divides those groups, but its plan retains `__always_true` and a compensation CASE after the join. The empty-group branch calls `fused_decimal_divide(NULL, scalar_subquery(...))`. The conservative NULL guard prevents an unsupported evaluation during planning; the fused function has no simplification that lets the optimizer remove this branch. Consequently, the plan carries an extra marker and evaluates a CASE across the outer result. Separate follow-up counters confirm 18.9% more execution instructions and 18.6-26.2% more planning instructions. Execution task-clock increases by 14.8-15.6% in those selected-case runs. The additional plan work is consistent with the regression; these counters do not isolate the cost of each operator.
+
+Three valid legacy/fused controls test whether the repairs add work to unaffected queries. Their complete physical plans and validated results are identical. Changes below are means from two counter processes per variant, with planning and execution counted separately.
+
+| Control | Planning instructions | Planning elapsed time | Execution instructions | Execution elapsed time |
+| --- | ---: | ---: | ---: | ---: |
+| No division | +0.0051% | -5.15% | +0.0002% | +1.73% |
+| Plain division with ORDER BY | -0.0008% | +1.57% | -0.0015% | +0.21% |
+| Scalar-subquery divisor | +0.0657% | -1.07% | -0.0036% | +1.68% |
+
+These controls show nearly unchanged instruction counts, with small elapsed-time changes. They do not establish zero overhead for every query. Separate expression/fused execution counters show 38.6% and 38.5% fewer instructions for nested and chained LATERAL, respectively. Correlated COUNT improves by only 0.22% in instructions: division happens on the small grouped input, so its arithmetic savings are a small part of total query work.
+
+Measurements use the same Ryzen 7 8845HS, Rust 1.97.1 release builds and CPU 2. The main order is expression, fused, fused, expression, fused, expression, expression, fused, with two warmups and nine samples per case in each process. All builds finish before timing. Counter runs are separate and balanced, with two processes per variant/case/phase and all six events running 100% of the enabled interval. All samples are retained. The selected-case fused nested-LATERAL processes average 104.8 and 106.9 ms, compared with full-suite process medians of 91.2-94.3 ms. These samples remain in their own groups. CPU frequency is unfixed, and SMT/background interference is possible.
+
+All 1,908 timed executions and 424 warmups pass row/NULL counts; each timing process also validates every output value before timing. Two existing benchmark cases per variant retain their preceding non-timing observations, and invalid case/phase arguments fail without a capture. The prior Spark, exact-integer and Delta corpora were not rerun in this harness-only slice; their tested production source hashes are unchanged. The default executables and scratch sources are restored, and all 168 default probe observations match the preceding capture. The only post-measurement benchmark edit corrects the perf helper's comment to describe both phases; both source hashes are recorded.
+
+The next runtime slice should investigate simplifying the fused function's NULL branch through DataFusion's existing expression simplifier, with checks for scalar-subquery errors and ANSI behavior. This slice makes no arithmetic or optimizer changes. The candidate remains optional, and the correlated MAX regression remains open. Delta I/O and concurrent workloads are still unmeasured.
+
+To reproduce, build and save the two corrected binaries as described in the preceding section, using this version of `decimal_bench`. Build `legacy` with the same fused/ROUND/filter sources and local dependency paths, omitting only the four subquery/LATERAL repairs. Run `decimal_bench OUTPUT_JSON subquery-check` on all three builds and inspect each result's status; check-only mode deliberately records failures and continues. Run `decimal_bench OUTPUT_JSON subqueries [CASE_ID]` in the recorded order for timing; this mode aborts on a wrong result. Reuse the earlier FIFO `perf stat` command with the new suite and set `DECIMAL_BENCH_PERF_PHASE=planning` or `execution` in addition to `DECIMAL_BENCH_PERF_DIR`. Keep the full-suite and selected-case counter samples separate. The artifact records every selected case and process order.
 
 ## Reproduce
 

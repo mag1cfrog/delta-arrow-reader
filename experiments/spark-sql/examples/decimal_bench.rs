@@ -9,7 +9,7 @@ use std::{
 };
 
 use arrow::{
-    array::{Array, ArrayRef, Decimal128Array, Float64Array},
+    array::{Array, ArrayRef, Decimal128Array, Float64Array, Int64Array},
     datatypes::{DataType, Field, Schema},
     record_batch::RecordBatch,
     util::display::array_value_to_string,
@@ -91,7 +91,7 @@ async fn consume(ctx: &SessionContext, plan: Arc<dyn ExecutionPlan>) -> Result<(
 }
 
 // perf stat --delay=-1 --control=fifo:DIR/control,DIR/ack
-// Counting covers only the measured executions and the control handshake.
+// Counting covers the enabled phase and the control handshake.
 fn perf_command(command: &[u8]) -> Result<()> {
     if let Some(dir) = std::env::var_os("DECIMAL_BENCH_PERF_DIR") {
         let dir = PathBuf::from(dir);
@@ -108,6 +108,310 @@ fn perf_command(command: &[u8]) -> Result<()> {
     Ok(())
 }
 
+async fn plan_query(ctx: &SessionContext, sql: &str, ansi: bool) -> Result<Arc<dyn ExecutionPlan>> {
+    let mut config = PlanConfig::default();
+    config.ansi_mode = ansi;
+    config.session_timezone = "UTC".into();
+    let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
+    let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
+    let named = PlanResolver::new(ctx, Arc::new(config))
+        .resolve_named_plan(spec)
+        .await?;
+    let frame = ctx.execute_logical_plan(named.plan).await?;
+    Ok(frame.create_physical_plan().await?)
+}
+
+fn subquery_input_id(position: usize) -> usize {
+    position.wrapping_mul(4099).wrapping_add(17) % ROWS
+}
+
+// Permuted outer rows make a missing ORDER BY observable. Half the keys have no
+// inner group; every eighth inner group has only NULL x values.
+fn register_subquery_inputs(ctx: &SessionContext) -> Result<usize> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Int64, false),
+        Field::new("k", DataType::Int64, false),
+        Field::new("a", DataType::Decimal128(18, 4), false),
+    ]));
+    let mut batches = Vec::new();
+    for start in (0..ROWS).step_by(BATCH_SIZE) {
+        let ids = (start..(start + BATCH_SIZE).min(ROWS)).map(|i| subquery_input_id(i) as i64);
+        batches.push(RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int64Array::from_iter_values(ids.clone())),
+                Arc::new(Int64Array::from_iter_values(ids.clone().map(|i| i % 512))),
+                Arc::new(
+                    Decimal128Array::from_iter_values(ids.map(|i| i128::from(i % 97 + 2) * 100))
+                        .with_precision_and_scale(18, 4)?,
+                ),
+            ],
+        )?);
+    }
+    ctx.register_table(
+        "bench_outer",
+        Arc::new(MemTable::try_new(schema, vec![batches])?),
+    )?;
+    let keys = (0_i64..256)
+        .flat_map(|k| std::iter::repeat_n(k, (1 + k % 3) as usize))
+        .collect::<Vec<_>>();
+    let inner_rows = keys.len();
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("k", DataType::Int64, false),
+        Field::new("x", DataType::Decimal128(18, 4), true),
+        Field::new("d", DataType::Decimal128(18, 4), false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int64Array::from_iter_values(keys.iter().copied())),
+            Arc::new(
+                Decimal128Array::from_iter(
+                    keys.iter()
+                        .map(|k| (k % 8 != 0).then_some(i128::from(k + 1) * 10_000)),
+                )
+                .with_precision_and_scale(18, 4)?,
+            ),
+            Arc::new(
+                Decimal128Array::from_iter_values(std::iter::repeat_n(40_000, inner_rows))
+                    .with_precision_and_scale(18, 4)?,
+            ),
+        ],
+    )?;
+    ctx.register_table(
+        "bench_inner",
+        Arc::new(MemTable::try_new(schema, vec![vec![batch]])?),
+    )?;
+    Ok(inner_rows)
+}
+
+fn expected_subquery_value(case: &str, id: usize) -> Option<i128> {
+    let key = id % 512;
+    let count = if key < 256 { 1 + key % 3 } else { 0 };
+    match case {
+        "no_division" => Some(id as i128 * 1_000_000),
+        "plain_projection" | "plain_sorted" | "scalar_projection" | "scalar_sorted" => {
+            Some((id % 97 + 2) as i128 * 2_500)
+        }
+        "correlated_max" => (key < 256 && key % 8 != 0).then_some((key + 1) as i128 * 250_000),
+        "correlated_count" | "nested_lateral" => Some(count as i128 * 250_000),
+        "chained_lateral" => Some((count + 1 + count % 3) as i128 * 250_000),
+        "left_lateral" => (count > 1).then_some(count as i128 * 250_000),
+        _ => unreachable!("unknown benchmark case"),
+    }
+}
+
+async fn validate_subquery(
+    ctx: &SessionContext,
+    plan: Arc<dyn ExecutionPlan>,
+    case: &str,
+    sorted: bool,
+) -> Result<(usize, usize, i128)> {
+    if plan.schema().fields().len() != 1
+        || plan.schema().field(0).data_type() != &DataType::Decimal128(38, 6)
+    {
+        return Err(format!("unexpected result schema: {:?}", plan.schema()).into());
+    }
+    let mut stream = execute_stream(plan, ctx.task_ctx())?;
+    let (mut rows, mut nulls, mut sum) = (0, 0, 0);
+    while let Some(batch) = stream.next().await {
+        let batch = batch?;
+        let values = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Decimal128Array>()
+            .unwrap();
+        for actual in values.iter() {
+            if rows >= ROWS {
+                return Err("too many output rows".into());
+            }
+            let id = if sorted {
+                rows
+            } else {
+                subquery_input_id(rows)
+            };
+            let expected = expected_subquery_value(case, id);
+            if actual != expected {
+                return Err(format!("row {rows}: expected {expected:?}, got {actual:?}").into());
+            }
+            rows += 1;
+            nulls += usize::from(actual.is_none());
+            sum += actual.unwrap_or(0);
+        }
+    }
+    if rows != ROWS {
+        return Err(format!("expected {ROWS} rows, got {rows}").into());
+    }
+    Ok((rows, nulls, sum))
+}
+
+async fn subquery_bench(
+    ctx: &SessionContext,
+    output: &str,
+    selected: Option<&str>,
+    check_only: bool,
+) -> Result<()> {
+    let inner_rows = register_subquery_inputs(ctx)?;
+    let phase = std::env::var("DECIMAL_BENCH_PERF_PHASE").unwrap_or_else(|_| "execution".into());
+    if phase != "planning" && phase != "execution" {
+        return Err("DECIMAL_BENCH_PERF_PHASE must be planning or execution".into());
+    }
+    let divisor = "(SELECT min(d) FROM bench_inner)";
+    let count = "SELECT count(*) AS n FROM bench_inner i WHERE i.k=o.k";
+    let cases = [
+        (
+            "no_division",
+            "CAST(o.id AS DECIMAL(38,6))".to_owned(),
+            "".to_owned(),
+            false,
+        ),
+        (
+            "plain_projection",
+            "o.a / CAST(4 AS DECIMAL(18,4))".into(),
+            "".into(),
+            false,
+        ),
+        (
+            "plain_sorted",
+            "o.a / CAST(4 AS DECIMAL(18,4))".into(),
+            "".into(),
+            true,
+        ),
+        (
+            "scalar_projection",
+            format!("o.a / {divisor}"),
+            "".into(),
+            false,
+        ),
+        ("scalar_sorted", format!("o.a / {divisor}"), "".into(), true),
+        (
+            "correlated_max",
+            format!("(SELECT max(i.x) / {divisor} FROM bench_inner i WHERE i.k=o.k)"),
+            "".into(),
+            true,
+        ),
+        (
+            "correlated_count",
+            format!(
+                "(SELECT CAST(count(*) AS DECIMAL(18,4)) / {divisor} FROM bench_inner i WHERE i.k=o.k)"
+            ),
+            "".into(),
+            true,
+        ),
+        (
+            "nested_lateral",
+            format!("CAST(t.n AS DECIMAL(18,4)) / {divisor}"),
+            format!("CROSS JOIN LATERAL (SELECT z.n FROM ({count}) z) t"),
+            true,
+        ),
+        (
+            "chained_lateral",
+            format!("CAST(t.n + u.m AS DECIMAL(18,4)) / {divisor}"),
+            format!(
+                "CROSS JOIN LATERAL ({count}) t CROSS JOIN LATERAL (SELECT count(*) AS m FROM bench_inner j WHERE j.k=t.n) u"
+            ),
+            true,
+        ),
+        (
+            "left_lateral",
+            format!("CAST(t.n AS DECIMAL(18,4)) / {divisor}"),
+            format!("LEFT JOIN LATERAL ({count}) t ON t.n>1"),
+            true,
+        ),
+    ];
+    let mut results = Vec::new();
+    for (case, expression, join, sorted) in cases {
+        let order = if sorted { "ORDER BY o.id" } else { "" };
+        let sql = format!(
+            "SELECT CAST({expression} AS DECIMAL(38,6)) AS r FROM bench_outer o {join} {order}"
+        );
+        for ansi in [true, false] {
+            let id = format!("{case}_ansi{ansi}");
+            if selected.is_some_and(|s| s != id) {
+                continue;
+            }
+            let mut result = json!({"id": id, "sql": sql, "ansi": ansi, "sorted": sorted});
+            let plan = match plan_query(ctx, &sql, ansi).await {
+                Ok(plan) => plan,
+                Err(error) if check_only => {
+                    result["status"] = json!("planning_error");
+                    result["error"] = json!(error.to_string());
+                    results.push(result);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            result["physical_plan"] = json!(displayable(plan.as_ref()).indent(true).to_string());
+            let (rows, nulls, sum) = match validate_subquery(ctx, plan, case, sorted).await {
+                Ok(counts) => counts,
+                Err(error) if check_only => {
+                    result["status"] = json!("validation_error");
+                    result["error"] = json!(error.to_string());
+                    results.push(result);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            result["status"] = json!("ok");
+            result["validated_rows"] = json!(rows);
+            result["output_nulls"] = json!(nulls);
+            result["coefficient_sum"] = json!(sum.to_string());
+            if !check_only {
+                for _ in 0..WARMUPS {
+                    let plan = plan_query(ctx, &sql, ansi).await?;
+                    assert_eq!(consume(ctx, plan).await?, (rows, nulls));
+                }
+                // Every execution gets a fresh physical plan. ScalarSubqueryExec
+                // and hash joins otherwise retain results from their first run.
+                let mut plans = Vec::new();
+                let mut planning_ms = Vec::new();
+                if phase == "planning" {
+                    perf_command(b"enable\n")?;
+                }
+                for _ in 0..SAMPLES {
+                    let start = Instant::now();
+                    let plan = plan_query(ctx, &sql, ansi).await?;
+                    planning_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+                    plans.push(plan);
+                }
+                if phase == "planning" {
+                    perf_command(b"disable\n")?;
+                }
+                let mut execution_ms = Vec::new();
+                if phase == "execution" {
+                    perf_command(b"enable\n")?;
+                }
+                for plan in &plans {
+                    let start = Instant::now();
+                    let counts = consume(ctx, plan.clone()).await?;
+                    execution_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+                    assert_eq!(counts, (rows, nulls));
+                }
+                if phase == "execution" {
+                    perf_command(b"disable\n")?;
+                }
+                result["planning_samples_ms"] = json!(planning_ms);
+                result["samples_ms"] = json!(execution_ms);
+            }
+            eprintln!("{id}: validated {rows} rows, {nulls} NULLs");
+            results.push(result);
+        }
+    }
+    if results.is_empty() {
+        return Err("no benchmark case matched CASE_ID".into());
+    }
+    fs::write(
+        output,
+        serde_json::to_vec_pretty(&json!({
+            "rows": ROWS, "inner_rows": inner_rows, "batch_size": BATCH_SIZE, "partitions": 1,
+            "input_permutation": "(position * 4099 + 17) % rows",
+            "warmups": WARMUPS, "samples": SAMPLES, "check_only": check_only,
+            "perf_phase": phase, "results": results,
+        }))?,
+    )?;
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     if cfg!(debug_assertions) {
@@ -117,7 +421,27 @@ async fn main() -> Result<()> {
     let output = args
         .get(1)
         .ok_or("usage: decimal_bench OUTPUT_JSON [SUITE [CASE_ID]]")?;
+    let ctx = SessionContext::new_with_state(
+        SessionStateBuilder::new()
+            .with_default_features()
+            .with_config(
+                SessionConfig::new()
+                    .with_batch_size(BATCH_SIZE)
+                    .with_target_partitions(1),
+            )
+            .with_query_planner(Arc::new(SparkQueryPlanner))
+            .build(),
+    );
     let inputs = match args.get(2).map(String::as_str) {
+        Some(mode @ ("subqueries" | "subquery-check")) => {
+            return subquery_bench(
+                &ctx,
+                output,
+                args.get(3).map(String::as_str),
+                mode == "subquery-check",
+            )
+            .await;
+        }
         None | Some("normal") => vec![
             (10, 2, 2, false),
             (18, 4, 4, false),
@@ -131,22 +455,11 @@ async fn main() -> Result<()> {
         Some("high-scale-mixed") => vec![(38, 6, 38, false), (38, 7, 38, false), (38, 6, 38, true)],
         Some(_) => {
             return Err(
-                "expected normal, high-scale, high-scale-35, high-scale-mixed or no extra argument"
+                "expected normal, high-scale, high-scale-35, high-scale-mixed, subqueries or subquery-check"
                     .into(),
             );
         }
     };
-    let ctx = SessionContext::new_with_state(
-        SessionStateBuilder::new()
-            .with_default_features()
-            .with_config(
-                SessionConfig::new()
-                    .with_batch_size(BATCH_SIZE)
-                    .with_target_partitions(1),
-            )
-            .with_query_planner(Arc::new(SparkQueryPlanner))
-            .build(),
-    );
     let mut results = Vec::new();
     for (precision, scale, divisor_scale, nulls) in inputs {
         ctx.deregister_table("bench_input")?;
@@ -187,16 +500,7 @@ async fn main() -> Result<()> {
                 if args.get(3).is_some_and(|selected| selected != &id) {
                     continue;
                 }
-                let mut config = PlanConfig::default();
-                config.ansi_mode = ansi;
-                config.session_timezone = "UTC".into();
-                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
-                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
-                let named = PlanResolver::new(&ctx, Arc::new(config))
-                    .resolve_named_plan(spec)
-                    .await?;
-                let frame = ctx.execute_logical_plan(named.plan).await?;
-                let plan = frame.create_physical_plan().await?;
+                let plan = plan_query(&ctx, &sql, ansi).await?;
                 let physical_plan = displayable(plan.as_ref()).indent(true).to_string();
                 let mut stream = execute_stream(plan.clone(), ctx.task_ctx())?;
                 let first = stream.next().await.ok_or("missing first batch")??;
