@@ -1,0 +1,26 @@
+{"id": "values_bad_many_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES ('4'),('bad') u(x)) AS r", "batch_size": 1}
+{"id": "values_bad_many_right", "sql": "SELECT (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES ('4'),('bad') u(x)) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "values_bad_empty_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES ('bad') u(x) WHERE false) AS r", "batch_size": 1}
+{"id": "values_bad_empty_right", "sql": "SELECT (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES ('bad') u(x) WHERE false) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "values_bad_limit0_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES ('bad') u(x) LIMIT 0) AS r", "batch_size": 1}
+{"id": "values_bad_limit0_right", "sql": "SELECT (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES ('bad') u(x) LIMIT 0) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "range_many_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(id AS DECIMAL(18,4)) FROM range(2)) AS r", "batch_size": 1}
+{"id": "range_many_right", "sql": "SELECT (SELECT CAST(id AS DECIMAL(18,4)) FROM range(2)) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "range_bad_column_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(concat('bad', CAST(id AS STRING)) AS DECIMAL(18,4)) FROM range(2)) AS r", "batch_size": 1}
+{"id": "range_bad_column_right", "sql": "SELECT (SELECT CAST(concat('bad', CAST(id AS STRING)) AS DECIMAL(18,4)) FROM range(2)) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "range_bad_literal_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST('bad' AS DECIMAL(18,4)) FROM range(2)) AS r", "batch_size": 1}
+{"id": "range_bad_literal_right", "sql": "SELECT (SELECT CAST('bad' AS DECIMAL(18,4)) FROM range(2)) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "range_divide0_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(4 AS DECIMAL(18,4)) / CAST(id AS DECIMAL(18,4)) FROM range(2)) AS r", "batch_size": 1}
+{"id": "range_divide0_right", "sql": "SELECT (SELECT CAST(4 AS DECIMAL(18,4)) / CAST(id AS DECIMAL(18,4)) FROM range(2)) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "values_nested_bad_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST((SELECT x FROM VALUES ('bad') u(x)) AS DECIMAL(18,4))) AS r", "batch_size": 1}
+{"id": "values_nested_bad_right", "sql": "SELECT (SELECT CAST((SELECT x FROM VALUES ('bad') u(x)) AS DECIMAL(18,4))) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "literal_bad_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST('bad' AS DECIMAL(18,4))) AS r", "batch_size": 1}
+{"id": "literal_bad_right", "sql": "SELECT (SELECT CAST('bad' AS DECIMAL(18,4))) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "literal_div0_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(4 AS DECIMAL(18,4)) / CAST(0 AS DECIMAL(18,4))) AS r", "batch_size": 1}
+{"id": "literal_div0_right", "sql": "SELECT (SELECT CAST(4 AS DECIMAL(18,4)) / CAST(0 AS DECIMAL(18,4))) / CAST(NULL AS DECIMAL(18,4)) AS r", "batch_size": 1}
+{"id": "range_correlated_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(id AS DECIMAL(18,4)) FROM range(4) WHERE id >= o.k) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "range_correlated_right", "sql": "SELECT (SELECT CAST(id AS DECIMAL(18,4)) FROM range(4) WHERE id >= o.k) / CAST(NULL AS DECIMAL(18,4)) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "values_correlated_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES (1,'4'),(2,'5') i(k,x) WHERE i.k >= o.k) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "values_correlated_right", "sql": "SELECT (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES (1,'4'),(2,'5') i(k,x) WHERE i.k >= o.k) / CAST(NULL AS DECIMAL(18,4)) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "values_correlated_bad_left", "sql": "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k >= o.k) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}
+{"id": "values_correlated_bad_right", "sql": "SELECT (SELECT CAST(x AS DECIMAL(18,4)) FROM VALUES (1,'4'),(2,'bad') i(k,x) WHERE i.k >= o.k) / CAST(NULL AS DECIMAL(18,4)) AS r FROM VALUES (1),(2) o(k) ORDER BY o.k", "batch_size": 1}

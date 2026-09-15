@@ -991,6 +991,66 @@ python experiments/spark-sql/decimal_division.py compare \
 
 The new corpus and previous CAST corpus comparisons now return exit 0. Reuse the preceding integer-reference, Delta, subquery and FIFO-counter commands. The artifact retains the Spark outputs, plans, samples, source hashes and commands. Both measured binaries use the same benchmark source; the published benchmark differs only by rustfmt wrapping one `format!` expression, with both hashes recorded. Reapplying the patch to the before sources reproduces the built candidate exactly. Scratch sources and default executables are restored, and all 168 default observations, including plans and complete errors, match the preceding checkpoint.
 
+## Typed NULL and subquery optimization order
+
+The follow-up to `d62e631` keeps [diagnostic SQL](decimal-null-order.jsonl) and [results](decimal-null-order-results.json). It retains no runtime change. Extending the fused division simplifier to every NULL literal fixes the four original multirow-subquery observations, but suppresses two previously preserved ANSI CAST errors. That prototype is rejected. The reviewed candidate still has its 14 known differences across the previous 1,748 observations.
+
+### Why the direct rewrite fails
+
+The original failing expression has the form `CAST(NULL AS DECIMAL(18,4)) / (SELECT ...)`, or the operands reversed. Spark can remove the unused scalar subquery before checking its runtime row count. The current fused UDF preserves typed SQL NULLs, so DataFusion executes the subquery and reports multiple rows.
+
+Spark also performs work before that NULL simplification. Its [optimizer batches and local-relation rule](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/Optimizer.scala) evaluate projections over constant VALUES rows and recursively optimize subqueries. An invalid local CAST can fail during this work. A [one-row subquery rewrite](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/subquery.scala) can instead inline a subquery expression into its parent. The later [NULL propagation and constant-folding rules](https://github.com/apache/spark/blob/32f7299601108917fb01920a54e084595b7b3bf8/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/expressions.scala) therefore see different expression trees.
+
+The captured Spark 4.2.0 ANSI results show the consequences:
+
+| Other operand's scalar subquery | Spark result with a literal NULL operand |
+| --- | --- |
+| Valid CAST over two VALUES rows | NULL; the scalar row-count check disappears |
+| Invalid CAST of a VALUES column | CAST error while building the optimized plan |
+| Invalid CAST dependent on a `range` column | NULL; the runtime expression disappears |
+| Invalid literal CAST projected over `range` | CAST error while building the optimized plan |
+| `SELECT CAST('bad' AS DECIMAL(18,4))` without FROM | NULL after the one-row subquery is inlined |
+
+The artifact retains analyzed, optimized and physical plans, or the failing phase, for 16 representative ANSI queries. It also covers a false filter, LIMIT 0, nested subqueries, division by zero and correlation. These cases prevent treating all child errors alike.
+
+Some correlated cases fail DataFusion's executable-plan validation before the UDF simplifier runs. Spark removes the unused correlated subquery and returns NULL. A general repair must account for this earlier validation boundary as well. The inspected [Sail optimizer setup](https://github.com/lakehq/sail/blob/732fded6f720465415a687218835db1b909165e5/crates/sail-logical-optimizer/src/lib.rs) adds lambda and lateral rules around DataFusion's defaults; it does not supply this sequence of Spark rules for reuse.
+
+### Regression results and comparison limits
+
+The new file contains 26 queries, run with both ANSI settings for 52 observations. Six initial control queries were already in `decimal-fused-null.jsonl`; they remain there and are excluded from the new totals. None of the new SQL/batch-size pairs duplicates a query in the preceding 13 corpora. Both variants use the same dependency overrides, and the before probe is the exact binary from the reviewed non-finite candidate.
+
+| Check | Reviewed candidate | Rejected NULL rewrite |
+| --- | ---: | ---: |
+| Existing NULL/subquery corpus | 56/60 | 58/60 |
+| All previous SQL observations | 1734/1748 | 1736/1748 |
+| New SQL, existing value/type/error-stage comparison | 18/52 | 36/52 |
+| New SQL, also requiring the expected CAST error cause | 16/52 | 34/52 |
+
+The prototype introduces six new coarse regressions: two in the old corpus and four in the new one. More total agreements do not satisfy the regression gate when previously correct queries become wrong.
+
+The existing comparator calls failures after SQL resolution `execution_error`; this includes logical optimization, physical planning and stream execution. Two new ANSI correlated cases count as agreements under that check even though Spark reports `CAST_INVALID_INPUT` and DataFusion rejects an unaggregated correlated subquery. The artifact records these false agreements separately. Of eight new observations requiring a CAST failure, the reviewed candidate reports the matching conversion cause in four and the rejected rewrite in none. This focused cause check uses the current adapter's conversion error text; it does not implement general Spark SQLSTATE matching.
+
+The 34 new coarse differences and two additional error-cause mismatches expose behavior in the existing candidate. No runtime change from this investigation is retained. Scratch sources and their lock file are restored. The repository's default probe is rebuilt from its own manifest, and all 168 default observations, including plans and complete errors, remain identical. The rejected prototype has no performance measurements.
+
+### Next implementation boundary and reproduction
+
+The next implementation should establish Spark's early local-expression evaluation and subquery ordering before enabling typed-NULL propagation. It must preserve the eight expected CAST failure causes, eliminate the unused multirow/runtime subqueries, and handle dead correlated subqueries before DataFusion's executable-plan validation. Reuse native DataFusion expressions and Arrow evaluation for this planning work. Keep the existing arithmetic kernels and verify the old NULL/error controls together with the new corpus.
+
+Build the reviewed optional candidate as described in the preceding sections, then reuse the existing capture and comparison commands:
+
+```sh
+python experiments/spark-sql/decimal_division.py spark "$run_dir/spark-null-order.json" \
+  --cases experiments/spark-sql/decimal-null-order.jsonl
+"$run_dir/before-probe" experiments/spark-sql/decimal-null-order.jsonl \
+  "$run_dir/before-null-order.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-null-order.json" "$run_dir/before-null-order.json" \
+  --cases experiments/spark-sql/decimal-null-order.jsonl \
+  --report "$run_dir/null-order-check.json"
+```
+
+That comparison currently exits 1 with 18/52 agreements. Inspect the eight expected CAST failures as well; a matching coarse error stage alone is insufficient. The artifact contains all new SQL/results, the six changed old observations, the rejected one-line diff, source and binary hashes, and Spark phase captures. The rejected diff is evidence for the investigation, not an optional implementation patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
