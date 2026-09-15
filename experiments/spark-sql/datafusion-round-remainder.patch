@@ -1,0 +1,14 @@
+diff --git a/src/math/round.rs b/src/math/round.rs
+--- a/src/math/round.rs
++++ b/src/math/round.rs
+@@ -665,7 +665,9 @@
+             // Same HALF_UP arithmetic as round_decimal; keep that helper unchanged
+             // for narrow types and scalar calls.
+             let mut quotient = value.div_wrapping(factor);
+-            let remainder = value.mod_wrapping(factor);
++            // factor > 0 and quotient truncates toward zero, so quotient * factor
++            // stays between zero and value. Reuse it to avoid a second wide divide.
++            let remainder = value.sub_wrapping(quotient.mul_wrapping(factor));
+             if remainder >= threshold {
+                 quotient = quotient.add_checked(i256::ONE).map_err(|_| {
+                     ArrowError::ComputeError("Overflow while rounding decimal".into())

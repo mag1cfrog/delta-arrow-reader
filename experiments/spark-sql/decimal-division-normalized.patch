@@ -1,0 +1,26 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -571,6 +571,22 @@
+         (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) => {
+             let (result_precision, result_scale) =
+                 spark_decimal_divide_type(*p1, *s1, *p2, *s2, true);
++            let minimum_scale = result_scale - (ARROW_DIV_SCALE_INCREMENT - 1);
++            let shift = (*s1 - minimum_scale).max(0).min((*s2).max(0));
++            let original_digits = i32::from(*p1) - i32::from(*s1)
++                + i32::from((*s1).max(minimum_scale)) + 4 + i32::from(*s2);
++            let (dividend, divisor, s1, s2) = if original_digits > 76 && shift > 0 {
++                let factor = lit(ScalarValue::Decimal256(Some(i256::ONE), 1, -shift));
++                (
++                    cast(dividend, DataType::Decimal256(*p1, *s1)) * factor.clone(),
++                    cast(divisor, DataType::Decimal256(*p2, *s2)) * factor,
++                    *s1 - shift,
++                    *s2 - shift,
++                )
++            } else {
++                (dividend, divisor, *s1, *s2)
++            };
++            let (s1, s2) = (&s1, &s2);
+             // Rescale the dividend so Arrow's quotient carries at least one digit past
+             // Spark's scale. One guard digit is exactly enough for HALF_UP over a
+             // truncating divide: the digit at `result_scale + 1` survives truncation, so

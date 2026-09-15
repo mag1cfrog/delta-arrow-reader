@@ -207,6 +207,106 @@ All 26 original physical plans, output types, first values and NULL counts remai
 
 All 2,448 timed executions and 544 warmups pass their row/NULL checks. [Raw samples, physical plans, hashes and validation results](decimal-high-scale-performance.json) retain both the high-scale cost and the ordinary-case variability. The restored default probe matches all 168 original baseline observations, including logical plans and errors. The high-scale patch remains optional and unapplied to the normal vendored source; adoption and the ten other original semantic differences remain open.
 
+## Review of the recent performance changes
+
+This review covers `b6f437c` through `941d73c` and the high-scale fallback. These commits store experiments and optional patches. They do not cumulatively change the default vendored division implementation. The test/profiling commits add no runtime work. Execution costs below apply when the corresponding candidate is built.
+
+| Change | Runtime effect when applied | Scope |
+| --- | --- | --- |
+| `b6f437c`, initial Spark Decimal division | Adds Spark result-type calculation, guard digits, HALF_UP and a final cast. Some declared types require Decimal256 intermediates. | Decimal/Decimal `/`; planning constructs the expression, execution pays for its casts and kernels. |
+| `12f2703`, numeric/NULL coercion | Routes mixed numeric operands through the Spark Decimal result-type and rounding path. Integer literal narrowing can keep it in Decimal128, but that still costs more than the previous native division with a different result type. | Mixed numeric/NULL operands of `/`. |
+| `0e568f4`, NULL/zero handling | Removes a separate ANSI divisor guard for Decimal pairs and lets Arrow handle NULLs and zeros. This removes work, although generated-code layout and literal timing still vary. | Decimal-pair ANSI `/`; literal-zero handling also changes planning behavior. |
+| `9bea09e` and `57237d8` | Benchmark and profiling/report changes only. | No runtime change. |
+| `1f7efff`, prepared rounding for all widths | Speeds wide rounding but introduced a repeatable 3-5% narrow-column cost in its original comparison. Keep this broad patch rejected. | Constant-scale Decimal ROUND, including calls outside division. |
+| `941d73c`, preparation only for Decimal256 | Keeps the earlier 17-23% wide benefit without the stable narrow-column cost. Narrow literal variability remains documented above. | Constant-scale Decimal256 array ROUND. This replaces the broad patch; the patches do not stack. |
+| High-scale fallback | Adds integer division, remainder, fractional division, rounding and addition. Earlier equal-result scale-35 measurements cost 36-74% more. | Type pairs whose original guard-digit intermediate exceeds 76 digits. |
+
+The first two arithmetic changes therefore both deserve performance work. Moving the same expression to an analyzer rule cannot remove the measured kernel costs: the benchmark starts after planning. Reverting their result types or rounding would trade away the Spark semantics being evaluated.
+
+| ANSI input/divisor | Default ms | `b6f437c` ms | `12f2703` ms | `0e568f4` ms |
+| --- | ---: | ---: | ---: | ---: |
+| DECIMAL(10,2) / column | 10.60 | 36.29 | 36.02 | 34.76 |
+| DECIMAL(18,4) / column | 10.67 | 142.13 | 132.53 | 128.84 |
+| DECIMAL(18,4) / integer 3 | 11.57 | 11.51 | 26.31 | 26.35 |
+| DECIMAL(38,6) / column | 10.61 | 140.93 | 134.96 | 139.46 |
+
+For example, `DECIMAL(18,4) / 3` changes from native `Decimal128(22,8)` division in the initial candidate to Spark `Decimal128(20,6)` division and rounding after coercion. The increase from 11.51 to 26.31 ms is an additional execution cost in that commit. It is not a change from DOUBLE to Decimal. Declared Decimal-pair column plans are identical across those two commits; their timing shifts cannot be attributed to a different arithmetic expression.
+
+The fresh review uses the same benchmark, compiler, lockfile, machine and CPU affinity as the earlier measurements, with two processes per variant and 18 retained samples per case. Prepared ROUND and remainder reuse receive two additional processes each (36 samples) because their scale-4 column results varied between processes. The second process pass reverses the first pass's variant order. All compilation and correctness checks finish before timing. The extra rounding order is prepared, reuse, reuse, prepared. These shorter historical runs locate large changes; they do not supersede the earlier four-process evidence for small or bimodal differences. Default and historical variants can return different Decimal types or values, so their ratios are semantic-cost comparisons. The new alternatives below preserve the measured output types and sample values, but two fail other SQL tests. Separately built binaries also show differences on unchanged physical plans: the ordinary scale-4 column median is 128.84 ms in the base candidate and 140.11 ms with the high-scale patch, whose fallback is not selected there. The cause of that variation is not isolated. These shifts are not evidence of added expression steps, and successive ratios must not be multiplied into a claimed cumulative slowdown.
+
+### Three smaller computations tested
+
+**Reuse ROUND's quotient.** [datafusion-round-remainder.patch](datafusion-round-remainder.patch) applies after the Decimal256-only prepared-rounding patch. It replaces `value % factor` with `value - quotient * factor`. Arrow's wide `/` and `%` separately invoke its division routine; this avoids the second invocation. The prepared path has a positive factor and a quotient truncated toward zero, so `quotient * factor` stays between zero and the input and the multiplication/subtraction cannot overflow. The original helper, narrow types, scalar calls and fallback paths remain unchanged. This is a local dependency experiment, not copied Sail code.
+
+Six rounding unit tests pass, including 1,120 wide helper comparisons and NULL/empty array checks. All 168 original observations, including plans and errors, are unchanged. The 26 benchmark physical plans are identical to the prepared-rounding control.
+
+| ANSI input/divisor | Prepared ROUND ms | Reuse quotient ms | Median change |
+| --- | ---: | ---: | ---: |
+| DECIMAL(18,4) / column | 117.79 | 113.17 | -3.9% |
+| DECIMAL(18,4) / typed 3 | 98.43 | 89.82 | -8.7% |
+| DECIMAL(38,6) / column | 114.59 | 106.94 | -6.7% |
+| DECIMAL(38,6) / typed 3 | 96.71 | 88.40 | -8.6% |
+
+Nine of the ten wide median comparisons improve by 3.9-8.8%. The scale-4 typed-literal non-ANSI case is an outlier (-29.4% median, -19.7% mean); do not generalize that larger number. The scale-4 ANSI column has prepared process medians of 107.83, 121.24, 117.77 and 120.18 ms, versus 113.23, 113.31, 109.45 and 109.45 ms with reuse. The first pair looked slower with reuse, which did not persist in the pooled result. The scale-6 non-ANSI column median improves 6.3%, but its mean improves only 0.1%. Narrow-column/NULL medians range from -0.1% to +2.2% while those source paths are unchanged; literal samples retain variability. No samples are removed. This supports further review of the small change, not a universal per-query speedup or a zero-regression guarantee.
+
+**Shift high-scale inputs before dividing.** [decimal-division-normalized.patch](decimal-division-normalized.patch) applies after the high-scale fallback. When both operand scales permit it, exact multiplication by a common power of ten reduces the intermediate needed by the ordinary Arrow expression. The hard mixed-scale cases retain the old fallback. This preserves the source coefficients and Spark result type; it is not a lossy cast to fewer fractional digits.
+
+**Fuse final-scale division and rounding.** [decimal-division-fused.patch](decimal-division-fused.patch) is an alternative applied directly after the base arithmetic patch, without the high-scale fallback or either dependency optimization. It computes the final coefficient using `a * 10^(result_scale + s2 - s1) / b`, then rounds from the exact remainder. Checked i128 multiplication selects a narrow path using the actual values; larger intermediates use i256. Both paths derive the remainder from the already-computed quotient. This removes guard digits, several intermediate arrays and the separate ROUND/final-cast steps. If the i256 multiplication overflows, a representable 38-digit result is impossible: its coefficient times a source coefficient of at most 38 digits, plus the remainder, fits within 76 digits. Actual result overflow and division by zero retain ANSI error/non-ANSI NULL behavior.
+
+The fused prototype uses DataFusion's native Rust UDF interface for the experiment. It has no Python callback, dependency or physical node. It still materializes scalar operands as arrays and does not claim optimal code generation. [Sail PR 2220](https://github.com/lakehq/sail/pull/2220) also proposed Rust arithmetic UDFs, not Python UDFs. Its maintainer's performance concern is not a benchmark of this prototype; its reported nested-subquery limitation is directly relevant and reproduced below.
+
+| ANSI column division | Existing high-scale candidate ms | Exact scale shift ms | Fused prototype ms |
+| --- | ---: | ---: | ---: |
+| DECIMAL(10,2) | 34.73 | 35.18 | 15.17 |
+| DECIMAL(18,4) | 140.11 | 133.95 | 17.27 |
+| DECIMAL(38,6) | 139.77 | 139.38 | 14.78 |
+| DECIMAL(38,35) | 378.34 | 171.07 | 59.86 |
+| DECIMAL(38,38) | 360.54 | 171.32 | 60.60 |
+
+The exact shift is selected only for the high-scale branch. Its ordinary-case plan differences are zero; those timing movements are not an optimization benefit. The fused ordinary inputs frequently fit checked i128 even when their declared type caused the old planner to choose i256. This is value-dependent: the high-scale inputs still need i256, and near-limit values can be slower than these ordinary benchmark values.
+
+These measurements show that the previously observed slowdowns are costs of the chosen implementation, not a necessary lower bound for Spark-compatible arithmetic. They do not establish that either faster expression shape is safe to adopt.
+
+### Correctness limits and next slice
+
+Both new arithmetic prototypes retain 158/168 original Spark observations and pass all 4,064 comparisons against the [exact integer oracle](decimal_division_properties.py), covering 187,410 returned rows. The oracle includes every one of the 880 nonnegative-scale Decimal128 type pairs above the old 76-digit boundary, selected ordinary types, signs, NULLs, result overflow and values around the i128/i256 dispatch limits. It uses unbounded Python integer `divmod`, not floating arithmetic or the candidate's implementation. This is additional arithmetic evidence, not a Spark capture or proof of full SQL compatibility.
+
+Both prototypes fall from 314/314 to 313/314 on the existing high-scale Spark corpus. The failing ANSI `filter_masks_zero` case should remove the zero-divisor row before division. Their physical plans instead evaluate the projection below the filter and raise. The original high-scale fallback passes this case. DataFusion 54.1.0's [filter/projection swap](https://github.com/apache/datafusion/blob/54.1.0/datafusion/physical-plan/src/filter.rs#L588) permits a narrowing projection to move below a filter without checking whether a computed expression can fail. An algebraically equivalent, shorter expression is therefore not automatically SQL-equivalent in this pipeline.
+
+The additional [14-query context corpus](decimal-division-contexts.jsonl), checked against Spark in both ANSI modes, covers filters, CASE, repeated expressions, aggregates, windows, scalar subqueries and a scalar subquery nested in a correlated aggregate. Five fresh processes per variant show:
+
+- The scale-2 ANSI filtered-zero case and its repeated-expression counterpart already fail in the base arithmetic candidate and high-scale fallback. The prototypes introduce corresponding scale-38 failures where the high-scale fallback passed. Existing and new failures are recorded separately.
+- The fused UDF consistently fails all four nested correlated-subquery observations in `scalar_subquery_to_join`, before physical execution, with `does not support logical expression ScalarSubquery`. The expression candidates can compute these results. This reproduces the integration hazard described in PR 2220.
+- The expression candidates sometimes return the two correlated result rows in the opposite order despite `ORDER BY`. Their captured physical plan lacks the sort. These ordered-row differences are retained in the report, not normalized away. The base candidate additionally has its known scale-38 arithmetic overflow. This review records the ordering gap without attempting an unrelated optimizer repair.
+- CASE, aggregate, window and standalone scalar-subquery controls pass for both new prototypes. The fused prototype also preserves all 116 existing Delta corpus observations and its 18 adapter checks.
+
+The smallest candidate for a separate implementation/review slice is quotient reuse inside prepared Decimal256 ROUND. It preserves the tested behavior and lowers typical wide medians, while leaving the much larger base arithmetic cost. Keep both expression-shape prototypes experimental. Before adopting their speedups, address projection evaluation across filters; the fused option also needs the nested-subquery integration fixed. Do not disable the optimizer globally, claim a fallible function is harmless, or fall back to different arithmetic semantics to make these tests pass. The exact scale shift reuses existing operators and is the smaller option once the shared filter boundary is reliable. A fused kernel remains the larger opportunity for ordinary Decimal division.
+
+All 5,796 timed executions and 1,288 warmups pass row/NULL checks. The default release probe has been restored and matches all 168 baseline observations. The host vendored source and dependency lockfiles are unchanged.
+
+The [review capture](decimal-performance-review.json) retains raw timing samples, per-process medians, pooled medians and means, physical plans, source/executable hashes, exact-check counts and all repeated context observations. It does not count metadata, structured error classes or error text as Spark agreement. All candidates remain optional; this report does not enable them in the normal vendored source.
+
+To reproduce the extra correctness checks, use a separately built candidate probe and the Spark environment from the existing reproduction section:
+
+```bash
+python3 experiments/spark-sql/decimal_division_properties.py \
+  --binary /absolute/path/to/candidate-decimal-probe \
+  --run-dir target/spark-sql/decimal-properties
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark \
+  target/spark-sql/decimal-context-spark.json \
+  --cases experiments/spark-sql/decimal-division-contexts.jsonl
+/absolute/path/to/candidate-decimal-probe \
+  experiments/spark-sql/decimal-division-contexts.jsonl \
+  target/spark-sql/decimal-context-candidate.json
+python3 experiments/spark-sql/decimal_division.py compare \
+  target/spark-sql/decimal-context-spark.json \
+  target/spark-sql/decimal-context-candidate.json \
+  --cases experiments/spark-sql/decimal-division-contexts.jsonl \
+  --report target/spark-sql/decimal-context-check.json
+```
+
+The context comparison is expected to fail for the documented cases. The property command requires a new output directory. Apply each optional patch in its stated order in a scratch checkout, and use the existing release benchmark commands for timings. Historical arithmetic candidates can be recovered with `git show COMMIT:experiments/spark-sql/decimal-division.patch` and applied to the unchanged default vendor. The dependency remainder patch applies to `src/math/round.rs` in the locked DataFusion functions crate after the Decimal256 preparation patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

@@ -1,0 +1,125 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -535,6 +535,92 @@
+     coerce_decimal_peer_operand(left, right, schema)
+ }
+ 
++// Research prototype: compute Spark's final-scale coefficient in one array pass.
++// Valid inputs are Decimal128 with nonnegative scales. No Python runtime is used.
++#[derive(Debug, PartialEq, Eq, Hash)]
++struct FusedDecimalDivide {
++    signature: datafusion_expr::Signature,
++    precision: u8,
++    scale: i8,
++    factor: i256,
++    factor128: Option<i128>,
++    limit: i128,
++    ansi: bool,
++}
++
++// The denominator is nonzero. If scaled multiplication overflows i256, the
++// quotient cannot fit 38 digits: a representable quotient times a <=38-digit
++// denominator (plus its remainder) needs at most 76 digits.
++fn fused_decimal_value(a: i128, b: i128, factor128: Option<i128>, factor: i256) -> Option<i128> {
++    let threshold = b.unsigned_abs().div_ceil(2);
++    let step = if (a < 0) == (b < 0) { 1 } else { -1 };
++    if let Some(numerator) = factor128.and_then(|factor| a.checked_mul(factor)) {
++        let quotient = numerator.checked_div(b)?;
++        let remainder = numerator - quotient * b;
++        quotient.checked_add(if remainder.unsigned_abs() >= threshold { step } else { 0 })
++    } else {
++        let numerator = i256::from_i128(a).checked_mul(factor)?;
++        let denominator = i256::from_i128(b);
++        let quotient = numerator.checked_div(denominator)?;
++        // Reuse the quotient instead of calling Arrow's wide division again for %.
++        let remainder = numerator.checked_sub(quotient.checked_mul(denominator)?)?.to_i128()?;
++        let quotient = quotient.checked_add(i256::from_i128(
++            if remainder.unsigned_abs() >= threshold { step } else { 0 },
++        ))?;
++        quotient.to_i128()
++    }
++}
++
++impl datafusion_expr::ScalarUDFImpl for FusedDecimalDivide {
++    fn name(&self) -> &str { "fused_decimal_divide" }
++
++    fn signature(&self) -> &datafusion_expr::Signature { &self.signature }
++
++    fn return_type(&self, _arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
++        Ok(DataType::Decimal128(self.precision, self.scale))
++    }
++
++    fn invoke_with_args(&self, input: datafusion_expr::ScalarFunctionArgs)
++        -> datafusion_common::Result<datafusion_expr::ColumnarValue>
++    {
++        use datafusion::arrow::array::{Array, AsArray, Decimal128Builder};
++        use datafusion::arrow::datatypes::Decimal128Type;
++        use datafusion_expr::ColumnarValue;
++        let arrays = ColumnarValue::values_to_arrays(&input.args)?;
++        let [a, b] = arrays.as_slice() else {
++            return Err(datafusion_common::DataFusionError::Internal("expected two operands".into()));
++        };
++        let a = a.as_primitive::<Decimal128Type>();
++        let b = b.as_primitive::<Decimal128Type>();
++        let mut result = Decimal128Builder::with_capacity(a.len());
++        for (a, b) in a.iter().zip(b.iter()) {
++            let (Some(a), Some(b)) = (a, b) else {
++                result.append_null();
++                continue;
++            };
++            if b == 0 {
++                if self.ansi { return Err(ArrowError::DivideByZero.into()); }
++                result.append_null();
++                continue;
++            }
++            match fused_decimal_value(a, b, self.factor128, self.factor)
++                .filter(|v| *v >= -self.limit && *v <= self.limit)
++            {
++                Some(value) => result.append_value(value),
++                None if self.ansi => return Err(ArrowError::ArithmeticOverflow(
++                    "Spark decimal division result exceeds its precision".into()).into()),
++                None => result.append_null(),
++            }
++        }
++        let result = result.finish().with_precision_and_scale(self.precision, self.scale)?;
++        if input.args.iter().all(|arg| matches!(arg, ColumnarValue::Scalar(_))) {
++            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(&result, 0)?))
++        } else {
++            Ok(ColumnarValue::Array(Arc::new(result)))
++        }
++    }
++}
++
+ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
+     let ScalarFunctionInput {
+         arguments,
+@@ -548,6 +634,28 @@
+         coerce_decimal_divide_operands(dividend, divisor, function_context.schema);
+     let dividend_type = dividend.get_type(function_context.schema);
+     let divisor_type = divisor.get_type(function_context.schema);
++
++    if let (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) =
++        (&dividend_type, &divisor_type)
++        && *s1 >= 0 && *s2 >= 0
++    {
++        let (precision, scale) = spark_decimal_divide_type(*p1, *s1, *p2, *s2, true);
++        let exponent = u32::try_from(i32::from(scale) + i32::from(*s2) - i32::from(*s1))
++            .map_err(|_| PlanError::internal("negative decimal division exponent"))?;
++        let factor = i256::from_i128(10).checked_pow(exponent)
++            .ok_or_else(|| PlanError::internal("decimal division scale factor overflow"))?;
++        let udf = FusedDecimalDivide {
++            signature: datafusion_expr::Signature::exact(
++                vec![DataType::Decimal128(*p1, *s1), DataType::Decimal128(*p2, *s2)],
++                datafusion_expr::Volatility::Immutable,
++            ),
++            precision, scale, factor,
++            factor128: 10_i128.checked_pow(exponent),
++            limit: 10_i128.pow(u32::from(precision)) - 1,
++            ansi: ansi_mode,
++        };
++        return Ok(ScalarUDF::from(udf).call(vec![dividend, divisor]));
++    }
+ 
+     // Apply runtime zero-divisor guard to the divisor before building the division expression.
+     let effective_divisor_type = divisor_type.as_ref().cloned().unwrap_or(DataType::Int32);
