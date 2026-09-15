@@ -560,6 +560,30 @@ datafusion-physical-optimizer = { path = "/absolute/path/to/order-patched-datafu
 
 Keep this entry under `[patch.crates-io]` alongside the physical-plan and logical-optimizer overrides. Reuse the build and Spark capture/comparison commands with `--cases experiments/spark-sql/subquery-order.jsonl`, and give the candidate probe that JSONL with `--physical-plans`. The new corpus and unchanged context corpus must compare successfully; the existing `decimal-subquery.jsonl` comparison still exits nonzero for the eight LATERAL cases. Run the direct regression with `cargo test --release --lib output_requirements::tests::scalar_subquery_preserves_hidden_sort_key` in the patched physical optimizer crate.
 
+## LATERAL table aliases
+
+[sail-lateral-alias.patch](sail-lateral-alias.patch) adapts the alias placement already used by [DataFusion 54.1.0's SQL planner](https://github.com/apache/datafusion/blob/54.1.0/datafusion/sql/src/relation/mod.rs#L341-L363). It changes one Sail resolver function, with 22 added lines and 13 removed including comments, plus a 67-line regression test. It remains an optional patch to the candidate checkout.
+
+Sail wrapped an aliased lateral relation as `Subquery(SubqueryAlias(t, inner))`. Decorrelation adds correlation keys and an unmatched-row indicator to the inner plan, but the tree walk retains the alias's original schema. The join cannot resolve the new `__always_true` field; MAX without compensation instead fails to resolve the correlation key. Building `SubqueryAlias(t, Subquery(inner))` lets the existing lateral optimizer extract the alias, rebuild its schema and requalify the join conditions. The resolver still projects the original output columns so the added helper fields remain internal. No optimizer rule, execution node or arithmetic implementation is added.
+
+The direct regression fails on the original resolver with the missing-indicator error. After the fix, all 14 sail-plan library tests pass, including exact ordered COUNT results for CROSS LATERAL and LEFT LATERAL with an ON condition. The candidate reuses the preceding fused arithmetic and three DataFusion overrides; its Cargo.lock is unchanged.
+
+The [capture](lateral-alias-checks.json) records the comparisons against Spark 4.2.0:
+
+| Check | Result |
+| --- | --- |
+| Original additional subquery corpus, three processes | 54/54 in each, up from 46/54; all eight targeted LATERAL failures repaired |
+| New LATERAL corpus, three processes | 44/48 in each, up from 8/48 |
+| Ordering and context corpora, three processes each | 30/30 and 28/28 in each |
+| Original/high-scale/filter corpora | All 602 parsed captures identical, including plans and complete errors |
+| Delta corpus and adapter checks | All 116 observations preserved with matching input data/schema; 18 adapter checks pass |
+
+The new [24-query corpus](lateral-alias.jsonl) runs both ANSI modes and batch sizes 1/4. It covers COUNT, MAX, COALESCE, grouped and ungrouped aggregates, non-aggregate rows, INNER/LEFT ON conditions including false and NULL, column aliases, overlapping outer/inner names, NULL correlation keys and nested scalar expressions. The controls without a table alias or without outer references retain their entire observations, including plans. The original subquery corpus has 43 successful executions and 11 expected runtime errors; all 11 error messages are preserved. The Delta corpus still has 87 successes, 18 planning errors and 11 execution errors.
+
+Four observations remain unsupported in the new corpus, and failed before this patch too. `multiple_lateral_{true,false}` chains two lateral joins and now reports `No field named i.column1`. `nested_derived_alias_{true,false}` puts another derived-table alias inside the lateral query and still reports a missing `__always_true` field under `z`. Their SQL, errors and logical plans remain in the capture for separate follow-up. No performance measurements were taken; the corrected candidate still needs the planned comparison with expression/ROUND.
+
+To reproduce, apply `git apply experiments/spark-sql/sail-lateral-alias.patch` at the isolated candidate checkout's root, alongside the preceding arithmetic and DataFusion patches. Reuse the release build and Spark comparison commands with `--cases experiments/spark-sql/lateral-alias.jsonl` and `--physical-plans` for the Rust probe. The new comparison intentionally exits nonzero for the four documented failures; `decimal-subquery.jsonl` must now compare successfully. Run the direct regression from the checkout root with `cargo test --release --locked --config /absolute/path/to/override.toml --manifest-path experiments/spark-sql/Cargo.toml -p sail-plan --lib lateral_alias_preserves_empty_group_count`.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

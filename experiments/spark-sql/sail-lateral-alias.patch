@@ -1,0 +1,138 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/lateral_join.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/lateral_join.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/lateral_join.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/lateral_join.rs
+@@ -32,6 +32,7 @@
+         };
+ 
+         let outer_ref_columns = right.all_out_ref_exprs();
++        let wrapped_as_subquery = !outer_ref_columns.is_empty();
+ 
+         // If the right plan contains outer references deeper than the top-level
+         // Projection (e.g. in a Filter or Aggregate), wrap it as a Subquery node
+@@ -39,13 +40,26 @@
+         //
+         // Before wrapping, collapse redundant Projection layers introduced by the
+         // opaque field ID rename mechanism.
+-        let right = if !outer_ref_columns.is_empty() {
++        let right = if wrapped_as_subquery {
+             let simplified = collapse_projections(right)?;
+-            LogicalPlan::Subquery(Subquery {
+-                subquery: Arc::new(simplified),
+-                outer_ref_columns,
+-                spans: Spans::new(),
+-            })
++            // Match DataFusion's SQL planner: the lateral alias stays outside
++            // Subquery so decorrelation can rebuild its schema and join filters.
++            match simplified {
++                LogicalPlan::SubqueryAlias(SubqueryAlias { input, alias, .. }) => {
++                    LogicalPlanBuilder::from(LogicalPlan::Subquery(Subquery {
++                        subquery: input,
++                        outer_ref_columns,
++                        spans: Spans::new(),
++                    }))
++                    .alias(alias)?
++                    .build()?
++                }
++                plan => LogicalPlan::Subquery(Subquery {
++                    subquery: Arc::new(plan),
++                    outer_ref_columns,
++                    spans: Spans::new(),
++                }),
++            }
+         } else {
+             right
+         };
+@@ -78,10 +92,6 @@
+             None
+         };
+ 
+-        // Track whether the right side was wrapped as a Subquery so we can add
+-        // an output Projection below to flatten the schema.
+-        let wrapped_as_subquery = matches!(&right, LogicalPlan::Subquery(_));
+-
+         // For inner joins without a condition, use cross join. Otherwise use join_on.
+         let plan =
+             if condition.is_none() && matches!(df_join_type, datafusion_common::JoinType::Inner) {
+@@ -92,9 +102,8 @@
+                     .build()?
+             };
+ 
+-        // When the right side is a Subquery, add an explicit Projection to expose
+-        // all join output columns. This ensures the Subquery's internal schema
+-        // is properly flattened into the join result.
++        // Keep the original output columns when decorrelation adds join keys
++        // and compensation fields, including when an alias wraps the Subquery.
+         let plan = if wrapped_as_subquery {
+             let original_columns: Vec<Expr> = plan
+                 .schema()
+@@ -279,3 +288,70 @@
+             _ => false,
+         })
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use arrow::array::Int64Array;
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    use crate::config::PlanConfig;
++    use crate::physical_plan::SparkQueryPlanner;
++
++    #[tokio::test]
++    async fn lateral_alias_preserves_empty_group_count() -> PlanResult<()> {
++        let ctx = SessionContext::new_with_state(
++            SessionStateBuilder::new()
++                .with_default_features()
++                .with_query_planner(Arc::new(SparkQueryPlanner))
++                .build(),
++        );
++        for (join, expected) in [
++            ("CROSS JOIN", vec![Some(2), Some(1), Some(0)]),
++            ("LEFT JOIN", vec![Some(2), Some(1), None]),
++        ] {
++            let condition = if join == "LEFT JOIN" {
++                " ON t.n > 0"
++            } else {
++                ""
++            };
++            let sql = format!(
++                "SELECT CAST(o.k AS BIGINT), t.n FROM VALUES (1),(2),(3) AS o(k) \
++                 {join} LATERAL (SELECT count(*) AS n FROM VALUES (1),(1),(2) AS i(k) \
++                 WHERE i.k=o.k) AS t{condition} ORDER BY o.k"
++            );
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let named = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()))
++                .resolve_named_plan(spec)
++                .await?;
++            let batches = ctx
++                .execute_logical_plan(named.plan)
++                .await?
++                .collect()
++                .await?;
++            let mut rows = Vec::new();
++            for batch in batches {
++                assert_eq!(batch.num_columns(), 2);
++                let keys = batch
++                    .column(0)
++                    .as_any()
++                    .downcast_ref::<Int64Array>()
++                    .unwrap();
++                let counts = batch
++                    .column(1)
++                    .as_any()
++                    .downcast_ref::<Int64Array>()
++                    .unwrap();
++                rows.extend(keys.iter().zip(counts.iter()));
++            }
++            assert_eq!(
++                rows,
++                (1..=3).map(Some).zip(expected).collect::<Vec<_>>(),
++                "{sql}"
++            );
++        }
++        Ok(())
++    }
++}
