@@ -54,7 +54,7 @@ fn input(precision: u8, scale: i8, nulls: bool) -> Result<MemTable> {
                         values.map(|v| v.map(|v| v as f64 / 100.0)),
                     ))
                 } else {
-                    let unit = 10_i128.pow((scale - 2) as u32);
+                    let unit = 10_i128.pow((scale - if scale >= 35 { 5 } else { 2 }) as u32);
                     Arc::new(
                         Decimal128Array::from_iter(values.map(|v| v.map(|v| v * unit)))
                             .with_precision_and_scale(precision, scale)?,
@@ -85,7 +85,21 @@ async fn main() -> Result<()> {
         return Err("use cargo build --release for timing".into());
     }
     let args = std::env::args().collect::<Vec<_>>();
-    let output = args.get(1).ok_or("usage: decimal_bench OUTPUT_JSON")?;
+    let output = args
+        .get(1)
+        .ok_or("usage: decimal_bench OUTPUT_JSON [high-scale]")?;
+    let inputs = match args.get(2).map(String::as_str) {
+        None => vec![
+            (10, 2, false),
+            (18, 4, false),
+            (38, 6, false),
+            (10, 2, true),
+            (0, 2, false),
+        ],
+        Some("high-scale") => vec![(38, 35, false), (38, 38, false), (38, 38, true)],
+        Some("high-scale-35") => vec![(38, 35, false)],
+        Some(_) => return Err("expected high-scale, high-scale-35 or no extra argument".into()),
+    };
     let ctx = SessionContext::new_with_state(
         SessionStateBuilder::new()
             .with_default_features()
@@ -98,17 +112,11 @@ async fn main() -> Result<()> {
             .build(),
     );
     let mut results = Vec::new();
-    for (precision, scale, nulls) in [
-        (10, 2, false),
-        (18, 4, false),
-        (38, 6, false),
-        (10, 2, true),
-        (0, 2, false),
-    ] {
+    for (precision, scale, nulls) in inputs {
         ctx.deregister_table("bench_input")?;
         ctx.register_table("bench_input", Arc::new(input(precision, scale, nulls)?))?;
         for divisor_kind in ["column", "typed_literal", "integer_literal"] {
-            if divisor_kind == "integer_literal" && (nulls || precision == 0) {
+            if divisor_kind == "integer_literal" && (nulls || precision == 0 || scale >= 35) {
                 continue;
             }
             let scalar = divisor_kind != "column";
@@ -118,6 +126,8 @@ async fn main() -> Result<()> {
                 "3".to_owned()
             } else if precision == 0 {
                 "CAST(3 AS DOUBLE)".to_owned()
+            } else if scale >= 35 {
+                format!("CAST('0.3' AS DECIMAL({precision},{scale}))")
             } else {
                 format!("CAST(3 AS DECIMAL({precision},{scale}))")
             };

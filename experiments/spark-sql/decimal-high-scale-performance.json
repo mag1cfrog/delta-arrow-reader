@@ -1,0 +1,5298 @@
+{
+  "environment": {
+    "source_commit": "941d73cc8e34ec049ac2158c81fb63462feb4659",
+    "patch_state": "High-scale follow-up pending review; default vendored arithmetic unmodified.",
+    "upstream_sail_pr_revision": "c9fda1f3281d383ee0efbd371d2b43d957d01939",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "os": "Linux-6.19.14-200.fc43.x86_64-x86_64-with-glibc2.42",
+    "cpu": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics",
+    "logical_cpu_affinity": [
+      2
+    ],
+    "datafusion": "54.1.0",
+    "arrow": "58.4.0",
+    "spark": "4.2.0",
+    "profile": "release",
+    "variants": {
+      "before": "decimal-division.patch with original registry dependencies",
+      "after": "Same candidate plus decimal-division-high-scale.patch; neither rounding patch applied"
+    },
+    "build_paths": "Both variants built from the same temporary checkout with identical lockfile and benchmark source; source changes forced planner recompilation.",
+    "file_sha256": {
+      "Cargo.lock": "55d246bde8b38df58816884f936a4743750504f8acc8d24a4cec9d6aecf6976f",
+      "decimal-division.patch": "81c9972126ee7e6a23378bfd3a3a17ce92f775b736061d48189491e2a2722809",
+      "decimal-division-high-scale.patch": "db954c6fafd53ed985f3b2b5364b1d5d7a84b26c7a3f747171a9b56059043111",
+      "decimal_division.py": "76f4839b2ce608ca05d789d17c649119d5855a0711af405e60d89b117a8b0549",
+      "decimal-division.jsonl": "9c57df6a2eb10c61b5400ab169d59fd162aa89ce876ba346ede35ac4079b4e41",
+      "decimal-high-scale.jsonl": "fae42f77c292be35c6a759f7a2866b376eaa48d59f63fecafe98c5180d01cc14",
+      "examples/decimal_bench.rs": "263ec552c58b433475b377447daf53b0a42731bcb894f2410028ad7d52d5e05a",
+      "examples/decimal_probe.rs": "a862bfc6912352bd9cd7da3967de82d8d66b7cde87375a17a53255a840d52e6f"
+    },
+    "math_sha256": {
+      "before": "baade117208c307d74f251807982ae8d6df024f5246f7bd0e59d30eccd490b62",
+      "after": "ddbd83401ba9299fff73fc16124630e832d1cd8f3e7b70543ce808a131c76f2b"
+    },
+    "binary_sha256": {
+      "before": "a7670f493e393d059a124023d1b286aa07ca315ca11ea7f36bae103244a9cfef",
+      "after": "a00da139905490078b3d1e254866397b28d66007a073cd4770d09be8984421f1"
+    },
+    "after_probe_sha256": "7d7a6cb9b1b34767c7c93949ef2940de2018dbf8a80e852e5860bfcc3abea0ad"
+  },
+  "validation": {
+    "original_probe": {
+      "agreement": 158,
+      "total": 168,
+      "changed_comparisons": [
+        "self_scale_37_true",
+        "self_scale_37_false",
+        "self_scale_38_true",
+        "self_scale_38_false",
+        "max_scale_value_true",
+        "max_scale_value_false"
+      ],
+      "remaining_differences": [
+        {
+          "id": "round_composed_true",
+          "differences": [
+            "types"
+          ]
+        },
+        {
+          "id": "round_composed_false",
+          "differences": [
+            "types"
+          ]
+        },
+        {
+          "id": "long_min_literal_true",
+          "differences": [
+            "status"
+          ]
+        },
+        {
+          "id": "long_min_literal_false",
+          "differences": [
+            "status"
+          ]
+        },
+        {
+          "id": "string_peer_control_true",
+          "differences": [
+            "status"
+          ]
+        },
+        {
+          "id": "string_peer_control_false",
+          "differences": [
+            "types",
+            "rows"
+          ]
+        },
+        {
+          "id": "other_operators_control_true",
+          "differences": [
+            "types"
+          ]
+        },
+        {
+          "id": "other_operators_control_false",
+          "differences": [
+            "types"
+          ]
+        },
+        {
+          "id": "nondecimal_null_mask_int_true",
+          "differences": [
+            "status"
+          ]
+        },
+        {
+          "id": "nondecimal_null_mask_double_true",
+          "differences": [
+            "status"
+          ]
+        }
+      ]
+    },
+    "high_scale_probe": {
+      "before_agreement": 249,
+      "after_agreement": 314,
+      "total": 314,
+      "queries": 157,
+      "expected_ansi_errors": [
+        {
+          "id": "overflow_35_positive_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  50000000000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,35)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'0.5','0.00...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Cast error: Cannot cast to Decimal128(38, 6). Overflowing on 50000000000000000000000000000000000000"
+        },
+        {
+          "id": "overflow_35_-_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  -50000000000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,35)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'-0.5','0.0...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Cast error: Cannot cast to Decimal128(38, 6). Overflowing on -50000000000000000000000000000000000000"
+        },
+        {
+          "id": "overflow_36_positive_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  50000000000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,36)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'0.5','0.00...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Cast error: Cannot cast to Decimal128(38, 6). Overflowing on 50000000000000000000000000000000000000"
+        },
+        {
+          "id": "overflow_36_-_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  -50000000000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,36)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'-0.5','0.0...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Cast error: Cannot cast to Decimal128(38, 6). Overflowing on -50000000000000000000000000000000000000"
+        },
+        {
+          "id": "overflow_37_positive_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  50000000000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,37)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'0.5','0.00...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Cast error: Cannot cast to Decimal128(38, 6). Overflowing on 50000000000000000000000000000000000000"
+        },
+        {
+          "id": "overflow_37_-_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  -50000000000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,37)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'-0.5','0.0...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Cast error: Cannot cast to Decimal128(38, 6). Overflowing on -50000000000000000000000000000000000000"
+        },
+        {
+          "id": "overflow_38_positive_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  50000000000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,38)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'0.5','0.00...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Cast error: Cannot cast to Decimal128(38, 6). Overflowing on 50000000000000000000000000000000000000"
+        },
+        {
+          "id": "overflow_38_-_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  -50000000000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,38)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'-0.5','0.0...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Cast error: Cannot cast to Decimal128(38, 6). Overflowing on -50000000000000000000000000000000000000"
+        },
+        {
+          "id": "rounding_overflow_true",
+          "category": "result_overflow",
+          "spark_error": "[NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION]  100000000000000000000000000000000.000000000000000000000000000000000000000 cannot be represented as Decimal(38, 6). If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error, and return NULL instead. SQLSTATE: 22003\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,6)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0, '999999999...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Invalid argument error: 100000000000000000000000000000000.000000 is too large to store in a Decimal128 of precision 38. Max is 99999999999999999999999999999999.999999"
+        },
+        {
+          "id": "active_zero_true",
+          "category": "divide_by_zero",
+          "spark_error": "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. SQLSTATE: 22012\n== SQL (line 1, position 8) ==\nSELECT CAST(a AS DECIMAL(38,38)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES (0,'0.5','0') ...\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Divide by zero error"
+        },
+        {
+          "id": "literal_active_zero_true",
+          "category": "divide_by_zero",
+          "spark_error": "[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. SQLSTATE: 22012\n== SQL (line 1, position 8) ==\nSELECT CAST('0.5' AS DECIMAL(38,38)) / CAST(0 AS DECIMAL(38,38)) AS r\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+          "candidate_error": "Arrow error: Divide by zero error"
+        }
+      ]
+    },
+    "capture_sha256": {
+      "spark.json": "e555fa9d244ee9fd901db982ba98982a22c95747f778284f3ea99bbe80595257",
+      "final-capture.json": "49a4fec83945341cbc7558d9f805f4a4b72d98ba4bc041bd38a2189dbcbe9de4",
+      "final-high-capture.json": "0dfe4ab2344c2ec80056129b903ae96d4724ef0a508d0c7c4ea42836791af6bc",
+      "before-high-capture.json": "f9ec81eeda90578862ae1676beba183540774e8fb116822d2707e2e26c2d65b3",
+      "default-capture.json": "ac2e0df83f81543ef8bce596e20ca752f1426066061afd5cbb69ba8198b9dac2"
+    },
+    "before_scale38_benchmark_row_failure": {
+      "case": {
+        "id": "bench_row_56",
+        "sql": "SELECT CAST(a AS DECIMAL(38,38)) / CAST(b AS DECIMAL(38,38)) AS r FROM VALUES ('0.00058', '0.00059') AS t(a,b)"
+      },
+      "before": [
+        {
+          "id": "bench_row_56_true",
+          "actual": {
+            "status": "execution_error",
+            "error": "Arrow error: Arithmetic overflow: Overflow happened on: 58000000000000000000000000000000000 * 1000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "id": "bench_row_56_false",
+          "actual": {
+            "status": "execution_error",
+            "error": "Arrow error: Arithmetic overflow: Overflow happened on: 58000000000000000000000000000000000 * 1000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "after": [
+        {
+          "id": "bench_row_56_true",
+          "actual": {
+            "status": "ok",
+            "types": [
+              "Decimal128(38, 6)"
+            ],
+            "rows": [
+              [
+                "0.983051"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "bench_row_56_false",
+          "actual": {
+            "status": "ok",
+            "types": [
+              "Decimal128(38, 6)"
+            ],
+            "rows": [
+              [
+                "0.983051"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "delta_corpus_matches": 116,
+    "host_adapter_checks": 18,
+    "runner_tests": 27,
+    "python_tests": 10,
+    "default_probe_observations_identical": 168,
+    "default_math_sha256": "992ee4240d91f7e480372cc1008401325068b6f6568a70315d15705056e84a31",
+    "default_benchmark_sha256": "145f3848f64b21bfe1b58b37f7bb9934cbe4d0de17a5a805edc05f96744c385e",
+    "type_bound_enumeration": {
+      "stats": {
+        "type_pairs": 606841,
+        "fallback_pairs": 880
+      },
+      "max_bounds": {
+        "aligned_digits": 76,
+        "remainder_digits": 38,
+        "fractional_numerator_digits": 45
+      }
+    }
+  },
+  "config": {
+    "rows": 1048576,
+    "batch_size": 8192,
+    "partitions": 1,
+    "warmups": 2,
+    "samples": 9
+  },
+  "run_order": [
+    "before-1",
+    "after-1",
+    "after-2",
+    "before-2",
+    "after-3",
+    "before-3",
+    "before-4",
+    "after-4"
+  ],
+  "normal_cases": [
+    {
+      "id": "p10_s2_nullsfalse_column_ansitrue",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(23, 13)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.6666666666667",
+        "0.7500000000000",
+        "0.8000000000000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 10)) / CAST(b@1 AS Decimal128(38, 2)), 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              34.997634,
+              34.91975,
+              35.000349,
+              35.031457,
+              34.942822,
+              34.821477,
+              34.777685000000005,
+              34.782635,
+              34.78521
+            ],
+            [
+              34.835744000000005,
+              34.846864,
+              34.879245000000004,
+              34.888541000000004,
+              34.913337000000006,
+              34.92043,
+              34.850801000000004,
+              34.879915999999994,
+              34.895575
+            ],
+            [
+              34.756577,
+              34.724196,
+              34.712595,
+              34.724066,
+              35.162169999999996,
+              36.309782,
+              37.599417,
+              37.247583,
+              34.999928
+            ],
+            [
+              34.706905000000006,
+              34.702146000000006,
+              34.685705,
+              34.711723,
+              34.716983,
+              34.722623,
+              34.735378,
+              34.693929999999995,
+              34.702466
+            ]
+          ],
+          "median_ms": 34.841304,
+          "mean_ms": 35.01621236111111,
+          "run_medians_ms": [
+            34.91975,
+            34.879915999999994,
+            34.999928,
+            34.706905000000006
+          ],
+          "run_means_ms": [
+            34.89544655555556,
+            34.87893922222222,
+            35.581812666666664,
+            34.708651
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 10)) / CAST(b@1 AS Decimal128(38, 2)), 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              34.852024,
+              34.837387,
+              34.835674,
+              34.784609,
+              34.759983,
+              34.826106,
+              34.804485,
+              34.778487,
+              34.842766999999995
+            ],
+            [
+              34.831155,
+              34.85548,
+              34.825013,
+              34.821317,
+              34.905573000000004,
+              34.889083,
+              34.893029999999996,
+              34.912697,
+              34.897207
+            ],
+            [
+              34.803303,
+              34.824343,
+              34.812801,
+              34.847195,
+              34.966336,
+              34.820615,
+              34.871871,
+              35.202535,
+              34.928005
+            ],
+            [
+              34.653225000000006,
+              34.608021,
+              34.599885,
+              34.664505999999996,
+              34.632998,
+              34.659376,
+              34.768528,
+              35.060321,
+              34.702605999999996
+            ]
+          ],
+          "median_ms": 34.8255595,
+          "mean_ms": 34.821626305555554,
+          "run_medians_ms": [
+            34.826106,
+            34.889083,
+            34.847195,
+            34.659376
+          ],
+          "run_means_ms": [
+            34.813502444444445,
+            34.870061666666665,
+            34.897444888888884,
+            34.70549622222222
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9995481081879138
+    },
+    {
+      "id": "p10_s2_nullsfalse_column_ansifalse",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(23, 13)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.6666666666667",
+        "0.7500000000000",
+        "0.8000000000000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 10)) / CAST(nullif(CAST(b@1 AS Decimal128(12, 2)), Some(0),12,2) AS Decimal128(38, 2)), 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              38.961256,
+              33.794018,
+              38.412166,
+              38.086301000000006,
+              37.946560999999996,
+              33.130717,
+              33.099308,
+              38.062958,
+              37.96717
+            ],
+            [
+              38.178573,
+              33.056789,
+              37.984372,
+              38.041778,
+              37.972569,
+              33.149181,
+              37.990924,
+              38.080069,
+              38.062988
+            ],
+            [
+              37.972480000000004,
+              32.998682,
+              38.043662,
+              38.116066999999994,
+              38.053709999999995,
+              33.098957999999996,
+              33.1006,
+              38.070071,
+              37.984271
+            ],
+            [
+              37.938086000000006,
+              32.97042,
+              38.894983,
+              38.538451,
+              38.163534999999996,
+              33.08433,
+              32.947064999999995,
+              38.00519,
+              37.855833999999994
+            ]
+          ],
+          "median_ms": 37.9843215,
+          "mean_ms": 36.60594702777778,
+          "run_medians_ms": [
+            37.96717,
+            37.990924,
+            37.984271,
+            37.938086000000006
+          ],
+          "run_means_ms": [
+            36.60671722222222,
+            36.94636033333333,
+            36.382055666666666,
+            36.48865488888889
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 10)) / CAST(nullif(CAST(b@1 AS Decimal128(12, 2)), Some(0),12,2) AS Decimal128(38, 2)), 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              38.019698,
+              33.066778,
+              37.996805,
+              38.025779,
+              38.006242,
+              33.678033000000006,
+              33.605468,
+              38.661329,
+              38.257419
+            ],
+            [
+              38.060874,
+              33.10975800000001,
+              38.100367000000006,
+              38.098002,
+              38.028032,
+              33.089851,
+              33.071677,
+              38.220851,
+              38.126346
+            ],
+            [
+              37.965436,
+              32.959468,
+              37.920042,
+              37.922236,
+              37.96707,
+              33.033595999999996,
+              33.03052,
+              38.058228,
+              37.934048999999995
+            ],
+            [
+              37.919882,
+              32.898255,
+              37.881791,
+              37.857155000000006,
+              37.873376,
+              32.978144,
+              32.921527999999995,
+              38.004228,
+              38.174695
+            ]
+          ],
+          "median_ms": 37.92814249999999,
+          "mean_ms": 36.40341688888889,
+          "run_medians_ms": [
+            38.006242,
+            38.060874,
+            37.922236,
+            37.873376
+          ],
+          "run_means_ms": [
+            36.590839,
+            36.433973111111115,
+            36.310071666666666,
+            36.278783777777775
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9985209950373864
+    },
+    {
+      "id": "p10_s2_nullsfalse_typed_literal_ansitrue",
+      "sql": "SELECT a / CAST(3 AS DECIMAL(10,2)) AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(23, 13)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.0066666666667",
+        "0.0100000000000",
+        "0.0133333333333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 10)) / Some(300),38,2, 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              32.646497,
+              32.658398999999996,
+              32.595773,
+              32.599258999999996,
+              32.594761,
+              32.553264,
+              32.601434,
+              32.62508699999999,
+              33.200857
+            ],
+            [
+              32.640606000000005,
+              32.59431,
+              32.600291000000006,
+              32.576006,
+              32.589271000000004,
+              32.571898000000004,
+              32.573491000000004,
+              32.5994,
+              32.617954
+            ],
+            [
+              32.678577,
+              32.665493,
+              32.659291,
+              32.6425,
+              32.663769,
+              32.626821,
+              32.655975,
+              32.641548,
+              32.650274
+            ],
+            [
+              32.75571,
+              32.696289,
+              32.65867,
+              32.630357,
+              32.675391,
+              33.027184,
+              33.002258,
+              32.977653000000004,
+              32.712921
+            ]
+          ],
+          "median_ms": 32.642024,
+          "mean_ms": 32.67942330555555,
+          "run_medians_ms": [
+            32.601434,
+            32.59431,
+            32.655975,
+            32.712921
+          ],
+          "run_means_ms": [
+            32.67503677777778,
+            32.595914111111114,
+            32.65380533333333,
+            32.792937
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 10)) / Some(300),38,2, 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              32.678326,
+              32.603716999999996,
+              32.629035,
+              32.588921,
+              32.596453999999994,
+              32.580033,
+              32.54067,
+              32.52984,
+              32.537124
+            ],
+            [
+              32.533658,
+              32.458849,
+              32.524411,
+              32.511967000000006,
+              32.501067,
+              32.480830000000005,
+              32.487641999999994,
+              32.473245999999996,
+              32.477713
+            ],
+            [
+              32.873088,
+              32.789553,
+              32.831291,
+              32.827323,
+              32.813367,
+              32.767962999999995,
+              32.854213,
+              32.802246,
+              32.807476
+            ],
+            [
+              32.96541,
+              32.720415,
+              32.606313,
+              32.608677,
+              32.580534,
+              32.533277,
+              32.558634000000005,
+              32.522587,
+              32.653279
+            ]
+          ],
+          "median_ms": 32.5926875,
+          "mean_ms": 32.63469858333333,
+          "run_medians_ms": [
+            32.588921,
+            32.487641999999994,
+            32.813367,
+            32.606313
+          ],
+          "run_means_ms": [
+            32.58712444444444,
+            32.49437588888889,
+            32.81850222222222,
+            32.638791777777776
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9984885587977019
+    },
+    {
+      "id": "p10_s2_nullsfalse_typed_literal_ansifalse",
+      "sql": "SELECT a / CAST(3 AS DECIMAL(10,2)) AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(23, 13)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.0066666666667",
+        "0.0100000000000",
+        "0.0133333333333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 10)) / Some(300),38,2, 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              29.926385,
+              29.914243,
+              29.92923,
+              29.996724999999998,
+              29.996935999999998,
+              29.892993,
+              29.918400000000002,
+              29.903461999999998,
+              29.868277
+            ],
+            [
+              29.884377,
+              29.869068,
+              29.853780999999998,
+              29.898403000000002,
+              30.545154,
+              30.766215,
+              30.751668,
+              30.148087,
+              30.048130999999998
+            ],
+            [
+              29.874358,
+              29.81059,
+              29.814858,
+              29.871383,
+              29.820207,
+              29.868467,
+              29.811942000000002,
+              29.839193,
+              29.792155
+            ],
+            [
+              29.912959999999998,
+              29.897953,
+              29.89168,
+              29.903032,
+              29.958615,
+              29.917579,
+              29.964235,
+              29.890038,
+              29.906007
+            ]
+          ],
+          "median_ms": 29.9007175,
+          "mean_ms": 29.96824408333333,
+          "run_medians_ms": [
+            29.918400000000002,
+            30.048130999999998,
+            29.820207,
+            29.906007
+          ],
+          "run_means_ms": [
+            29.927405666666665,
+            30.196098222222222,
+            29.83368366666667,
+            29.915788777777777
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 10)) / Some(300),38,2, 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              29.88045,
+              29.876732999999998,
+              29.843650999999998,
+              29.876452,
+              29.863867999999997,
+              29.922477999999998,
+              30.328651,
+              30.253372,
+              29.929510999999998
+            ],
+            [
+              30.685956,
+              30.177781,
+              29.923089,
+              29.903101000000003,
+              29.865742,
+              29.858399000000002,
+              29.838502,
+              29.83231,
+              29.7943
+            ],
+            [
+              30.046518000000003,
+              29.982689,
+              29.992929,
+              30.111478,
+              30.426233,
+              30.134812,
+              30.024967999999998,
+              30.002507,
+              30.189884
+            ],
+            [
+              29.838272,
+              29.872225,
+              29.841597,
+              29.913632,
+              29.819737,
+              29.826439999999998,
+              29.783810000000003,
+              29.783649999999998,
+              29.764433999999998
+            ]
+          ],
+          "median_ms": 29.8917755,
+          "mean_ms": 29.972504472222223,
+          "run_medians_ms": [
+            29.88045,
+            29.865742,
+            30.046518000000003,
+            29.826439999999998
+          ],
+          "run_means_ms": [
+            29.975018444444444,
+            29.986575555555557,
+            30.101335333333335,
+            29.827088555555555
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9997009436312022
+    },
+    {
+      "id": "p10_s2_nullsfalse_integer_literal_ansitrue",
+      "sql": "SELECT a / 3 AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "integer_literal",
+      "output_type": "Decimal128(14, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006667",
+        "0.010000",
+        "0.013333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 3)) / Some(3),38,0, 6) AS Decimal128(14, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              32.785165,
+              37.570694,
+              37.509239,
+              37.499982,
+              32.754457,
+              32.901340000000005,
+              32.794613,
+              37.824895999999995,
+              32.754127000000004
+            ],
+            [
+              37.591181,
+              37.577517,
+              37.549604,
+              37.519428,
+              37.603925000000004,
+              37.555184999999994,
+              37.550245000000004,
+              37.862885999999996,
+              37.838049999999996
+            ],
+            [
+              32.662818,
+              37.429851,
+              37.446773,
+              37.409835,
+              32.89041,
+              33.110589000000004,
+              32.884820000000005,
+              37.532001,
+              32.610821
+            ],
+            [
+              32.64824,
+              37.439991,
+              37.466300000000004,
+              37.443047,
+              32.636719,
+              32.671794,
+              32.632642000000004,
+              37.554933999999996,
+              32.609418
+            ]
+          ],
+          "median_ms": 37.441519,
+          "mean_ms": 35.55898713888889,
+          "run_medians_ms": [
+            32.901340000000005,
+            37.577517,
+            33.110589000000004,
+            32.671794
+          ],
+          "run_means_ms": [
+            34.93272366666667,
+            37.62755788888889,
+            34.88643533333334,
+            34.789231666666666
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 3)) / Some(3),38,0, 6) AS Decimal128(14, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              32.584301,
+              37.511143,
+              37.480285,
+              37.702729,
+              32.714914,
+              32.768534,
+              32.574404,
+              37.566025,
+              32.584562
+            ],
+            [
+              32.68076000000001,
+              37.582234,
+              37.600408,
+              37.595689,
+              32.791927,
+              32.771158,
+              33.216496,
+              37.996805,
+              32.712911
+            ],
+            [
+              32.68014,
+              37.473423,
+              37.463715,
+              37.461220000000004,
+              32.709434,
+              32.854914,
+              32.702942,
+              38.233875,
+              33.503319
+            ],
+            [
+              32.550279,
+              37.331699,
+              37.415165,
+              37.402240000000006,
+              32.531563999999996,
+              32.680229999999995,
+              32.526044,
+              37.442265,
+              32.508902
+            ]
+          ],
+          "median_ms": 33.035705,
+          "mean_ms": 34.88629597222222,
+          "run_medians_ms": [
+            32.768534,
+            33.216496,
+            33.503319,
+            32.680229999999995
+          ],
+          "run_means_ms": [
+            34.831877444444444,
+            34.99426533333333,
+            35.009220222222226,
+            34.70982088888889
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.882328118151403
+    },
+    {
+      "id": "p10_s2_nullsfalse_integer_literal_ansifalse",
+      "sql": "SELECT a / 3 AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "integer_literal",
+      "output_type": "Decimal128(14, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006667",
+        "0.010000",
+        "0.013333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 3)) / Some(3),38,0, 6) AS Decimal128(14, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              34.761134,
+              34.692918000000006,
+              34.708467,
+              34.679764,
+              34.708728,
+              34.674844,
+              35.028873000000004,
+              35.228443,
+              34.838208
+            ],
+            [
+              24.317527,
+              24.305454,
+              24.529641,
+              24.266502,
+              24.23884,
+              24.616082000000002,
+              24.519362,
+              24.389771,
+              24.385954
+            ],
+            [
+              34.668713,
+              34.649037,
+              34.642804999999996,
+              34.641303,
+              34.656611,
+              34.623960000000004,
+              34.634881,
+              34.706433000000004,
+              34.800017000000004
+            ],
+            [
+              34.703578,
+              34.717745,
+              34.70437,
+              34.752258,
+              34.719538,
+              34.679162999999996,
+              34.644518999999995,
+              34.696394999999995,
+              34.662973
+            ]
+          ],
+          "median_ms": 34.6717785,
+          "mean_ms": 32.144300305555554,
+          "run_medians_ms": [
+            34.708728,
+            24.385954,
+            34.649037,
+            34.703578
+          ],
+          "run_means_ms": [
+            34.813486555555556,
+            24.396570333333333,
+            34.669306666666664,
+            34.697837666666665
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 3)) / Some(3),38,0, 6) AS Decimal128(14, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              40.184959,
+              40.697540999999994,
+              38.020548,
+              35.116505,
+              34.949404,
+              34.782365000000006,
+              34.762016,
+              34.739725,
+              34.76366
+            ],
+            [
+              34.633969,
+              34.62383,
+              34.850521,
+              34.5973,
+              34.632075,
+              34.606367,
+              34.611788,
+              34.608362,
+              34.631624
+            ],
+            [
+              34.726862,
+              34.752339,
+              34.776583,
+              34.701764000000004,
+              34.773987999999996,
+              34.748381,
+              34.718264999999995,
+              34.787314,
+              34.766455
+            ],
+            [
+              34.649888,
+              34.654637,
+              34.642946,
+              34.620323,
+              34.614633,
+              34.698347999999996,
+              34.662212,
+              34.616386,
+              34.615044
+            ]
+          ],
+          "median_ms": 34.7100145,
+          "mean_ms": 35.12052575,
+          "run_medians_ms": [
+            34.949404,
+            34.62383,
+            34.752339,
+            34.642946
+          ],
+          "run_means_ms": [
+            36.446302555555555,
+            34.643981777777775,
+            34.75021677777778,
+            34.641601888888886
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0011027989233376
+    },
+    {
+      "id": "p18_s4_nullsfalse_column_ansitrue",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 18,
+      "scale": 4,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 20)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.66666666666666666667",
+        "0.75000000000000000000",
+        "0.80000000000000000000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 17)) / CAST(b@1 AS Decimal256(76, 4)), 20) AS Decimal128(38, 20)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              146.92388400000002,
+              140.75246099999998,
+              140.81176200000002,
+              140.720913,
+              141.07019200000002,
+              140.81333500000002,
+              140.919542,
+              140.849131,
+              130.930569
+            ],
+            [
+              140.355976,
+              130.744513,
+              130.745485,
+              130.852894,
+              130.93703000000002,
+              130.709508,
+              130.863714,
+              132.593277,
+              130.97134499999999
+            ],
+            [
+              140.37915900000002,
+              140.230943,
+              140.057852,
+              140.091905,
+              140.00000500000002,
+              139.858922,
+              140.13242,
+              140.03055,
+              130.818721
+            ],
+            [
+              136.937376,
+              137.120576,
+              136.416118,
+              136.755318,
+              136.343203,
+              136.133853,
+              136.48587700000002,
+              136.265939,
+              126.98842799999998
+            ]
+          ],
+          "median_ms": 137.028976,
+          "mean_ms": 136.76701933333334,
+          "run_medians_ms": [
+            140.81333500000002,
+            130.863714,
+            140.057852,
+            136.416118
+          ],
+          "run_means_ms": [
+            140.42130988888889,
+            132.08597133333333,
+            139.06671966666667,
+            135.49407644444443
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 17)) / CAST(b@1 AS Decimal256(76, 4)), 20) AS Decimal128(38, 20)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              140.28323,
+              142.082392,
+              140.887643,
+              140.609486,
+              140.520751,
+              140.385701,
+              141.001624,
+              140.510322,
+              131.49658
+            ],
+            [
+              139.993402,
+              140.058974,
+              139.963637,
+              139.867017,
+              140.364181,
+              141.333341,
+              140.323856,
+              140.027175,
+              131.187416
+            ],
+            [
+              139.75369700000002,
+              139.88007199999998,
+              139.835599,
+              139.856137,
+              140.08408,
+              140.075895,
+              140.20501399999998,
+              139.823266,
+              130.170968
+            ],
+            [
+              135.98232199999998,
+              135.98675,
+              137.237123,
+              136.540098,
+              136.276558,
+              136.212149,
+              135.97038,
+              136.894286,
+              126.56057200000001
+            ]
+          ],
+          "median_ms": 139.9218545,
+          "mean_ms": 138.2844915,
+          "run_medians_ms": [
+            140.520751,
+            140.027175,
+            139.856137,
+            136.212149
+          ],
+          "run_means_ms": [
+            139.753081,
+            139.23544433333333,
+            138.85385866666667,
+            135.295582
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0211114363140246
+    },
+    {
+      "id": "p18_s4_nullsfalse_column_ansifalse",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 18,
+      "scale": 4,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 20)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.66666666666666666667",
+        "0.75000000000000000000",
+        "0.80000000000000000000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 17)) / CAST(nullif(b@1, Some(0),18,4) AS Decimal256(76, 4)), 20) AS Decimal128(38, 20)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              125.980674,
+              125.83277000000001,
+              125.636946,
+              126.015961,
+              127.031096,
+              126.33560399999999,
+              125.83350200000001,
+              125.700915,
+              126.270984
+            ],
+            [
+              125.526641,
+              125.378968,
+              125.500213,
+              125.595439,
+              125.55650700000001,
+              125.55285999999998,
+              125.51482899999999,
+              125.699323,
+              125.19743
+            ],
+            [
+              125.18206200000002,
+              125.545878,
+              126.374146,
+              126.498477,
+              125.42900000000002,
+              125.26876200000001,
+              125.107373,
+              125.100289,
+              125.17596999999999
+            ],
+            [
+              130.433586,
+              130.205081,
+              130.319674,
+              130.266386,
+              130.185826,
+              131.505046,
+              130.348127,
+              130.67265,
+              130.66265099999998
+            ]
+          ],
+          "median_ms": 125.7668425,
+          "mean_ms": 126.90115683333333,
+          "run_medians_ms": [
+            125.980674,
+            125.526641,
+            125.26876200000001,
+            130.348127
+          ],
+          "run_means_ms": [
+            126.07093911111112,
+            125.50246777777778,
+            125.52021744444444,
+            130.511003
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 17)) / CAST(nullif(b@1, Some(0),18,4) AS Decimal256(76, 4)), 20) AS Decimal128(38, 20)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              125.909883,
+              125.745798,
+              129.593775,
+              125.99306699999998,
+              125.86480999999999,
+              126.15711299999998,
+              131.777141,
+              126.251959,
+              125.84815899999998
+            ],
+            [
+              125.517945,
+              125.46667000000001,
+              125.47082700000001,
+              125.61232,
+              125.32965600000001,
+              125.67768200000002,
+              125.60285400000001,
+              125.355293,
+              125.37268600000002
+            ],
+            [
+              126.29147199999998,
+              126.095498,
+              126.18365200000001,
+              126.175657,
+              126.188029,
+              126.181468,
+              126.214138,
+              125.94269499999999,
+              126.15827499999999
+            ],
+            [
+              130.061665,
+              129.910855,
+              130.42171399999998,
+              129.891078,
+              130.12778799999998,
+              130.18223,
+              130.13650399999997,
+              131.533278,
+              132.978123
+            ]
+          ],
+          "median_ms": 126.166966,
+          "mean_ms": 127.31171547222222,
+          "run_medians_ms": [
+            125.99306699999998,
+            125.47082700000001,
+            126.181468,
+            130.13650399999997
+          ],
+          "run_means_ms": [
+            127.015745,
+            125.48954811111112,
+            126.1589871111111,
+            130.58258166666667
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0031814705056303
+    },
+    {
+      "id": "p18_s4_nullsfalse_typed_literal_ansitrue",
+      "sql": "SELECT a / CAST(3 AS DECIMAL(18,4)) AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 18,
+      "scale": 4,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 20)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.00666666666666666667",
+        "0.01000000000000000000",
+        "0.01333333333333333333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 17)) / Some(30000),76,4, 20) AS Decimal128(38, 20)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              117.415255,
+              117.354493,
+              117.668756,
+              117.488281,
+              117.351637,
+              117.341849,
+              117.77631600000001,
+              117.489683,
+              117.326071
+            ],
+            [
+              116.860776,
+              117.237246,
+              118.377673,
+              117.188665,
+              117.031653,
+              117.44964900000001,
+              112.62372599999999,
+              112.50754,
+              121.92374000000001
+            ],
+            [
+              116.85522499999999,
+              122.75271000000001,
+              117.408273,
+              117.431295,
+              116.92215,
+              116.818427,
+              116.83288399999999,
+              116.804311,
+              116.929143
+            ],
+            [
+              117.107505,
+              117.079132,
+              117.02774600000001,
+              117.07458299999999,
+              117.17812599999999,
+              117.130617,
+              117.061249,
+              117.08341899999999,
+              117.101974
+            ]
+          ],
+          "median_ms": 117.1543715,
+          "mean_ms": 117.25032716666666,
+          "run_medians_ms": [
+            117.415255,
+            117.188665,
+            116.92215,
+            117.08341899999999
+          ],
+          "run_means_ms": [
+            117.46803788888889,
+            116.80007422222222,
+            117.63937977777778,
+            117.09381677777777
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 17)) / Some(30000),76,4, 20) AS Decimal128(38, 20)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              117.49525399999999,
+              117.189055,
+              117.609938,
+              117.230352,
+              117.253255,
+              117.30453,
+              117.461521,
+              117.32204300000001,
+              117.32618000000001
+            ],
+            [
+              119.481162,
+              117.145184,
+              117.09526100000001,
+              117.749787,
+              117.338904,
+              117.008079,
+              116.976812,
+              117.603104,
+              117.195668
+            ],
+            [
+              117.39086999999999,
+              117.155763,
+              117.272079,
+              117.145054,
+              118.065263,
+              117.887663,
+              117.230232,
+              117.18471699999999,
+              117.184707
+            ],
+            [
+              116.977313,
+              117.33181099999999,
+              117.238157,
+              117.00888099999999,
+              117.049427,
+              116.96972799999999,
+              117.407432,
+              117.324116,
+              117.45329699999999
+            ]
+          ],
+          "median_ms": 117.262667,
+          "mean_ms": 117.36284997222222,
+          "run_medians_ms": [
+            117.32204300000001,
+            117.195668,
+            117.230232,
+            117.238157
+          ],
+          "run_means_ms": [
+            117.3546808888889,
+            117.51044011111111,
+            117.39070533333333,
+            117.19557355555555
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0009243829198469
+    },
+    {
+      "id": "p18_s4_nullsfalse_typed_literal_ansifalse",
+      "sql": "SELECT a / CAST(3 AS DECIMAL(18,4)) AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 18,
+      "scale": 4,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 20)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.00666666666666666667",
+        "0.01000000000000000000",
+        "0.01333333333333333333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 17)) / Some(30000),76,4, 20) AS Decimal128(38, 20)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              116.784194,
+              115.71444699999999,
+              115.53317,
+              115.57051899999999,
+              115.55744399999999,
+              115.512552,
+              115.577572,
+              115.578223,
+              115.5441
+            ],
+            [
+              95.362404,
+              95.278319,
+              95.364198,
+              95.30180200000001,
+              95.30028999999999,
+              95.270023,
+              95.16930599999999,
+              95.404333,
+              95.385358
+            ],
+            [
+              115.419809,
+              115.313812,
+              115.785298,
+              115.630681,
+              115.53086599999999,
+              115.448773,
+              115.406494,
+              115.406494,
+              115.622165
+            ],
+            [
+              116.41903500000001,
+              115.935708,
+              115.695803,
+              115.925609,
+              115.36638,
+              115.308413,
+              115.372081,
+              115.222644,
+              115.301891
+            ]
+          ],
+          "median_ms": 115.434291,
+          "mean_ms": 110.5366725,
+          "run_medians_ms": [
+            115.57051899999999,
+            95.30180200000001,
+            115.448773,
+            115.372081
+          ],
+          "run_means_ms": [
+            115.70802455555555,
+            95.31511477777778,
+            115.50715466666666,
+            115.616396
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 17)) / Some(30000),76,4, 20) AS Decimal128(38, 20)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              116.047054,
+              117.072849,
+              116.660444,
+              116.003163,
+              115.765742,
+              116.113728,
+              116.145898,
+              115.81970199999999,
+              115.92031899999999
+            ],
+            [
+              115.85046,
+              115.739824,
+              115.636241,
+              115.678641,
+              115.694439,
+              115.618759,
+              116.93298,
+              116.164412,
+              115.82730600000001
+            ],
+            [
+              115.433916,
+              119.365669,
+              115.257918,
+              115.335442,
+              115.363304,
+              115.718034,
+              115.72080899999999,
+              115.280119,
+              115.35822399999999
+            ],
+            [
+              115.23756999999999,
+              115.272997,
+              116.021508,
+              116.447198,
+              115.437943,
+              115.49376699999999,
+              115.240557,
+              115.222563,
+              115.197056
+            ]
+          ],
+          "median_ms": 115.7194215,
+          "mean_ms": 115.86379319444444,
+          "run_medians_ms": [
+            116.047054,
+            115.739824,
+            115.363304,
+            115.272997
+          ],
+          "run_means_ms": [
+            116.1720998888889,
+            115.90478466666667,
+            115.87038166666666,
+            115.50790655555555
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0024700675815645
+    },
+    {
+      "id": "p18_s4_nullsfalse_integer_literal_ansitrue",
+      "sql": "SELECT a / 3 AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 18,
+      "scale": 4,
+      "nullable_input": false,
+      "divisor_kind": "integer_literal",
+      "output_type": "Decimal128(20, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006667",
+        "0.010000",
+        "0.013333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 4)) / Some(3),38,0, 6) AS Decimal128(20, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              26.437815,
+              26.442955,
+              26.408841,
+              26.438226,
+              26.428448,
+              26.426755,
+              26.44037,
+              26.458213,
+              26.441312
+            ],
+            [
+              26.318113,
+              26.269151,
+              26.269733,
+              26.267018,
+              26.260807,
+              26.759102,
+              26.763931,
+              26.89232,
+              26.591440000000002
+            ],
+            [
+              26.244647,
+              26.223397,
+              26.284501,
+              26.254595,
+              26.258182,
+              26.234587,
+              26.232533,
+              26.272157,
+              26.216524
+            ],
+            [
+              26.289340000000003,
+              26.275794,
+              26.288849,
+              26.322311000000003,
+              26.300420000000003,
+              26.317652,
+              26.290041,
+              26.260396,
+              26.292645999999998
+            ]
+          ],
+          "median_ms": 26.291343499999996,
+          "mean_ms": 26.365920055555556,
+          "run_medians_ms": [
+            26.438226,
+            26.318113,
+            26.244647,
+            26.290041
+          ],
+          "run_means_ms": [
+            26.435881666666667,
+            26.48795722222222,
+            26.246791444444444,
+            26.293049888888888
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 4)) / Some(3),38,0, 6) AS Decimal128(20, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              26.418019,
+              26.409903,
+              26.413911000000002,
+              26.476205999999998,
+              26.490733,
+              26.455358,
+              26.448995999999998,
+              26.430432,
+              26.436683
+            ],
+            [
+              26.546226,
+              26.428467,
+              26.413981,
+              26.347267000000002,
+              26.351596,
+              26.396148,
+              26.618882,
+              26.415454,
+              26.375519999999998
+            ],
+            [
+              26.246841,
+              26.244615999999997,
+              26.33271,
+              26.266337,
+              26.260055,
+              26.234206,
+              26.285362,
+              26.211094,
+              26.436293
+            ],
+            [
+              26.256208,
+              26.254675000000002,
+              26.270956,
+              26.271586,
+              26.280793,
+              26.251068999999998,
+              26.277798,
+              26.264543,
+              26.240889
+            ]
+          ],
+          "median_ms": 26.3494315,
+          "mean_ms": 26.35443925,
+          "run_medians_ms": [
+            26.436683,
+            26.413981,
+            26.260055,
+            26.264543
+          ],
+          "run_means_ms": [
+            26.442249,
+            26.432615666666667,
+            26.27972377777778,
+            26.263168555555556
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.002209396412169
+    },
+    {
+      "id": "p18_s4_nullsfalse_integer_literal_ansifalse",
+      "sql": "SELECT a / 3 AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 18,
+      "scale": 4,
+      "nullable_input": false,
+      "divisor_kind": "integer_literal",
+      "output_type": "Decimal128(20, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006667",
+        "0.010000",
+        "0.013333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 4)) / Some(3),38,0, 6) AS Decimal128(20, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              23.530535,
+              23.503555,
+              23.555452000000002,
+              23.87246,
+              23.685353,
+              23.585237,
+              23.545052000000002,
+              23.505238000000002,
+              23.451769000000002
+            ],
+            [
+              23.516599999999997,
+              23.541406000000002,
+              23.540153,
+              23.517512,
+              23.498715999999998,
+              23.471405,
+              23.820925,
+              23.618579,
+              23.528872
+            ],
+            [
+              23.490842,
+              23.356612,
+              23.319083,
+              23.343738,
+              23.340021,
+              23.358446,
+              23.406215,
+              23.417054,
+              23.356122
+            ],
+            [
+              23.47367,
+              23.394122,
+              23.396446,
+              23.36623,
+              23.373354,
+              23.381348,
+              23.43081,
+              23.400644000000003,
+              23.371409999999997
+            ]
+          ],
+          "median_ms": 23.4725375,
+          "mean_ms": 23.479582944444445,
+          "run_medians_ms": [
+            23.545052000000002,
+            23.528872,
+            23.356612,
+            23.394122
+          ],
+          "run_means_ms": [
+            23.58162788888889,
+            23.561574222222223,
+            23.376459222222223,
+            23.398670444444445
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 4)) / Some(3),38,0, 6) AS Decimal128(20, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              23.567324,
+              23.550472,
+              23.574958,
+              23.551043,
+              23.532518999999997,
+              23.539562,
+              23.528432,
+              23.563136,
+              23.531516999999997
+            ],
+            [
+              23.507582999999997,
+              23.418528000000002,
+              23.424629,
+              23.384504,
+              23.427835,
+              23.39856,
+              23.466427000000003,
+              23.461437,
+              23.389975
+            ],
+            [
+              24.076039,
+              23.679472,
+              23.630581000000003,
+              23.615351999999998,
+              23.54413,
+              23.66265,
+              23.572672999999998,
+              23.523602,
+              23.390195
+            ],
+            [
+              23.424078,
+              23.407857,
+              23.420521,
+              23.433163999999998,
+              23.394412,
+              23.43064,
+              23.411775,
+              23.391257,
+              23.385736
+            ]
+          ],
+          "median_ms": 23.487005,
+          "mean_ms": 23.505904861111112,
+          "run_medians_ms": [
+            23.550472,
+            23.424629,
+            23.615351999999998,
+            23.411775
+          ],
+          "run_means_ms": [
+            23.548773666666666,
+            23.43105311111111,
+            23.632743777777776,
+            23.41104888888889
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0006163585850059
+    },
+    {
+      "id": "p38_s6_nullsfalse_column_ansitrue",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 6,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.666667",
+        "0.750000",
+        "0.800000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 6)) / CAST(b@1 AS Decimal256(76, 6)), 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              140.36256799999998,
+              141.61042500000002,
+              140.814247,
+              140.359552,
+              140.792786,
+              140.655833,
+              140.35910099999998,
+              140.56602600000002,
+              140.79466
+            ],
+            [
+              140.42300899999998,
+              140.306003,
+              140.318255,
+              140.24345699999998,
+              140.76237999999998,
+              140.258534,
+              140.547111,
+              140.363459,
+              140.426767
+            ],
+            [
+              141.182981,
+              139.86894999999998,
+              139.612304,
+              139.705828,
+              140.29938,
+              139.883277,
+              139.873028,
+              141.47311000000002,
+              141.75665700000002
+            ],
+            [
+              139.313189,
+              139.747175,
+              140.71899,
+              140.481508,
+              139.58293999999998,
+              139.550449,
+              139.14073800000003,
+              139.79968300000002,
+              139.633584
+            ]
+          ],
+          "median_ms": 140.3593265,
+          "mean_ms": 140.32188733333334,
+          "run_medians_ms": [
+            140.655833,
+            140.363459,
+            139.883277,
+            139.633584
+          ],
+          "run_means_ms": [
+            140.70168866666666,
+            140.40544166666666,
+            140.40616833333334,
+            139.77425066666666
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 6)) / CAST(b@1 AS Decimal256(76, 6)), 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              140.289241,
+              140.70310999999998,
+              141.72062,
+              141.73952500000001,
+              140.793649,
+              141.224278,
+              140.55259,
+              140.700545,
+              140.484985
+            ],
+            [
+              141.087424,
+              140.338452,
+              139.93889000000001,
+              139.879149,
+              139.973965,
+              140.047752,
+              140.95471700000002,
+              140.619254,
+              140.622951
+            ],
+            [
+              139.244471,
+              139.176624,
+              139.374322,
+              139.308449,
+              139.35932400000002,
+              139.891192,
+              139.68014,
+              139.263115,
+              139.044218
+            ],
+            [
+              138.679552,
+              138.91731399999998,
+              139.031756,
+              140.35144699999998,
+              140.303799,
+              139.77499600000002,
+              138.98012,
+              139.205939,
+              139.597257
+            ]
+          ],
+          "median_ms": 139.95642750000002,
+          "mean_ms": 140.02375366666666,
+          "run_medians_ms": [
+            140.70310999999998,
+            140.338452,
+            139.308449,
+            139.205939
+          ],
+          "run_means_ms": [
+            140.91206033333333,
+            140.38472822222224,
+            139.37131722222222,
+            139.42690888888887
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9971295174318182
+    },
+    {
+      "id": "p38_s6_nullsfalse_column_ansifalse",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 6,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.666667",
+        "0.750000",
+        "0.800000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 6)) / CAST(nullif(b@1, Some(0),38,6) AS Decimal256(76, 6)), 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              129.120055,
+              128.79064400000001,
+              128.753474,
+              128.509882,
+              128.647929,
+              129.564963,
+              129.796322,
+              128.605049,
+              128.74006
+            ],
+            [
+              138.83502000000001,
+              138.60708699999998,
+              138.61924,
+              138.218525,
+              138.30186999999998,
+              138.111617,
+              138.010308,
+              138.33272699999998,
+              138.154716
+            ],
+            [
+              128.38533099999998,
+              128.404527,
+              128.377917,
+              128.561749,
+              129.992737,
+              128.742545,
+              128.504072,
+              128.464268,
+              128.74687300000002
+            ],
+            [
+              129.6387,
+              129.74947600000002,
+              129.694503,
+              129.979703,
+              129.917608,
+              129.84853900000002,
+              131.059238,
+              130.486995,
+              129.643799
+            ]
+          ],
+          "median_ms": 129.669151,
+          "mean_ms": 131.49772411111113,
+          "run_medians_ms": [
+            128.753474,
+            138.30186999999998,
+            128.504072,
+            129.84853900000002
+          ],
+          "run_means_ms": [
+            128.94759755555557,
+            138.35456777777776,
+            128.68666877777778,
+            130.00206233333333
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 6)) / CAST(nullif(b@1, Some(0),38,6) AS Decimal256(76, 6)), 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              128.76744100000002,
+              128.891401,
+              128.825088,
+              128.60492000000002,
+              128.70583599999998,
+              128.75325500000002,
+              128.891762,
+              129.928046,
+              128.727858
+            ],
+            [
+              128.56816099999998,
+              128.451394,
+              128.538195,
+              128.439742,
+              128.444221,
+              128.43418200000002,
+              128.756501,
+              128.45209499999999,
+              128.95663199999998
+            ],
+            [
+              130.318702,
+              129.335185,
+              129.13513400000002,
+              129.092144,
+              128.997809,
+              129.07917,
+              128.843903,
+              128.929752,
+              129.131517
+            ],
+            [
+              129.865971,
+              130.061685,
+              129.28936,
+              129.643669,
+              129.983179,
+              129.33904299999998,
+              129.648117,
+              129.757169,
+              130.923246
+            ]
+          ],
+          "median_ms": 128.943192,
+          "mean_ms": 129.12531902777778,
+          "run_medians_ms": [
+            128.76744100000002,
+            128.45209499999999,
+            129.092144,
+            129.757169
+          ],
+          "run_means_ms": [
+            128.8995118888889,
+            128.56012477777776,
+            129.2070351111111,
+            129.83460433333335
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9944014517377384
+    },
+    {
+      "id": "p38_s6_nullsfalse_typed_literal_ansitrue",
+      "sql": "SELECT a / CAST(3 AS DECIMAL(38,6)) AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 6,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006667",
+        "0.010000",
+        "0.013333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 6)) / Some(3000000),76,6, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              121.796292,
+              121.801152,
+              122.139561,
+              121.911046,
+              121.697699,
+              122.074429,
+              121.903442,
+              121.998398,
+              121.716796
+            ],
+            [
+              121.760046,
+              121.844322,
+              121.88094,
+              122.34949,
+              123.094174,
+              122.26835899999999,
+              122.01596,
+              121.79912800000001,
+              121.858568
+            ],
+            [
+              121.496326,
+              121.598175,
+              122.271736,
+              121.556548,
+              121.43237699999999,
+              121.519489,
+              121.670739,
+              121.50967,
+              121.404385
+            ],
+            [
+              121.543143,
+              121.573679,
+              121.55130799999999,
+              121.587235,
+              121.614917,
+              121.57366999999999,
+              121.634213,
+              121.615647,
+              121.562971
+            ]
+          ],
+          "median_ms": 121.7072475,
+          "mean_ms": 121.7951675,
+          "run_medians_ms": [
+            121.903442,
+            121.88094,
+            121.519489,
+            121.573679
+          ],
+          "run_means_ms": [
+            121.89320166666667,
+            122.09677633333334,
+            121.606605,
+            121.584087
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 6)) / Some(3000000),76,6, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              122.154718,
+              122.153446,
+              121.836438,
+              121.844903,
+              122.07043200000001,
+              122.065002,
+              122.076313,
+              122.132307,
+              121.988149
+            ],
+            [
+              122.53775999999999,
+              122.82467199999999,
+              122.375058,
+              122.400244,
+              121.896159,
+              121.640304,
+              121.64707600000001,
+              121.691438,
+              121.925834
+            ],
+            [
+              121.98907100000001,
+              121.947394,
+              121.879497,
+              121.901107,
+              121.933147,
+              123.96610299999999,
+              126.25947300000001,
+              122.215462,
+              122.10790200000001
+            ],
+            [
+              121.680939,
+              121.619885,
+              121.643379,
+              121.56183800000001,
+              121.581014,
+              121.669016,
+              122.29241400000001,
+              121.90236,
+              121.63708700000001
+            ]
+          ],
+          "median_ms": 121.9402705,
+          "mean_ms": 122.14020391666666,
+          "run_medians_ms": [
+            122.07043200000001,
+            121.925834,
+            121.98907100000001,
+            121.643379
+          ],
+          "run_means_ms": [
+            122.03574533333334,
+            122.10428277777778,
+            122.68879511111112,
+            121.73199244444444
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0019146189301504
+    },
+    {
+      "id": "p38_s6_nullsfalse_typed_literal_ansifalse",
+      "sql": "SELECT a / CAST(3 AS DECIMAL(38,6)) AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 6,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006667",
+        "0.010000",
+        "0.013333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 6)) / Some(3000000),76,6, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              121.371032,
+              121.01257799999999,
+              120.13156,
+              120.111132,
+              120.01299999999999,
+              120.05353600000001,
+              120.079043,
+              120.108928,
+              120.199978
+            ],
+            [
+              115.203037,
+              124.866314,
+              124.866625,
+              124.768844,
+              124.804089,
+              124.819037,
+              124.845156,
+              124.757894,
+              124.687623
+            ],
+            [
+              119.99659,
+              119.808942,
+              119.715638,
+              119.667048,
+              119.660235,
+              119.637383,
+              119.674221,
+              120.008652,
+              120.070318
+            ],
+            [
+              119.84582,
+              122.034986,
+              120.245773,
+              119.931971,
+              119.994206,
+              119.839318,
+              119.883721,
+              119.803802,
+              119.87492499999999
+            ]
+          ],
+          "median_ms": 120.061927,
+          "mean_ms": 121.01091541666666,
+          "run_medians_ms": [
+            120.111132,
+            124.804089,
+            119.715638,
+            119.883721
+          ],
+          "run_means_ms": [
+            120.34230966666667,
+            123.73540211111111,
+            119.80433633333334,
+            120.16161355555556
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 6)) / Some(3000000),76,6, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              120.202132,
+              120.13702099999999,
+              121.967801,
+              120.369562,
+              120.733248,
+              120.38328800000001,
+              120.342393,
+              120.15049599999999,
+              120.113888
+            ],
+            [
+              119.85705100000001,
+              119.790147,
+              119.808922,
+              119.808601,
+              119.791409,
+              119.80301999999999,
+              121.134654,
+              121.575913,
+              120.223232
+            ],
+            [
+              120.104971,
+              119.988465,
+              120.158401,
+              120.226737,
+              120.491669,
+              120.347292,
+              120.019713,
+              119.98509899999999,
+              120.153081
+            ],
+            [
+              120.111003,
+              120.041675,
+              120.103479,
+              121.316042,
+              120.66937,
+              120.419876,
+              120.194277,
+              120.235614,
+              120.14586800000001
+            ]
+          ],
+          "median_ms": 120.155741,
+          "mean_ms": 120.30292805555555,
+          "run_medians_ms": [
+            120.342393,
+            119.808922,
+            120.153081,
+            120.194277
+          ],
+          "run_means_ms": [
+            120.48886988888889,
+            120.19921655555555,
+            120.16393644444445,
+            120.35968933333334
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0007813800956236
+    },
+    {
+      "id": "p38_s6_nullsfalse_integer_literal_ansitrue",
+      "sql": "SELECT a / 3 AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 6,
+      "nullable_input": false,
+      "divisor_kind": "integer_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006667",
+        "0.010000",
+        "0.013333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 6)) / Some(3),76,0, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              122.34431099999999,
+              122.090589,
+              121.993669,
+              121.764885,
+              121.941383,
+              121.85920899999999,
+              122.862403,
+              123.392718,
+              122.021441
+            ],
+            [
+              122.407549,
+              122.113803,
+              122.036248,
+              121.95798400000001,
+              121.921575,
+              122.16124,
+              122.00261599999999,
+              121.998188,
+              121.921275
+            ],
+            [
+              121.69796,
+              121.54870299999999,
+              121.4663,
+              121.534507,
+              121.63307900000001,
+              122.852154,
+              121.992317,
+              121.65851599999999,
+              121.62755899999999
+            ],
+            [
+              121.640623,
+              121.633962,
+              121.572287,
+              121.646315,
+              121.690938,
+              121.609055,
+              121.651074,
+              123.55187400000001,
+              122.02727200000001
+            ]
+          ],
+          "median_ms": 121.931479,
+          "mean_ms": 121.99515502777778,
+          "run_medians_ms": [
+            122.021441,
+            122.00261599999999,
+            121.63307900000001,
+            121.646315
+          ],
+          "run_means_ms": [
+            122.25228977777778,
+            122.05783088888889,
+            121.77901055555556,
+            121.89148888888889
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 6)) / Some(3),76,0, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              122.178131,
+              122.14455000000001,
+              122.011092,
+              121.971949,
+              121.910615,
+              121.98846,
+              122.16007900000001,
+              122.290811,
+              123.709767
+            ],
+            [
+              121.65476,
+              121.706136,
+              121.740559,
+              121.65667400000001,
+              121.861554,
+              122.074549,
+              121.733627,
+              121.659609,
+              121.64737600000001
+            ],
+            [
+              121.958975,
+              123.333518,
+              122.17668900000001,
+              121.97954299999999,
+              122.01337600000001,
+              121.97936299999999,
+              121.87893700000001,
+              121.831628,
+              121.926885
+            ],
+            [
+              121.608514,
+              122.888943,
+              121.97453399999999,
+              122.01777399999999,
+              121.899565,
+              121.812904,
+              121.75991599999999,
+              121.820859,
+              122.012204
+            ]
+          ],
+          "median_ms": 121.965462,
+          "mean_ms": 122.02706736111111,
+          "run_medians_ms": [
+            122.14455000000001,
+            121.706136,
+            121.97936299999999,
+            121.899565
+          ],
+          "run_means_ms": [
+            122.26282822222223,
+            121.748316,
+            122.11987933333333,
+            121.97724588888889
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0002787057147073
+    },
+    {
+      "id": "p38_s6_nullsfalse_integer_literal_ansifalse",
+      "sql": "SELECT a / 3 AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 6,
+      "nullable_input": false,
+      "divisor_kind": "integer_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006667",
+        "0.010000",
+        "0.013333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 6)) / Some(3),76,0, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              120.027948,
+              120.113437,
+              119.941107,
+              119.992362,
+              119.978777,
+              120.608386,
+              120.20669000000001,
+              120.443571,
+              120.017829
+            ],
+            [
+              120.16891100000001,
+              120.053937,
+              120.063745,
+              120.09286900000001,
+              120.427581,
+              121.754976,
+              120.778342,
+              120.104792,
+              120.10448
+            ],
+            [
+              119.81319,
+              120.089583,
+              120.474698,
+              119.812758,
+              119.703185,
+              119.80933300000001,
+              119.673129,
+              119.71645000000001,
+              119.702904
+            ],
+            [
+              120.119138,
+              120.070938,
+              120.039299,
+              120.18962900000001,
+              120.11129299999999,
+              120.062874,
+              120.53456999999999,
+              120.328477,
+              120.10374999999999
+            ]
+          ],
+          "median_ms": 120.091226,
+          "mean_ms": 120.14541494444444,
+          "run_medians_ms": [
+            120.027948,
+            120.104792,
+            119.80933300000001,
+            120.11129299999999
+          ],
+          "run_means_ms": [
+            120.14778966666667,
+            120.39440366666666,
+            119.86613666666668,
+            120.17332977777778
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 6)) / Some(3),76,0, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              120.484647,
+              120.14214,
+              120.107847,
+              120.18468,
+              120.149243,
+              120.21216999999999,
+              120.144574,
+              120.263225,
+              120.18869699999999
+            ],
+            [
+              120.375443,
+              120.595473,
+              121.566766,
+              120.471663,
+              119.993645,
+              119.841291,
+              119.902174,
+              122.518895,
+              120.017318
+            ],
+            [
+              120.07582699999999,
+              120.104872,
+              120.086307,
+              120.03976,
+              120.165013,
+              120.039199,
+              120.151788,
+              121.81191199999999,
+              120.334698
+            ],
+            [
+              120.66399999999999,
+              120.584973,
+              120.407003,
+              120.546742,
+              120.348494,
+              120.438952,
+              120.859473,
+              120.49184100000001,
+              120.24242699999999
+            ]
+          ],
+          "median_ms": 120.22729849999999,
+          "mean_ms": 120.40425477777778,
+          "run_medians_ms": [
+            120.18468,
+            120.375443,
+            120.104872,
+            120.49184100000001
+          ],
+          "run_means_ms": [
+            120.20858033333333,
+            120.58696311111112,
+            120.31215288888889,
+            120.50932277777778
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0011330761166515
+    },
+    {
+      "id": "p10_s2_nullstrue_column_ansitrue",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": true,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(23, 13)",
+      "output_nulls": 177451,
+      "first_values": [
+        "0.6666666666667",
+        "0.7500000000000",
+        "0.8000000000000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 10)) / CAST(b@1 AS Decimal128(38, 2)), 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              25.978673,
+              25.994361,
+              26.080852,
+              26.116639,
+              26.189393,
+              26.005062,
+              26.145693,
+              26.043162000000002,
+              26.047259999999998
+            ],
+            [
+              26.020079000000003,
+              25.966841000000002,
+              25.934039,
+              25.916547,
+              25.964296,
+              25.95602,
+              26.027182999999997,
+              26.013567000000002,
+              26.066226
+            ],
+            [
+              25.960038,
+              26.172783000000003,
+              25.916858,
+              25.942515,
+              26.203429,
+              25.913591999999998,
+              26.092734,
+              25.898162999999997,
+              25.840746000000003
+            ],
+            [
+              25.989190999999998,
+              26.153498,
+              25.925644000000002,
+              25.927588,
+              26.113913,
+              25.91294,
+              26.044044,
+              25.932417,
+              25.988351
+            ]
+          ],
+          "median_ms": 25.991776,
+          "mean_ms": 26.010953805555555,
+          "run_medians_ms": [
+            26.047259999999998,
+            25.966841000000002,
+            25.942515,
+            25.988351
+          ],
+          "run_means_ms": [
+            26.066788333333335,
+            25.984977555555556,
+            25.993428666666667,
+            25.998620666666667
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 10)) / CAST(b@1 AS Decimal128(38, 2)), 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              26.082595,
+              25.997888,
+              26.005371999999998,
+              26.007335,
+              26.209761,
+              26.075802,
+              26.034276,
+              25.978071,
+              26.060584000000002
+            ],
+            [
+              26.008878,
+              26.259845000000002,
+              25.986736999999998,
+              26.024448,
+              26.280182,
+              26.045367,
+              26.062007,
+              26.001334,
+              25.976418000000002
+            ],
+            [
+              25.975366,
+              26.024147,
+              26.016723,
+              26.018836999999998,
+              26.215151,
+              25.991806999999998,
+              25.997949,
+              26.048212,
+              26.011924
+            ],
+            [
+              25.986235999999998,
+              25.914774,
+              25.913241,
+              25.937436,
+              26.116909,
+              25.901389,
+              25.883906000000003,
+              25.864058999999997,
+              25.868506999999997
+            ]
+          ],
+          "median_ms": 26.0081065,
+          "mean_ms": 26.02176313888889,
+          "run_medians_ms": [
+            26.034276,
+            26.024448,
+            26.016723,
+            25.913241
+          ],
+          "run_means_ms": [
+            26.05018711111111,
+            26.071690666666665,
+            26.03334622222222,
+            25.931828555555555
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0006282948883523
+    },
+    {
+      "id": "p10_s2_nullstrue_column_ansifalse",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": true,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(23, 13)",
+      "output_nulls": 177451,
+      "first_values": [
+        "0.6666666666667",
+        "0.7500000000000",
+        "0.8000000000000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 10)) / CAST(nullif(CAST(b@1 AS Decimal128(12, 2)), Some(0),12,2) AS Decimal128(38, 2)), 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              24.641028,
+              24.639685,
+              24.646518,
+              24.658861,
+              25.096853999999997,
+              25.157828,
+              25.247263999999998,
+              25.075676,
+              24.906982000000003
+            ],
+            [
+              24.624117000000002,
+              24.832824,
+              24.693866,
+              24.724563,
+              24.704496,
+              24.658821,
+              24.716368,
+              24.703935,
+              24.683296000000002
+            ],
+            [
+              25.07264,
+              24.931478,
+              24.672156,
+              24.598439,
+              24.549367,
+              24.532376000000003,
+              24.503313,
+              24.501739,
+              24.493584
+            ],
+            [
+              24.621723000000003,
+              24.613357,
+              24.589282,
+              24.579193,
+              24.669621,
+              24.912983999999998,
+              24.694998,
+              24.967074,
+              25.036112
+            ]
+          ],
+          "median_ms": 24.677726,
+          "mean_ms": 24.748678277777778,
+          "run_medians_ms": [
+            24.906982000000003,
+            24.703935,
+            24.549367,
+            24.669621
+          ],
+          "run_means_ms": [
+            24.896743999999998,
+            24.704698444444446,
+            24.65056577777778,
+            24.742704888888888
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 10)) / CAST(nullif(CAST(b@1 AS Decimal128(12, 2)), Some(0),12,2) AS Decimal128(38, 2)), 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              24.640617,
+              24.672266,
+              24.684919,
+              24.686642000000003,
+              24.699897,
+              24.788041,
+              24.778774,
+              24.712661,
+              24.688195999999998
+            ],
+            [
+              24.573443,
+              24.554748,
+              24.551581,
+              24.54019,
+              24.573511999999997,
+              24.585835,
+              24.493744000000003,
+              24.555019,
+              24.531765
+            ],
+            [
+              24.626210999999998,
+              24.601825,
+              24.647561,
+              24.608597,
+              24.667257000000003,
+              24.646137,
+              24.625118,
+              24.710978,
+              24.630588
+            ],
+            [
+              24.560478,
+              24.616513,
+              24.625269000000003,
+              24.603589,
+              24.601765,
+              24.632683,
+              24.624698000000002,
+              24.633004,
+              24.683928
+            ]
+          ],
+          "median_ms": 24.62574,
+          "mean_ms": 24.62939025,
+          "run_medians_ms": [
+            24.688195999999998,
+            24.554748,
+            24.630588,
+            24.624698000000002
+          ],
+          "run_means_ms": [
+            24.705779222222223,
+            24.551093,
+            24.640474666666666,
+            24.62021411111111
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9978934039546432
+    },
+    {
+      "id": "p10_s2_nullstrue_typed_literal_ansitrue",
+      "sql": "SELECT a / CAST(3 AS DECIMAL(10,2)) AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": true,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(23, 13)",
+      "output_nulls": 104857,
+      "first_values": [
+        "0.0066666666667",
+        "0.0100000000000",
+        "0.0133333333333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 10)) / Some(300),38,2, 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              25.771958,
+              25.718579,
+              25.683785,
+              25.718219,
+              25.717086000000002,
+              25.701056,
+              25.672163,
+              25.704563,
+              25.699002
+            ],
+            [
+              25.752232,
+              25.745519,
+              25.679457,
+              25.663718,
+              25.698382,
+              25.64385,
+              25.636356999999997,
+              25.698282,
+              25.715153
+            ],
+            [
+              25.597775,
+              25.541028999999998,
+              25.657526,
+              25.517997,
+              25.527324,
+              25.566387,
+              25.527374,
+              25.586564,
+              25.539858
+            ],
+            [
+              25.788809999999998,
+              25.748995,
+              25.723679,
+              25.696578000000002,
+              25.617161,
+              25.656755,
+              25.635816,
+              25.589791,
+              25.664198
+            ]
+          ],
+          "median_ms": 25.67581,
+          "mean_ms": 25.661193833333332,
+          "run_medians_ms": [
+            25.704563,
+            25.698282,
+            25.541028999999998,
+            25.664198
+          ],
+          "run_means_ms": [
+            25.709601222222222,
+            25.69255,
+            25.562426,
+            25.68019811111111
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal128(38, 10)) / Some(300),38,2, 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              25.702109,
+              26.240679,
+              26.363588,
+              26.638358,
+              26.017515000000003,
+              25.799780000000002,
+              26.280202,
+              25.925494,
+              25.761529
+            ],
+            [
+              25.581605,
+              25.615368,
+              25.655502,
+              25.637739,
+              25.566958,
+              25.576666000000003,
+              25.621489,
+              25.533495,
+              25.535299000000002
+            ],
+            [
+              25.789471000000002,
+              25.749537,
+              25.655742,
+              25.692551,
+              25.816832,
+              26.129312,
+              25.887703000000002,
+              25.686670000000003,
+              25.764104
+            ],
+            [
+              25.644811999999998,
+              25.551569,
+              25.692321,
+              25.711587,
+              25.789191,
+              25.667815,
+              26.094338,
+              26.404864,
+              26.550414
+            ]
+          ],
+          "median_ms": 25.730562,
+          "mean_ms": 25.842561333333332,
+          "run_medians_ms": [
+            26.017515000000003,
+            25.581605,
+            25.764104,
+            25.711587
+          ],
+          "run_means_ms": [
+            26.081028222222223,
+            25.591569,
+            25.796880222222224,
+            25.90076788888889
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.0021324351597867
+    },
+    {
+      "id": "p10_s2_nullstrue_typed_literal_ansifalse",
+      "sql": "SELECT a / CAST(3 AS DECIMAL(10,2)) AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 10,
+      "scale": 2,
+      "nullable_input": true,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(23, 13)",
+      "output_nulls": 104857,
+      "first_values": [
+        "0.0066666666667",
+        "0.0100000000000",
+        "0.0133333333333"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 10)) / Some(300),38,2, 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              23.456788,
+              23.219337,
+              23.203868999999997,
+              23.205061,
+              23.208437,
+              23.169584999999998,
+              23.202757000000002,
+              23.147474000000003,
+              23.270782999999998
+            ],
+            [
+              23.25311,
+              23.174264,
+              23.129761,
+              23.156731,
+              23.195804,
+              23.322288,
+              23.234606000000003,
+              23.226381,
+              23.227632
+            ],
+            [
+              23.127717,
+              23.131093,
+              23.112750000000002,
+              23.122347,
+              23.11888,
+              23.143897,
+              23.131624,
+              23.109102999999998,
+              23.101749
+            ],
+            [
+              23.23656,
+              23.217905000000002,
+              23.196826,
+              23.207235,
+              23.206574,
+              23.20425,
+              23.216031,
+              23.224397,
+              23.233041999999998
+            ]
+          ],
+          "median_ms": 23.2040595,
+          "mean_ms": 23.195740222222224,
+          "run_medians_ms": [
+            23.205061,
+            23.226381,
+            23.122347,
+            23.216031
+          ],
+          "run_means_ms": [
+            23.231565666666665,
+            23.213397444444446,
+            23.122128888888888,
+            23.215868888888888
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal128(38, 10)) / Some(300),38,2, 13) AS Decimal128(23, 13)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              23.449635,
+              23.271504,
+              23.245676,
+              23.248071,
+              23.258680000000002,
+              23.469191000000002,
+              23.238252,
+              23.192436999999998,
+              23.192035999999998
+            ],
+            [
+              23.224747999999998,
+              23.340763,
+              23.353787,
+              23.25304,
+              23.230949000000003,
+              23.170977999999998,
+              23.173502,
+              23.181516,
+              23.18275
+            ],
+            [
+              23.470254,
+              23.219368,
+              23.185313999999998,
+              23.204991,
+              23.168112,
+              23.191956,
+              23.198028,
+              23.1779,
+              23.181086
+            ],
+            [
+              23.471486,
+              23.2206,
+              23.177690000000002,
+              23.160549,
+              23.120854,
+              23.166168000000003,
+              23.177989999999998,
+              23.133437999999998,
+              23.141533
+            ]
+          ],
+          "median_ms": 23.1952325,
+          "mean_ms": 23.234578666666668,
+          "run_medians_ms": [
+            23.248071,
+            23.224747999999998,
+            23.191956,
+            23.166168000000003
+          ],
+          "run_means_ms": [
+            23.285053555555557,
+            23.234670333333334,
+            23.22188988888889,
+            23.196700888888888
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9996195924251962
+    },
+    {
+      "id": "p0_s2_nullsfalse_column_ansitrue",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 0,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Float64",
+      "output_nulls": 0,
+      "first_values": [
+        "0.6666666666666667",
+        "0.75",
+        "0.7999999999999999"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[a@0 / CASE WHEN b@1 = 0 THEN CAST(raise_error(Division by zero) AS Float64) ELSE b@1 END as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              1.106064,
+              1.0807779999999998,
+              1.090074,
+              1.068755,
+              1.067573,
+              1.075197,
+              1.070268,
+              1.067894,
+              1.06594
+            ],
+            [
+              1.1019269999999999,
+              1.095736,
+              1.100244,
+              1.1232659999999999,
+              1.091227,
+              1.088001,
+              1.088061,
+              1.08234,
+              1.07646
+            ],
+            [
+              1.10372,
+              1.089904,
+              1.088231,
+              1.083593,
+              1.0799150000000002,
+              1.0777219999999998,
+              1.0753570000000001,
+              1.074315,
+              1.069326
+            ],
+            [
+              1.100855,
+              1.080758,
+              1.0787229999999999,
+              1.073825,
+              1.091998,
+              1.0859260000000002,
+              1.078613,
+              1.07164,
+              1.078353
+            ]
+          ],
+          "median_ms": 1.080768,
+          "mean_ms": 1.0839605277777777,
+          "run_medians_ms": [
+            1.070268,
+            1.091227,
+            1.0799150000000002,
+            1.0787229999999999
+          ],
+          "run_means_ms": [
+            1.0769492222222221,
+            1.0941402222222223,
+            1.0824536666666666,
+            1.082299
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[a@0 / CASE WHEN b@1 = 0 THEN CAST(raise_error(Division by zero) AS Float64) ELSE b@1 END as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              1.1211929999999999,
+              1.099401,
+              1.089002,
+              1.086719,
+              1.096327,
+              1.081729,
+              1.078343,
+              1.077351,
+              1.0704079999999998
+            ],
+            [
+              1.124047,
+              1.105202,
+              1.090495,
+              1.0886019999999998,
+              1.107427,
+              1.082761,
+              1.0764,
+              1.075117,
+              1.0743250000000002
+            ],
+            [
+              1.120171,
+              1.1046719999999999,
+              1.099502,
+              1.0870389999999999,
+              1.1030790000000001,
+              1.112987,
+              1.0840139999999998,
+              1.077321,
+              1.073614
+            ],
+            [
+              1.104932,
+              1.084755,
+              1.079806,
+              1.071841,
+              1.074646,
+              1.0728529999999998,
+              1.070699,
+              1.0729330000000001,
+              1.069837
+            ]
+          ],
+          "median_ms": 1.0843844999999999,
+          "mean_ms": 1.088598611111111,
+          "run_medians_ms": [
+            1.086719,
+            1.0886019999999998,
+            1.099502,
+            1.0729330000000001
+          ],
+          "run_means_ms": [
+            1.0889414444444445,
+            1.0915973333333333,
+            1.095822111111111,
+            1.0780335555555556
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.003346231568662
+    },
+    {
+      "id": "p0_s2_nullsfalse_column_ansifalse",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 0,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Float64",
+      "output_nulls": 0,
+      "first_values": [
+        "0.6666666666666667",
+        "0.75",
+        "0.7999999999999999"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[a@0 / nullif(b@1, 0) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              1.1265820000000002,
+              1.11448,
+              1.112106,
+              1.121403,
+              1.114359,
+              1.107898,
+              1.111505,
+              1.1067550000000002,
+              1.1386949999999998
+            ],
+            [
+              1.1573989999999998,
+              1.128196,
+              1.123246,
+              1.121473,
+              1.1181159999999999,
+              1.124949,
+              1.116083,
+              1.11457,
+              1.116063
+            ],
+            [
+              1.147742,
+              1.134588,
+              1.1176059999999999,
+              1.108328,
+              1.112286,
+              1.108588,
+              1.105293,
+              1.106225,
+              1.105272
+            ],
+            [
+              1.1317320000000002,
+              1.0995320000000002,
+              1.1035890000000002,
+              1.114531,
+              1.1633609999999999,
+              1.123156,
+              1.110983,
+              1.1151419999999999,
+              1.1083690000000002
+            ]
+          ],
+          "median_ms": 1.114856,
+          "mean_ms": 1.11917225,
+          "run_medians_ms": [
+            1.114359,
+            1.121473,
+            1.108588,
+            1.114531
+          ],
+          "run_means_ms": [
+            1.117087,
+            1.124455,
+            1.1162142222222222,
+            1.1189327777777778
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[a@0 / nullif(b@1, 0) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              1.1251099999999998,
+              1.1246889999999998,
+              1.1277439999999999,
+              1.1114950000000001,
+              1.112086,
+              1.110383,
+              1.108829,
+              1.105243,
+              1.104943
+            ],
+            [
+              1.149756,
+              1.130239,
+              1.121122,
+              1.1197,
+              1.116825,
+              1.1106230000000001,
+              1.111615,
+              1.1083690000000002,
+              1.107237
+            ],
+            [
+              1.142943,
+              1.125661,
+              1.14103,
+              1.1239780000000001,
+              1.1232659999999999,
+              1.117836,
+              1.112446,
+              1.111985,
+              1.122274
+            ],
+            [
+              1.1284159999999999,
+              1.121423,
+              1.113318,
+              1.1013959999999998,
+              1.107207,
+              1.1065649999999998,
+              1.102247,
+              1.105022,
+              1.1138789999999998
+            ]
+          ],
+          "median_ms": 1.1135985,
+          "mean_ms": 1.117413888888889,
+          "run_medians_ms": [
+            1.1114950000000001,
+            1.116825,
+            1.1232659999999999,
+            1.107207
+          ],
+          "run_means_ms": [
+            1.1145024444444445,
+            1.1194984444444445,
+            1.124602111111111,
+            1.1110525555555555
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.998872051637162
+    },
+    {
+      "id": "p0_s2_nullsfalse_typed_literal_ansitrue",
+      "sql": "SELECT a / CAST(3 AS DOUBLE) AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 0,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Float64",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006666666666666667",
+        "0.01",
+        "0.013333333333333334"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[a@0 / 3 as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              0.620683,
+              0.615173,
+              0.620021,
+              0.625342,
+              0.614982,
+              0.621434,
+              0.620342,
+              0.618128,
+              0.61903
+            ],
+            [
+              0.6484340000000001,
+              0.6398480000000001,
+              0.637444,
+              0.630351,
+              0.6306309999999999,
+              0.625722,
+              0.618078,
+              0.622266,
+              0.618969
+            ],
+            [
+              0.641351,
+              0.6341880000000001,
+              0.622025,
+              0.623318,
+              0.61895,
+              0.615684,
+              0.625251,
+              0.613199,
+              0.6214649999999999
+            ],
+            [
+              0.641241,
+              0.626914,
+              0.629159,
+              0.640369,
+              0.613821,
+              0.623298,
+              0.613239,
+              0.616605,
+              0.621955
+            ]
+          ],
+          "median_ms": 0.62199,
+          "mean_ms": 0.6246919444444444,
+          "run_medians_ms": [
+            0.620021,
+            0.630351,
+            0.622025,
+            0.623298
+          ],
+          "run_means_ms": [
+            0.6194594444444445,
+            0.6301936666666667,
+            0.6239367777777778,
+            0.6251778888888889
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[a@0 / 3 as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              0.641261,
+              0.639888,
+              0.620202,
+              0.626093,
+              0.6192599999999999,
+              0.611286,
+              0.623779,
+              0.6126480000000001,
+              0.617948
+            ],
+            [
+              0.636803,
+              0.6366419999999999,
+              0.621835,
+              0.625101,
+              0.6226769999999999,
+              0.612748,
+              0.618719,
+              0.612187,
+              0.614561
+            ],
+            [
+              0.637064,
+              0.632775,
+              0.628518,
+              0.617046,
+              0.620222,
+              0.617537,
+              0.6256929999999999,
+              0.633306,
+              0.647182
+            ],
+            [
+              0.638787,
+              0.63547,
+              0.634238,
+              0.617196,
+              0.616855,
+              0.614451,
+              0.6200720000000001,
+              0.621063,
+              0.61398
+            ]
+          ],
+          "median_ms": 0.621449,
+          "mean_ms": 0.6245859166666666,
+          "run_medians_ms": [
+            0.620202,
+            0.621835,
+            0.628518,
+            0.6200720000000001
+          ],
+          "run_means_ms": [
+            0.6235961111111111,
+            0.6223636666666666,
+            0.6288158888888888,
+            0.623568
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9991302110966414
+    },
+    {
+      "id": "p0_s2_nullsfalse_typed_literal_ansifalse",
+      "sql": "SELECT a / CAST(3 AS DOUBLE) AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 0,
+      "scale": 2,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Float64",
+      "output_nulls": 0,
+      "first_values": [
+        "0.006666666666666667",
+        "0.01",
+        "0.013333333333333334"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[a@0 / 3 as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              0.61343,
+              0.618779,
+              0.614201,
+              0.61912,
+              0.620683,
+              0.612137,
+              0.616344,
+              0.6145309999999999,
+              0.632796
+            ],
+            [
+              0.6379349999999999,
+              0.622918,
+              0.614251,
+              0.617396,
+              0.619841,
+              0.608721,
+              0.6219049999999999,
+              0.6129389999999999,
+              0.6186689999999999
+            ],
+            [
+              0.614151,
+              0.6191099999999999,
+              0.6174470000000001,
+              0.611837,
+              0.618749,
+              0.61885,
+              0.611686,
+              0.620853,
+              0.612498
+            ],
+            [
+              0.617377,
+              0.617056,
+              0.6104940000000001,
+              0.621654,
+              0.61899,
+              0.6104040000000001,
+              0.622286,
+              0.613319,
+              0.622436
+            ]
+          ],
+          "median_ms": 0.6174215000000001,
+          "mean_ms": 0.6176609166666667,
+          "run_medians_ms": [
+            0.616344,
+            0.6186689999999999,
+            0.6174470000000001,
+            0.617377
+          ],
+          "run_means_ms": [
+            0.6180023333333333,
+            0.6193972222222222,
+            0.6161312222222222,
+            0.6171128888888889
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[a@0 / 3 as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              0.614892,
+              0.6205120000000001,
+              0.614642,
+              0.611545,
+              0.632094,
+              0.608641,
+              0.618268,
+              0.6171059999999999,
+              0.6114649999999999
+            ],
+            [
+              0.621254,
+              0.611897,
+              0.615002,
+              0.611075,
+              0.6120869999999999,
+              0.6155130000000001,
+              0.606136,
+              0.6226959999999999,
+              0.6100730000000001
+            ],
+            [
+              0.6138600000000001,
+              0.610885,
+              0.62983,
+              0.6139,
+              0.610114,
+              0.616575,
+              0.611827,
+              0.6167250000000001,
+              0.6180180000000001
+            ],
+            [
+              0.6281070000000001,
+              0.6130979999999999,
+              0.6191,
+              0.6158640000000001,
+              0.615593,
+              0.6160140000000001,
+              0.606646,
+              0.618489,
+              0.620753
+            ]
+          ],
+          "median_ms": 0.6152575,
+          "mean_ms": 0.6158415555555555,
+          "run_medians_ms": [
+            0.614892,
+            0.6120869999999999,
+            0.6139,
+            0.6160140000000001
+          ],
+          "run_means_ms": [
+            0.6165738888888889,
+            0.6139703333333334,
+            0.6157482222222223,
+            0.6170737777777778
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 0.9964951009966448
+    }
+  ],
+  "high_scale_cases": [
+    {
+      "id": "p38_s35_nullsfalse_column_ansitrue",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 35,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.666667",
+        "0.750000",
+        "0.800000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 35)) / CAST(b@1 AS Decimal256(76, 35)), 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              217.766827,
+              218.010199,
+              218.00112299999998,
+              217.96642799999998,
+              220.353261,
+              217.64604300000002,
+              218.049351,
+              217.71622299999999,
+              218.12376
+            ],
+            [
+              220.440723,
+              218.806609,
+              218.70357700000002,
+              218.183922,
+              218.529764,
+              218.563177,
+              218.59178,
+              218.648976,
+              221.34727700000002
+            ],
+            [
+              217.241672,
+              217.145454,
+              217.37511,
+              218.610325,
+              217.545557,
+              217.42863,
+              217.178635,
+              217.74717099999998,
+              217.563871
+            ],
+            [
+              217.57184700000002,
+              217.609436,
+              217.599908,
+              218.093715,
+              218.85541999999998,
+              217.825517,
+              217.58256500000002,
+              217.60431599999998,
+              217.647626
+            ]
+          ],
+          "median_ms": 217.89597249999997,
+          "mean_ms": 218.15766097222223,
+          "run_medians_ms": [
+            218.00112299999998,
+            218.648976,
+            217.42863,
+            217.609436
+          ],
+          "run_means_ms": [
+            218.18146833333333,
+            219.090645,
+            217.53738055555556,
+            217.82115
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(CAST(CAST(__common_expr_1@0 * Some(1),1,-39 / __common_expr_2@1 * Some(1),1,-39 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % __common_expr_2@1 * Some(1),1,-32 / __common_expr_2@1 * Some(1),1,-32, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 35)) as __common_expr_1, CAST(b@1 AS Decimal256(38, 35)) as __common_expr_2]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              379.51556800000003,
+              378.829734,
+              381.547932,
+              379.27492,
+              379.210861,
+              379.27468,
+              379.04578399999997,
+              382.203639,
+              355.439008
+            ],
+            [
+              378.489822,
+              378.299428,
+              381.762993,
+              381.308217,
+              377.724811,
+              377.893635,
+              377.65839800000003,
+              378.729718,
+              354.363199
+            ],
+            [
+              378.577024,
+              378.481257,
+              378.972649,
+              378.823362,
+              378.592713,
+              380.963536,
+              378.58171200000004,
+              380.002702,
+              354.106473
+            ],
+            [
+              377.686351,
+              377.684297,
+              380.037598,
+              377.907531,
+              378.469626,
+              378.128562,
+              377.954609,
+              379.250706,
+              354.70754999999997
+            ]
+          ],
+          "median_ms": 378.5872125,
+          "mean_ms": 376.37501680555556,
+          "run_medians_ms": [
+            379.27468,
+            378.299428,
+            378.592713,
+            377.954609
+          ],
+          "run_means_ms": [
+            377.1491251111111,
+            376.2478023333333,
+            376.3446031111111,
+            375.75853666666666
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.7374676922952308
+    },
+    {
+      "id": "p38_s35_nullsfalse_column_ansifalse",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 35,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.666667",
+        "0.750000",
+        "0.800000"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 35)) / CAST(nullif(b@1, Some(0),38,35) AS Decimal256(76, 35)), 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              217.640753,
+              217.698951,
+              218.991923,
+              218.045685,
+              217.952291,
+              218.113842,
+              218.222424,
+              218.377602,
+              218.23115
+            ],
+            [
+              217.55987299999998,
+              217.419703,
+              217.588496,
+              217.556216,
+              217.691628,
+              217.651002,
+              217.72371700000002,
+              217.876009,
+              218.875166
+            ],
+            [
+              217.39018800000002,
+              221.10358499999998,
+              218.476626,
+              216.969567,
+              216.862248,
+              217.405797,
+              216.72338,
+              216.998241,
+              216.886853
+            ],
+            [
+              217.10855600000002,
+              217.300672,
+              217.711275,
+              222.96311999999998,
+              217.31465799999998,
+              217.036982,
+              217.27359099999998,
+              217.09806600000002,
+              217.139703
+            ]
+          ],
+          "median_ms": 217.6146245,
+          "mean_ms": 217.86054275,
+          "run_medians_ms": [
+            218.113842,
+            217.651002,
+            216.998241,
+            217.27359099999998
+          ],
+          "run_means_ms": [
+            218.14162455555555,
+            217.77131222222224,
+            217.64627611111112,
+            217.8829581111111
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(CAST(TRY_CAST(__common_expr_1@0 * Some(1),1,-39 / __common_expr_2@1 * Some(1),1,-39 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % __common_expr_2@1 * Some(1),1,-32 / __common_expr_2@1 * Some(1),1,-32, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 35)) as __common_expr_1, CAST(nullif(b@1, Some(0),38,35) AS Decimal256(38, 35)) as __common_expr_2]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              351.215753,
+              351.057609,
+              353.67129400000005,
+              351.522674,
+              351.90522400000003,
+              351.767548,
+              351.91371,
+              354.635005,
+              352.989878
+            ],
+            [
+              352.021811,
+              351.99469,
+              352.19929,
+              353.23299099999997,
+              358.824986,
+              352.338208,
+              352.71703199999996,
+              351.718918,
+              351.97614500000003
+            ],
+            [
+              353.084265,
+              352.14217399999995,
+              352.31894200000005,
+              351.80675099999996,
+              352.06457,
+              353.589592,
+              352.63539,
+              352.532519,
+              352.013064
+            ],
+            [
+              351.738436,
+              351.49838,
+              353.346563,
+              352.28244600000005,
+              352.13194599999997,
+              351.73339599999997,
+              351.745489,
+              351.944127,
+              353.79736
+            ]
+          ],
+          "median_ms": 352.098258,
+          "mean_ms": 352.5030048888889,
+          "run_medians_ms": [
+            351.90522400000003,
+            352.19929,
+            352.31894200000005,
+            351.944127
+          ],
+          "run_means_ms": [
+            352.2976327777778,
+            353.00267455555553,
+            352.4652518888889,
+            352.24646033333335
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.6179898699776953
+    },
+    {
+      "id": "p38_s35_nullsfalse_typed_literal_ansitrue",
+      "sql": "SELECT a / CAST('0.3' AS DECIMAL(38,35)) AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 35,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.000067",
+        "0.000100",
+        "0.000133"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[CAST(round(CAST(a@0 AS Decimal256(76, 35)) / Some(30000000000000000000000000000000000),76,35, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              189.639954,
+              191.057688,
+              190.29663399999998,
+              189.713842,
+              189.796676,
+              189.808177,
+              190.187852,
+              190.193092,
+              189.663638
+            ],
+            [
+              189.611141,
+              189.41729099999998,
+              189.421439,
+              189.35871200000003,
+              189.501878,
+              189.716487,
+              190.035409,
+              190.118603,
+              190.618452
+            ],
+            [
+              189.26274500000002,
+              190.755096,
+              189.380404,
+              189.21172,
+              189.748727,
+              189.286659,
+              189.127022,
+              189.108969,
+              189.17856899999998
+            ],
+            [
+              189.979085,
+              189.473035,
+              190.889777,
+              190.712938,
+              189.358924,
+              189.61539,
+              189.42827300000002,
+              189.36784,
+              189.39835599999998
+            ]
+          ],
+          "median_ms": 189.627672,
+          "mean_ms": 189.76223594444446,
+          "run_medians_ms": [
+            189.808177,
+            189.611141,
+            189.26274500000002,
+            189.473035
+          ],
+          "run_means_ms": [
+            190.03972811111112,
+            189.75549022222222,
+            189.45110122222223,
+            189.80262422222222
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(CAST(CAST(__common_expr_1@0 * Some(1),1,-39 / Some(30000000000000000000000000000000000),40,-4 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % Some(30000000000000000000000000000000000),38,35 * Some(1),1,-32 / Some(30000000000000000000000000000000000),40,3, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 35)) as __common_expr_1]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              259.409243,
+              259.420494,
+              259.421516,
+              259.179607,
+              260.42254599999995,
+              261.47091300000005,
+              259.206767,
+              259.125887,
+              259.25141
+            ],
+            [
+              259.419342,
+              258.999302,
+              258.97216099999997,
+              258.99746899999997,
+              259.04650899999996,
+              259.64818699999995,
+              259.38046999999995,
+              260.48576299999996,
+              259.066998
+            ],
+            [
+              259.376622,
+              260.949635,
+              259.573518,
+              259.637878,
+              259.694363,
+              259.357507,
+              259.415785,
+              259.425043,
+              259.701516
+            ],
+            [
+              259.43802700000003,
+              258.944872,
+              258.697162,
+              259.058823,
+              258.95536200000004,
+              260.26263900000004,
+              258.85009599999995,
+              259.35762800000003,
+              258.703232
+            ]
+          ],
+          "median_ms": 259.378546,
+          "mean_ms": 259.45345255555554,
+          "run_medians_ms": [
+            259.409243,
+            259.066998,
+            259.573518,
+            258.95536200000004
+          ],
+          "run_means_ms": [
+            259.656487,
+            259.3351334444444,
+            259.68131855555555,
+            259.14087122222224
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.3678306718863267
+    },
+    {
+      "id": "p38_s35_nullsfalse_typed_literal_ansifalse",
+      "sql": "SELECT a / CAST('0.3' AS DECIMAL(38,35)) AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 35,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.000067",
+        "0.000100",
+        "0.000133"
+      ],
+      "variants": {
+        "before": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(round(CAST(a@0 AS Decimal256(76, 35)) / Some(30000000000000000000000000000000000),76,35, 6) AS Decimal128(38, 6)) as #2]\n  DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              188.000159,
+              189.349095,
+              188.228423,
+              187.935499,
+              187.902297,
+              187.80609900000002,
+              188.457478,
+              188.101397,
+              187.825945
+            ],
+            [
+              188.119191,
+              187.93295400000002,
+              187.870629,
+              187.870488,
+              187.806129,
+              188.409189,
+              188.269068,
+              188.595184,
+              188.94520500000002
+            ],
+            [
+              187.690304,
+              189.33918599999998,
+              187.624081,
+              187.621446,
+              188.24391300000002,
+              187.51068,
+              187.60196000000002,
+              187.54446199999998,
+              187.633879
+            ],
+            [
+              189.444602,
+              189.489315,
+              189.279586,
+              187.85565100000002,
+              187.905012,
+              187.76219799999998,
+              187.701215,
+              187.66137,
+              187.604104
+            ]
+          ],
+          "median_ms": 187.90365450000002,
+          "mean_ms": 188.13714980555557,
+          "run_medians_ms": [
+            188.000159,
+            188.119191,
+            187.624081,
+            187.85565100000002
+          ],
+          "run_means_ms": [
+            188.178488,
+            188.2020041111111,
+            187.8677678888889,
+            188.30033922222222
+          ]
+        },
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(CAST(TRY_CAST(__common_expr_1@0 * Some(1),1,-39 / Some(30000000000000000000000000000000000),40,-4 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % Some(30000000000000000000000000000000000),38,35 * Some(1),1,-32 / Some(30000000000000000000000000000000000),40,3, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 35)) as __common_expr_1]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              256.119803,
+              256.729696,
+              257.568885,
+              256.014708,
+              256.773638,
+              256.208328,
+              255.847819,
+              255.78362900000002,
+              256.146663
+            ],
+            [
+              255.715062,
+              255.81881499999997,
+              256.28877700000004,
+              255.847147,
+              257.399901,
+              255.420785,
+              255.56567400000003,
+              255.682201,
+              255.435303
+            ],
+            [
+              256.181518,
+              256.346184,
+              255.863538,
+              255.858638,
+              256.14005000000003,
+              255.839392,
+              257.307619,
+              256.212035,
+              256.591519
+            ],
+            [
+              255.43334899999996,
+              255.549505,
+              256.743172,
+              255.761949,
+              255.79562300000003,
+              255.62490599999998,
+              255.143792,
+              255.430194,
+              255.354894
+            ]
+          ],
+          "median_ms": 255.8532285,
+          "mean_ms": 256.0429086388889,
+          "run_medians_ms": [
+            256.146663,
+            255.715062,
+            256.181518,
+            255.549505
+          ],
+          "run_means_ms": [
+            256.35479655555554,
+            255.908185,
+            256.2600547777778,
+            255.64859822222223
+          ]
+        }
+      },
+      "elapsed_ratio_after_over_before": 1.361619225452584
+    },
+    {
+      "id": "p38_s38_nullsfalse_column_ansitrue",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 38,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.666667",
+        "0.750000",
+        "0.800000"
+      ],
+      "variants": {
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(CAST(CAST(__common_expr_1@0 * Some(1),1,-42 / __common_expr_2@1 * Some(1),1,-42 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % __common_expr_2@1 * Some(1),1,-35 / __common_expr_2@1 * Some(1),1,-35, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 38)) as __common_expr_1, CAST(b@1 AS Decimal256(38, 38)) as __common_expr_2]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              357.019764,
+              357.09172700000005,
+              361.865995,
+              362.701076,
+              368.427191,
+              362.006276,
+              361.75379699999996,
+              361.999623,
+              362.50708599999996
+            ],
+            [
+              357.70723,
+              355.942553,
+              360.188269,
+              360.44730000000004,
+              360.816526,
+              360.748309,
+              363.615374,
+              361.37881999999996,
+              361.443831
+            ],
+            [
+              355.981415,
+              355.79810499999996,
+              368.533339,
+              361.310073,
+              360.55863700000003,
+              360.874243,
+              360.6306,
+              361.122404,
+              362.214202
+            ],
+            [
+              356.763038,
+              355.68206000000004,
+              355.60920400000003,
+              360.507543,
+              361.12300600000003,
+              362.60014,
+              360.90827800000005,
+              360.40328999999997,
+              360.5327
+            ]
+          ],
+          "median_ms": 360.8453845,
+          "mean_ms": 360.522584,
+          "run_medians_ms": [
+            361.999623,
+            360.748309,
+            360.874243,
+            360.507543
+          ],
+          "run_means_ms": [
+            361.7080594444444,
+            360.2542457777778,
+            360.7803353333333,
+            359.34769544444447
+          ]
+        }
+      }
+    },
+    {
+      "id": "p38_s38_nullsfalse_column_ansifalse",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 38,
+      "nullable_input": false,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.666667",
+        "0.750000",
+        "0.800000"
+      ],
+      "variants": {
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(CAST(TRY_CAST(__common_expr_1@0 * Some(1),1,-42 / __common_expr_2@1 * Some(1),1,-42 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % __common_expr_2@1 * Some(1),1,-35 / __common_expr_2@1 * Some(1),1,-35, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 38)) as __common_expr_1, CAST(nullif(b@1, Some(0),38,38) AS Decimal256(38, 38)) as __common_expr_2]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              353.33007100000003,
+              353.20047,
+              353.384582,
+              353.732758,
+              353.56092900000004,
+              355.34168700000004,
+              353.52281899999997,
+              353.416151,
+              353.24794799999995
+            ],
+            [
+              356.749572,
+              356.20714399999997,
+              355.518816,
+              355.05262,
+              355.093075,
+              355.24679100000003,
+              356.29605,
+              355.119173,
+              354.566697
+            ],
+            [
+              354.850194,
+              354.895598,
+              356.192056,
+              355.87599,
+              354.984574,
+              355.229849,
+              354.896229,
+              354.62552600000004,
+              356.717712
+            ],
+            [
+              355.790231,
+              354.719873,
+              354.68023,
+              355.026032,
+              354.77761000000004,
+              356.542559,
+              356.314365,
+              355.314478,
+              354.925275
+            ]
+          ],
+          "median_ms": 355.005303,
+          "mean_ms": 354.9707148333333,
+          "run_medians_ms": [
+            353.416151,
+            355.24679100000003,
+            354.984574,
+            355.026032
+          ],
+          "run_means_ms": [
+            353.6374905555556,
+            355.538882,
+            355.3630808888889,
+            355.34340588888887
+          ]
+        }
+      }
+    },
+    {
+      "id": "p38_s38_nullsfalse_typed_literal_ansitrue",
+      "sql": "SELECT a / CAST('0.3' AS DECIMAL(38,38)) AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 38,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.000067",
+        "0.000100",
+        "0.000133"
+      ],
+      "variants": {
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(CAST(CAST(__common_expr_1@0 * Some(1),1,-42 / Some(30000000000000000000000000000000000000),40,-4 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % Some(30000000000000000000000000000000000000),38,38 * Some(1),1,-35 / Some(30000000000000000000000000000000000000),40,3, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 38)) as __common_expr_1]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              259.986456,
+              260.18811,
+              259.51455899999996,
+              259.13851999999997,
+              274.358861,
+              274.739087,
+              274.970506,
+              274.483021,
+              276.235246
+            ],
+            [
+              259.666401,
+              259.215834,
+              260.350271,
+              259.68012699999997,
+              274.689394,
+              274.709252,
+              274.447746,
+              275.09268399999996,
+              274.41553600000003
+            ],
+            [
+              259.53865399999995,
+              259.220684,
+              259.1813,
+              259.275174,
+              274.62230999999997,
+              276.223444,
+              274.60063,
+              274.739087,
+              274.460039
+            ],
+            [
+              259.394005,
+              265.850839,
+              259.921756,
+              259.328715,
+              275.517694,
+              276.308443,
+              274.49163799999997,
+              274.373709,
+              274.23585299999996
+            ]
+          ],
+          "median_ms": 274.366285,
+          "mean_ms": 268.25459958333334,
+          "run_medians_ms": [
+            274.358861,
+            274.41553600000003,
+            274.460039,
+            274.23585299999996
+          ],
+          "run_means_ms": [
+            268.179374,
+            268.02969388888886,
+            267.9845913333333,
+            268.8247391111111
+          ]
+        }
+      }
+    },
+    {
+      "id": "p38_s38_nullsfalse_typed_literal_ansifalse",
+      "sql": "SELECT a / CAST('0.3' AS DECIMAL(38,38)) AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 38,
+      "nullable_input": false,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 0,
+      "first_values": [
+        "0.000067",
+        "0.000100",
+        "0.000133"
+      ],
+      "variants": {
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(CAST(TRY_CAST(__common_expr_1@0 * Some(1),1,-42 / Some(30000000000000000000000000000000000000),40,-4 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % Some(30000000000000000000000000000000000000),38,38 * Some(1),1,-35 / Some(30000000000000000000000000000000000000),40,3, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 38)) as __common_expr_1]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              255.43497100000002,
+              255.559142,
+              256.26874,
+              255.8703,
+              255.561196,
+              257.160967,
+              256.403159,
+              255.58122300000002,
+              255.71918
+            ],
+            [
+              256.36875599999996,
+              255.70126599999998,
+              255.14130600000001,
+              255.54164899999998,
+              255.42333900000003,
+              254.92272999999997,
+              255.153509,
+              256.53280099999995,
+              255.904443
+            ],
+            [
+              255.57943999999998,
+              255.44451899999999,
+              259.530949,
+              256.314445,
+              255.37770500000002,
+              255.309809,
+              255.15376899999998,
+              255.319998,
+              255.378707
+            ],
+            [
+              255.37575299999997,
+              255.47260300000002,
+              255.61483600000003,
+              255.57954100000003,
+              255.542371,
+              255.63833000000002,
+              257.667929,
+              255.906778,
+              255.870581
+            ]
+          ],
+          "median_ms": 255.57949050000002,
+          "mean_ms": 255.84240944444446,
+          "run_medians_ms": [
+            255.71918,
+            255.54164899999998,
+            255.378707,
+            255.61483600000003
+          ],
+          "run_means_ms": [
+            255.95098644444445,
+            255.63219988888886,
+            255.9343712222222,
+            255.85208022222224
+          ]
+        }
+      }
+    },
+    {
+      "id": "p38_s38_nullstrue_column_ansitrue",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 38,
+      "nullable_input": true,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 177451,
+      "first_values": [
+        "0.666667",
+        "0.750000",
+        "0.800000"
+      ],
+      "variants": {
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(CAST(CAST(__common_expr_1@0 * Some(1),1,-42 / __common_expr_2@1 * Some(1),1,-42 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % __common_expr_2@1 * Some(1),1,-35 / __common_expr_2@1 * Some(1),1,-35, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 38)) as __common_expr_1, CAST(b@1 AS Decimal256(38, 38)) as __common_expr_2]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              325.462429,
+              327.063002,
+              325.768858,
+              325.625382,
+              326.069097,
+              326.110644,
+              325.817158,
+              326.592589,
+              327.433921
+            ],
+            [
+              327.217099,
+              326.583522,
+              326.674711,
+              328.828161,
+              326.825362,
+              326.726437,
+              327.206088,
+              327.05731199999997,
+              326.595835
+            ],
+            [
+              326.503333,
+              326.831983,
+              326.765912,
+              326.500197,
+              327.07310099999995,
+              328.911155,
+              326.652029,
+              326.997151,
+              326.77151100000003
+            ],
+            [
+              325.86904599999997,
+              327.264067,
+              327.79618500000004,
+              325.443416,
+              325.712775,
+              325.768068,
+              325.79433800000004,
+              326.140179,
+              327.342062
+            ]
+          ],
+          "median_ms": 326.66337,
+          "mean_ms": 326.6609476388889,
+          "run_medians_ms": [
+            326.069097,
+            326.825362,
+            326.77151100000003,
+            325.86904599999997
+          ],
+          "run_means_ms": [
+            326.2158977777778,
+            327.0793918888889,
+            327.000708,
+            326.3477928888889
+          ]
+        }
+      }
+    },
+    {
+      "id": "p38_s38_nullstrue_column_ansifalse",
+      "sql": "SELECT a / b AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 38,
+      "nullable_input": true,
+      "divisor_kind": "column",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 177451,
+      "first_values": [
+        "0.666667",
+        "0.750000",
+        "0.800000"
+      ],
+      "variants": {
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(CAST(TRY_CAST(__common_expr_1@0 * Some(1),1,-42 / __common_expr_2@1 * Some(1),1,-42 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % __common_expr_2@1 * Some(1),1,-35 / __common_expr_2@1 * Some(1),1,-35, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 38)) as __common_expr_1, CAST(nullif(b@1, Some(0),38,38) AS Decimal256(38, 38)) as __common_expr_2]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              325.7103,
+              324.790301,
+              324.554584,
+              326.338276,
+              324.316881,
+              324.438267,
+              324.849211,
+              324.478081,
+              324.56260799999995
+            ],
+            [
+              324.462242,
+              324.837919,
+              324.35819799999996,
+              324.316971,
+              324.49372,
+              326.42332400000004,
+              324.377304,
+              324.922637,
+              324.56026399999996
+            ],
+            [
+              326.248269,
+              324.56775799999997,
+              324.55781900000005,
+              324.39646,
+              324.487459,
+              324.481387,
+              324.961159,
+              326.360768,
+              325.12366
+            ],
+            [
+              323.97133,
+              323.907242,
+              323.96333599999997,
+              325.854239,
+              324.795632,
+              323.970329,
+              324.085063,
+              324.12183,
+              323.891142
+            ]
+          ],
+          "median_ms": 324.52415199999996,
+          "mean_ms": 324.7371102777778,
+          "run_medians_ms": [
+            324.56260799999995,
+            324.49372,
+            324.56775799999997,
+            323.97133
+          ],
+          "run_means_ms": [
+            324.89316766666667,
+            324.75028655555553,
+            325.02052655555553,
+            324.28446033333336
+          ]
+        }
+      }
+    },
+    {
+      "id": "p38_s38_nullstrue_typed_literal_ansitrue",
+      "sql": "SELECT a / CAST('0.3' AS DECIMAL(38,38)) AS quotient FROM bench_input",
+      "ansi": true,
+      "precision": 38,
+      "scale": 38,
+      "nullable_input": true,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 104857,
+      "first_values": [
+        "0.000067",
+        "0.000100",
+        "0.000133"
+      ],
+      "variants": {
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[CAST(CAST(CAST(__common_expr_1@0 * Some(1),1,-42 / Some(30000000000000000000000000000000000000),40,-4 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % Some(30000000000000000000000000000000000000),38,38 * Some(1),1,-35 / Some(30000000000000000000000000000000000000),40,3, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 38)) as __common_expr_1]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              242.108239,
+              242.01071800000003,
+              242.359636,
+              242.100063,
+              241.78601999999998,
+              242.21809299999998,
+              245.427244,
+              244.416827,
+              242.43207999999998
+            ],
+            [
+              257.76687300000003,
+              260.225059,
+              257.563325,
+              257.55217400000004,
+              257.536435,
+              257.095906,
+              257.35026799999997,
+              257.526005,
+              257.213365
+            ],
+            [
+              242.22122900000002,
+              242.352442,
+              242.93690800000002,
+              243.00842,
+              243.579361,
+              242.244712,
+              242.622354,
+              242.414277,
+              247.39830400000002
+            ],
+            [
+              257.218505,
+              256.90855899999997,
+              256.951358,
+              257.082923,
+              256.92492,
+              256.90262800000005,
+              257.555923,
+              258.41979599999996,
+              257.393871
+            ]
+          ],
+          "median_ms": 252.15046600000005,
+          "mean_ms": 250.2451338888889,
+          "run_medians_ms": [
+            242.21809299999998,
+            257.536435,
+            242.622354,
+            257.082923
+          ],
+          "run_means_ms": [
+            242.7621022222222,
+            257.75882333333334,
+            243.19755633333335,
+            257.26205366666665
+          ]
+        }
+      }
+    },
+    {
+      "id": "p38_s38_nullstrue_typed_literal_ansifalse",
+      "sql": "SELECT a / CAST('0.3' AS DECIMAL(38,38)) AS quotient FROM bench_input",
+      "ansi": false,
+      "precision": 38,
+      "scale": 38,
+      "nullable_input": true,
+      "divisor_kind": "typed_literal",
+      "output_type": "Decimal128(38, 6)",
+      "output_nulls": 104857,
+      "first_values": [
+        "0.000067",
+        "0.000100",
+        "0.000133"
+      ],
+      "variants": {
+        "after": {
+          "physical_plan": "ProjectionExec: expr=[TRY_CAST(CAST(TRY_CAST(__common_expr_1@0 * Some(1),1,-42 / Some(30000000000000000000000000000000000000),40,-4 AS Decimal128(38, 6)) AS Decimal256(76, 6)) + round(__common_expr_1@0 % Some(30000000000000000000000000000000000000),38,38 * Some(1),1,-35 / Some(30000000000000000000000000000000000000),40,3, 6) AS Decimal128(38, 6)) as #2]\n  ProjectionExec: expr=[CAST(a@0 AS Decimal256(38, 38)) as __common_expr_1]\n    DataSourceExec: partitions=1, partition_sizes=[128]\n",
+          "samples_ms": [
+            [
+              239.13717,
+              238.743459,
+              238.836161,
+              238.93483500000002,
+              238.65160799999998,
+              240.740388,
+              239.147409,
+              238.731567,
+              240.051648
+            ],
+            [
+              254.85329099999998,
+              254.754147,
+              254.58538400000003,
+              254.376726,
+              254.550008,
+              254.39508100000003,
+              256.901405,
+              254.839936,
+              255.18078900000003
+            ],
+            [
+              239.149153,
+              240.548602,
+              239.41995599999998,
+              238.947187,
+              238.939022,
+              239.401391,
+              240.979362,
+              239.55568799999998,
+              239.891832
+            ],
+            [
+              213.518297,
+              213.764344,
+              213.193544,
+              213.865261,
+              213.791905,
+              213.873977,
+              215.57917500000002,
+              213.61667,
+              213.407201
+            ]
+          ],
+          "median_ms": 239.148281,
+          "mean_ms": 236.91259941666667,
+          "run_medians_ms": [
+            238.93483500000002,
+            254.754147,
+            239.41995599999998,
+            213.764344
+          ],
+          "run_means_ms": [
+            239.21936055555557,
+            254.93741855555555,
+            239.64802144444445,
+            213.84559711111112
+          ]
+        }
+      }
+    }
+  ],
+  "timed_executions": 2448,
+  "warmup_executions": 544,
+  "limitations": [
+    "Single machine, execution-only projection; does not measure Delta I/O or whole-query latency.",
+    "Scale-35 inputs fit before and after; scale-38 throughput is after-only because the previous candidate errors.",
+    "Fallback dispatch uses declared types and also affects small values of those types that previously succeeded.",
+    "Original 26 physical plans and observed outputs are identical; timing changes can include noise and compiled code layout.",
+    "Agreement checks exact Decimal values/types or error stage; full error-class and metadata parity remain outside scope.",
+    "The new fallback is evaluated for nonnegative-scale Decimal128 inputs; input Decimal256 and negative scales remain outside this experiment."
+  ]
+}

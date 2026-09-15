@@ -13,11 +13,11 @@ from reference import observe
 ROOT = Path(__file__).resolve().parent
 
 
-def load_cases():
-    return [json.loads(line) for line in (ROOT / "decimal-division.jsonl").read_text().splitlines()]
+def load_cases(path=ROOT / "decimal-division.jsonl"):
+    return [json.loads(line) for line in path.read_text().splitlines()]
 
 
-def capture(out):
+def capture(out, cases_path=ROOT / "decimal-division.jsonl"):
     os.environ["SPARK_LOCAL_IP"] = "127.0.0.1"
     os.environ["PYSPARK_PYTHON"] = sys.executable
     from pyspark.sql import SparkSession
@@ -35,7 +35,7 @@ def capture(out):
         if spark.version != "4.2.0":
             raise ValueError(f"expected Spark 4.2.0, got {spark.version}")
         spark.sparkContext.setLogLevel("ERROR")
-        cases = load_cases()
+        cases = load_cases(cases_path)
         for case in cases:
             for ansi in ("true", "false"):
                 spark.conf.set("spark.sql.ansi.enabled", ansi)
@@ -60,10 +60,10 @@ def rows(actual):
     return [[Decimal(v) if v is not None else None for v in row] for row in actual["rows"]]
 
 
-def compare(reference, candidate):
+def compare(reference, candidate, cases_path=ROOT / "decimal-division.jsonl"):
     reference_capture = json.loads(reference.read_text())
     candidate_capture = json.loads(candidate.read_text())
-    cases = load_cases()
+    cases = load_cases(cases_path)
     if reference_capture["cases"] != cases or candidate_capture["cases"] != cases:
         raise ValueError("capture SQL does not match the current cases")
     expected = reference_capture["results"]
@@ -99,11 +99,13 @@ def main():
     check.add_argument("reference", type=Path)
     check.add_argument("candidate", type=Path)
     check.add_argument("--report", type=Path, required=True)
+    for command in (spark, check):
+        command.add_argument("--cases", type=Path, default=ROOT / "decimal-division.jsonl")
     args = parser.parse_args()
     if args.mode == "spark":
-        capture(args.out)
+        capture(args.out, args.cases)
         return 0
-    result = compare(args.reference, args.candidate)
+    result = compare(args.reference, args.candidate, args.cases)
     args.report.write_text(json.dumps(result, indent=2) + "\n")
     print(f"{result['agreement']}/{result['total']} agree on values/types or error stage")
     return int(result["agreement"] != result["total"])

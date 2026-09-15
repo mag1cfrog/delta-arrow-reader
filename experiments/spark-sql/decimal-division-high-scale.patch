@@ -1,0 +1,68 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -585,20 +585,52 @@
+                 + i32::from(dividend_scale)
+                 + i32::from(ARROW_DIV_SCALE_INCREMENT)
+                 + i32::from(*s2);
+-            let (dividend_target, divisor_target) =
+-                if intermediate_digits <= i32::from(DECIMAL128_MAX_PRECISION) {
+-                    (
+-                        DataType::Decimal128(DECIMAL128_MAX_PRECISION, dividend_scale),
+-                        DataType::Decimal128(DECIMAL128_MAX_PRECISION, *s2),
+-                    )
++            let rounded = if intermediate_digits > i32::from(DECIMAL256_MAX_PRECISION) {
++                // Split a/b into its truncating integer quotient and remainder/b. Aligning
++                // two Decimal128 coefficients needs at most 76 digits; the remainder has
++                // at most 38. This avoids overflowing a fully rescaled numerator.
++                let dividend = cast(dividend, DataType::Decimal256(*p1, *s1));
++                let divisor = cast(divisor, DataType::Decimal256(*p2, *s2));
++                // Multiplication by a negative-scale scalar with coefficient 1 moves the
++                // decimal point exactly, without dropping any input digits.
++                let shift = |value: Expr, places: i8| {
++                    value * lit(ScalarValue::Decimal256(Some(i256::ONE), 1, -places))
++                };
++                // Arrow adds four to the numerator scale; -4 gives an integer quotient.
++                let whole = shift(dividend.clone(), *s1 + ARROW_DIV_SCALE_INCREMENT)
++                    / shift(divisor.clone(), *s1 + ARROW_DIV_SCALE_INCREMENT);
++                // An out-of-range integer part already makes the final result overflow.
++                // Check it before rescaling for addition, including ANSI-off NULL behavior.
++                let target = DataType::Decimal128(result_precision, result_scale);
++                let whole = if ansi_mode {
++                    cast(whole, target)
+                 } else {
+-                    (
+-                        DataType::Decimal256(DECIMAL256_MAX_PRECISION, dividend_scale),
+-                        DataType::Decimal256(DECIMAL256_MAX_PRECISION, *s2),
+-                    )
++                    try_cast(whole, target)
+                 };
+-            let quotient = cast(dividend, dividend_target) / cast(divisor, divisor_target);
+-            let rounded = expr_fn::round(vec![quotient, lit(result_scale as i32)]);
++                let remainder = dividend % divisor.clone();
++                let places =
++                    (*s1).max(*s2) - (result_scale - (ARROW_DIV_SCALE_INCREMENT - 1));
++                let fraction = shift(remainder, places) / shift(divisor, places);
++                cast(
++                    whole,
++                    DataType::Decimal256(DECIMAL256_MAX_PRECISION, result_scale),
++                ) + expr_fn::round(vec![fraction, lit(result_scale as i32)])
++            } else {
++                let (dividend_target, divisor_target) =
++                    if intermediate_digits <= i32::from(DECIMAL128_MAX_PRECISION) {
++                        (
++                            DataType::Decimal128(DECIMAL128_MAX_PRECISION, dividend_scale),
++                            DataType::Decimal128(DECIMAL128_MAX_PRECISION, *s2),
++                        )
++                    } else {
++                        (
++                            DataType::Decimal256(DECIMAL256_MAX_PRECISION, dividend_scale),
++                            DataType::Decimal256(DECIMAL256_MAX_PRECISION, *s2),
++                        )
++                    };
++                let quotient = cast(dividend, dividend_target) / cast(divisor, divisor_target);
++                expr_fn::round(vec![quotient, lit(result_scale as i32)])
++            };
+             if ansi_mode {
+                 cast(rounded, DataType::Decimal128(result_precision, result_scale))
+             } else {

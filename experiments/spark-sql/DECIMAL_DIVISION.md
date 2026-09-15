@@ -1,6 +1,6 @@
 # Decimal division patch evaluation
 
-The division core and numeric/NULL operand coercion from [Sail PR 2225](https://github.com/lakehq/sail/pull/2225), plus a local adjustment to use Arrow's Decimal NULL/zero handling, fix the frozen `2 / 3` discrepancy and the tested Decimal division boundaries. They do not provide complete Spark division semantics. The candidate is saved as an optional patch; the normal vendored source and its checkpoint remain unchanged.
+The division core and numeric/NULL operand coercion from [Sail PR 2225](https://github.com/lakehq/sail/pull/2225), plus a local adjustment to use Arrow's Decimal NULL/zero handling, fix the frozen `2 / 3` discrepancy and the tested Decimal division boundaries. They do not provide complete Spark division semantics. The candidate is saved as optional patches; the normal vendored source and its checkpoint remain unchanged. The [high-scale follow-up](#high-scale-intermediate-overflow) adds a local fallback and raises the original probe agreement to 158/168.
 
 ## Candidate and provenance
 
@@ -32,7 +32,7 @@ These counts exclude field names, nullability, metadata and structured error con
 
 The original 116-query Delta corpus matches the rounding-only and coercion candidates in every observation. Relative to the lifecycle checkpoint, only `arithmetic_decimal_division` changes: the `2 / 3` row becomes `0.666667` instead of `0.666666`. The repaired case still differs from Spark in generated field names and metadata, so the strict Spark summary remains 47 matches / 58 differences / 11 pending host-adapter cases. The four frozen corpus/baseline files are unchanged.
 
-The expanded probe leaves 16 disagreements:
+Before the high-scale follow-up, the expanded probe leaves 16 disagreements:
 
 | Cases, across ANSI modes | Count | What remains |
 | --- | ---: | --- |
@@ -172,9 +172,44 @@ One narrow literal case still needs care. `DECIMAL(10,2) / 3` under ANSI has a p
 
 [Raw samples, plans, medians, means and source hashes](decimal-round256-performance.json) retain that limitation. The narrowed patch is a better candidate for further evaluation than the all-width patch: the stable narrow-column overhead is gone, while the wide benefit persists. Literal timing variability remains a measurement question before a broader performance claim. Further arithmetic optimization can investigate repeated wide quotient/remainder computation; no such change is included here. These measurements compare two versions that already include the same Spark arithmetic rules and do not eliminate the earlier cost relative to unmodified Sail. The 16 semantic differences and the adoption decision remain open.
 
+## High-scale intermediate overflow
+
+[decimal-division-high-scale.patch](decimal-division-high-scale.patch) extends the arithmetic candidate with a fallback for Decimal128 operands whose original intermediate requires more than 76 decimal digits. Apply it after `decimal-division.patch`. It adds 44 Rust lines and removes 12, a net 32 including comments and formatting. This is a local expression-builder adjustment, not code copied from a merged Sail fix. Sail PR 2225 still had the same unmerged revision when rechecked on September 14, 2026. Neither rounding-performance patch is applied in this evaluation.
+
+Arrow's [division kernel](https://github.com/apache/arrow-rs/blob/58.4.0/arrow-arith/src/numeric.rs#L864) multiplies the numerator by a power of ten before dividing. For `DECIMAL(38,38)` values `0.5 / 0.5`, that intermediate exceeds i256 even though the result is `1.000000`. Simply lowering the input scale would lose small values. Multiplying both operands by a common power of ten fixes that example, but still overflows for valid mixed-scale results such as `DECIMAL(38,6)` value `90000000000000000000000000000000` divided by `DECIMAL(38,38)` value `0.99`.
+
+The fallback instead uses the identity `a / b = q + r / b`, where `q` is the integer quotient truncated toward zero and `r` is the remainder. Existing Arrow division computes `q`, existing remainder computes `r`, and division plus DataFusion's existing HALF_UP rounding computes the fraction. Multiplication by internal negative-scale Decimal constants, each with coefficient 1, moves the decimal point without discarding input digits. The planner checks the integer part against Spark's result type before rescaling it for addition, then checks the final sum to catch a rounding carry. ANSI mode raises for actual result overflow; non-ANSI mode returns NULL.
+
+For nonnegative-scale Decimal128 inputs, aligning the original operands needs at most 76 coefficient digits. The remainder needs at most 38, and its division with a guard digit needs at most 45 on this fallback. Both fit i256. The existing Decimal128 and ordinary Decimal256 expression branches are retained. The new branch adds no dependency, custom UDF, physical node or Python execution. Its internal negative-scale constants do not establish support for user-provided negative-scale or Decimal256 inputs.
+
+The [additional corpus](decimal-high-scale.jsonl) contains 157 queries, run with ANSI enabled and disabled. It crosses the 76-digit dispatch boundary with equal and unequal scales, lower precisions, deterministic varied values, signs, exact and repeating results, tiny values, halfway neighbors, the maximum result, rounding overflow, NULL masks, live and masked zero divisors, empty inputs, literals and multiple batches. The comparator accepts `--cases` to keep this corpus separate from the original 84 queries, and still rejects captures whose SQL or case IDs differ.
+
+- All 314 observations agree with Spark 4.2.0 on exact Decimal values and types or error stage, up from 249/314 with the previous candidate. Successful comparisons cover all returned rows, not just samples.
+- The original probe improves from 152/168 to 158/168. Only the six previously failing high-scale observations change their comparison result. The remaining ten differences concern non-Decimal NULL/zero handling, ROUND result precision, minimum BIGINT parsing, string coercion and other operators.
+- All 116 Delta corpus results match the previous arithmetic candidate, including its 18 adapter checks. All 27 extraction tests and ten Python tests pass. The default vendored arithmetic remains unchanged.
+
+Error text and error classes are still outside the comparator's agreement count. The eleven expected ANSI failures in the new corpus were also checked by category: nine actual result overflows, including a rounding carry, and two active zero divisors. Their non-ANSI counterparts return NULL. The new path is selected by operand types, so it also runs for small values of those types that happened to avoid overflow before.
+
+The benchmark retains the original 26 cases and adds scale-35/38 inputs. The same 1,048,576 rows, batch size, CPU affinity and release settings apply, with four processes per variant, two warmups and nine samples per case. Scale 35 uses values small enough for both variants to finish. Scale 38 is measured only after the patch; a probe of row 56 from that benchmark confirms that the old candidate overflows in both ANSI modes. No failed run is treated as a throughput baseline.
+
+| Input and divisor | Before ms, ANSI on | After ms, ANSI on | ANSI on ratio | ANSI off ratio |
+| --- | ---: | ---: | ---: | ---: |
+| DECIMAL(38,35) / column | 217.90 | 378.59 | 1.74x | 1.62x |
+| DECIMAL(38,35) / typed 0.3 | 189.63 | 259.38 | 1.37x | 1.36x |
+| DECIMAL(38,38) / column | errors | 360.85 | n/a | n/a |
+| DECIMAL(38,38) / typed 0.3 | errors | 274.37 | n/a | n/a |
+| DECIMAL(38,38), NULL masks / column | errors | 326.66 | n/a | n/a |
+| DECIMAL(38,38), NULL masks / typed 0.3 | errors | 252.15 | n/a | n/a |
+
+The scale-35 column case increases from 217.90 to 378.59 ms under ANSI, about 74%; the typed-literal case increases about 37%. Non-ANSI increases are about 62% and 36%. This is the cost of this expression fallback, not a lower bound on the cost of Spark-compatible division. It resolves overflow by doing more arithmetic. A later performance slice can investigate an exact common-scale shift for the cases where that alone is sufficient, retaining this fallback for the harder mixed-scale cases.
+
+All 26 original physical plans, output types, first values and NULL counts remain identical across variants. Twenty-five pooled medians change between -0.6% and +2.2%. The previously variable `DECIMAL(10,2) / 3` ANSI case shifts from a 37.44 ms median to 33.04 ms, while means shift from 35.56 to 34.89 ms. Its samples still occupy two bands; the fallback does not run for this case, so this is not evidence of an arithmetic optimization. No samples are discarded.
+
+All 2,448 timed executions and 544 warmups pass their row/NULL checks. [Raw samples, physical plans, hashes and validation results](decimal-high-scale-performance.json) retain both the high-scale cost and the ordinary-case variability. The restored default probe matches all 168 original baseline observations, including logical plans and errors. The high-scale patch remains optional and unapplied to the normal vendored source; adoption and the ten other original semantic differences remain open.
+
 ## Reproduce
 
-Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse the same Cargo target directory for all Rust commands.
+Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
 
 ```bash
 mkdir -p target/spark-sql/decimal-division
@@ -312,4 +347,45 @@ cd "$host_repo"
 
 Pool all four runs' `samples_ms` per case and variant as in the earlier benchmark, using `before` and `after` instead of `baseline` and `candidate`. Compare all non-timing case fields across both variants before interpreting the medians. Keep the detached checkout for inspection; it contains the temporary arithmetic patch and dependency override lockfile.
 
-The Decimal256-only experiment retains the wide benefit and removes the previous stable narrow-column regression. Both rounding patches remain optional; literal timing variability still limits broader performance claims. Further work can isolate that variability and investigate repeated wide quotient/remainder computation. NULL/zero handling for non-Decimal columns remains separate semantic work. High-scale Decimal arithmetic still needs explicit treatment before general Spark division support can be claimed. String conversion and other operators remain separate work; importing the entire arithmetic PR would expand scope without resolving all of these gaps. This evaluation does not close the adoption decision in the owning issue.
+For the high-scale follow-up, start from a commit containing both patches and the additional corpus, then use a fresh detached checkout and the original registry dependencies. Apply the arithmetic patch first and the high-scale patch second; omit both DataFusion rounding patches. Set `SPARK_TEST_PYTHON` and `JAVA_HOME` to the Spark 4.2.0 reference environment described above:
+
+```bash
+set -e
+high_dir="$(mktemp -d /tmp/delta-high-scale.XXXXXX)"
+git worktree add --detach "$high_dir/checkout" HEAD
+cd "$high_dir/checkout"
+export CARGO_TARGET_DIR="$high_dir/build"
+git apply experiments/spark-sql/decimal-division.patch
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --examples --bin delta-reader-sail-extraction-probe -j 4
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$high_dir/before"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$high_dir/before-probe"
+git apply experiments/spark-sql/decimal-division-high-scale.patch
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --examples --bin delta-reader-sail-extraction-probe -j 4
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$high_dir/after"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$high_dir/after-probe"
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark "$high_dir/spark.json" \
+  --cases experiments/spark-sql/decimal-high-scale.jsonl
+for variant in before after; do
+  "$high_dir/$variant-probe" experiments/spark-sql/decimal-high-scale.jsonl \
+    "$high_dir/$variant.json"
+done
+python3 experiments/spark-sql/decimal_division.py compare \
+  "$high_dir/spark.json" "$high_dir/after.json" --report "$high_dir/check.json" \
+  --cases experiments/spark-sql/decimal-high-scale.jsonl
+# Finish all builds and correctness checks before timing.
+for run in before-1 after-1 after-2 before-2 after-3 before-3 before-4 after-4; do
+  variant="${run%-*}"
+  taskset -c 2 "$high_dir/$variant" "$high_dir/$run-normal.json"
+  if [ "$variant" = before ]; then
+    taskset -c 2 "$high_dir/$variant" "$high_dir/$run-high.json" high-scale-35
+  else
+    taskset -c 2 "$high_dir/$variant" "$high_dir/$run-high.json" high-scale
+  fi
+done
+```
+
+The `high-scale-35` benchmark selects the subset that completes before the patch. The `high-scale` mode additionally measures scale 38, with and without NULLs. High-scale input coefficients represent values in units of `0.00001`, and the typed divisor is `0.3`; all fit the declared input types. Pool the four processes' nine samples per case as above. Compare SQL, output types, first values and NULL counts across variants; the high-scale physical plans are expected to change. Use a target directory dedicated to this checkout to avoid reusing stale path-dependency artifacts from another workspace. The recorded evaluation forced a rebuild of the host Sail planner before verifying the restored default capture.
+
+The Decimal256-only experiment retains the wide benefit and removes the previous stable narrow-column regression. Both rounding patches remain optional; literal timing variability still limits broader performance claims. Further work can isolate that variability and investigate repeated wide quotient/remainder computation. NULL/zero handling for non-Decimal columns remains separate semantic work. The high-scale follow-up resolves the six original intermediate-overflow observations and passes its additional corpus, but does not establish complete Spark division support. String conversion and other operators remain separate work; importing the entire arithmetic PR would expand scope without resolving all of these gaps. This evaluation does not close the adoption decision in the owning issue.
