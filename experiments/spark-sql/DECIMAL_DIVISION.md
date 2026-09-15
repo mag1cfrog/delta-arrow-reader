@@ -694,9 +694,44 @@ Measurements use the same Ryzen 7 8845HS, Rust 1.97.1 release builds and CPU 2. 
 
 All 1,908 timed executions and 424 warmups pass row/NULL counts; each timing process also validates every output value before timing. Two existing benchmark cases per variant retain their preceding non-timing observations, and invalid case/phase arguments fail without a capture. The prior Spark, exact-integer and Delta corpora were not rerun in this harness-only slice; their tested production source hashes are unchanged. The default executables and scratch sources are restored, and all 168 default probe observations match the preceding capture. The only post-measurement benchmark edit corrects the perf helper's comment to describe both phases; both source hashes are recorded.
 
-The next runtime slice should investigate simplifying the fused function's NULL branch through DataFusion's existing expression simplifier, with checks for scalar-subquery errors and ANSI behavior. This slice makes no arithmetic or optimizer changes. The candidate remains optional, and the correlated MAX regression remains open. Delta I/O and concurrent workloads are still unmeasured.
+This measurement slice makes no arithmetic or optimizer changes. The following section addresses the correlated MAX regression through DataFusion's existing expression simplifier. The candidate remains optional; Delta I/O and concurrent workloads are still unmeasured.
 
 To reproduce, build and save the two corrected binaries as described in the preceding section, using this version of `decimal_bench`. Build `legacy` with the same fused/ROUND/filter sources and local dependency paths, omitting only the four subquery/LATERAL repairs. Run `decimal_bench OUTPUT_JSON subquery-check` on all three builds and inspect each result's status; check-only mode deliberately records failures and continues. Run `decimal_bench OUTPUT_JSON subqueries [CASE_ID]` in the recorded order for timing; this mode aborts on a wrong result. Reuse the earlier FIFO `perf stat` command with the new suite and set `DECIMAL_BENCH_PERF_PHASE=planning` or `execution` in addition to `DECIMAL_BENCH_PERF_DIR`. Keep the full-suite and selected-case counter samples separate. The artifact records every selected case and process order.
+
+## Empty-aggregate NULL simplification
+
+The optional [fused NULL patch](decimal-division-fused-null.patch) removes the measured correlated MAX regression. It adds a 17-line `ScalarUDFImpl::simplify` method and one regression test. Execution medians decrease by 12.7-13.2% from the preceding fused candidate, planning medians by 29.9-30.0%, and execution instructions by 15.94%. The [samples, plans and correctness records](decimal-fused-null-performance.json) include a fresh expression/ROUND comparison.
+
+Sail coerces the fused function's SQL operands to Decimal types before constructing it. During empty-aggregate analysis, DataFusion substitutes an untyped `ScalarValue::Null` for MAX and other aggregates with NULL defaults. The hook recognizes that sentinel and returns NULL with the function's declared precision and scale. DataFusion can then omit the compensation CASE and prune `__always_true`. The aggregate division, scalar-subquery execution, join and required sort remain in the plan. COUNT's zero default retains its divisor and error behavior. Both scalar-subquery and LATERAL decorrelation use the same simplifier; no new optimizer pass or execution node is added.
+
+The distinction between untyped and typed NULL is deliberate. An unrestricted NULL rule suppressed two ANSI invalid-CAST errors that Spark reports while processing the other operand's subquery. The final patch preserves typed SQL NULLs. It also leaves a synthetic NULL unchanged when an enclosing cast has already given it a Decimal type. This keeps the optimization within the empty-aggregate pattern measured here; it does not implement general Spark NULL simplification.
+
+The same 20-case fixture and phase boundaries from the preceding section are used. Times below are pooled medians in milliseconds over 1,048,576 outer rows, with before/after referring to fused division without/with this hook.
+
+| ANSI | Planning before / after ms | Execution before / after ms | Execution instructions |
+| --- | ---: | ---: | ---: |
+| On | 1.794 / 1.256 | 81.04 / 70.77 | -15.94% |
+| Off | 1.795 / 1.258 | 80.21 / 69.63 | -15.94% |
+
+Execution means decrease by 11.9-13.0%. Against expression/ROUND, the corrected fused MAX medians are 1.4-2.3% lower and planning medians are 13.1-18.7% lower. Separate execution counters show nearly identical work: fused uses about 0.02% fewer instructions, while elapsed time is 0.6-0.7% higher. The execution cost is therefore close to expression/ROUND in this fixture, with the earlier 10-12% gap removed.
+
+The other 18 benchmark plans are unchanged. Their execution median changes range from -1.0% to +2.7%, and mean changes from -1.9% to +1.4%; all samples are retained. Four execution controls have instruction-count differences below 0.013%. Targeted follow-ups check the largest unchanged-plan variations: LEFT LATERAL's +2.7% full-suite execution median becomes +0.22% elapsed time with +0.0008% instructions in selected-case counters; nested LATERAL's +8.6% planning mean becomes -0.09% elapsed time with +0.024% instructions. These runs do not show a material increase in work on those paths. Planning counters include the existing control handshake, and one plain-projection comparison changes elapsed time by -20.9% despite a +0.022% instruction change, so such timings are not attributed to the hook.
+
+The main run uses four fresh processes per variant in the order expression, before, after, after, before, expression, before, after, expression, expression, after, before. Each case has two warmups and nine planning/execution samples. All builds and correctness gates complete before timing. Fifty-six separate counter processes cover the MAX paths and unchanged-plan controls; every event runs for 100% of its enabled interval. The saved expression binary differs in benchmark source only by the perf helper comment described above. Hardware and dependency versions match the preceding comparison. CPU frequency is unfixed; these measurements cover one machine, one partition and in-memory inputs.
+
+Validation preserves all 858 before/after SQL observations on ordered values/types or error stage, including every complete error message. The original 798 parsed captures, including logical and physical plans, are identical. The [30 added queries](decimal-fused-null.jsonl), run in both ANSI modes, cover NULL on either side, zero/NULL/empty/multirow scalar subqueries, invalid CAST, matched/all-NULL/unmatched aggregate groups, COUNT and LATERAL COALESCE defaults. Both fused variants agree with Spark in 50 of those 60 observations. The same ten pre-existing differences remain: four typed-NULL/multirow-subquery cases and six non-ANSI invalid-CAST cases. The final rule introduces no new mismatch in this corpus.
+
+The unit check reproduces the missing untyped-NULL simplification before the fix and passes afterward, while preserving typed NULL and zero arguments containing pending subqueries. The candidate also passes all 4,064 integer-reference comparisons over 187,410 rows, preserves 116 Delta observations, and passes all 18 adapter checks. Every benchmark variant validates all 20 cases row by row; all 2,664 timed executions and 592 warmups pass row/NULL counts. Default executables and scratch sources are restored, and all 168 default probe observations match the previous capture.
+
+To reproduce, add `decimal-division-fused-null.patch` after the base and fused arithmetic patches in the isolated candidate checkout. Keep the existing Sail alias patch and all four local DataFusion overrides identical on both sides. Set `run_dir` to the experiment directory containing `override.toml`, then run the unit check from the candidate checkout:
+
+```bash
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-plan --lib \
+  fused_division_simplifies_empty_aggregate_null_only
+```
+
+Run `decimal_probe experiments/spark-sql/decimal-fused-null.jsonl OUTPUT_JSON --physical-plans`, compare it against both the saved before capture and the Spark capture using `decimal_division.py compare --cases`, and use `decimal_bench OUTPUT_JSON subquery-check` before timing. The before/after SQL comparison must match all 60 observations; the Spark comparison currently matches 50 and returns exit 1 for the documented differences. Reuse the preceding `subqueries` and FIFO counter commands with the recorded process order. The patch remains optional, and broader compatibility, Delta I/O latency and concurrent execution remain outside this result.
 
 ## Reproduce
 

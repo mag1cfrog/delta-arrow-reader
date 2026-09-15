@@ -1,0 +1,81 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -580,6 +580,23 @@
+         Ok(DataType::Decimal128(self.precision, self.scale))
+     }
+ 
++    fn simplify(
++        &self,
++        args: Vec<Expr>,
++        _info: &datafusion_expr::simplify::SimplifyContext,
++    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
++        use datafusion_expr::simplify::ExprSimplifyResult;
++        // SQL operands are already Decimal-typed. The decorrelator substitutes
++        // untyped NULL for empty aggregates. Fold only that sentinel: folding
++        // typed SQL NULLs can hide ANSI errors in the other operand's subquery.
++        if args.iter().any(|arg| matches!(arg, Expr::Literal(ScalarValue::Null, _))) {
++            return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::Decimal128(
++                None, self.precision, self.scale,
++            ))));
++        }
++        Ok(ExprSimplifyResult::Original(args))
++    }
++
+     fn invoke_with_args(&self, input: datafusion_expr::ScalarFunctionArgs)
+         -> datafusion_common::Result<datafusion_expr::ColumnarValue>
+     {
+@@ -618,6 +635,53 @@
+         } else {
+             Ok(ColumnarValue::Array(Arc::new(result)))
+         }
++    }
++}
++
++#[cfg(test)]
++mod fused_null_tests {
++    use super::*;
++    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
++    use datafusion_expr::{LogicalPlanBuilder, scalar_subquery, simplify::SimplifyContext};
++
++    #[test]
++    fn fused_division_simplifies_empty_aggregate_null_only() -> datafusion_common::Result<()> {
++        let info = SimplifyContext::builder().build();
++        let simplifier = ExprSimplifier::new(info);
++        for (precision, scale) in [(18, 4), (38, 38)] {
++            let subquery = scalar_subquery(Arc::new(
++                LogicalPlanBuilder::empty(true)
++                    .project([lit(ScalarValue::Decimal128(Some(4), precision, scale))])?
++                    .build()?,
++            ));
++            for ansi in [true, false] {
++                let udf = ScalarUDF::from(FusedDecimalDivide {
++                    signature: datafusion_expr::Signature::exact(
++                        vec![DataType::Decimal128(precision, scale); 2],
++                        datafusion_expr::Volatility::Immutable,
++                    ),
++                    precision: 38, scale: 6, factor: i256::from_i128(1_000_000),
++                    factor128: Some(1_000_000), limit: 10_i128.pow(38) - 1, ansi,
++                });
++                let null = lit(ScalarValue::Null);
++                for args in [vec![null.clone(), subquery.clone()], vec![subquery.clone(), null]] {
++                    assert_eq!(
++                        simplifier.simplify(udf.call(args))?,
++                        lit(ScalarValue::Decimal128(None, 38, 6)),
++                    );
++                }
++                // SQL NULL must retain subquery errors; COUNT's zero retains
++                // the divisor so it can still raise divide-by-zero in ANSI mode.
++                for value in [None, Some(0)] {
++                    let literal = lit(ScalarValue::Decimal128(value, precision, scale));
++                    for args in [vec![literal.clone(), subquery.clone()], vec![subquery.clone(), literal]] {
++                        let expr = udf.call(args);
++                        assert_eq!(simplifier.simplify(expr.clone())?, expr);
++                    }
++                }
++            }
++        }
++        Ok(())
+     }
+ }
+ 
