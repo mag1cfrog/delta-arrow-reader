@@ -1,0 +1,120 @@
+{"id": "float_divide_negative_zero_b1", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_divide_negative_zero_b3", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_divide_positive_zero_b1", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_divide_positive_zero_b3", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_divide_null_mask_b1", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_divide_null_mask_b3", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_divide_mixed_b1", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_divide_mixed_b3", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_divide_scalar_left", "sql": "SELECT CAST(2 AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0'),(1,'3'),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "float_divide_scalar_right", "sql": "SELECT CAST(a AS FLOAT) / CAST('-0.0' AS FLOAT) AS r FROM VALUES (0,'2'),(1,NULL) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "float_divide_both_scalar", "sql": "SELECT CAST(2 AS FLOAT) / CAST('-0.0' AS FLOAT) AS r", "batch_size": 3}
+{"id": "float_divide_empty", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES ('2','-0.0') t(a,b) WHERE false", "batch_size": 3}
+{"id": "float_divide_limit0", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3}
+{"id": "float_divide_subquery", "sql": "SELECT CAST(2 AS FLOAT) / (SELECT CAST(b AS FLOAT) FROM VALUES ('-0.0') t(b)) AS r", "batch_size": 3}
+{"id": "float_divide_window", "sql": "SELECT CAST(a AS FLOAT) / MIN(CAST(b AS FLOAT)) OVER () AS r FROM VALUES (0,'2','-0.0'),(1,'-2','2') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_div_negative_zero_b1", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_div_negative_zero_b3", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_div_positive_zero_b1", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_div_positive_zero_b3", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_div_null_mask_b1", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_div_null_mask_b3", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_div_mixed_b1", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_div_mixed_b3", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_div_scalar_left", "sql": "SELECT CAST(2 AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0'),(1,'3'),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "float_div_scalar_right", "sql": "SELECT CAST(a AS FLOAT) DIV CAST('-0.0' AS FLOAT) AS r FROM VALUES (0,'2'),(1,NULL) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "float_div_both_scalar", "sql": "SELECT CAST(2 AS FLOAT) DIV CAST('-0.0' AS FLOAT) AS r", "batch_size": 3}
+{"id": "float_div_empty", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES ('2','-0.0') t(a,b) WHERE false", "batch_size": 3}
+{"id": "float_div_limit0", "sql": "SELECT CAST(a AS FLOAT) DIV CAST(b AS FLOAT) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3}
+{"id": "float_div_subquery", "sql": "SELECT CAST(2 AS FLOAT) DIV (SELECT CAST(b AS FLOAT) FROM VALUES ('-0.0') t(b)) AS r", "batch_size": 3}
+{"id": "float_div_window", "sql": "SELECT CAST(a AS FLOAT) DIV MIN(CAST(b AS FLOAT)) OVER () AS r FROM VALUES (0,'2','-0.0'),(1,'-2','2') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_modulo_negative_zero_b1", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_modulo_negative_zero_b3", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_modulo_positive_zero_b1", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_modulo_positive_zero_b3", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_modulo_null_mask_b1", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_modulo_null_mask_b3", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_modulo_mixed_b1", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "float_modulo_mixed_b3", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_modulo_scalar_left", "sql": "SELECT CAST(2 AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES (0,'-0.0'),(1,'3'),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "float_modulo_scalar_right", "sql": "SELECT CAST(a AS FLOAT) % CAST('-0.0' AS FLOAT) AS r FROM VALUES (0,'2'),(1,NULL) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "float_modulo_both_scalar", "sql": "SELECT CAST(2 AS FLOAT) % CAST('-0.0' AS FLOAT) AS r", "batch_size": 3}
+{"id": "float_modulo_empty", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES ('2','-0.0') t(a,b) WHERE false", "batch_size": 3}
+{"id": "float_modulo_limit0", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3}
+{"id": "float_modulo_subquery", "sql": "SELECT CAST(2 AS FLOAT) % (SELECT CAST(b AS FLOAT) FROM VALUES ('-0.0') t(b)) AS r", "batch_size": 3}
+{"id": "float_modulo_window", "sql": "SELECT CAST(a AS FLOAT) % MIN(CAST(b AS FLOAT)) OVER () AS r FROM VALUES (0,'2','-0.0'),(1,'-2','2') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "float_nullifzero_zeros", "sql": "SELECT NULLIFZERO(CAST(b AS FLOAT)) AS r FROM VALUES (0,'-0.0'),(1,'0.0'),(2,'-2'),(3,'2'),(4,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "float_nullifzero_nonfinite", "sql": "SELECT CAST(isnan(NULLIFZERO(CAST(b AS FLOAT))) AS INT), CAST(NULLIFZERO(CAST(b AS FLOAT)) IS NULL AS INT) AS r FROM VALUES (0,'NaN'),(1,'Infinity'),(2,'-Infinity') t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "float_nullifzero_small", "sql": "SELECT NULLIFZERO(CAST(b AS FLOAT)) AS r FROM VALUES (0,'0.0009765625'),(1,'-0.0009765625') t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "float_nullifzero_scalar_-0.0", "sql": "SELECT NULLIFZERO(CAST('-0.0' AS FLOAT)) AS r", "batch_size": 3}
+{"id": "float_nullifzero_scalar_0.0", "sql": "SELECT NULLIFZERO(CAST('0.0' AS FLOAT)) AS r", "batch_size": 3}
+{"id": "float_nullifzero_scalar_-2", "sql": "SELECT NULLIFZERO(CAST('-2' AS FLOAT)) AS r", "batch_size": 3}
+{"id": "float_nullifzero_scalar_2", "sql": "SELECT NULLIFZERO(CAST('2' AS FLOAT)) AS r", "batch_size": 3}
+{"id": "float_nullifzero_null", "sql": "SELECT NULLIFZERO(CAST(NULL AS FLOAT)) AS r", "batch_size": 3}
+{"id": "float_divide_NaN", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES ('NaN','-0.0') t(a,b)", "batch_size": 3}
+{"id": "float_divide_Infinity", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES ('Infinity','-0.0') t(a,b)", "batch_size": 3}
+{"id": "float_divide_-Infinity", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES ('-Infinity','-0.0') t(a,b)", "batch_size": 3}
+{"id": "double_divide_negative_zero_b1", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_divide_negative_zero_b3", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_divide_positive_zero_b1", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_divide_positive_zero_b3", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_divide_null_mask_b1", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_divide_null_mask_b3", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_divide_mixed_b1", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_divide_mixed_b3", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_divide_scalar_left", "sql": "SELECT CAST(2 AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0'),(1,'3'),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "double_divide_scalar_right", "sql": "SELECT CAST(a AS DOUBLE) / CAST('-0.0' AS DOUBLE) AS r FROM VALUES (0,'2'),(1,NULL) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "double_divide_both_scalar", "sql": "SELECT CAST(2 AS DOUBLE) / CAST('-0.0' AS DOUBLE) AS r", "batch_size": 3}
+{"id": "double_divide_empty", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b) WHERE false", "batch_size": 3}
+{"id": "double_divide_limit0", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3}
+{"id": "double_divide_subquery", "sql": "SELECT CAST(2 AS DOUBLE) / (SELECT CAST(b AS DOUBLE) FROM VALUES ('-0.0') t(b)) AS r", "batch_size": 3}
+{"id": "double_divide_window", "sql": "SELECT CAST(a AS DOUBLE) / MIN(CAST(b AS DOUBLE)) OVER () AS r FROM VALUES (0,'2','-0.0'),(1,'-2','2') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_div_negative_zero_b1", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_div_negative_zero_b3", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_div_positive_zero_b1", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_div_positive_zero_b3", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_div_null_mask_b1", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_div_null_mask_b3", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_div_mixed_b1", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_div_mixed_b3", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_div_scalar_left", "sql": "SELECT CAST(2 AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0'),(1,'3'),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "double_div_scalar_right", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST('-0.0' AS DOUBLE) AS r FROM VALUES (0,'2'),(1,NULL) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "double_div_both_scalar", "sql": "SELECT CAST(2 AS DOUBLE) DIV CAST('-0.0' AS DOUBLE) AS r", "batch_size": 3}
+{"id": "double_div_empty", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b) WHERE false", "batch_size": 3}
+{"id": "double_div_limit0", "sql": "SELECT CAST(a AS DOUBLE) DIV CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3}
+{"id": "double_div_subquery", "sql": "SELECT CAST(2 AS DOUBLE) DIV (SELECT CAST(b AS DOUBLE) FROM VALUES ('-0.0') t(b)) AS r", "batch_size": 3}
+{"id": "double_div_window", "sql": "SELECT CAST(a AS DOUBLE) DIV MIN(CAST(b AS DOUBLE)) OVER () AS r FROM VALUES (0,'2','-0.0'),(1,'-2','2') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_modulo_negative_zero_b1", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_modulo_negative_zero_b3", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','-0.0'),(1,'-2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_modulo_positive_zero_b1", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_modulo_positive_zero_b3", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,'2','0.0'),(1,'-2','0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_modulo_null_mask_b1", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_modulo_null_mask_b3", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,NULL,'-0.0'),(1,'2',NULL),(2,NULL,'0.0'),(3,'2','3') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_modulo_mixed_b1", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "double_modulo_mixed_b3", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0','2'),(1,'0.0','-2'),(2,'2','-3'),(3,NULL,'-0.0'),(4,'2','0.0'),(5,'2','-0.0') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_modulo_scalar_left", "sql": "SELECT CAST(2 AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES (0,'-0.0'),(1,'3'),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "double_modulo_scalar_right", "sql": "SELECT CAST(a AS DOUBLE) % CAST('-0.0' AS DOUBLE) AS r FROM VALUES (0,'2'),(1,NULL) t(id,a) ORDER BY id", "batch_size": 3}
+{"id": "double_modulo_both_scalar", "sql": "SELECT CAST(2 AS DOUBLE) % CAST('-0.0' AS DOUBLE) AS r", "batch_size": 3}
+{"id": "double_modulo_empty", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b) WHERE false", "batch_size": 3}
+{"id": "double_modulo_limit0", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3}
+{"id": "double_modulo_subquery", "sql": "SELECT CAST(2 AS DOUBLE) % (SELECT CAST(b AS DOUBLE) FROM VALUES ('-0.0') t(b)) AS r", "batch_size": 3}
+{"id": "double_modulo_window", "sql": "SELECT CAST(a AS DOUBLE) % MIN(CAST(b AS DOUBLE)) OVER () AS r FROM VALUES (0,'2','-0.0'),(1,'-2','2') t(id,a,b) ORDER BY id", "batch_size": 3}
+{"id": "double_nullifzero_zeros", "sql": "SELECT NULLIFZERO(CAST(b AS DOUBLE)) AS r FROM VALUES (0,'-0.0'),(1,'0.0'),(2,'-2'),(3,'2'),(4,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "double_nullifzero_nonfinite", "sql": "SELECT CAST(isnan(NULLIFZERO(CAST(b AS DOUBLE))) AS INT), CAST(NULLIFZERO(CAST(b AS DOUBLE)) IS NULL AS INT) AS r FROM VALUES (0,'NaN'),(1,'Infinity'),(2,'-Infinity') t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "double_nullifzero_small", "sql": "SELECT NULLIFZERO(CAST(b AS DOUBLE)) AS r FROM VALUES (0,'0.0009765625'),(1,'-0.0009765625') t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "double_nullifzero_scalar_-0.0", "sql": "SELECT NULLIFZERO(CAST('-0.0' AS DOUBLE)) AS r", "batch_size": 3}
+{"id": "double_nullifzero_scalar_0.0", "sql": "SELECT NULLIFZERO(CAST('0.0' AS DOUBLE)) AS r", "batch_size": 3}
+{"id": "double_nullifzero_scalar_-2", "sql": "SELECT NULLIFZERO(CAST('-2' AS DOUBLE)) AS r", "batch_size": 3}
+{"id": "double_nullifzero_scalar_2", "sql": "SELECT NULLIFZERO(CAST('2' AS DOUBLE)) AS r", "batch_size": 3}
+{"id": "double_nullifzero_null", "sql": "SELECT NULLIFZERO(CAST(NULL AS DOUBLE)) AS r", "batch_size": 3}
+{"id": "double_divide_NaN", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('NaN','-0.0') t(a,b)", "batch_size": 3}
+{"id": "double_divide_Infinity", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('Infinity','-0.0') t(a,b)", "batch_size": 3}
+{"id": "double_divide_-Infinity", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('-Infinity','-0.0') t(a,b)", "batch_size": 3}
+{"id": "volatile_divisor", "sql": "SELECT CAST(2 AS DOUBLE) / CASE WHEN RAND(42) >= 0 THEN CAST('-0.0' AS DOUBLE) ELSE CAST(3 AS DOUBLE) END AS r FROM range(4)", "batch_size": 3}
+{"id": "dead_case", "sql": "SELECT CASE WHEN false THEN CAST(2 AS DOUBLE)/CAST('-0.0' AS DOUBLE) ELSE CAST(1 AS DOUBLE) END AS r", "batch_size": 3}
+{"id": "dead_if", "sql": "SELECT IF(true, CAST(1 AS DOUBLE), CAST(2 AS DOUBLE)/CAST('-0.0' AS DOUBLE)) AS r", "batch_size": 3}
+{"id": "nullifzero_control_INT", "sql": "SELECT NULLIFZERO(CAST(b AS INT)) AS r FROM VALUES (0,0),(1,2),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "nullifzero_control_BIGINT", "sql": "SELECT NULLIFZERO(CAST(b AS BIGINT)) AS r FROM VALUES (0,0),(1,2),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "nullifzero_control_DECIMAL(10,2)", "sql": "SELECT NULLIFZERO(CAST(b AS DECIMAL(10,2))) AS r FROM VALUES (0,0),(1,2),(2,NULL) t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "nullif_control", "sql": "SELECT NULLIF(CAST(b AS DOUBLE), CAST(0 AS DOUBLE)) AS r FROM VALUES (0,'-0.0'),(1,NULL),(2,'2') t(id,b) ORDER BY id", "batch_size": 3}
+{"id": "zeroifnull_control", "sql": "SELECT ZEROIFNULL(CAST(b AS DOUBLE)) AS r FROM VALUES (0,'-0.0'),(1,NULL),(2,'2') t(id,b) ORDER BY id", "batch_size": 3}

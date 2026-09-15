@@ -1,0 +1,172 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -43,6 +43,7 @@
+ use sail_function::scalar::misc::raise_error::RaiseError;
+ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
+ 
++use super::conditional::SparkNullIfZero;
+ use crate::error::{PlanError, PlanResult};
+ use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+ 
+@@ -314,6 +315,8 @@
+             when_then_expr: vec![(Box::new(zero_check), Box::new(raise))],
+             else_expr: Some(Box::new(divisor)),
+         })
++    } else if divisor_type.is_floating() {
++        ScalarUDF::from(SparkNullIfZero::default()).call(vec![divisor])
+     } else {
+         expr_fn::nullif(divisor, lit(0))
+     }
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs
+@@ -1,9 +1,11 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use arrow::datatypes::{DataType, TimeUnit};
+ use datafusion::functions::expr_fn;
++use datafusion::functions::math::iszero::IsZeroFunc;
+ use datafusion_common::ScalarValue;
+-use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit};
++use datafusion_expr::{ExprSchemable, ScalarUDF, ScalarUDFImpl, cast, expr, lit};
+ use sail_common_datafusion::utils::items::ItemTaker;
+ use sail_function::scalar::datetime::spark_date::SparkDate;
+ use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+@@ -217,6 +219,124 @@
+     }
+ }
+ 
++// Reuse native zero detection and change validity only, preserving the input type.
++#[derive(Debug, Default, PartialEq, Eq, Hash)]
++pub(super) struct SparkNullIfZero(IsZeroFunc);
++
++impl ScalarUDFImpl for SparkNullIfZero {
++    fn name(&self) -> &str {
++        "spark_nullifzero"
++    }
++
++    fn signature(&self) -> &datafusion_expr::Signature {
++        self.0.signature()
++    }
++
++    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
++        Ok(arg_types[0].clone())
++    }
++
++    fn invoke_with_args(
++        &self,
++        input: datafusion_expr::ScalarFunctionArgs,
++    ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
++        use arrow::array::AsArray;
++        use arrow::compute::kernels::nullif::nullif;
++        use datafusion_expr::ColumnarValue;
++        let [value] =
++            datafusion_common::utils::take_function_args(self.name(), input.args.as_slice())?;
++        let value = value.clone();
++        let zero = self
++            .0
++            .invoke_with_args(datafusion_expr::ScalarFunctionArgs {
++                return_field: Arc::new(
++                    input
++                        .return_field
++                        .as_ref()
++                        .clone()
++                        .with_data_type(DataType::Boolean),
++                ),
++                ..input
++            })?;
++        match (value, zero) {
++            (ColumnarValue::Array(value), ColumnarValue::Array(zero)) => Ok(ColumnarValue::Array(
++                nullif(value.as_ref(), zero.as_boolean())?,
++            )),
++            (
++                ColumnarValue::Scalar(value),
++                ColumnarValue::Scalar(ScalarValue::Boolean(Some(true))),
++            ) => Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(
++                &value.data_type(),
++            )?)),
++            (ColumnarValue::Scalar(value), ColumnarValue::Scalar(ScalarValue::Boolean(_))) => {
++                Ok(ColumnarValue::Scalar(value))
++            }
++            _ => datafusion_common::internal_err!("iszero returned an unexpected value shape"),
++        }
++    }
++}
++
++#[test]
++fn nullifzero_preserves_type_and_value_buffers() -> datafusion_common::Result<()> {
++    use arrow::array::{Array, ArrayRef, Float16Array, Float32Array, Float64Array};
++    use arrow::datatypes::Field;
++    use datafusion_common::config::ConfigOptions;
++    use datafusion_expr::{ColumnarValue, ScalarFunctionArgs};
++    let run = |value: ColumnarValue, rows| {
++        let field = Arc::new(Field::new("x", value.data_type(), true));
++        SparkNullIfZero::default().invoke_with_args(ScalarFunctionArgs {
++            args: vec![value],
++            arg_fields: vec![field.clone()],
++            number_rows: rows,
++            return_field: field,
++            config_options: Arc::new(ConfigOptions::default()),
++        })
++    };
++    let values = [
++        Some(-0.0),
++        Some(0.0),
++        None,
++        Some(-2.0),
++        Some(2.0),
++        Some(f64::INFINITY),
++        Some(f64::NAN),
++    ];
++    let arrays: [ArrayRef; 3] = [
++        Arc::new(Float16Array::from_iter(
++            values.map(|v| v.map(half::f16::from_f64)),
++        )),
++        Arc::new(Float32Array::from_iter(values.map(|v| v.map(|v| v as f32)))),
++        Arc::new(Float64Array::from_iter(values)),
++    ];
++    for input in arrays {
++        for (offset, len) in [(0, 7), (1, 4), (0, 0)] {
++            let input = input.slice(offset, len);
++            let output = run(ColumnarValue::Array(input.clone()), len)?.into_array(len)?;
++            assert_eq!(output.data_type(), input.data_type());
++            assert_eq!(
++                output.to_data().buffers()[0].as_ptr(),
++                input.to_data().buffers()[0].as_ptr()
++            );
++            for i in 0..len {
++                assert_eq!(output.is_null(i), offset + i < 3);
++            }
++        }
++        for index in 0..input.len() {
++            let value = ScalarValue::try_from_array(&input, index)?;
++            let result = run(ColumnarValue::Scalar(value.clone()), 1)?;
++            let ColumnarValue::Scalar(result) = result else {
++                panic!("expected scalar")
++            };
++            assert_eq!(result.data_type(), value.data_type());
++            assert_eq!(result.is_null(), index < 3);
++            if index >= 3 {
++                assert_eq!(format!("{result:?}"), format!("{value:?}"));
++            }
++        }
++    }
++    Ok(())
++}
++
+ /// Implementation of nullifzero function with type-aware casting
+ fn nullifzero(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+     let ScalarFunctionInput {
+@@ -228,6 +348,10 @@
+     // Get the data type of the input argument
+     let data_type = arg.to_field(function_context.schema)?.1.data_type().clone();
+ 
++    if data_type.is_floating() {
++        return Ok(ScalarUDF::from(SparkNullIfZero::default()).call(vec![arg]));
++    }
++
+     // Create a zero literal with the same type as the input
+     let zero_literal = lit(create_zero_literal(&data_type));
+ 
