@@ -1051,6 +1051,105 @@ python experiments/spark-sql/decimal_division.py compare \
 
 That comparison currently exits 1 with 18/52 agreements. Inspect the eight expected CAST failures as well; a matching coarse error stage alone is insufficient. The artifact contains all new SQL/results, the six changed old observations, the rejected one-line diff, source and binary hashes, and Spark phase captures. The rejected diff is evidence for the investigation, not an optional implementation patch.
 
+## Analyzer rule for Decimal NULL subqueries
+
+The follow-up to `01dbdc8` adds the optional [analyzer patch](sail-decimal-null-analyzer.patch), [50 new queries](decimal-null-analyzer.jsonl) and [validation and performance captures](decimal-null-analyzer-results.json). The rule removes a scalar subquery from Decimal division with a literal NULL operand after preserving the early expression failures observed in Spark 4.2.0. The default vendor remains unchanged.
+
+### Implementation and limits
+
+This is a local Rust adapter for the Spark optimizer ordering described above. Sail's inspected optimizer does not provide this rule. It reuses DataFusion physical expressions, its native VALUES source, and Arrow filtering. It adds no dependency, Python UDF, arithmetic kernel or physical execution node.
+
+The shared scalar-subquery resolver first checks that its result has exactly one column. This prevents NULL simplification from hiding malformed subqueries and rejects the same error in live expressions. The rule runs after DataFusion's default analyzer rules, including type coercion, and before executable-plan validation. It first borrows the plan to find fused Decimal divisions containing both a literal NULL and a scalar subquery. Other plans return without rebuilding. For a matching expression, it validates the discarded subquery's early local expressions, then substitutes a NULL with the division's output type. One-row subqueries are inlined without evaluation; constant VALUES projections and filters retain their early errors. Empty local relations avoid re-evaluating their discarded projections. Conditional expressions and correlated predicates follow the tested Spark ordering.
+
+This work evaluates only local expressions from the SQL text. It does not read table data or execute range scans, aggregates or joins. It is a focused Decimal rule, not a port of Spark's entire optimizer. Unsupported ancestors can revisit local inputs; very deep discarded subqueries may need a single postorder traversal. Large VALUES inputs, volatile functions and arbitrary combinations of optimizer rules are not covered by the performance measurements below.
+
+### Correctness
+
+The 50 queries extend the locally designed NULL-order matrix and were run against Spark 4.2.0 with both ANSI settings. The existing comparator checks ordered values, types and error stage. Of the new observations, 24 also require the expected single-column validation error during SQL resolution. The focused cause check also requires all 22 expected `CAST_INVALID_INPUT` failures to report a Decimal conversion error, rather than an unrelated planning or scalar-cardinality error.
+
+| Corpus | Reviewed parent | Analyzer candidate |
+| --- | ---: | ---: |
+| Existing NULL/subquery checks | 56/60 | 60/60 |
+| Previous optimization-order checks | 18/52 | 52/52 |
+| New empty-input, conditional, precision and column-count checks | 30/100 | 100/100 |
+| All Decimal SQL observations | 1782/1900 | 1890/1900 |
+
+There are no new mismatches. The ten remaining original differences cover composed ROUND types, the minimum integer literal, string peers, other Decimal operators and non-Decimal NULL division. These observations are outside this patch. The match count does not establish full Spark compatibility or general SQLSTATE/schema parity.
+
+All 4,064 integer-reference comparisons over 187,410 rows pass. The 116 Delta observations and 18 adapter checks retain their previous results. Four native lifecycle tests pass, including a new test that hides the real Parquet file while eliminated uncorrelated and correlated subqueries return typed NULLs. The same new test fails on the parent because its plan retains a Delta scan. A live query retains the reader's idle scan and reads the fixture after the file is restored; a bad constant CAST still fails for its conversion cause. The 24 benchmark cases validate every output value, and the original 20 preserve their complete physical plans and results.
+
+Two unrelated multi-partition CAST controls can report different invalid input rows first. Their plans and error categories are unchanged; repeated parent/candidate captures retain this scheduling variation. The artifact records full errors instead of claiming byte-identical messages for these cases.
+
+### Performance
+
+Both variants use the same 24-case in-memory benchmark, dependency overrides and release settings. Each case validates 1,048,576 output values before timing. Four processes per variant run in balanced order, pinned to CPU 2, with batch size 8192, one partition, two warmups and nine samples. Planning and execution use separate intervals and fresh physical plans. Another 48 FIFO-controlled `perf stat` processes measure six ANSI cases in both phases. All 2,160 timed plans/executions, 480 warmups and 240 full-value checks in measured processes pass. The separate correctness runs add 48 full-value checks. Counters run without multiplexing and include the control handshake.
+
+The NULL cases remove their scalar subquery and inner input. Across both ANSI modes, planning time falls 34.2%-35.8% and execution time falls 40.2%-42.2%. The ANSI counters show about 33% fewer planning instructions and 53% fewer execution instructions. Selected medians are:
+
+| ANSI query | Planning before / after (ms) | Execution before / after (ms) | Planning instructions | Execution instructions |
+| --- | ---: | ---: | ---: | ---: |
+| No division | 0.343 / 0.343 | 4.666 / 4.648 | +0.19% | -0.005% |
+| Ordinary Decimal division | 0.413 / 0.412 | 16.897 / 16.821 | +0.26% | -0.002% |
+| Scalar-subquery division | 0.616 / 0.619 | 16.831 / 16.855 | +0.18% | within 0.001% |
+| Correlated MAX | 1.258 / 1.270 | 68.542 / 69.271 | +0.19% | within 0.001% |
+| NULL / scalar subquery | 0.621 / 0.399 | 0.341 / 0.202 | -33.31% | -53.29% |
+| Scalar subquery / NULL | 0.614 / 0.402 | 0.349 / 0.202 | -33.13% | -52.58% |
+
+The rule has a small global planning cost: the four unchanged controls use 0.18%-0.26% more planning instructions. Across the original 20 cases, planning medians change by -1.37% to +1.45% and execution medians by -1.10% to +1.06%. Their physical plans are identical, and the four profiled controls' execution instruction counts remain within 0.01%. This does not prove zero wall-time overhead. CPU frequency is not fixed and the host is not isolated; process medians and raw counters are retained. The measurements do not cover Delta I/O latency, concurrent queries or large/deep local VALUES plans.
+
+### Reproducing this slice
+
+Start from the reviewed optional candidate through `sail-decimal-nonfinite-cast.patch`, with the dependency overrides used in the preceding sections. Build the before benchmark with the expanded repository harness. Apply the analyzer patch in that experimental checkout, build the three callers, and run the existing probes:
+
+```sh
+override="$run_dir/override.toml"
+git apply --check experiments/spark-sql/sail-decimal-null-analyzer.patch
+git apply experiments/spark-sql/sail-decimal-null-analyzer.patch
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$override" --example decimal_probe --example decimal_bench \
+  --bin delta-reader-sail-extraction-probe
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$override" --bin delta-reader-sail-extraction-probe delta_lifecycle
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark "$run_dir/spark-null-analyzer.json" \
+  --cases experiments/spark-sql/decimal-null-analyzer.jsonl
+"$run_dir/after-probe" experiments/spark-sql/decimal-null-analyzer.jsonl \
+  "$run_dir/after-null-analyzer.json" --physical-plans
+python experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-null-analyzer.json" "$run_dir/after-null-analyzer.json" \
+  --cases experiments/spark-sql/decimal-null-analyzer.jsonl \
+  --report "$run_dir/null-analyzer-check.json"
+```
+
+Repeat the prior NULL-order corpus and require the expected CAST causes in both captures:
+
+```sh
+python - "$run_dir" <<'CHECK'
+import json, sys
+from pathlib import Path
+run = Path(sys.argv[1])
+count = width_count = 0
+for name in ['null-order', 'null-analyzer']:
+    reference = json.loads((run / f'spark-{name}.json').read_text())['results']
+    actual = json.loads((run / f'after-{name}.json').read_text())['results']
+    for expected, observed in zip(reference, actual, strict=True):
+        assert expected['id'] == observed['id']
+        if expected['id'].startswith('width_'):
+            assert observed['actual']['status'] == 'planning_error'
+            assert 'exactly one column, found 2' in observed['actual']['error']
+            width_count += 1
+        if expected['actual'].get('condition') == 'CAST_INVALID_INPUT':
+            value = observed['actual']
+            assert value['status'] == 'execution_error', observed
+            assert 'Cannot cast' in value['error'] and 'DECIMAL(18,4)' in value['error'], observed
+            count += 1
+assert count == 22 and width_count == 24
+CHECK
+```
+
+Reuse the existing `subquery-check` and `subqueries` benchmark modes; they now include both NULL operand positions. Measure planning and execution separately with `DECIMAL_BENCH_PERF_PHASE`. The patch round trip reproduces the built sources exactly. Scratch sources and lockfile are restored; the default executables are restored using the repository build manifest, and all 168 default observations, including plans and complete errors, match the previous checkpoint.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

@@ -197,6 +197,7 @@ fn expected_subquery_value(case: &str, id: usize) -> Option<i128> {
         "correlated_count" | "nested_lateral" => Some(count as i128 * 250_000),
         "chained_lateral" => Some((count + 1 + count % 3) as i128 * 250_000),
         "left_lateral" => (count > 1).then_some(count as i128 * 250_000),
+        "null_divide_left" | "null_divide_right" => None,
         _ => unreachable!("unknown benchmark case"),
     }
 }
@@ -284,6 +285,18 @@ async fn subquery_bench(
             false,
         ),
         ("scalar_sorted", format!("o.a / {divisor}"), "".into(), true),
+        (
+            "null_divide_left",
+            format!("CAST(NULL AS DECIMAL(18,4)) / {divisor}"),
+            "".into(),
+            false,
+        ),
+        (
+            "null_divide_right",
+            format!("{divisor} / CAST(NULL AS DECIMAL(18,4))"),
+            "".into(),
+            false,
+        ),
         (
             "correlated_max",
             format!("(SELECT max(i.x) / {divisor} FROM bench_inner i WHERE i.k=o.k)"),

@@ -1,0 +1,530 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -538,7 +538,7 @@
+ // Research prototype: compute Spark's final-scale coefficient in one array pass.
+ // Valid inputs are Decimal128 with nonnegative scales. No Python runtime is used.
+ #[derive(Debug, PartialEq, Eq, Hash)]
+-struct FusedDecimalDivide {
++pub(crate) struct FusedDecimalDivide {
+     signature: datafusion_expr::Signature,
+     precision: u8,
+     scale: i8,
+diff --git a/experiments/spark-sql/examples/decimal_bench.rs b/experiments/spark-sql/examples/decimal_bench.rs
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -21,6 +21,7 @@
+     prelude::{SessionConfig, SessionContext},
+ };
+ use futures_util::StreamExt;
++use sail_plan::decimal_null::SparkDecimalNullPropagation;
+ use sail_plan::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
+ use serde_json::{Value, json};
+ 
+@@ -540,6 +541,7 @@
+                     .with_target_partitions(1),
+             )
+             .with_query_planner(Arc::new(SparkQueryPlanner))
++        .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
+             .build(),
+     );
+     let inputs = match args.get(2).map(String::as_str) {
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/lib.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/lib.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/lib.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/lib.rs
+@@ -1,5 +1,6 @@
+ // Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ pub mod config;
++pub mod decimal_null;
+ pub mod error;
+ pub mod formatter;
+ pub mod function;
+diff --git a/experiments/spark-sql/src/main.rs b/experiments/spark-sql/src/main.rs
+--- a/experiments/spark-sql/src/main.rs
++++ b/experiments/spark-sql/src/main.rs
+@@ -1,3 +1,4 @@
++use sail_plan::decimal_null::SparkDecimalNullPropagation;
+ use arrow::{ipc::writer::StreamWriter, util::display::array_value_to_string};
+ use datafusion::{
+     execution::SessionStateBuilder,
+@@ -28,6 +29,7 @@
+         .with_config(SessionConfig::new().with_target_partitions(2))
+         .with_default_features()
+         .with_query_planner(Arc::new(SparkQueryPlanner))
++        .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
+         .build();
+     Ok(SessionContext::new_with_state(state))
+ }
+diff --git a/experiments/spark-sql/examples/decimal_probe.rs b/experiments/spark-sql/examples/decimal_probe.rs
+--- a/experiments/spark-sql/examples/decimal_probe.rs
++++ b/experiments/spark-sql/examples/decimal_probe.rs
+@@ -1,3 +1,4 @@
++use sail_plan::decimal_null::SparkDecimalNullPropagation;
+ use std::{error::Error, fs, sync::Arc};
+ 
+ use arrow::{array::Array, util::display::array_value_to_string};
+@@ -20,6 +21,7 @@
+                     .with_target_partitions(2),
+             )
+             .with_query_planner(Arc::new(SparkQueryPlanner))
++        .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
+             .build(),
+     );
+     let sql = case["sql"].as_str().ok_or("missing SQL")?;
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
+new file mode 100644
+--- /dev/null
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
+@@ -0,0 +1,335 @@
++// Local Spark planning adapter. See DECIMAL_DIVISION.md in the host experiment.
++use std::sync::Arc;
++
++use datafusion::arrow::array::AsArray;
++use datafusion::arrow::compute::filter_record_batch;
++use datafusion::arrow::datatypes::Schema;
++use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
++use datafusion::datasource::memory::MemorySourceConfig;
++use datafusion::logical_expr::execution_props::ExecutionProps;
++use datafusion::optimizer::AnalyzerRule;
++use datafusion::physical_expr::create_physical_expr;
++use datafusion_common::config::ConfigOptions;
++use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
++use datafusion_common::{DFSchema, Result, ScalarValue};
++use datafusion_expr::utils::{conjunction, split_conjunction_owned};
++use datafusion_expr::{Expr, LogicalPlan, lit};
++
++use crate::function::scalar::math::FusedDecimalDivide;
++
++/// Remove unused Decimal subqueries after preserving Spark's early expression errors.
++#[derive(Debug)]
++pub struct SparkDecimalNullPropagation;
++
++fn null_literal(expr: &Expr) -> bool {
++    match expr {
++        Expr::Literal(value, _) => value.is_null(),
++        Expr::Cast(cast) => null_literal(&cast.expr),
++        Expr::TryCast(cast) => null_literal(&cast.expr),
++        Expr::Alias(alias) => null_literal(&alias.expr),
++        _ => false,
++    }
++}
++
++fn null_divide(expr: &Expr) -> bool {
++    matches!(expr, Expr::ScalarFunction(f)
++        if f.func.inner().is::<FusedDecimalDivide>() && f.args.iter().any(null_literal))
++}
++
++fn candidate(expr: &Expr) -> bool {
++    null_divide(expr) && expr.contains_scalar_subquery()
++}
++
++impl AnalyzerRule for SparkDecimalNullPropagation {
++    fn name(&self) -> &str {
++        "spark_decimal_null_propagation"
++    }
++
++    fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
++        // Borrow first: ordinary queries require no rewritten plan or batch allocation.
++        let mut found = false;
++        plan.apply_with_subqueries(|node| {
++            node.apply_expressions(|expr| {
++                found |= expr.exists(|e| Ok(candidate(e)))?;
++                Ok(if found {
++                    TreeNodeRecursion::Stop
++                } else {
++                    TreeNodeRecursion::Continue
++                })
++            })?;
++            Ok(if found {
++                TreeNodeRecursion::Stop
++            } else {
++                TreeNodeRecursion::Continue
++            })
++        })?;
++        if !found {
++            return Ok(plan);
++        }
++        let mut props = ExecutionProps::new();
++        props.config_options = Some(Arc::new(options.clone()));
++        let prepare = Prepare { props };
++        Ok(plan
++            .transform_down_with_subqueries(|node| {
++                node.map_expressions(|expr| {
++                    expr.transform_down(|expr| {
++                        if !candidate(&expr) {
++                            return Ok(Transformed::no(expr));
++                        }
++                        let Expr::ScalarFunction(f) = &expr else {
++                            unreachable!()
++                        };
++                        for arg in &f.args {
++                            prepare.check_expr(arg, false)?;
++                        }
++                        Ok(Transformed::yes(lit(ScalarValue::try_new_null(
++                            &f.func.return_type(&[])?,
++                        )?)))
++                    })
++                })
++            })?
++            .data)
++    }
++}
++
++struct Prepare {
++    props: ExecutionProps,
++}
++
++// Physical row expressions only; aggregates, subqueries and outer references
++// require their own planning context. Volatile expressions are not constants.
++fn row_expression(expr: &Expr, columns: bool) -> Result<bool> {
++    Ok(!expr.exists(|node| {
++        Ok(match node {
++            Expr::Column(_) => !columns,
++            Expr::Literal(_, _)
++            | Expr::Alias(_)
++            | Expr::BinaryExpr(_)
++            | Expr::Cast(_)
++            | Expr::TryCast(_)
++            | Expr::Case(_)
++            | Expr::Negative(_)
++            | Expr::Not(_)
++            | Expr::IsNull(_)
++            | Expr::IsNotNull(_)
++            | Expr::IsTrue(_)
++            | Expr::IsFalse(_)
++            | Expr::IsUnknown(_)
++            | Expr::IsNotTrue(_)
++            | Expr::IsNotFalse(_)
++            | Expr::IsNotUnknown(_)
++            | Expr::Between(_)
++            | Expr::InList(_)
++            | Expr::Like(_)
++            | Expr::SimilarTo(_) => false,
++            Expr::ScalarFunction(_) => !columns && node.is_volatile_node(),
++            _ => true,
++        })
++    })?)
++}
++
++// Inline projection/alias chains over OneRowRelation without evaluating them.
++// Spark performs this before optimizing the remaining scalar subqueries.
++fn one_row_exprs(plan: &LogicalPlan) -> Result<Option<Vec<Expr>>> {
++    match plan {
++        LogicalPlan::EmptyRelation(empty)
++            if empty.produce_one_row && empty.schema.fields().is_empty() =>
++        {
++            Ok(Some(vec![]))
++        }
++        LogicalPlan::SubqueryAlias(alias) => one_row_exprs(&alias.input),
++        LogicalPlan::Projection(project) => {
++            let Some(input) = one_row_exprs(&project.input)? else {
++                return Ok(None);
++            };
++            project
++                .expr
++                .iter()
++                .map(|expr| {
++                    Ok(expr
++                        .clone()
++                        .unalias()
++                        .transform_up(|expr| match expr {
++                            Expr::Column(column) => Ok(Transformed::yes(
++                                input[project.input.schema().index_of_column(&column)?].clone(),
++                            )),
++                            Expr::OuterReferenceColumn(_, column) => {
++                                Ok(Transformed::yes(Expr::Column(column)))
++                            }
++                            _ => Ok(Transformed::no(expr)),
++                        })?
++                        .data)
++                })
++                .collect::<Result<Vec<_>>>()
++                .map(Some)
++        }
++        _ => Ok(None),
++    }
++}
++
++impl Prepare {
++    fn check_expr(&self, expr: &Expr, constants: bool) -> Result<()> {
++        if let Expr::ScalarSubquery(subquery) = expr {
++            if let Some(expressions) = one_row_exprs(&subquery.subquery)? {
++                return self.check_expr(&expressions[0], constants);
++            }
++            return self.check_subquery(&subquery.subquery);
++        }
++        // NULL propagation precedes constant folding. Only subquery planning
++        // work survives the discarded branch, not its ordinary scalar errors.
++        if null_divide(expr) {
++            return expr
++                .apply_children(|child| {
++                    self.check_expr(child, false)?;
++                    Ok(TreeNodeRecursion::Continue)
++                })
++                .map(|_| ());
++        }
++        if constants && row_expression(expr, false)? {
++            let batch = RecordBatch::try_new_with_options(
++                Arc::new(Schema::empty()),
++                vec![],
++                &RecordBatchOptions::new().with_row_count(Some(1)),
++            )?;
++            create_physical_expr(expr, &DFSchema::empty(), &self.props)?.evaluate(&batch)?;
++            return Ok(());
++        }
++        // Spark defers failed constant evaluation inside nonconstant CASE and
++        // other conditional expressions. Subqueries still undergo optimization.
++        let conditional = matches!(expr, Expr::Case(_))
++            || matches!(expr, Expr::ScalarFunction(f) if f.func.short_circuits());
++        expr.apply_children(|child| {
++            self.check_expr(child, constants && !conditional)?;
++            Ok(TreeNodeRecursion::Continue)
++        })
++        .map(|_| ())
++    }
++
++    fn check_subquery(&self, plan: &LogicalPlan) -> Result<()> {
++        // ponytail: unsupported ancestors can revisit local inputs; use one
++        // postorder pass if deeply nested discarded subqueries become costly.
++        plan.apply(|node| {
++            // A locally evaluated relation has replaced these expressions,
++            // including projections over zero rows. Do not fold them again.
++            if self.local_batch(node)?.is_some() {
++                return Ok(TreeNodeRecursion::Jump);
++            }
++            node.apply_expressions(|expr| {
++                self.check_expr(expr, true)?;
++                Ok(TreeNodeRecursion::Continue)
++            })?;
++            Ok(TreeNodeRecursion::Continue)
++        })
++        .map(|_| ())
++    }
++
++    // Evaluate only SQL VALUES and the operations Spark can perform locally.
++    // Table scans, range execution, aggregates and joins are never executed.
++    // The batch is discarded; it exists to preserve early planning failures.
++    fn local_batch(&self, plan: &LogicalPlan) -> Result<Option<RecordBatch>> {
++        let inputs = plan
++            .inputs()
++            .into_iter()
++            .map(|p| self.local_batch(p))
++            .collect::<Result<Vec<_>>>()?;
++        let input = inputs.first().and_then(|p| p.as_ref());
++        let batch = match plan {
++            LogicalPlan::Values(values) if !values.values.is_empty() => {
++                if !values.values.iter().flatten().try_fold(true, |valid, e| {
++                    Ok::<_, datafusion_common::DataFusionError>(valid && row_expression(e, false)?)
++                })? {
++                    return Ok(None);
++                }
++                let exprs = values
++                    .values
++                    .iter()
++                    .map(|row| {
++                        row.iter()
++                            .map(|e| create_physical_expr(e, &values.schema, &self.props))
++                            .collect::<Result<Vec<_>>>()
++                    })
++                    .collect::<Result<Vec<_>>>()?;
++                let source = MemorySourceConfig::try_new_as_values(
++                    Arc::clone(values.schema.inner()),
++                    exprs,
++                )?;
++                source
++                    .data_source()
++                    .downcast_ref::<MemorySourceConfig>()
++                    .unwrap()
++                    .partitions()[0][0]
++                    .clone()
++            }
++            LogicalPlan::Projection(project) if input.is_some() => {
++                let input = input.unwrap();
++                if !project.expr.iter().try_fold(true, |valid, e| {
++                    Ok::<_, datafusion_common::DataFusionError>(valid && row_expression(e, true)?)
++                })? {
++                    return Ok(None);
++                }
++                if input.num_rows() == 0 {
++                    return Ok(Some(RecordBatch::new_empty(Arc::clone(
++                        project.schema.inner(),
++                    ))));
++                }
++                let columns = project
++                    .expr
++                    .iter()
++                    .map(|e| {
++                        create_physical_expr(e, project.input.schema(), &self.props)?
++                            .evaluate(input)?
++                            .into_array(input.num_rows())
++                    })
++                    .collect::<Result<Vec<_>>>()?;
++                RecordBatch::try_new_with_options(
++                    Arc::clone(project.schema.inner()),
++                    columns,
++                    &RecordBatchOptions::new().with_row_count(Some(input.num_rows())),
++                )?
++            }
++            LogicalPlan::SubqueryAlias(alias) if input.is_some() => {
++                let input = input.unwrap();
++                RecordBatch::try_new_with_options(
++                    Arc::clone(alias.schema.inner()),
++                    input.columns().to_vec(),
++                    &RecordBatchOptions::new().with_row_count(Some(input.num_rows())),
++                )?
++            }
++            LogicalPlan::Filter(filter) if input.is_some() => {
++                let input = input.unwrap();
++                // Spark pulls correlated conjuncts out before recursively
++                // optimizing this discarded subquery. Keep local predicates.
++                let predicate = conjunction(
++                    split_conjunction_owned(filter.predicate.clone())
++                        .into_iter()
++                        .filter(|e| !e.contains_outer()),
++                )
++                .unwrap_or_else(|| lit(true));
++                if !row_expression(&predicate, true)? {
++                    return Ok(None);
++                }
++                if input.num_rows() == 0 {
++                    return Ok(Some(input.clone()));
++                }
++                let mask = create_physical_expr(&predicate, filter.input.schema(), &self.props)?
++                    .evaluate(input)?
++                    .into_array(input.num_rows())?;
++                filter_record_batch(input, mask.as_boolean())?
++            }
++            LogicalPlan::Sort(_) if input.is_some_and(|b| b.num_rows() == 0) => {
++                input.unwrap().clone()
++            }
++            LogicalPlan::Limit(_) if input.is_some() => {
++                let input = input.unwrap();
++                let offset = plan.skip()?.unwrap_or(0).min(input.num_rows());
++                let count = plan
++                    .fetch()?
++                    .unwrap_or(usize::MAX)
++                    .min(input.num_rows() - offset);
++                input.slice(offset, count)
++            }
++            _ => return Ok(None),
++        };
++        Ok(Some(batch))
++    }
++}
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/mod.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/mod.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/mod.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/mod.rs
+@@ -15,7 +15,7 @@
+ mod aggregate;
+ pub(crate) mod common;
+ mod generator;
+-mod scalar;
++pub(crate) mod scalar;
+ mod table;
+ mod window;
+ 
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs
+@@ -14,7 +14,7 @@
+ mod json;
+ mod lambda;
+ mod map;
+-mod math;
++pub(crate) mod math;
+ mod misc;
+ mod predicate;
+ mod string;
+diff --git a/experiments/spark-sql/src/delta_lifecycle.rs b/experiments/spark-sql/src/delta_lifecycle.rs
+--- a/experiments/spark-sql/src/delta_lifecycle.rs
++++ b/experiments/spark-sql/src/delta_lifecycle.rs
+@@ -84,6 +84,73 @@
+             .source()
+             .expect("must preserve the reader error source");
+     }
++}
++
++#[tokio::test]
++async fn spark_decimal_null_subqueries_do_not_read_delta() -> TestResult {
++    let fixture = RealParquetDeltaTable::new_default("spark-null-subqueries")?;
++    let table = DeltaTableBuilder::new(fixture.path().to_string_lossy().into_owned())
++        .with_warmup(WarmupMode::QueryPlanning)
++        .load_table()
++        .await?;
++    let ctx = context(1)?;
++    ctx.register_table(
++        "dv",
++        Arc::new(DeltaTableProvider::try_new(table, ScanOptions::default())?),
++    )?;
++    let data = fixture.path().join(fixture.data_file_path());
++    let hidden = data.with_extension("unavailable");
++    fs::rename(&data, &hidden)?;
++    for (subquery, outer, rows) in [
++        ("SELECT CAST(id AS DECIMAL(18,4)) FROM dv", "", 1),
++        (
++            "SELECT CAST(concat('bad', CAST(id AS STRING)) AS DECIMAL(18,4)) FROM dv",
++            "",
++            1,
++        ),
++        (
++            "SELECT CAST(id AS DECIMAL(18,4)) FROM dv WHERE id=o.k",
++            "FROM VALUES (1), (2) AS o(k)",
++            2,
++        ),
++    ] {
++        for expression in [
++            format!("CAST(NULL AS DECIMAL(18,4)) / ({subquery})"),
++            format!("({subquery}) / CAST(NULL AS DECIMAL(18,4))"),
++        ] {
++            let physical = plan(&ctx, &format!("SELECT {expression} AS r {outer}")).await?;
++            assert!(collect_scan_metrics(physical.as_ref()).is_empty());
++            assert_eq!(
++                physical.schema().field(0).data_type(),
++                &DataType::Decimal128(38, 20)
++            );
++            assert!(physical.schema().field(0).is_nullable());
++            let mut stream = execute_stream(physical, ctx.task_ctx())?;
++            let mut actual = 0;
++            while let Some(batch) = stream.next().await {
++                let batch = batch?;
++                assert_eq!(batch.column(0).null_count(), batch.num_rows());
++                actual += batch.num_rows();
++            }
++            assert_eq!(actual, rows);
++        }
++    }
++    let error = plan(
++        &ctx,
++        "SELECT CAST(NULL AS DECIMAL(18,4)) / (SELECT CAST('bad' AS DECIMAL(18,4)) FROM dv)",
++    )
++    .await
++    .unwrap_err()
++    .to_string();
++    assert!(
++        error.contains("Cannot cast") && error.contains("DECIMAL(18,4)"),
++        "{error}"
++    );
++    let live = plan(&ctx, "SELECT id FROM dv").await?;
++    assert_idle(live.as_ref());
++    fs::rename(&hidden, &data)?;
++    assert_eq!(read_ids(&ctx, live).await?, vec![1, 2, 3]);
++    Ok(())
+ }
+ 
+ #[tokio::test]
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs
+@@ -60,6 +60,12 @@
+             let mut scope = state.enter_query_scope(Arc::clone(schema));
+             self.resolve_query_plan(subquery, scope.state()).await?
+         };
++        let columns = subquery.schema().fields().len();
++        if columns != 1 {
++            return Err(PlanError::invalid(format!(
++                "Scalar subquery must return exactly one column, found {columns}"
++            )));
++        }
+         Ok(NamedExpr::new(
+             vec!["subquery".to_string()],
+             expr_fn::scalar_subquery(Arc::new(subquery)),
