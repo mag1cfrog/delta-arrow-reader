@@ -1856,6 +1856,40 @@ done
 
 Repeat with the baseline and SMALLINT case, using the balanced runner recorded in the artifact for comparisons. This tests streaming a later query while retaining an earlier result, not collecting the later query, arbitrary concurrent sessions or Python C Stream ownership. All 25 scratch paths and three default executables are restored, and earlier experiment artifacts are unchanged. Nothing was pushed. A default implementation needs a reuse design that is not disabled by one long-lived result; this slice does not add a larger cache or change the runtime patch.
 
+## Reuse buffers while earlier SQL results stay alive
+
+The optional [arrow-integer-decimal-thread-cache.patch](arrow-integer-decimal-thread-cache.patch) removes the global live-buffer limit. Apply it after the two preceding Arrow patches. Each OS thread keeps one idle buffer; a live result holds its own allocation without excluding later conversions from reuse. The final release returns a buffer to the releasing thread's empty slot, including cross-thread release. Thread exit frees that slot. This replaces the mutex and atomic flag with a thread-local `RefCell`, adds no dependency and reduces the helper with tests from 240 to 208 lines. The preceding retention audit is committed as `ac9983b`; this follow-up remains optional and uncommitted.
+
+The idle bound changes from 256 KiB per process to 256 KiB plus metadata per OS thread. Live results and ordinary allocator retention remain outside that bound. Every eligible output now has custom ownership, so overlapping outputs also lose direct `into_mutable`/`into_vec` reclamation. All nine source files in the preceding consumer audit are unchanged; no added copy was identified in the current SQL consumers. A producer/consumer thread split can reduce reuse because a buffer returns to the releasing thread.
+
+[integer-decimal-thread-cache-results.json](integer-decimal-thread-cache-results.json) records the patch, builds and measurements. Both SQL variants use the same benchmark, lockfile and non-Arrow dependency versions, features and profiles. Before is the prior global gate; after uses thread-local idle buffers. The unchanged retention protocol runs 224 processes: 12 per variant/mode/target and four per variant/mode for the Decimal projection control. Each process contributes the median of nine executions after two warmups, with 1,048,576 rows, 8,192-row batches, one partition and CPU 2 affinity. Builds, correctness checks and diagnostics finish before timing.
+
+| Earlier result held | SMALLINT before / after ms | BIGINT before / after ms | High-fault targets before / after |
+| --- | ---: | ---: | ---: |
+| None | 2.181 / 2.214 | 2.134 / 2.128 | 0/24 / 0/24 |
+| One batch | 2.477 / 2.195 | 2.454 / 2.129 | 5/24 / 0/24 |
+| All batches | 2.475 / 2.201 | 2.450 / 2.125 | 0/24 / 0/24 |
+| Batch released on another thread | 2.184 / 2.199 | 2.135 / 2.131 | 0/24 / 0/24 |
+
+All 96 candidate target processes remain at 16-17 execution page faults. The five slow baseline processes hold one batch and run BIGINT, with 18,464 faults and medians up to 5.589 ms. Their group mean is 3.722 ms, versus 2.136 ms after. The candidate ownership probe confirms custom buffers in every mode. Eight separate candidate syscall traces show 0-2 `brk` calls and no `mmap`, `munmap` or `madvise` calls inside execution.
+
+The no-retention SMALLINT median is 1.50% higher, and the released-batch median is 0.68% higher. The unchanged Decimal projection is 0.10-0.59% higher. These measurements do not establish zero overhead. Holding earlier results no longer forces ordinary allocation, but collecting the later query's entire output still requires separate live allocations.
+
+A separate 72-process Rust cast comparison checks the earlier concurrency penalty. Six fresh processes per variant/workload each cast 128 batches per worker; retained-output timing includes destruction. Four-worker samples use the maximum worker elapsed time. Non-cast library hashes match across variants; these standalone compiler features and timings are kept separate from SQL.
+
+| Cast workload | Ordinary allocation ms | Global gate ms | Thread-local idle buffer ms |
+| --- | ---: | ---: | ---: |
+| One worker, release each batch | 0.992 | 0.677 | 0.674 |
+| One worker, retain all batches | 6.176 | 1.068 | 1.043 |
+| Four workers, release each batch | 0.990 | 0.964 | 0.692 |
+| Four workers, retain all batches | 7.604 | 7.567 | 3.583 |
+
+Sixteen separate BIGINT memory probes show a 0-34 KiB increase in median private dirty memory across the four modes. Whole-process RSS is 5.1-6.8 MiB lower in these samples; that includes executable mappings and does not measure the cache alone. These single-thread SQL probes do not bound memory across a large thread pool. Diagnostic timings are excluded from the performance tables.
+
+Validation reruns all 343 Arrow tests, the 312 large-cast matrix and four-worker retained-value check, 3,076 SQL observations, 346 focused checks, 4,064 integer-reference observations over 187,410 rows, four Delta lifecycle tests, 116 Delta comparisons, 18 adapter checks and 19 seeds. Values, types, plans and failure stages are preserved; Spark agreement remains 2,950/3,076. The same four multi-invalid-row cases report a different first bad value relative to the saved cast baseline; the artifact retains both messages. The ownership regression covers retained slices, cross-thread final release, use after the creating thread exits, TLS teardown, NULLs, width/size boundaries and unwind cleanup. All 48 wrapped, 12 Float64 and 20 cast captures pass; the 224 timed processes also check retained values and ownership outside timing. Native-output captures were not rerun in this slice.
+
+To reproduce, prepare the preceding runtime, save its executable, then apply the follow-up to the same Arrow dependency copy and rebuild. Reuse the retention commands above; the artifact includes the balanced runner and the standalone benchmark. All 25 scratch paths and three default executables are restored, and earlier patches and result artifacts are unchanged. This establishes the fix for the recorded retention workloads, not arbitrary task migration, all allocators or Python C Stream throughput. Default project dependencies remain unchanged and nothing was pushed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

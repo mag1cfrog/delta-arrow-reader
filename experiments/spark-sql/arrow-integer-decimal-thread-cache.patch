@@ -1,0 +1,313 @@
+--- a/src/cast/integer_decimal_buffer.rs
++++ b/src/cast/integer_decimal_buffer.rs
+@@ -15,42 +15,34 @@
+ // specific language governing permissions and limitations
+ // under the License.
+ 
++use std::cell::RefCell;
+ use std::ptr::NonNull;
+-use std::sync::atomic::{AtomicBool, Ordering};
+-use std::sync::{Arc, Mutex};
++use std::sync::Arc;
+ 
+ use arrow_array::{Array, PrimitiveArray, types::ArrowPrimitiveType};
+ use arrow_buffer::{Buffer, MutableBuffer, ScalarBuffer};
+ 
+ const MIN_BYTES: usize = 64 * 1024;
+ const MAX_BYTES: usize = 256 * 1024;
+-// ponytail: One shared slot retains at most 256 KiB; revisit only if concurrent
+-// profiling shows that contention or competing buffer sizes defeat reuse.
+-struct Cache {
+-    idle: Mutex<Option<MutableBuffer>>,
+-    in_use: AtomicBool,
+-}
+-
+-static IDLE: Cache = Cache {
+-    idle: Mutex::new(None),
+-    in_use: AtomicBool::new(false),
+-};
+-
+-struct Recycled {
+-    buffer: Option<MutableBuffer>,
+-    cache: &'static Cache,
+-}
++thread_local! {
++    // ponytail: At most 256 KiB idle per OS thread; a process-wide budget is
++    // needed if callers create enough long-lived threads for this to matter.
++    static IDLE: RefCell<Option<MutableBuffer>> = const { RefCell::new(None) };
++}
++
++struct Recycled(Option<MutableBuffer>);
+ 
+ impl Drop for Recycled {
+     fn drop(&mut self) {
+-        if self.buffer.is_some() {
+-            if let Ok(mut slot) = self.cache.idle.try_lock() {
++        // A result may be released on a different thread. Return its buffer
++        // there, or free it normally if that thread's cache is full or gone.
++        let _ = IDLE.try_with(|slot| {
++            if let Ok(mut slot) = slot.try_borrow_mut() {
+                 if slot.is_none() {
+-                    *slot = self.buffer.take();
++                    *slot = self.0.take();
+                 }
+             }
+-        }
+-        self.cache.in_use.store(false, Ordering::Release);
++        });
+     }
+ }
+ 
+@@ -58,39 +50,14 @@
+     array: &PrimitiveArray<T>,
+     op: impl Fn(T::Native) -> D::Native,
+ ) -> PrimitiveArray<D> {
+-    collect(array, op, &IDLE)
+-}
+-
+-fn collect<T: ArrowPrimitiveType, D: ArrowPrimitiveType>(
+-    array: &PrimitiveArray<T>,
+-    op: impl Fn(T::Native) -> D::Native,
+-    cache: &'static Cache,
+-) -> PrimitiveArray<D> {
+     let bytes = array.len().saturating_mul(size_of::<D::Native>());
+-    // Reuse only bounded buffers from this integer-to-Decimal path.
+     if !(MIN_BYTES..=MAX_BYTES).contains(&bytes) {
+         return array.unary(op);
+     }
+-    // Only one result may be managed by this cache at a time. Callers keeping
+-    // earlier results use the ordinary kernel, without extra owner allocations.
+-    if cache.in_use.load(Ordering::Relaxed)
+-        || cache
+-            .in_use
+-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+-            .is_err()
+-    {
+-        return array.unary(op);
+-    }
+-    // Release the claim on unwind as well as on the final result drop.
+-    let mut owner = Recycled {
+-        buffer: None,
+-        cache,
+-    };
+-    let recycled = cache
+-        .idle
+-        .try_lock()
++    let recycled = IDLE
++        .try_with(|slot| slot.try_borrow_mut().ok().and_then(|mut slot| slot.take()))
+         .ok()
+-        .and_then(|mut slot| slot.take())
++        .flatten()
+         .filter(|buffer| buffer.len() == bytes && buffer.as_ptr().cast::<D::Native>().is_aligned());
+     let mut buffer = if let Some(mut buffer) = recycled {
+         for (output, input) in buffer
+@@ -102,12 +69,9 @@
+         }
+         buffer
+     } else {
+-        // Keep the ordinary unary kernel's Vec collection on cache misses;
+-        // zeroing a fresh buffer first penalizes callers retaining results.
+         let values: Vec<D::Native> = array.values().iter().map(|v| op(*v)).collect();
+         MutableBuffer::from(values)
+     };
+-    // A custom owner's reported allocation size must match its capacity.
+     if buffer.capacity() != bytes {
+         return PrimitiveArray::new(
+             ScalarBuffer::new(buffer.into(), 0, array.len()),
+@@ -115,11 +79,10 @@
+         );
+     }
+     let ptr = NonNull::new(buffer.as_mut_ptr()).unwrap();
+-    owner.buffer = Some(buffer);
+-    let owner = Arc::new(owner);
++    let owner = Arc::new(Recycled(Some(buffer)));
+     // SAFETY: The owner holds the fully initialized, aligned allocation of
+-    // exactly `bytes` bytes. Arrow keeps it alive through all clones/slices;
+-    // only the final owner drop may return it to the cache, on any thread.
++    // exactly `bytes` bytes. All Arrow clones/slices retain it; only the final
++    // release can return the allocation to the releasing thread's idle slot.
+     let buffer = unsafe { Buffer::from_custom_allocation(ptr, bytes, owner) };
+     PrimitiveArray::new(
+         ScalarBuffer::new(buffer, 0, array.len()),
+@@ -133,25 +96,24 @@
+     use arrow_array::{Array, Int64Array, types::*};
+ 
+     #[test]
+-    fn reuse_preserves_ownership_and_bounds() {
+-        static CACHE: Cache = Cache {
+-            idle: Mutex::new(None),
+-            in_use: AtomicBool::new(false),
+-        };
++    fn reuse_preserves_retained_results_and_thread_ownership() {
++        IDLE.with(|slot| slot.borrow_mut().take());
+         let source =
+             Int64Array::from_iter((0..8194).map(|i| (i % 5 != 0).then_some(i as i64 - 4000)))
+                 .slice(1, 8192);
+-        let first = collect::<Int64Type, Decimal128Type>(&source, i128::from, &CACHE);
+-        let ptr = first.values().as_ptr();
++        let first = unary::<Int64Type, Decimal128Type>(&source, i128::from);
+         assert_eq!(
+             first.get_buffer_memory_size(),
+             128 * 1024 + source.nulls().unwrap().buffer().capacity()
+         );
+-        assert!(CACHE.idle.lock().unwrap().is_none());
+-        let retained = first.slice(3, 8192 - 3);
++        let retained = first.slice(3, 8189);
+         drop(first);
+-        let second = collect::<Int64Type, Decimal128Type>(&source, |v| i128::from(v) * 10, &CACHE);
+-        assert_ne!(ptr, second.values().as_ptr());
++        let second = unary::<Int64Type, Decimal128Type>(&source, |v| i128::from(v) * 10);
++        let second_ptr = second.values().as_ptr();
++        assert_ne!(retained.values().as_ptr(), second_ptr);
++        drop(second);
++        let third = unary::<Int64Type, Decimal128Type>(&source, |v| i128::from(v) * 100);
++        assert_eq!(third.values().as_ptr(), second_ptr);
+         assert_eq!(
+             retained.iter().collect::<Vec<_>>(),
+             source
+@@ -160,20 +122,6 @@
+                 .map(|v| v.map(i128::from))
+                 .collect::<Vec<_>>()
+         );
+-        std::thread::spawn(move || drop(retained)).join().unwrap();
+-        assert_eq!(
+-            CACHE.idle.lock().unwrap().as_ref().unwrap().as_ptr(),
+-            ptr.cast()
+-        );
+-        let third = collect::<Int64Type, Decimal128Type>(&source, |v| i128::from(v) * 100, &CACHE);
+-        assert_eq!(ptr, third.values().as_ptr());
+-        assert_eq!(
+-            second.iter().collect::<Vec<_>>(),
+-            source
+-                .iter()
+-                .map(|v| v.map(|v| i128::from(v) * 10))
+-                .collect::<Vec<_>>()
+-        );
+         assert_eq!(
+             third.iter().collect::<Vec<_>>(),
+             source
+@@ -181,60 +129,80 @@
+                 .map(|v| v.map(|v| i128::from(v) * 100))
+                 .collect::<Vec<_>>()
+         );
+-        let (_, values, _) = second.into_parts();
+-        assert!(values.into_inner().into_mutable().is_ok());
+-        assert!(CACHE.idle.lock().unwrap().is_none());
+-        drop(third);
+-        let cached = CACHE.idle.lock().unwrap().as_ref().unwrap().as_ptr() as usize;
+-        assert_eq!(cached, ptr as usize);
+-
+-        // A contended cache must allocate independently instead of blocking.
+-        let lock = CACHE.idle.lock().unwrap();
+-        let independent = collect::<Int64Type, Decimal128Type>(&source, i128::from, &CACHE);
+-        assert_ne!(independent.values().as_ptr() as usize, cached);
+-        drop(independent);
+-        drop(lock);
+-        assert_eq!(
+-            CACHE.idle.lock().unwrap().as_ref().unwrap().capacity(),
+-            128 * 1024
+-        );
+-
+-        // Switching widths must return the correct type and exact byte size.
+-        let wide = collect::<Int64Type, Decimal256Type>(
+-            &source,
+-            |v| arrow_buffer::i256::from_i128(i128::from(v)),
+-            &CACHE,
++
++        // Cross-thread final release can populate the receiving thread's cache.
++        std::thread::spawn(move || {
++            IDLE.with(|slot| assert!(slot.borrow().is_none()));
++            drop(retained);
++            let ptr = IDLE.with(|slot| slot.borrow().as_ref().unwrap().as_ptr());
++            let input = Int64Array::from(vec![7; 8192]);
++            let reused = unary::<Int64Type, Decimal128Type>(&input, i128::from);
++            assert_eq!(reused.values().as_ptr().cast::<u8>(), ptr);
++            assert!(reused.values().iter().all(|v| *v == 7));
++            drop(reused);
++        })
++        .join()
++        .unwrap();
++        let (_, values, _) = third.into_parts();
++        assert!(values.into_inner().into_mutable().is_err());
++        // A nested borrow must neither block nor panic during allocation/drop.
++        IDLE.with(|slot| {
++            let held = slot.borrow_mut();
++            drop(unary::<Int64Type, Decimal128Type>(&source, i128::from));
++            assert_eq!(held.as_ref().unwrap().capacity(), 128 * 1024);
++        });
++        let wide = unary::<Int64Type, Decimal256Type>(&source, |v| {
++            arrow_buffer::i256::from_i128(i128::from(v))
++        });
++        assert_eq!(wide.len(), source.len());
++        assert!(
++            wide.iter()
++                .zip(source.iter())
++                .all(|(a, b)| a == b.map(|v| arrow_buffer::i256::from_i128(i128::from(v))))
+         );
+         drop(wide);
+         for rows in [0, 4095, 4096, 4097, 16384, 16385] {
+             let input = Int64Array::from(vec![7; rows]);
+-            let out = collect::<Int64Type, Decimal128Type>(&input, i128::from, &CACHE);
++            let out = unary::<Int64Type, Decimal128Type>(&input, i128::from);
+             assert_eq!(out.len(), rows);
+             assert!(out.values().iter().all(|v| *v == 7));
+             drop(out);
+-            assert!(
+-                CACHE
+-                    .idle
+-                    .lock()
+-                    .unwrap()
+-                    .as_ref()
+-                    .is_none_or(|b| b.capacity() <= MAX_BYTES)
+-            );
++            IDLE.with(|slot| {
++                assert!(
++                    slot.borrow()
++                        .as_ref()
++                        .is_none_or(|b| b.capacity() <= MAX_BYTES)
++                )
++            });
+         }
+-        CACHE.idle.lock().unwrap().take();
+         assert!(
+             std::panic::catch_unwind(|| {
+-                collect::<Int64Type, Decimal128Type>(&source, |_| panic!("test unwind"), &CACHE)
++                unary::<Int64Type, Decimal128Type>(&source, |_| panic!("test unwind"))
+             })
+             .is_err()
+         );
+-        assert!(!CACHE.in_use.load(Ordering::Relaxed));
+-        drop(collect::<Int64Type, Decimal128Type>(
+-            &source,
+-            i128::from,
+-            &CACHE,
+-        ));
+-        assert!(CACHE.idle.lock().unwrap().is_some());
+-        CACHE.idle.lock().unwrap().take();
+-    }
+-}
++        drop(unary::<Int64Type, Decimal128Type>(&source, i128::from));
++        IDLE.with(|slot| assert!(slot.borrow_mut().take().is_some()));
++
++        // Drop a live output after its thread exits, then during TLS teardown.
++        let output = std::thread::spawn(|| {
++            unary::<Int64Type, Decimal128Type>(&Int64Array::from(vec![9; 8192]), i128::from)
++        })
++        .join()
++        .unwrap();
++        assert!(output.values().iter().all(|v| *v == 9));
++        drop(output);
++        std::thread::spawn(|| {
++            thread_local! {
++                static HELD: RefCell<Option<PrimitiveArray<Decimal128Type>>> = const { RefCell::new(None) };
++            }
++            // Initialize HELD before IDLE, so IDLE is destroyed first.
++            HELD.with(|held| {
++                *held.borrow_mut() = Some(unary::<Int64Type, Decimal128Type>(
++                    &Int64Array::from(vec![11; 8192]), i128::from,
++                ));
++            });
++        }).join().unwrap();
++        IDLE.with(|slot| slot.borrow_mut().take());
++    }
++}
