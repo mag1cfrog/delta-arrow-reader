@@ -2180,6 +2180,64 @@ Ordinary Decimal division changes by +0.35% in execution time with nearly unchan
 
 The [results artifact](float-decimal-compare-results.json) contains raw captures, remaining case IDs and causes, standalone CAST diagnostics, commands, hashes, timing samples and counters. Apply this patch after `sail-div-null-numeric.patch` with the preceding optional runtime and dependency overrides. Use the same expanded benchmark in both builds. Replay `decimal_probe` and `decimal_division.py` with `--cases experiments/spark-sql/float-decimal-compare.jsonl`; the comparison exits 1 for the 128 retained differences. The patch applies and reverses exactly. All 26 scratch source paths and three cached executables were restored with fresh source timestamps. The default project build does not apply this patch.
 
+## Correct Decimal128 to DOUBLE rounding
+
+Starting from `6525002`, [arrow-decimal-to-double.patch](arrow-decimal-to-double.patch) fixes the shared Arrow CAST path. `CAST(CAST('9007199254740993' AS DECIMAL(38,18)) AS DOUBLE)` now returns `9007199254740992`, matching Spark, instead of `9007199254740994`. The [previous Arrow formula](https://github.com/apache/arrow-rs/blob/58.4.0/arrow-cast/src/cast/mod.rs) rounds the coefficient before dividing by its scale factor. [Spark converts through BigDecimal](https://github.com/apache/spark/blob/v4.2.0/sql/api/src/main/scala/org/apache/spark/sql/types/Decimal.scala). The local patch rounds the scaled value once.
+
+The patch adds 74 runtime lines across two Arrow files. Exact coefficients and exact powers of ten use native floating arithmetic; small coefficients first narrow losslessly to i64. For other coefficients at positive scales 1 through 21, an integer quotient keeps 55 or 56 bits and uses the remainder as a sticky bit before conversion to DOUBLE. The shifted numerator fits in u128. Remaining cases use the existing `lexical-core` parser with a 64-byte stack buffer, without constructing a String per row. Scale zero keeps the direct integer conversion. Arrow's unary kernel preserves NULL masks and sliced buffers. DataFusion's scalar CAST also routes through Arrow, so explicit CAST, TRY_CAST, constant folding and implicit comparison casts share the fix. Dependency versions, features, host planner code and the SQL benchmark are unchanged.
+
+The [139-query corpus](decimal-to-double.jsonl) covers scales 0 through 38, signed rounding boundaries, large coefficients, literals, columns, NULLs, filters, both CAST spellings and batch boundaries. Both ANSI modes pass all 278 observations, up from 100. Another 112 observations in the preceding comparison corpus now match Spark, bringing it from 256/384 to 368/384. These observations repeat the shared conversion defect; they are not 112 separate bugs. Across 27 numeric corpora, agreement increases from 4,884/5,370 to 5,174/5,370, with no previously matching observation regressing. The new corpus also verifies all 4,450 non-NULL DOUBLE output cells by their exact IEEE bits.
+
+The remaining 196 coarse differences consist of 180 earlier differences, eight IN-list coercion observations and four each for EXISTS and IN-subquery projection planning. The earlier error-cause and wrapped-sort diagnostics remain. The numeric comparator excludes full schema metadata and structured error conditions. These locally designed checks do not establish complete Spark compatibility.
+
+Validation passes 345 Arrow tests, 24 Rust planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 exact rows, 116 Delta comparisons and 18 adapter checks. The new Arrow test covers every permitted Decimal128 scale from -128 through 38, signs, halfway boundaries, seeded coefficients, NULL storage, sliced/empty arrays and both CAST error modes. Negative scales are tested at the Arrow level, not against Spark SQL. All 66 SQL benchmark queries retain identical results and physical plans. Of the preceding 5,092 observations, 4,977 remain identical including plans and errors, 112 are repaired, and three multi-invalid-row checks choose a different first failing value with the same error class and target.
+
+Measurements use 1,048,576 rows, batches of 8,192, CPU 2, two warmups and nine samples per process. Four ABBA blocks provide eight processes per variant/case/phase. The 13 SQL scenarios use separate planning and execution counter intervals, for 416 processes; each series starts after its build and regression checks, with no concurrent compilation. Negative changes mean less time or fewer instructions.
+
+| SQL case | Before ms | After ms | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT and Decimal columns | 7.322 | 5.224 | -28.64% | -23.20% |
+| DOUBLE and Decimal columns | 7.281 | 5.219 | -28.33% | -24.21% |
+| DOUBLE column and Decimal literal | 3.515 | 3.517 | +0.07% | -0.00% |
+| Decimal column and DOUBLE literal | 6.511 | 4.407 | -32.31% | -26.12% |
+| Integer-to-Decimal control | 0.771 | 0.770 | -0.13% | -0.00% |
+| Decimal division control | 15.846 | 15.861 | +0.09% | +0.00% |
+| Negative Decimal divisor control | 16.092 | 16.112 | +0.12% | -0.00% |
+| Decimal i256 division control | 43.974 | 43.427 | -1.24% | -0.00% |
+| BIGINT DIV control | 2.129 | 2.126 | -0.15% | -0.00% |
+| Constant INT DIV control | 0.293 | 0.295 | +0.48% | +0.10% |
+| NULL DIV numeric CAST control | 571.014 | 581.890 | +1.90% | -0.00% |
+| NULL Decimal subquery control | 0.203 | 0.202 | -0.21% | -0.79% |
+| Correlated COUNT control | 73.398 | 77.121 | +5.07% | -0.00% |
+
+The three comparisons that convert a Decimal column improve by 28%-32%; the Decimal-literal case stays close to its previous time. Planning medians change by -1.20% to +0.97%, with instruction changes below 0.06%. The NULL/numeric-CAST control rises by 1.90% in elapsed time with unchanged instructions and overlapping process ranges. Correlated COUNT rises by 5.07%. A separate 16-process ABBA repeat also measures an increase, from 77.003 to 80.008 ms (+3.90%), with instruction count changing by -0.0022%. Its identical physical plan contains no DOUBLE conversion. This elapsed-time difference remains unattributed; the measurements do not dismiss it as noise or establish a general absence of regressions.
+
+A separate three-version measurement of the Decimal-column/DOUBLE-literal query records 3.271 ms before the comparison compatibility patch, 6.485 ms with that patch and 4.417 ms with the corrected CAST. The latest version remains +35.05% in time and +42.19% in instructions relative to the first version. This comparison has equal results for the benchmark's small coefficients; the first version does not implement the newly tested general Spark comparison behavior. The additional Float64 column and its conversion still have a measurable cost. Planning also retains a 5.35% time and 6.44% instruction increase relative to the version before comparison coercion.
+
+The [standalone kernel benchmark](decimal_to_double_bench.rs) separates coefficient/scale paths, including 75%-NULL arrays and nonzero offsets. Its `before` branch runs the old formula in the same executable; `after` calls the patched Arrow API. Both validate every row against their own specified behavior before timing, and the candidate additionally matches exact standard-library parsing for every non-NULL value. Baseline errors are counted rather than treated as successful exact conversion. Four ABBA blocks produce 208 processes, with no mismatching candidate cells.
+
+| Kernel input | Before ms | After ms | Before cells differing from exact conversion |
+| --- | ---: | ---: | ---: |
+| `small` | 3.182 | 1.104 | 0 |
+| `small_nulls` | 3.177 | 1.102 | 0 |
+| `exact_wide` | 3.189 | 4.703 | 0 |
+| `wide` | 3.194 | 6.381 | 497,263 |
+| `precision38` | 3.194 | 9.021 | 281,062 |
+| `wide_nulls` | 3.184 | 2.288 | 124,317 |
+| `scale22` | 3.197 | 45.291 | 389,160 |
+| `scale23` | 3.196 | 43.697 | 399,971 |
+| `scale38_small` | 3.184 | 12.988 | 97,290 |
+| `scale38_wide` | 3.194 | 43.572 | 367,542 |
+| `scale0` | 3.192 | 3.011 | 0 |
+| `negative_scale` | 3.179 | 0.984 | 0 |
+| `negative_wide` | 3.191 | 44.719 | 475,643 |
+
+Small-coefficient conversion falls from 3.182 to 1.104 ms. Other paths still regress. `exact_wide` represents ordinary fractions from 0.02 to 0.98 with scale-18 coefficients; the old formula already gives correct results, but the candidate's exactness checks increase time by 47.47%. Arbitrary wide coefficients take 6.381 ms, and full-precision coefficients take 9.021 ms, versus about 3.194 ms for the old formula. Parsing paths reach 43.6-45.3 ms, roughly 14 times the old formula, while the small-coefficient scale-38 case takes 12.988 ms. These ratios describe isolated CAST kernels, not whole queries or all workloads. The old formula is incorrect for many of these inputs, but that does not establish that this much overhead is necessary.
+
+This candidate repairs the tested precision defect and improves the previously measured scale-4 comparison case. It is not ready for general enablement on performance grounds. The next work is to reduce the guard/conversion cost for exactly representable large coefficients, replace the expensive parsing fallback where a bounded integer conversion is practical, and investigate the separate COUNT timing difference. The earlier unrelated buffer-policy timing gaps are also unresolved by this slice.
+
+The [results artifact](decimal-to-double-results.json) retains corpus IDs, value/type captures, diagnostics, build hashes, commands, plans, samples and counters. Apply the patch to the Arrow 58.4.0 source selected by the existing dependency override, then rebuild the optional runtime. It applies to both the preceding patched Arrow source and the registry source, and reverses exactly. Replay `decimal_probe` and `decimal_division.py` with `--cases experiments/spark-sql/decimal-to-double.jsonl`; this corpus now exits successfully. The kernel benchmark's recorded rustc command links the release arrow-array, arrow-schema and arrow-cast artifacts from that same build. All 26 scratch host source paths, both changed Arrow files and three cached executables were restored with fresh source timestamps. The default project build does not enable the patch. Decimal32/64/256 inputs and Float32 output keep their earlier paths.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

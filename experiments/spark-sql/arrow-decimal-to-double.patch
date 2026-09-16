@@ -1,0 +1,170 @@
+--- a/src/cast/mod.rs
++++ b/src/cast/mod.rs
+@@ -1107,6 +1107,7 @@
+             )
+         }
+         // Decimal to non-decimal
++        (Decimal128(_, scale), Float64) => cast_decimal128_to_float64(array, *scale),
+         (Decimal32(_, scale), _) if !to_type.is_temporal() => {
+             cast_from_decimal::<Decimal32Type, _>(
+                 array,
+--- a/src/cast/decimal.rs
++++ b/src/cast/decimal.rs
+@@ -904,6 +904,79 @@
+     Ok(Arc::new(value_builder.finish()))
+ }
+ 
++/// Cast Decimal128 to Float64 with one rounding of the scaled value.
++pub(crate) fn cast_decimal128_to_float64(
++    array: &dyn Array,
++    scale: i8,
++) -> Result<ArrayRef, ArrowError> {
++    let array = array.as_primitive::<Decimal128Type>();
++    if scale == 0 {
++        return Ok(Arc::new(array.unary::<_, Float64Type>(|v| v as f64)));
++    }
++    // Powers of ten through 10^22 are exactly representable in Float64.
++    // Dividing or multiplying an exact coefficient then rounds only once.
++    let array = if scale.unsigned_abs() <= 22 {
++        let factor = 10_f64.powi(scale.unsigned_abs() as i32);
++        let divisor = if (1..=21).contains(&scale) {
++            10_u128.pow(scale as u32)
++        } else {
++            0
++        };
++        let divisor_bits = 128 - divisor.leading_zeros();
++        array.unary::<_, Float64Type>(|v| {
++            let value = if (-(1_i128 << 53)..=(1_i128 << 53)).contains(&v) {
++                (v as i64) as f64
++            } else if v.unsigned_abs().leading_zeros() + v.unsigned_abs().trailing_zeros() >= 75 {
++                // Larger integers are exact when only their top 53 bits are nonzero.
++                v as f64
++            } else if divisor != 0 {
++                return decimal128_ratio_to_float64(v, divisor, divisor_bits);
++            } else {
++                return parse_decimal128_as_float64(v, scale);
++            };
++            if scale > 0 {
++                value / factor
++            } else {
++                value * factor
++            }
++        })
++    } else {
++        array.unary::<_, Float64Type>(|v| parse_decimal128_as_float64(v, scale))
++    };
++    Ok(Arc::new(array))
++}
++
++#[inline(never)]
++fn decimal128_ratio_to_float64(value: i128, divisor: u128, divisor_bits: u32) -> f64 {
++    let magnitude = value.unsigned_abs();
++    // Keep 55 or 56 quotient bits: 53 significand bits, a round bit and a
++    // sticky bit. For scales 1..=21 the shifted numerator fits in u128.
++    let shift = 128 - magnitude.leading_zeros() as i32 - divisor_bits as i32 - 55;
++    let (numerator, denominator) = if shift >= 0 {
++        (magnitude, divisor << shift)
++    } else {
++        (magnitude << -shift, divisor)
++    };
++    let quotient = numerator / denominator;
++    let remainder = numerator % denominator;
++    let rounded = ((quotient as i64) | (remainder != 0) as i64) as f64;
++    // All Decimal128 ratios here are normal Float64 values. Scaling by an
++    // exact power of two preserves the integer conversion's rounding.
++    let result = rounded * f64::from_bits(((1023 + shift) as u64) << 52);
++    if value < 0 { -result } else { result }
++}
++
++#[inline(never)]
++fn parse_decimal128_as_float64(value: i128, scale: i8) -> f64 {
++    // i128 plus an exponent fits in 64 bytes, including scale = i8::MIN.
++    let mut buffer = [0_u8; 64];
++    let mut len = lexical_core::write(value, &mut buffer).len();
++    buffer[len] = b'e';
++    len += 1;
++    len += lexical_core::write(-(scale as i16), &mut buffer[len..]).len();
++    lexical_core::parse(&buffer[..len]).expect("valid decimal coefficient and exponent")
++}
++
+ /// Cast a decimal array to a floating point array.
+ ///
+ /// Conversion is lossy and follows standard floating point semantics. Values
+@@ -924,6 +997,77 @@
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++
++    #[test]
++    fn test_decimal128_to_float64_rounding() {
++        let mut seed = 818_818_191_u128;
++        for scale in i8::MIN..=38 {
++            let mut values = vec![None, Some(0), Some(1), Some(-1)];
++            for v in [
++                1_i128 << 53,
++                1_i128 << 63,
++                9_007_199_254_740_993_000_000_000_000_000_000,
++                10_i128.pow(38) - 2,
++            ] {
++                for n in [v - 1, v, v + 1] {
++                    values.extend([Some(n), Some(-n)]);
++                }
++            }
++            for _ in 0..128 {
++                seed ^= seed << 13;
++                seed ^= seed >> 17;
++                seed ^= seed << 43;
++                values.extend([
++                    Some((seed as i128) % 10_i128.pow(38)),
++                    Some(seed as i64 as i128),
++                    Some(seed as i32 as i128),
++                ]);
++            }
++            let source = Decimal128Array::from(values.clone())
++                .with_precision_and_scale(38, scale)
++                .unwrap();
++            for options in [
++                CastOptions::default(),
++                CastOptions {
++                    safe: false,
++                    ..Default::default()
++                },
++            ] {
++                // Nonzero offsets, NULLs and empty arrays use the public CAST path.
++                for (offset, len) in [(0, source.len()), (1, source.len() - 2), (2, 0)] {
++                    let input = source.slice(offset, len);
++                    let result = cast_with_options(&input, &DataType::Float64, &options).unwrap();
++                    let actual = result.as_primitive::<Float64Type>();
++                    assert_eq!(actual.nulls(), input.nulls());
++                    for (value, actual) in values[offset..offset + len].iter().zip(actual.iter()) {
++                        let expected = value
++                            .map(|v| format!("{v}e{}", -(scale as i16)).parse::<f64>().unwrap());
++                        assert_eq!(
++                            actual.map(f64::to_bits),
++                            expected.map(f64::to_bits),
++                            "value={value:?}, scale={scale}"
++                        );
++                    }
++                }
++            }
++        }
++        // NULL storage and out-of-precision coefficients must not panic or truncate.
++        let source = Decimal128Array::new(
++            vec![i128::MIN, i128::MAX, i128::MIN, i128::MAX].into(),
++            Some(vec![false, false, true, true].into()),
++        )
++        .with_precision_and_scale(1, 1)
++        .unwrap();
++        let result = cast(&source, &DataType::Float64).unwrap();
++        let actual = result.as_primitive::<Float64Type>();
++        assert_eq!(actual.null_count(), 2);
++        for (index, value) in [(2, i128::MIN), (3, i128::MAX)] {
++            assert_eq!(
++                actual.value(index).to_bits(),
++                format!("{value}e-1").parse::<f64>().unwrap().to_bits()
++            );
++        }
++    }
+ 
+     #[test]
+     fn test_parse_string_to_decimal_native() -> Result<(), ArrowError> {
