@@ -1,0 +1,37 @@
+--- a/src/cast/decimal.rs
++++ b/src/cast/decimal.rs
+@@ -923,12 +923,14 @@
+             0
+         };
+         let divisor_bits = 128 - divisor.leading_zeros();
+-        array.unary::<_, Float64Type>(|v| {
++        array.unary::<_, Float64Type>(move |v| {
+             let value = if (-(1_i128 << 53)..=(1_i128 << 53)).contains(&v) {
+                 (v as i64) as f64
+             } else if v.unsigned_abs().leading_zeros() + v.unsigned_abs().trailing_zeros() >= 75 {
+-                // Larger integers are exact when only their top 53 bits are nonzero.
+-                v as f64
++                // The discarded low bits are zero. Convert the top 53 bits and
++                // rescale by an exact power of two without rounding.
++                let shift = 75 - v.unsigned_abs().leading_zeros();
++                ((v >> shift) as i64) as f64 * f64::from_bits(((1023 + shift) as u64) << 52)
+             } else if divisor != 0 {
+                 return decimal128_ratio_to_float64(v, divisor, divisor_bits);
+             } else {
+@@ -1011,6 +1013,16 @@
+             ] {
+                 for n in [v - 1, v, v + 1] {
+                     values.extend([Some(n), Some(-n)]);
++                }
++            }
++            // Exercise every normalization shift and both sides of the
++            // exact-coefficient guard, including values wider than i64.
++            for shift in 1..=74 {
++                for significand in [1_i128 << 52, (1_i128 << 52) + 1, (1_i128 << 53) - 1] {
++                    let v = significand << shift;
++                    for n in [v - 1, v, v + 1] {
++                        values.extend([Some(n), Some(-n)]);
++                    }
+                 }
+             }
+             for _ in 0..128 {

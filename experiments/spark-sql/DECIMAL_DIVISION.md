@@ -2238,6 +2238,67 @@ This candidate repairs the tested precision defect and improves the previously m
 
 The [results artifact](decimal-to-double-results.json) retains corpus IDs, value/type captures, diagnostics, build hashes, commands, plans, samples and counters. Apply the patch to the Arrow 58.4.0 source selected by the existing dependency override, then rebuild the optional runtime. It applies to both the preceding patched Arrow source and the registry source, and reverses exactly. Replay `decimal_probe` and `decimal_division.py` with `--cases experiments/spark-sql/decimal-to-double.jsonl`; this corpus now exits successfully. The kernel benchmark's recorded rustc command links the release arrow-array, arrow-schema and arrow-cast artifacts from that same build. All 26 scratch host source paths, both changed Arrow files and three cached executables were restored with fresh source timestamps. The default project build does not enable the patch. Decimal32/64/256 inputs and Float32 output keep their earlier paths.
 
+## Faster conversion of exact large Decimal128 coefficients
+
+Starting from `7058810`, [arrow-decimal-to-double-exact.patch](arrow-decimal-to-double-exact.patch) replaces the exact-large-coefficient branch's i128-to-f64 cast with a lossless shift, an i64-to-f64 cast and multiplication by a power of two. It applies after [arrow-decimal-to-double.patch](arrow-decimal-to-double.patch). The existing guard proves that discarded bits are zero; the shifted signed value fits in 53 significant bits. These operations are exact, so the subsequent decimal scaling still rounds once. The unary closure also captures its per-batch constants by value. Both edits stay in the existing Arrow function, with no new dependency or allocation.
+
+The branch runs only for coefficients outside [-2^53, 2^53] that are exactly representable as DOUBLE, at nonzero scales with absolute value at most 22. Small coefficients, scale zero, the general integer-quotient conversion and the parsing fallback retain their paths. Shared scalar and array callers keep using the Arrow CAST entry point. Host source, dependency versions/features and the SQL benchmark are unchanged.
+
+The existing Arrow rounding test now covers every positive-coefficient normalization shift from 1 through 74, three significands and their immediate neighbors, both signs and all 167 permitted scales. Its existing i128::MIN case also exercises shift 75. The 345 Arrow tests pass, as do 24 planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 exact rows, 116 Delta comparisons and 18 adapter checks. All 66 benchmark queries retain identical results and physical plans.
+
+The 27 numeric corpora remain at 5,174/5,370, with no repaired or regressed observations. All 4,450 non-NULL DOUBLE cells in the rounding corpus remain bit-exact against the saved Spark 4.2.0 reference. 5,366 observations retain identical parsed captures, including plans and errors; 4 multi-invalid-row observations select a different first invalid value with the same checked error class and target. The 196 coarse differences and previously recorded diagnostic gaps remain.
+
+The [kernel benchmark](decimal_to_double_bench.rs) adds exact coefficients wider than i64, exact coefficients with 75% NULLs, and negative scale. Both binaries use this same source and call the corrected Arrow API through the `after` argument; the baseline has the preceding patch, and the candidate has this additional patch. Every process validates all 1,048,576 rows, including NULLs, signs and nonzero offsets. Four ABBA blocks provide eight processes per version/case, two warmups and nine samples per process, pinned to CPU 2. The 16 cases total 256 processes. No candidate or baseline cells differ from exact standard-library parsing.
+
+| Kernel input | Before ms | After ms | Change |
+| --- | ---: | ---: | ---: |
+| `small` | 1.116 | 1.098 | -1.66% |
+| `small_nulls` | 1.131 | 1.094 | -3.22% |
+| `exact_wide` | 4.738 | 2.518 | -46.85% |
+| `exact_128` | 4.714 | 2.514 | -46.67% |
+| `exact_wide_nulls` | 1.900 | 1.269 | -33.21% |
+| `negative_exact` | 4.783 | 2.508 | -47.57% |
+| `wide` | 6.396 | 6.258 | -2.15% |
+| `precision38` | 9.195 | 8.557 | -6.95% |
+| `wide_nulls` | 2.252 | 2.166 | -3.78% |
+| `scale22` | 45.384 | 44.887 | -1.10% |
+| `scale23` | 43.931 | 43.860 | -0.16% |
+| `scale38_small` | 13.213 | 13.228 | +0.12% |
+| `scale38_wide` | 43.572 | 43.549 | -0.05% |
+| `scale0` | 3.019 | 3.024 | +0.17% |
+| `negative_scale` | 0.994 | 0.973 | -2.10% |
+| `negative_wide` | 45.091 | 45.036 | -0.12% |
+
+The first shift-based candidate retained reference captures. Its negative-scale small-coefficient control rose by 19.69%, and a separate repeat rose by 9.61%. Capturing the constants by value removes two pointer loads in the generated small-coefficient loop. The final control measures 0.994 versus 0.973 ms (-2.10%). The initial measurements remain in the artifact. This verifies the final measured behavior without attributing every timing difference to a particular CPU effect.
+
+The original `exact_wide` target falls from 4.738 to 2.518 ms (-46.85%). A separate 48-process ABBA comparison checks the old formula against the new API on the three positive-scale exact-large cases, where both give correct results. For `exact_wide`, it measures 3.199 versus 2.519 ms (-21.27%). This addresses the earlier 47.47% regression on that input set. These are isolated CAST timings; high-scale parsing and general wide-coefficient conversion still cost more than the old, sometimes incorrect formula.
+
+The SQL controls use the same 13 scenarios and separate planning/execution counter intervals as the preceding slice: 416 processes, identical queries, results, physical plans and dependencies, with no concurrent compilation or other test runs during timing.
+
+| SQL case | Before ms | After ms | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| `no_division_ansitrue` | 0.771 | 0.783 | +1.47% | +0.00% |
+| `plain_projection_ansitrue` | 15.862 | 15.868 | +0.04% | -0.00% |
+| `negative_literal_ansitrue` | 16.100 | 16.096 | -0.02% | -0.00% |
+| `wide_projection_ansitrue` | 43.425 | 43.902 | +1.10% | -0.00% |
+| `div_integer_ansitrue` | 2.146 | 2.131 | -0.68% | +0.00% |
+| `div_constant_ansitrue` | 0.294 | 0.294 | +0.22% | +0.00% |
+| `div_null_cast_numeric_ansitrue` | 581.681 | 602.463 | +3.57% | -0.00% |
+| `compare_f32_column_ansitrue` | 5.228 | 4.999 | -4.37% | -3.07% |
+| `compare_f64_column_ansitrue` | 5.194 | 4.980 | -4.12% | -3.24% |
+| `compare_f64_literal_ansitrue` | 3.508 | 3.312 | -5.58% | -0.02% |
+| `compare_decimal_literal_ansitrue` | 4.419 | 4.185 | -5.29% | -3.60% |
+| `null_divide_left_ansitrue` | 0.203 | 0.202 | -0.39% | +0.00% |
+| `correlated_count_ansitrue` | 75.063 | 75.175 | +0.15% | +0.00% |
+
+The three comparisons that convert a Decimal column improve by 4.12%-5.29%, with instruction counts falling by 3.07%-3.60%. The DOUBLE-column/Decimal-literal case improves by 5.58% in elapsed time but only 0.02% in instructions; its physical plan has no Decimal-to-DOUBLE conversion during execution, so this gain is not attributed to the new kernel. Planning changes range from -0.45% to +0.98%, with instruction changes within 0.06%.
+
+The NULL DIV numeric CAST control increases by 3.57%. A separate 16-process ABBA repeat measures 583.657 versus 599.880 ms (+2.78%), with instruction count changing by -0.0011%. Its identical physical plan projects NULL through a cross join and casts the result to Decimal; it does not execute a Decimal-to-DOUBLE conversion. The timing difference remains unattributed and is not dismissed as noise. Correlated COUNT changes by only +0.15% against this slice's baseline, which does not resolve the earlier comparison against the version before the rounding fix.
+
+This slice removes the measured exact-large-coefficient kernel regression. High-scale parsing, general wide-coefficient conversion, comparison materialization and the SQL control timing gaps still need work before general enablement.
+
+The [results artifact](decimal-double-exact-results.json) records commands, hashes, all samples and counters, corpus checks and preservation checks. It references the preceding artifact for unchanged captures instead of repeating those rows and plans. Apply the two Arrow patches in order to the dependency override, rebuild the optional runtime, and link the standalone kernel benchmark against that build's recorded Arrow artifacts. Apply and reverse checks confirm that the follow-up patch restores the preceding Arrow source exactly. All 26 scratch host paths, both Arrow files and three cached executables were restored with fresh source timestamps. The default project build still does not enable either patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
