@@ -1552,6 +1552,82 @@ The comparison exits 1 for the 11 recorded differences. Inspect the report, then
 
 The patch applies and reverses exactly. All 24 scratch paths and saved default executables are restored, changed Sail package caches are invalidated, and all 168 default observations match the parent checkpoint including complete errors and plans. The restored default benchmark is the saved 26-case executable; measured binaries use the shared 48-case harness. The candidate remains optional and uncommitted for review.
 
+## Fuse small-integer DIV conversion
+
+The follow-up [sail-div-fused.patch](sail-div-fused.patch) applies after `sail-div-widen.patch`. It preserves the preceding correctness repairs while avoiding intermediate BIGINT input arrays for matching TINYINT, SMALLINT and INT operand pairs. Mixed widths and integer/NULL combinations retain the native-cast fallback. The default vendor remains unchanged.
+
+The implementation adds a local Rust scalar function in a private module, using Arrow's existing traversals to widen individual values and write BIGINT results directly. DataFusion's existing `datum::apply` adapter handles scalar/array combinations without expanding scalars into full arrays. It reuses the scalar-function integration pattern already present for floating division. No dependency, execution node or additional Sail code is imported. This is a local optimization, not a newly copied Sail fix.
+
+The literal-zero check and ANSI divisor guard keep their previous behavior. Non-ANSI NULLIF receives a zero at the input width, so it no longer widens Int8/Int16 just to compare with an Int32 zero. For a folded nonzero constant divisor other than -1, the function simplifies back to native narrow division and the final BIGINT cast: MIN / -1 is the only possible overflow at those input widths. A scalar divisor of -1 uses Arrow `unary` to widen and negate in one traversal, avoiding per-row division. Other shapes use `try_binary` or `try_unary`. The function also preserves native NULL propagation and derives output nullability from its argument fields, matching the original binary expression after constants and guards simplify.
+
+Both Rust checks pass. They cover all three input widths, minimum and maximum values, signed division, sliced arrays, scalar operands on either side, NULL masks, empty arrays, zero errors, array-length errors and return-field nullability. The planner check exercises minimum values with divisors -3, -2, -1, 1, 2 and 3 in both ANSI modes, as well as the existing floating-type rejection cases.
+
+All 21 numeric corpora retain exactly the preceding agreement: 2,950/3,076 observations, including 177/188 in the small-integer matrix. All 45 repairs relative to `2cc3024` remain, with no new correctness regressions. The 126 recorded differences remain open. The 346 focused cause/signed-zero checks, 13 small-integer error causes and previously recorded diagnostic limitations are preserved. Some multirow CAST failures can report a different invalid value first; the artifact records those messages, whose cast cause and execution stage are unchanged. Four lifecycle tests, 4,064 exact-integer reference observations covering 187,410 rows, 116 full Delta capture comparisons, 18 adapter checks and 19 specified Delta seeds pass.
+
+Performance uses the unchanged harness and three binaries on the same host. "Original" is the implementation before widening, which fails MIN / -1; "native casts" is the preceding correct candidate; "fused" is this follow-up. The measured inputs are valid for all three, and every output row is checked outside timing. The shared harness casts each result to DECIMAL(38,6); timings include that cast and measure the whole projection. All three pass the 48 subquery and 12 Float64 checks. Only small-integer DIV plans change; the other 36 subquery plans and all Float64 plans match exactly. Safe constant-divisor queries use native expressions after optimization.
+
+The method remains CPU 2, 1,048,576 rows, one partition, batches of 8,192, two warmups and nine samples. Each case has four balanced timing processes per variant. Twenty cases have separate FIFO-controlled planning and execution counters, with two processes per variant and no multiplexing. Thirteen cases repeat under diagnostic allocation thresholds of 1048576 bytes. Builds and correctness checks finish before measurement. The return-field metadata adjustment, module placement and scalar -1 shortcut are all included in the final source, binaries and measurements below.
+
+| Input / ANSI | Default ms: original / native casts / fused | Fused vs original | Fixed thresholds ms: original / fused | Change |
+| --- | ---: | ---: | ---: | ---: |
+| Int8 column / ANSI true | 6.088 / 10.763 / 5.863 | -3.70% | 6.124 / 5.799 | -5.30% |
+| Int8 column / ANSI false | 7.376 / 10.865 / 5.748 | -22.07% | 7.307 / 5.705 | -21.92% |
+| Int8 literal 3 / ANSI true | 6.003 / 9.229 / 5.990 | -0.22% | 5.921 / 5.906 | -0.25% |
+| Int8 literal 3 / ANSI false | 12.254 / 11.908 / 5.961 | -51.36% | 6.862 / 5.926 | -13.64% |
+| Int16 column / ANSI true | 6.257 / 10.849 / 5.960 | -4.75% | 6.063 / 5.890 | -2.85% |
+| Int16 column / ANSI false | 7.431 / 10.795 / 5.874 | -20.94% | 7.347 / 5.802 | -21.04% |
+| Int16 literal 3 / ANSI true | 6.000 / 9.232 / 5.987 | -0.22% | 5.948 / 5.949 | +0.01% |
+| Int16 literal 3 / ANSI false | 6.994 / 6.791 / 8.952 | +28.00% | 6.813 / 5.951 | -12.65% |
+| Int32 column / ANSI true | 6.360 / 10.749 / 6.399 | +0.60% | 6.333 / 6.294 | -0.62% |
+| Int32 column / ANSI false | 6.383 / 10.899 / 6.275 | -1.69% | 6.351 / 6.208 | -2.25% |
+| Int32 literal 3 / ANSI true | 6.395 / 11.984 / 6.364 | -0.49% | 6.315 / 6.317 | +0.03% |
+| Int32 literal 3 / ANSI false | 6.368 / 11.952 / 6.412 | +0.68% | 6.295 / 6.330 | +0.55% |
+
+Across the 12 affected cases, default fused execution changes by -51.36% to +28.00% relative to the original implementation; the fixed-threshold diagnostic changes by -21.92% to +0.55%. Column-case execution instructions change by -22.27% to -7.75%. These measurements retain the overflow repair without the preceding candidate's measured increase in arithmetic work for these same-width cases. Mixed-width performance remains outside this result.
+
+The eight unchanged controls show default elapsed changes of -33.31% to +1.53% and execution instruction changes of -0.01% to +0.01%. The BIGINT ANSI control has the same physical plan throughout; under fixed thresholds it changes by -0.31%. No production allocator setting is changed, and user-space counters exclude kernel work during faults.
+
+Default allocation remains a measurement limit. The final Int16 literal-3 non-ANSI case is still slower in the primary default run: 6.994 / 6.791 / 8.952 ms for original / native casts / fused, or +28.00% versus original and +31.83% versus native casts. The separate default repeat gives 9.543 / 11.889 / 7.493 ms; fixed thresholds give 6.813 / 6.451 / 5.951 ms. The unchanged BIGINT ANSI control is also +24.91% versus native casts in the primary default run, but +0.15% under fixed thresholds. These default regressions remain recorded and prevent a claim that all elapsed-time regressions are resolved. The [allocator follow-up](#trace-div-allocator-variance) records the syscall diagnosis and native-output comparison.
+
+The preceding modular build showed a similar pattern for Int8 literal-3 ANSI: 5.950 / 9.072 ms for original / fused, with unchanged sampled user-space instruction counts. Fixed thresholds gave 5.943 / 5.920 ms. A default repeat gave 5.851 / 5.978 ms, with one of four fused processes still around 8.9 ms. Those runs remain in the artifact. The final build's separate default repeat records 5.914 / 5.934 ms for that case. Fixed thresholds and repeats do not erase slower default observations, and counters collected in separate processes cannot identify the cause of every slow sample.
+
+An earlier implementation placed the new integer function inside `math.rs`. An unchanged Decimal `/` projection then slowed by about 3% in two runs despite an identical plan. Its compiled `invoke_with_args` body grew from 7,180 to 8,847 bytes, and sampled profiles put more cycles in that function. Moving the integer function and its test to a private sibling module reduced the Decimal body to 7,340 bytes. A focused comparison measured native casts / inline / module at 16.812 / 17.494 / 16.791 ms, while retaining the integer improvement. The final build's Decimal control is included in the table data and artifact. These observations support a code-generation effect; the exact LLVM mechanism was not isolated, and module separation is not a universal compiler guarantee.
+
+The scalar -1 path also received a targeted check. Before the shortcut, a SUM over 8,388,608 INT values took about 104 ms across both ANSI modes, versus about 91 ms for native casts. Widening and negating in Arrow's existing `unary` traversal removes that per-row division. In the final balanced check, original / native casts / fused took 93.010 / 93.191 / 82.008 ms. Every sum matches the integer reference. This diagnostic includes process startup, planning, range generation, aggregation and both ANSI queries; it is not a kernel benchmark and cannot establish performance for every scalar shape or input width. Final runs use one unmeasured process warmup and five processes per variant, while the initial diagnostic had no standalone warmup.
+
+Small-integer DIV planning instructions change by -10.34% to -0.80% relative to the original implementation. The control planning instruction range is -0.02% to +0.94%. This is an execution optimization, not a claim of zero planning overhead. CPU frequency is not fixed and the host is not isolated. [div-fused-results.json](div-fused-results.json) retains source and binary hashes, plans, all timing samples, counters and the diagnostic runs.
+
+To reproduce, prepare the optional candidate through `sail-div-widen.patch` using the preceding dependency overrides, then build and save both variants:
+
+```sh
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/before-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/before-bench"
+git apply --check experiments/spark-sql/sail-div-fused.patch
+git apply experiments/spark-sql/sail-div-fused.patch
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-plan --lib small_int_divide_masks_and_scalars
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-plan --lib div_rejects_floating_types_before_zero_folding
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+"$run_dir/after-probe" experiments/spark-sql/div-widen.jsonl \
+  "$run_dir/after-fused.json" --physical-plans
+python3 experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-widen.json" "$run_dir/after-fused.json" \
+  --cases experiments/spark-sql/div-widen.jsonl --report "$run_dir/fused-check.json"
+taskset -c 2 "$run_dir/after-bench" "$run_dir/fused-bench.json" subqueries div_i32_column_ansitrue
+MALLOC_MMAP_THRESHOLD_=1048576 MALLOC_TRIM_THRESHOLD_=1048576 \
+  taskset -c 2 "$run_dir/after-bench" "$run_dir/fused-fixed.json" subqueries div_i32_column_ansitrue
+```
+
+Reuse or regenerate the preceding Spark 4.2.0 capture. The comparison exits 1 for the same 11 small-integer differences. Run each benchmark variant separately in a balanced order after correctness checks finish. To include the original baseline, also save a binary built before `sail-div-widen.patch` with the same benchmark source. Restore the optional patches after experimentation.
+
+The patch applies and reverses exactly. All 24 original scratch paths and saved default executables are restored, and the new module is removed from the scratch tree. Changed Sail package caches are invalidated, and all 168 default observations match the preceding checkpoint, including full errors and plans. The restored default benchmark remains the saved 26-case executable. This optional follow-up is ready for review; mixed-width optimization and the recorded semantic gaps remain separate work.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

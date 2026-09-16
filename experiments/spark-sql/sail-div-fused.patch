@@ -1,0 +1,374 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -44,6 +44,7 @@
+ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
+ 
+ use super::conditional::SparkNullIfZero;
++use super::small_int_divide::SparkSmallIntDivide;
+ use crate::error::{PlanError, PlanResult};
+ use crate::function::common::{ScalarFunction, ScalarFunctionInput};
+ 
+@@ -1031,6 +1032,25 @@
+         }
+     }
+ 
++    if let (Ok(left @ (DataType::Int8 | DataType::Int16 | DataType::Int32)), Ok(right)) =
++        (&dividend_type, &divisor_type)
++        && left == right
++    {
++        let divisor = if function_context.plan_config.ansi_mode {
++            make_safe_divisor(divisor, right, true, "Division by zero")
++        } else {
++            // Keep NULLIF at the input width; an Int32 zero would widen Int8/Int16.
++            expr_fn::nullif(divisor, lit(ScalarValue::new_zero(right)?))
++        };
++        return Ok(ScalarUDF::from(SparkSmallIntDivide {
++            signature: datafusion_expr::Signature::exact(
++                vec![left.clone(); 2],
++                datafusion_expr::Volatility::Immutable,
++            ),
++        })
++        .call(vec![dividend, divisor]));
++    }
++
+     // Decimal peers have their own coercion; widen only the signed-integer family.
+     let (dividend, divisor) = match (&dividend_type, &divisor_type) {
+         (Ok(left), Ok(right))
+@@ -1125,22 +1145,25 @@
+             (ScalarValue::Int32(Some(i32::MIN)), 2147483648),
+         ] {
+             let data_type = value.data_type();
+-            let expr = resolve(lit(value), cast(lit(-1), data_type)).unwrap();
+-            let batches = ctx
+-                .sql("SELECT 1")
+-                .await
+-                .unwrap()
+-                .select(vec![expr])
+-                .unwrap()
+-                .collect()
+-                .await
+-                .unwrap();
+-            let values = batches[0]
+-                .column(0)
+-                .as_any()
+-                .downcast_ref::<datafusion::arrow::array::Int64Array>()
+-                .unwrap();
+-            assert_eq!(values.value(0), expected);
++            for divisor in [-3, -2, -1, 1, 2, 3] {
++                let expr =
++                    resolve(lit(value.clone()), cast(lit(divisor), data_type.clone())).unwrap();
++                let batches = ctx
++                    .sql("SELECT 1")
++                    .await
++                    .unwrap()
++                    .select(vec![expr])
++                    .unwrap()
++                    .collect()
++                    .await
++                    .unwrap();
++                let values = batches[0]
++                    .column(0)
++                    .as_any()
++                    .downcast_ref::<datafusion::arrow::array::Int64Array>()
++                    .unwrap();
++                assert_eq!(values.value(0), -expected / i64::from(divisor));
++            }
+         }
+         assert!(resolve(lit(7), lit(2)).is_ok());
+         assert!(
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs
+@@ -17,6 +17,7 @@
+ pub(crate) mod math;
+ mod misc;
+ mod predicate;
++mod small_int_divide;
+ mod string;
+ mod r#struct;
+ mod url;
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/small_int_divide.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/small_int_divide.rs
+new file mode 100644
+--- /dev/null
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/small_int_divide.rs
+@@ -0,0 +1,279 @@
++// Local small-integer DIV optimization for the Delta reader Spark SQL experiment.
++use std::sync::Arc;
++
++use datafusion::arrow::datatypes::DataType;
++use datafusion::arrow::error::ArrowError;
++use datafusion_common::ScalarValue;
++use datafusion_expr::{Expr, cast, lit};
++use sail_common_datafusion::utils::items::ItemTaker;
++
++// Widen values inside Arrow's traversal, without materializing Int64 inputs.
++#[derive(Debug, PartialEq, Eq, Hash)]
++pub(super) struct SparkSmallIntDivide {
++    pub(super) signature: datafusion_expr::Signature,
++}
++
++impl datafusion_expr::ScalarUDFImpl for SparkSmallIntDivide {
++    fn name(&self) -> &str {
++        "spark_small_int_divide"
++    }
++
++    fn signature(&self) -> &datafusion_expr::Signature {
++        &self.signature
++    }
++
++    fn return_type(&self, _arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
++        Ok(DataType::Int64)
++    }
++
++    fn return_field_from_args(
++        &self,
++        args: datafusion_expr::ReturnFieldArgs,
++    ) -> datafusion_common::Result<datafusion::arrow::datatypes::FieldRef> {
++        // Match the native binary expression after guards and constants simplify.
++        Ok(Arc::new(datafusion::arrow::datatypes::Field::new(
++            "spark_small_int_divide",
++            DataType::Int64,
++            args.arg_fields.iter().any(|field| field.is_nullable()),
++        )))
++    }
++
++    fn simplify(
++        &self,
++        args: Vec<Expr>,
++        _info: &datafusion_expr::simplify::SimplifyContext,
++    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
++        use datafusion_expr::simplify::ExprSimplifyResult;
++        // Retain BinaryExpr's NULL propagation, including decorrelation sentinels.
++        if args
++            .iter()
++            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
++        {
++            return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::Int64(
++                None,
++            ))));
++        }
++        // At the original width, only MIN / -1 can overflow. Folded nonzero
++        // divisors other than -1 can keep the native division and final cast.
++        if let Expr::Literal(value, _) = &args[1] {
++            let safe = match value {
++                ScalarValue::Int8(Some(v)) => *v != 0 && *v != -1,
++                ScalarValue::Int16(Some(v)) => *v != 0 && *v != -1,
++                ScalarValue::Int32(Some(v)) => *v != 0 && *v != -1,
++                _ => false,
++            };
++            if safe {
++                let (left, right) = args.two()?;
++                return Ok(ExprSimplifyResult::Simplified(cast(
++                    left / right,
++                    DataType::Int64,
++                )));
++            }
++        }
++        Ok(ExprSimplifyResult::Original(args))
++    }
++
++    fn invoke_with_args(
++        &self,
++        input: datafusion_expr::ScalarFunctionArgs,
++    ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
++        use datafusion::arrow::array::{Array, AsArray, Int64Array, PrimitiveArray};
++        use datafusion::arrow::compute::kernels::arity::try_binary;
++        use datafusion::arrow::datatypes::{ArrowPrimitiveType, Int8Type, Int16Type, Int32Type};
++        use datafusion::physical_expr_common::datum::apply;
++
++        fn divide<T: ArrowPrimitiveType>(
++            a: &PrimitiveArray<T>,
++            a_scalar: bool,
++            b: &PrimitiveArray<T>,
++            b_scalar: bool,
++        ) -> Result<Int64Array, ArrowError>
++        where
++            i64: From<T::Native>,
++        {
++            // T is Int8, Int16 or Int32, so the widened quotient cannot overflow.
++            let op = |a, b| {
++                let b = i64::from(b);
++                if b == 0 {
++                    Err(ArrowError::DivideByZero)
++                } else {
++                    Ok(i64::from(a) / b)
++                }
++            };
++            match (a_scalar, b_scalar) {
++                (true, false) if a.is_null(0) => Ok(Int64Array::new_null(b.len())),
++                (false, true) if b.is_null(0) => Ok(Int64Array::new_null(a.len())),
++                // Widen before negation so MIN / -1 stays valid without per-row division.
++                (false, true) if i64::from(b.value(0)) == -1 => Ok(a.unary(|a| -i64::from(a))),
++                (true, false) => b.try_unary(|b| op(a.value(0), b)),
++                (false, true) => a.try_unary(|a| op(a, b.value(0))),
++                _ => try_binary(a, b, op),
++            }
++        }
++
++        let [left, right] = input.args.as_slice() else {
++            return datafusion_common::internal_err!(
++                "spark_small_int_divide requires two arguments"
++            );
++        };
++        apply(left, right, |left, right| {
++            let (a, a_scalar) = left.get();
++            let (b, b_scalar) = right.get();
++            let result = match (a.data_type(), b.data_type()) {
++                (DataType::Int8, DataType::Int8) => divide(
++                    a.as_primitive::<Int8Type>(),
++                    a_scalar,
++                    b.as_primitive::<Int8Type>(),
++                    b_scalar,
++                ),
++                (DataType::Int16, DataType::Int16) => divide(
++                    a.as_primitive::<Int16Type>(),
++                    a_scalar,
++                    b.as_primitive::<Int16Type>(),
++                    b_scalar,
++                ),
++                (DataType::Int32, DataType::Int32) => divide(
++                    a.as_primitive::<Int32Type>(),
++                    a_scalar,
++                    b.as_primitive::<Int32Type>(),
++                    b_scalar,
++                ),
++                _ => Err(ArrowError::ComputeError(
++                    "expected matching small signed integer types".into(),
++                )),
++            }?;
++            Ok(Arc::new(result))
++        })
++    }
++}
++
++#[test]
++fn small_int_divide_masks_and_scalars() -> datafusion_common::Result<()> {
++    use datafusion::arrow::array::{ArrayRef, AsArray, Int64Array};
++    use datafusion::arrow::datatypes::{Field, Int64Type};
++    use datafusion_common::config::ConfigOptions;
++    use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl};
++
++    for (data_type, min, max) in [
++        (DataType::Int8, i8::MIN as i64, i8::MAX as i64),
++        (DataType::Int16, i16::MIN as i64, i16::MAX as i64),
++        (DataType::Int32, i32::MIN as i64, i32::MAX as i64),
++    ] {
++        let udf = SparkSmallIntDivide {
++            signature: datafusion_expr::Signature::exact(
++                vec![data_type.clone(); 2],
++                datafusion_expr::Volatility::Immutable,
++            ),
++        };
++        for left_nullable in [false, true] {
++            for right_nullable in [false, true] {
++                let fields = [
++                    Arc::new(Field::new("a", data_type.clone(), left_nullable)),
++                    Arc::new(Field::new("b", data_type.clone(), right_nullable)),
++                ];
++                let result = udf.return_field_from_args(datafusion_expr::ReturnFieldArgs {
++                    arg_fields: &fields,
++                    scalar_arguments: &[None, None],
++                })?;
++                assert_eq!(result.is_nullable(), left_nullable || right_nullable);
++                assert_eq!(result.data_type(), &DataType::Int64);
++            }
++        }
++        let array = |values: Vec<Option<i64>>| -> ArrayRef {
++            datafusion::arrow::compute::cast(&Int64Array::from(values), &data_type).unwrap()
++        };
++        let run = |left, right, rows| {
++            udf.invoke_with_args(ScalarFunctionArgs {
++                args: vec![left, right],
++                number_rows: rows,
++                arg_fields: vec![Arc::new(Field::new("arg", data_type.clone(), true)); 2],
++                return_field: Arc::new(Field::new("r", DataType::Int64, true)),
++                config_options: Arc::new(ConfigOptions::default()),
++            })
++        };
++        let a = array(vec![
++            Some(99),
++            Some(min),
++            None,
++            Some(-7),
++            Some(7),
++            Some(0),
++            Some(max),
++        ])
++        .slice(1, 6);
++        let b = array(vec![
++            Some(99),
++            Some(-1),
++            Some(0),
++            Some(2),
++            None,
++            Some(-1),
++            Some(1),
++        ])
++        .slice(1, 6);
++        let output =
++            run(ColumnarValue::Array(a.clone()), ColumnarValue::Array(b), 6)?.into_array(6)?;
++        assert_eq!(
++            output
++                .as_primitive::<Int64Type>()
++                .iter()
++                .collect::<Vec<_>>(),
++            vec![Some(-min), None, Some(-3), None, Some(0), Some(max)]
++        );
++        for divisor in [-3, -2, -1, 1, 2, 3] {
++            let scalar = ScalarValue::try_from_array(&array(vec![Some(divisor)]), 0)?;
++            let output = run(
++                ColumnarValue::Array(a.clone()),
++                ColumnarValue::Scalar(scalar),
++                6,
++            )?
++            .into_array(6)?;
++            let expected = [Some(min), None, Some(-7), Some(7), Some(0), Some(max)]
++                .map(|a| a.map(|a| a / divisor));
++            assert_eq!(
++                output
++                    .as_primitive::<Int64Type>()
++                    .iter()
++                    .collect::<Vec<_>>(),
++                expected
++            );
++        }
++        let scalar =
++            |v| ColumnarValue::Scalar(ScalarValue::try_from_array(&array(vec![v]), 0).unwrap());
++        let b = array(vec![Some(-1), None, Some(2)]);
++        let output = run(scalar(Some(min)), ColumnarValue::Array(b.clone()), 3)?.into_array(3)?;
++        assert_eq!(
++            output
++                .as_primitive::<Int64Type>()
++                .iter()
++                .collect::<Vec<_>>(),
++            vec![Some(-min), None, Some(min / 2)]
++        );
++        for (left, right, rows) in [
++            (scalar(None), ColumnarValue::Array(b), 3),
++            (ColumnarValue::Array(a.clone()), scalar(None), 6),
++        ] {
++            let output = run(left, right, rows)?.into_array(rows)?;
++            assert_eq!(output.null_count(), output.len());
++        }
++        assert!(
++            matches!(run(scalar(Some(min)),scalar(Some(-1)),1)?,ColumnarValue::Scalar(ScalarValue::Int64(Some(v))) if v == -min)
++        );
++        assert!(matches!(
++            run(scalar(None), scalar(Some(0)), 1)?,
++            ColumnarValue::Scalar(ScalarValue::Int64(None))
++        ));
++        assert!(run(scalar(Some(1)), scalar(Some(0)), 1).is_err());
++        let empty = ColumnarValue::Array(a.slice(0, 0));
++        assert_eq!(run(empty, scalar(Some(0)), 0)?.into_array(0)?.len(), 0);
++        assert!(
++            run(
++                ColumnarValue::Array(a.clone()),
++                ColumnarValue::Array(a.slice(0, 1)),
++                6
++            )
++            .is_err()
++        );
++    }
++    Ok(())
++}
