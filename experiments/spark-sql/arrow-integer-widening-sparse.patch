@@ -1,0 +1,95 @@
+--- a/src/cast/mod.rs
++++ b/src/cast/mod.rs
+@@ -2474,17 +2474,19 @@
+     let from_type = const { &FROM::DATA_TYPE };
+     let to_type = const { &TO::DATA_TYPE };
+     // Every source value fits in these wider integer types, including null slots.
+-    // Use the infallible kernel so it can fill the output in one pass.
++    // Convert densely in one pass, or skip null slots in sparse arrays.
+     if from_type.is_integer()
+         && to_type.is_integer()
+         && std::mem::size_of::<FROM::Native>() < std::mem::size_of::<TO::Native>()
+         && (from_type.is_unsigned_integer() || to_type.is_signed_integer())
++    {
+         // ponytail: measured size/density cutoffs; retune with workload evidence.
+-        && (from.len() <= 128 || from.null_count() <= from.len() / 2)
+-    {
+-        return Ok(Arc::new(from.unary::<_, TO>(|value| {
+-            num_cast::<FROM::Native, TO::Native>(value).expect("lossless integer widening")
+-        })));
++        if from.len() <= 128 || from.null_count() <= from.len() / 2 {
++            return Ok(Arc::new(from.unary::<_, TO>(|value| {
++                num_cast::<FROM::Native, TO::Native>(value).expect("lossless integer widening")
++            })));
++        }
++        return Ok(Arc::new(cast_numeric_sparse::<FROM, TO>(from)));
+     }
+ 
+     if cast_options.safe {
+@@ -2494,6 +2496,34 @@
+         // If the value can't be casted to the `TO::Native`, return error
+         Ok(Arc::new(try_numeric_cast::<FROM, TO>(from)?))
+     }
++}
++
++// Called only for lossless integer widening with more than half null slots.
++// Keep sparse-buffer setup out of the dense path.
++#[inline(never)]
++fn cast_numeric_sparse<FROM, TO>(from: &PrimitiveArray<FROM>) -> PrimitiveArray<TO>
++where
++    FROM: ArrowPrimitiveType,
++    TO: ArrowPrimitiveType,
++    FROM::Native: NumCast,
++    TO::Native: NumCast,
++{
++    let input: &[FROM::Native] = from.values();
++    let nulls = from.nulls().unwrap().clone();
++    let mut values = vec![TO::Native::default(); input.len()];
++    nulls
++        .try_for_each_valid_idx(|index| {
++            // SAFETY: valid indices are bounded by nulls.len(), which equals
++            // input.len() and values.len() for this primitive array.
++            unsafe {
++                *values.get_unchecked_mut(index) =
++                    num_cast::<FROM::Native, TO::Native>(*input.get_unchecked(index))
++                        .expect("lossless integer widening");
++            }
++            Ok::<_, std::convert::Infallible>(())
++        })
++        .unwrap();
++    PrimitiveArray::new(values.into(), Some(nulls))
+ }
+ 
+ // Natural cast between numeric types
+@@ -7749,17 +7779,28 @@
+                     .cycle()
+                     .take(8211)
+                     .collect();
+-                for null_mode in 0..3 {
++                for null_mode in 0..4 {
+                     let nulls = match null_mode {
+                         0 => None,
+                         1 => Some(NullBuffer::from(
+                             (0..data.len()).map(|i| i % 5 != 0).collect::<Vec<_>>(),
+                         )),
++                        2 => Some(NullBuffer::from(
++                            (0..data.len())
++                                .map(|i| (i * 37) % 101 >= 51)
++                                .collect::<Vec<_>>(),
++                        )),
+                         _ => Some(NullBuffer::new_null(data.len())),
+                     };
+                     let array = PrimitiveArray::<$ty>::new(data.clone().into(), nulls);
+-                    for (offset, len) in [(0, data.len()), (1, data.len() - 2), (17, 8192), (1, 0)]
+-                    {
++                    for (offset, len) in [
++                        (0, data.len()),
++                        (1, data.len() - 2),
++                        (17, 8192),
++                        (1, 0),
++                        (1, 128),
++                        (17, 129),
++                    ] {
+                         let array = array.slice(offset, len);
+                         let values: Vec<_> = array.iter().map(|v| v.map(|v| v as i128)).collect();
+                         check::<Int8Type>(&array, &values, i8::MIN as i128, i8::MAX as i128);
