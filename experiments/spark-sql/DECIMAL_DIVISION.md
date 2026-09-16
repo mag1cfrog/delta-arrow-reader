@@ -2136,6 +2136,50 @@ The local numeric-CAST planning median changes from 694.4 to 702.5 microseconds,
 
 Apply this patch after `sail-div-null-cast.patch` with the preceding optional runtime and dependency overrides. Build both variants with the same expanded benchmark. Replay the Rust probe and `decimal_division.py` with `--cases experiments/spark-sql/div-null-numeric.jsonl`; the numeric comparison exits 1 for the 20 retained differences. The results artifact contains commands, reference/candidate captures, remaining differences, hashes, cause checks and raw timing/counter samples. The patch applies and reverses exactly. All 25 scratch paths and three cached executables were restored with fresh source timestamps. The default project build does not apply this patch.
 
+## Mixed Decimal and floating-point comparisons
+
+Starting from `8ca0f86`, [sail-float-decimal-compare.patch](sail-float-decimal-compare.patch) fixes filters such as `WHERE v = 2.5` when `v` is DOUBLE and contains NaN. Spark compares the operands as DOUBLE, while DataFusion first tries to cast the floating column to Decimal and fails on NaN. The shared resolver now follows Spark's [Decimal precision rule](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/DecimalPrecisionTypeCoercion.scala) for mixed binary comparisons. The same builder handles comparison operators, `equal_null`, `IS DISTINCT FROM`, `IS NOT DISTINCT FROM`, and the comparisons produced by BETWEEN and simple CASE.
+
+Native Arrow CAST handles the Decimal operand. A small Rust adapter normalizes the floating operand before the native comparison: both zero signs become positive zero, and all NaN signs/payloads become the canonical NaN. This preserves Spark's [floating comparison rules](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/util/SQLOrderingUtil.scala); Arrow's [comparison kernels](https://github.com/apache/arrow-rs/blob/58.4.0/arrow-ord/src/cmp.rs) use total ordering, which distinguishes zero signs. FLOAT widening shares the normalization pass, and a binary comparison evaluates each operand once. Scalars remain scalars, and arrays preserve their NULL masks. Other type pairs keep their existing expressions. The change adds no dependency, Python execution or physical plan node.
+
+The [192-query corpus](float-decimal-compare.jsonl) runs both ANSI modes against Spark 4.2.0. It covers both operand orders, all binary comparison spellings, NULL-safe predicates, finite rounding boundaries, infinities, signed NaNs, signed zeros, subnormals, filters, joins, CASE, BETWEEN, scalar subqueries, correlated EXISTS and different batch sizes. IN and projection-subquery cases remain explicit boundary checks. The corpus is locally designed, not a complete Spark or upstream CI suite.
+
+| Corpus | Before | After | Observations |
+| --- | ---: | ---: | ---: |
+| Preceding 25 numeric corpora | 4,516 | 4,528 | 4,708 |
+| New comparison corpus | 32 | 256 | 384 |
+| Combined | 4,548 | 4,784 | 5,092 |
+
+No previously matching observation regresses. The original numeric-CAST corpus improves from 568/588 to 580/588, repairing all twelve mixed-comparison filter observations. Four additional ANSI filters now report the intended integer `CAST_OVERFLOW` cause instead of failing on an implicit Decimal conversion. The audit preserves 379 earlier focused checks, 117 string-CAST errors and 106 numeric-CAST errors. It records 4,687 identical old observations, including values, types, plans and complete errors; 5 multi-invalid-row captures select a different first bad value with the same CAST class, target and plans.
+
+The preceding corpora retain 180 coarse differences. The new corpus retains 128: 112 observations repeat a native high-scale Decimal-to-DOUBLE rounding difference, eight concern IN-list coercion, and four each concern EXISTS and IN subqueries inside projections. For example, `CAST(CAST('9007199254740993' AS DECIMAL(38,18)) AS DOUBLE)` returns `9007199254740992` in Spark and `9007199254740994` in the existing Arrow path. The standalone diagnostic reproduces this before and after the patch. Arrow [converts the coefficient to floating point before dividing by the scale factor](https://github.com/apache/arrow-rs/blob/58.4.0/arrow-cast/src/cast/mod.rs); Spark [converts through BigDecimal](https://github.com/apache/spark/blob/v4.2.0/sql/api/src/main/scala/org/apache/spark/sql/types/Decimal.scala). That CAST path needs a separate fix. Five older error-cause gaps, four empty-subquery cause gaps and four wrapped-sort diagnostics also remain. Counts describe observations, not independent bugs or complete compatibility.
+
+Validation passes 24 Rust planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 exact rows, 116 Delta baseline comparisons and 18 adapter checks. All 66 benchmark queries validate every output row. The eight new comparison observations change their physical plans; the other 58 preserve theirs. Both variants use the same expanded benchmark, dependencies/features, release profiles, lockfile and Arrow libraries.
+
+Measurements use CPU 2, four ABBA blocks, eight processes per variant/case/phase, two warmups and nine samples, for 416 processes. Planning and execution counters cover separate intervals. Negative percentages mean less time or fewer instructions.
+
+| Case | Planning time | Planning instructions | Execution time | Execution instructions |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT and Decimal columns | +4.76% | +4.76% | -35.83% | -35.30% |
+| DOUBLE and Decimal columns | +5.20% | +4.83% | -35.71% | -37.65% |
+| DOUBLE column and Decimal literal | +4.54% | +3.91% | -64.55% | -63.67% |
+| Decimal column and DOUBLE literal | +4.91% | +6.42% | +98.60% | +92.48% |
+| Integer-to-Decimal control | +0.86% | -0.11% | -0.09% | +0.00% |
+| Decimal division control | +0.40% | +0.01% | +0.35% | +0.00% |
+| Negative Decimal divisor | +0.65% | -0.01% | +0.19% | -0.00% |
+| Decimal i256 fallback | -0.30% | +0.02% | -12.07% | -6.15% |
+| BIGINT DIV column/literal | -1.01% | -0.24% | +0.79% | -0.01% |
+| Constant INT DIV | -0.79% | -0.00% | +0.67% | +0.00% |
+| NULL DIV local numeric CAST | +0.23% | +0.04% | -1.75% | +0.01% |
+| NULL Decimal subquery | -0.07% | -0.04% | -0.75% | +1.37% |
+| Correlated COUNT division | +0.63% | -0.05% | +3.13% | +0.00% |
+
+The Decimal-column/DOUBLE-literal case retains a measured local regression: execution changes from 3.268 to 6.491 ms per 1,048,576 rows (+98.60%), with +92.48% instructions. Its old plan converted only the literal to Decimal; the new plan casts the Decimal column to DOUBLE for every row. The floating normalization call folds away in this case. The three cases with floating columns execute about 36-65% faster because they avoid converting those columns to Decimal. All four mixed-comparison queries take about 22.1-25.6 additional microseconds to plan; the before/after timing ranges do not overlap for these targets.
+
+Ordinary Decimal division changes by +0.35% in execution time with nearly unchanged instructions; its process-median ranges overlap. Correlated COUNT changes by +3.13%, also with overlapping ranges and nearly unchanged instructions. The i256 control improves in this build even though its source and physical plan are unchanged; that observation does not establish a general division speedup from the comparison rule. These results do not establish zero overhead. The local Decimal-column conversion cost remains a follow-up alongside its precision issue. NULL-heavy comparison throughput, large comparison trees, Delta I/O, predicate pushdown and concurrency were not timed. Earlier unattributed buffer-policy differences around 0.4%-0.7% remain outside this comparison.
+
+The [results artifact](float-decimal-compare-results.json) contains raw captures, remaining case IDs and causes, standalone CAST diagnostics, commands, hashes, timing samples and counters. Apply this patch after `sail-div-null-numeric.patch` with the preceding optional runtime and dependency overrides. Use the same expanded benchmark in both builds. Replay `decimal_probe` and `decimal_division.py` with `--cases experiments/spark-sql/float-decimal-compare.jsonl`; the comparison exits 1 for the 128 retained differences. The patch applies and reverses exactly. All 26 scratch source paths and three cached executables were restored with fresh source timestamps. The default project build does not apply this patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

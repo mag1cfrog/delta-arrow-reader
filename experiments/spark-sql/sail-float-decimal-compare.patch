@@ -1,0 +1,319 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -138,14 +138,10 @@
+         Arc::new(
+             move |ScalarFunctionInput {
+                       arguments,
+-                      function_context: _,
++                      function_context,
+                   }| {
+                 let (left, right) = arguments.two()?;
+-                Ok(expr::Expr::BinaryExpr(BinaryExpr {
+-                    left: Box::new(left),
+-                    op,
+-                    right: Box::new(right),
+-                }))
++                spark_binary_expr(left, op, right, function_context.schema)
+             },
+         )
+     }
+@@ -211,6 +207,190 @@
+     }
+ }
+ 
++pub(crate) fn spark_binary_expr(
++    mut left: expr::Expr,
++    op: Operator,
++    mut right: expr::Expr,
++    schema: &DFSchemaRef,
++) -> PlanResult<expr::Expr> {
++    if matches!(
++        op,
++        Operator::Eq
++            | Operator::NotEq
++            | Operator::Lt
++            | Operator::LtEq
++            | Operator::Gt
++            | Operator::GtEq
++            | Operator::IsDistinctFrom
++            | Operator::IsNotDistinctFrom
++    ) {
++        let left_type = left.get_type(schema)?;
++        let right_type = right.get_type(schema)?;
++        // Spark compares Decimal/float pairs as DOUBLE. Arrow's total ordering
++        // also needs canonical NaNs and positive zero on the floating side.
++        if left_type.is_floating() && right_type.is_decimal() {
++            left = ScalarUDF::from(SparkComparisonFloat).call(vec![left]);
++            right = cast(right, DataType::Float64);
++        } else if left_type.is_decimal() && right_type.is_floating() {
++            left = cast(left, DataType::Float64);
++            right = ScalarUDF::from(SparkComparisonFloat).call(vec![right]);
++        }
++    }
++    Ok(expr::Expr::BinaryExpr(BinaryExpr::new(
++        Box::new(left),
++        op,
++        Box::new(right),
++    )))
++}
++
++#[derive(Debug, PartialEq, Eq, Hash)]
++struct SparkComparisonFloat;
++
++impl ScalarUDFImpl for SparkComparisonFloat {
++    fn name(&self) -> &str {
++        "spark_comparison_float"
++    }
++
++    fn signature(&self) -> &datafusion_expr::Signature {
++        static SIGNATURE: std::sync::LazyLock<datafusion_expr::Signature> =
++            std::sync::LazyLock::new(|| {
++                datafusion_expr::Signature::uniform(
++                    1,
++                    vec![DataType::Float32, DataType::Float64],
++                    datafusion_expr::Volatility::Immutable,
++                )
++            });
++        &SIGNATURE
++    }
++
++    fn return_type(&self, _: &[DataType]) -> datafusion_common::Result<DataType> {
++        Ok(DataType::Float64)
++    }
++
++    fn return_field_from_args(
++        &self,
++        args: datafusion_expr::ReturnFieldArgs,
++    ) -> datafusion_common::Result<arrow::datatypes::FieldRef> {
++        Ok(Arc::new(arrow::datatypes::Field::new(
++            self.name(),
++            DataType::Float64,
++            args.arg_fields[0].is_nullable(),
++        )))
++    }
++
++    fn invoke_with_args(
++        &self,
++        input: datafusion_expr::ScalarFunctionArgs,
++    ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
++        use arrow::array::AsArray;
++        use arrow::datatypes::{Float32Type, Float64Type};
++        use datafusion_expr::ColumnarValue;
++        // Fuse FLOAT widening with normalization; evaluate the operand once.
++        let normalize = |v: f64| {
++            if v == 0.0 {
++                0.0
++            } else if v.is_nan() {
++                f64::NAN
++            } else {
++                v
++            }
++        };
++        let [value] = datafusion_common::utils::take_function_args(self.name(), input.args)?;
++        Ok(match value {
++            ColumnarValue::Scalar(ScalarValue::Float32(v)) => {
++                ColumnarValue::Scalar(ScalarValue::Float64(v.map(|v| normalize(f64::from(v)))))
++            }
++            ColumnarValue::Scalar(ScalarValue::Float64(v)) => {
++                ColumnarValue::Scalar(ScalarValue::Float64(v.map(normalize)))
++            }
++            ColumnarValue::Array(a) if a.data_type() == &DataType::Float32 => {
++                ColumnarValue::Array(Arc::new(
++                    a.as_primitive::<Float32Type>()
++                        .unary::<_, Float64Type>(|v| normalize(f64::from(v))),
++                ))
++            }
++            ColumnarValue::Array(a) if a.data_type() == &DataType::Float64 => {
++                ColumnarValue::Array(Arc::new(
++                    a.as_primitive::<Float64Type>()
++                        .unary::<_, Float64Type>(normalize),
++                ))
++            }
++            _ => {
++                return datafusion_common::internal_err!(
++                    "expected FLOAT or DOUBLE comparison operand"
++                );
++            }
++        })
++    }
++}
++
++#[test]
++fn comparison_float_preserves_values_nulls_and_shapes() -> datafusion_common::Result<()> {
++    use arrow::array::{Array, ArrayRef, AsArray, Float32Array, Float64Array};
++    use arrow::datatypes::{Field, Float64Type};
++    use datafusion_common::config::ConfigOptions;
++    use datafusion_expr::{ColumnarValue, ScalarFunctionArgs};
++    let run = |value: ColumnarValue, rows| {
++        SparkComparisonFloat.invoke_with_args(ScalarFunctionArgs {
++            arg_fields: vec![Arc::new(Field::new("x", value.data_type(), true))],
++            args: vec![value],
++            number_rows: rows,
++            return_field: Arc::new(Field::new("x", DataType::Float64, true)),
++            config_options: Arc::new(ConfigOptions::default()),
++        })
++    };
++    let values = [
++        Some(-0.0),
++        Some(0.0),
++        None,
++        Some(-0.1),
++        Some(0.1),
++        Some(f64::INFINITY),
++        Some(f64::NEG_INFINITY),
++        Some(f64::NAN),
++        Some(-f64::NAN),
++        Some(f64::from_bits(0x7ff0_0000_0000_0001)),
++        Some(f64::from_bits(0xfff0_0000_0000_1234)),
++        Some(1e-40),
++        Some(-1e-40),
++    ];
++    let arrays: [ArrayRef; 2] = [
++        Arc::new(Float32Array::from_iter(values.map(|v| v.map(|v| v as f32)))),
++        Arc::new(Float64Array::from_iter(values)),
++    ];
++    for input in arrays {
++        for (offset, len) in [(0, values.len()), (1, 10), (0, 0)] {
++            let input = input.slice(offset, len);
++            let output = run(ColumnarValue::Array(input.clone()), len)?.into_array(len)?;
++            let actual = output.as_primitive::<Float64Type>();
++            let widened = arrow::compute::cast(&input, &DataType::Float64)?;
++            for (i, value) in widened.as_primitive::<Float64Type>().iter().enumerate() {
++                let expected = value.map(|v| {
++                    if v.is_nan() {
++                        f64::NAN.to_bits()
++                    } else if v == 0.0 {
++                        0
++                    } else {
++                        v.to_bits()
++                    }
++                });
++                assert_eq!(actual.is_null(i), expected.is_none());
++                if let Some(bits) = expected {
++                    assert_eq!(actual.value(i).to_bits(), bits);
++                }
++                let scalar = ScalarValue::try_from_array(&input, i)?;
++                let ColumnarValue::Scalar(ScalarValue::Float64(result)) =
++                    run(ColumnarValue::Scalar(scalar), 1)?
++                else {
++                    panic!("expected scalar")
++                };
++                assert_eq!(result.map(f64::to_bits), expected);
++            }
++        }
++    }
++    Ok(())
++}
++
+ /// Aggregate function input components, excluding the function name.
+ ///
+ /// Populated by the resolver from `spec::UnresolvedFunction` after resolving spec expressions
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -9,7 +9,7 @@
+ };
+ 
+ use arrow::{
+-    array::{Array, ArrayRef, Decimal128Array, Float64Array, Int64Array},
++    array::{Array, ArrayRef, Decimal128Array, Float32Array, Float64Array, Int64Array},
+     datatypes::{DataType, Field, Schema},
+     record_batch::RecordBatch,
+     util::display::array_value_to_string,
+@@ -138,6 +138,8 @@
+         Field::new("id", DataType::Int64, false),
+         Field::new("k", DataType::Int64, false),
+         Field::new("a", DataType::Decimal128(18, 4), false),
++        Field::new("f32", DataType::Float32, false),
++        Field::new("f64", DataType::Float64, false),
+     ];
+     for (name, data_type) in &integer_types {
+         fields.push(Field::new(format!("{name}_a"), data_type.clone(), true));
+@@ -156,6 +158,12 @@
+                 )
+                 .with_precision_and_scale(18, 4)?,
+             ),
++            Arc::new(Float32Array::from_iter_values(
++                ids.clone().map(|i| ((i % 97 + 2) as f64 / 100.0 + 0.125) as f32),
++            )),
++            Arc::new(Float64Array::from_iter_values(
++                ids.clone().map(|i| (i % 97 + 2) as f64 / 100.0 + 0.125),
++            )),
+         ];
+         let a = Int64Array::from_iter(ids.clone().map(|i| (i % 10 != 9).then_some(i % 97 - 48)));
+         let b = Int64Array::from_iter(ids.map(|i| (i % 13 != 12).then_some(i % 7 + 1)));
+@@ -233,6 +241,9 @@
+         | "div_null_cast_column"
+         | "div_null_cast_numeric" => None,
+         "div_constant" => Some(3_000_000),
++        "compare_f32_column" | "compare_f64_column" => Some(1_000_000),
++        "compare_f64_literal" => Some(i128::from(id % 97 + 2 >= 38) * 1_000_000),
++        "compare_decimal_literal" => Some(i128::from(id % 97 + 2 <= 50) * 1_000_000),
+         _ => unreachable!("unknown benchmark case"),
+     }
+ }
+@@ -325,6 +336,10 @@
+         ),
+         ("round_decimal", "ROUND(o.a, 2)".into(), "".into(), false),
+         ("div_integer", "o.id DIV 4".into(), "".into(), false),
++        ("compare_f32_column", "CAST(o.f32 > o.a AS INT)".into(), "".into(), false),
++        ("compare_f64_column", "CAST(o.f64 > o.a AS INT)".into(), "".into(), false),
++        ("compare_f64_literal", "CAST(o.f64 >= 0.5 AS INT)".into(), "".into(), false),
++        ("compare_decimal_literal", "CAST(o.a < CAST(0.505 AS DOUBLE) AS INT)".into(), "".into(), false),
+         ("div_constant", "CAST(7 AS INT) DIV CAST(2 AS INT)".into(), "".into(), false),
+         (
+             "div_null_cast_values",
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/predicate.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/predicate.rs
+@@ -4,6 +4,7 @@
+ use sail_common::spec;
+ 
+ use crate::error::PlanResult;
++use crate::function::common::spark_binary_expr;
+ use crate::resolver::PlanResolver;
+ use crate::resolver::expression::NamedExpr;
+ use crate::resolver::state::PlanResolverState;
+@@ -145,16 +146,8 @@
+         let high = self.resolve_expression(high, schema, state).await?;
+ 
+         // DataFusion's BETWEEN operator has a bug, so we construct the expression manually.
+-        let greater_eq = expr::Expr::BinaryExpr(BinaryExpr::new(
+-            Box::new(expr.clone()),
+-            Operator::GtEq,
+-            Box::new(low),
+-        ));
+-        let less_eq = expr::Expr::BinaryExpr(BinaryExpr::new(
+-            Box::new(expr),
+-            Operator::LtEq,
+-            Box::new(high),
+-        ));
++        let greater_eq = spark_binary_expr(expr.clone(), Operator::GtEq, low, schema)?;
++        let less_eq = spark_binary_expr(expr, Operator::LtEq, high, schema)?;
+         let between_expr = expr::Expr::BinaryExpr(BinaryExpr::new(
+             Box::new(greater_eq),
+             Operator::And,
+@@ -179,11 +172,7 @@
+         let right = self.resolve_expression(right, schema, state).await?;
+         Ok(NamedExpr::new(
+             vec!["is_distinct_from".to_string()],
+-            expr::Expr::BinaryExpr(BinaryExpr {
+-                left: Box::new(left),
+-                op: Operator::IsDistinctFrom,
+-                right: Box::new(right),
+-            }),
++            spark_binary_expr(left, Operator::IsDistinctFrom, right, schema)?,
+         ))
+     }
+ 
+@@ -198,11 +187,7 @@
+         let right = self.resolve_expression(right, schema, state).await?;
+         Ok(NamedExpr::new(
+             vec!["is_not_distinct_from".to_string()],
+-            expr::Expr::BinaryExpr(BinaryExpr {
+-                left: Box::new(left),
+-                op: Operator::IsNotDistinctFrom,
+-                right: Box::new(right),
+-            }),
++            spark_binary_expr(left, Operator::IsNotDistinctFrom, right, schema)?,
+         ))
+     }
+ 
