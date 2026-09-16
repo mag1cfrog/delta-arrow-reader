@@ -2092,6 +2092,50 @@ The local string-CAST planning median changes from 669.4 to 675.0 microseconds. 
 
 Apply this patch after `sail-div-evaluation.patch` with the preceding optional runtime and dependency overrides. Build both variants with the same expanded benchmark. Replay the Rust probe and `decimal_division.py` with `--cases experiments/spark-sql/div-null-cast.jsonl`; the numeric comparison exits 1 for the 29 retained differences. The results artifact contains the commands, reference/candidate captures, remaining differences, source/binary hashes, cause checks and raw timing/counter samples. The patch applies and reverses exactly. All 25 scratch paths and three cached executables were restored with fresh source timestamps. The default project build does not apply this patch.
 
+## NULL integer DIV and local numeric-column casts
+
+Starting from `e3b419d`, [sail-div-null-numeric.patch](sail-div-null-numeric.patch) preserves numeric CAST failures in direct local projections such as `SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)`. Spark raises `CAST_OVERFLOW`; the preceding runtime returns NULL. The existing Rust analyzer now checks strict numeric-column cast chains as well as string-column casts over local VALUES. Native CAST still handles conversion, and successful prechecks return immediately.
+
+One boundary needs special treatment. Spark's [exact numeric conversions](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/types/numerics.scala) compare floating inputs with a floating `Long.MaxValue`, which rounds to `2^63`. Spark accepts that endpoint and saturates it to BIGINT maximum; Arrow rejects it. After a native precheck fails, a native CASE handles exactly this endpoint in the discarded precheck. NaN, Infinity, values above the endpoint and overflow in subsequent narrowing casts still fail. The query's runtime expression and physical plan remain unchanged, and this patch does not change ordinary runtime CAST semantics.
+
+The first numeric-CAST candidate slowed ordinary Decimal division by 3.6% in a repeated control, despite an unchanged physical plan. Its compiled `FusedDecimalDivide::invoke_with_args` function grew from 7,340 to 8,847 bytes. The final patch moves only i256 fallback arithmetic into a separate function, leaving the i128 path available for inlining into the array loop. After checked division succeeds, `abs(quotient * divisor) <= abs(numerator)` and `abs(remainder) < abs(divisor)`, so reconstructing the remainder needs no repeated multiplication/subtraction overflow checks. Rounding moves away from zero, so a quotient outside i128 cannot become representable through rounding. The final helper returns the rounded scalar directly, and the compiled execution function is 5,196 bytes. The new wide benchmark uses `DECIMAL(38,34)` as divisor to force the i256 path and verifies all output rows against the ordinary division result.
+
+The [294-query corpus](div-null-numeric.jsonl) runs both ANSI modes across TINYINT, SMALLINT, INT and BIGINT targets. It covers FLOAT, DOUBLE, Decimal and BIGINT sources, representable neighbours around floating boundaries, fractions, NULLs, mixed rows, cast chains, operand reversal, TRY_CAST, filters, limits, offsets, unused outputs and conditional parents.
+
+| Corpus | Before | After | Observations |
+| --- | ---: | ---: | ---: |
+| Preceding 21 numeric corpora | 2,959 | 2,959 | 3,076 |
+| Integer NULL/zero corpus | 158 | 158 | 158 |
+| Constant-evaluation corpus | 314 | 314 | 350 |
+| Local string-CAST corpus | 507 | 517 | 536 |
+| New local numeric-CAST corpus | 472 | 568 | 588 |
+| Combined | 4,410 | 4,516 | 4,708 |
+
+No previously matching observation regresses. All 106 repairs have Spark's `CAST_OVERFLOW` cause and a corresponding native integer CAST error with the same target width. The preceding 24 corpora retain 172 differences. The new corpus retains 20: eight under conditional or NULL parents and twelve in DOUBLE/Decimal filter coercion. For example, `v = 2.5` can cast a DOUBLE column containing NaN to Decimal and fail before DIV; an explicit DOUBLE comparison passes the intended filter checks. Four ANSI filter cases also report the wrong error cause despite matching the coarse error stage. These are recorded separately from the 20. Counts describe observations, not independent bugs or complete Spark compatibility.
+
+The diagnostic audit preserves 379 earlier focused checks and all 117 preceding string-CAST repairs. It records 4,597 identical observations, including values, types, plans and complete errors. 5 unchanged Decimal-conversion failures select a different first invalid row across partitions, retaining the error class, target type and plans. The five older cause gaps, four empty-subquery cause gaps and four wrapped-sort diagnostics remain.
+
+Validation passes 23 Rust planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 exact rows, 116 Delta comparisons and 18 adapter checks. All 58 benchmark queries retain identical results and physical plans. Measurements use Rust 1.97.1. Both variants use the same expanded benchmark, dependency identities/features, profiles, lockfile and Arrow libraries.
+
+Measurements use CPU 2, four ABBA blocks, eight processes per variant/case/phase, two warmups and nine samples. Planning and execution counters are gated separately, for 320 processes. Negative values mean less time or fewer instructions.
+
+| Case | Planning time | Planning instructions | Execution time | Execution instructions |
+| --- | ---: | ---: | ---: | ---: |
+| Integer-to-Decimal control | +0.35% | +0.01% | -0.27% | +0.00% |
+| Decimal division control | -0.26% | +0.00% | -6.49% | -3.27% |
+| Negative Decimal divisor | +0.29% | +0.02% | -6.42% | -3.24% |
+| Decimal i256 fallback | +1.93% | +0.03% | -14.95% | -9.54% |
+| BIGINT DIV column/literal | +2.52% | +0.01% | -0.10% | -0.00% |
+| Constant INT DIV | -0.12% | +0.01% | +0.85% | +0.25% |
+| NULL DIV local numeric CAST | +1.18% | +0.96% | -1.95% | +0.00% |
+| NULL DIV integer-column CAST control | -0.05% | +0.16% | -0.06% | +0.19% |
+| NULL Decimal subquery | -0.55% | +0.01% | -0.14% | +0.00% |
+| Correlated COUNT division | -0.73% | +0.00% | -2.57% | +0.00% |
+
+The local numeric-CAST planning median changes from 694.4 to 702.5 microseconds, a change of +8.2 microseconds with +0.96% instructions. The integer-column control over a table changes by -0.05% in planning time and +0.16% in instructions. Execution median changes range from -14.95% to +0.85%. Before/after process-median ranges overlap in 16 of 20 case/phase comparisons. See [div-null-numeric-results.json](div-null-numeric-results.json) for raw medians and counters. These results do not establish zero overhead. Large VALUES inputs, failed-cast/endpoint retries, Delta I/O and concurrency were not timed separately; the older 0.4%-0.7% buffer-policy timing difference remains unresolved by this measurement.
+
+Apply this patch after `sail-div-null-cast.patch` with the preceding optional runtime and dependency overrides. Build both variants with the same expanded benchmark. Replay the Rust probe and `decimal_division.py` with `--cases experiments/spark-sql/div-null-numeric.jsonl`; the numeric comparison exits 1 for the 20 retained differences. The results artifact contains commands, reference/candidate captures, remaining differences, hashes, cause checks and raw timing/counter samples. The patch applies and reverses exactly. All 25 scratch paths and three cached executables were restored with fresh source timestamps. The default project build does not apply this patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

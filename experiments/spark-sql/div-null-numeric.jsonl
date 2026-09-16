@@ -1,0 +1,294 @@
+{"id": "tinyint_float_zero", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('0' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_one", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('1' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_min", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-128' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_max", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_below", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-129' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_above", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('128' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('2.75' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_negative_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-2.75' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_min_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-128.75' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_max_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127.75' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_nan", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('NaN' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_infinity", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('Infinity' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_negative_infinity", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-Infinity' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_upper_adjacent_0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127.99999237060547' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_upper_adjacent_1", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('128.00001525878906' AS FLOAT)) t(v)"}
+{"id": "tinyint_float_null", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST(NULL AS FLOAT)) t(v)"}
+{"id": "tinyint_double_zero", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_one", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('1' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_min", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-128' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_max", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_below", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-129' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_above", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('128' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('2.75' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_negative_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-2.75' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_min_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-128.75' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_max_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127.75' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_nan", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_infinity", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('Infinity' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_negative_infinity", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-Infinity' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_upper_adjacent_0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127.99999999999999' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_upper_adjacent_1", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('128.00000000000003' AS DOUBLE)) t(v)"}
+{"id": "tinyint_double_null", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST(NULL AS DOUBLE)) t(v)"}
+{"id": "tinyint_decimal_zero", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('0' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_one", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('1' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_min", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-128' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_max", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_below", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-129' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_above", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('128' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('2.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_negative_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-2.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_min_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-128.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_max_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_decimal_null", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST(NULL AS DECIMAL(38,2))) t(v)"}
+{"id": "tinyint_bigint_zero", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('0' AS BIGINT)) t(v)"}
+{"id": "tinyint_bigint_one", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('1' AS BIGINT)) t(v)"}
+{"id": "tinyint_bigint_min", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-128' AS BIGINT)) t(v)"}
+{"id": "tinyint_bigint_max", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('127' AS BIGINT)) t(v)"}
+{"id": "tinyint_bigint_below", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('-129' AS BIGINT)) t(v)"}
+{"id": "tinyint_bigint_above", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('128' AS BIGINT)) t(v)"}
+{"id": "tinyint_bigint_null", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST(NULL AS BIGINT)) t(v)"}
+{"id": "tinyint_function", "sql": "SELECT div(CAST(NULL AS TINYINT), CAST(v AS TINYINT)) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_reverse", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_try_cast", "sql": "SELECT CAST(NULL AS TINYINT) DIV TRY_CAST(v AS TINYINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) WHERE false"}
+{"id": "tinyint_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) LIMIT 0"}
+{"id": "tinyint_input_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) LIMIT 0) t"}
+{"id": "tinyint_input_limit1", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) LIMIT 1) t"}
+{"id": "tinyint_input_offset1", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES (CAST('NaN' AS DOUBLE)), (CAST('2.5' AS DOUBLE)) t(v) OFFSET 1) t"}
+{"id": "tinyint_range", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT CAST('NaN' AS DOUBLE) + CAST(id AS DOUBLE) AS v FROM range(2)) t"}
+{"id": "tinyint_unused", "sql": "SELECT 1 AS q FROM (SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS unused FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)) t"}
+{"id": "tinyint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_live_case", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_coalesce", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT)) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_parent_null", "sql": "SELECT (CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT)) * CAST(NULL AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_multirow", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)), (NULL), (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "tinyint_filter_good", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v = 2.5"}
+{"id": "tinyint_filter_bad", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v <> 2.5"}
+{"id": "tinyint_filter_good_double", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v = CAST(2.5 AS DOUBLE)"}
+{"id": "tinyint_filter_bad_double", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v <> CAST(2.5 AS DOUBLE)"}
+{"id": "tinyint_endpoint_mixed", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('2.5' AS DOUBLE)), (NULL), (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "tinyint_endpoint_mixed_bad", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_endpoint_mixed_chain", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(CAST(v AS BIGINT) AS TINYINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('2.5' AS DOUBLE)), (NULL) t(v)"}
+{"id": "tinyint_cast_chain", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(CAST(v AS BIGINT) AS TINYINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_long_endpoint_chain", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(CAST(v AS BIGINT) AS TINYINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)) t(v)"}
+{"id": "smallint_float_zero", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('0' AS FLOAT)) t(v)"}
+{"id": "smallint_float_one", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('1' AS FLOAT)) t(v)"}
+{"id": "smallint_float_min", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32768' AS FLOAT)) t(v)"}
+{"id": "smallint_float_max", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767' AS FLOAT)) t(v)"}
+{"id": "smallint_float_below", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32769' AS FLOAT)) t(v)"}
+{"id": "smallint_float_above", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32768' AS FLOAT)) t(v)"}
+{"id": "smallint_float_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('2.75' AS FLOAT)) t(v)"}
+{"id": "smallint_float_negative_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-2.75' AS FLOAT)) t(v)"}
+{"id": "smallint_float_min_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32768.75' AS FLOAT)) t(v)"}
+{"id": "smallint_float_max_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767.75' AS FLOAT)) t(v)"}
+{"id": "smallint_float_nan", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('NaN' AS FLOAT)) t(v)"}
+{"id": "smallint_float_infinity", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('Infinity' AS FLOAT)) t(v)"}
+{"id": "smallint_float_negative_infinity", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-Infinity' AS FLOAT)) t(v)"}
+{"id": "smallint_float_upper_adjacent_0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767.998046875' AS FLOAT)) t(v)"}
+{"id": "smallint_float_upper_adjacent_1", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32768.00390625' AS FLOAT)) t(v)"}
+{"id": "smallint_float_null", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST(NULL AS FLOAT)) t(v)"}
+{"id": "smallint_double_zero", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_one", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('1' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_min", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32768' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_max", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_below", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32769' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_above", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32768' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('2.75' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_negative_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-2.75' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_min_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32768.75' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_max_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767.75' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_nan", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_infinity", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('Infinity' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_negative_infinity", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-Infinity' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_upper_adjacent_0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767.999999999996' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_upper_adjacent_1", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32768.00000000001' AS DOUBLE)) t(v)"}
+{"id": "smallint_double_null", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST(NULL AS DOUBLE)) t(v)"}
+{"id": "smallint_decimal_zero", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('0' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_one", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('1' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_min", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32768' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_max", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_below", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32769' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_above", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32768' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('2.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_negative_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-2.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_min_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32768.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_max_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_decimal_null", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST(NULL AS DECIMAL(38,2))) t(v)"}
+{"id": "smallint_bigint_zero", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('0' AS BIGINT)) t(v)"}
+{"id": "smallint_bigint_one", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('1' AS BIGINT)) t(v)"}
+{"id": "smallint_bigint_min", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32768' AS BIGINT)) t(v)"}
+{"id": "smallint_bigint_max", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32767' AS BIGINT)) t(v)"}
+{"id": "smallint_bigint_below", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('-32769' AS BIGINT)) t(v)"}
+{"id": "smallint_bigint_above", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('32768' AS BIGINT)) t(v)"}
+{"id": "smallint_bigint_null", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST(NULL AS BIGINT)) t(v)"}
+{"id": "smallint_function", "sql": "SELECT div(CAST(NULL AS SMALLINT), CAST(v AS SMALLINT)) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_reverse", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_try_cast", "sql": "SELECT CAST(NULL AS SMALLINT) DIV TRY_CAST(v AS SMALLINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) WHERE false"}
+{"id": "smallint_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) LIMIT 0"}
+{"id": "smallint_input_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) LIMIT 0) t"}
+{"id": "smallint_input_limit1", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) LIMIT 1) t"}
+{"id": "smallint_input_offset1", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES (CAST('NaN' AS DOUBLE)), (CAST('2.5' AS DOUBLE)) t(v) OFFSET 1) t"}
+{"id": "smallint_range", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT CAST('NaN' AS DOUBLE) + CAST(id AS DOUBLE) AS v FROM range(2)) t"}
+{"id": "smallint_unused", "sql": "SELECT 1 AS q FROM (SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS unused FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)) t"}
+{"id": "smallint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_live_case", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_coalesce", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT)) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_parent_null", "sql": "SELECT (CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT)) * CAST(NULL AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_multirow", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)), (NULL), (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "smallint_filter_good", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v = 2.5"}
+{"id": "smallint_filter_bad", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v <> 2.5"}
+{"id": "smallint_filter_good_double", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v = CAST(2.5 AS DOUBLE)"}
+{"id": "smallint_filter_bad_double", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v <> CAST(2.5 AS DOUBLE)"}
+{"id": "smallint_endpoint_mixed", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('2.5' AS DOUBLE)), (NULL), (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "smallint_endpoint_mixed_bad", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_endpoint_mixed_chain", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(CAST(v AS BIGINT) AS SMALLINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('2.5' AS DOUBLE)), (NULL) t(v)"}
+{"id": "smallint_cast_chain", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(CAST(v AS BIGINT) AS SMALLINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_long_endpoint_chain", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(CAST(v AS BIGINT) AS SMALLINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)) t(v)"}
+{"id": "int_float_zero", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('0' AS FLOAT)) t(v)"}
+{"id": "int_float_one", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('1' AS FLOAT)) t(v)"}
+{"id": "int_float_min", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483648' AS FLOAT)) t(v)"}
+{"id": "int_float_max", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483647' AS FLOAT)) t(v)"}
+{"id": "int_float_below", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483649' AS FLOAT)) t(v)"}
+{"id": "int_float_above", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483648' AS FLOAT)) t(v)"}
+{"id": "int_float_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.75' AS FLOAT)) t(v)"}
+{"id": "int_float_negative_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2.75' AS FLOAT)) t(v)"}
+{"id": "int_float_min_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483648.75' AS FLOAT)) t(v)"}
+{"id": "int_float_max_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483647.75' AS FLOAT)) t(v)"}
+{"id": "int_float_nan", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('NaN' AS FLOAT)) t(v)"}
+{"id": "int_float_infinity", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('Infinity' AS FLOAT)) t(v)"}
+{"id": "int_float_negative_infinity", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-Infinity' AS FLOAT)) t(v)"}
+{"id": "int_float_upper_adjacent_0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483520.0' AS FLOAT)) t(v)"}
+{"id": "int_float_upper_adjacent_1", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483904.0' AS FLOAT)) t(v)"}
+{"id": "int_float_null", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST(NULL AS FLOAT)) t(v)"}
+{"id": "int_double_zero", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "int_double_one", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('1' AS DOUBLE)) t(v)"}
+{"id": "int_double_min", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483648' AS DOUBLE)) t(v)"}
+{"id": "int_double_max", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483647' AS DOUBLE)) t(v)"}
+{"id": "int_double_below", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483649' AS DOUBLE)) t(v)"}
+{"id": "int_double_above", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483648' AS DOUBLE)) t(v)"}
+{"id": "int_double_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.75' AS DOUBLE)) t(v)"}
+{"id": "int_double_negative_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2.75' AS DOUBLE)) t(v)"}
+{"id": "int_double_min_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483648.75' AS DOUBLE)) t(v)"}
+{"id": "int_double_max_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483647.75' AS DOUBLE)) t(v)"}
+{"id": "int_double_nan", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_double_infinity", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('Infinity' AS DOUBLE)) t(v)"}
+{"id": "int_double_negative_infinity", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-Infinity' AS DOUBLE)) t(v)"}
+{"id": "int_double_upper_adjacent_0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483647.9999998' AS DOUBLE)) t(v)"}
+{"id": "int_double_upper_adjacent_1", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483648.0000005' AS DOUBLE)) t(v)"}
+{"id": "int_double_null", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST(NULL AS DOUBLE)) t(v)"}
+{"id": "int_decimal_zero", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('0' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_one", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('1' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_min", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483648' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_max", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483647' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_below", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483649' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_above", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483648' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_negative_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_min_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483648.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_max_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483647.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "int_decimal_null", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST(NULL AS DECIMAL(38,2))) t(v)"}
+{"id": "int_bigint_zero", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('0' AS BIGINT)) t(v)"}
+{"id": "int_bigint_one", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('1' AS BIGINT)) t(v)"}
+{"id": "int_bigint_min", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483648' AS BIGINT)) t(v)"}
+{"id": "int_bigint_max", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483647' AS BIGINT)) t(v)"}
+{"id": "int_bigint_below", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('-2147483649' AS BIGINT)) t(v)"}
+{"id": "int_bigint_above", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2147483648' AS BIGINT)) t(v)"}
+{"id": "int_bigint_null", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST(NULL AS BIGINT)) t(v)"}
+{"id": "int_function", "sql": "SELECT div(CAST(NULL AS INT), CAST(v AS INT)) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_reverse", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_try_cast", "sql": "SELECT CAST(NULL AS INT) DIV TRY_CAST(v AS INT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) WHERE false"}
+{"id": "int_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) LIMIT 0"}
+{"id": "int_input_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) LIMIT 0) t"}
+{"id": "int_input_limit1", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) LIMIT 1) t"}
+{"id": "int_input_offset1", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES (CAST('NaN' AS DOUBLE)), (CAST('2.5' AS DOUBLE)) t(v) OFFSET 1) t"}
+{"id": "int_range", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT CAST('NaN' AS DOUBLE) + CAST(id AS DOUBLE) AS v FROM range(2)) t"}
+{"id": "int_unused", "sql": "SELECT 1 AS q FROM (SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS unused FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)) t"}
+{"id": "int_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_live_case", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_coalesce", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(NULL AS INT) DIV CAST(v AS INT)) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_parent_null", "sql": "SELECT (CAST(NULL AS INT) DIV CAST(v AS INT)) * CAST(NULL AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_multirow", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)), (NULL), (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "int_filter_good", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v = 2.5"}
+{"id": "int_filter_bad", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v <> 2.5"}
+{"id": "int_filter_good_double", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v = CAST(2.5 AS DOUBLE)"}
+{"id": "int_filter_bad_double", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v <> CAST(2.5 AS DOUBLE)"}
+{"id": "int_endpoint_mixed", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('2.5' AS DOUBLE)), (NULL), (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "int_endpoint_mixed_bad", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_endpoint_mixed_chain", "sql": "SELECT CAST(NULL AS INT) DIV CAST(CAST(v AS BIGINT) AS INT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('2.5' AS DOUBLE)), (NULL) t(v)"}
+{"id": "int_cast_chain", "sql": "SELECT CAST(NULL AS INT) DIV CAST(CAST(v AS BIGINT) AS INT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_long_endpoint_chain", "sql": "SELECT CAST(NULL AS INT) DIV CAST(CAST(v AS BIGINT) AS INT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)) t(v)"}
+{"id": "bigint_float_zero", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('0' AS FLOAT)) t(v)"}
+{"id": "bigint_float_one", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('1' AS FLOAT)) t(v)"}
+{"id": "bigint_float_min", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775808' AS FLOAT)) t(v)"}
+{"id": "bigint_float_max", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775807' AS FLOAT)) t(v)"}
+{"id": "bigint_float_below", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775809' AS FLOAT)) t(v)"}
+{"id": "bigint_float_above", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775808' AS FLOAT)) t(v)"}
+{"id": "bigint_float_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('2.75' AS FLOAT)) t(v)"}
+{"id": "bigint_float_negative_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-2.75' AS FLOAT)) t(v)"}
+{"id": "bigint_float_min_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775808.75' AS FLOAT)) t(v)"}
+{"id": "bigint_float_max_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775807.75' AS FLOAT)) t(v)"}
+{"id": "bigint_float_nan", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('NaN' AS FLOAT)) t(v)"}
+{"id": "bigint_float_infinity", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('Infinity' AS FLOAT)) t(v)"}
+{"id": "bigint_float_negative_infinity", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-Infinity' AS FLOAT)) t(v)"}
+{"id": "bigint_float_upper_adjacent_0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9.223371487098962e+18' AS FLOAT)) t(v)"}
+{"id": "bigint_float_upper_adjacent_1", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9.223373136366404e+18' AS FLOAT)) t(v)"}
+{"id": "bigint_float_null", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST(NULL AS FLOAT)) t(v)"}
+{"id": "bigint_double_zero", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_one", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('1' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_min", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775808' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_max", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775807' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_below", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775809' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_above", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('2.75' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_negative_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-2.75' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_min_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775808.75' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_max_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775807.75' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_nan", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_infinity", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('Infinity' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_negative_infinity", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-Infinity' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_upper_adjacent_0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9.223372036854775e+18' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_upper_adjacent_1", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9.223372036854778e+18' AS DOUBLE)) t(v)"}
+{"id": "bigint_double_null", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST(NULL AS DOUBLE)) t(v)"}
+{"id": "bigint_decimal_zero", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('0' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_one", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('1' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_min", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775808' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_max", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775807' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_below", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775809' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_above", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775808' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('2.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_negative_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-2.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_min_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775808.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_max_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775807.75' AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_decimal_null", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST(NULL AS DECIMAL(38,2))) t(v)"}
+{"id": "bigint_bigint_zero", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('0' AS BIGINT)) t(v)"}
+{"id": "bigint_bigint_one", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('1' AS BIGINT)) t(v)"}
+{"id": "bigint_bigint_min", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('-9223372036854775808' AS BIGINT)) t(v)"}
+{"id": "bigint_bigint_max", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775807' AS BIGINT)) t(v)"}
+{"id": "bigint_bigint_null", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST(NULL AS BIGINT)) t(v)"}
+{"id": "bigint_function", "sql": "SELECT div(CAST(NULL AS BIGINT), CAST(v AS BIGINT)) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_reverse", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_try_cast", "sql": "SELECT CAST(NULL AS BIGINT) DIV TRY_CAST(v AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) WHERE false"}
+{"id": "bigint_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) LIMIT 0"}
+{"id": "bigint_input_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES (CAST('NaN' AS DOUBLE)) t(v) LIMIT 0) t"}
+{"id": "bigint_input_limit1", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) LIMIT 1) t"}
+{"id": "bigint_input_offset1", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES (CAST('NaN' AS DOUBLE)), (CAST('2.5' AS DOUBLE)) t(v) OFFSET 1) t"}
+{"id": "bigint_range", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT CAST('NaN' AS DOUBLE) + CAST(id AS DOUBLE) AS v FROM range(2)) t"}
+{"id": "bigint_unused", "sql": "SELECT 1 AS q FROM (SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS unused FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)) t"}
+{"id": "bigint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_live_case", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_coalesce", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT)) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_parent_null", "sql": "SELECT (CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT)) * CAST(NULL AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_multirow", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)), (NULL), (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "bigint_filter_good", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v = 2.5"}
+{"id": "bigint_filter_bad", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v <> 2.5"}
+{"id": "bigint_filter_good_double", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v = CAST(2.5 AS DOUBLE)"}
+{"id": "bigint_filter_bad_double", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v) WHERE v <> CAST(2.5 AS DOUBLE)"}
+{"id": "bigint_endpoint_mixed", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('2.5' AS DOUBLE)), (NULL), (CAST('0' AS DOUBLE)) t(v)"}
+{"id": "bigint_endpoint_mixed_bad", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_endpoint_mixed_chain", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(CAST(v AS BIGINT) AS BIGINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)), (CAST('2.5' AS DOUBLE)), (NULL) t(v)"}
+{"id": "bigint_cast_chain", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(CAST(v AS BIGINT) AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_long_endpoint_chain", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(CAST(v AS BIGINT) AS BIGINT) AS q FROM VALUES (CAST('9223372036854775808' AS DOUBLE)) t(v)"}

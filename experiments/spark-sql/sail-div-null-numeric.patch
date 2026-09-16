@@ -1,0 +1,255 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -560,23 +560,31 @@
+ // The denominator is nonzero. If scaled multiplication overflows i256, the
+ // quotient cannot fit 38 digits: a representable quotient times a <=38-digit
+ // denominator (plus its remainder) needs at most 76 digits.
+-fn fused_decimal_value(a: i128, b: i128, factor128: Option<i128>, factor: i256) -> Option<i128> {
++// Keep wide arithmetic outside the hot array loop and its register allocation.
++#[inline(never)]
++fn fused_decimal_wide_value(a: i128, b: i128, factor: i256) -> Option<i128> {
++    let numerator = i256::from_i128(a).checked_mul(factor)?;
++    let denominator = i256::from_i128(b);
++    let quotient = numerator.checked_div(denominator)?;
++    // Truncating division gives |q*b| <= |numerator| and |remainder| < |b|,
++    // so this product and subtraction cannot overflow after checked_div succeeds.
++    let remainder = numerator.wrapping_sub(quotient.wrapping_mul(denominator)).to_i128()?;
++    // Rounding moves away from zero and cannot recover a quotient outside i128.
++    let quotient = quotient.to_i128()?;
+     let threshold = b.unsigned_abs().div_ceil(2);
+     let step = if (a < 0) == (b < 0) { 1 } else { -1 };
++    quotient.checked_add(if remainder.unsigned_abs() >= threshold { step } else { 0 })
++}
++
++fn fused_decimal_value(a: i128, b: i128, factor128: Option<i128>, factor: i256) -> Option<i128> {
+     if let Some(numerator) = factor128.and_then(|factor| a.checked_mul(factor)) {
+         let quotient = numerator.checked_div(b)?;
+         let remainder = numerator - quotient * b;
++        let threshold = b.unsigned_abs().div_ceil(2);
++        let step = if (a < 0) == (b < 0) { 1 } else { -1 };
+         quotient.checked_add(if remainder.unsigned_abs() >= threshold { step } else { 0 })
+     } else {
+-        let numerator = i256::from_i128(a).checked_mul(factor)?;
+-        let denominator = i256::from_i128(b);
+-        let quotient = numerator.checked_div(denominator)?;
+-        // Reuse the quotient instead of calling Arrow's wide division again for %.
+-        let remainder = numerator.checked_sub(quotient.checked_mul(denominator)?)?.to_i128()?;
+-        let quotient = quotient.checked_add(i256::from_i128(
+-            if remainder.unsigned_abs() >= threshold { step } else { 0 },
+-        ))?;
+-        quotient.to_i128()
++        fused_decimal_wide_value(a, b, factor)
+     }
+ }
+ 
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -221,14 +221,17 @@
+             a.zip(b).map(|(a, b)| a / b * 1_000_000)
+         }
+         "negative_literal" => Some((id % 97 + 2) as i128 * -2_500),
+-        "plain_projection" | "plain_sorted" | "scalar_projection" | "scalar_sorted" => {
+-            Some((id % 97 + 2) as i128 * 2_500)
+-        }
++        "wide_projection" | "plain_projection" | "plain_sorted" | "scalar_projection"
++        | "scalar_sorted" => Some((id % 97 + 2) as i128 * 2_500),
+         "correlated_max" => (key < 256 && key % 8 != 0).then_some((key + 1) as i128 * 250_000),
+         "correlated_count" | "nested_lateral" => Some(count as i128 * 250_000),
+         "chained_lateral" => Some((count + 1 + count % 3) as i128 * 250_000),
+         "left_lateral" => (count > 1).then_some(count as i128 * 250_000),
+-        "null_divide_left" | "null_divide_right" | "div_null_cast_values" | "div_null_cast_column" => None,
++        "null_divide_left"
++        | "null_divide_right"
++        | "div_null_cast_values"
++        | "div_null_cast_column"
++        | "div_null_cast_numeric" => None,
+         "div_constant" => Some(3_000_000),
+         _ => unreachable!("unknown benchmark case"),
+     }
+@@ -309,6 +312,12 @@
+             false,
+         ),
+         (
++            "wide_projection",
++            "o.a / CAST(4 AS DECIMAL(38,34))".into(),
++            "".into(),
++            false,
++        ),
++        (
+             "negative_literal",
+             "o.a / CAST(-4 AS DECIMAL(18,4))".into(),
+             "".into(),
+@@ -327,6 +336,12 @@
+             "div_null_cast_column",
+             "CAST(NULL AS INT) DIV CAST(o.id AS INT)".into(),
+             "".into(),
++            false,
++        ),
++        (
++            "div_null_cast_numeric",
++            "t.q".into(),
++            "CROSS JOIN (SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('2.5' AS DOUBLE)) t(v)) t".into(),
+             false,
+         ),
+         (
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
+@@ -3,7 +3,7 @@
+ 
+ use datafusion::arrow::array::AsArray;
+ use datafusion::arrow::compute::filter_record_batch;
+-use datafusion::arrow::datatypes::Schema;
++use datafusion::arrow::datatypes::{DataType, Schema};
+ use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
+ use datafusion::datasource::memory::MemorySourceConfig;
+ use datafusion::functions::expr_fn;
+@@ -60,13 +60,16 @@
+ }
+ 
+ // Spark evaluates the divisor first when converting local VALUES. Restrict
+-// the added check to strict string-column casts, including integer widening.
++// the added check to strict string/numeric-column casts, including integer widening.
+ // Non-ANSI DIV lowers its divisor through NULLIF and does not match this shape.
+ fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
+     match expr {
+         Expr::Cast(cast) if cast.field.data_type().is_signed_integer() => {
+             match cast.expr.as_ref() {
+-                Expr::Column(_) => cast.expr.get_type(schema).is_ok_and(|t| t.is_string()),
++                Expr::Column(_) => cast
++                    .expr
++                    .get_type(schema)
++                    .is_ok_and(|t| t.is_string() || t.is_numeric()),
+                 expr => column_cast(expr, schema),
+             }
+         }
+@@ -272,12 +275,16 @@
+                                 self.check_expr(expr, true)?;
+                                 continue;
+                             }
+-                            if create_physical_expr(expr, project.input.schema(), &self.props)?
+-                                .evaluate(&batch)
+-                                .is_ok()
++                            let error = match create_physical_expr(
++                                expr,
++                                project.input.schema(),
++                                &self.props,
++                            )?
++                            .evaluate(&batch)
+                             {
+-                                continue;
+-                            }
++                                Ok(_) => continue,
++                                Err(error) => error,
++                            };
+                             // Match Spark's strict string-to-integer trimming
+                             // only for this discarded local evaluation. The
+                             // runtime expression and its physical plan stay intact.
+@@ -292,12 +299,39 @@
+                                             .collect();
+                                         cast.expr =
+                                             Box::new(expr_fn::btrim(vec![*cast.expr, lit(trim)]));
++                                        return Ok(Transformed::yes(Expr::Cast(cast)));
+                                     }
+-                                    Ok(Transformed::yes(Expr::Cast(cast)))
++                                    // Spark compares its floating input with a
++                                    // floating Long.MaxValue, which rounds to
++                                    // 2^63, then saturates that endpoint to MAX.
++                                    if cast.field.data_type() == &DataType::Int64 {
++                                        let upper =
++                                            match cast.expr.get_type(project.input.schema())? {
++                                                DataType::Float32 => Some(ScalarValue::Float32(
++                                                    Some(i64::MAX as f32),
++                                                )),
++                                                DataType::Float64 => Some(ScalarValue::Float64(
++                                                    Some(i64::MAX as f64),
++                                                )),
++                                                _ => None,
++                                            };
++                                        if let Some(upper) = upper {
++                                            let expr = datafusion_expr::expr_fn::when(
++                                                (*cast.expr).clone().eq(lit(upper)),
++                                                lit(i64::MAX),
++                                            )
++                                            .otherwise(Expr::Cast(cast))?;
++                                            return Ok(Transformed::yes(expr));
++                                        }
++                                    }
++                                    Ok(Transformed::no(Expr::Cast(cast)))
+                                 } else {
+                                     Ok(Transformed::no(expr))
+                                 }
+                             })?;
++                            if !expr.transformed {
++                                return Err(error);
++                            }
+                             create_physical_expr(&expr.data, project.input.schema(), &self.props)?
+                                 .evaluate(&batch)?;
+                         }
+@@ -648,3 +682,67 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn null_integer_divide_checks_numeric_casts()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for target in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
++        for ansi_mode in [true, false] {
++            for (value, fails) in [
++                ("CAST('NaN' AS DOUBLE)", true),
++                ("CAST('-Infinity' AS FLOAT)", true),
++                (
++                    "CAST(32768 AS BIGINT)",
++                    matches!(target, "TINYINT" | "SMALLINT"),
++                ),
++                ("CAST('9223372036854775808' AS DOUBLE)", target != "BIGINT"),
++                ("CAST('9223372036854775808' AS FLOAT)", target != "BIGINT"),
++                ("CAST('9223372036854777856' AS DOUBLE)", true),
++                ("CAST(2.75 AS DECIMAL(10,2))", false),
++            ] {
++                let sql = format!(
++                    "SELECT CAST(NULL AS {target}) DIV CAST(v AS {target}) AS q FROM VALUES ({value}) t(v)"
++                );
++                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                let result =
++                    async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
++                if ansi_mode && fails {
++                    let error = result.unwrap_err().to_string();
++                    assert!(error.contains("Cast error"), "{sql}: {error}");
++                } else {
++                    let batches = result?;
++                    assert_eq!(
++                        batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
++                        1,
++                        "{sql}"
++                    );
++                    assert!(
++                        batches
++                            .iter()
++                            .all(|batch| batch.column(0).null_count() == batch.num_rows())
++                    );
++                }
++            }
++        }
++    }
++    Ok(())
++}
