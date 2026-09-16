@@ -1,0 +1,94 @@
+{"id": "tinyint_min_literal", "sql": "SELECT CAST(-128 AS TINYINT) DIV CAST(-1 AS TINYINT) AS q"}
+{"id": "tinyint_min_function", "sql": "SELECT div(CAST(-128 AS TINYINT), CAST(-1 AS TINYINT)) AS q"}
+{"id": "tinyint_min_untyped_divisor", "sql": "SELECT CAST(-128 AS TINYINT) DIV -1 AS q"}
+{"id": "tinyint_column_b1", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,-128,-1),(1,127,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id", "batch_size": 1}
+{"id": "tinyint_column_b4", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,-128,-1),(1,127,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id", "batch_size": 4}
+{"id": "tinyint_scalar_right", "sql": "SELECT a DIV CAST(-1 AS TINYINT) AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,-128,-1),(1,127,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "tinyint_scalar_left", "sql": "SELECT CAST(-128 AS TINYINT) DIV b AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,-128,-1),(1,127,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "tinyint_peer_tinyint", "sql": "SELECT CAST(-128 AS TINYINT) DIV CAST(-1 AS TINYINT) AS q"}
+{"id": "tinyint_peer_smallint", "sql": "SELECT CAST(-128 AS TINYINT) DIV CAST(-1 AS SMALLINT) AS q"}
+{"id": "tinyint_peer_int", "sql": "SELECT CAST(-128 AS TINYINT) DIV CAST(-1 AS INT) AS q"}
+{"id": "tinyint_peer_bigint", "sql": "SELECT CAST(-128 AS TINYINT) DIV CAST(-1 AS BIGINT) AS q"}
+{"id": "tinyint_cte", "sql": "WITH x AS (SELECT CAST(-128 AS TINYINT) a, CAST(-1 AS TINYINT) b) SELECT a DIV b AS q FROM x"}
+{"id": "tinyint_subquery", "sql": "SELECT (SELECT CAST(-128 AS TINYINT)) DIV CAST(-1 AS TINYINT) AS q"}
+{"id": "tinyint_window", "sql": "SELECT a DIV MIN(b) OVER () AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,-128,-1),(1,127,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "tinyint_aggregate", "sql": "SELECT MIN(a) DIV MIN(b) AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,-128,-1),(1,127,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b))"}
+{"id": "tinyint_empty", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,-128,-1),(1,127,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) WHERE false"}
+{"id": "tinyint_limit0", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS TINYINT) a, CAST(b AS TINYINT) b FROM VALUES (0,-128,-1),(1,127,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) LIMIT 0"}
+{"id": "tinyint_null_left", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(-1 AS TINYINT) AS q"}
+{"id": "tinyint_null_right", "sql": "SELECT CAST(-128 AS TINYINT) DIV NULL AS q"}
+{"id": "tinyint_null_zero_column", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(b AS TINYINT) AS q FROM VALUES (NULL,0) t(a,b)"}
+{"id": "tinyint_zero_column", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(b AS TINYINT) AS q FROM VALUES (7,0) t(a,b)"}
+{"id": "tinyint_zero_literal", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q"}
+{"id": "tinyint_decimal12_2_left", "sql": "SELECT CAST(-128 AS TINYINT) DIV CAST(-1 AS DECIMAL(12,2)) AS q"}
+{"id": "tinyint_decimal12_2_right", "sql": "SELECT CAST(-1 AS DECIMAL(12,2)) DIV CAST(-128 AS TINYINT) AS q"}
+{"id": "tinyint_decimal38_0_left", "sql": "SELECT CAST(-128 AS TINYINT) DIV CAST(-1 AS DECIMAL(38,0)) AS q"}
+{"id": "tinyint_decimal38_0_right", "sql": "SELECT CAST(-1 AS DECIMAL(38,0)) DIV CAST(-128 AS TINYINT) AS q"}
+{"id": "tinyint_decimal38_18_left", "sql": "SELECT CAST(-128 AS TINYINT) DIV CAST(-0.000001 AS DECIMAL(38,18)) AS q"}
+{"id": "tinyint_decimal38_18_right", "sql": "SELECT CAST(-0.000001 AS DECIMAL(38,18)) DIV CAST(-128 AS TINYINT) AS q"}
+{"id": "smallint_min_literal", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV CAST(-1 AS SMALLINT) AS q"}
+{"id": "smallint_min_function", "sql": "SELECT div(CAST(-32768 AS SMALLINT), CAST(-1 AS SMALLINT)) AS q"}
+{"id": "smallint_min_untyped_divisor", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV -1 AS q"}
+{"id": "smallint_column_b1", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,-32768,-1),(1,32767,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id", "batch_size": 1}
+{"id": "smallint_column_b4", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,-32768,-1),(1,32767,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id", "batch_size": 4}
+{"id": "smallint_scalar_right", "sql": "SELECT a DIV CAST(-1 AS SMALLINT) AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,-32768,-1),(1,32767,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "smallint_scalar_left", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV b AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,-32768,-1),(1,32767,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "smallint_peer_tinyint", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV CAST(-1 AS TINYINT) AS q"}
+{"id": "smallint_peer_smallint", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV CAST(-1 AS SMALLINT) AS q"}
+{"id": "smallint_peer_int", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV CAST(-1 AS INT) AS q"}
+{"id": "smallint_peer_bigint", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV CAST(-1 AS BIGINT) AS q"}
+{"id": "smallint_cte", "sql": "WITH x AS (SELECT CAST(-32768 AS SMALLINT) a, CAST(-1 AS SMALLINT) b) SELECT a DIV b AS q FROM x"}
+{"id": "smallint_subquery", "sql": "SELECT (SELECT CAST(-32768 AS SMALLINT)) DIV CAST(-1 AS SMALLINT) AS q"}
+{"id": "smallint_window", "sql": "SELECT a DIV MIN(b) OVER () AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,-32768,-1),(1,32767,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "smallint_aggregate", "sql": "SELECT MIN(a) DIV MIN(b) AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,-32768,-1),(1,32767,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b))"}
+{"id": "smallint_empty", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,-32768,-1),(1,32767,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) WHERE false"}
+{"id": "smallint_limit0", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS SMALLINT) a, CAST(b AS SMALLINT) b FROM VALUES (0,-32768,-1),(1,32767,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) LIMIT 0"}
+{"id": "smallint_null_left", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(-1 AS SMALLINT) AS q"}
+{"id": "smallint_null_right", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV NULL AS q"}
+{"id": "smallint_null_zero_column", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(b AS SMALLINT) AS q FROM VALUES (NULL,0) t(a,b)"}
+{"id": "smallint_zero_column", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(b AS SMALLINT) AS q FROM VALUES (7,0) t(a,b)"}
+{"id": "smallint_zero_literal", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q"}
+{"id": "smallint_decimal12_2_left", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV CAST(-1 AS DECIMAL(12,2)) AS q"}
+{"id": "smallint_decimal12_2_right", "sql": "SELECT CAST(-1 AS DECIMAL(12,2)) DIV CAST(-32768 AS SMALLINT) AS q"}
+{"id": "smallint_decimal38_0_left", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV CAST(-1 AS DECIMAL(38,0)) AS q"}
+{"id": "smallint_decimal38_0_right", "sql": "SELECT CAST(-1 AS DECIMAL(38,0)) DIV CAST(-32768 AS SMALLINT) AS q"}
+{"id": "smallint_decimal38_18_left", "sql": "SELECT CAST(-32768 AS SMALLINT) DIV CAST(-0.000001 AS DECIMAL(38,18)) AS q"}
+{"id": "smallint_decimal38_18_right", "sql": "SELECT CAST(-0.000001 AS DECIMAL(38,18)) DIV CAST(-32768 AS SMALLINT) AS q"}
+{"id": "int_min_literal", "sql": "SELECT CAST(-2147483648 AS INT) DIV CAST(-1 AS INT) AS q"}
+{"id": "int_min_function", "sql": "SELECT div(CAST(-2147483648 AS INT), CAST(-1 AS INT)) AS q"}
+{"id": "int_min_untyped_divisor", "sql": "SELECT CAST(-2147483648 AS INT) DIV -1 AS q"}
+{"id": "int_column_b1", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,-2147483648,-1),(1,2147483647,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id", "batch_size": 1}
+{"id": "int_column_b4", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,-2147483648,-1),(1,2147483647,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id", "batch_size": 4}
+{"id": "int_scalar_right", "sql": "SELECT a DIV CAST(-1 AS INT) AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,-2147483648,-1),(1,2147483647,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "int_scalar_left", "sql": "SELECT CAST(-2147483648 AS INT) DIV b AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,-2147483648,-1),(1,2147483647,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "int_peer_tinyint", "sql": "SELECT CAST(-2147483648 AS INT) DIV CAST(-1 AS TINYINT) AS q"}
+{"id": "int_peer_smallint", "sql": "SELECT CAST(-2147483648 AS INT) DIV CAST(-1 AS SMALLINT) AS q"}
+{"id": "int_peer_int", "sql": "SELECT CAST(-2147483648 AS INT) DIV CAST(-1 AS INT) AS q"}
+{"id": "int_peer_bigint", "sql": "SELECT CAST(-2147483648 AS INT) DIV CAST(-1 AS BIGINT) AS q"}
+{"id": "int_cte", "sql": "WITH x AS (SELECT CAST(-2147483648 AS INT) a, CAST(-1 AS INT) b) SELECT a DIV b AS q FROM x"}
+{"id": "int_subquery", "sql": "SELECT (SELECT CAST(-2147483648 AS INT)) DIV CAST(-1 AS INT) AS q"}
+{"id": "int_window", "sql": "SELECT a DIV MIN(b) OVER () AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,-2147483648,-1),(1,2147483647,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) ORDER BY id"}
+{"id": "int_aggregate", "sql": "SELECT MIN(a) DIV MIN(b) AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,-2147483648,-1),(1,2147483647,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b))"}
+{"id": "int_empty", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,-2147483648,-1),(1,2147483647,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) WHERE false"}
+{"id": "int_limit0", "sql": "SELECT a DIV b AS q FROM (SELECT id, CAST(a AS INT) a, CAST(b AS INT) b FROM VALUES (0,-2147483648,-1),(1,2147483647,-1),(2,-7,2),(3,7,-2),(4,NULL,2),(5,7,NULL),(6,0,1) t(id,a,b)) LIMIT 0"}
+{"id": "int_null_left", "sql": "SELECT CAST(NULL AS INT) DIV CAST(-1 AS INT) AS q"}
+{"id": "int_null_right", "sql": "SELECT CAST(-2147483648 AS INT) DIV NULL AS q"}
+{"id": "int_null_zero_column", "sql": "SELECT CAST(a AS INT) DIV CAST(b AS INT) AS q FROM VALUES (NULL,0) t(a,b)"}
+{"id": "int_zero_column", "sql": "SELECT CAST(a AS INT) DIV CAST(b AS INT) AS q FROM VALUES (7,0) t(a,b)"}
+{"id": "int_zero_literal", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q"}
+{"id": "int_decimal12_2_left", "sql": "SELECT CAST(-2147483648 AS INT) DIV CAST(-1 AS DECIMAL(12,2)) AS q"}
+{"id": "int_decimal12_2_right", "sql": "SELECT CAST(-1 AS DECIMAL(12,2)) DIV CAST(-2147483648 AS INT) AS q"}
+{"id": "int_decimal38_0_left", "sql": "SELECT CAST(-2147483648 AS INT) DIV CAST(-1 AS DECIMAL(38,0)) AS q"}
+{"id": "int_decimal38_0_right", "sql": "SELECT CAST(-1 AS DECIMAL(38,0)) DIV CAST(-2147483648 AS INT) AS q"}
+{"id": "int_decimal38_18_left", "sql": "SELECT CAST(-2147483648 AS INT) DIV CAST(-0.000001 AS DECIMAL(38,18)) AS q"}
+{"id": "int_decimal38_18_right", "sql": "SELECT CAST(-0.000001 AS DECIMAL(38,18)) DIV CAST(-2147483648 AS INT) AS q"}
+{"id": "control_bigint_overflow", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) DIV CAST(-1 AS BIGINT) AS q"}
+{"id": "control_string_integer", "sql": "SELECT '7' DIV 2 AS q"}
+{"id": "control_float_integer", "sql": "SELECT CAST(7 AS FLOAT) DIV 2 AS q"}
+{"id": "control_double_integer", "sql": "SELECT CAST(7 AS DOUBLE) DIV 2 AS q"}
+{"id": "control_interval", "sql": "SELECT INTERVAL '7' MONTH DIV INTERVAL '2' MONTH AS q"}
+{"id": "control_interval_integer", "sql": "SELECT INTERVAL '7' MONTH DIV 2 AS q"}
+{"id": "control_boolean_integer", "sql": "SELECT true DIV 2 AS q"}
+{"id": "control_null_null", "sql": "SELECT NULL DIV NULL AS q"}
+{"id": "control_slash_control", "sql": "SELECT CAST(-2147483648 AS INT) / CAST(-1 AS INT) AS q"}
+{"id": "control_modulo_control", "sql": "SELECT CAST(-2147483648 AS INT) % CAST(-1 AS INT) AS q"}

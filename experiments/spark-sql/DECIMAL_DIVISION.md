@@ -1478,6 +1478,80 @@ The comparison intentionally exits 1 for the four recorded non-floating differen
 
 The patch applies and reverses exactly. All 24 saved scratch paths and saved default executables are restored, modified Sail package caches are invalidated, and all 168 default observations match the parent checkpoint including complete errors and plans. The default vendor is unchanged. The restored default benchmark remains the saved 26-case executable; measured candidates use the same expanded harness.
 
+## Widen small integers before DIV
+
+This optional correctness candidate fixes small-integer overflow before the result cast, but has a measured local execution regression. Starting from `2cc3024`, [sail-div-widen.patch](sail-div-widen.patch) makes `CAST(-2147483648 AS INT) DIV CAST(-1 AS INT)` return BIGINT `2147483648` in both ANSI modes. The previous lowering divided at INT width and failed before it could cast the quotient. The default vendor remains unchanged. The [follow-up](#fuse-small-integer-div-conversion) measures an implementation without intermediate input buffers; the allocator diagnostic below is not a production fix.
+
+Spark widens BYTE, SHORT and INT inputs for integral division. Its Decimal coercion runs earlier, so applying this rule indiscriminately to Decimal peers would change a different coercion path. The patch adds 16 planner lines: when both operands are signed integers or NULL, cast Int8/Int16/Int32 to Int64, then use the existing division. Existing Int64 inputs need no new cast. The literal-zero path stays ahead of widening. Decimal/string/interval combinations and other operators keep their prior lowering. This is a local adaptation using DataFusion's native CAST and division, with no new dependency, UDF, kernel or execution node. The inspected Sail revision still lacks this widening. See Spark's [integral division rule](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/IntegralDivisionTypeCoercion.scala), [coercion order](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/TypeCoercion.scala), [ANSI coercion order](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/AnsiTypeCoercion.scala) and [Decimal peer conversion](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/DecimalPrecisionTypeCoercion.scala).
+
+The 94 queries in [div-widen.jsonl](div-widen.jsonl) were designed and captured against Spark 4.2.0 before implementing widening. They cover both ANSI modes, minimum values, column/scalar operands, mixed integer widths, NULLs, zero divisors, batches of 1 and 4, CTEs, subqueries, aggregates, windows, empty inputs and LIMIT 0. Mixed Decimal, BIGINT, string, floating, interval, boolean, `/` and remainder cases are controls. This is a local matrix, not an upstream CI list. Ordered multirow inputs prevent row-order differences from changing the comparison.
+
+| Corpus | Before | Candidate | Repaired observations |
+| --- | ---: | ---: | ---: |
+| New small-integer matrix | 134/188 | 177/188 | 43 |
+| Previous 20 numeric corpora | 2,771/2,888 | 2,773/2,888 | 2 |
+| Combined | 2,905/3,076 | 2,950/3,076 | 45 |
+
+No tracked observation regresses. The 11 new differences remain explicit: three ANSI NULL-numerator/zero-column cases, three ANSI literal-zero error stages, three non-ANSI literal-zero result types, non-ANSI BIGINT overflow, and ANSI string/integer coercion. The prior corpora retain 115 differences. These counts overlap in behavior and include repeated query shapes and ANSI modes; they are not independent bug counts.
+
+All 346 prior focused cause/signed-zero checks, five known same-stage cause gaps, four generic sort diagnostics and eleven non-floating error controls are preserved. Thirteen same-stage errors in the new corpus receive cause checks. Numeric comparison still checks values, types and coarse error stage; it does not prove full schema or structured error equivalence. The extended Rust test verifies all three minimum/-1 cases in both ANSI modes. Four lifecycle tests, 4,064 exact-integer reference observations covering 187,410 rows, 116 Delta capture comparisons, 18 adapter checks and 19 specified Delta seeds pass.
+
+The benchmark adds six nullable small-integer columns and six query shapes to the existing harness. Fixture casts happen before planning or timing. Every row is checked outside timing, including negative and NULL inputs. MIN / -1 is tested in the correctness corpus, since the baseline cannot execute it. Both binaries use the same expanded source: all 48 subquery cases and 12 Float64 cases pass their full-value checks. Only the 12 small-integer DIV plans change; the other 36 subquery plans and all 12 Float64 plans match exactly.
+
+Timing uses CPU 2, 1,048,576 rows, one partition, batches of 8,192, two warmups and nine samples. Four balanced processes per variant provide 36 timing samples for each of 12 affected cases and eight controls. Planning and execution counters are collected separately using FIFO control, two processes per variant, with no multiplexing. Builds and correctness work finish first. Each table cell lists before / candidate execution milliseconds.
+
+| Input / ANSI | Default allocator ms | Change | Fixed diagnostic thresholds ms | Change |
+| --- | ---: | ---: | ---: | ---: |
+| Int8 column / ANSI true | 6.069 / 10.782 | +77.67% | 6.031 / 7.372 | +22.22% |
+| Int8 column / ANSI false | 7.328 / 10.761 | +46.85% | 7.273 / 7.391 | +1.63% |
+| Int8 literal / ANSI true | 5.940 / 11.920 | +100.70% | 5.946 / 6.435 | +8.23% |
+| Int8 literal / ANSI false | 12.240 / 6.475 | -47.10% | 6.783 / 6.452 | -4.88% |
+| Int16 column / ANSI true | 6.083 / 10.627 | +74.70% | 6.077 / 7.265 | +19.55% |
+| Int16 column / ANSI false | 7.394 / 10.689 | +44.55% | 7.387 / 7.408 | +0.29% |
+| Int16 literal / ANSI true | 5.966 / 11.926 | +99.89% | 5.965 / 6.459 | +8.29% |
+| Int16 literal / ANSI false | 12.305 / 9.264 | -24.72% | 6.803 / 6.449 | -5.19% |
+| Int32 column / ANSI true | 6.357 / 10.653 | +67.60% | 6.249 / 7.343 | +17.50% |
+| Int32 column / ANSI false | 6.391 / 10.780 | +68.68% | 6.292 / 7.427 | +18.05% |
+| Int32 literal / ANSI true | 6.373 / 12.011 | +88.47% | 6.271 / 6.436 | +2.62% |
+| Int32 literal / ANSI false | 6.375 / 11.928 | +87.12% | 6.284 / 6.452 | +2.68% |
+
+The default-allocator regressions are real observations and remain in [div-widen-results.json](div-widen-results.json). For example, the Int8 column ANSI case records 48 / 18,464 page faults per measured interval. Repeating with both diagnostic thresholds (`MALLOC_MMAP_THRESHOLD_` and `MALLOC_TRIM_THRESHOLD_`) fixed at 1048576 bytes yields 48 / 48 faults. This removes much of the elapsed-time gap, but leaves a 22.22% regression and 12.26% more execution instructions. User-space counters exclude kernel work during faults; they cannot replace the default elapsed-time result. No production allocator setting is changed.
+
+The residual cost is confined to the changed small-integer DIV execution paths in this measurement. Casts now materialize wider input arrays, and Arrow divides at 64-bit width; the old final cast is removed where redundant. Under fixed thresholds, the three ANSI column cases slow by 17.50%-22.22%, and non-ANSI Int32 by 18.05%. Int8/Int16 non-ANSI columns change by +0.29%-+1.63%, while their literal cases improve by about 5% because their old path already promoted inputs to Int32 and cast the result. ANSI literal cases slow by 2.62%-8.29%. These results do not show that a Spark-compatible implementation must have this cost; they show the cost of this native-cast candidate. A follow-up can investigate combining widening with integer division to avoid intermediate buffers, using these same boundary tests and measurements before changing the implementation.
+
+The eight controls (BIGINT and Decimal DIV in both modes, no division, ordinary Decimal projection, ROUND and a correlated aggregate) change by -0.79% to +0.50% elapsed. Their execution instructions change by -0.012% to +0.038%, and planning instructions by -0.107% to +1.062%. Small-integer DIV planning instructions increase by +0.362% to +6.981%. Thus there is no measured general execution slowdown in these controls, but the candidate does add planning work and local execution cost. CPU frequency is not fixed and the host is not isolated. All default and diagnostic samples, plans and counters are retained.
+
+To reproduce, prepare the optional candidate through `sail-div-types.patch`, use the current benchmark source for both variants, and retain the preceding dependency overrides:
+
+```sh
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/before-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/before-bench"
+git apply --check experiments/spark-sql/sail-div-widen.patch
+git apply experiments/spark-sql/sail-div-widen.patch
+cargo test --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" -p sail-plan --lib div_rejects_floating_types_before_zero_folding
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_probe --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark "$run_dir/spark-widen.json" \
+  --cases experiments/spark-sql/div-widen.jsonl
+"$run_dir/after-probe" experiments/spark-sql/div-widen.jsonl \
+  "$run_dir/after-widen.json" --physical-plans
+python3 experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark-widen.json" "$run_dir/after-widen.json" \
+  --cases experiments/spark-sql/div-widen.jsonl --report "$run_dir/widen-check.json"
+taskset -c 2 "$run_dir/after-bench" "$run_dir/widen-bench.json" subqueries div_i32_column_ansitrue
+MALLOC_MMAP_THRESHOLD_=1048576 MALLOC_TRIM_THRESHOLD_=1048576 \
+  taskset -c 2 "$run_dir/after-bench" "$run_dir/widen-fixed.json" subqueries div_i32_column_ansitrue
+```
+
+The comparison exits 1 for the 11 recorded differences. Inspect the report, then run timing separately. Repeat with `before-bench`, both ANSI settings, the other recorded case IDs and a balanced process order. The threshold override is diagnostic only. Restore the optional patch after experimentation.
+
+The patch applies and reverses exactly. All 24 scratch paths and saved default executables are restored, changed Sail package caches are invalidated, and all 168 default observations match the parent checkpoint including complete errors and plans. The restored default benchmark is the saved 26-case executable; measured binaries use the shared 48-case harness. The candidate remains optional and uncommitted for review.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

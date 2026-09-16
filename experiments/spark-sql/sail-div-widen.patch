@@ -1,0 +1,56 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -1031,6 +1031,22 @@
+         }
+     }
+ 
++    // Decimal peers have their own coercion; widen only the signed-integer family.
++    let (dividend, divisor) = match (&dividend_type, &divisor_type) {
++        (Ok(left), Ok(right))
++            if [left, right]
++                .iter()
++                .all(|t| t.is_signed_integer() || **t == DataType::Null) =>
++        {
++            let widen = |expr, data_type: &DataType| match data_type {
++                DataType::Int8 | DataType::Int16 | DataType::Int32 => cast(expr, DataType::Int64),
++                _ => expr,
++            };
++            (widen(dividend, left), widen(divisor, right))
++        }
++        _ => (dividend, divisor),
++    };
++
+     let ansi_mode = function_context.plan_config.ansi_mode;
+ 
+     // Apply runtime zero-divisor guard to the divisor before building the division expression.
+@@ -1102,6 +1118,29 @@
+                     if message == "DIV does not accept floating-point operands")
+                 );
+             }
++        }
++        for (value, expected) in [
++            (ScalarValue::Int8(Some(i8::MIN)), 128_i64),
++            (ScalarValue::Int16(Some(i16::MIN)), 32768),
++            (ScalarValue::Int32(Some(i32::MIN)), 2147483648),
++        ] {
++            let data_type = value.data_type();
++            let expr = resolve(lit(value), cast(lit(-1), data_type)).unwrap();
++            let batches = ctx
++                .sql("SELECT 1")
++                .await
++                .unwrap()
++                .select(vec![expr])
++                .unwrap()
++                .collect()
++                .await
++                .unwrap();
++            let values = batches[0]
++                .column(0)
++                .as_any()
++                .downcast_ref::<datafusion::arrow::array::Int64Array>()
++                .unwrap();
++            assert_eq!(values.value(0), expected);
+         }
+         assert!(resolve(lit(7), lit(2)).is_ok());
+         assert!(

@@ -128,25 +128,41 @@ fn subquery_input_id(position: usize) -> usize {
 // Permuted outer rows make a missing ORDER BY observable. Half the keys have no
 // inner group; every eighth inner group has only NULL x values.
 fn register_subquery_inputs(ctx: &SessionContext) -> Result<usize> {
-    let schema = Arc::new(Schema::new(vec![
+    let integer_types = [
+        ("i8", DataType::Int8),
+        ("i16", DataType::Int16),
+        ("i32", DataType::Int32),
+    ];
+    let mut fields = vec![
         Field::new("id", DataType::Int64, false),
         Field::new("k", DataType::Int64, false),
         Field::new("a", DataType::Decimal128(18, 4), false),
-    ]));
+    ];
+    for (name, data_type) in &integer_types {
+        fields.push(Field::new(format!("{name}_a"), data_type.clone(), true));
+        fields.push(Field::new(format!("{name}_b"), data_type.clone(), true));
+    }
+    let schema = Arc::new(Schema::new(fields));
     let mut batches = Vec::new();
     for start in (0..ROWS).step_by(BATCH_SIZE) {
         let ids = (start..(start + BATCH_SIZE).min(ROWS)).map(|i| subquery_input_id(i) as i64);
-        batches.push(RecordBatch::try_new(
-            schema.clone(),
-            vec![
-                Arc::new(Int64Array::from_iter_values(ids.clone())),
-                Arc::new(Int64Array::from_iter_values(ids.clone().map(|i| i % 512))),
-                Arc::new(
-                    Decimal128Array::from_iter_values(ids.map(|i| i128::from(i % 97 + 2) * 100))
-                        .with_precision_and_scale(18, 4)?,
-                ),
-            ],
-        )?);
+        let mut columns: Vec<ArrayRef> = vec![
+            Arc::new(Int64Array::from_iter_values(ids.clone())),
+            Arc::new(Int64Array::from_iter_values(ids.clone().map(|i| i % 512))),
+            Arc::new(
+                Decimal128Array::from_iter_values(
+                    ids.clone().map(|i| i128::from(i % 97 + 2) * 100),
+                )
+                .with_precision_and_scale(18, 4)?,
+            ),
+        ];
+        let a = Int64Array::from_iter(ids.clone().map(|i| (i % 10 != 9).then_some(i % 97 - 48)));
+        let b = Int64Array::from_iter(ids.map(|i| (i % 13 != 12).then_some(i % 7 + 1)));
+        for (_, data_type) in &integer_types {
+            columns.push(arrow::compute::cast(&a, data_type)?);
+            columns.push(arrow::compute::cast(&b, data_type)?);
+        }
+        batches.push(RecordBatch::try_new(schema.clone(), columns)?);
     }
     ctx.register_table(
         "bench_outer",
@@ -193,6 +209,16 @@ fn expected_subquery_value(case: &str, id: usize) -> Option<i128> {
         "round_decimal" => Some((id % 97 + 2) as i128 * 10_000),
         "div_integer" | "div_decimal" => Some((id / 4) as i128 * 1_000_000),
         "div_column" => Some((id / (key + 1)) as i128 * 1_000_000),
+        "div_i8_column" | "div_i16_column" | "div_i32_column" | "div_i8_literal"
+        | "div_i16_literal" | "div_i32_literal" => {
+            let a = (id % 10 != 9).then_some((id % 97) as i128 - 48);
+            let b = if case.ends_with("_literal") {
+                Some(3)
+            } else {
+                (id % 13 != 12).then_some((id % 7 + 1) as i128)
+            };
+            a.zip(b).map(|(a, b)| a / b * 1_000_000)
+        }
         "negative_literal" => Some((id % 97 + 2) as i128 * -2_500),
         "plain_projection" | "plain_sorted" | "scalar_projection" | "scalar_sorted" => {
             Some((id % 97 + 2) as i128 * 2_500)
@@ -291,6 +317,42 @@ async fn subquery_bench(
             false,
         ),
         ("div_column", "o.id DIV (o.k + 1)".into(), "".into(), false),
+        (
+            "div_i8_column",
+            "o.i8_a DIV o.i8_b".into(),
+            "".into(),
+            false,
+        ),
+        (
+            "div_i8_literal",
+            "o.i8_a DIV CAST(3 AS TINYINT)".into(),
+            "".into(),
+            false,
+        ),
+        (
+            "div_i16_column",
+            "o.i16_a DIV o.i16_b".into(),
+            "".into(),
+            false,
+        ),
+        (
+            "div_i16_literal",
+            "o.i16_a DIV CAST(3 AS SMALLINT)".into(),
+            "".into(),
+            false,
+        ),
+        (
+            "div_i32_column",
+            "o.i32_a DIV o.i32_b".into(),
+            "".into(),
+            false,
+        ),
+        (
+            "div_i32_literal",
+            "o.i32_a DIV CAST(3 AS INT)".into(),
+            "".into(),
+            false,
+        ),
         (
             "round_wide",
             "ROUND(CAST(o.id AS DECIMAL(38,4)), 2)".into(),
