@@ -1914,6 +1914,55 @@ The widening source still routes through `cast_numeric_arrays` and `try_numeric_
 
 To reproduce, reuse the saved before/after executables from the preceding experiment and run the artifact's `repeat.py`, `no-probe.py` and `cpu4.py` sequentially, then run `profile.py` separately. The source and executable hashes, commands, raw captures and counters are recorded. No Arrow, full SQL corpus, integer-reference or Delta lifecycle suite was rerun because the runtime and benchmark source are unchanged; the preceding results remain applicable. All 25 scratch paths, three default executables, prior patches and result artifacts are unchanged. This audit adds no runtime changes and nothing was pushed.
 
+## Prototype lossless integer widening
+
+The preceding SMALLINT timing audit is committed as `c0721d3`. [arrow-integer-widening.patch](arrow-integer-widening.patch) targets the pre-existing widening hotspot identified there. SMALLINT query time falls by 16.47%, but 129-row mostly-null casts remain 2-11% slower. The candidate stays experimental while that fallback cost is investigated. [integer-widening-results.json](integer-widening-results.json) records the final checks and measurements, plus the rejected first version's NULL-density measurements. This is a separate improvement; it does not identify the cause of the earlier 0.4-0.7% difference between the two Decimal buffer policies.
+
+The shared `cast_numeric_arrays` entry now uses Arrow's existing `PrimitiveArray::unary` for 18 lossless integer conversions: signed to wider signed, unsigned to wider unsigned, and unsigned to wider signed. The type bounds prove that every stored value fits, so the loop writes the output once without a failure check for each value. Narrowing, signed-to-unsigned conversions and floating-point casts retain their existing kernels. Widening outputs keep standard Arrow ownership; the Decimal buffer helper is unchanged.
+
+The first version used the infallible loop regardless of NULL density. At 8,192 rows, it improved the no-NULL cast by about 25%, but made sparse/all-NULL casts 87-151% slower because it visited every slot. The final version keeps the existing kernels for larger arrays with more than half NULL. Arrays up to 128 rows take the infallible path regardless of density: a separate 32-1,024-row sweep found it faster through 128 rows in every measured pattern, roughly tied for 256-row all-NULL arrays, and slower for sparse/all-NULL arrays from 512 rows. Sharing a fallback kernel between safety modes was also measured and rejected because it increased the error-mode small-array penalty. This is a conservative measured selection, not an optimal threshold for every machine or array shape. The implementation adds 11 lines net to the shared function and adds one matrix regression.
+
+| Query, no retained output | Before (ms) | Candidate (ms) | Change |
+| --- | ---: | ---: | ---: |
+| TINYINT constant DIV | 2.183 | 1.830 | -16.14% |
+| SMALLINT constant DIV | 2.223 | 1.857 | -16.47% |
+| INT constant DIV | 2.582 | 2.152 | -16.66% |
+| BIGINT control | 2.142 | 2.153 | +0.53% |
+| Integer-to-Decimal only | 0.777 | 0.777 | -0.01% |
+| Unchanged Decimal control | 17.088 | 17.160 | +0.42% |
+
+The SQL comparison uses the frozen thread-local runtime from the preceding audit as its baseline. The benchmark, lockfile, other patches and dependency features/profiles match. There are 240 fresh processes in balanced ABBA order on CPU 2: 16 per variant/query for three targets and three controls without retained output, plus eight per variant for SMALLINT under each of the batch/all/released retention modes. Each process validates all 1,048,576 output rows, types and plans, then records nine executions after two warmups at batch size 8,192. Execution-only counters exclude validation and planning. SMALLINT improves by 15.88-16.44% in the three retention modes. Its execution instruction count falls by about 13.37%; TINYINT and INT fall by 17.07% and 15.83%. Control instruction counts change by at most 0.01%. Neither variant has a high-fault process: 0/120 each under the preceding >1,000-fault threshold. No outlier is discarded.
+
+The direct Rust cast comparison uses both exact SQL Arrow libraries and identical other libraries. Its 560 processes cover both cast safety settings, seven NULL patterns and 64/128/129/8,192/65,536-row arrays. Each sample converts approximately 8.39 million rows, with output release included; every process first verifies values and ordinary value-buffer reclamation. The 64-row groups improve by 10-47%, and 128-row groups by 2-55%. At 129 rows with more than half NULL, both safety settings still slow down: +2.05% to +11.17%, about 3-17 ns per cast. For larger mostly-null groups, changes range from -1.75% to +2.99%; four processes per variant/case do not establish zero overhead. The 129-row result shows that adjusting the cutoff has not removed the fallback cost. Further work should inspect that path before adopting this as a general replacement.
+
+All 344 Arrow tests pass, including the new 1,536-cast matrix across all 64 integer type pairs, both safety settings, no/mixed/all NULL values, full arrays, two slice offsets and empty arrays. Independent i128 bounds check values, types, validity and first-overflow errors. The existing SQL comparison remains 2,950/3,076 with no changed plans or new differences. The 346 focused checks, 4,064 integer-reference cases, four Delta lifecycle tests, 116 Delta comparisons, 18 adapter checks and 19 seeds pass. The 48 wrapped, 12 float and 20 cast captures preserve their results. Four multi-invalid-row string/Unicode cases report a different first bad value, as in earlier runs; their error types and failure stages are unchanged.
+
+To reproduce, save the preceding optional runtime's executables, apply this follow-up to the same Arrow dependency copy, and rebuild with the same override and benchmark. Run `cargo test --release --locked --manifest-path "$ARROW_CAST_DIR/Cargo.toml" --lib` for the Arrow tests, then reuse the artifact's validation and balanced measurement scripts. The raw commands, sources, counters and executable hashes are retained. The new patch applies and reverses exactly; all 25 scratch paths and three default executables are restored. Earlier patches and result artifacts are unchanged. Host frequency and background load were not isolated, so the measurements do not establish universal speedups or zero overhead. This follow-up remains experimental; nothing was pushed.
+
+## Constant type references in integer widening
+
+[arrow-integer-widening-const-types.patch](arrow-integer-widening-const-types.patch) removes a concrete cost in the preceding prototype: temporary `DataType` values left four destructor calls in the SMALLINT widening dispatcher, including its fallback path. Two `const` references let the existing type predicates fold without runtime construction or cleanup. The follow-up adds three lines net, including a comment. The 18 eligible conversions, size/density cutoffs, kernels and matrix test stay the same.
+
+The default Cargo build confirms all four calls are gone. The fallback kernel still has the same 376 normalized instructions in 1,780 bytes. In a matched direct build, whole-process counters fall from about 89 extra instructions and 19 extra branches per fallback cast to nine instructions and three branches. The latter remain for selecting the kernel; this is not a zero-overhead fallback. The Cargo dispatch matches that diagnostic build's normalized instructions. Commands, disassembly, raw samples and checks are in [integer-widening-const-types-results.json](integer-widening-const-types-results.json).
+
+The expanded cast matrix has 1,120 processes, eight per variant/case, using the exact SQL Arrow libraries. Five of the six 129-row mostly-NULL groups are now within -0.56% to +0.60% of the original runtime. One group remains slower:
+
+| NULL pattern, 129 rows | Error on failed cast | NULL on failed cast |
+| --- | ---: | ---: |
+| About 51% NULL | +15.75% | -0.06% |
+| About 99% NULL | -0.37% | +0.60% |
+| All NULL | +0.22% | -0.56% |
+
+The error-mode majority-NULL gap is about 22 ns per cast. A focused 48-process comparison reproduces +16.01%, with only about 0.4% more retired instructions and similar branch-miss counts. Fixing `argv`, including `argv[0]`, does not remove it. Cycle sampling places the extra time in the unchanged fallback kernel. Even two executables linked to the same baseline Arrow library differ by about 6% in this case.
+
+Four diagnostic links then change only the order of code sections, using deterministic linker shuffle seeds. Across 32 balanced processes, the candidate's difference ranges from -5.19% to +12.75%; all eight links preserve the fallback kernel's normalized instructions. This establishes sensitivity to binary layout. It does not identify the precise CPU effect or provide a portable fix. The default +16% result remains unresolved; none of the shuffled layouts is proposed for adoption. The larger mostly-NULL groups range from -2.41% to +2.21%, while every measured 64/128-row group improves. No run is discarded.
+
+The 240-process SQL comparison retains the widening gains: SMALLINT improves by 16.45%, TINYINT by 16.31% and INT by 16.19%. The three controls range from -0.29% to +0.50%. SMALLINT improves by 16.58-16.88% under the other retention modes. Values, types, plans and ownership checks pass in every process, with no high-fault runs under the existing threshold.
+
+All 344 Arrow tests pass. Spark agreement stays at 2,950/3,076, with no changed plans or new differences. The 346 focused checks, 4,064 integer-reference cases, four Delta lifecycle tests, 116 Delta comparisons, 18 adapter checks and 19 seeds also pass, along with the wrapped/float/cast checks. Two multi-invalid-row string/Unicode cases select a different first bad value, as in earlier runs; their error classes and failure stages are unchanged. The earlier 0.4-0.7% Decimal-buffer-policy difference remains unattributed.
+
+Apply this patch after `arrow-integer-widening.patch` and repeat the preceding optional-runtime build and checks. Both patches and their raw measurements are preserved separately. The follow-up applies and reverses exactly; all 25 scratch paths and three default executables are restored. Default project sources and dependencies are unchanged. Both widening patches remain experimental; nothing was pushed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

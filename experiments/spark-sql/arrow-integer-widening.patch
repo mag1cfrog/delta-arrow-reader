@@ -1,0 +1,143 @@
+--- a/src/cast/mod.rs
++++ b/src/cast/mod.rs
+@@ -2469,16 +2469,27 @@
+     FROM::Native: NumCast,
+     TO::Native: NumCast,
+ {
++    let from = from.as_primitive::<FROM>();
++    // Every source value fits in these wider integer types, including null slots.
++    // Use the infallible kernel so it can fill the output in one pass.
++    if FROM::DATA_TYPE.is_integer()
++        && TO::DATA_TYPE.is_integer()
++        && std::mem::size_of::<FROM::Native>() < std::mem::size_of::<TO::Native>()
++        && (FROM::DATA_TYPE.is_unsigned_integer() || TO::DATA_TYPE.is_signed_integer())
++        // ponytail: measured size/density cutoffs; retune with workload evidence.
++        && (from.len() <= 128 || from.null_count() <= from.len() / 2)
++    {
++        return Ok(Arc::new(from.unary::<_, TO>(|value| {
++            num_cast::<FROM::Native, TO::Native>(value).expect("lossless integer widening")
++        })));
++    }
++
+     if cast_options.safe {
+         // If the value can't be casted to the `TO::Native`, return null
+-        Ok(Arc::new(numeric_cast::<FROM, TO>(
+-            from.as_primitive::<FROM>(),
+-        )))
++        Ok(Arc::new(numeric_cast::<FROM, TO>(from)))
+     } else {
+         // If the value can't be casted to the `TO::Native`, return error
+-        Ok(Arc::new(try_numeric_cast::<FROM, TO>(
+-            from.as_primitive::<FROM>(),
+-        )?))
++        Ok(Arc::new(try_numeric_cast::<FROM, TO>(from)?))
+     }
+ }
+ 
+@@ -7668,6 +7679,106 @@
+             u8_expected,
+             get_cast_values::<UInt8Type>(&f32_array, &DataType::UInt8)
+         );
++    }
++
++    #[test]
++    fn test_integer_cast_matrix() {
++        fn check<T: ArrowPrimitiveType>(
++            from: &dyn Array,
++            values: &[Option<i128>],
++            min: i128,
++            max: i128,
++        ) where
++            T::Native: Into<i128>,
++        {
++            let fits = |v: &i128| (min..=max).contains(v);
++            let expected: Vec<_> = values.iter().map(|v| v.filter(fits)).collect();
++            for safe in [false, true] {
++                let options = CastOptions {
++                    safe,
++                    ..Default::default()
++                };
++                let result = cast_with_options(from, &T::DATA_TYPE, &options);
++                if let Some(value) = values.iter().flatten().find(|v| !fits(v)).filter(|_| !safe) {
++                    assert_eq!(
++                        result.unwrap_err().to_string(),
++                        ArrowError::CastError(format!(
++                            "Can't cast value {value} to type {}",
++                            T::DATA_TYPE
++                        ))
++                        .to_string()
++                    );
++                } else {
++                    let result = result.unwrap();
++                    assert_eq!(result.data_type(), &T::DATA_TYPE);
++                    assert_eq!(
++                        result
++                            .as_primitive::<T>()
++                            .iter()
++                            .map(|v| v.map(Into::into))
++                            .collect::<Vec<_>>(),
++                        expected,
++                        "{} -> {}, safe={safe}",
++                        from.data_type(),
++                        T::DATA_TYPE
++                    );
++                }
++            }
++        }
++
++        // Independent i128 range checks cover widening and the excluded narrowing
++        // and sign-changing cases. Include every integer boundary and its neighbors.
++        let mut edges = vec![-1_i128, 0, 1];
++        for bits in [8, 16, 32, 64] {
++            for bound in [
++                -(1_i128 << (bits - 1)),
++                (1_i128 << (bits - 1)) - 1,
++                (1_i128 << bits) - 1,
++            ] {
++                edges.extend([bound - 1, bound, bound + 1]);
++            }
++        }
++        macro_rules! source {
++            ($ty:ty, $native:ty) => {{
++                let data: Vec<$native> = edges
++                    .iter()
++                    .filter_map(|v| <$native>::try_from(*v).ok())
++                    .cycle()
++                    .take(8211)
++                    .collect();
++                for null_mode in 0..3 {
++                    let nulls = match null_mode {
++                        0 => None,
++                        1 => Some(NullBuffer::from(
++                            (0..data.len()).map(|i| i % 5 != 0).collect::<Vec<_>>(),
++                        )),
++                        _ => Some(NullBuffer::new_null(data.len())),
++                    };
++                    let array = PrimitiveArray::<$ty>::new(data.clone().into(), nulls);
++                    for (offset, len) in [(0, data.len()), (1, data.len() - 2), (17, 8192), (1, 0)]
++                    {
++                        let array = array.slice(offset, len);
++                        let values: Vec<_> = array.iter().map(|v| v.map(|v| v as i128)).collect();
++                        check::<Int8Type>(&array, &values, i8::MIN as i128, i8::MAX as i128);
++                        check::<Int16Type>(&array, &values, i16::MIN as i128, i16::MAX as i128);
++                        check::<Int32Type>(&array, &values, i32::MIN as i128, i32::MAX as i128);
++                        check::<Int64Type>(&array, &values, i64::MIN as i128, i64::MAX as i128);
++                        check::<UInt8Type>(&array, &values, 0, u8::MAX as i128);
++                        check::<UInt16Type>(&array, &values, 0, u16::MAX as i128);
++                        check::<UInt32Type>(&array, &values, 0, u32::MAX as i128);
++                        check::<UInt64Type>(&array, &values, 0, u64::MAX as i128);
++                    }
++                }
++            }};
++        }
++        source!(Int8Type, i8);
++        source!(Int16Type, i16);
++        source!(Int32Type, i32);
++        source!(Int64Type, i64);
++        source!(UInt8Type, u8);
++        source!(UInt16Type, u16);
++        source!(UInt32Type, u32);
++        source!(UInt64Type, u64);
+     }
+ 
+     #[test]

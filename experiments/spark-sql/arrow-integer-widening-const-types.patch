@@ -1,0 +1,21 @@
+--- a/src/cast/mod.rs
++++ b/src/cast/mod.rs
+@@ -2470,12 +2470,15 @@
+     TO::Native: NumCast,
+ {
+     let from = from.as_primitive::<FROM>();
++    // Borrow constant types so classification does not create/drop DataType values.
++    let from_type = const { &FROM::DATA_TYPE };
++    let to_type = const { &TO::DATA_TYPE };
+     // Every source value fits in these wider integer types, including null slots.
+     // Use the infallible kernel so it can fill the output in one pass.
+-    if FROM::DATA_TYPE.is_integer()
+-        && TO::DATA_TYPE.is_integer()
++    if from_type.is_integer()
++        && to_type.is_integer()
+         && std::mem::size_of::<FROM::Native>() < std::mem::size_of::<TO::Native>()
+-        && (FROM::DATA_TYPE.is_unsigned_integer() || TO::DATA_TYPE.is_signed_integer())
++        && (from_type.is_unsigned_integer() || to_type.is_signed_integer())
+         // ponytail: measured size/density cutoffs; retune with workload evidence.
+         && (from.len() <= 128 || from.null_count() <= from.len() / 2)
+     {
