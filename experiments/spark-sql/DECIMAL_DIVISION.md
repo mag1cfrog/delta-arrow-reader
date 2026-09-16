@@ -1724,6 +1724,45 @@ The override entry belongs in the existing `[patch.crates-io]` table. The first 
 
 All 25 scratch paths are restored, and the three default executable hashes are unchanged. The shared default target's Sail caches are invalidated, and all 168 default observations match the preceding checkpoint including complete errors and plans. The patch applies and reverses exactly, formatting passes, and earlier patches and result files remain unchanged. The candidate and this report remain uncommitted. The 126 compatibility differences and allocator-policy decision remain open; this in-memory experiment does not measure Python C Stream consumption or concurrent sessions.
 
+## Opt in to glibc buffer reuse
+
+On the measured glibc 2.42 host, setting `GLIBC_TUNABLES=glibc.malloc.tcache_max=262144` before starting the process removes the remaining observed allocator slowdown from the two wrapped DIV targets. The setting reuses released buffers through glibc's per-thread cache. This follow-up changes no runtime code, dependency, SQL or default configuration. [allocator-policy-results.json](allocator-policy-results.json) contains the commands, binary hashes, samples, counters, memory measurements and validation results. Without the opt-in, the slow mode remains reproducible.
+
+glibc 2.42 added support for caching large allocations; the selected limit covers this benchmark's 128 KiB Decimal and 64 KiB integer buffers. The allocator already supports reusing aligned buffers through this cache. Unlike setting either allocation threshold, changing `tcache_max` does not disable glibc's dynamic threshold adjustment. See the [glibc 2.42 release notes](https://raw.githubusercontent.com/bminor/glibc/glibc-2.42/NEWS) and [pinned allocator implementation](https://raw.githubusercontent.com/bminor/glibc/glibc-2.42/malloc/malloc.c).
+
+Set `bench` to the preceding section's saved Arrow-optimized benchmark and `run_dir` to an output directory. With no other allocator overrides, the complete local opt-in is:
+
+```sh
+GLIBC_TUNABLES=glibc.malloc.tcache_max=262144 \
+  taskset -c 2 "$bench" "$run_dir/tcache-smallint.json" \
+  subqueries div_i16_literal_ansifalse
+```
+
+Repeat with `div_integer_ansitrue` and a separate output file for BIGINT. This is a process-startup setting, including when Python eventually hosts the reader. Do not set it during library import or change the process allocator through `mallopt`. Existing `GLIBC_TUNABLES` entries need to be reconciled explicitly before using this command. The setting applies to libc allocations throughout the process; it is not confined to these SQL expressions. glibc documents tunables as release- and distribution-dependent, so this is an opt-in for the measured environment, not a portable package default. [GNU tunables documentation](https://sourceware.org/glibc/manual/latest/html_node/Tunables.html).
+
+Final timings reuse the exact saved binaries from the preceding section. The three settings are default, both mmap/trim thresholds at 1 MiB, and the tcache opt-in. All use CPU 2, one partition, 1,048,576 rows, batches of 8,192, two warmups and nine executions per process. There are 204 wrapped-query and 72 native-output processes, interleaved by setting. Each target has 16 processes per setting; other cases have six. No tracing, memory probes, builds or validation jobs overlap these timings. Each process contributes one median, and counters use the same FIFO-controlled interval.
+
+| Wrapped query | Default median ms | Tcache median ms | Default high-fault processes | Tcache high-fault processes |
+| --- | ---: | ---: | ---: | ---: |
+| SMALLINT DIV 3, non-ANSI | 2.478 | 2.457 | 2/16 | 0/16 |
+| BIGINT DIV 4, ANSI | 2.484 | 2.415 | 7/16 | 0/16 |
+
+The default high-fault groups take about 5.49/5.43 ms. Tcache process medians range from 2.444-2.477 ms for SMALLINT and 2.406-2.482 ms for BIGINT. Execution faults fall from 48 or 18,464 to 1-2 over nine executions. The gain is removal of the sampled slow mode; the already-fast mode changes little. Selected wrapped control medians change by -0.06% to -1.88%, and native-output control medians by -0.0004% to -0.93%. Small positive mean changes and outliers remain in the artifact; these measurements do not establish zero overhead for every workload.
+
+The six-setting exploration has 48 additional timing processes and 24 separate syscall traces. Default slow traces have 2,304 `brk` calls over 1,152 batches. All four tcache target traces have zero `brk`, `mmap`, `munmap` and `madvise` calls inside the execution interval. Only raising the trim threshold to 1 MiB instead produces 1,152 `mmap` and 1,152 `munmap` calls, with roughly 8 ms queries. Only raising the mmap threshold still leaves repeated `brk` calls. Raising both thresholds to 256 KiB also retains slow samples. Raising both to 1 MiB removes the sampled target slow mode, but pins two thresholds; the tcache option needs one setting. Traced times are excluded from performance comparisons.
+
+Memory reuse retains memory. A separate 96-process measurement pauses the child at the existing FIFO handshakes and reads `/proc/PID/smaps_rollup` before and after execution. Four processes per setting per case produce these median private dirty memory totals after execution:
+
+| Query | Default KiB | Tcache KiB | Increase KiB |
+| --- | ---: | ---: | ---: |
+| SMALLINT DIV 3, non-ANSI | 54,748 | 55,046 | 298 |
+| BIGINT DIV 4, ANSI | 54,742 | 55,012 | 270 |
+| Correlated MAX control | 77,214 | 81,038 | 3,824 |
+
+These are whole-process measurements with inputs, context and plans still alive, not an isolated cache size or a memory ceiling. The artifact also keeps live RSS, peak RSS and execution fault deltas. Peak RSS includes startup and validation. Cache retention depends on workload and thread count; this single-thread experiment does not bound concurrent-session or Python C Stream memory.
+
+Both selected settings preserve all 48 wrapped-query, 48 native-output, 20 cast and 12 Float64 checks, for 256 observations in total. Full-value checks run inside the benchmark, and captures match the preceding default-allocator references apart from timing fields. The earlier error corpora, Arrow unit suite and Delta lifecycle were not rerun for this environment-only change; the 126 tracked SQL differences remain open. All 25 scratch paths and three default executable hashes remain unchanged. Earlier patches and results are preserved. This slice adds the opt-in instructions and evidence only; it remains uncommitted and nothing was pushed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
