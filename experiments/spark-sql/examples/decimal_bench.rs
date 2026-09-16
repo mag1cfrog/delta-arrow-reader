@@ -287,6 +287,10 @@ async fn subquery_bench(
     if phase != "planning" && phase != "execution" {
         return Err("DECIMAL_BENCH_PERF_PHASE must be planning or execution".into());
     }
+    let retention = std::env::var("DECIMAL_BENCH_RETAIN").unwrap_or_else(|_| "none".into());
+    if !matches!(retention.as_str(), "none" | "batch" | "all" | "released") {
+        return Err("DECIMAL_BENCH_RETAIN must be none, batch, all or released".into());
+    }
     let divisor = "(SELECT min(d) FROM bench_inner)";
     let count = "SELECT count(*) AS n FROM bench_inner i WHERE i.k=o.k";
     let cases = [
@@ -457,6 +461,50 @@ async fn subquery_bench(
             result["output_nulls"] = json!(nulls);
             result["coefficient_sum"] = json!(sum.to_string());
             if !check_only {
+                let mut retained = Vec::new();
+                if retention != "none" {
+                    let held_plan = plan_query(
+                        ctx,
+                        "SELECT CAST(id AS DECIMAL(38,6)) AS r FROM bench_outer",
+                        true,
+                    )
+                    .await?;
+                    let mut stream = execute_stream(held_plan, ctx.task_ctx())?;
+                    while let Some(batch) = stream.next().await {
+                        retained.push(batch?);
+                        if retention != "all" {
+                            break;
+                        }
+                    }
+                    drop(stream);
+                    assert_eq!(
+                        validate_retained(&retained),
+                        if retention == "all" { ROWS } else { BATCH_SIZE }
+                    );
+                    // Dropping the first result on another thread must release
+                    // its owner and make the reuse slot available again.
+                    if retention == "released" {
+                        std::thread::spawn(move || drop(retained)).join().unwrap();
+                        retained = Vec::new();
+                    }
+                }
+                // Inspect a uniquely owned value buffer outside timing. This
+                // distinguishes native allocation from a custom reuse owner.
+                if std::env::var_os("DECIMAL_BENCH_RETAIN").is_some() {
+                    result["retention"] = json!(retention);
+                    result["retained_rows"] = json!(validate_retained(&retained));
+                    let input = Int64Array::from_iter_values(0..BATCH_SIZE as i64);
+                    let cast = arrow::compute::cast(&input, &DataType::Decimal128(38, 6))?;
+                    let values = cast
+                        .as_any()
+                        .downcast_ref::<Decimal128Array>()
+                        .unwrap()
+                        .clone();
+                    drop(cast);
+                    let (_, values, _) = values.into_parts();
+                    result["probe_value_buffer_mutable"] =
+                        json!(values.into_inner().into_mutable().is_ok());
+                }
                 for _ in 0..WARMUPS {
                     let plan = plan_query(ctx, &sql, ansi).await?;
                     assert_eq!(consume(ctx, plan).await?, (rows, nulls));
@@ -492,6 +540,14 @@ async fn subquery_bench(
                 }
                 result["planning_samples_ms"] = json!(planning_ms);
                 result["samples_ms"] = json!(execution_ms);
+                assert_eq!(
+                    validate_retained(&retained),
+                    match retention.as_str() {
+                        "batch" => BATCH_SIZE,
+                        "all" => ROWS,
+                        _ => 0,
+                    }
+                );
             }
             eprintln!("{id}: validated {rows} rows, {nulls} NULLs");
             results.push(result);
@@ -510,6 +566,23 @@ async fn subquery_bench(
         }))?,
     )?;
     Ok(())
+}
+
+fn validate_retained(batches: &[RecordBatch]) -> usize {
+    let mut rows = 0;
+    for batch in batches {
+        let values = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Decimal128Array>()
+            .unwrap();
+        assert_eq!(values.data_type(), &DataType::Decimal128(38, 6));
+        for value in values.iter() {
+            assert_eq!(value, Some(subquery_input_id(rows) as i128 * 1_000_000));
+            rows += 1;
+        }
+    }
+    rows
 }
 
 async fn cast_bench(ctx: &SessionContext, output: &str, selected: Option<&str>) -> Result<()> {

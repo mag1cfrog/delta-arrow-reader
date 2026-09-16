@@ -1820,6 +1820,42 @@ taskset -c 2 "$CARGO_TARGET_DIR/release/examples/decimal_bench" \
 
 Use no allocator overrides. Give separate dependency checkouts separate Cargo target directories. Save the candidate executable and repeat BIGINT and controls using the artifact's balanced runner. The artifact also includes the standalone Rust benchmark, large-array check and their build commands. The follow-up patch recreates the tested source and reverses exactly. All 25 scratch paths and three default executables are restored; earlier patches and results are unchanged. This slice remains uncommitted and nothing was pushed.
 
+## Retain a prior SQL result while testing buffer reuse
+
+Holding one earlier SQL result batch disables the optional reuse patch for subsequent conversions. Three of 24 target processes then return to the slow mode. The patch remains an experiment, not a general fix. The preceding six reviewed slices are now committed through `fbd380c5`; this follow-up changes only the Rust benchmark and its evidence. [integer-decimal-retention-results.json](integer-decimal-retention-results.json) contains the captures, counters, source audit and build provenance.
+
+The existing benchmark now accepts `DECIMAL_BENCH_RETAIN=none|batch|all|released`. Before timing the selected query, it can hold one 8,192-row batch or all 1,048,576 rows from a separate `CAST(id AS DECIMAL(38,6))` query. It drops that query's stream, checks every retained value, and keeps the result alive through the timed query. `released` drops the batch on another Rust thread before warmup. The retained values are checked again after timing. With the variable unset, the benchmark's original behavior and capture format are unchanged.
+
+A separate cast outside timing tests whether a uniquely owned value buffer can become mutable. With the reuse patch, it has custom ownership in `none` and `released`, but ordinary ownership in `batch` and `all`. The earlier batch keeps the single process-wide reuse slot busy until its last reference drops, so later casts take the original allocation path. The baseline always has ordinary ownership. This establishes the retention limit in Rust SQL results without involving Python.
+
+Before is the preceding Arrow cast optimization; after adds the unchanged reuse patch. Both binaries use the new benchmark, identical non-Arrow dependencies and default allocator settings. Each mode has 12 fresh processes per variant and target query, plus four per variant for the unchanged Decimal projection control: 224 processes total. The ABBA variant order rotates modes and query order. Each process supplies the median of nine executions after two warmups, on CPU 2 with one partition. All output validation and retention setup remain outside the execution interval.
+
+| Earlier result held | After SMALLINT ms | After BIGINT ms | High-fault targets before / after |
+| --- | ---: | ---: | ---: |
+| None | 2.164 | 2.127 | 8/24 / 0/24 |
+| One batch | 2.463 | 2.448 | 1/24 / 3/24 |
+| All batches | 2.467 | 2.439 | 3/24 / 0/24 |
+| Batch released on another thread | 2.169 | 2.126 | 5/24 / 0/24 |
+
+The three slow candidate processes all hold one batch and run BIGINT. Their medians are 5.462-5.691 ms, with 18,464 page faults across nine executions. The mode's median hides them; its BIGINT process mean is 3.220 ms. The control medians change by -0.30% to +0.33%. These small samples do not establish that holding one batch increases the probability of slow allocation. Holding all batches also disables reuse, despite its 0/24 sampled slow processes; allocator layout changes with the retained allocations. The ownership probe itself also performs an allocation outside timing. Cross-thread release restores eligibility in every measured process.
+
+Eight separate syscall diagnostics cover four retained-batch processes and two each of `none` and `released`. None reproduces the slow mode: all have only 1-2 `brk` calls and no `mmap`, `munmap` or `madvise` calls inside the execution interval. These traced timings are excluded. The slow untraced processes share the earlier experiment's high page-fault count, but these new traces do not directly establish their syscall sequence.
+
+The source audit found no current SQL Decimal consumer that needs an additional copy because of the custom owner. DataFusion's mutable aggregate kernel mutates newly allocated state, while join builders consume integer index arrays. Null-mask repair in DataFusion and Delta Kernel rebuilds `ArrayData` metadata without reclaiming value buffers. Numeric and rounding kernels borrow their inputs. This is a bounded audit of the pinned sources: external callers needing `Buffer::into_mutable`, `into_vec` or mutable arithmetic still face the ownership limitation.
+
+Both runtimes preserve all 48 normal benchmark captures, including values, types and plans. Every timed process passes full output checks and the expected retention/ownership assertions; invalid modes are rejected. The runtime patch did not change, so the preceding Arrow, Spark corpus, integer-reference and Delta lifecycle suites were not rerun here. Their earlier results remain evidence for the same patch, not new validation runs.
+
+After preparing and saving both runtimes as described above, run each mode against the same saved binary:
+
+```sh
+for mode in none batch all released; do
+  DECIMAL_BENCH_RETAIN="$mode" taskset -c 2 "$run_dir/after-bench" \
+    "$run_dir/retained-$mode.json" subqueries div_integer_ansitrue
+done
+```
+
+Repeat with the baseline and SMALLINT case, using the balanced runner recorded in the artifact for comparisons. This tests streaming a later query while retaining an earlier result, not collecting the later query, arbitrary concurrent sessions or Python C Stream ownership. All 25 scratch paths and three default executables are restored, and earlier experiment artifacts are unchanged. Nothing was pushed. A default implementation needs a reuse design that is not disabled by one long-lived result; this slice does not add a larger cache or change the runtime patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
