@@ -2299,6 +2299,47 @@ This slice removes the measured exact-large-coefficient kernel regression. High-
 
 The [results artifact](decimal-double-exact-results.json) records commands, hashes, all samples and counters, corpus checks and preservation checks. It references the preceding artifact for unchanged captures instead of repeating those rows and plans. Apply the two Arrow patches in order to the dependency override, rebuild the optional runtime, and link the standalone kernel benchmark against that build's recorded Arrow artifacts. Apply and reverse checks confirm that the follow-up patch restores the preceding Arrow source exactly. All 26 scratch host paths, both Arrow files and three cached executables were restored with fresh source timestamps. The default project build still does not enable either patch.
 
+## Single-row build input for cross joins
+
+Starting from `12a3d0c`, [datafusion-cross-join-singleton.patch](datafusion-cross-join-singleton.patch) changes DataFusion 54.1.0's physical join selection. It uses the existing `CrossJoinExec::swap_inputs()` helper to put an exactly one-row input on the build side when the other input has an exact row count greater than one. The rule preserves that orientation on subsequent optimizer passes. Empty, unknown, inexact and other row counts retain the existing byte-size/row-count heuristic. Disabling join reordering still prevents the swap. The byte/row comparison is shared with the existing helper, so the fallback reuses the already fetched statistics. Hash joins and nested-loop joins keep their existing selection policy.
+
+The NULL DIV numeric CAST control had 1,048,576 rows on the build side, with all columns projected away. Its statistics report exactly 0 bytes. The right side contains one NULL integer, reported as 8 bytes. The byte-first rule chose the many-row input as the build side. CrossJoinExec then emitted one batch per build row and probe batch: 1,048,576 one-row batches. Choosing the singleton as the build side produces 128 batches of 8,192 rows through the same execution node. A diagnostic run of the patched optimizer confirms that batch count without manually swapping the plan. All 1,048,576 results remain NULL.
+
+Execution-only CPU profiles of the two preceding binaries place the work in batch construction, projection, integer-to-Decimal conversion and memory management. This identifies a large cost common to both versions. It does not explain the preceding +2.78% elapsed-time difference, and the query does not run the Decimal-to-DOUBLE conversion optimized in the preceding slice.
+
+Two new regression tests fail against the baseline and pass with the patch. They cover exact singleton selection in both orientations, empty and uncertain statistics, the join-reordering and statistics-registry switches, schema preservation, a repeated optimizer pass, and actual batch/value preservation for NULL and positive/negative integers. The physical optimizer crate's 30 tests pass, as do 24 planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 exact rows, 116 Delta comparisons and 18 adapter checks. The standalone optimizer test lock changes only three registry dependencies to the already selected local overrides; package versions are unchanged, and its original lock is restored afterward.
+
+The 27 numeric corpora remain at 5,174/5,370, with no repaired or regressed observations. 5,368 parsed captures are identical, including physical plans; 2 multi-invalid-row cases select a different first invalid value with the same checked error class and target. All 4,450 non-NULL DOUBLE cells remain bit-exact against the saved Spark reference. All 66 benchmark queries retain their results. Only the numeric/string VALUES NULL DIV queries, in both ANSI modes, change physical plans, by exchanging the CrossJoin inputs.
+
+The performance series uses the previous 13 SQL cases plus the string VALUES sibling: 448 processes, four ABBA blocks, eight processes per version/case/phase, two warmups and nine samples per process, pinned to CPU 2. Planning and execution counters use separate intervals. Every process validates its output and physical plan. Host source, the Arrow conversion code, dependencies/features and benchmark source are unchanged. Compilation and validation finish before timing begins.
+
+| SQL case | Before ms | After ms | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| `no_division_ansitrue` | 0.777 | 0.771 | -0.83% | +0.00% |
+| `plain_projection_ansitrue` | 15.888 | 15.880 | -0.05% | -0.00% |
+| `negative_literal_ansitrue` | 16.058 | 16.143 | +0.53% | -0.00% |
+| `wide_projection_ansitrue` | 43.446 | 43.531 | +0.20% | +0.00% |
+| `div_integer_ansitrue` | 2.129 | 2.135 | +0.32% | +0.00% |
+| `div_constant_ansitrue` | 0.294 | 0.294 | -0.03% | +0.01% |
+| `div_null_cast_numeric_ansitrue` | 590.464 | 0.869 | -99.85% | -99.74% |
+| `div_null_cast_values_ansitrue` | 586.482 | 0.869 | -99.85% | -99.74% |
+| `compare_f32_column_ansitrue` | 5.002 | 5.044 | +0.84% | -0.00% |
+| `compare_f64_column_ansitrue` | 5.018 | 4.990 | -0.56% | -0.00% |
+| `compare_f64_literal_ansitrue` | 3.352 | 3.317 | -1.04% | +0.01% |
+| `compare_decimal_literal_ansitrue` | 4.206 | 4.196 | -0.22% | -0.00% |
+| `null_divide_left_ansitrue` | 0.204 | 0.202 | -0.70% | -1.58% |
+| `correlated_count_ansitrue` | 75.344 | 73.675 | -2.21% | +0.00% |
+
+The numeric VALUES case falls from 590.464 to 0.869 ms (-99.85%), and the string VALUES case falls from 586.482 to 0.869 ms (-99.85%). Both instruction counts fall by 99.74%. Planning rises from 0.716 to 0.734 ms (+2.54%) for numeric VALUES and from 0.698 to 0.712 ms (+1.86%) for string VALUES, about 18 and 13 microseconds. Planning instructions rise by 2.63% and 2.81%. The extra optimizer work is measured alongside the execution gain.
+
+Other execution controls range from -2.21% to +0.84% in elapsed time, with unchanged physical plans. Their timing improvements are not attributed to the singleton rule. Correlated COUNT measures 75.344 versus 73.675 ms (-2.21%), with instructions changing by +0.0025%; this does not resolve the older COUNT comparison or establish its cause. Other planning controls range from -1.47% to +1.29%, with instruction changes within 0.15%.
+
+The first measured candidate read statistics again in the non-singleton fallback. Final code extracts the existing byte/row comparison into a shared helper and reuses the statistics already fetched for the singleton check. Selection behavior is unchanged. The table and validation counts describe the rebuilt final version; the artifact also retains the initial candidate's summary and provenance.
+
+The [results artifact](cross-join-singleton-results.json) retains samples, counters, commands, build hashes, profile findings, changed plans, regression checks and restoration checks. Apply the patch to the DataFusion 54.1.0 physical optimizer source selected by the existing dependency override, then rebuild the optional runtime. Run that crate's library tests through its own manifest with the recorded dependency overrides. Apply/reverse checks confirm that the patch restores the original file exactly. The scratch host files, Arrow sources, physical optimizer source/test lock and three cached executables were restored, with fresh source timestamps. The default project build does not enable the patch.
+
+The optimization is measured here on fixed in-memory batches and a fixed-width NULL singleton. It is not a general cross-join cost model. The remaining 196 Spark differences, diagnostic gaps, COUNT timing gaps and separate Decimal parsing/conversion/materialization costs remain outside this slice.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

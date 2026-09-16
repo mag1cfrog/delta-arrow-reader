@@ -1,0 +1,190 @@
+diff --git a/src/join_selection.rs b/src/join_selection.rs
+--- a/src/join_selection.rs
++++ b/src/join_selection.rs
+@@ -28,6 +28,7 @@
+ use datafusion_common::Statistics;
+ use datafusion_common::config::ConfigOptions;
+ use datafusion_common::error::Result;
++use datafusion_common::stats::Precision;
+ use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
+ use datafusion_common::{JoinSide, JoinType, internal_err};
+ use datafusion_expr_common::sort_properties::SortProperties;
+@@ -97,19 +98,26 @@
+     let left_stats = get_stats(left, registry)?;
+     let right_stats = get_stats(right, registry)?;
+ 
++    Ok(should_swap_join_order_by_statistics(&left_stats, &right_stats))
++}
++
++fn should_swap_join_order_by_statistics(
++    left_stats: &Statistics,
++    right_stats: &Statistics,
++) -> bool {
+     // First compare total_byte_size, then fall back to num_rows if byte
+     // sizes are unavailable.
+     match (
+         left_stats.total_byte_size.get_value(),
+         right_stats.total_byte_size.get_value(),
+     ) {
+-        (Some(l), Some(r)) => Ok(l > r),
++        (Some(l), Some(r)) => l > r,
+         _ => match (
+             left_stats.num_rows.get_value(),
+             right_stats.num_rows.get_value(),
+         ) {
+-            (Some(l), Some(r)) => Ok(l > r),
+-            _ => Ok(false),
++            (Some(l), Some(r)) => l > r,
++            _ => false,
+         },
+     }
+ }
+@@ -345,7 +353,21 @@
+     } else if let Some(cross_join) = plan.downcast_ref::<CrossJoinExec>() {
+         let left = cross_join.left();
+         let right = cross_join.right();
+-        if should_swap_join_order(&**left, &**right, config, registry)? {
++        let swap = if config.optimizer.join_reordering {
++            let left_stats = get_stats(&**left, registry)?;
++            let right_stats = get_stats(&**right, registry)?;
++            // CrossJoinExec emits one batch per build row and probe batch. Keep
++            // an exact singleton on the build side, even when a many-row input
++            // has fewer bytes (for example, after projecting away all columns).
++            match (&left_stats.num_rows, &right_stats.num_rows) {
++                (Precision::Exact(1), Precision::Exact(n)) if *n > 1 => false,
++                (Precision::Exact(n), Precision::Exact(1)) if *n > 1 => true,
++                _ => should_swap_join_order_by_statistics(&left_stats, &right_stats),
++            }
++        } else {
++            false
++        };
++        if swap {
+             cross_join.swap_inputs().map(Some)?
+         } else {
+             None
+@@ -601,3 +623,125 @@
+ }
+ 
+ // See tests in datafusion/core/tests/physical_optimizer
++
++#[cfg(test)]
++mod tests {
++    use super::{JoinSelection, PhysicalOptimizerRule};
++    use arrow::array::Int64Array;
++    use arrow::datatypes::{DataType, Field, Schema};
++    use arrow::record_batch::{RecordBatch, RecordBatchOptions};
++    use datafusion_common::{Statistics, config::ConfigOptions, error::Result, stats::Precision};
++    use datafusion_execution::TaskContext;
++    use datafusion_physical_plan::test::{TestMemoryExec, exec::StatisticsExec};
++    use datafusion_physical_plan::{ExecutionPlan, collect, joins::CrossJoinExec};
++    use std::sync::Arc;
++
++    #[test]
++    fn singleton_cross_join_selection() -> Result<()> {
++        use Precision::{Absent, Exact, Inexact};
++        for (left_rows, left_bytes, right_rows, right_bytes, swapped) in [
++            (Exact(128), 0, Exact(1), 8, true),
++            (Exact(1), 8, Exact(128), 0, false),
++            (Exact(0), 0, Exact(1), 8, false),
++            (Exact(1), 8, Exact(0), 0, true),
++            (Exact(1), 8, Exact(1), 0, true),
++            (Exact(128), 0, Exact(2), 16, false),
++            (Inexact(128), 0, Exact(1), 8, false),
++            (Exact(128), 0, Inexact(1), 8, false),
++            (Absent, 0, Exact(1), 8, false),
++            (Exact(128), 1024, Absent, 8, true),
++        ] {
++            let source = |rows, bytes| -> Arc<dyn ExecutionPlan> {
++                let schema = if bytes == 0 {
++                    Schema::empty()
++                } else {
++                    Schema::new(vec![Field::new("v", DataType::Int64, true)])
++                };
++                let mut stats = Statistics::new_unknown(&schema);
++                stats.num_rows = rows;
++                stats.total_byte_size = Exact(bytes);
++                Arc::new(StatisticsExec::new(stats, schema))
++            };
++            let left = source(left_rows, left_bytes);
++            let right = source(right_rows, right_bytes);
++            for enabled in [false, true] {
++                for registry in [false, true] {
++                    let mut config = ConfigOptions::default();
++                    config.optimizer.join_reordering = enabled;
++                    config.optimizer.use_statistics_registry = registry;
++                    let original: Arc<dyn ExecutionPlan> =
++                        Arc::new(CrossJoinExec::new(left.clone(), right.clone()));
++                    let optimized = JoinSelection::new().optimize(original.clone(), &config)?;
++                    assert_eq!(optimized.schema(), original.schema());
++                    let join = optimized
++                        .downcast_ref::<CrossJoinExec>()
++                        .unwrap_or_else(|| {
++                            optimized.children()[0]
++                                .downcast_ref::<CrossJoinExec>()
++                                .unwrap()
++                        });
++                    assert!(Arc::ptr_eq(
++                        join.left(),
++                        if enabled && swapped { &right } else { &left }
++                    ));
++                    // A second optimizer pass must retain the selected orientation.
++                    let again = JoinSelection::new().optimize(optimized.clone(), &config)?;
++                    assert_eq!(
++                        format!(
++                            "{}",
++                            datafusion_physical_plan::displayable(again.as_ref()).indent(true)
++                        ),
++                        format!(
++                            "{}",
++                            datafusion_physical_plan::displayable(optimized.as_ref()).indent(true)
++                        )
++                    );
++                }
++            }
++        }
++        Ok(())
++    }
++
++    #[tokio::test]
++    async fn singleton_cross_join_preserves_rows_and_batches() -> Result<()> {
++        for value in [None, Some(7), Some(-4)] {
++            let schema = Arc::new(Schema::empty());
++            let batches = [16, 17].map(|rows| {
++                RecordBatch::try_new_with_options(
++                    schema.clone(),
++                    vec![],
++                    &RecordBatchOptions::new().with_row_count(Some(rows)),
++                )
++                .unwrap()
++            });
++            let left = TestMemoryExec::try_new_exec(&[batches.to_vec()], schema, None)?;
++            let schema = Arc::new(Schema::new(vec![Field::new("v", DataType::Int64, true)]));
++            let batch = RecordBatch::try_new(
++                schema.clone(),
++                vec![Arc::new(Int64Array::from(vec![value]))],
++            )?;
++            let right = TestMemoryExec::try_new_exec(&[vec![batch]], schema.clone(), None)?;
++            let original: Arc<dyn ExecutionPlan> = Arc::new(CrossJoinExec::new(left, right));
++            let optimized =
++                JoinSelection::new().optimize(original.clone(), &ConfigOptions::default())?;
++            for (plan, expected_batches) in [(original, 33), (optimized, 2)] {
++                let output = collect(plan, Arc::new(TaskContext::default())).await?;
++                assert_eq!(output.len(), expected_batches);
++                assert_eq!(output.iter().map(RecordBatch::num_rows).sum::<usize>(), 33);
++                for batch in output {
++                    assert_eq!(batch.schema(), schema);
++                    assert!(
++                        batch
++                            .column(0)
++                            .as_any()
++                            .downcast_ref::<Int64Array>()
++                            .unwrap()
++                            .iter()
++                            .all(|v| v == value)
++                    );
++                }
++            }
++        }
++        Ok(())
++    }
++}
