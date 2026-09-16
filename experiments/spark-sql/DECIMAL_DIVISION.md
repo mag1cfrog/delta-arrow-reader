@@ -1628,6 +1628,56 @@ Reuse or regenerate the preceding Spark 4.2.0 capture. The comparison exits 1 fo
 
 The patch applies and reverses exactly. All 24 original scratch paths and saved default executables are restored, and the new module is removed from the scratch tree. Changed Sail package caches are invalidated, and all 168 default observations match the preceding checkpoint, including full errors and plans. The restored default benchmark remains the saved 26-case executable. This optional follow-up is ready for review; mixed-width optimization and the recorded semantic gaps remain separate work.
 
+## Trace DIV allocator variance
+
+The follow-up identifies heap trimming in the slow executions behind the preceding +31.83% SMALLINT literal-DIV and +24.91% BIGINT control measurements. Those percentages do not reproduce as stable costs of the candidate. The same saved binaries produce both timing modes. The original wrapped SQL remains a valid workload, and its slower samples remain recorded.
+
+The first comparison reuses the exact three binaries from the fused experiment with default allocator settings. Each of the two cases runs in 12 fresh processes per variant, in balanced order: 72 processes total. The existing FIFO mechanism records counters and elapsed samples for the same nine-execution interval in each process. CPU 2, one partition, 1,048,576 rows, batch size 8,192 and two warmups remain unchanged. Every run validates all values before timing. Each process contributes one median to the summary; its nine executions are not treated as independent fresh-process observations.
+
+| Wrapped query / variant | Median of process medians, ms | Mean of process medians, ms | Low-fault / high-fault processes |
+| --- | ---: | ---: | ---: |
+| SMALLINT DIV 3, non-ANSI / original | 12.402 | 11.944 | 1 / 11 |
+| SMALLINT DIV 3, non-ANSI / native casts | 12.016 | 10.224 | 4 / 8 |
+| SMALLINT DIV 3, non-ANSI / fused | 8.942 | 7.738 | 5 / 7 |
+| BIGINT DIV 4, ANSI / original | 6.026 | 7.064 | 8 / 4 |
+| BIGINT DIV 4, ANSI / native casts | 5.994 | 6.768 | 9 / 3 |
+| BIGINT DIV 4, ANSI / fused | 5.999 | 7.011 | 8 / 4 |
+
+Low-fault processes have fewer than 1,000 faults over nine executions. The others have 18,464-38,048 faults. Within the fused binary, SMALLINT execution moves from about 5.9 ms in the low-fault group to 9.0 ms in the high-fault group. BIGINT has the same approximately 6/9 ms modes in all three variants. Its fused median is within 0.1% of native casts; its mean is still 3.59% higher in this sample, with four slow processes versus three. These counts do not establish how often either mode will occur in an application.
+
+Twelve separate syscall traces locate the repeated work. During the nine executions, slow wrapped runs make about 2,304 `brk` calls for 1,152 batches, alternating heap contraction and growth. The fused traces repeatedly shrink the heap by 192 KiB; the original SMALLINT traces shrink it by 256 KiB. Fast wrapped traces have one `brk` call. None of these captured intervals contains `mmap`, `munmap` or `madvise`. A captured execution stack follows RecordBatch/Arrow buffer release into glibc `_int_free_chunk` and `systrim`; allocation reaches `posix_memalign` and `sysmalloc`. The stack diagnostic was stopped after its time limit, so only the captured stacks are used. Traced elapsed times are excluded from performance comparisons.
+
+The existing benchmark adds a final `CAST(... AS DECIMAL(38,6))` to every result. For DIV, that introduces a 128 KiB values buffer per 8,192-row batch beyond its actual BIGINT result. The optional [div-native-bench.patch](div-native-bench.patch) adds a separate comparison by removing that wrapper from the 18 DIV observations. It checks the BIGINT schema and scales coefficients only during untimed validation. The other 30 observations keep the same SQL and plans. This changes the measurement workload; it does not change the SQL implementation or production allocator settings.
+
+All three rebuilt binaries pass all 48 full-value checks. Their rows, NULL counts and normalized sums match their respective wrapped captures. Arithmetic, dependency overrides and lockfiles match the preceding variants exactly; only the benchmark changes. A further 144 default-allocator processes measure the two target cases, an INT column case and the unchanged Decimal control, again with 12 processes per variant and counters from the same interval.
+
+| Native-output query | Median ms: original / native casts / fused | Fused vs native casts | Fused faults per nine executions |
+| --- | ---: | ---: | ---: |
+| SMALLINT DIV 3, non-ANSI | 2.380 / 2.023 / 1.500 | -25.87% | 16-17 |
+| BIGINT DIV 4, ANSI | 1.453 / 1.455 / 1.453 | -0.13% | 16-17 |
+| INT column DIV, ANSI | 2.140 / 6.352 / 2.055 | -67.65% | 16-17 |
+| Unchanged Decimal / control | 17.048 / 17.099 / 17.088 | -0.07% | 64-64 |
+
+The fused SMALLINT target ranges from 1.491 to 1.518 ms across its 12 process medians; BIGINT ranges from 1.446 to 1.462 ms. Twelve additional syscall traces of the two native-output targets show two `brk` calls per interval, without repeated contraction and growth for each batch. The native-cast INT column control still has many faults, while the fused implementation removes that input-buffer cost. These results support the preceding fused optimization on these inputs without treating the extra Decimal conversion as part of DIV itself.
+
+[div-allocator-results.json](div-allocator-results.json) contains all 216 untraced process captures, counters, process statistics, 24 syscall summaries, stack evidence, commands and source/binary hashes. The earlier artifacts are unchanged. Default heap trimming still affects the wrapped workload; its frequency depends on process heap state, and this experiment does not isolate every factor that selects a mode. User-mode counters exclude kernel work. The host is not isolated and CPU frequency is not fixed. There is no global zero-regression claim.
+
+To reproduce, prepare each runtime variant from the preceding fused comparison with its recorded dependency overrides. Apply the same benchmark-only patch to each variant before building and saving its executable:
+
+```sh
+git apply --check experiments/spark-sql/div-native-bench.patch
+git apply experiments/spark-sql/div-native-bench.patch
+cargo build --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_bench
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/native-after-bench"
+"$run_dir/native-after-bench" "$run_dir/native-check.json" subquery-check
+git apply -R experiments/spark-sql/div-native-bench.patch
+```
+
+Save `native-original-bench` and `native-before-bench` the same way from their respective runtime sources. Reuse the existing FIFO-controlled `perf stat` command with `subqueries div_i16_literal_ansifalse` and `subqueries div_integer_ansitrue`; also run the INT column and Decimal controls from the table. Read timing samples from that command's `capture.json` alongside its `counters.jsonl`. Use fresh processes in the recorded balanced order. To trace a separate run, place `strace -f -qq --seccomp-bpf -ttt -T -yy -e trace=brk,mmap,munmap,madvise,write -o TRACE_FILE` before the benchmark command. Count syscalls between its `enable` and `disable` FIFO writes, and keep traced timings out of the performance comparison.
+
+The benchmark patch applies and reverses exactly. All 25 saved scratch paths and default executables are restored, changed Sail package caches are invalidated, and the default probe matches all 168 previous observations including complete errors and plans. The host benchmark, vendor, manifests and lockfiles retain their preceding contents. The last compatibility checkpoint remains 2,950/3,076 with 126 recorded differences; this slice adds no compatibility repair. Both the benchmark patch and findings remain uncommitted for review.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

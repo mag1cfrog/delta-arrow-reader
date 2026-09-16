@@ -1,0 +1,65 @@
+diff --git a/experiments/spark-sql/examples/decimal_bench.rs b/experiments/spark-sql/examples/decimal_bench.rs
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -238,21 +238,27 @@
+     case: &str,
+     sorted: bool,
+ ) -> Result<(usize, usize, i128)> {
+-    if plan.schema().fields().len() != 1
+-        || plan.schema().field(0).data_type() != &DataType::Decimal128(38, 6)
+-    {
++    let expected_type = if case.starts_with("div_") {
++        DataType::Int64
++    } else {
++        DataType::Decimal128(38, 6)
++    };
++    if plan.schema().fields().len() != 1 || plan.schema().field(0).data_type() != &expected_type {
+         return Err(format!("unexpected result schema: {:?}", plan.schema()).into());
+     }
+     let mut stream = execute_stream(plan, ctx.task_ctx())?;
+     let (mut rows, mut nulls, mut sum) = (0, 0, 0);
+     while let Some(batch) = stream.next().await {
+         let batch = batch?;
+-        let values = batch
+-            .column(0)
+-            .as_any()
+-            .downcast_ref::<Decimal128Array>()
+-            .unwrap();
+-        for actual in values.iter() {
++        let values = batch.column(0);
++        let integers = values.as_any().downcast_ref::<Int64Array>();
++        let decimals = values.as_any().downcast_ref::<Decimal128Array>();
++        for i in 0..values.len() {
++            let actual = (!values.is_null(i)).then(|| match integers {
++                // Normalize only in validation, outside the timed execution.
++                Some(values) => i128::from(values.value(i)) * 1_000_000,
++                None => decimals.unwrap().value(i),
++            });
+             if rows >= ROWS {
+                 return Err("too many output rows".into());
+             }
+@@ -422,9 +428,13 @@
+     let mut results = Vec::new();
+     for (case, expression, join, sorted) in cases {
+         let order = if sorted { "ORDER BY o.id" } else { "" };
+-        let sql = format!(
+-            "SELECT CAST({expression} AS DECIMAL(38,6)) AS r FROM bench_outer o {join} {order}"
+-        );
++        // Measure DIV's actual BIGINT output without an extra Decimal buffer.
++        let output_expression = if case.starts_with("div_") {
++            expression
++        } else {
++            format!("CAST({expression} AS DECIMAL(38,6))")
++        };
++        let sql = format!("SELECT {output_expression} AS r FROM bench_outer o {join} {order}");
+         for ansi in [true, false] {
+             let id = format!("{case}_ansi{ansi}");
+             if selected.is_some_and(|s| s != id) {
+@@ -442,6 +452,7 @@
+                 Err(error) => return Err(error),
+             };
+             result["physical_plan"] = json!(displayable(plan.as_ref()).indent(true).to_string());
++            result["output_type"] = json!(format!("{:?}", plan.schema().field(0).data_type()));
+             let (rows, nulls, sum) = match validate_subquery(ctx, plan, case, sorted).await {
+                 Ok(counts) => counts,
+                 Err(error) if check_only => {
