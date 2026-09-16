@@ -1,0 +1,137 @@
+diff --git a/src/cast/mod.rs b/src/cast/mod.rs
+--- a/src/cast/mod.rs
++++ b/src/cast/mod.rs
+@@ -363,7 +363,22 @@
+         ))
+     })?;
+ 
+-    let array = if scale < 0 {
++    // All values fit when the output reserves enough digits for the input type.
++    // Use the infallible traversal to avoid per-row checks and buffer zeroing.
++    let integer_precision = match T::DATA_TYPE {
++        DataType::Int8 | DataType::UInt8 => 3,
++        DataType::Int16 | DataType::UInt16 => 5,
++        DataType::Int32 | DataType::UInt32 => 10,
++        DataType::Int64 => 19,
++        DataType::UInt64 => 20,
++        _ => unreachable!("integer input required"),
++    };
++    let array = if scale >= 0
++        && precision <= D::MAX_PRECISION
++        && (precision as i16) >= integer_precision + (scale as i16)
++    {
++        array.unary::<_, D>(|v| v.as_().mul_wrapping(scale_factor))
++    } else if scale < 0 {
+         match cast_options.safe {
+             true => array.unary_opt::<_, D>(|v| {
+                 v.as_()
+@@ -11218,6 +11233,109 @@
+     }
+ 
+     #[test]
++    fn test_integer_decimal_infallible_boundaries() {
++        fn check<T, D>(values: Vec<T::Native>, digits: u8)
++        where
++            T: ArrowPrimitiveType,
++            T::Native: Into<i128>,
++            D: DecimalType,
++            D::Native: DecimalCast,
++        {
++            // Leave a nonzero offset in both the values and validity buffers.
++            let input = PrimitiveArray::<T>::from_iter(
++                std::iter::once(None)
++                    .chain(values.into_iter().map(Some))
++                    .chain([None]),
++            );
++            let input = input.slice(1, input.len() - 1);
++            if digits > D::MAX_PRECISION {
++                return;
++            }
++            for scale in 0..=(D::MAX_PRECISION - digits) as i8 {
++                for precision in [digits + scale as u8, D::MAX_PRECISION] {
++                    let factor = i256::from_i128(10).checked_pow(scale as u32).unwrap();
++                    let expected = input
++                        .iter()
++                        .map(|v| v.map(|v| i256::from_i128(v.into()).checked_mul(factor).unwrap()))
++                        .collect::<Vec<_>>();
++                    for safe in [true, false] {
++                        let target = PrimitiveArray::<D>::new_null(0)
++                            .with_precision_and_scale(precision, scale)
++                            .unwrap();
++                        let actual = cast_with_options(
++                            &input,
++                            target.data_type(),
++                            &CastOptions {
++                                safe,
++                                ..Default::default()
++                            },
++                        )
++                        .unwrap();
++                        let actual = actual.as_primitive::<D>();
++                        assert_eq!(actual.data_type(), target.data_type());
++                        assert_eq!(
++                            actual
++                                .iter()
++                                .map(|v| v.map(|v| v.to_i256().unwrap()))
++                                .collect::<Vec<_>>(),
++                            expected,
++                            "{:?} -> {:?}, safe={safe}",
++                            T::DATA_TYPE,
++                            target.data_type()
++                        );
++                        for empty in [input.slice(0, 0), PrimitiveArray::<T>::new_null(3)] {
++                            let out = cast_with_options(
++                                &empty,
++                                target.data_type(),
++                                &CastOptions {
++                                    safe,
++                                    ..Default::default()
++                                },
++                            )
++                            .unwrap();
++                            assert_eq!(out.len(), empty.len());
++                            assert_eq!(out.null_count(), empty.len());
++                        }
++                    }
++                }
++            }
++        }
++        macro_rules! check_integer {
++            ($arrow:ty, $native:ty, $digits:expr) => {
++                let values = vec![<$native>::MIN, <$native>::MAX, 0, 1];
++                check::<$arrow, Decimal32Type>(values.clone(), $digits);
++                check::<$arrow, Decimal64Type>(values.clone(), $digits);
++                check::<$arrow, Decimal128Type>(values.clone(), $digits);
++                check::<$arrow, Decimal256Type>(values, $digits);
++            };
++        }
++        check_integer!(Int8Type, i8, 3);
++        check_integer!(UInt8Type, u8, 3);
++        check_integer!(Int16Type, i16, 5);
++        check_integer!(UInt16Type, u16, 5);
++        check_integer!(Int32Type, i32, 10);
++        check_integer!(UInt32Type, u32, 10);
++        check_integer!(Int64Type, i64, 19);
++        check_integer!(UInt64Type, u64, 20);
++
++        // One fewer integer digit must keep overflow handling, for both modes.
++        let input = Int64Array::from(vec![Some(i64::MIN), None, Some(i64::MAX)]);
++        let target = DataType::Decimal128(24, 6);
++        assert_eq!(cast(&input, &target).unwrap().null_count(), 3);
++        assert!(
++            cast_with_options(
++                &input,
++                &target,
++                &CastOptions {
++                    safe: false,
++                    ..Default::default()
++                }
++            )
++            .is_err()
++        );
++    }
++
++    #[test]
+     fn test_cast_numeric_to_decimal128_precision_overflow() {
+         let array = Int64Array::from(vec![1234567]);
+         let array = Arc::new(array) as ArrayRef;

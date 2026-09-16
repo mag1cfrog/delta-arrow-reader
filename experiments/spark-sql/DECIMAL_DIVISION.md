@@ -1678,6 +1678,52 @@ Save `native-original-bench` and `native-before-bench` the same way from their r
 
 The benchmark patch applies and reverses exactly. All 25 saved scratch paths and default executables are restored, changed Sail package caches are invalidated, and the default probe matches all 168 previous observations including complete errors and plans. The host benchmark, vendor, manifests and lockfiles retain their preceding contents. The last compatibility checkpoint remains 2,950/3,076 with 126 recorded differences; this slice adds no compatibility repair. Both the benchmark patch and findings remain uncommitted for review.
 
+## Speed up integer-to-Decimal casts
+
+The optional [arrow-integer-decimal.patch](arrow-integer-decimal.patch) reduces the cost of the original wrapped DIV queries, but does not eliminate their allocator timing modes. It changes Arrow's integer-to-Decimal conversion, leaving the preceding fused DIV implementation, SQL, batch size and production allocator settings unchanged. [integer-decimal-cast-results.json](integer-decimal-cast-results.json) records the results. The default project does not apply this patch.
+
+The patch adds 16 production lines and removes one in `arrow-cast` 58.4.0. For nonnegative scale, when the target precision can hold every value of the input integer type after scaling, it uses Arrow's existing `PrimitiveArray::unary`. For example, BIGINT needs at most 19 integer digits, so DECIMAL(38,6) can hold every BIGINT value. This avoids per-row overflow checks and zeroing the output buffer; safe casts also reuse the input NULL bitmap. Conversion still allocates one Decimal result buffer. Smaller target precisions, negative scales and other casts retain their existing paths. No new dependency, UDF or execution node is added. This is a local Arrow optimization, not an imported Sail fix.
+
+All 342 Arrow library tests pass. The added test checks 3,520 integer-type/Decimal-type/precision/scale/error-mode combinations, each with sliced nullable, empty and all-NULL inputs. It covers all eight signed/unsigned integer types and Decimal32/64/128/256, plus BIGINT overflow immediately below the safe precision boundary. The same independent boundary expectations pass against the unmodified Arrow baseline. The 21 SQL corpora retain 2,950/3,076 agreement, with no changed physical plans or new differences. All 346 focused checks, 13 small-integer error causes, four lifecycle tests, 4,064 integer reference observations over 187,410 rows, 116 Delta comparisons, 18 adapter checks and 19 seeds pass. Four queries with multiple invalid strings report a different failing value first; their cast failure and execution stage are unchanged, and both messages remain in the artifact.
+
+The wrapped benchmark's 48 captures match the preceding fused runtime exactly, including SQL, plans, types, rows, NULLs and normalized sums. All 12 Float64 and 20 cast cases also pass full-value validation. A separate native-output build reuses [div-native-bench.patch](div-native-bench.patch) and matches all 48 preceding native captures. The runtime lockfile changes only Arrow's source from the registry to the local copy, with no package-version changes.
+
+Final timing uses CPU 2, one partition, 1,048,576 rows, batches of 8,192, two warmups and nine executions per process. Counters and elapsed samples cover the same FIFO-controlled interval. There are 192 default-allocator processes, with 12 per variant per case; 24 fixed-threshold diagnostic processes; and 48 native-output control processes. Builds and correctness checks finish before these measurements. Each process contributes one median. Before is the preceding fused runtime; after adds only this Arrow patch. The table measures the unchanged wrapped SQL.
+
+| Query | Before median ms | After median ms | Change |
+| --- | ---: | ---: | ---: |
+| SMALLINT DIV 3, non-ANSI | 6.034 | 2.522 | -58.20% |
+| BIGINT DIV 4, ANSI | 6.119 | 2.455 | -59.88% |
+| INT column DIV, ANSI | 6.337 | 3.056 | -51.77% |
+| BIGINT-to-Decimal cast, no division | 4.728 | 1.086 | -77.03% |
+| Decimal DIV with final BIGINT-to-Decimal cast | 26.524 | 22.831 | -13.92% |
+| Unchanged Decimal / projection | 16.976 | 16.964 | -0.07% |
+| Unchanged Decimal ROUND | 9.105 | 9.100 | -0.05% |
+| Unchanged correlated MAX | 69.921 | 69.338 | -0.83% |
+
+The two target queries' mean process medians fall from 6.802/6.871 ms to 3.046/2.960 ms. Their execution instruction counts fall by 67.68%/78.98%. With both diagnostic allocator thresholds fixed at 1 MiB, medians fall from 5.995/6.060 ms to 2.501/2.441 ms. These diagnostic settings remain outside production. Native-output SMALLINT, BIGINT and INT-column DIV change by +0.11%, +0.81% and +1.05% elapsed, with instruction changes between -0.004% and +0.011%; the unchanged Decimal control is -0.45%. The wrapped-query gain comes from the final integer-to-Decimal cast, not a faster DIV kernel. Small control differences remain recorded, without a global zero-overhead claim.
+
+Heap trimming remains. Each target has two high-fault candidate processes out of 12, versus three before. The candidate high-fault groups take about 5.69 ms for SMALLINT and 5.50 ms for BIGINT, versus about 2.5 ms in their low-fault groups. Sixteen separate syscall traces include candidate SMALLINT runs with 2,304 `brk` calls over 1,152 batches, repeatedly releasing 192 KiB of heap. Fast traces have one `brk`; none of these intervals contains `mmap`, `munmap` or `madvise`. Traced times are excluded from performance comparisons. This patch reduces conversion work but cannot be described as fixing repeated allocator reclamation. The earlier slow samples remain unchanged.
+
+To reproduce, prepare the preceding fused runtime and its four dependency overrides. Copy the installed `arrow-cast` 58.4.0 source into a run directory, then apply the patch to that copy. Do not modify Cargo's registry source:
+
+```sh
+cp -a "$ARROW_CAST_SOURCE" "$run_dir/arrow-cast"
+git -C "$run_dir/arrow-cast" apply "$repo_root/experiments/spark-sql/arrow-integer-decimal.patch"
+cargo test --release --locked --manifest-path "$run_dir/arrow-cast/Cargo.toml" --lib
+cat >> "$run_dir/override.toml" <<EOF
+arrow-cast = { path = "$run_dir/arrow-cast" }
+EOF
+cargo build --release --offline --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_bench --example decimal_probe
+taskset -c 2 "$CARGO_TARGET_DIR/release/examples/decimal_bench" \
+  "$run_dir/wrapped.json" subqueries div_i16_literal_ansifalse
+```
+
+The override entry belongs in the existing `[patch.crates-io]` table. The first runtime build updates only the `arrow-cast` lockfile source; check that diff, then use `--locked` on subsequent builds. Save both executables and use the artifact's balanced FIFO-controlled runner for comparisons. Repeat the BIGINT target and controls. The native-output comparison uses the separate benchmark patch described above.
+
+All 25 scratch paths are restored, and the three default executable hashes are unchanged. The shared default target's Sail caches are invalidated, and all 168 default observations match the preceding checkpoint including complete errors and plans. The patch applies and reverses exactly, formatting passes, and earlier patches and result files remain unchanged. The candidate and this report remain uncommitted. The 126 compatibility differences and allocator-policy decision remain open; this in-memory experiment does not measure Python C Stream consumption or concurrent sessions.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
