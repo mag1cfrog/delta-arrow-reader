@@ -1,0 +1,175 @@
+{"id": "tinyint_range_false", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3) WHERE false"}
+{"id": "tinyint_range_limit0", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3) LIMIT 0"}
+{"id": "tinyint_range_false_limit0", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3) WHERE false LIMIT 0"}
+{"id": "tinyint_values_false", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM VALUES (0),(1) t(id) WHERE false"}
+{"id": "tinyint_values_limit0", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM VALUES (0),(1) t(id) LIMIT 0"}
+{"id": "tinyint_values_false_limit0", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM VALUES (0),(1) t(id) WHERE false LIMIT 0"}
+{"id": "tinyint_constant_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2)"}
+{"id": "tinyint_dynamic_dead_case", "sql": "SELECT CASE WHEN id < 0 THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2) ORDER BY id"}
+{"id": "tinyint_live_case", "sql": "SELECT CASE WHEN id = 0 THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2) ORDER BY id"}
+{"id": "tinyint_coalesce_safe", "sql": "SELECT COALESCE(CAST(id AS BIGINT), CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS q FROM range(2) ORDER BY id"}
+{"id": "tinyint_null_zero_false", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3) WHERE false"}
+{"id": "tinyint_unused_projection", "sql": "SELECT id AS q FROM (SELECT id, CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS unused FROM range(3)) t ORDER BY id"}
+{"id": "tinyint_empty_subquery", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false) AS q"}
+{"id": "tinyint_limit0_subquery", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) LIMIT 0) AS q"}
+{"id": "tinyint_left_cast_values_live", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_left_cast_values_false", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "tinyint_left_cast_values_limit0", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "tinyint_left_cast_range_live", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t"}
+{"id": "tinyint_left_cast_range_false", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t WHERE false"}
+{"id": "tinyint_left_cast_range_limit0", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t LIMIT 0"}
+{"id": "tinyint_right_cast_values_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_right_cast_values_false", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "tinyint_right_cast_values_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "tinyint_right_cast_range_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t"}
+{"id": "tinyint_right_cast_range_false", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t WHERE false"}
+{"id": "tinyint_right_cast_range_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t LIMIT 0"}
+{"id": "smallint_range_false", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3) WHERE false"}
+{"id": "smallint_range_limit0", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3) LIMIT 0"}
+{"id": "smallint_range_false_limit0", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3) WHERE false LIMIT 0"}
+{"id": "smallint_values_false", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM VALUES (0),(1) t(id) WHERE false"}
+{"id": "smallint_values_limit0", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM VALUES (0),(1) t(id) LIMIT 0"}
+{"id": "smallint_values_false_limit0", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM VALUES (0),(1) t(id) WHERE false LIMIT 0"}
+{"id": "smallint_constant_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2)"}
+{"id": "smallint_dynamic_dead_case", "sql": "SELECT CASE WHEN id < 0 THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2) ORDER BY id"}
+{"id": "smallint_live_case", "sql": "SELECT CASE WHEN id = 0 THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2) ORDER BY id"}
+{"id": "smallint_coalesce_safe", "sql": "SELECT COALESCE(CAST(id AS BIGINT), CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS q FROM range(2) ORDER BY id"}
+{"id": "smallint_null_zero_false", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3) WHERE false"}
+{"id": "smallint_unused_projection", "sql": "SELECT id AS q FROM (SELECT id, CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS unused FROM range(3)) t ORDER BY id"}
+{"id": "smallint_empty_subquery", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false) AS q"}
+{"id": "smallint_limit0_subquery", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) LIMIT 0) AS q"}
+{"id": "smallint_left_cast_values_live", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_left_cast_values_false", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "smallint_left_cast_values_limit0", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "smallint_left_cast_range_live", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t"}
+{"id": "smallint_left_cast_range_false", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t WHERE false"}
+{"id": "smallint_left_cast_range_limit0", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t LIMIT 0"}
+{"id": "smallint_right_cast_values_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_right_cast_values_false", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "smallint_right_cast_values_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "smallint_right_cast_range_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t"}
+{"id": "smallint_right_cast_range_false", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t WHERE false"}
+{"id": "smallint_right_cast_range_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t LIMIT 0"}
+{"id": "int_range_false", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) WHERE false"}
+{"id": "int_range_limit0", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) LIMIT 0"}
+{"id": "int_range_false_limit0", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) WHERE false LIMIT 0"}
+{"id": "int_values_false", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM VALUES (0),(1) t(id) WHERE false"}
+{"id": "int_values_limit0", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM VALUES (0),(1) t(id) LIMIT 0"}
+{"id": "int_values_false_limit0", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM VALUES (0),(1) t(id) WHERE false LIMIT 0"}
+{"id": "int_constant_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2)"}
+{"id": "int_dynamic_dead_case", "sql": "SELECT CASE WHEN id < 0 THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2) ORDER BY id"}
+{"id": "int_live_case", "sql": "SELECT CASE WHEN id = 0 THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2) ORDER BY id"}
+{"id": "int_coalesce_safe", "sql": "SELECT COALESCE(CAST(id AS BIGINT), CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM range(2) ORDER BY id"}
+{"id": "int_null_zero_false", "sql": "SELECT CAST(NULL AS INT) DIV CAST(0 AS INT) AS q FROM range(3) WHERE false"}
+{"id": "int_unused_projection", "sql": "SELECT id AS q FROM (SELECT id, CAST(7 AS INT) DIV CAST(0 AS INT) AS unused FROM range(3)) t ORDER BY id"}
+{"id": "int_empty_subquery", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS q"}
+{"id": "int_limit0_subquery", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) LIMIT 0) AS q"}
+{"id": "int_left_cast_values_live", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_left_cast_values_false", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "int_left_cast_values_limit0", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "int_left_cast_range_live", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t"}
+{"id": "int_left_cast_range_false", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t WHERE false"}
+{"id": "int_left_cast_range_limit0", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t LIMIT 0"}
+{"id": "int_right_cast_values_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_right_cast_values_false", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "int_right_cast_values_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "int_right_cast_range_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t"}
+{"id": "int_right_cast_range_false", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t WHERE false"}
+{"id": "int_right_cast_range_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t LIMIT 0"}
+{"id": "bigint_range_false", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) WHERE false"}
+{"id": "bigint_range_limit0", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) LIMIT 0"}
+{"id": "bigint_range_false_limit0", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) WHERE false LIMIT 0"}
+{"id": "bigint_values_false", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM VALUES (0),(1) t(id) WHERE false"}
+{"id": "bigint_values_limit0", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM VALUES (0),(1) t(id) LIMIT 0"}
+{"id": "bigint_values_false_limit0", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM VALUES (0),(1) t(id) WHERE false LIMIT 0"}
+{"id": "bigint_constant_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2)"}
+{"id": "bigint_dynamic_dead_case", "sql": "SELECT CASE WHEN id < 0 THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2) ORDER BY id"}
+{"id": "bigint_live_case", "sql": "SELECT CASE WHEN id = 0 THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2) ORDER BY id"}
+{"id": "bigint_coalesce_safe", "sql": "SELECT COALESCE(CAST(id AS BIGINT), CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM range(2) ORDER BY id"}
+{"id": "bigint_null_zero_false", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) WHERE false"}
+{"id": "bigint_unused_projection", "sql": "SELECT id AS q FROM (SELECT id, CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS unused FROM range(3)) t ORDER BY id"}
+{"id": "bigint_empty_subquery", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false) AS q"}
+{"id": "bigint_limit0_subquery", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) LIMIT 0) AS q"}
+{"id": "bigint_left_cast_values_live", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_left_cast_values_false", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "bigint_left_cast_values_limit0", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "bigint_left_cast_range_live", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t"}
+{"id": "bigint_left_cast_range_false", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t WHERE false"}
+{"id": "bigint_left_cast_range_limit0", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t LIMIT 0"}
+{"id": "bigint_right_cast_values_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_right_cast_values_false", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "bigint_right_cast_values_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "bigint_right_cast_range_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t"}
+{"id": "bigint_right_cast_range_false", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t WHERE false"}
+{"id": "bigint_right_cast_range_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(1)) t LIMIT 0"}
+{"id": "constant_success", "sql": "SELECT CAST(7 AS INT) DIV CAST(2 AS INT) AS q FROM range(3) WHERE false"}
+{"id": "nonconstant_zero", "sql": "SELECT CAST(id AS INT) DIV CAST(0 AS INT) AS q FROM range(3) WHERE false"}
+{"id": "unused_cte", "sql": "WITH unused AS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q) SELECT CAST(5 AS BIGINT) AS q"}
+{"id": "int_unused_values", "sql": "SELECT id AS q FROM (SELECT id, CAST(7 AS INT) DIV CAST(0 AS INT) AS unused FROM VALUES (0),(1) t(id)) t ORDER BY id"}
+{"id": "int_count_range", "sql": "SELECT COUNT(*) AS q FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS unused FROM range(3)) t"}
+{"id": "int_count_values", "sql": "SELECT COUNT(*) AS q FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS unused FROM VALUES (0),(1) t(id)) t"}
+{"id": "int_dynamic_dead_case_false", "sql": "SELECT CASE WHEN id < 0 THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS q FROM range(3) WHERE false"}
+{"id": "int_constant_live_case_false", "sql": "SELECT CASE WHEN true THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS q FROM range(3) WHERE false"}
+{"id": "int_coalesce_null_false", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT), CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM range(3) WHERE false"}
+{"id": "int_coalesce_literal_false", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM range(3) WHERE false"}
+{"id": "int_filter_false_left", "sql": "SELECT id AS q FROM range(3) WHERE false AND id > (CAST(7 AS INT) DIV CAST(0 AS INT))"}
+{"id": "int_filter_false_right", "sql": "SELECT id AS q FROM range(3) WHERE id > (CAST(7 AS INT) DIV CAST(0 AS INT)) AND false"}
+{"id": "int_sort_false", "sql": "SELECT id AS q FROM range(3) WHERE false ORDER BY CAST(7 AS INT) DIV CAST(0 AS INT)"}
+{"id": "int_aggregate_false", "sql": "SELECT SUM(CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM range(3) WHERE false"}
+{"id": "int_nested_limit0", "sql": "SELECT q FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) LIMIT 0) t"}
+{"id": "int_union_dead", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) WHERE false UNION ALL SELECT CAST(5 AS BIGINT) AS q"}
+{"id": "int_range_empty", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(0)"}
+{"id": "int_values_empty_filter", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM VALUES (0),(1) t(id) WHERE id < 0"}
+{"id": "int_values_empty_outer_projection", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM (SELECT id FROM VALUES (0),(1) t(id) WHERE id < 0) t"}
+{"id": "bigint_unused_values", "sql": "SELECT id AS q FROM (SELECT id, CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS unused FROM VALUES (0),(1) t(id)) t ORDER BY id"}
+{"id": "bigint_count_range", "sql": "SELECT COUNT(*) AS q FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS unused FROM range(3)) t"}
+{"id": "bigint_count_values", "sql": "SELECT COUNT(*) AS q FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS unused FROM VALUES (0),(1) t(id)) t"}
+{"id": "bigint_dynamic_dead_case_false", "sql": "SELECT CASE WHEN id < 0 THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS q FROM range(3) WHERE false"}
+{"id": "bigint_constant_live_case_false", "sql": "SELECT CASE WHEN true THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS q FROM range(3) WHERE false"}
+{"id": "bigint_coalesce_null_false", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT), CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM range(3) WHERE false"}
+{"id": "bigint_coalesce_literal_false", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM range(3) WHERE false"}
+{"id": "bigint_filter_false_left", "sql": "SELECT id AS q FROM range(3) WHERE false AND id > (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT))"}
+{"id": "bigint_filter_false_right", "sql": "SELECT id AS q FROM range(3) WHERE id > (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AND false"}
+{"id": "bigint_sort_false", "sql": "SELECT id AS q FROM range(3) WHERE false ORDER BY CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)"}
+{"id": "bigint_aggregate_false", "sql": "SELECT SUM(CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM range(3) WHERE false"}
+{"id": "bigint_nested_limit0", "sql": "SELECT q FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) LIMIT 0) t"}
+{"id": "bigint_union_dead", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) WHERE false UNION ALL SELECT CAST(5 AS BIGINT) AS q"}
+{"id": "bigint_range_empty", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(0)"}
+{"id": "bigint_values_empty_filter", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM VALUES (0),(1) t(id) WHERE id < 0"}
+{"id": "bigint_values_empty_outer_projection", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM (SELECT id FROM VALUES (0),(1) t(id) WHERE id < 0) t"}
+{"id": "int_safe_null_True", "sql": "SELECT CAST(7 AS INT) DIV CAST(2 AS INT) AS harmless, CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_safe_null_False", "sql": "SELECT CAST(7 AS INT) DIV CAST(2 AS INT) AS harmless, CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_dead_null_True", "sql": "SELECT CASE WHEN false THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE CAST(5 AS BIGINT) END AS harmless, CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_dead_null_False", "sql": "SELECT CASE WHEN false THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE CAST(5 AS BIGINT) END AS harmless, CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_mul_null", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)) * CAST(NULL AS BIGINT) AS q FROM range(3) WHERE false"}
+{"id": "int_add_null", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)) + CAST(NULL AS BIGINT) AS q FROM range(3) WHERE false"}
+{"id": "int_and_false", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT) > 0) AND false AS q FROM range(3) WHERE false"}
+{"id": "int_or_true", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT) > 0) OR true AS q FROM range(3) WHERE false"}
+{"id": "int_case_values_safe", "sql": "SELECT CASE WHEN id < 0 THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS q FROM VALUES (0) t(id) LIMIT 0"}
+{"id": "int_case_values_bad", "sql": "SELECT CASE WHEN id = 0 THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS q FROM VALUES (0) t(id) LIMIT 0"}
+{"id": "int_coalesce_values_safe", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM VALUES (0) t(id) LIMIT 0"}
+{"id": "int_coalesce_values_bad", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT), CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM VALUES (0) t(id) LIMIT 0"}
+{"id": "int_unused_cast_range", "sql": "SELECT CAST(7 AS INT) DIV CAST(2 AS INT) AS q FROM (SELECT id, CAST('bad' AS INT) AS unused FROM range(3)) t"}
+{"id": "int_cast_limit0", "sql": "SELECT CAST(7 AS INT) DIV CAST(2 AS INT) AS q, CAST('bad' AS INT) AS unused FROM range(3) LIMIT 0"}
+{"id": "bigint_safe_null_True", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(2 AS BIGINT) AS harmless, CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_safe_null_False", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(2 AS BIGINT) AS harmless, CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_dead_null_True", "sql": "SELECT CASE WHEN false THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE CAST(5 AS BIGINT) END AS harmless, CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_dead_null_False", "sql": "SELECT CASE WHEN false THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE CAST(5 AS BIGINT) END AS harmless, CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_mul_null", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) * CAST(NULL AS BIGINT) AS q FROM range(3) WHERE false"}
+{"id": "bigint_add_null", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) + CAST(NULL AS BIGINT) AS q FROM range(3) WHERE false"}
+{"id": "bigint_and_false", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) > 0) AND false AS q FROM range(3) WHERE false"}
+{"id": "bigint_or_true", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) > 0) OR true AS q FROM range(3) WHERE false"}
+{"id": "bigint_case_values_safe", "sql": "SELECT CASE WHEN id < 0 THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS q FROM VALUES (0) t(id) LIMIT 0"}
+{"id": "bigint_case_values_bad", "sql": "SELECT CASE WHEN id = 0 THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS q FROM VALUES (0) t(id) LIMIT 0"}
+{"id": "bigint_coalesce_values_safe", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM VALUES (0) t(id) LIMIT 0"}
+{"id": "bigint_coalesce_values_bad", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT), CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM VALUES (0) t(id) LIMIT 0"}
+{"id": "bigint_unused_cast_range", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(2 AS BIGINT) AS q FROM (SELECT id, CAST('bad' AS INT) AS unused FROM range(3)) t"}
+{"id": "bigint_cast_limit0", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(2 AS BIGINT) AS q, CAST('bad' AS INT) AS unused FROM range(3) LIMIT 0"}
+{"id": "int_derived_null_parent", "sql": "SELECT q * CAST(NULL AS BIGINT) AS r FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3)) t"}
+{"id": "int_derived_dead_case_parent", "sql": "SELECT CASE WHEN false THEN q ELSE 5 END AS r FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3)) t"}
+{"id": "int_derived_coalesce_parent", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), q) AS r FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3)) t"}
+{"id": "int_scalar_null_parent", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT)) * CAST(NULL AS BIGINT) AS r FROM range(3)"}
+{"id": "bigint_derived_null_parent", "sql": "SELECT q * CAST(NULL AS BIGINT) AS r FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3)) t"}
+{"id": "bigint_derived_dead_case_parent", "sql": "SELECT CASE WHEN false THEN q ELSE 5 END AS r FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3)) t"}
+{"id": "bigint_derived_coalesce_parent", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), q) AS r FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3)) t"}
+{"id": "bigint_scalar_null_parent", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) * CAST(NULL AS BIGINT) AS r FROM range(3)"}

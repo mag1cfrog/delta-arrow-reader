@@ -1,0 +1,314 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -992,6 +992,18 @@
+     };
+ 
+     Ok(div_expr)
++}
++
++pub(crate) fn is_integer_divide(expr: &Expr, schema: &DFSchemaRef) -> bool {
++    match expr {
++        Expr::ScalarFunction(f) => f.func.inner().is::<SparkSmallIntDivide>(),
++        Expr::BinaryExpr(binary) if binary.op == Operator::Divide => {
++            [&binary.left, &binary.right]
++                .iter()
++                .all(|arg| arg.get_type(schema).is_ok_and(|t| t.is_signed_integer()))
++        }
++        _ => false,
++    }
+ }
+ 
+ /// Returns the integral part of the division of dividend by divisor.
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -21,6 +21,7 @@
+     prelude::{SessionConfig, SessionContext},
+ };
+ use futures_util::StreamExt;
++use sail_plan::decimal_null::SparkDecimalNullPropagation;
+ use sail_plan::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
+ use serde_json::{Value, json};
+ 
+@@ -228,6 +229,7 @@
+         "chained_lateral" => Some((count + 1 + count % 3) as i128 * 250_000),
+         "left_lateral" => (count > 1).then_some(count as i128 * 250_000),
+         "null_divide_left" | "null_divide_right" => None,
++        "div_constant" => Some(3_000_000),
+         _ => unreachable!("unknown benchmark case"),
+     }
+ }
+@@ -314,6 +316,7 @@
+         ),
+         ("round_decimal", "ROUND(o.a, 2)".into(), "".into(), false),
+         ("div_integer", "o.id DIV 4".into(), "".into(), false),
++        ("div_constant", "CAST(7 AS INT) DIV CAST(2 AS INT)".into(), "".into(), false),
+         (
+             "div_decimal",
+             "CAST(o.id AS DECIMAL(18,2)) DIV CAST(4 AS DECIMAL(18,2))".into(),
+@@ -694,6 +697,7 @@
+     let ctx = SessionContext::new_with_state(
+         SessionStateBuilder::new()
+             .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
+             .with_config(
+                 SessionConfig::new()
+                     .with_batch_size(BATCH_SIZE)
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
+@@ -7,17 +7,19 @@
+ use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
+ use datafusion::datasource::memory::MemorySourceConfig;
+ use datafusion::logical_expr::execution_props::ExecutionProps;
+-use datafusion::optimizer::AnalyzerRule;
++use datafusion::optimizer::optimize_projections::OptimizeProjections;
++use datafusion::optimizer::simplify_expressions::SimplifyExpressions;
++use datafusion::optimizer::{AnalyzerRule, OptimizerContext, OptimizerRule};
+ use datafusion::physical_expr::create_physical_expr;
+ use datafusion_common::config::ConfigOptions;
+ use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+-use datafusion_common::{DFSchema, Result, ScalarValue};
++use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
+ use datafusion_expr::utils::{conjunction, split_conjunction_owned};
+-use datafusion_expr::{Expr, LogicalPlan, lit};
+-
+-use crate::function::scalar::math::FusedDecimalDivide;
+-
+-/// Remove unused Decimal subqueries after preserving Spark's early expression errors.
++use datafusion_expr::{ColumnarValue, Expr, LogicalPlan, lit};
++
++use crate::function::scalar::math::{FusedDecimalDivide, is_integer_divide};
++
++/// Preserve early expression errors before NULL and empty-result rewrites.
+ #[derive(Debug)]
+ pub struct SparkDecimalNullPropagation;
+ 
+@@ -40,6 +42,16 @@
+     null_divide(expr) && expr.contains_scalar_subquery()
+ }
+ 
++// ponytail: only direct DIV outputs; general folding needs Spark's NULL and
++// conditional-expression rules, not eager physical evaluation of the parent.
++fn integer_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
++    match expr {
++        Expr::Alias(alias) => integer_candidate(&alias.expr, schema),
++        Expr::Cast(cast) => integer_candidate(&cast.expr, schema),
++        _ => Ok(is_integer_divide(expr, schema) && row_expression(expr, false)?),
++    }
++}
++
+ impl AnalyzerRule for SparkDecimalNullPropagation {
+     fn name(&self) -> &str {
+         "spark_decimal_null_propagation"
+@@ -48,27 +60,47 @@
+     fn analyze(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
+         // Borrow first: ordinary queries require no rewritten plan or batch allocation.
+         let mut found = false;
++        let mut check_integer = false;
+         plan.apply_with_subqueries(|node| {
+             node.apply_expressions(|expr| {
+-                found |= expr.exists(|e| Ok(candidate(e)))?;
+-                Ok(if found {
+-                    TreeNodeRecursion::Stop
+-                } else {
+-                    TreeNodeRecursion::Continue
+-                })
++                found |= expr.exists(|expr| Ok(candidate(expr)))?;
++                if let LogicalPlan::Projection(project) = node {
++                    check_integer |= integer_candidate(expr, project.input.schema())?;
++                }
++                Ok(TreeNodeRecursion::Continue)
+             })?;
+-            Ok(if found {
++            Ok(if found && check_integer {
+                 TreeNodeRecursion::Stop
+             } else {
+                 TreeNodeRecursion::Continue
+             })
+         })?;
+-        if !found {
++        if !found && !check_integer {
+             return Ok(plan);
+         }
+         let mut props = ExecutionProps::new();
+         props.config_options = Some(Arc::new(options.clone()));
+         let prepare = Prepare { props };
++        // Local VALUES are evaluated before column pruning and LIMIT 0.
++        // Successful constants need no extra copy, simplification or pruning.
++        if check_integer && prepare.check_integer_projections(&plan, true)? {
++            let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
++            // Simplify parents before pruning: NULL * derived.q and dead CASE
++            // branches can make the inner DIV unused. Leave simplification
++            // failures to the normal optimizer, outside this narrow precheck.
++            if let Ok(simplified) = plan
++                .clone()
++                .transform_up(|node| SimplifyExpressions::new().rewrite(node, &config))
++            {
++                let pruned = OptimizeProjections::new()
++                    .rewrite(simplified.data, &config)?
++                    .data;
++                prepare.check_integer_projections(&pruned, false)?;
++            }
++        }
++        if !found {
++            return Ok(plan);
++        }
+         Ok(plan
+             .transform_down_with_subqueries(|node| {
+                 node.map_expressions(|expr| {
+@@ -168,6 +200,51 @@
+ }
+ 
+ impl Prepare {
++    fn eval_constant(&self, expr: &Expr) -> Result<ColumnarValue> {
++        let batch = RecordBatch::try_new_with_options(
++            Arc::new(Schema::empty()),
++            vec![],
++            &RecordBatchOptions::new().with_row_count(Some(1)),
++        )?;
++        create_physical_expr(expr, &DFSchema::empty(), &self.props)?.evaluate(&batch)
++    }
++
++    fn check_integer_projections(&self, plan: &LogicalPlan, local: bool) -> Result<bool> {
++        let mut needs_pruning = false;
++        plan.apply(|node| {
++            if !local
++                && let LogicalPlan::Limit(limit) = node
++                && let Some(fetch) = limit.fetch.as_deref()
++                && row_expression(fetch, false)?
++                && matches!(
++                    self.eval_constant(fetch)?,
++                    ColumnarValue::Scalar(ScalarValue::Int64(Some(0)))
++                )
++            {
++                return Ok(TreeNodeRecursion::Jump);
++            }
++            if let LogicalPlan::Projection(project) = node {
++                for expr in &project.expr {
++                    if !integer_candidate(expr, project.input.schema())? {
++                        continue;
++                    }
++                    match self.local_batch(&project.input) {
++                        Ok(Some(batch)) if local && batch.num_rows() > 0 => {
++                            self.check_expr(expr, true)?
++                        }
++                        Ok(None) if local => needs_pruning |= self.eval_constant(expr).is_err(),
++                        Ok(None) => self.check_expr(expr, true)?,
++                        // Leave unrelated input failures to normal planning/execution.
++                        // Empty local input has no output expressions to evaluate.
++                        _ => {}
++                    }
++                }
++            }
++            Ok(TreeNodeRecursion::Continue)
++        })
++        .map(|_| needs_pruning)
++    }
++
+     fn check_expr(&self, expr: &Expr, constants: bool) -> Result<()> {
+         if let Expr::ScalarSubquery(subquery) = expr {
+             if let Some(expressions) = one_row_exprs(&subquery.subquery)? {
+@@ -186,12 +263,7 @@
+                 .map(|_| ());
+         }
+         if constants && row_expression(expr, false)? {
+-            let batch = RecordBatch::try_new_with_options(
+-                Arc::new(Schema::empty()),
+-                vec![],
+-                &RecordBatchOptions::new().with_row_count(Some(1)),
+-            )?;
+-            create_physical_expr(expr, &DFSchema::empty(), &self.props)?.evaluate(&batch)?;
++            self.eval_constant(expr)?;
+             return Ok(());
+         }
+         // Spark defers failed constant evaluation inside nonconstant CASE and
+@@ -333,3 +405,90 @@
+         Ok(Some(batch))
+     }
+ }
++
++#[tokio::test]
++async fn integer_divide_evaluation_order()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for data_type in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
++        let div = format!("CAST(7 AS {data_type}) DIV CAST(0 AS {data_type})");
++        for ansi in [true, false] {
++            for (sql, fails, rows) in [
++                (
++                    format!("SELECT {div} AS q FROM range(3) WHERE false"),
++                    true,
++                    0,
++                ),
++                (format!("SELECT {div} AS q FROM range(3) LIMIT 0"), false, 0),
++                (
++                    format!("SELECT {div} AS q FROM VALUES (0) t(id) LIMIT 0"),
++                    true,
++                    0,
++                ),
++                (
++                    format!("SELECT CASE WHEN false THEN {div} ELSE 5 END AS q FROM range(3)"),
++                    false,
++                    3,
++                ),
++                (
++                    format!(
++                        "SELECT COALESCE(CAST(5 AS BIGINT), {div}) AS q FROM range(3) WHERE false"
++                    ),
++                    false,
++                    0,
++                ),
++                (
++                    format!(
++                        "SELECT q * CAST(NULL AS BIGINT) AS r FROM (SELECT {div} AS q FROM range(3)) t"
++                    ),
++                    false,
++                    3,
++                ),
++                (
++                    format!("SELECT id FROM (SELECT id, {div} AS unused FROM range(3)) t"),
++                    false,
++                    3,
++                ),
++                (
++                    format!("SELECT id FROM (SELECT id, {div} AS unused FROM VALUES (0) t(id)) t"),
++                    true,
++                    1,
++                ),
++            ] {
++                let mut config = PlanConfig::default();
++                config.ansi_mode = ansi;
++                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                let result =
++                    async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
++                if ansi && fails {
++                    assert!(
++                        result.unwrap_err().to_string().contains("Divide by zero"),
++                        "{sql}"
++                    );
++                } else {
++                    let batches = result?;
++                    assert_eq!(
++                        batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
++                        rows,
++                        "{sql}, ANSI={ansi}"
++                    );
++                }
++            }
++        }
++    }
++    Ok(())
++}

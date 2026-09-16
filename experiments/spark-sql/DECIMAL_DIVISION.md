@@ -2013,6 +2013,44 @@ The unchanged benchmark uses 1,048,576 rows, batches of 8,192 and CPU 2. Eight c
 
 [div-zero-results.json](div-zero-results.json) records source and binary hashes, commands, Spark and candidate observations, remaining differences, raw timings and counters. Apply the patch after the preceding optional runtime's planner patches, from the candidate checkout root, then run `decimal_division.py` with `--cases experiments/spark-sql/div-zero.jsonl` and the Rust probe with the same corpus. The numeric comparison still exits 1 for the five retained differences. The patch applies and reverses exactly; all 25 scratch paths and three cached executables were restored. Dependency identities/features, lockfile, Arrow libraries and benchmark source are unchanged. The default project build does not apply this experimental patch.
 
+## Direct integer DIV constant evaluation
+
+Starting from `1aab87a`, [sail-div-evaluation.patch](sail-div-evaluation.patch) preserves early errors for direct constant integer `DIV` projection outputs. The preceding runtime returned no rows for `SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) WHERE false`, whereas the pinned Spark 4.2.0 oracle raises division by zero. `LIMIT 0` without that filter suppresses the error over `range`, while a local `VALUES` projection can raise it before the limit. These cases depend on the order of [constant folding](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/expressions.scala) and [plan optimization](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/Optimizer.scala).
+
+The patch extends the existing Rust analyzer. It reuses the local `VALUES` evaluator for direct projections, then DataFusion's expression simplification and column pruning before checking retained nonlocal projections. Simplifying parents prevents an unused derived column from raising an error under `NULL * q`, a dead `CASE` branch or `COALESCE`. Successful constants skip the extra plan copy and optimization passes. The arithmetic kernels are unchanged. This is a partial constant-evaluation fix: surrounding expressions, scalar subqueries and unrelated input failures retain their existing handling.
+
+The [175-query corpus](div-evaluation.jsonl) tests all four signed integer widths and both ANSI modes. It includes empty filters, limits, local values, unused columns, derived tables, aggregates, filters, sorting, scalar subqueries, conditional parents, NULL masks and invalid casts. Spark supplies the reference results; they are not inferred from the candidate.
+
+| Corpus | Before | After | Observations |
+| --- | ---: | ---: | ---: |
+| Preceding 21 numeric corpora | 2,959 | 2,959 | 3,076 |
+| Preceding integer NULL/zero corpus | 153 | 157 | 158 |
+| New evaluation-order corpus | 286 | 302 | 350 |
+| Combined | 3,398 | 3,418 | 3,584 |
+
+No previously matching observation loses agreement. The four repaired existing observations are the empty-filter cases for TINYINT, SMALLINT, INT and BIGINT. The new corpus repairs another 16 observations, including local `VALUES` under `LIMIT 0`, unused local columns, empty ranges and an empty UNION branch. The preceding corpora retain 118 differences; the new corpus retains 48. These are observations across widths, modes and query shapes, not counts of independent bugs.
+
+The numeric comparator checks values, normalized types and coarse error stages. A separate cause audit retains all 379 earlier focused checks and verifies 40 division-by-zero errors across the two integer corpora, including all 20 repaired observations. It also records four additional *existing* wrong-cause cases: an empty scalar subquery reports an Arrow non-nullable-output error instead of Spark's division-by-zero error. Those four, the five older cause gaps and the four wrapped-sort diagnostic cases remain separate from the numeric counts. Among changed diagnostics, 15 gain the analyzer prefix with the same underlying cause; two report a different first invalid string with the same cast class and target type. All 2,913 observations successful on both sides retain identical values, types and captured plans.
+
+Validation also passes 21 Rust planner tests, four Delta lifecycle tests, all 4,064 integer-reference observations covering 187,410 rows, 116 Delta baseline comparisons and 18 adapter checks. The 50 benchmark queries retain identical results and physical plans.
+
+The benchmark now registers this analyzer. Earlier versions of that harness did not, so their planning timings do not measure its overhead. Both variants here were rebuilt with the same corrected harness and the added constant-DIV case. The measurements use CPU 2, four ABBA blocks, eight processes per variant/case/phase, two warmups and nine samples. Planning and execution counters are gated separately, for 256 processes total. Negative changes mean less time or fewer instructions.
+
+| Case | Planning time | Planning instructions | Execution time | Execution instructions |
+| --- | ---: | ---: | ---: | ---: |
+| Integer-to-Decimal cast control | -0.15% | +0.11% | -0.24% | -0.00% |
+| Decimal division control | +1.28% | +0.01% | +0.02% | +0.00% |
+| BIGINT DIV column/literal | +0.21% | +0.02% | -0.73% | +0.00% |
+| SMALLINT DIV columns | +0.24% | +0.05% | +0.11% | -0.01% |
+| Constant INT DIV | +0.86% | +0.64% | -0.26% | -0.13% |
+| NULL Decimal subquery | -0.25% | +0.29% | -0.71% | +0.14% |
+| Scalar-subquery division | +0.37% | +0.03% | +0.08% | +0.00% |
+| Correlated COUNT division | +0.90% | +0.01% | -1.57% | +0.00% |
+
+The constant-DIV planning median changes from 411.0 to 414.5 microseconds, with 0.64% more instructions. Skipping extra optimization for successful constants reduced the pilot's roughly 15-microsecond cost to about 3.5 microseconds in the final comparison. The pilot has only two processes per variant/case. All final process-median timing ranges overlap; the execution measurements do not show a stable regression. The remaining borrowed checks still have a small planning cost. These results do not establish zero overhead or resolve the earlier 0.4%-0.7% buffer-policy timing difference.
+
+[div-evaluation-results.json](div-evaluation-results.json) contains the commands, source and binary hashes, reference/candidate captures, remaining differences, diagnostic audit and raw performance samples. Apply this patch after `sail-div-zero.patch` in a checkout with the preceding optional runtime and the same dependency overrides. Use the corrected benchmark source for both variants. Replay the Rust probe and `decimal_division.py` with `--cases experiments/spark-sql/div-evaluation.jsonl`; the numeric comparison still exits 1 for the 48 retained differences. The patch applies and reverses exactly. All 25 scratch paths and three cached executables were restored, with fresh source timestamps so Cargo will rebuild the restored code. Dependency identities/features, lockfile and Arrow libraries match between the measured variants. The default project build does not apply this patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
