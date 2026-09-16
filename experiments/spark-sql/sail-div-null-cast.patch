@@ -1,0 +1,296 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -994,15 +994,23 @@
+     Ok(div_expr)
+ }
+ 
+-pub(crate) fn is_integer_divide(expr: &Expr, schema: &DFSchemaRef) -> bool {
++pub(crate) fn integer_divide_args<'a>(
++    expr: &'a Expr,
++    schema: &DFSchemaRef,
++) -> Option<(&'a Expr, &'a Expr)> {
+     match expr {
+-        Expr::ScalarFunction(f) => f.func.inner().is::<SparkSmallIntDivide>(),
+-        Expr::BinaryExpr(binary) if binary.op == Operator::Divide => {
+-            [&binary.left, &binary.right]
+-                .iter()
+-                .all(|arg| arg.get_type(schema).is_ok_and(|t| t.is_signed_integer()))
+-        }
+-        _ => false,
++        Expr::ScalarFunction(f) if f.func.inner().is::<SparkSmallIntDivide>() => {
++            Some((&f.args[0], &f.args[1]))
++        }
++        Expr::BinaryExpr(binary)
++            if binary.op == Operator::Divide
++                && [&binary.left, &binary.right]
++                    .iter()
++                    .all(|arg| arg.get_type(schema).is_ok_and(|t| t.is_signed_integer())) =>
++        {
++            Some((&binary.left, &binary.right))
++        }
++        _ => None,
+     }
+ }
+ 
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -228,7 +228,7 @@
+         "correlated_count" | "nested_lateral" => Some(count as i128 * 250_000),
+         "chained_lateral" => Some((count + 1 + count % 3) as i128 * 250_000),
+         "left_lateral" => (count > 1).then_some(count as i128 * 250_000),
+-        "null_divide_left" | "null_divide_right" => None,
++        "null_divide_left" | "null_divide_right" | "div_null_cast_values" | "div_null_cast_column" => None,
+         "div_constant" => Some(3_000_000),
+         _ => unreachable!("unknown benchmark case"),
+     }
+@@ -317,6 +317,18 @@
+         ("round_decimal", "ROUND(o.a, 2)".into(), "".into(), false),
+         ("div_integer", "o.id DIV 4".into(), "".into(), false),
+         ("div_constant", "CAST(7 AS INT) DIV CAST(2 AS INT)".into(), "".into(), false),
++        (
++            "div_null_cast_values",
++            "t.q".into(),
++            "CROSS JOIN (SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2') t(v)) t".into(),
++            false,
++        ),
++        (
++            "div_null_cast_column",
++            "CAST(NULL AS INT) DIV CAST(o.id AS INT)".into(),
++            "".into(),
++            false,
++        ),
+         (
+             "div_decimal",
+             "CAST(o.id AS DECIMAL(18,2)) DIV CAST(4 AS DECIMAL(18,2))".into(),
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
+@@ -6,6 +6,7 @@
+ use datafusion::arrow::datatypes::Schema;
+ use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
+ use datafusion::datasource::memory::MemorySourceConfig;
++use datafusion::functions::expr_fn;
+ use datafusion::logical_expr::execution_props::ExecutionProps;
+ use datafusion::optimizer::optimize_projections::OptimizeProjections;
+ use datafusion::optimizer::simplify_expressions::SimplifyExpressions;
+@@ -15,9 +16,9 @@
+ use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+ use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
+ use datafusion_expr::utils::{conjunction, split_conjunction_owned};
+-use datafusion_expr::{ColumnarValue, Expr, LogicalPlan, lit};
+-
+-use crate::function::scalar::math::{FusedDecimalDivide, is_integer_divide};
++use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, lit};
++
++use crate::function::scalar::math::{FusedDecimalDivide, integer_divide_args};
+ 
+ /// Preserve early expression errors before NULL and empty-result rewrites.
+ #[derive(Debug)]
+@@ -48,7 +49,28 @@
+     match expr {
+         Expr::Alias(alias) => integer_candidate(&alias.expr, schema),
+         Expr::Cast(cast) => integer_candidate(&cast.expr, schema),
+-        _ => Ok(is_integer_divide(expr, schema) && row_expression(expr, false)?),
++        _ => {
++            match integer_divide_args(expr, schema) {
++                Some((left, right)) => Ok(row_expression(expr, false)?
++                    || (null_literal(left) && column_cast(right, schema))),
++                None => Ok(false),
++            }
++        }
++    }
++}
++
++// Spark evaluates the divisor first when converting local VALUES. Restrict
++// the added check to strict string-column casts, including integer widening.
++// Non-ANSI DIV lowers its divisor through NULLIF and does not match this shape.
++fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
++    match expr {
++        Expr::Cast(cast) if cast.field.data_type().is_signed_integer() => {
++            match cast.expr.as_ref() {
++                Expr::Column(_) => cast.expr.get_type(schema).is_ok_and(|t| t.is_string()),
++                expr => column_cast(expr, schema),
++            }
++        }
++        _ => false,
+     }
+ }
+ 
+@@ -209,6 +231,22 @@
+         create_physical_expr(expr, &DFSchema::empty(), &self.props)?.evaluate(&batch)
+     }
+ 
++    fn limit_count(&self, expr: Option<&Expr>, default: usize) -> Result<Option<usize>> {
++        let Some(expr) = expr else {
++            return Ok(Some(default));
++        };
++        if !row_expression(expr, false)? {
++            return Ok(None);
++        }
++        // Before simplification, LIMIT/OFFSET can still be casts or arithmetic.
++        // An unsupported bound is not an unbounded relation.
++        Ok(match self.eval_constant(expr)? {
++            ColumnarValue::Scalar(ScalarValue::Int32(Some(n))) => usize::try_from(n).ok(),
++            ColumnarValue::Scalar(ScalarValue::Int64(Some(n))) => usize::try_from(n).ok(),
++            _ => None,
++        })
++    }
++
+     fn check_integer_projections(&self, plan: &LogicalPlan, local: bool) -> Result<bool> {
+         let mut needs_pruning = false;
+         plan.apply(|node| {
+@@ -230,10 +268,46 @@
+                     }
+                     match self.local_batch(&project.input) {
+                         Ok(Some(batch)) if local && batch.num_rows() > 0 => {
+-                            self.check_expr(expr, true)?
++                            if row_expression(expr, false)? {
++                                self.check_expr(expr, true)?;
++                                continue;
++                            }
++                            if create_physical_expr(expr, project.input.schema(), &self.props)?
++                                .evaluate(&batch)
++                                .is_ok()
++                            {
++                                continue;
++                            }
++                            // Match Spark's strict string-to-integer trimming
++                            // only for this discarded local evaluation. The
++                            // runtime expression and its physical plan stay intact.
++                            let expr = expr.clone().transform_up(|expr| {
++                                if let Expr::Cast(mut cast) = expr {
++                                    if cast.field.data_type().is_signed_integer()
++                                        && cast.expr.get_type(project.input.schema())?.is_string()
++                                    {
++                                        let trim: String = (0..=b' ')
++                                            .chain(std::iter::once(0x7f))
++                                            .map(char::from)
++                                            .collect();
++                                        cast.expr =
++                                            Box::new(expr_fn::btrim(vec![*cast.expr, lit(trim)]));
++                                    }
++                                    Ok(Transformed::yes(Expr::Cast(cast)))
++                                } else {
++                                    Ok(Transformed::no(expr))
++                                }
++                            })?;
++                            create_physical_expr(&expr.data, project.input.schema(), &self.props)?
++                                .evaluate(&batch)?;
+                         }
+-                        Ok(None) if local => needs_pruning |= self.eval_constant(expr).is_err(),
+-                        Ok(None) => self.check_expr(expr, true)?,
++                        Ok(None) if row_expression(expr, false)? => {
++                            if local {
++                                needs_pruning |= self.eval_constant(expr).is_err();
++                            } else {
++                                self.check_expr(expr, true)?;
++                            }
++                        }
+                         // Leave unrelated input failures to normal planning/execution.
+                         // Empty local input has no output expressions to evaluate.
+                         _ => {}
+@@ -391,13 +465,16 @@
+             LogicalPlan::Sort(_) if input.is_some_and(|b| b.num_rows() == 0) => {
+                 input.unwrap().clone()
+             }
+-            LogicalPlan::Limit(_) if input.is_some() => {
++            LogicalPlan::Limit(limit) if input.is_some() => {
+                 let input = input.unwrap();
+-                let offset = plan.skip()?.unwrap_or(0).min(input.num_rows());
+-                let count = plan
+-                    .fetch()?
+-                    .unwrap_or(usize::MAX)
+-                    .min(input.num_rows() - offset);
++                let Some(offset) = self.limit_count(limit.skip.as_deref(), 0)? else {
++                    return Ok(None);
++                };
++                let Some(count) = self.limit_count(limit.fetch.as_deref(), usize::MAX)? else {
++                    return Ok(None);
++                };
++                let offset = offset.min(input.num_rows());
++                let count = count.min(input.num_rows() - offset);
+                 input.slice(offset, count)
+             }
+             _ => return Ok(None),
+@@ -492,3 +569,82 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn null_integer_divide_checks_local_column_casts()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for data_type in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
++        for ansi_mode in [true, false] {
++            for (source, suffix, local_error, rows) in [
++                ("VALUES ('bad') t(v)", "", true, 1),
++                ("VALUES ('bad') t(v)", " LIMIT 0", true, 0),
++                ("VALUES ('bad') t(v)", " WHERE false", false, 0),
++                ("VALUES (' +2 ') t(v)", "", false, 1),
++                (
++                    "(SELECT v FROM VALUES ('bad') t(v) LIMIT 0) t",
++                    "",
++                    false,
++                    0,
++                ),
++                (
++                    "(SELECT v FROM VALUES ('2'), ('bad') t(v) LIMIT 1) t",
++                    "",
++                    false,
++                    1,
++                ),
++                (
++                    "(SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 1) t",
++                    "",
++                    false,
++                    1,
++                ),
++            ] {
++                let sql = format!(
++                    "SELECT CAST(NULL AS {data_type}) DIV CAST(v AS {data_type}) AS q FROM {source}{suffix}"
++                );
++                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                let result =
++                    async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
++                if ansi_mode && local_error {
++                    let error = result.unwrap_err().to_string();
++                    assert!(
++                        error.contains("Cannot cast") && error.contains("bad"),
++                        "{sql}: {error}"
++                    );
++                } else {
++                    let batches = result?;
++                    assert_eq!(
++                        batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
++                        rows,
++                        "{sql}"
++                    );
++                    assert!(
++                        batches
++                            .iter()
++                            .all(|batch| batch.column(0).null_count() == batch.num_rows())
++                    );
++                }
++            }
++        }
++    }
++    Ok(())
++}

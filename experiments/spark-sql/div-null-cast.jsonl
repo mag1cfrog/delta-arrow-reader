@@ -1,0 +1,268 @@
+{"id": "tinyint_lexical_space", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (' 2 ') t(v)"}
+{"id": "tinyint_lexical_signed_space", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (' +2 ') t(v)"}
+{"id": "tinyint_lexical_negative_space", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (' -2 ') t(v)"}
+{"id": "tinyint_lexical_controls", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f2\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f') t(v)"}
+{"id": "tinyint_lexical_nbsp", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('\u00a02\u00a0') t(v)"}
+{"id": "tinyint_lexical_fullwidth", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('\uff12') t(v)"}
+{"id": "tinyint_lexical_arabic", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('\u0662') t(v)"}
+{"id": "tinyint_lexical_leading_zeros", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('000000000000000000000000000000000000000000000000000000000000000000000000000000002') t(v)"}
+{"id": "tinyint_lexical_scientific", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2e0') t(v)"}
+{"id": "tinyint_lexical_min", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('-128') t(v)"}
+{"id": "tinyint_lexical_max", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('127') t(v)"}
+{"id": "tinyint_lexical_below_min", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('-129') t(v)"}
+{"id": "tinyint_lexical_above_max", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('128') t(v)"}
+{"id": "tinyint_numeric_control_nan", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "tinyint_numeric_control_inf", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST('Infinity' AS DOUBLE)) t(v)"}
+{"id": "tinyint_numeric_control_fraction", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST(2.5 AS DOUBLE)) t(v)"}
+{"id": "tinyint_numeric_control_integer", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (32768) t(v)"}
+{"id": "tinyint_bad_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_bad_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "tinyint_bad_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "tinyint_overflow_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('99999999999999999999999') t(v)"}
+{"id": "tinyint_overflow_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('99999999999999999999999') t(v) WHERE false"}
+{"id": "tinyint_overflow_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('99999999999999999999999') t(v) LIMIT 0"}
+{"id": "tinyint_fraction_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2.5') t(v)"}
+{"id": "tinyint_fraction_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2.5') t(v) WHERE false"}
+{"id": "tinyint_fraction_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2.5') t(v) LIMIT 0"}
+{"id": "tinyint_blank_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('') t(v)"}
+{"id": "tinyint_blank_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('') t(v) WHERE false"}
+{"id": "tinyint_blank_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('') t(v) LIMIT 0"}
+{"id": "tinyint_valid_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2') t(v)"}
+{"id": "tinyint_valid_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2') t(v) WHERE false"}
+{"id": "tinyint_valid_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2') t(v) LIMIT 0"}
+{"id": "tinyint_zero_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('0') t(v)"}
+{"id": "tinyint_zero_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('0') t(v) WHERE false"}
+{"id": "tinyint_zero_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('0') t(v) LIMIT 0"}
+{"id": "tinyint_null_live", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v)"}
+{"id": "tinyint_null_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v) WHERE false"}
+{"id": "tinyint_null_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v) LIMIT 0"}
+{"id": "tinyint_function", "sql": "SELECT div(CAST(NULL AS TINYINT), CAST(v AS TINYINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_reverse", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_try_cast", "sql": "SELECT CAST(NULL AS TINYINT) DIV TRY_CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_strict_over_try", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(TRY_CAST(v AS BIGINT) AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_range", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(2)) t"}
+{"id": "tinyint_unused", "sql": "SELECT 1 AS q FROM (SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS unused FROM VALUES ('bad') t(v)) d"}
+{"id": "tinyint_derived_null", "sql": "SELECT q * CAST(NULL AS BIGINT) AS q FROM (SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v)) d"}
+{"id": "tinyint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_live_case", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_conditional", "sql": "SELECT CASE WHEN v = 'bad' THEN 5 ELSE CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) END AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_coalesce", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_parent_null", "sql": "SELECT (CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT)) * CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_unrelated_bad_left", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q, CAST('bad' AS TINYINT) DIV CAST(NULL AS TINYINT) AS other FROM VALUES ('2') t(v)"}
+{"id": "tinyint_unrelated_case", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q, CASE WHEN false THEN CAST(v AS TINYINT) ELSE 5 END AS other FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_multirow", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2'), ('bad'), (NULL), ('0') t(v)"}
+{"id": "tinyint_filter_bad", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2'), ('bad') t(v) WHERE v <> 'bad'"}
+{"id": "tinyint_filter_good", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('2'), ('bad') t(v) WHERE v = 'bad'"}
+{"id": "tinyint_input_limit0", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES ('bad') t(v) LIMIT 0) d"}
+{"id": "tinyint_input_limit1_good_first", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES ('2'), ('bad') t(v) LIMIT 1) d"}
+{"id": "tinyint_input_limit1_bad_first", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) LIMIT 1) d"}
+{"id": "tinyint_input_offset1", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 1) d"}
+{"id": "tinyint_input_offset_all", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 2) d"}
+{"id": "tinyint_input_limit0_expression", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM (SELECT v FROM VALUES ('bad') t(v) LIMIT (1 - 1)) d"}
+{"id": "tinyint_outer_filter", "sql": "SELECT q FROM (SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v)) d WHERE false"}
+{"id": "tinyint_cast_chain", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(CAST(v AS BIGINT) AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_explicit_nullif", "sql": "SELECT CAST(NULL AS TINYINT) DIV NULLIF(CAST(v AS TINYINT), CAST(0 AS TINYINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_mixed_smallint", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_mixed_int", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "tinyint_mixed_bigint", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_lexical_space", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (' 2 ') t(v)"}
+{"id": "smallint_lexical_signed_space", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (' +2 ') t(v)"}
+{"id": "smallint_lexical_negative_space", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (' -2 ') t(v)"}
+{"id": "smallint_lexical_controls", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f2\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f') t(v)"}
+{"id": "smallint_lexical_nbsp", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('\u00a02\u00a0') t(v)"}
+{"id": "smallint_lexical_fullwidth", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('\uff12') t(v)"}
+{"id": "smallint_lexical_arabic", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('\u0662') t(v)"}
+{"id": "smallint_lexical_leading_zeros", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('000000000000000000000000000000000000000000000000000000000000000000000000000000002') t(v)"}
+{"id": "smallint_lexical_scientific", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2e0') t(v)"}
+{"id": "smallint_lexical_min", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('-32768') t(v)"}
+{"id": "smallint_lexical_max", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('32767') t(v)"}
+{"id": "smallint_lexical_below_min", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('-32769') t(v)"}
+{"id": "smallint_lexical_above_max", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('32768') t(v)"}
+{"id": "smallint_numeric_control_nan", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "smallint_numeric_control_inf", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST('Infinity' AS DOUBLE)) t(v)"}
+{"id": "smallint_numeric_control_fraction", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST(2.5 AS DOUBLE)) t(v)"}
+{"id": "smallint_numeric_control_integer", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (32768) t(v)"}
+{"id": "smallint_bad_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_bad_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "smallint_bad_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "smallint_overflow_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('99999999999999999999999') t(v)"}
+{"id": "smallint_overflow_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('99999999999999999999999') t(v) WHERE false"}
+{"id": "smallint_overflow_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('99999999999999999999999') t(v) LIMIT 0"}
+{"id": "smallint_fraction_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2.5') t(v)"}
+{"id": "smallint_fraction_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2.5') t(v) WHERE false"}
+{"id": "smallint_fraction_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2.5') t(v) LIMIT 0"}
+{"id": "smallint_blank_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('') t(v)"}
+{"id": "smallint_blank_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('') t(v) WHERE false"}
+{"id": "smallint_blank_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('') t(v) LIMIT 0"}
+{"id": "smallint_valid_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2') t(v)"}
+{"id": "smallint_valid_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2') t(v) WHERE false"}
+{"id": "smallint_valid_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2') t(v) LIMIT 0"}
+{"id": "smallint_zero_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('0') t(v)"}
+{"id": "smallint_zero_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('0') t(v) WHERE false"}
+{"id": "smallint_zero_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('0') t(v) LIMIT 0"}
+{"id": "smallint_null_live", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v)"}
+{"id": "smallint_null_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v) WHERE false"}
+{"id": "smallint_null_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v) LIMIT 0"}
+{"id": "smallint_function", "sql": "SELECT div(CAST(NULL AS SMALLINT), CAST(v AS SMALLINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_reverse", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_try_cast", "sql": "SELECT CAST(NULL AS SMALLINT) DIV TRY_CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_strict_over_try", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(TRY_CAST(v AS BIGINT) AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_range", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(2)) t"}
+{"id": "smallint_unused", "sql": "SELECT 1 AS q FROM (SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS unused FROM VALUES ('bad') t(v)) d"}
+{"id": "smallint_derived_null", "sql": "SELECT q * CAST(NULL AS BIGINT) AS q FROM (SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v)) d"}
+{"id": "smallint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_live_case", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_conditional", "sql": "SELECT CASE WHEN v = 'bad' THEN 5 ELSE CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) END AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_coalesce", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_parent_null", "sql": "SELECT (CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT)) * CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_unrelated_bad_left", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q, CAST('bad' AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS other FROM VALUES ('2') t(v)"}
+{"id": "smallint_unrelated_case", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q, CASE WHEN false THEN CAST(v AS SMALLINT) ELSE 5 END AS other FROM VALUES ('bad') t(v)"}
+{"id": "smallint_multirow", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2'), ('bad'), (NULL), ('0') t(v)"}
+{"id": "smallint_filter_bad", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2'), ('bad') t(v) WHERE v <> 'bad'"}
+{"id": "smallint_filter_good", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('2'), ('bad') t(v) WHERE v = 'bad'"}
+{"id": "smallint_input_limit0", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES ('bad') t(v) LIMIT 0) d"}
+{"id": "smallint_input_limit1_good_first", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES ('2'), ('bad') t(v) LIMIT 1) d"}
+{"id": "smallint_input_limit1_bad_first", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) LIMIT 1) d"}
+{"id": "smallint_input_offset1", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 1) d"}
+{"id": "smallint_input_offset_all", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 2) d"}
+{"id": "smallint_input_limit0_expression", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM (SELECT v FROM VALUES ('bad') t(v) LIMIT (1 - 1)) d"}
+{"id": "smallint_outer_filter", "sql": "SELECT q FROM (SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v)) d WHERE false"}
+{"id": "smallint_cast_chain", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(CAST(v AS BIGINT) AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_explicit_nullif", "sql": "SELECT CAST(NULL AS SMALLINT) DIV NULLIF(CAST(v AS SMALLINT), CAST(0 AS SMALLINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_mixed_tinyint", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_mixed_int", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "smallint_mixed_bigint", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_lexical_space", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (' 2 ') t(v)"}
+{"id": "int_lexical_signed_space", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (' +2 ') t(v)"}
+{"id": "int_lexical_negative_space", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (' -2 ') t(v)"}
+{"id": "int_lexical_controls", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f2\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f') t(v)"}
+{"id": "int_lexical_nbsp", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('\u00a02\u00a0') t(v)"}
+{"id": "int_lexical_fullwidth", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('\uff12') t(v)"}
+{"id": "int_lexical_arabic", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('\u0662') t(v)"}
+{"id": "int_lexical_leading_zeros", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('000000000000000000000000000000000000000000000000000000000000000000000000000000002') t(v)"}
+{"id": "int_lexical_scientific", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2e0') t(v)"}
+{"id": "int_lexical_min", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('-2147483648') t(v)"}
+{"id": "int_lexical_max", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2147483647') t(v)"}
+{"id": "int_lexical_below_min", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('-2147483649') t(v)"}
+{"id": "int_lexical_above_max", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2147483648') t(v)"}
+{"id": "int_numeric_control_nan", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "int_numeric_control_inf", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST('Infinity' AS DOUBLE)) t(v)"}
+{"id": "int_numeric_control_fraction", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST(2.5 AS DOUBLE)) t(v)"}
+{"id": "int_numeric_control_integer", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (32768) t(v)"}
+{"id": "int_bad_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_bad_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "int_bad_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "int_overflow_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('99999999999999999999999') t(v)"}
+{"id": "int_overflow_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('99999999999999999999999') t(v) WHERE false"}
+{"id": "int_overflow_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('99999999999999999999999') t(v) LIMIT 0"}
+{"id": "int_fraction_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2.5') t(v)"}
+{"id": "int_fraction_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2.5') t(v) WHERE false"}
+{"id": "int_fraction_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2.5') t(v) LIMIT 0"}
+{"id": "int_blank_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('') t(v)"}
+{"id": "int_blank_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('') t(v) WHERE false"}
+{"id": "int_blank_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('') t(v) LIMIT 0"}
+{"id": "int_valid_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2') t(v)"}
+{"id": "int_valid_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2') t(v) WHERE false"}
+{"id": "int_valid_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2') t(v) LIMIT 0"}
+{"id": "int_zero_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('0') t(v)"}
+{"id": "int_zero_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('0') t(v) WHERE false"}
+{"id": "int_zero_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('0') t(v) LIMIT 0"}
+{"id": "int_null_live", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v)"}
+{"id": "int_null_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v) WHERE false"}
+{"id": "int_null_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v) LIMIT 0"}
+{"id": "int_function", "sql": "SELECT div(CAST(NULL AS INT), CAST(v AS INT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_reverse", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_try_cast", "sql": "SELECT CAST(NULL AS INT) DIV TRY_CAST(v AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_strict_over_try", "sql": "SELECT CAST(NULL AS INT) DIV CAST(TRY_CAST(v AS BIGINT) AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_range", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(2)) t"}
+{"id": "int_unused", "sql": "SELECT 1 AS q FROM (SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS unused FROM VALUES ('bad') t(v)) d"}
+{"id": "int_derived_null", "sql": "SELECT q * CAST(NULL AS BIGINT) AS q FROM (SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)) d"}
+{"id": "int_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_live_case", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_conditional", "sql": "SELECT CASE WHEN v = 'bad' THEN 5 ELSE CAST(NULL AS INT) DIV CAST(v AS INT) END AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_coalesce", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(NULL AS INT) DIV CAST(v AS INT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_parent_null", "sql": "SELECT (CAST(NULL AS INT) DIV CAST(v AS INT)) * CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_unrelated_bad_left", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q, CAST('bad' AS INT) DIV CAST(NULL AS INT) AS other FROM VALUES ('2') t(v)"}
+{"id": "int_unrelated_case", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q, CASE WHEN false THEN CAST(v AS INT) ELSE 5 END AS other FROM VALUES ('bad') t(v)"}
+{"id": "int_multirow", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2'), ('bad'), (NULL), ('0') t(v)"}
+{"id": "int_filter_bad", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2'), ('bad') t(v) WHERE v <> 'bad'"}
+{"id": "int_filter_good", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('2'), ('bad') t(v) WHERE v = 'bad'"}
+{"id": "int_input_limit0", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES ('bad') t(v) LIMIT 0) d"}
+{"id": "int_input_limit1_good_first", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES ('2'), ('bad') t(v) LIMIT 1) d"}
+{"id": "int_input_limit1_bad_first", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) LIMIT 1) d"}
+{"id": "int_input_offset1", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 1) d"}
+{"id": "int_input_offset_all", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 2) d"}
+{"id": "int_input_limit0_expression", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM (SELECT v FROM VALUES ('bad') t(v) LIMIT (1 - 1)) d"}
+{"id": "int_outer_filter", "sql": "SELECT q FROM (SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)) d WHERE false"}
+{"id": "int_cast_chain", "sql": "SELECT CAST(NULL AS INT) DIV CAST(CAST(v AS BIGINT) AS INT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_explicit_nullif", "sql": "SELECT CAST(NULL AS INT) DIV NULLIF(CAST(v AS INT), CAST(0 AS INT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_mixed_tinyint", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_mixed_smallint", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "int_mixed_bigint", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_lexical_space", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (' 2 ') t(v)"}
+{"id": "bigint_lexical_signed_space", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (' +2 ') t(v)"}
+{"id": "bigint_lexical_negative_space", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (' -2 ') t(v)"}
+{"id": "bigint_lexical_controls", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f2\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b\t\n\u000b\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f \u007f') t(v)"}
+{"id": "bigint_lexical_nbsp", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('\u00a02\u00a0') t(v)"}
+{"id": "bigint_lexical_fullwidth", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('\uff12') t(v)"}
+{"id": "bigint_lexical_arabic", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('\u0662') t(v)"}
+{"id": "bigint_lexical_leading_zeros", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('000000000000000000000000000000000000000000000000000000000000000000000000000000002') t(v)"}
+{"id": "bigint_lexical_scientific", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2e0') t(v)"}
+{"id": "bigint_lexical_min", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('-9223372036854775808') t(v)"}
+{"id": "bigint_lexical_max", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('9223372036854775807') t(v)"}
+{"id": "bigint_lexical_below_min", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('-9223372036854775809') t(v)"}
+{"id": "bigint_lexical_above_max", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('9223372036854775808') t(v)"}
+{"id": "bigint_numeric_control_nan", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)"}
+{"id": "bigint_numeric_control_inf", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST('Infinity' AS DOUBLE)) t(v)"}
+{"id": "bigint_numeric_control_fraction", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST(2.5 AS DOUBLE)) t(v)"}
+{"id": "bigint_numeric_control_integer", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (32768) t(v)"}
+{"id": "bigint_bad_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_bad_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v) WHERE false"}
+{"id": "bigint_bad_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v) LIMIT 0"}
+{"id": "bigint_overflow_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('99999999999999999999999') t(v)"}
+{"id": "bigint_overflow_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('99999999999999999999999') t(v) WHERE false"}
+{"id": "bigint_overflow_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('99999999999999999999999') t(v) LIMIT 0"}
+{"id": "bigint_fraction_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2.5') t(v)"}
+{"id": "bigint_fraction_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2.5') t(v) WHERE false"}
+{"id": "bigint_fraction_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2.5') t(v) LIMIT 0"}
+{"id": "bigint_blank_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('') t(v)"}
+{"id": "bigint_blank_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('') t(v) WHERE false"}
+{"id": "bigint_blank_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('') t(v) LIMIT 0"}
+{"id": "bigint_valid_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2') t(v)"}
+{"id": "bigint_valid_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2') t(v) WHERE false"}
+{"id": "bigint_valid_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2') t(v) LIMIT 0"}
+{"id": "bigint_zero_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('0') t(v)"}
+{"id": "bigint_zero_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('0') t(v) WHERE false"}
+{"id": "bigint_zero_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('0') t(v) LIMIT 0"}
+{"id": "bigint_null_live", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v)"}
+{"id": "bigint_null_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v) WHERE false"}
+{"id": "bigint_null_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES (CAST(NULL AS STRING)) t(v) LIMIT 0"}
+{"id": "bigint_function", "sql": "SELECT div(CAST(NULL AS BIGINT), CAST(v AS BIGINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_reverse", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_try_cast", "sql": "SELECT CAST(NULL AS BIGINT) DIV TRY_CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_strict_over_try", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(TRY_CAST(v AS BIGINT) AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_range", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT CAST(id AS STRING) || 'bad' AS v FROM range(2)) t"}
+{"id": "bigint_unused", "sql": "SELECT 1 AS q FROM (SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS unused FROM VALUES ('bad') t(v)) d"}
+{"id": "bigint_derived_null", "sql": "SELECT q * CAST(NULL AS BIGINT) AS q FROM (SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)) d"}
+{"id": "bigint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_live_case", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_conditional", "sql": "SELECT CASE WHEN v = 'bad' THEN 5 ELSE CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) END AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_coalesce", "sql": "SELECT COALESCE(CAST(5 AS BIGINT), CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_parent_null", "sql": "SELECT (CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT)) * CAST(NULL AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_unrelated_bad_left", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q, CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS other FROM VALUES ('2') t(v)"}
+{"id": "bigint_unrelated_case", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q, CASE WHEN false THEN CAST(v AS BIGINT) ELSE 5 END AS other FROM VALUES ('bad') t(v)"}
+{"id": "bigint_multirow", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2'), ('bad'), (NULL), ('0') t(v)"}
+{"id": "bigint_filter_bad", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2'), ('bad') t(v) WHERE v <> 'bad'"}
+{"id": "bigint_filter_good", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('2'), ('bad') t(v) WHERE v = 'bad'"}
+{"id": "bigint_input_limit0", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES ('bad') t(v) LIMIT 0) d"}
+{"id": "bigint_input_limit1_good_first", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES ('2'), ('bad') t(v) LIMIT 1) d"}
+{"id": "bigint_input_limit1_bad_first", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) LIMIT 1) d"}
+{"id": "bigint_input_offset1", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 1) d"}
+{"id": "bigint_input_offset_all", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES ('bad'), ('2') t(v) OFFSET 2) d"}
+{"id": "bigint_input_limit0_expression", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM (SELECT v FROM VALUES ('bad') t(v) LIMIT (1 - 1)) d"}
+{"id": "bigint_outer_filter", "sql": "SELECT q FROM (SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q FROM VALUES ('bad') t(v)) d WHERE false"}
+{"id": "bigint_cast_chain", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(CAST(v AS BIGINT) AS BIGINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_explicit_nullif", "sql": "SELECT CAST(NULL AS BIGINT) DIV NULLIF(CAST(v AS BIGINT), CAST(0 AS BIGINT)) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_mixed_tinyint", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS TINYINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_mixed_smallint", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS SMALLINT) AS q FROM VALUES ('bad') t(v)"}
+{"id": "bigint_mixed_int", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)"}

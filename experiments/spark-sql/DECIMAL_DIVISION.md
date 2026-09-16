@@ -2051,6 +2051,47 @@ The constant-DIV planning median changes from 411.0 to 414.5 microseconds, with 
 
 [div-evaluation-results.json](div-evaluation-results.json) contains the commands, source and binary hashes, reference/candidate captures, remaining differences, diagnostic audit and raw performance samples. Apply this patch after `sail-div-zero.patch` in a checkout with the preceding optional runtime and the same dependency overrides. Use the corrected benchmark source for both variants. Replay the Rust probe and `decimal_division.py` with `--cases experiments/spark-sql/div-evaluation.jsonl`; the numeric comparison still exits 1 for the 48 retained differences. The patch applies and reverses exactly. All 25 scratch paths and three cached executables were restored, with fresh source timestamps so Cargo will rebuild the restored code. Dependency identities/features, lockfile and Arrow libraries match between the measured variants. The default project build does not apply this patch.
 
+## NULL integer DIV and local string-column casts
+
+Starting from `18d4715`, [sail-div-null-cast.patch](sail-div-null-cast.patch) repairs direct local projections such as `SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q FROM VALUES ('bad') t(v)`. Spark raises `CAST_INVALID_INPUT`; the preceding runtime returns NULL. Spark's [DIV evaluation](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/arithmetic.scala#L613-L633) evaluates the divisor first, and its early local-relation conversion can run before NULL propagation, column pruning or an outer LIMIT.
+
+The patch reuses the Rust analyzer's existing local `VALUES` evaluator. It recognizes strict string-column casts and integer widening under direct DIV outputs. Non-ANSI divisors have a NULLIF wrapper and keep their existing handling. Input filters, LIMIT and OFFSET select the rows checked; a LIMIT above the projection still follows Spark's early evaluation order. LIMIT/OFFSET expressions are evaluated before slicing, because DataFusion's literal-only accessors otherwise mistake bounds that have not yet been folded for an unlimited input.
+
+Successful native CAST evaluation returns immediately. After failure, the discarded precheck retries with native `btrim` using Spark's ASCII whitespace/control set, U+0000 through U+0020 and U+007F. This preserves valid padded integers without accepting non-ASCII spaces or digits. The rule follows Spark's [strict integer conversion](https://github.com/apache/spark/blob/v4.2.0/common/unsafe/src/main/java/org/apache/spark/unsafe/types/UTF8String.java#L1556-L1623). Trimming does not alter the query's runtime CAST expression or physical plan.
+
+The [268-query corpus](div-null-cast.jsonl) runs both ANSI modes. It covers all four widths, mixed widths, invalid and out-of-range strings, lexical boundaries, operand reversal, TRY_CAST, filters, limits, offsets, unused columns, conditional parents and numeric-cast controls.
+
+| Corpus | Before | After | Observations |
+| --- | ---: | ---: | ---: |
+| Preceding 21 numeric corpora | 2,959 | 2,959 | 3,076 |
+| Integer NULL/zero corpus | 157 | 158 | 158 |
+| Constant-evaluation corpus | 302 | 314 | 350 |
+| New local-CAST corpus | 403 | 507 | 536 |
+| Combined | 3,821 | 3,938 | 4,120 |
+
+No previously matching observation regresses. All 117 repaired observations have Spark's `CAST_INVALID_INPUT` cause and a corresponding native integer CAST error with the same target width. The 23 preceding corpora retain 153 differences, and the new corpus retains 29. These counts describe observations, not independent bugs. Remaining new cases involve numeric casts, conditional or NULL parents, explicit NULLIF and invalid constant casts in another column. General expression evaluation and ordinary runtime CAST compatibility remain separate work.
+
+The diagnostic audit preserves all 379 earlier focused checks. It records 3,996 identical observations, including values, types, plans and complete errors. Seven unchanged string-conversion failures report a different first invalid row across partitions, with the same cast class, target type and plans. The five older cause gaps, four empty-subquery cause gaps and four wrapped-sort diagnostics remain. Numeric agreement does not establish complete Spark compatibility.
+
+Validation passes 22 Rust planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 exact rows, 116 Delta comparisons and 18 adapter checks. All 54 benchmark queries retain identical results and physical plans. Both measured variants use the same expanded benchmark, dependency identities/features, build profiles, lockfile and Arrow libraries.
+
+Measurements use CPU 2, four ABBA blocks, eight processes per variant/case/phase, two warmups and nine samples. Planning and execution counters are gated separately, for 256 processes. Negative values mean less time or fewer instructions.
+
+| Case | Planning time | Planning instructions | Execution time | Execution instructions |
+| --- | ---: | ---: | ---: | ---: |
+| Integer-to-Decimal control | -0.76% | -0.04% | +0.45% | -0.00% |
+| Decimal division control | -0.37% | +0.01% | +0.17% | -0.00% |
+| BIGINT DIV column/literal | -1.32% | +0.01% | +0.01% | +0.00% |
+| Constant INT DIV | -0.32% | +0.05% | +0.33% | -0.44% |
+| NULL DIV local string CAST | +0.85% | +0.81% | -1.95% | +0.00% |
+| NULL DIV integer-column CAST control | +0.29% | -0.01% | -0.38% | +0.14% |
+| NULL Decimal subquery | -0.13% | +0.06% | +0.36% | -0.00% |
+| Correlated COUNT division | -0.72% | -0.06% | +0.39% | -0.00% |
+
+The local string-CAST planning median changes from 669.4 to 675.0 microseconds. This is about 5.7 microseconds and 0.81% more planning instructions. Execution medians change by -1.95% to +0.45%, and every before/after process-median range overlaps. Execution keeps the original physical plan. See the raw process medians in [div-null-cast-results.json](div-null-cast-results.json) when assessing timing variability. Large VALUES inputs, the whitespace retry, Delta I/O and concurrency were not timed separately. This measurement does not establish zero overhead or resolve the older 0.4%-0.7% buffer-policy timing difference.
+
+Apply this patch after `sail-div-evaluation.patch` with the preceding optional runtime and dependency overrides. Build both variants with the same expanded benchmark. Replay the Rust probe and `decimal_division.py` with `--cases experiments/spark-sql/div-null-cast.jsonl`; the numeric comparison exits 1 for the 29 retained differences. The results artifact contains the commands, reference/candidate captures, remaining differences, source/binary hashes, cause checks and raw timing/counter samples. The patch applies and reverses exactly. All 25 scratch paths and three cached executables were restored with fresh source timestamps. The default project build does not apply this patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
