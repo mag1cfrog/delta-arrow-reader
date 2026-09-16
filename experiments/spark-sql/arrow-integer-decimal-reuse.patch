@@ -1,0 +1,265 @@
+diff --git a/src/cast/mod.rs b/src/cast/mod.rs
+--- a/src/cast/mod.rs
++++ b/src/cast/mod.rs
+@@ -39,6 +39,7 @@
+ 
+ mod decimal;
+ mod dictionary;
++mod integer_decimal_buffer;
+ mod list;
+ mod map;
+ mod run_array;
+@@ -377,7 +378,7 @@
+         && precision <= D::MAX_PRECISION
+         && (precision as i16) >= integer_precision + (scale as i16)
+     {
+-        array.unary::<_, D>(|v| v.as_().mul_wrapping(scale_factor))
++        integer_decimal_buffer::unary::<T, D>(array, |v| v.as_().mul_wrapping(scale_factor))
+     } else if scale < 0 {
+         match cast_options.safe {
+             true => array.unary_opt::<_, D>(|v| {
+diff --git a/src/cast/integer_decimal_buffer.rs b/src/cast/integer_decimal_buffer.rs
+new file mode 100644
+--- /dev/null
++++ b/src/cast/integer_decimal_buffer.rs
+@@ -0,0 +1,240 @@
++// Licensed to the Apache Software Foundation (ASF) under one
++// or more contributor license agreements.  See the NOTICE file
++// distributed with this work for additional information
++// regarding copyright ownership.  The ASF licenses this file
++// to you under the Apache License, Version 2.0 (the
++// "License"); you may not use this file except in compliance
++// with the License.  You may obtain a copy of the License at
++//
++//   http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing,
++// software distributed under the License is distributed on an
++// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++// KIND, either express or implied.  See the License for the
++// specific language governing permissions and limitations
++// under the License.
++
++use std::ptr::NonNull;
++use std::sync::atomic::{AtomicBool, Ordering};
++use std::sync::{Arc, Mutex};
++
++use arrow_array::{Array, PrimitiveArray, types::ArrowPrimitiveType};
++use arrow_buffer::{Buffer, MutableBuffer, ScalarBuffer};
++
++const MIN_BYTES: usize = 64 * 1024;
++const MAX_BYTES: usize = 256 * 1024;
++// ponytail: One shared slot retains at most 256 KiB; revisit only if concurrent
++// profiling shows that contention or competing buffer sizes defeat reuse.
++struct Cache {
++    idle: Mutex<Option<MutableBuffer>>,
++    in_use: AtomicBool,
++}
++
++static IDLE: Cache = Cache {
++    idle: Mutex::new(None),
++    in_use: AtomicBool::new(false),
++};
++
++struct Recycled {
++    buffer: Option<MutableBuffer>,
++    cache: &'static Cache,
++}
++
++impl Drop for Recycled {
++    fn drop(&mut self) {
++        if self.buffer.is_some() {
++            if let Ok(mut slot) = self.cache.idle.try_lock() {
++                if slot.is_none() {
++                    *slot = self.buffer.take();
++                }
++            }
++        }
++        self.cache.in_use.store(false, Ordering::Release);
++    }
++}
++
++pub(super) fn unary<T: ArrowPrimitiveType, D: ArrowPrimitiveType>(
++    array: &PrimitiveArray<T>,
++    op: impl Fn(T::Native) -> D::Native,
++) -> PrimitiveArray<D> {
++    collect(array, op, &IDLE)
++}
++
++fn collect<T: ArrowPrimitiveType, D: ArrowPrimitiveType>(
++    array: &PrimitiveArray<T>,
++    op: impl Fn(T::Native) -> D::Native,
++    cache: &'static Cache,
++) -> PrimitiveArray<D> {
++    let bytes = array.len().saturating_mul(size_of::<D::Native>());
++    // Reuse only bounded buffers from this integer-to-Decimal path.
++    if !(MIN_BYTES..=MAX_BYTES).contains(&bytes) {
++        return array.unary(op);
++    }
++    // Only one result may be managed by this cache at a time. Callers keeping
++    // earlier results use the ordinary kernel, without extra owner allocations.
++    if cache.in_use.load(Ordering::Relaxed)
++        || cache
++            .in_use
++            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
++            .is_err()
++    {
++        return array.unary(op);
++    }
++    // Release the claim on unwind as well as on the final result drop.
++    let mut owner = Recycled {
++        buffer: None,
++        cache,
++    };
++    let recycled = cache
++        .idle
++        .try_lock()
++        .ok()
++        .and_then(|mut slot| slot.take())
++        .filter(|buffer| buffer.len() == bytes && buffer.as_ptr().cast::<D::Native>().is_aligned());
++    let mut buffer = if let Some(mut buffer) = recycled {
++        for (output, input) in buffer
++            .typed_data_mut::<D::Native>()
++            .iter_mut()
++            .zip(array.values())
++        {
++            *output = op(*input);
++        }
++        buffer
++    } else {
++        // Keep the ordinary unary kernel's Vec collection on cache misses;
++        // zeroing a fresh buffer first penalizes callers retaining results.
++        let values: Vec<D::Native> = array.values().iter().map(|v| op(*v)).collect();
++        MutableBuffer::from(values)
++    };
++    // A custom owner's reported allocation size must match its capacity.
++    if buffer.capacity() != bytes {
++        return PrimitiveArray::new(
++            ScalarBuffer::new(buffer.into(), 0, array.len()),
++            array.nulls().cloned(),
++        );
++    }
++    let ptr = NonNull::new(buffer.as_mut_ptr()).unwrap();
++    owner.buffer = Some(buffer);
++    let owner = Arc::new(owner);
++    // SAFETY: The owner holds the fully initialized, aligned allocation of
++    // exactly `bytes` bytes. Arrow keeps it alive through all clones/slices;
++    // only the final owner drop may return it to the cache, on any thread.
++    let buffer = unsafe { Buffer::from_custom_allocation(ptr, bytes, owner) };
++    PrimitiveArray::new(
++        ScalarBuffer::new(buffer, 0, array.len()),
++        array.nulls().cloned(),
++    )
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use arrow_array::{Array, Int64Array, types::*};
++
++    #[test]
++    fn reuse_preserves_ownership_and_bounds() {
++        static CACHE: Cache = Cache {
++            idle: Mutex::new(None),
++            in_use: AtomicBool::new(false),
++        };
++        let source =
++            Int64Array::from_iter((0..8194).map(|i| (i % 5 != 0).then_some(i as i64 - 4000)))
++                .slice(1, 8192);
++        let first = collect::<Int64Type, Decimal128Type>(&source, i128::from, &CACHE);
++        let ptr = first.values().as_ptr();
++        assert_eq!(
++            first.get_buffer_memory_size(),
++            128 * 1024 + source.nulls().unwrap().buffer().capacity()
++        );
++        assert!(CACHE.idle.lock().unwrap().is_none());
++        let retained = first.slice(3, 8192 - 3);
++        drop(first);
++        let second = collect::<Int64Type, Decimal128Type>(&source, |v| i128::from(v) * 10, &CACHE);
++        assert_ne!(ptr, second.values().as_ptr());
++        assert_eq!(
++            retained.iter().collect::<Vec<_>>(),
++            source
++                .slice(3, 8189)
++                .iter()
++                .map(|v| v.map(i128::from))
++                .collect::<Vec<_>>()
++        );
++        std::thread::spawn(move || drop(retained)).join().unwrap();
++        assert_eq!(
++            CACHE.idle.lock().unwrap().as_ref().unwrap().as_ptr(),
++            ptr.cast()
++        );
++        let third = collect::<Int64Type, Decimal128Type>(&source, |v| i128::from(v) * 100, &CACHE);
++        assert_eq!(ptr, third.values().as_ptr());
++        assert_eq!(
++            second.iter().collect::<Vec<_>>(),
++            source
++                .iter()
++                .map(|v| v.map(|v| i128::from(v) * 10))
++                .collect::<Vec<_>>()
++        );
++        assert_eq!(
++            third.iter().collect::<Vec<_>>(),
++            source
++                .iter()
++                .map(|v| v.map(|v| i128::from(v) * 100))
++                .collect::<Vec<_>>()
++        );
++        let (_, values, _) = second.into_parts();
++        assert!(values.into_inner().into_mutable().is_ok());
++        assert!(CACHE.idle.lock().unwrap().is_none());
++        drop(third);
++        let cached = CACHE.idle.lock().unwrap().as_ref().unwrap().as_ptr() as usize;
++        assert_eq!(cached, ptr as usize);
++
++        // A contended cache must allocate independently instead of blocking.
++        let lock = CACHE.idle.lock().unwrap();
++        let independent = collect::<Int64Type, Decimal128Type>(&source, i128::from, &CACHE);
++        assert_ne!(independent.values().as_ptr() as usize, cached);
++        drop(independent);
++        drop(lock);
++        assert_eq!(
++            CACHE.idle.lock().unwrap().as_ref().unwrap().capacity(),
++            128 * 1024
++        );
++
++        // Switching widths must return the correct type and exact byte size.
++        let wide = collect::<Int64Type, Decimal256Type>(
++            &source,
++            |v| arrow_buffer::i256::from_i128(i128::from(v)),
++            &CACHE,
++        );
++        drop(wide);
++        for rows in [0, 4095, 4096, 4097, 16384, 16385] {
++            let input = Int64Array::from(vec![7; rows]);
++            let out = collect::<Int64Type, Decimal128Type>(&input, i128::from, &CACHE);
++            assert_eq!(out.len(), rows);
++            assert!(out.values().iter().all(|v| *v == 7));
++            drop(out);
++            assert!(
++                CACHE
++                    .idle
++                    .lock()
++                    .unwrap()
++                    .as_ref()
++                    .is_none_or(|b| b.capacity() <= MAX_BYTES)
++            );
++        }
++        CACHE.idle.lock().unwrap().take();
++        assert!(
++            std::panic::catch_unwind(|| {
++                collect::<Int64Type, Decimal128Type>(&source, |_| panic!("test unwind"), &CACHE)
++            })
++            .is_err()
++        );
++        assert!(!CACHE.in_use.load(Ordering::Relaxed));
++        drop(collect::<Int64Type, Decimal128Type>(
++            &source,
++            i128::from,
++            &CACHE,
++        ));
++        assert!(CACHE.idle.lock().unwrap().is_some());
++        CACHE.idle.lock().unwrap().take();
++    }
++}

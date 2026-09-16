@@ -1763,6 +1763,63 @@ These are whole-process measurements with inputs, context and plans still alive,
 
 Both selected settings preserve all 48 wrapped-query, 48 native-output, 20 cast and 12 Float64 checks, for 256 observations in total. Full-value checks run inside the benchmark, and captures match the preceding default-allocator references apart from timing fields. The earlier error corpora, Arrow unit suite and Delta lifecycle were not rerun for this environment-only change; the 126 tracked SQL differences remain open. All 25 scratch paths and three default executable hashes remain unchanged. Earlier patches and results are preserved. This slice adds the opt-in instructions and evidence only; it remains uncommitted and nothing was pushed.
 
+## Reuse bounded integer-to-Decimal buffers in Rust
+
+The optional [arrow-integer-decimal-reuse.patch](arrow-integer-decimal-reuse.patch), applied after the preceding Arrow cast patch, removes the sampled slow mode without allocator environment settings. The unchanged wrapped SMALLINT/BIGINT queries take about 2.1-2.2 ms. High-fault target processes fall from 10/24 to 0/24. [integer-decimal-reuse-results.json](integer-decimal-reuse-results.json) records the code, build provenance, measurements and validation. The default project does not enable this patch.
+
+This is a local change to Rust's Arrow dependency. The existing infallible integer-to-Decimal branch calls a private helper that reuses one 64-256 KiB value buffer. It uses standard synchronization and Arrow 58.4.0's `Buffer::from_custom_allocation` ownership API, with no new dependency or UDF. The helper adds 240 lines including the license, comments and one ownership regression test; the caller adds a module declaration and changes one expression.
+
+Only one live allocation participates in reuse at a time. Clones and slices keep its owner alive; only the last release can return the complete buffer, including when release happens on another thread. While that output remains live, other casts use the original unary kernel. Small or large outputs also use that kernel. A cache miss collects into the same `Vec` as ordinary unary conversion, without zeroing a fresh buffer first. Reuse checks byte length and alignment and preserves the NULL bitmap. The idle slot retains at most 256 KiB of value-buffer capacity plus metadata; this is a process-wide slot within this cast path, outside individual query reservations.
+
+The simpler prototype wrapped every eligible output. A corrected standalone benchmark found it 13.65% slower when four workers retained all results. The final one-allocation limit removes that measured penalty:
+
+| Rust cast workload | Before ms | Final ms | Change |
+| --- | ---: | ---: | ---: |
+| One worker, release each batch | 1.001 | 0.676 | -32.51% |
+| One worker, retain all batches | 6.119 | 1.061 | -82.66% |
+| Four workers, release each batch | 0.988 | 0.968 | -1.97% |
+| Four workers, retain all batches | 7.539 | 7.490 | -0.65% |
+
+Each worker casts 128 batches of 8,192 BIGINT values to DECIMAL(38,6). Six fresh processes per variant/workload provide medians of nine samples after two warmups. Four-worker samples use the slowest worker's elapsed time; result destruction is included. These supplementary timings use their own recorded compiler feature set and are not pooled with SQL timings. Two earlier trials linked a stale library and are excluded. Corrected builds force compilation, copy the emitted library and verify distinct library and executable hashes.
+
+Final SQL timing uses the same rows, batches, CPU 2 affinity, warmups and sample counts as the preceding section, with empty allocator overrides. There are 192 wrapped-query processes and 48 native-output controls, interleaved before/after. Before is the saved Arrow cast optimization; after adds only buffer reuse. Builds, correctness checks, tracing and memory probes finish separately from timing.
+
+| Wrapped query | Before fast-group ms | Before slow-group ms | Final median ms | Slow processes before / after |
+| --- | ---: | ---: | ---: | ---: |
+| SMALLINT DIV 3, non-ANSI | 2.493 | 5.547 | 2.181 | 3/12 / 0/12 |
+| BIGINT DIV 4, ANSI | 2.434 | 5.476 | 2.129 | 7/12 / 0/12 |
+
+Final process medians range from 2.162-2.209 ms and 2.122-2.187 ms. Target execution faults are 16 across nine executions, versus 48 or 18,464 before. Sixteen separate syscall traces show 0-2 `brk` calls per candidate interval and no `mmap`, `munmap` or `madvise`; baseline slow intervals have 2,304 `brk` calls. Repeated per-batch heap reclamation disappears in these samples, while some allocation and faults remain.
+
+The cast-only control improves 29.02%, and wrapped INT-column DIV improves 9.90%. The unchanged Decimal projection is 0.83% slower; ROUND, Decimal DIV and correlated MAX are 0.34-1.06% faster. Native-output controls range from -2.41% to +0.06%. All samples and counters remain recorded; this does not establish zero overhead for every workload.
+
+Memory needs a separate qualification. In 64 processes, private dirty memory after execution changes by +36 KiB for SMALLINT and -2 KiB for BIGINT. Whole-process RSS increases by 3,166-7,018 KiB across the measured cases, mostly in clean file-backed pages. Four additional target probes locate most of the increase in executable mappings. The executable grows by 96,056 bytes; the exact layout or read-ahead cause is not established. The 256 KiB idle-buffer bound does not bound whole-process RSS, live results or ordinary allocator retention.
+
+Validation passes:
+
+- All 343 Arrow library tests, including the previous 3,520 boundary combinations and the new ownership test. The latter covers retained slices, cross-thread final release, contention, size boundaries, width changes, memory accounting and unwind cleanup.
+- A separate 312-case matrix passes against both baseline and candidate: all eight integer types, applicable Decimal32/64/128/256 targets, NULLs, sliced arrays and 64/128/256 KiB buffers. Four concurrent workers also preserve values in retained outputs.
+- All 3,076 SQL observations preserve values, types, plans and failure stages. Spark agreement stays at 2,950/3,076, with the same 126 differences. Four multi-invalid-row cases select a different bad value first; repeated captures and both messages are retained. Their tiny batches cannot enter the new reuse branch.
+- The 346 focused checks and prior error-cause checks, 4,064 integer-reference observations over 187,410 rows, four Delta lifecycle tests, 116 Delta comparisons, 18 adapter checks and 19 seeds pass. All 48 wrapped, 48 native, 12 Float64 and 20 cast captures pass their existing full-value checks.
+
+A reused output supports ordinary Arrow reads, clones and slices, but its custom owner prevents direct `Buffer::into_mutable` or `into_vec` reclamation. Consumers requiring mutable ownership may copy. Concurrency can reduce reuse because overlapping outputs use ordinary allocation. This experiment covers warm execution on the recorded Linux/glibc host, not all allocators, batch sizes, concurrent sessions or Python C Stream consumption.
+
+To reproduce, first prepare and save the preceding Arrow-optimized runtime. Apply this follow-up to that same dependency copy, retaining the existing override table:
+
+```sh
+git -C "$run_dir/arrow-cast" apply --check \
+  "$repo_root/experiments/spark-sql/arrow-integer-decimal-reuse.patch"
+git -C "$run_dir/arrow-cast" apply \
+  "$repo_root/experiments/spark-sql/arrow-integer-decimal-reuse.patch"
+cargo test --release --locked --manifest-path "$run_dir/arrow-cast/Cargo.toml" --lib
+cargo build --release --offline --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --config "$run_dir/override.toml" --example decimal_bench --example decimal_probe
+taskset -c 2 "$CARGO_TARGET_DIR/release/examples/decimal_bench" \
+  "$run_dir/reuse-smallint.json" subqueries div_i16_literal_ansifalse
+```
+
+Use no allocator overrides. Give separate dependency checkouts separate Cargo target directories. Save the candidate executable and repeat BIGINT and controls using the artifact's balanced runner. The artifact also includes the standalone Rust benchmark, large-array check and their build commands. The follow-up patch recreates the tested source and reverses exactly. All 25 scratch paths and three default executables are restored; earlier patches and results are unchanged. This slice remains uncommitted and nothing was pushed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
