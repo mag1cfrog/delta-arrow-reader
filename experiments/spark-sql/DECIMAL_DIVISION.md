@@ -2340,6 +2340,71 @@ The [results artifact](cross-join-singleton-results.json) retains samples, count
 
 The optimization is measured here on fixed in-memory batches and a fixed-width NULL singleton. It is not a general cross-join cost model. The remaining 196 Spark differences, diagnostic gaps, COUNT timing gaps and separate Decimal parsing/conversion/materialization costs remain outside this slice.
 
+## Integer conversion for Decimal128 scales 23 through 31
+
+Starting from `8122f65`, [arrow-decimal-to-double-scale.patch](arrow-decimal-to-double-scale.patch) reuses the existing integer ratio helper for positive scales 23 through 31. It applies after [arrow-decimal-to-double-exact.patch](arrow-decimal-to-double-exact.patch). The previous path wrote each coefficient and exponent to a stack buffer and parsed that decimal text. The new branch divides the coefficient by `5^scale` and multiplies the rounded result by `2^-scale`. Since `5^31` fits in 72 bits, the helper's normalized numerator and shifts fit in u128 even for zero. Nonzero floating-point results remain normal, so the final multiplication is exact and does not introduce a second rounding; zero stays zero. Scalar and array callers use the same Arrow CAST entry point.
+
+The runtime change adds one branch and changes no helper arithmetic. It adds no dependency or allocation. Scales through 22, scales 32 through 38, and negative scales keep their existing paths. The patch extends the existing Arrow test with both i128 extrema at every supported scale, and even/odd halfway values with immediate neighbors and both signs at scales 23 through 31. The test also checks NULLs, empty arrays, nonzero offsets and both CAST safety options. All 345 Arrow tests pass. An independent Rust check with overflow checking enabled passes 5,317,209 bit-exact comparisons against standard-library decimal parsing; its source and command are retained in the results artifact.
+
+The 27 numeric corpora remain at 5,174/5,370, with no repaired or regressed observations. The Decimal-to-DOUBLE corpus already covers every positive scale through 38; all 278 observations pass, and its 4,450 non-NULL DOUBLE cells remain bit-exact against the saved Spark 4.2.0 reference. 5,369 parsed captures are identical, including plans and errors. One observation with multiple invalid rows selects a different first invalid value with the same checked error class and target. All 66 benchmark queries retain identical results and physical plans. The 24 planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 exact rows, 116 Delta comparisons and 18 adapter checks pass.
+
+The [kernel benchmark](decimal_to_double_bench.rs) adds the 64-bit divisor boundary at scales 27/28, the upper bound at 31, small and full-precision coefficients, 75% NULLs, and scale 32 as an unchanged fallback control. Both separately linked binaries call the corrected Arrow API with the `after` argument and identical benchmark source. Every process validates all 1,048,576 rows before timing, including signs and nonzero offsets. Four ABBA blocks give eight processes per version/case, with two warmups and nine samples per process, pinned to CPU 2. The 23 cases total 368 processes. Both versions have zero differences from exact parsing. All compilation and validation finish before timing.
+
+| Kernel input | Before ms | After ms | Change |
+| --- | ---: | ---: | ---: |
+| `small` | 1.092 | 1.096 | +0.36% |
+| `small_nulls` | 1.100 | 1.099 | -0.09% |
+| `exact_wide` | 2.533 | 2.520 | -0.51% |
+| `exact_128` | 2.521 | 2.523 | +0.08% |
+| `exact_wide_nulls` | 1.270 | 1.267 | -0.30% |
+| `negative_exact` | 2.504 | 2.574 | +2.80% |
+| `wide` | 6.212 | 6.238 | +0.42% |
+| `precision38` | 8.587 | 8.776 | +2.20% |
+| `wide_nulls` | 2.175 | 2.211 | +1.65% |
+| `scale22` | 44.722 | 45.218 | +1.11% |
+| `scale23` | 43.919 | 5.066 | -88.47% |
+| `scale27` | 43.621 | 5.067 | -88.38% |
+| `scale28` | 43.515 | 7.587 | -82.56% |
+| `scale31` | 43.495 | 7.563 | -82.61% |
+| `scale31_small` | 13.175 | 7.565 | -42.58% |
+| `scale31_precision38` | 49.523 | 7.674 | -84.50% |
+| `scale31_nulls` | 17.629 | 7.542 | -57.22% |
+| `scale32` | 43.548 | 43.562 | +0.03% |
+| `scale38_small` | 13.185 | 12.977 | -1.58% |
+| `scale38_wide` | 43.483 | 43.637 | +0.35% |
+| `scale0` | 3.016 | 3.023 | +0.25% |
+| `negative_scale` | 0.978 | 1.171 | +19.67% |
+| `negative_wide` | 45.046 | 44.858 | -0.42% |
+
+The negative-scale small-coefficient control rises by 19.67%; a separate 48-process control series confirms +19.86%, while its positive-scale small/exact controls change by less than 0.08%. The old conversion loop has identical instructions and relative branches in the two binaries. Its linked address differs. Eight diagnostic binaries add 0-112 startup NOPs before argument parsing, outside timed code, and reuse the exact same candidate Arrow libraries. All ten binaries retain the same 132 normalized instruction lines in this loop. In an interleaved 80-process series, the original baseline/candidate measure 0.970/1.177 ms. Candidate variants with this function starting at offsets 16, 32 or 48 within a 64-byte block measure 0.973-0.976 ms; variants at offset zero measure 1.175-1.176 ms.
+
+This demonstrates a placement-sensitive slowdown in the standalone binary on this host. It does not identify a universal hardware cost model or guarantee equal time after every link. The original +19.67% result remains in the table, and the diagnostic code is confined to the experiment cache. The optional Arrow patch contains no startup padding or alignment workaround. Other unchanged kernel controls range from -1.58% to +2.80%; those elapsed-time differences are not attributed to extra work in the new branch.
+
+The following 14 SQL controls measure surrounding paths and do not exercise scales 23 through 31. They use unchanged host source and queries, 448 processes, separate planning/execution counter intervals and the same ABBA procedure. Their results do not establish a whole-query speedup for the new branch.
+
+| SQL control | Before ms | After ms | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| `no_division_ansitrue` | 0.769 | 0.770 | +0.21% | -0.00% |
+| `plain_projection_ansitrue` | 15.815 | 15.831 | +0.10% | -0.00% |
+| `negative_literal_ansitrue` | 16.008 | 16.040 | +0.21% | +0.00% |
+| `wide_projection_ansitrue` | 43.420 | 43.401 | -0.04% | +0.00% |
+| `div_integer_ansitrue` | 2.118 | 2.116 | -0.12% | -0.00% |
+| `div_constant_ansitrue` | 0.294 | 0.292 | -0.70% | -0.00% |
+| `div_null_cast_numeric_ansitrue` | 0.871 | 0.871 | -0.00% | +0.00% |
+| `div_null_cast_values_ansitrue` | 0.867 | 0.869 | +0.26% | -0.07% |
+| `compare_f32_column_ansitrue` | 4.990 | 4.984 | -0.12% | -0.01% |
+| `compare_f64_column_ansitrue` | 4.985 | 5.000 | +0.30% | -0.00% |
+| `compare_f64_literal_ansitrue` | 3.295 | 3.300 | +0.15% | +0.01% |
+| `compare_decimal_literal_ansitrue` | 4.177 | 4.178 | +0.02% | -0.00% |
+| `null_divide_left_ansitrue` | 0.204 | 0.202 | -1.15% | +1.34% |
+| `correlated_count_ansitrue` | 73.497 | 79.465 | +8.12% | -0.00% |
+
+Other SQL execution controls range from -1.15% to +0.30% in elapsed time. Planning changes range from -1.30% to +0.72%, with instruction changes within 0.35%. Correlated COUNT rises from 73.497 to 79.465 ms (+8.12%) in the main series, with instructions changing by -0.0038%. A separate 16-process ABBA repeat measures 73.750 versus 74.346 ms (+0.81%), with instructions changing by +0.0020%. Both versions have processes near 73-75 ms and near 80 ms in the main series. Its unchanged plan performs integer/Decimal CASTs, aggregation, a hash join, Decimal division and sorting; it does not run Decimal-to-DOUBLE conversion. The timing distributions remain unexplained. The standalone negative-scale layout experiment does not establish the cause of this SQL difference, and the older COUNT timing gaps remain open.
+
+The [results artifact](decimal-double-scale-results.json) records build and source hashes, commands, all kernel samples, SQL samples and counters, corpus checks and restoration checks. It references the preceding artifact for unchanged captures. To reproduce, apply `arrow-decimal-to-double.patch`, `arrow-decimal-to-double-exact.patch` and this patch in order to the existing Arrow dependency override, retaining the accepted CrossJoin patch. Rebuild the optional runtime, run the Arrow library tests, and link the standalone benchmark against that build's recorded Arrow artifacts. The baseline omits only this follow-up patch. Apply/reverse checks restore the preceding Arrow source exactly. The 26 scratch host paths, two Arrow files, physical optimizer source and three cached executables were restored with fresh source timestamps. The default project build does not enable the patch.
+
+This reduces parsing cost for the measured scale 23-31 inputs. Scale 22's wide-coefficient fallback, scales 32-38, large negative scales, general quotient conversion and mixed-comparison materialization remain separate work. The 196 coarse Spark differences, diagnostic gaps and older unattributed timing differences remain. These fixed-batch measurements do not establish complete compatibility or zero performance overhead.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

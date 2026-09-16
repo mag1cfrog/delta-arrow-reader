@@ -1,0 +1,55 @@
+diff --git a/src/cast/decimal.rs b/src/cast/decimal.rs
+--- a/src/cast/decimal.rs
++++ b/src/cast/decimal.rs
+@@ -942,6 +942,15 @@
+                 value * factor
+             }
+         })
++    } else if (23..=31).contains(&scale) {
++        // 10^scale = 5^scale * 2^scale. The ratio rounds once; multiplying
++        // by 2^-scale stays normal and is exact. 5^31 fits in 72 bits.
++        let divisor = 5_u128.pow(scale as u32);
++        let divisor_bits = 128 - divisor.leading_zeros();
++        let factor = f64::from_bits(((1023 - scale as i32) as u64) << 52);
++        array.unary::<_, Float64Type>(move |v| {
++            decimal128_ratio_to_float64(v, divisor, divisor_bits) * factor
++        })
+     } else {
+         array.unary::<_, Float64Type>(|v| parse_decimal128_as_float64(v, scale))
+     };
+@@ -952,7 +961,8 @@
+ fn decimal128_ratio_to_float64(value: i128, divisor: u128, divisor_bits: u32) -> f64 {
+     let magnitude = value.unsigned_abs();
+     // Keep 55 or 56 quotient bits: 53 significand bits, a round bit and a
+-    // sticky bit. For scales 1..=21 the shifted numerator fits in u128.
++    // sticky bit. A divisor of at most 72 bits keeps the shifted numerator
++    // in u128 and the shift below 128, including a zero coefficient.
+     let shift = 128 - magnitude.leading_zeros() as i32 - divisor_bits as i32 - 55;
+     let (numerator, denominator) = if shift >= 0 {
+         (magnitude, divisor << shift)
+@@ -1004,7 +1014,24 @@
+     fn test_decimal128_to_float64_rounding() {
+         let mut seed = 818_818_191_u128;
+         for scale in i8::MIN..=38 {
+-            let mut values = vec![None, Some(0), Some(1), Some(-1)];
++            let mut values = vec![
++                None,
++                Some(0),
++                Some(1),
++                Some(-1),
++                Some(i128::MIN),
++                Some(i128::MAX),
++            ];
++            if (23..=31).contains(&scale) {
++                // Even/odd halfway significands and their immediate neighbors
++                // exercise tie-to-even rounding and the remainder's sticky bit.
++                for significand in [(1_i128 << 53) + 1, (1_i128 << 53) + 3] {
++                    let v = significand * 5_i128.pow(scale as u32);
++                    for n in [v - 1, v, v + 1] {
++                        values.extend([Some(n), Some(-n)]);
++                    }
++                }
++            }
+             for v in [
+                 1_i128 << 53,
+                 1_i128 << 63,
