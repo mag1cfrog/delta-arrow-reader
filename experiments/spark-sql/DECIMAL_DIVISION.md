@@ -1890,6 +1890,30 @@ Validation reruns all 343 Arrow tests, the 312 large-cast matrix and four-worker
 
 To reproduce, prepare the preceding runtime, save its executable, then apply the follow-up to the same Arrow dependency copy and rebuild. Reuse the retention commands above; the artifact includes the balanced runner and the standalone benchmark. All 25 scratch paths and three default executables are restored, and earlier patches and result artifacts are unchanged. This establishes the fix for the recorded retention workloads, not arbitrary task migration, all allocators or Python C Stream throughput. Default project dependencies remain unchanged and nothing was pushed.
 
+## Audit the remaining SMALLINT timing difference
+
+The preceding thread-local buffer patch is committed as `18144e1`. Its earlier +1.50% no-retention SMALLINT measurement does not reproduce at the same size. Three follow-up groups measure +0.42%, +0.51% and +0.69%. A small positive difference remains in their point estimates; this audit neither fixes it nor establishes that it is noise. No runtime or benchmark source changes were made. [integer-decimal-smallint-audit-results.json](integer-decimal-smallint-audit-results.json) retains the measurements, profiles and assembly comparison.
+
+The audit uses the exact two executables from the preceding experiment, verified by SHA256. Before is the global-gated buffer-reuse experiment; after is the thread-local version. Both already include the earlier integer-to-Decimal optimization. Each process validates every output value, then supplies the median of nine fresh-plan executions after two warmups. Queries, 1,048,576 rows, 8,192-row batches and the current-thread runtime remain unchanged. Variant order is ABBA, with rotating query order and execution-only FIFO counters. All 512 processes pass the existing value/type/plan checks, with no high-fault target process.
+
+| Protocol | Processes per variant/query | SMALLINT change | BIGINT change | Integer-to-Decimal only | Unchanged Decimal control |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CPU 2, ownership probe enabled | 32 | +0.42% | -0.10% | -0.31% | +0.06% |
+| CPU 2, ownership probe absent | 16 | +0.51% | -0.22% | -0.16% | +0.15% |
+| CPU 4, ownership probe enabled | 16 | +0.69% | +0.10% | +0.21% | +0.10% |
+
+The first group takes 2.159/2.168 ms before/after for SMALLINT; the other two take 2.162/2.173 ms and 2.171/2.186 ms. Removing `DECIMAL_BENCH_RETAIN` removes the extra ownership-probe allocation outside timing. Neither that change nor selecting CPU 4 eliminates the small difference. Cast-only and BIGINT results do not show a comparable consistent increase, so these measurements do not support a global 1.50% execution penalty.
+
+Individual ABBA blocks vary in both directions. In the first group, SMALLINT block ratios range from -1.44% to +1.42%; CPU 4 also contains positive outliers. The artifact retains every process, block ratio and an exploratory block-bootstrap interval. CPU frequency and the whole host were not fixed or isolated. These limits prevent a claim of zero overhead or a precise universal regression percentage.
+
+Sixteen separate execution-only cycle profiles use four fresh processes per variant for SMALLINT and cast-only queries. Their timings are excluded from the tables. SMALLINT self samples are about 38% in native division, 22% in the existing SMALLINT-to-BIGINT conversion and 30% in BIGINT-to-Decimal conversion. The last function includes scaling and writing output values; its sample share is not the cost of cache bookkeeping alone. The profiles are too coarse to locate a sub-percent difference.
+
+Source and machine-code checks confirm that both plans already contain the same three operations. The native division and widening functions remain 2,372 and 1,780 bytes respectively, with matching instruction offsets and operands after normalizing relocations. The Decimal conversion helper shrinks from 2,452 to 1,916 bytes. This rules out an added traversal or instruction-shape growth in the first two functions, but does not establish equal cache behavior or latency.
+
+The widening source still routes through `cast_numeric_arrays` and `try_numeric_cast` to `PrimitiveArray::try_unary`, which initializes output and visits valid indices. That pre-existing path accounts for roughly one fifth of sampled CPU and is a separate optimization candidate. It has not been shown to cause the difference between these two runtimes. This audit adds no speculative cache workaround.
+
+To reproduce, reuse the saved before/after executables from the preceding experiment and run the artifact's `repeat.py`, `no-probe.py` and `cpu4.py` sequentially, then run `profile.py` separately. The source and executable hashes, commands, raw captures and counters are recorded. No Arrow, full SQL corpus, integer-reference or Delta lifecycle suite was rerun because the runtime and benchmark source are unchanged; the preceding results remain applicable. All 25 scratch paths, three default executables, prior patches and result artifacts are unchanged. This audit adds no runtime changes and nothing was pushed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
