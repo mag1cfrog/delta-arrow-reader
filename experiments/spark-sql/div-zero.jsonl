@@ -1,0 +1,79 @@
+{"id": "tinyint_literal_zero", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q"}
+{"id": "tinyint_function_zero", "sql": "SELECT div(CAST(7 AS TINYINT), CAST(0 AS TINYINT)) AS q"}
+{"id": "tinyint_literal_null_zero", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(0 AS TINYINT) AS q"}
+{"id": "tinyint_untyped_null_zero", "sql": "SELECT NULL DIV CAST(0 AS TINYINT) AS q"}
+{"id": "tinyint_literal_null_right", "sql": "SELECT CAST(7 AS TINYINT) DIV NULL AS q"}
+{"id": "tinyint_mixed_mask_b1", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(b AS TINYINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "tinyint_mixed_mask_b4", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(b AS TINYINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "tinyint_array_live_zero", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(b AS TINYINT) AS q FROM VALUES (0,NULL,0),(1,7,0) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "tinyint_scalar_zero_all_null", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM VALUES (0,NULL),(1,NULL) t(id,a) ORDER BY id", "batch_size": 4}
+{"id": "tinyint_scalar_zero_live", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM VALUES (0,NULL),(1,7) t(id,a) ORDER BY id", "batch_size": 4}
+{"id": "tinyint_scalar_null_zero_column", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(b AS TINYINT) AS q FROM VALUES (0,0),(1,2) t(id,b) ORDER BY id", "batch_size": 4}
+{"id": "tinyint_mixed_width_null", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "tinyint_limit0", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3) LIMIT 0"}
+{"id": "tinyint_empty", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3) WHERE false"}
+{"id": "tinyint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2)"}
+{"id": "tinyint_filtered_zero", "sql": "SELECT CAST(a AS TINYINT) DIV CAST(b AS TINYINT) AS q FROM VALUES (0,7,0),(1,7,2),(2,NULL,0) t(id,a,b) WHERE id > 0 ORDER BY id", "batch_size": 4}
+{"id": "tinyint_window_null", "sql": "SELECT MIN(CAST(NULL AS TINYINT)) OVER () DIV CAST(0 AS TINYINT) AS q FROM range(2)"}
+{"id": "tinyint_aggregate_null", "sql": "SELECT MAX(CAST(NULL AS TINYINT)) DIV CAST(0 AS TINYINT) AS q FROM range(2)"}
+{"id": "tinyint_subquery_null", "sql": "SELECT (SELECT MAX(CAST(NULL AS TINYINT)) FROM range(2)) DIV CAST(0 AS TINYINT) AS q"}
+{"id": "smallint_literal_zero", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q"}
+{"id": "smallint_function_zero", "sql": "SELECT div(CAST(7 AS SMALLINT), CAST(0 AS SMALLINT)) AS q"}
+{"id": "smallint_literal_null_zero", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q"}
+{"id": "smallint_untyped_null_zero", "sql": "SELECT NULL DIV CAST(0 AS SMALLINT) AS q"}
+{"id": "smallint_literal_null_right", "sql": "SELECT CAST(7 AS SMALLINT) DIV NULL AS q"}
+{"id": "smallint_mixed_mask_b1", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(b AS SMALLINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "smallint_mixed_mask_b4", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(b AS SMALLINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "smallint_array_live_zero", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(b AS SMALLINT) AS q FROM VALUES (0,NULL,0),(1,7,0) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "smallint_scalar_zero_all_null", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM VALUES (0,NULL),(1,NULL) t(id,a) ORDER BY id", "batch_size": 4}
+{"id": "smallint_scalar_zero_live", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM VALUES (0,NULL),(1,7) t(id,a) ORDER BY id", "batch_size": 4}
+{"id": "smallint_scalar_null_zero_column", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(b AS SMALLINT) AS q FROM VALUES (0,0),(1,2) t(id,b) ORDER BY id", "batch_size": 4}
+{"id": "smallint_mixed_width_null", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "smallint_limit0", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3) LIMIT 0"}
+{"id": "smallint_empty", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3) WHERE false"}
+{"id": "smallint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2)"}
+{"id": "smallint_filtered_zero", "sql": "SELECT CAST(a AS SMALLINT) DIV CAST(b AS SMALLINT) AS q FROM VALUES (0,7,0),(1,7,2),(2,NULL,0) t(id,a,b) WHERE id > 0 ORDER BY id", "batch_size": 4}
+{"id": "smallint_window_null", "sql": "SELECT MIN(CAST(NULL AS SMALLINT)) OVER () DIV CAST(0 AS SMALLINT) AS q FROM range(2)"}
+{"id": "smallint_aggregate_null", "sql": "SELECT MAX(CAST(NULL AS SMALLINT)) DIV CAST(0 AS SMALLINT) AS q FROM range(2)"}
+{"id": "smallint_subquery_null", "sql": "SELECT (SELECT MAX(CAST(NULL AS SMALLINT)) FROM range(2)) DIV CAST(0 AS SMALLINT) AS q"}
+{"id": "int_literal_zero", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q"}
+{"id": "int_function_zero", "sql": "SELECT div(CAST(7 AS INT), CAST(0 AS INT)) AS q"}
+{"id": "int_literal_null_zero", "sql": "SELECT CAST(NULL AS INT) DIV CAST(0 AS INT) AS q"}
+{"id": "int_untyped_null_zero", "sql": "SELECT NULL DIV CAST(0 AS INT) AS q"}
+{"id": "int_literal_null_right", "sql": "SELECT CAST(7 AS INT) DIV NULL AS q"}
+{"id": "int_mixed_mask_b1", "sql": "SELECT CAST(a AS INT) DIV CAST(b AS INT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "int_mixed_mask_b4", "sql": "SELECT CAST(a AS INT) DIV CAST(b AS INT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "int_array_live_zero", "sql": "SELECT CAST(a AS INT) DIV CAST(b AS INT) AS q FROM VALUES (0,NULL,0),(1,7,0) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "int_scalar_zero_all_null", "sql": "SELECT CAST(a AS INT) DIV CAST(0 AS INT) AS q FROM VALUES (0,NULL),(1,NULL) t(id,a) ORDER BY id", "batch_size": 4}
+{"id": "int_scalar_zero_live", "sql": "SELECT CAST(a AS INT) DIV CAST(0 AS INT) AS q FROM VALUES (0,NULL),(1,7) t(id,a) ORDER BY id", "batch_size": 4}
+{"id": "int_scalar_null_zero_column", "sql": "SELECT CAST(NULL AS INT) DIV CAST(b AS INT) AS q FROM VALUES (0,0),(1,2) t(id,b) ORDER BY id", "batch_size": 4}
+{"id": "int_mixed_width_null", "sql": "SELECT CAST(a AS INT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "int_limit0", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) LIMIT 0"}
+{"id": "int_empty", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) WHERE false"}
+{"id": "int_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2)"}
+{"id": "int_filtered_zero", "sql": "SELECT CAST(a AS INT) DIV CAST(b AS INT) AS q FROM VALUES (0,7,0),(1,7,2),(2,NULL,0) t(id,a,b) WHERE id > 0 ORDER BY id", "batch_size": 4}
+{"id": "int_window_null", "sql": "SELECT MIN(CAST(NULL AS INT)) OVER () DIV CAST(0 AS INT) AS q FROM range(2)"}
+{"id": "int_aggregate_null", "sql": "SELECT MAX(CAST(NULL AS INT)) DIV CAST(0 AS INT) AS q FROM range(2)"}
+{"id": "int_subquery_null", "sql": "SELECT (SELECT MAX(CAST(NULL AS INT)) FROM range(2)) DIV CAST(0 AS INT) AS q"}
+{"id": "bigint_literal_zero", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q"}
+{"id": "bigint_function_zero", "sql": "SELECT div(CAST(7 AS BIGINT), CAST(0 AS BIGINT)) AS q"}
+{"id": "bigint_literal_null_zero", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(0 AS BIGINT) AS q"}
+{"id": "bigint_untyped_null_zero", "sql": "SELECT NULL DIV CAST(0 AS BIGINT) AS q"}
+{"id": "bigint_literal_null_right", "sql": "SELECT CAST(7 AS BIGINT) DIV NULL AS q"}
+{"id": "bigint_mixed_mask_b1", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 1}
+{"id": "bigint_mixed_mask_b4", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "bigint_array_live_zero", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,NULL,0),(1,7,0) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "bigint_scalar_zero_all_null", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM VALUES (0,NULL),(1,NULL) t(id,a) ORDER BY id", "batch_size": 4}
+{"id": "bigint_scalar_zero_live", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM VALUES (0,NULL),(1,7) t(id,a) ORDER BY id", "batch_size": 4}
+{"id": "bigint_scalar_null_zero_column", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,0),(1,2) t(id,b) ORDER BY id", "batch_size": 4}
+{"id": "bigint_mixed_width_null", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,NULL,0),(1,7,2),(2,7,NULL),(3,-7,-2),(4,NULL,NULL) t(id,a,b) ORDER BY id", "batch_size": 4}
+{"id": "bigint_limit0", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) LIMIT 0"}
+{"id": "bigint_empty", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) WHERE false"}
+{"id": "bigint_dead_case", "sql": "SELECT CASE WHEN false THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE CAST(5 AS BIGINT) END AS q FROM range(2)"}
+{"id": "bigint_filtered_zero", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS q FROM VALUES (0,7,0),(1,7,2),(2,NULL,0) t(id,a,b) WHERE id > 0 ORDER BY id", "batch_size": 4}
+{"id": "bigint_window_null", "sql": "SELECT MIN(CAST(NULL AS BIGINT)) OVER () DIV CAST(0 AS BIGINT) AS q FROM range(2)"}
+{"id": "bigint_aggregate_null", "sql": "SELECT MAX(CAST(NULL AS BIGINT)) DIV CAST(0 AS BIGINT) AS q FROM range(2)"}
+{"id": "bigint_subquery_null", "sql": "SELECT (SELECT MAX(CAST(NULL AS BIGINT)) FROM range(2)) DIV CAST(0 AS BIGINT) AS q"}
+{"id": "control_null_null", "sql": "SELECT NULL DIV NULL AS q"}
+{"id": "control_bad_left_null", "sql": "SELECT CAST(a AS INT) DIV CAST(NULL AS INT) AS q FROM VALUES ('bad') t(a)"}
+{"id": "control_bad_right_null", "sql": "SELECT CAST(NULL AS INT) DIV CAST(b AS INT) AS q FROM VALUES ('bad') t(b)"}

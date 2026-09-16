@@ -1,0 +1,100 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -1023,8 +1023,11 @@
+         ));
+     }
+ 
+-    // Plan-time check for literal zero divisors.
+-    if is_zero_literal(&divisor) {
++    let integer_operands = matches!((&dividend_type, &divisor_type), (Ok(left), Ok(right))
++        if [left, right].iter().all(|t| t.is_signed_integer() || **t == DataType::Null));
++    // Integer kernels handle zero after NULL propagation and preserve BIGINT output.
++    // Keep the existing lowering for Decimal, interval and unresolved operands.
++    if !integer_operands && is_zero_literal(&divisor) {
+         if function_context.plan_config.ansi_mode {
+             return Err(PlanError::ArrowError(ArrowError::DivideByZero));
+         } else {
+@@ -1037,7 +1040,7 @@
+         && left == right
+     {
+         let divisor = if function_context.plan_config.ansi_mode {
+-            make_safe_divisor(divisor, right, true, "Division by zero")
++            divisor
+         } else {
+             // Keep NULLIF at the input width; an Int32 zero would widen Int8/Int16.
+             expr_fn::nullif(divisor, lit(ScalarValue::new_zero(right)?))
+@@ -1053,11 +1056,7 @@
+ 
+     // Decimal peers have their own coercion; widen only the signed-integer family.
+     let (dividend, divisor) = match (&dividend_type, &divisor_type) {
+-        (Ok(left), Ok(right))
+-            if [left, right]
+-                .iter()
+-                .all(|t| t.is_signed_integer() || **t == DataType::Null) =>
+-        {
++        (Ok(left), Ok(right)) if integer_operands => {
+             let widen = |expr, data_type: &DataType| match data_type {
+                 DataType::Int8 | DataType::Int16 | DataType::Int32 => cast(expr, DataType::Int64),
+                 _ => expr,
+@@ -1069,14 +1068,13 @@
+ 
+     let ansi_mode = function_context.plan_config.ansi_mode;
+ 
+-    // Apply runtime zero-divisor guard to the divisor before building the division expression.
++    // ANSI integer kernels already check live zeros; a divisor-only guard loses NULL masking.
+     let effective_divisor_type = divisor_type.as_ref().cloned().unwrap_or(DataType::Int32);
+-    let divisor = make_safe_divisor(
+-        divisor,
+-        &effective_divisor_type,
+-        ansi_mode,
+-        "Division by zero",
+-    );
++    let divisor = if ansi_mode && integer_operands {
++        divisor
++    } else {
++        make_safe_divisor(divisor, &effective_divisor_type, ansi_mode, "Division by zero")
++    };
+ 
+     let div_expr = match (&dividend_type, &divisor_type) {
+         // TODO: Casting DataType::Interval(_) to DataType::Int64 is not supported yet.
+@@ -1163,6 +1161,40 @@
+                     .downcast_ref::<datafusion::arrow::array::Int64Array>()
+                     .unwrap();
+                 assert_eq!(values.value(0), -expected / i64::from(divisor));
++            }
++        }
++        for data_type in [
++            DataType::Int8,
++            DataType::Int16,
++            DataType::Int32,
++            DataType::Int64,
++        ] {
++            for right_type in [data_type.clone(), DataType::Int64] {
++                for (left, right) in [(None, Some(0)), (Some(7), Some(0)), (Some(7), None)] {
++                    let expr = resolve(
++                        cast(lit(ScalarValue::Int64(left)), data_type.clone()),
++                        cast(lit(ScalarValue::Int64(right)), right_type.clone()),
++                    )
++                    .unwrap();
++                    assert_eq!(expr.get_type(&schema).unwrap(), DataType::Int64);
++                    let result = ctx
++                        .sql("SELECT 1")
++                        .await
++                        .unwrap()
++                        .select(vec![expr])
++                        .unwrap()
++                        .collect()
++                        .await;
++                    if ansi_mode && left.is_some() && right == Some(0) {
++                        assert!(result.unwrap_err().to_string().contains("Divide by zero"));
++                    } else {
++                        let batches = result.unwrap();
++                        assert_eq!(
++                            ScalarValue::try_from_array(batches[0].column(0), 0).unwrap(),
++                            ScalarValue::Int64(None),
++                        );
++                    }
++                }
+             }
+         }
+         assert!(resolve(lit(7), lit(2)).is_ok());

@@ -1985,6 +1985,34 @@ All 344 Arrow tests pass. The existing matrix expands to 3,072 casts across all 
 
 Apply this patch after `arrow-integer-widening.patch` and `arrow-integer-widening-const-types.patch`, then reuse the recorded optional-runtime build, validation and measurement commands. It applies and reverses exactly. All 25 scratch paths and three default executables are restored; preceding sources, binaries and artifacts are preserved. Default project sources and dependencies are unchanged. The earlier 0.4-0.7% Decimal-buffer-policy difference remains unattributed, and the 126 Spark differences remain outside this performance change. CPU frequency and background load were not isolated; kernel timings cover SMALLINT-to-BIGINT, while correctness covers all integer pairs. This follow-up remains experimental; nothing was pushed.
 
+## Integer DIV NULL and zero handling
+
+Starting from `ed3602b`, [sail-div-zero.patch](sail-div-zero.patch) fixes premature zero checks for signed-integer `DIV`. It changes only the experimental Sail planner's `math.rs`, with two fewer production lines and 34 added test lines. The existing small-integer kernel and Arrow's integer division already skip NULL rows and reject live zero divisors. Removing the separate ANSI divisor guard lets those kernels see both operands. Removing the signed-integer literal-zero shortcut also preserves BIGINT output under non-ANSI mode and lets unused branches avoid evaluation. Both `DIV` and `div(a, b)` use this resolver. Decimal, interval and other operand families retain their preceding lowering.
+
+[Spark 4.2.0's DivModLike](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/arithmetic.scala#L613-L633) checks the numerator for NULL before raising an ANSI zero-divisor error. This is a local planner adjustment using existing Rust kernels. It adds no UDF, execution node, dependency or per-row operation. Non-ANSI integer NULLIF handling and the earlier widening optimization remain.
+
+| Spark value/type or error-stage agreement | Before | Candidate |
+| --- | ---: | ---: |
+| Existing 21 numeric corpora | 2,950/3,076 | 2,959/3,076 |
+| New integer NULL/zero corpus | 49/158 | 153/158 |
+
+The nine repaired existing observations cover TINYINT, SMALLINT and INT: ANSI NULL-numerator/zero-column results, ANSI literal-zero error stages and non-ANSI literal-zero result types. No previously matching observation loses agreement. The old corpus retains 117 differences. The new [79-query corpus](div-zero.jsonl), captured against Spark before implementation, adds BIGINT, mixed widths, column/scalar operands, batch sizes 1 and 4, NULL masks, live errors, dead CASE branches, empty results, aggregates, windows and scalar subqueries, with both ANSI settings.
+
+Five new observations remain unmatched. Four ANSI constant-zero queries under `WHERE false` now return empty results because DataFusion prunes the expression; Spark reports division by zero. The previous candidate failed during Sail resolution, also at the wrong stage. A NULL numerator with an invalid CAST in the divisor still returns NULL where Spark evaluates the divisor and raises `CAST_INVALID_INPUT`. These failures concern expression evaluation order and are retained in the comparison. Combined agreement is 3,112/3,234, with 122 differing observations, not independent bug counts. Schema metadata and complete structured error equality remain outside the numeric match count.
+
+All 20 planner tests, four Delta lifecycle tests, 4,064 independent integer-reference observations covering 187,410 rows, 116 Delta baseline comparisons, 18 adapter checks and 19 seeds pass. Of 379 preceding focused checks, 372 keep the same results/errors; seven live-zero errors now come from Arrow and retain the checked division-by-zero cause. Sixteen additional new-corpus zero errors have explicit cause checks. The five preceding same-stage cause gaps and four wrapped sort diagnostics remain. Four multi-invalid-row string/Unicode queries select a different first bad value; their cast failure, target type and execution-error stage remain unchanged. All 48 benchmark queries retain their values; only the four ANSI integer column-division plans below change.
+
+| ANSI column DIV | Before ms | Candidate ms | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| TINYINT | 2.3452 | 1.7800 | -24.10% | -25.28% |
+| SMALLINT | 2.4264 | 1.9681 | -18.89% | -23.37% |
+| INT | 2.7408 | 2.2708 | -17.15% | -21.02% |
+| BIGINT | 2.9692 | 2.5334 | -14.68% | -19.19% |
+
+The unchanged benchmark uses 1,048,576 rows, batches of 8,192 and CPU 2. Eight cases run in balanced ABBA order with eight processes per variant/case, two warmups and nine timed executions each. Execution-only counters run in the same processes, without multiplexing. SMALLINT constant-divisor, non-ANSI SMALLINT column, BIGINT constant-divisor and Decimal controls measure -0.21%, -0.09%, +0.16% and -0.87%; their instruction changes are within 0.05% and their process-median ranges overlap. No sample is discarded. This measurement does not resolve the earlier unattributed Decimal-buffer-policy difference or establish zero overhead for other workloads.
+
+[div-zero-results.json](div-zero-results.json) records source and binary hashes, commands, Spark and candidate observations, remaining differences, raw timings and counters. Apply the patch after the preceding optional runtime's planner patches, from the candidate checkout root, then run `decimal_division.py` with `--cases experiments/spark-sql/div-zero.jsonl` and the Rust probe with the same corpus. The numeric comparison still exits 1 for the five retained differences. The patch applies and reverses exactly; all 25 scratch paths and three cached executables were restored. Dependency identities/features, lockfile, Arrow libraries and benchmark source are unchanged. The default project build does not apply this experimental patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
