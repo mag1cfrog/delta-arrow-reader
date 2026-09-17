@@ -2608,6 +2608,63 @@ git apply --reverse experiments/spark-sql/sail-float-decimal-in.patch
 
 The patch applies and reverses exactly. All 30 shared source paths and three cached executables were restored, with fresh timestamps on restored sources and executable mode 0755. The default project build does not enable this patch.
 
+## Remove the short Decimal IN execution regression
+
+The mixed-numeric IN fix is committed as `921a0c3`. [datafusion-decimal-in-unwrap.patch](datafusion-decimal-in-unwrap.patch) removes the measured execution regression for a Decimal column compared with three DOUBLE constants. The target improves from 5.483 to 4.203 ms per 1,048,576 rows. A separate comparison with the pre-coercion binary measures 4.162 versus 4.184 ms, or +0.52% time and +0.017% execution instructions. Its physical plan is identical. This returns the measured workload to the earlier execution level while preserving the corrected mixed-numeric semantics.
+
+The change belongs in DataFusion's existing expression simplifier. For each finite DOUBLE constant, it uses native casts to find a Decimal candidate and verify that casting it back produces identical floating-point bits. It also casts the adjacent valid Decimal coefficients. Decimal-to-DOUBLE conversion is monotone, so different neighbors establish a unique inverse. A round trip alone would miss cases where several Decimals round to the same DOUBLE, such as the large-integer and high-scale examples above. NULL becomes a typed Decimal NULL; any failed proof retains the original expression.
+
+The rule handles CAST and TRY_CAST, IN and NOT IN, and uses DataFusion's existing three-element inlining threshold. Native simplification then emits direct Decimal comparisons, removing the per-row DOUBLE conversion and floating-point set lookup. Longer lists retain their prior plan. The patch changes two optimizer files and adds no dependency or execution kernel. Spark has an existing [guarded cast-unwrapping rule](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/UnwrapCastInBinaryComparison.scala); this per-constant uniqueness proof is local work, not code copied from Sail or a claim that upstream already fixed this case.
+
+The [136-query corpus](decimal-in-unwrap.jsonl) agrees with Spark 4.2.0 on all 272 observations in both versions. It covers precision/scale boundaries, neighboring values, rounding collisions, signed zero, NULL, NaN/Infinity, filters, CASE, explicit casts, batch sizes and longer-list controls. Only 76 physical plans change; rows, types, status and logical plans are identical. All preceding 5,532 observations retain their results, including 188 differences. Combined agreement is 5,616/5,804. Five unchanged parallel CAST failures select a different first invalid row; the artifact records those diagnostics and targeted reruns.
+
+All 177 DataFusion simplifier tests pass. The new exhaustive check compares original and simplified physical expressions over all 1,999 coefficients of Decimal precision 3 plus NULL, at four scales: 216 comparisons covering 432,000 rows. The 25 Sail planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 rows, 116 Delta comparisons and 18 adapter checks pass. Both benchmark variants validate all 84 captures; four plans change, covering the implicit and explicit Decimal-to-DOUBLE targets in both ANSI modes.
+
+| Query | Before (ms) | After (ms) | Execution time | Execution instructions |
+| --- | ---: | ---: | ---: | ---: |
+| Decimal column, three DOUBLE literals | 5.483 | 4.203 | -23.34% | -23.44% |
+| Explicit Decimal-to-DOUBLE target | 5.492 | 4.221 | -23.14% | -23.45% |
+| Integer IN control | 5.316 | 5.296 | -0.37% | -0.10% |
+| Plain projection control | 0.768 | 0.772 | +0.57% | +0.002% |
+| Decimal division control | 15.836 | 15.797 | -0.25% | -0.002% |
+
+The other six IN controls change by -1.00% to +0.15% in execution time and less than 0.18% in instructions. Measurements use the same 84-case benchmark, lockfile, dependency features/profiles and Arrow libraries. Only the two optimizer sources change. The main series uses four fresh processes per variant/query/phase, CPU 2, balanced order, two warmups and nine samples, with separately gated planning and execution counters. The historical comparison uses eight fresh processes per variant. Every process validates its output and plan. Builds and correctness checks finish before timing begins.
+
+The proof has a local planning cost. The implicit target rises from 0.669 to 0.710 ms (+6.1%, +10.4% instructions); the explicit target rises from 0.616 to 0.672 ms (+9.1%, +11.6% instructions). These are about 0.041 and 0.056 ms per generated plan, independent of the number of rows subsequently executed. Other measured planning instruction counts change by less than 0.07%. This fixes the measured execution regression; it does not eliminate every planning cost, the earlier small integer buffer-policy timing difference, or the 188 compatibility differences. Larger Decimal sets and workloads dominated by repeated planning remain unmeasured.
+
+[decimal-in-unwrap-results.json](decimal-in-unwrap-results.json) contains the final Spark/Rust captures, exact preceding plan differences, existing-corpus audit, build/source hashes, test logs, raw timings/counters, historical comparison and runners. To reproduce, start with the accepted optional runtime from the preceding section, including the full `sail-float-decimal-in.patch`. Keep its benchmark, dependency overrides and `CARGO_TARGET_DIR` unchanged. Set `optimizer_dir` to the DataFusion 54.1.0 optimizer copy selected by that override. Set `run_dir` to a new capture directory containing a copy of the same `override.toml`:
+
+```bash
+host_repo="$PWD"
+for variant in before after; do
+  if [ "$variant" = after ]; then
+    git -C "$optimizer_dir" apply \
+      "$host_repo/experiments/spark-sql/datafusion-decimal-in-unwrap.patch"
+  fi
+  cargo build --release --locked --config "$run_dir/override.toml" \
+    --manifest-path experiments/spark-sql/Cargo.toml \
+    --example decimal_bench --example decimal_probe \
+    --bin delta-reader-sail-extraction-probe -j 3
+  cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/$variant-bench"
+  cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/$variant-probe"
+  "$run_dir/$variant-probe" experiments/spark-sql/decimal-in-unwrap.jsonl \
+    "$run_dir/$variant.json" --physical-plans
+done
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark \
+  "$run_dir/spark.json" --cases experiments/spark-sql/decimal-in-unwrap.jsonl
+python3 experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark.json" "$run_dir/after.json" --report "$run_dir/check.json" \
+  --cases experiments/spark-sql/decimal-in-unwrap.jsonl
+# Test the dependency through its own manifest; it is not a host workspace member.
+cp experiments/spark-sql/Cargo.lock "$optimizer_dir/Cargo.lock"
+cargo test --release --config "$run_dir/override.toml" \
+  --manifest-path "$optimizer_dir/Cargo.toml" --lib simplify_expressions:: -j 3
+git -C "$optimizer_dir" apply --reverse \
+  "$host_repo/experiments/spark-sql/datafusion-decimal-in-unwrap.patch"
+```
+
+Use the artifact's balanced runners after all builds and correctness checks. The historical comparison is valid only for the checked finite-input benchmark; that older binary has known mixed-numeric semantic errors. The packaged patch uses DataFusion's [90-column rustfmt setting](https://github.com/apache/datafusion/blob/54.1.0/rustfmt.toml); only formatting differs from the measured source, and both hashes are recorded. Patch application and reversal reproduce the packaged source hashes exactly. All 33 shared source/lockfile paths and three cached executables were restored, with fresh source timestamps and executable mode 0755. The default project build does not enable this patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

@@ -1,0 +1,258 @@
+--- a/src/simplify_expressions/unwrap_cast.rs
++++ b/src/simplify_expressions/unwrap_cast.rs
+@@ -54,7 +54,7 @@
+ //! c1 > INT32(10)
+ //! ```
+ 
+-use arrow::datatypes::DataType;
++use arrow::datatypes::{DataType, MAX_DECIMAL128_FOR_EACH_PRECISION};
+ use datafusion_common::{Result, ScalarValue};
+ use datafusion_common::{internal_err, tree_node::Transformed};
+ use datafusion_expr::{BinaryExpr, lit};
+@@ -180,6 +180,76 @@
+     }
+ 
+     true
++}
++
++pub(super) fn unwrap_decimal_double_in_list(
++    info: &SimplifyContext,
++    left: &Expr,
++    list: &[Expr],
++    negated: bool,
++) -> Option<Expr> {
++    let (Expr::Cast(Cast { expr, field }) | Expr::TryCast(TryCast { expr, field })) =
++        left
++    else {
++        return None;
++    };
++    if field.data_type() != &DataType::Float64 {
++        return None;
++    }
++    let data_type = info.get_data_type(expr).ok()?;
++    let DataType::Decimal128(precision, scale) = data_type else {
++        return None;
++    };
++    let maximum = *MAX_DECIMAL128_FOR_EACH_PRECISION.get(usize::from(precision))?;
++    let forward = |coefficient| {
++        let ScalarValue::Float64(Some(value)) =
++            ScalarValue::Decimal128(Some(coefficient), precision, scale)
++                .cast_to(&DataType::Float64)
++                .ok()?
++        else {
++            return None;
++        };
++        Some(value.to_bits())
++    };
++    let mut converted = Vec::with_capacity(list.len());
++    for item in list {
++        let Expr::Literal(value @ ScalarValue::Float64(number), _) = item else {
++            return None;
++        };
++        let Some(number) = number else {
++            converted.push(lit(ScalarValue::Decimal128(None, precision, scale)));
++            continue;
++        };
++        if !number.is_finite() {
++            return None;
++        }
++        let ScalarValue::Decimal128(Some(coefficient), _, _) =
++            value.cast_to(&data_type).ok()?
++        else {
++            return None;
++        };
++        if coefficient.checked_abs()? > maximum
++            || forward(coefficient)? != number.to_bits()
++        {
++            return None;
++        }
++        // Decimal-to-double conversion is monotone. A round trip alone is not
++        // sufficient: adjacent Decimal values must not share this double.
++        // Bit equality also preserves the native IN distinction of signed zero.
++        for adjacent in [coefficient - 1, coefficient + 1] {
++            if (-maximum..=maximum).contains(&adjacent)
++                && forward(adjacent)? == number.to_bits()
++            {
++                return None;
++            }
++        }
++        converted.push(lit(ScalarValue::Decimal128(
++            Some(coefficient),
++            precision,
++            scale,
++        )));
++    }
++    Some(expr.as_ref().clone().in_list(converted, negated))
+ }
+ 
+ ///// Tries to move a cast from an expression (such as column) to the literal other side of a comparison operator./
+@@ -241,6 +311,143 @@
+     use datafusion_expr::{cast, col, in_list, try_cast};
+ 
+     #[test]
++    fn test_decimal_double_in_list_requires_unique_inverse() {
++        let schema = expr_test_schema();
++        let info = SimplifyContext::builder().with_schema(schema).build();
++        let left = cast(col("c3"), DataType::Float64);
++        let list = vec![lit(0.25_f64), lit(0.5_f64), lit(0.75_f64)];
++        for negated in [false, true] {
++            let expected = col("c3").in_list(
++                [25, 50, 75].map(|n| lit_decimal(n, 18, 2)).to_vec(),
++                negated,
++            );
++            assert_eq!(
++                unwrap_decimal_double_in_list(&info, &left, &list, negated),
++                Some(expected.clone())
++            );
++            assert_eq!(
++                unwrap_decimal_double_in_list(
++                    &info,
++                    &try_cast(col("c3"), DataType::Float64),
++                    &list,
++                    negated,
++                ),
++                Some(expected)
++            );
++        }
++        for number in [
++            -0.0,
++            0.25001,
++            9e15,
++            1e300,
++            f64::NAN,
++            f64::INFINITY,
++            f64::NEG_INFINITY,
++        ] {
++            assert!(
++                unwrap_decimal_double_in_list(
++                    &info,
++                    &left,
++                    &[lit(0.25_f64), lit(number)],
++                    false,
++                )
++                .is_none(),
++                "{number}"
++            );
++        }
++        assert!(
++            unwrap_decimal_double_in_list(
++                &info,
++                &cast(col("c4"), DataType::Float64),
++                &[lit(0.1_f64)],
++                false,
++            )
++            .is_none()
++        );
++        assert!(
++            unwrap_decimal_double_in_list(
++                &info,
++                &left,
++                &[lit(0.25_f64), col("c3")],
++                false,
++            )
++            .is_none()
++        );
++    }
++
++    #[test]
++    fn test_decimal_double_in_list_exhaustive_small_domains() -> Result<()> {
++        use arrow::array::{AsArray, Decimal128Array};
++        use arrow::datatypes::Schema;
++        use arrow::record_batch::RecordBatch;
++        use datafusion_physical_expr::{
++            create_physical_expr, execution_props::ExecutionProps,
++        };
++
++        let (mut rewritten, mut retained) = (0, 0);
++        for scale in [-2, 0, 2, 3] {
++            let schema = Arc::new(Schema::new(vec![Field::new(
++                "v",
++                DataType::Decimal128(3, scale),
++                true,
++            )]));
++            let values = Decimal128Array::from_iter(
++                (-999..=999).map(Some).chain(std::iter::once(None)),
++            )
++            .with_precision_and_scale(3, scale)?;
++            let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(values)])?;
++            let df_schema = Arc::new(DFSchema::try_from(schema)?);
++            let info = SimplifyContext::builder()
++                .with_schema(df_schema.clone())
++                .build();
++            let left = cast(col("v"), DataType::Float64);
++            for coefficient in [-999, -500, -250, -1, 0, 1, 250, 500, 999] {
++                let ScalarValue::Float64(Some(value)) =
++                    ScalarValue::Decimal128(Some(coefficient), 3, scale)
++                        .cast_to(&DataType::Float64)?
++                else {
++                    unreachable!()
++                };
++                for number in [value.next_down(), value, value.next_up()] {
++                    let list = vec![lit(number), lit(ScalarValue::Float64(None))];
++                    for negated in [false, true] {
++                        let original = left.clone().in_list(list.clone(), negated);
++                        let replacement =
++                            unwrap_decimal_double_in_list(&info, &left, &list, negated);
++                        rewritten += usize::from(replacement.is_some());
++                        retained += usize::from(replacement.is_none());
++                        let simplified = optimize_test(original.clone(), &df_schema);
++                        if let Some(replacement) = replacement {
++                            assert_eq!(
++                                simplified,
++                                optimize_test(replacement, &df_schema)
++                            );
++                        }
++                        let evaluate = |expr: &Expr| {
++                            create_physical_expr(
++                                expr,
++                                &df_schema,
++                                &ExecutionProps::new(),
++                            )?
++                            .evaluate(&batch)?
++                            .into_array(batch.num_rows())
++                        };
++                        let before = evaluate(&original)?;
++                        let after = evaluate(&simplified)?;
++                        assert_eq!(
++                            before.as_boolean().iter().collect::<Vec<_>>(),
++                            after.as_boolean().iter().collect::<Vec<_>>(),
++                            "scale={scale}, literal={number}, negated={negated}",
++                        );
++                    }
++                }
++            }
++        }
++        assert!(rewritten > 0 && retained > 0);
++        Ok(())
++    }
++
++    #[test]
+     fn test_not_unwrap_cast_comparison() {
+         let schema = expr_test_schema();
+         // cast(INT32(c1), INT64) > INT64(c2)
+--- a/src/simplify_expressions/expr_simplifier.rs
++++ b/src/simplify_expressions/expr_simplifier.rs
+@@ -59,7 +59,7 @@
+ use crate::simplify_expressions::unwrap_cast::{
+     is_cast_expr_and_support_unwrap_cast_in_comparison_for_binary,
+     is_cast_expr_and_support_unwrap_cast_in_comparison_for_inlist,
+-    unwrap_cast_in_comparison_for_binary,
++    unwrap_cast_in_comparison_for_binary, unwrap_decimal_double_in_list,
+ };
+ use crate::{
+     analyzer::type_coercion::TypeCoercionRewriter,
+@@ -2056,6 +2056,14 @@
+                 list,
+                 negated,
+             }) => {
++                // ponytail: match native short-list inlining; benchmark Decimal
++                // set lookup before extending this to larger lists.
++                if list.len() <= THRESHOLD_INLINE_INLIST
++                    && let Some(rewritten) =
++                        unwrap_decimal_double_in_list(info, &expr, &list, negated)
++                {
++                    return Ok(Transformed::yes(rewritten));
++                }
+                 if list.len() > THRESHOLD_INLINE_INLIST || list.iter().any(is_null) {
+                     return Ok(Transformed::no(Expr::InList(InList {
+                         expr,
