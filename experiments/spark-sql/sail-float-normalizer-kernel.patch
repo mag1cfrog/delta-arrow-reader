@@ -1,0 +1,82 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -376,25 +376,14 @@
+         use arrow::datatypes::{Float32Type, Float64Type};
+         use datafusion_expr::ColumnarValue;
+         // Fuse FLOAT widening with normalization; evaluate the operand once.
++        // Adding positive zero clears the sign of -0; NaNs still need explicit canonicalization.
+         let normalize = |v: f64| {
+-            if v == 0.0 {
+-                0.0
+-            } else if v.is_nan() {
+-                f64::NAN
+-            } else {
+-                v
+-            }
++            if v.is_nan() { f64::NAN } else { v + 0.0 }
+         };
+         let [value] = datafusion_common::utils::take_function_args(self.name(), input.args)?;
+         if !self.widen && value.data_type() == DataType::Float32 {
+             let normalize = |v: f32| {
+-                if v == 0.0 {
+-                    0.0
+-                } else if v.is_nan() {
+-                    f32::NAN
+-                } else {
+-                    v
+-                }
++                if v.is_nan() { f32::NAN } else { v + 0.0 }
+             };
+             return Ok(match value {
+                 ColumnarValue::Scalar(ScalarValue::Float32(v)) => {
+@@ -474,9 +463,48 @@
+         Arc::new(Float32Array::from_iter(values.map(|v| v.map(|v| v as f32)))),
+         Arc::new(Float64Array::from_iter(values)),
+     ];
++    let mut arrays = arrays.to_vec();
++    // Exercise IEEE boundaries and arbitrary bit patterns without a random dependency.
++    let mut bits = vec![
++        0,
++        1,
++        0x000f_ffff_ffff_ffff,
++        0x0010_0000_0000_0000,
++        0x7fef_ffff_ffff_ffff,
++        0x7ff0_0000_0000_0000,
++        0x7ff0_0000_0000_0001,
++        0x7ff8_0000_0000_0000,
++        0x7fff_ffff_ffff_ffff,
++        0x0000_0001_0000_0000,
++        0x007f_ffff_0000_0000,
++        0x0080_0000_0000_0000,
++        0x7f7f_ffff_0000_0000,
++        0x7f80_0000_0000_0000,
++        0x7f80_0001_0000_0000,
++        0x7fc0_0000_0000_0000,
++        0x7fff_ffff_0000_0000,
++    ];
++    bits.extend(bits.clone().into_iter().map(|v| v | (1 << 63)));
++    let mut state = 0x1234_5678_9abc_def0_u64;
++    bits.extend((0..8192).map(|_| {
++        state ^= state << 13;
++        state ^= state >> 7;
++        state ^= state << 17;
++        state
++    }));
++    arrays.push(Arc::new(Float32Array::from_iter(
++        bits.iter()
++            .enumerate()
++            .map(|(i, &v)| (i % 19 != 18).then_some(f32::from_bits((v >> 32) as u32))),
++    )));
++    arrays.push(Arc::new(Float64Array::from_iter(
++        bits.iter()
++            .enumerate()
++            .map(|(i, &v)| (i % 19 != 18).then_some(f64::from_bits(v))),
++    )));
+     for input in arrays {
+         for widen in [false, true] {
+-            for (offset, len) in [(0, values.len()), (1, 10), (0, 0)] {
++            for (offset, len) in [(0, input.len()), (1, 10), (1, input.len() - 1), (0, 0)] {
+                 let input = input.slice(offset, len);
+                 let output =
+                     run(ColumnarValue::Array(input.clone()), len, widen)?.into_array(len)?;

@@ -2956,6 +2956,45 @@ Build the baseline with that unchanged copy, then apply the patch and build the 
 
 Floating normalization, the previously recorded planning overhead, and all 331 existing Spark differences remain outside this change. The batch cutoff is conservative and does not establish the best strategy for every CPU or data distribution. This patch remains optional in the SQL experiment.
 
+## Reduce operations in floating normalization
+
+[sail-float-normalizer-kernel.patch](sail-float-normalizer-kernel.patch) simplifies the two existing Rust normalization closures. Each explicitly replaces NaNs with the canonical NaN and otherwise adds positive zero. That addition converts negative zero to positive zero while preserving other non-NaN values under Rust's default floating-point arithmetic. The helper still evaluates its operand once and uses the same Arrow arrays, allocation paths and optional FLOAT-to-DOUBLE widening.
+
+The allocation investigation did not produce a suitable reuse path. At 8192 rows, checking every value's normalized bits took longer than allocating and normalizing. A cheaper scan for NaNs or negative zero helped ordinary inputs, but finding the first exceptional value at the end required a scan followed by normalization. The chunked prototype made those tail cases about 66% slower for FLOAT and 93% slower for DOUBLE in exploratory kernel measurements. Neither scan is included in the patch. The selected change keeps a single pass and reduces its operations.
+
+Four fresh processes, with reversed method order in the middle two, measure the Arrow kernel including allocation. At 8192 ordinary values, FLOAT falls from 0.942 to 0.803 microseconds (-14.84%) and DOUBLE from 1.674 to 1.529 microseconds (-8.65%). Positive and negative subnormals, signed NaNs and signaling NaNs retain similar large-batch gains on this machine. Small inputs have little room to improve: the largest increase below 8192 rows is about 0.65 ns (+1.47%) for one DOUBLE negative zero. These are isolated kernel timings, not SQL query gains.
+
+The existing normalizer test now includes IEEE boundary values and 8192 deterministic random bit patterns per width. It checks 65,984 array values and the corresponding scalar invocations, including widening, NULLs, slices and empty arrays, against the conditional bit oracle. All 26 planner tests and four Delta lifecycle tests pass. The final rebuilt executables replay all 6332 observations without new value, type, status or plan differences; raw Spark agreement remains 6001/6332. The 264 independent projected-subquery results are retained. Four parallel CAST observations vary only in which invalid input is reported first; three repeats per variant in both ANSI modes preserve every other field. All 112 million-row benchmark captures, including plans, are identical.
+
+Full SQL execution per 1,048,576 rows is below. The baseline includes the preceding short-IN optimization.
+
+| Query | Before (ms) | After (ms) | Elapsed change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| Raw FLOAT, three-item IN | 3.525 | 3.529 | +0.11% | -0.34% |
+| Raw DOUBLE, three-item IN | 3.885 | 3.858 | -0.69% | -0.61% |
+| FLOAT/DOUBLE comparison | 4.107 | 3.862 | -5.95% | -7.17% |
+| Dynamic DOUBLE IN | 15.867 | 15.918 | +0.32% | -0.35% |
+
+Elapsed time remains variable. A separate balanced repeat measures FLOAT short IN at -1.73%, DOUBLE comparison at -0.10% (initially +1.16%), and dynamic DOUBLE IN at +0.80%. Instructions decrease in both series for these queries. Unchanged controls in the repeat take 1.44%-2.10% longer with instruction changes below 0.004%. Both series are retained; the dynamic query's measured increase remains a limitation, and these results do not establish a latency improvement for every query.
+
+The main series still puts raw FLOAT/DOUBLE short IN 1.79% and 4.00% above the earlier reference, with 2.79% and 6.17% more instructions. Use the paired before/after measurements to assess this patch; subtracting reference gaps reported in different sessions would also count timing variation. Same-width arrays still allocate and fill a new buffer. The earlier native-IN small-batch dispatch cost, planning overhead and 331 raw Spark differences remain.
+
+[float-normalizer-kernel-results.json](float-normalizer-kernel-results.json) records the patch and binary hashes, test output, rejected scan measurements, final kernel samples, both SQL timing series and reproduction scripts. Execution timing uses CPU 2, four fresh processes per case and variant, two warmups, nine samples, no retained output and execution-only counters. All compilation and correctness checks finish before timing. The dependency graph, features, profiles, Arrow libraries and benchmark source match the baseline; only the common comparison source changes.
+
+To reproduce, start with the accepted optional runtime from the preceding section in a scratch checkout, including its DataFusion short-IN patch. Freeze the baseline executables, apply this patch from the scratch checkout root, and rebuild with the same override and locked release graph:
+
+```bash
+git apply "$source_repo/experiments/spark-sql/sail-float-normalizer-kernel.patch"
+cargo build --release --locked --config "$run_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml \
+  --example decimal_bench --example decimal_probe \
+  --bin delta-reader-sail-extraction-probe -j 3
+cargo test --release --locked --config "$run_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml -p sail-plan --lib -j 3
+```
+
+Set `source_repo` to this repository and `run_dir` to a new capture directory with the same dependency overrides. Adapt the artifact's build, replay and measurement scripts to those paths. The patch applies and reverses exactly, and rustfmt passes. All 37 shared source/lockfile paths and three executable slots were restored before SQL timing and their hashes checked again afterward. This remains an optional experiment patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
