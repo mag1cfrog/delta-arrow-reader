@@ -2665,6 +2665,85 @@ git -C "$optimizer_dir" apply --reverse \
 
 Use the artifact's balanced runners after all builds and correctness checks. The historical comparison is valid only for the checked finite-input benchmark; that older binary has known mixed-numeric semantic errors. The packaged patch uses DataFusion's [90-column rustfmt setting](https://github.com/apache/datafusion/blob/54.1.0/rustfmt.toml); only formatting differs from the measured source, and both hashes are recorded. Patch application and reversal reproduce the packaged source hashes exactly. All 33 shared source/lockfile paths and three cached executables were restored, with fresh source timestamps and executable mode 0755. The default project build does not enable this patch.
 
+## Projected IN and EXISTS subqueries
+
+[datafusion-projected-subqueries.patch](datafusion-projected-subqueries.patch) makes the eight previously failing projected IN/EXISTS observations execute. It backports [DataFusion PR #24972](https://github.com/apache/datafusion/pull/24972), merged as `cee7bae63ba1ba1213b2c4aaf3bb22d803f50bda`, into the existing 54.1.0 optimizer copy. The production change is unchanged from upstream. Three lines in one new test snapshot are adapted because 54.1.0 declares the internal mark columns non-nullable; the final CASE expression remains nullable. All 52 predicate-subquery optimizer tests pass with that adaptation.
+
+The rule now visits projections as well as filters. EXISTS uses an existing native Mark Join. IN combines three native marks for a matching value, a NULL in the inner result, and a nonempty inner result, then constructs the three-valued result with CASE. NOT IN negates that result. The existing fallback for unsupported correlated LIMIT remains. There is no new physical node or dependency.
+
+[sail-projected-subqueries.patch](sail-projected-subqueries.patch) connects the existing `spark_in_list` helper to single-column IN subqueries. Its resolver change adds 19 net lines. Mixed Decimal/floating operands therefore use the same DOUBLE coercion and floating normalization as the preceding IN-list fix. A changed inner expression gets a projection retaining its resolver field name. The patch also extends the existing benchmark with seven projected-subquery queries; it does not introduce another benchmark framework.
+
+### NULL policy and correctness
+
+This slice preserves SQL three-valued NULL semantics, as explicitly agreed during review. For example, `3 IN (1, 2, NULL)` is NULL, while `3 IN (1, 3, NULL)` is true. Spark's [documented IN rules](https://spark.apache.org/docs/latest/sql-ref-null-semantics.html#innot-in-subquery) say the same. Spark 4.2.0 nevertheless loses observable NULLs in some predicate-subquery rewrites. The related [Spark PR #58186](https://github.com/apache/spark/pull/58186) describes that collapse and explicitly leaves some projected and correlated cases outside its fix. We preserve the raw Spark captures and classify these differences instead of copying the bug. NULL tested against an empty result also follows standard false/true IN/NOT IN behavior rather than the legacy Spark setting.
+
+The [132-query corpus](projected-subqueries.jsonl) includes the four original queries, all six upstream SQLLogicTest examples, correlated and uncorrelated forms, IN/NOT IN/EXISTS/NOT EXISTS, empty and all-NULL inner results, duplicate rows, NULL correlation keys, nested expressions, mixed numeric boundaries, NaN/Infinity, signed zero and batch sizes 1/3/64. Numeric wrappers let the existing comparator capture boolean results. The four original queries overlap the preceding corpus by eight ANSI observations.
+
+All 264 new observations execute. Raw Spark agreement moves from 0/264 before the patch to 109/264 with the upstream patch alone, then 125/264 with the existing numeric helper connected. The independent reference uses the six upstream expected results plus a small three-valued evaluator over the fixed VALUES inputs, Spark numeric coercion and Spark NaN/signed-zero equality. The candidate agrees with it on 248/264 observations; Spark agrees on 133/264. The 139 raw Spark differences divide as follows:
+
+| Difference | Observations |
+| --- | ---: |
+| Spark loses an observable NULL; candidate matches the reference | 122 |
+| Spark NULL behavior and an existing candidate signed-zero error both occur | 8 |
+| Existing candidate signed-zero error only | 8 |
+| Legacy Spark NULL-in-empty behavior | 1 |
+
+All 16 candidate reference failures concern the row containing FLOAT `-0.0` compared with DOUBLE `0.0`. Eight separate ordinary-comparison, JOIN and WHERE-subquery observations reproduce this gap before and after the patch with identical captures and plans. The existing mixed Decimal/floating normalization does not cover those pure floating comparisons. This remains separate compatibility work. The reference check rejects failures outside those recorded rows.
+
+The preceding 5,804 observations introduce no new value, type or execution-status differences. Raw agreement rises from 5,616 to 5,620, leaving 184 differences. All eight original execution failures are repaired; four now agree with Spark and four preserve the correct NULL result instead. Six existing parallel CAST failures select a different first invalid row; their status and plans stay unchanged, including targeted reruns. All 25 Sail planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 rows and 116 Delta comparisons pass. Both original benchmark binaries validate all 84 captures with identical results and plans; the extended benchmark validates all 98 captures, each over 1,048,576 rows.
+
+### Performance and next boundary
+
+Nine existing controls show execution-time changes from -2.95% to +0.56%, with execution instructions within 0.034%. Planning time changes from -1.03% to +0.92%, with planning instructions within 0.139%. This provides no clear evidence of an execution regression in those controls. The earlier short Decimal IN improvement remains: 4.228 ms before this slice and 4.216 ms after it.
+
+Newly executable targets have no working pre-feature timing baseline. Their measured costs are:
+
+| Projected query | Planning (ms) | Execution per 1,048,576 rows (ms) |
+| --- | ---: | ---: |
+| EXISTS | 0.684 | 9.362 |
+| IN, non-null input columns | 1.209 | 356.649 |
+| IN, nullable inner expression | 1.538 | 407.561 |
+| IN, DOUBLE/Decimal operands | 1.647 | 400.932 |
+| IN, equality-correlated inner result | 1.546 | 34.926 |
+
+NOT EXISTS takes 9.280 ms and non-null NOT IN takes 355.911 ms. Each query uses 1,048,576 outer rows, 511 inner rows and one partition. There are four fresh processes per query/variant/phase, CPU 2, two warmups and nine samples, with separate planning and execution counters. Existing controls use identical benchmark sources and dependency features/profiles; new targets use a separately recorded binary. Timing does not overlap compilation, correctness checks or profiling.
+
+The uncorrelated IN plans retain extra Mark Joins even for non-null input columns. Their unconditional NestedLoopJoin checks repeatedly process inner rows to determine existence. The correlated target instead uses three hash joins. Correct NULL semantics do not inherently require the measured 357-408 ms cost. Removing redundant checks and avoiding repeated work for uncorrelated existence checks should be the next performance slice, followed by the existing pure floating signed-zero gap. These results do not establish complete Spark compatibility or finish performance work.
+
+### Reproducing this slice
+
+[projected-subqueries-results.json](projected-subqueries-results.json) records the raw Spark and Rust captures, independent expected rows and evaluator, upstream sources, difference classification, preceding-corpus audit, tests, plans, build hashes, raw timings/counters and reproduction scripts. Start with the accepted optional runtime through `datafusion-decimal-in-unwrap.patch`. Reuse its dependency overrides and target directory. Save the before binaries using the preceding section's procedure, then apply the production changes while keeping the original benchmark for the control comparison:
+
+```bash
+host_repo="$PWD"
+git -C "$optimizer_dir" apply \
+  "$host_repo/experiments/spark-sql/datafusion-projected-subqueries.patch"
+git apply --include='experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs' \
+  experiments/spark-sql/sail-projected-subqueries.patch
+cargo build --release --locked --config "$run_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml \
+  --example decimal_bench --example decimal_probe \
+  --bin delta-reader-sail-extraction-probe -j 3
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+"$run_dir/after-probe" experiments/spark-sql/projected-subqueries.jsonl \
+  "$run_dir/after.json" --physical-plans
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark \
+  "$run_dir/spark.json" --cases experiments/spark-sql/projected-subqueries.jsonl
+cp experiments/spark-sql/Cargo.lock "$optimizer_dir/Cargo.lock"
+cargo test --release --config "$run_dir/override.toml" \
+  --manifest-path "$optimizer_dir/Cargo.toml" --lib decorrelate_predicate_subquery -j 3
+# Build the additional targets separately from the existing before/after pair.
+git apply --include='experiments/spark-sql/examples/decimal_bench.rs' \
+  experiments/spark-sql/sail-projected-subqueries.patch
+cargo build --release --locked --config "$run_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml --example decimal_bench -j 3
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/target-bench"
+"$run_dir/target-bench" "$run_dir/target-subquery-check.json" subquery-check
+```
+
+The generic Spark comparator intentionally reports 125/264 and exits nonzero. Use the artifact's `semantics.py`, `corpus.py` and upstream SQLLogicTest file to reproduce the independent check; adjust the recorded local paths to the new checkout. Keep raw agreement and semantic correctness separate. Both patches apply and reverse to the recorded source hashes. All 34 shared source/lockfile paths and three executable slots were restored, with fresh source timestamps and executable mode 0755. The default project build does not enable these optional patches.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
