@@ -2995,6 +2995,22 @@ cargo test --release --locked --config "$run_dir/override.toml" \
 
 Set `source_repo` to this repository and `run_dir` to a new capture directory with the same dependency overrides. Adapt the artifact's build, replay and measurement scripts to those paths. The patch applies and reverses exactly, and rustfmt passes. All 37 shared source/lockfile paths and three executable slots were restored before SQL timing and their hashes checked again afterward. This remains an optional experiment patch.
 
+## Small-batch IN dispatch investigation
+
+Neither candidate in [short-float-in-dispatch-investigation.json](short-float-in-dispatch-investigation.json) is adopted. The accepted runtime remains at `37ed5d8`. Both candidates reduce some floating-array measurements but introduce costs elsewhere.
+
+The first adds an early batch-row-count check before the existing array checks. The second replaces `array.len()` with the already-read batch row count. The latter relies on DataFusion's existing requirement that array expression results have the input batch's row count; its UDF evaluator checks this requirement. Both retain the scalar/array distinction, cutoff, type and literal restrictions, input evaluation count, and existing comparison and hashing implementations. Disassembly confirms that the replacement removes an indirect length call, but the compiler combines the scalar and batch-size conditions rather than preserving their source-level short-circuit order.
+
+The replacement passes all 52 native IN tests. The existing bit-oracle test is extended to one-row arrays, 32-row arrays, and scalars evaluated against an 8192-row batch: 13,440 evaluations over 33,148,416 row values. All 26 planner tests and four Delta lifecycle tests pass. The 6332-observation replay has no new value, type, status or plan differences, retaining 6001 raw Spark matches and the 264 independent projected-subquery matches. Six parallel CAST observations differ only in their first invalid input; three reruns per variant preserve every other field. All 112 million-row query captures and plans are identical.
+
+In the three-variant native matrix, replacing the length source saves median costs of 0.7, 1.1 and 1.4 ns per call at 1, 8 and 32 rows across short floating lists. Separate isolated controls do not consistently retain those gains. Scalar controls execute slightly more instructions. The earlier approximately 17 ns worst-case gap does not reproduce and is not counted as an improvement from either candidate.
+
+The decisive control is an eight-row nullable string array with a three-item list. In the final balanced repeat, the accepted implementation takes 413.5 ns, the extra guard 422.9 ns (+2.26%), and the length replacement 427.9 ns (+3.49%). The replacement executes 0.24% fewer instructions but uses 3.64% more CPU cycles. An earlier isolated repeat also measures about +3.5%. Branch counters do not establish the cause; no allocator, cache, or instruction-layout explanation has been verified. Large apparent improvements in some sequential-matrix profiles are not claimed as gains either.
+
+Keep the accepted implementation rather than adding this tradeoff. If small-batch dispatch remains a priority, the next bounded investigation is whether the existing type-specific static filters can choose the floating strategy at construction, leaving unrelated types on their native execution path. That approach has not been implemented or measured here. Normalization allocation, planning costs, and the existing 331 Spark differences remain.
+
+The artifact preserves both rejected diffs, build identities, samples, counters, test output, and reproduction scripts. Reproduction starts from the accepted optional runtime and applies one embedded candidate diff to its isolated `datafusion-physical-expr` copy. Both timed variants must use the same dependency graph, release settings and harness. All builds and correctness work finished before timing on CPU 2. Both diffs apply and reverse exactly; the replacement passes rustfmt. All 39 shared source/lockfile paths and three executable slots were restored and their hashes rechecked after timing. No candidate patch is enabled or added to the accepted patch sequence.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
