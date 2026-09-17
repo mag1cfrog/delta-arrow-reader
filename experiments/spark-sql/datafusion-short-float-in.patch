@@ -1,0 +1,234 @@
+--- a/src/expressions/in_list.rs
++++ b/src/expressions/in_list.rs
+@@ -290,8 +290,18 @@
+     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
+         let num_rows = batch.num_rows();
+         let value = self.expr.evaluate(batch)?;
++        // ponytail: keep smaller batches on hashing; lower the cutoff only
++        // after measuring their vectorized-comparison setup cost.
++        let short_float_list = matches!(&value, ColumnarValue::Array(array)
++            if array.len() >= 8192
++                && matches!(array.data_type(), DataType::Float32 | DataType::Float64))
++            && (1..=3).contains(&self.list.len())
++            && self
++                .list
++                .iter()
++                .all(|expr| expr.is::<crate::expressions::Literal>());
+         let r = match &self.static_filter {
+-            Some(filter) => {
++            Some(filter) if !short_float_list => {
+                 match value {
+                     ColumnarValue::Array(array) => {
+                         filter.contains(&array, self.negated)?
+@@ -329,8 +339,8 @@
+                     }
+                 }
+             }
+-            None => {
+-                // No static filter: iterate through each expression, compare, and OR results.
++            _ => {
++                // Compare once per list item and OR the results.
+                 // Use Arrow's vectorized eq kernel for types it supports (primitive,
+                 // boolean, string, binary, dictionary), falling back to row-by-row
+                 // comparator for unsupported types (nested, RunEndEncoded, etc.).
+@@ -483,6 +493,200 @@
+     use datafusion_physical_expr_common::physical_expr::fmt_sql;
+     use insta::assert_snapshot;
+     use itertools::Itertools;
++
++    #[test]
++    fn short_float_literal_in_matches_bit_oracle() -> Result<()> {
++        use std::sync::atomic::{AtomicUsize, Ordering};
++
++        struct CountedFilter {
++            inner: Arc<dyn StaticFilter + Send + Sync>,
++            calls: AtomicUsize,
++        }
++        impl StaticFilter for CountedFilter {
++            fn null_count(&self) -> usize {
++                self.inner.null_count()
++            }
++            fn contains(&self, v: &dyn Array, negated: bool) -> Result<BooleanArray> {
++                self.calls.fetch_add(1, Ordering::Relaxed);
++                self.inner.contains(v, negated)
++            }
++        }
++        fn bits(value: ScalarValue) -> Option<u64> {
++            match value {
++                ScalarValue::Float32(v) => v.map(|x| u64::from(x.to_bits())),
++                ScalarValue::Float64(v) => v.map(f64::to_bits),
++                ScalarValue::Dictionary(_, v) => bits(*v),
++                _ => unreachable!(),
++            }
++        }
++        // Distinct NaN signs/payloads, both zeros, infinities, subnormals,
++        // ordinary values, and NULL. Native IN uses bit equality.
++        let f32_bits = [
++            0, 0x80000000, 0x7fc00000, 0xffc00000, 0x7fc00001, 0xffc00001, 0x7f800001,
++            0x7f800000, 0xff800000, 1, 0x80000001, 0x3f800000, 0xbf800000,
++        ];
++        let f64_bits = [
++            0,
++            0x8000000000000000,
++            0x7ff8000000000000,
++            0xfff8000000000000,
++            0x7ff8000000000001,
++            0xfff8000000000001,
++            0x7ff0000000000001,
++            0x7ff0000000000000,
++            0xfff0000000000000,
++            1,
++            0x8000000000000001,
++            0x3ff0000000000000,
++            0xbff0000000000000,
++        ];
++        let arrays: [ArrayRef; 2] = [
++            Arc::new(Float32Array::from_iter(
++                f32_bits
++                    .into_iter()
++                    .map(|x| Some(f32::from_bits(x)))
++                    .chain([None]),
++            )),
++            Arc::new(Float64Array::from_iter(
++                f64_bits
++                    .into_iter()
++                    .map(|x| Some(f64::from_bits(x)))
++                    .chain([None]),
++            )),
++        ];
++        let mut checks = 0;
++        for values in arrays {
++            let keys =
++                Int32Array::from_iter((0..values.len() as i32).map(Some).chain([None]));
++            let dictionary =
++                Arc::new(DictionaryArray::try_new(keys, Arc::clone(&values))?)
++                    as ArrayRef;
++            let indices = UInt32Array::from_iter_values(
++                (0..8193).map(|i| (i % values.len()) as u32),
++            );
++            let large = arrow::compute::take(&values, &indices, None)?;
++            for length in 1..=4 {
++                for start in 0..values.len() {
++                    let indices = UInt32Array::from_iter_values(
++                        (0..length).map(|i| ((start + i) % values.len()) as u32),
++                    );
++                    let haystack = arrow::compute::take(&values, &indices, None)?;
++                    let literals = (0..length)
++                        .map(|i| ScalarValue::try_from_array(&haystack, i).map(lit))
++                        .collect::<Result<Vec<_>>>()?;
++                    let haystack_bits = (0..length)
++                        .map(|i| ScalarValue::try_from_array(&haystack, i).map(bits))
++                        .collect::<Result<Vec<_>>>()?;
++                    for negated in [false, true] {
++                        for (kind, needle) in [
++                            ("array", Arc::clone(&values)),
++                            ("below_cutoff", large.slice(1, 8191)),
++                            ("at_cutoff", large.slice(1, 8192)),
++                            ("slice", values.slice(1, values.len() - 1)),
++                            ("empty", values.slice(1, 0)),
++                            ("dictionary", Arc::clone(&dictionary)),
++                            ("scalar", Arc::clone(&values)),
++                        ] {
++                            let schema = Arc::new(Schema::new(vec![Field::new(
++                                "a",
++                                needle.data_type().clone(),
++                                true,
++                            )]));
++                            let batch = RecordBatch::try_new(
++                                Arc::clone(&schema),
++                                vec![Arc::clone(&needle)],
++                            )?;
++                            let input = if kind == "scalar" {
++                                lit(ScalarValue::try_from_array(&values, start)?)
++                            } else {
++                                col("a", &schema)?
++                            };
++                            let expected =
++                                BooleanArray::from_iter((0..needle.len()).map(|i| {
++                                    let i = if kind == "scalar" { start } else { i };
++                                    bits(ScalarValue::try_from_array(&needle, i).unwrap())
++                                        .and_then(|v| {
++                                            if haystack_bits.contains(&Some(v)) {
++                                                Some(!negated)
++                                            } else if haystack_bits.contains(&None) {
++                                                None
++                                            } else {
++                                                Some(negated)
++                                            }
++                                        })
++                                }));
++                            for factory in ["literals", "array", "constant_casts"] {
++                                let mut expr = if factory == "array" {
++                                    InListExpr::try_new_from_array(
++                                        Arc::clone(&input),
++                                        Arc::clone(&haystack),
++                                        negated,
++                                        &schema,
++                                    )?
++                                } else {
++                                    let list = if factory == "constant_casts" {
++                                        literals
++                                            .iter()
++                                            .map(|e| {
++                                                Arc::new(
++                                                    crate::expressions::CastExpr::new(
++                                                        Arc::clone(e),
++                                                        values.data_type().clone(),
++                                                        None,
++                                                    ),
++                                                )
++                                                    as Arc<dyn PhysicalExpr>
++                                            })
++                                            .collect()
++                                    } else {
++                                        literals.clone()
++                                    };
++                                    InListExpr::try_new(
++                                        Arc::clone(&input),
++                                        list,
++                                        negated,
++                                        &schema,
++                                    )?
++                                };
++                                let filter = Arc::new(CountedFilter {
++                                    inner: expr.static_filter.take().unwrap(),
++                                    calls: AtomicUsize::new(0),
++                                });
++                                expr.static_filter = Some(filter.clone());
++                                let expr: Arc<dyn PhysicalExpr> = Arc::new(expr);
++                                let rewritten = Arc::clone(&expr).with_new_children(
++                                    expr.children().into_iter().cloned().collect(),
++                                )?;
++                                for e in [expr, rewritten] {
++                                    let actual = e
++                                        .evaluate(&batch)?
++                                        .into_array(batch.num_rows())?;
++                                    assert_eq!(
++                                        as_boolean_array(&actual),
++                                        &expected,
++                                        "{kind} {factory} length={length} start={start} negated={negated}"
++                                    );
++                                    checks += 1;
++                                }
++                                let vectorized = length <= 3
++                                    && factory != "constant_casts"
++                                    && kind == "at_cutoff";
++                                // The scalar-NULL shortcut also bypasses contains().
++                                let scalar_null =
++                                    kind == "scalar" && values.is_null(start);
++                                assert_eq!(
++                                    filter.calls.load(Ordering::Relaxed),
++                                    if vectorized || scalar_null { 0 } else { 2 }
++                                );
++                            }
++                        }
++                    }
++                }
++            }
++        }
++        assert_eq!(checks, 9408);
++        Ok(())
++    }
+ 
+     type InListCastResult = (Arc<dyn PhysicalExpr>, Vec<Arc<dyn PhysicalExpr>>);
+ 

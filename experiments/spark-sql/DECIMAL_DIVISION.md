@@ -2920,6 +2920,42 @@ done
 
 For the earlier reference, reuse the pre-extension executable and benchmark capture from the preceding section. Use the artifact's scripts for the full replay, diagnostic reruns, lifecycle checks and three-variant timing, adapting local paths. All compilation and correctness runs finish before timing. The patch applies and reverses exactly, and rustfmt passes. All 37 shared source/lockfile paths and three executable slots were restored before measurement and their hashes rechecked afterward. The default project build still leaves this patch disabled.
 
+## Short floating IN lists
+
+[datafusion-short-float-in.patch](datafusion-short-float-in.patch) changes the dispatch in DataFusion 54.1.0's existing `InListExpr::evaluate`. FLOAT/DOUBLE arrays with at least 8192 rows and one to three literal list items use its existing Arrow equality and Kleene-OR path. The normalized input still evaluates once. Scalar inputs, dictionaries, smaller batches, empty or longer lists, and constant expressions other than literals retain their previous paths. There is no new execution node or library dependency.
+
+The expression still constructs its static filter and retains its nullability metadata. Its displayed plan therefore still says `IN (SET)`; execution chooses the comparison path after evaluating the input. Restricting the alternate path to literals avoids reevaluating expressions whose results were cached when the static filter was built. Arrow's floating equality and the existing floating hash keys both compare IEEE bits. The Spark helper still canonicalizes signed zero and NaNs before either path.
+
+An initial prototype applied the alternate path to all batch sizes. In four fresh processes per variant, its short-list lookup was slower for small batches; at 256 rows, some profiles were still 93% slower. At 8192 rows, every measured short-list profile improved, by 39%-86%. The final guard conservatively starts there. These are native expression measurements, separate from full SQL timings. The best crossover between 256 and 8192 rows remains unmeasured.
+
+All 52 native IN tests pass. One new parameterized test checks 9408 evaluations and 22,094,016 row values against an independent integer-bit oracle. It covers both floating widths, signed zero, NaN signs and payloads, a signaling NaN, infinities, subnormals, NULL, IN/NOT IN, both constructors, constant casts, dictionaries, scalars, empty arrays, and nonzero-offset slices immediately below and at the cutoff. It also checks `with_new_children` and counts static-filter calls to verify the selected execution path.
+
+The existing 6332-observation replay, representing 6324 unique observations, has no new value, type, status or plan differences. Raw Spark agreement remains 6001/6332; all 264 projected-subquery observations still match the independent SQL reference. Two parallel CAST diagnostics report a different first invalid input; three reruns per variant in both ANSI modes preserve every other field. All 112 million-row benchmark captures, including plans, are identical. The 26 planner tests, four Delta lifecycle tests, 4064 integer-reference observations over 187,410 rows, and 116 Delta comparisons pass.
+
+Full SQL execution per 1,048,576 rows is below. The earlier reference predates the pure-floating extension and already includes the older Decimal/floating helper. All variants use the same benchmark input and harness.
+
+| Query | Earlier reference (ms) | Accepted baseline (ms) | After (ms) | Change from baseline |
+| --- | ---: | ---: | ---: | ---: |
+| Raw FLOAT, three-item IN | 3.460 | 4.562 | 3.539 | -22.42% |
+| Raw DOUBLE, three-item IN | 3.713 | 4.638 | 3.911 | -15.67% |
+| Nullable DOUBLE, three-item IN | 6.914 | 6.955 | 6.256 | -10.06% |
+
+Execution instructions decrease by 24.70%, 19.51% and 14.70%, respectively. The first two queries still take 2.30% and 5.33% longer than the earlier reference, with 3.15% and 6.85% more instructions. The nullable case already used the older normalizer in that reference and also benefits from the new lookup path. This removes much of the short-IN regression, while retaining normalization and its remaining cost.
+
+Planning instruction counts for the three targets change by less than 0.02% from the accepted baseline. Raw FLOAT/DOUBLE planning still takes about 5%-6% longer than the earlier reference. The twelve controls retain their plans, with instruction changes below 0.15% in planning and 0.25% in execution. Their elapsed-time variation, including about +2% on the unchanged projected-IN control, is not interpreted as a change in query work.
+
+The final native measurements retain hashing for small batches but still show some overhead. Across short-list profiles, the median per-call increase is about 2.4 ns at one row, 3.0 ns at eight rows, and 2.9 ns at 32 rows. The largest relative increase among those profiles is a one-row DOUBLE list containing only NULL: 132.8 to 149.5 ns (+12.60%). These are isolated native expression timings, not whole-query measurements. They remain a limit of this slice; the guard does not establish zero overhead for every input size.
+
+[short-float-in-results.json](short-float-in-results.json) records source and binary identities, replay hashes, test output, native measurements and SQL timing samples. The patch applies to an isolated copy of the locked `datafusion-physical-expr` 54.1.0 crate. Add its path to the existing `[patch.crates-io]` table used by the accepted experiment:
+
+```toml
+datafusion-physical-expr = { path = "/absolute/path/to/datafusion-physical-expr" }
+```
+
+Build the baseline with that unchanged copy, then apply the patch and build the candidate with the same override and release settings. Preserve all other dependency versions and features when updating the path package's lock entry. Freeze each executable before rebuilding. The artifact includes the SQL build/replay scripts and a standalone Rust native benchmark compiled against the recorded release libraries. Run native unit tests with the copied crate's own manifest and test lockfile, separately from the benchmark lockfile. Compilation and correctness work must finish before timing.
+
+Floating normalization, the previously recorded planning overhead, and all 331 existing Spark differences remain outside this change. The batch cutoff is conservative and does not establish the best strategy for every CPU or data distribution. This patch remains optional in the SQL experiment.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
