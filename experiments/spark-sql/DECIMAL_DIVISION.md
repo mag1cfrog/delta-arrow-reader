@@ -3071,6 +3071,33 @@ The SQL measurements are regression controls with non-NULL list items. The nulla
 
 This remains an optional experiment patch. Generic string and Decimal NULL lists retain their current filtering paths. Normalization allocation, previous planning costs, the small timing increases above and 331 raw Spark differences remain. The separate floating-dispatch candidate needs a new evaluation on top of this change.
 
+## Revisit floating dispatch after the NULL optimization
+
+The floating-filter candidate is still not adopted. [short-float-in-filter-null-investigation.json](short-float-in-filter-null-investigation.json) retests the final candidate from the type-specific investigation on the accepted NULL optimization. The optional runtime remains at `3b011a1`.
+
+The candidate removes the shared floating dispatch guard from `InListExpr::evaluate` and chooses vector comparison inside the existing FLOAT/DOUBLE filters. It reuses the earlier candidate's runtime code, retaining the direct NULL construction and numeric all-NULL filter selection from the preceding section. Only `in_list.rs` and `primitive_filter.rs` differ from this new baseline. The dependency graph, features, release settings, Arrow libraries, benchmark sources and other runtime sources match.
+
+All 55 native IN tests, 26 planner tests and four Delta lifecycle tests pass. This combines the earlier 14,784 floating bit-oracle evaluations and 120 strategy checks with the 8640 all-NULL evaluations. The 6332-observation replay retains 6001 raw Spark matches and all 264 independent projected-subquery matches, with no new value, type, status or plan differences. Three parallel CAST observations differ only in their first invalid input; three reruns per variant preserve every other field. All 112 million-row captures and plans are identical.
+
+Across short floating lists, the native matrix saves median costs of 2.60, 2.09 and 2.27 ns per evaluation at 1, 8 and 32 rows. A second balanced series retains median elapsed reductions of 2.52%, 2.75% and 1.60%. Selected isolated floating-array profiles also improve. The earlier roughly 45% all-NULL INT regression is gone: its isolated repeat takes 100.70 ns before and 100.74 ns after. The corresponding BIGINT control takes 100.64 and 103.76 ns.
+
+Other controls prevent adoption. These results use four fresh processes per variant in the isolated repeat, in balanced order, with two warmups and nine samples per process:
+
+| Control | Before (ns) | After (ns) | Elapsed change |
+| --- | ---: | ---: | ---: |
+| Utf8 array, 8192 rows, one NULL list item | 24713.75 | 26065.92 | +5.47% |
+| Utf8 array, 8192 rows, two values and NULL | 26180.13 | 27310.87 | +4.32% |
+| BIGINT NULL scalar, 8192 output rows, mixed four-item list | 89.04 | 91.85 | +3.16% |
+| DOUBLE NULL scalar, 8192 output rows, one NULL list item | 89.04 | 93.58 | +5.10% |
+
+The all-NULL Utf8 increase also appears in the first isolated series (+6.30%). Generic filter source is unchanged, and whole-process instruction counts fall about 0.006% for both large Utf8 controls. The two NULL scalar controls use the existing scalar-NULL shortcut before calling a filter. Their latency causes are not established. The much larger small-string increases in the sequential matrix do not reproduce in isolation. A separate 256-row FLOAT all-NULL profile does remain slower in the repeated full native matrix: 89.22 to 111.73 ns (+25.23%). That profile was not measured in isolation. Both initial and repeated results are retained.
+
+The SQL series measures raw FLOAT/DOUBLE short-IN execution changes of -0.74%/+0.25%, with instructions down about 0.40%. Nullable-input DOUBLE improves 1.13%, while the long DOUBLE list takes 1.00% longer. These SQL queries have non-NULL list items. The measurements do not establish a universal query speedup or remove earlier normalization, planning and compatibility costs.
+
+Keep the accepted NULL patch. The few nanoseconds saved on small floating arrays do not justify this candidate's repeated string and scalar increases. Further work on this design needs to explain and remove those penalties before adoption.
+
+The artifact retains the candidate diff, build identities, test output, all timing samples, repeats and reproduction scripts. Reproduction starts from the accepted optional runtime through `3b011a1`; apply the embedded candidate diff to the isolated `datafusion-physical-expr` 54.1.0 copy. It applies and reverses exactly and passes rustfmt. All builds and correctness checks finished before timing on CPU 2. All 42 shared source/lockfile paths and three executable slots were restored and their hashes rechecked after measurement. No candidate patch is added to the accepted sequence.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
