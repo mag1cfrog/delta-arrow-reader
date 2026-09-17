@@ -1,0 +1,107 @@
+diff --git a/src/joins/nested_loop_join.rs b/src/joins/nested_loop_join.rs
+--- a/src/joins/nested_loop_join.rs
++++ b/src/joins/nested_loop_join.rs
+@@ -2040,6 +2040,22 @@
+             return Ok(false);
+         }
+ 
++        // Both inputs are nonempty here. An unfiltered mark join only needs
++        // existence, so every row on the marked side has a match.
++        if self.join_filter.is_none()
++            && matches!(self.join_type, JoinType::LeftMark | JoinType::RightMark)
++        {
++            if self.join_type == JoinType::LeftMark {
++                left_data.bitmap().lock().as_slice_mut().fill(u8::MAX);
++            } else {
++                self.current_right_batch_matched = Some(BooleanArray::new(
++                    BooleanBuffer::new_set(right_batch.num_rows()),
++                    None,
++                ));
++            }
++            return Ok(false);
++        }
++
+         // ========
+         // Join (l_row x right_batch)
+         // and push the result into output_buffer
+@@ -3376,6 +3392,80 @@
+         Ok(())
+     }
+ 
++    #[rstest]
++    #[tokio::test]
++    async fn join_unfiltered_mark(
++        #[values(1, 16)] batch_size: usize,
++        #[values(JoinType::LeftMark, JoinType::RightMark)] join_type: JoinType,
++        #[values(false, true)] spill: bool,
++    ) -> Result<()> {
++        for (left_rows, right_rows) in
++            [(0, 0), (0, 17), (33, 0), (1, 17), (33, 1), (33, 17)]
++        {
++            let left_values = (0..left_rows).collect();
++            let right_values = (0..right_rows).collect();
++            let left = build_table(
++                ("a1", &left_values),
++                ("b1", &left_values),
++                ("c1", &left_values),
++                Some(batch_size),
++                vec![],
++            );
++            let right = build_table(
++                ("a2", &right_values),
++                ("b2", &right_values),
++                ("c2", &right_values),
++                Some(batch_size),
++                vec![],
++            );
++            let (_, batches, metrics) = if spill {
++                join_collect(
++                    left,
++                    right,
++                    &join_type,
++                    None,
++                    task_ctx_with_memory_limit(50, batch_size)?,
++                )
++                .await?
++            } else {
++                multi_partitioned_join_collect(
++                    left,
++                    right,
++                    &join_type,
++                    None,
++                    new_task_ctx(batch_size),
++                )
++                .await?
++            };
++            let (expected_rows, marked) = if join_type == JoinType::LeftMark {
++                (left_rows, right_rows > 0)
++            } else {
++                (right_rows, left_rows > 0)
++            };
++            let mut ids = Vec::new();
++            for batch in &batches {
++                let marks = batch
++                    .column(3)
++                    .as_any()
++                    .downcast_ref::<BooleanArray>()
++                    .unwrap();
++                assert!(marks.iter().all(|value| value == Some(marked)));
++                let values = batch
++                    .column(0)
++                    .as_any()
++                    .downcast_ref::<arrow::array::Int32Array>()
++                    .unwrap();
++                ids.extend(values.iter().map(Option::unwrap));
++            }
++            ids.sort_unstable();
++            assert_eq!(ids, (0..expected_rows).collect::<Vec<_>>());
++            if spill && left_rows == 33 && right_rows == 17 {
++                assert!(metrics.spill_count().unwrap_or(0) > 0);
++            }
++        }
++        Ok(())
++    }
++
+     #[tokio::test]
+     async fn join_has_correct_stats() -> Result<()> {
+         let left = build_left_table();

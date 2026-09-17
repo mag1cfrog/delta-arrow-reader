@@ -2744,6 +2744,65 @@ cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/target-bench"
 
 The generic Spark comparator intentionally reports 125/264 and exits nonzero. Use the artifact's `semantics.py`, `corpus.py` and upstream SQLLogicTest file to reproduce the independent check; adjust the recorded local paths to the new checkout. Keep raw agreement and semantic correctness separate. Both patches apply and reverse to the recorded source hashes. All 34 shared source/lockfile paths and three executable slots were restored, with fresh source timestamps and executable mode 0755. The default project build does not enable these optional patches.
 
+## Avoid Cartesian work in unfiltered Mark Joins
+
+[datafusion-mark-existence.patch](datafusion-mark-existence.patch) adds a 16-line fast path to DataFusion 54.1.0's native NestedLoopJoin. With no join filter and nonempty inputs, every row on the marked side has a match. LeftMark fills the existing left bitmap; RightMark sets one bitmap for the current right batch. This replaces repeated pairwise bitmap work with one existence check per batch.
+
+This is a local Rust optimization using the existing execution state machine. It does not import more Sail code or introduce a physical node. Empty inputs retain the existing false marks. The join still consumes its inputs and uses the same buffering, output, error and spill handling. Filtered Mark Joins and other join types retain their existing execution paths. The logical Mark Joins and three-valued CASE from the preceding slice remain, including the agreed SQL NULL semantics.
+
+All 50 native NestedLoopJoin tests pass. One parameterized test adds eight instances covering 48 scenarios: LeftMark/RightMark, batch sizes 1/16, six empty/nonempty input shapes, four right partitions in normal execution, and a 50-byte memory limit in single-partition spill execution. It checks every row ID and mark, including a non-byte-aligned 33-row bitmap, and requires actual spills for the 33-by-17 inputs.
+
+The existing 6,068 SQL observations, representing 6,060 unique observations, retain their values, types, execution status and physical plans. Raw Spark agreement remains 5,745/6,068. Two parallel CAST failures report a different first invalid input; targeted before/after reruns preserve their status and plans, and neither query uses NestedLoopJoin. All 264 projected-subquery captures are identical to the approved baseline: 248 match the independent reference and the same 16 pure FLOAT/DOUBLE signed-zero failures remain. All 98 million-row benchmark captures and plans are identical. The 25 Sail planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 rows and 116 Delta comparisons also pass.
+
+Execution per 1,048,576 rows improves as follows. Inputs, physical plans and output validation are unchanged.
+
+| Projected query | Before (ms) | After (ms) | Change |
+| --- | ---: | ---: | ---: |
+| IN, non-null columns | 357.366 | 6.788 | -98.10% |
+| NOT IN, non-null columns | 356.420 | 6.571 | -98.16% |
+| IN, nullable inner expression | 406.525 | 16.195 | -96.02% |
+| IN, DOUBLE/Decimal operands | 401.268 | 9.377 | -97.66% |
+| EXISTS | 9.346 | 9.446 | +1.07% |
+| NOT EXISTS | 9.322 | 9.461 | +1.49% |
+| IN, equality-correlated inner result | 34.878 | 35.027 | +0.43% |
+
+The four uncorrelated IN targets execute 97.84% to 98.45% fewer instructions. Planning instructions stay within 0.070% across all 16 queries. Nine existing controls have execution-instruction changes within 0.031%. The short Decimal IN, correlated COUNT and correlated MAX controls vary in elapsed time; a separate balanced repeat measures -0.33%, -0.57% and -0.19%, respectively.
+
+Nested LATERAL needs a closer check: the first two series measure +5.02% and +5.66% elapsed time, with nearly identical instructions and no NestedLoopJoin in its plan. A third interleaved series reverses the default-setting gap to -6.24%. Across all 24 default processes, total execution time correlates with page faults at r=0.985. Reusing the earlier child-process allocator diagnostic (`MALLOC_MMAP_MAX_=0`, `MALLOC_TRIM_THRESHOLD_=1073741824`) reduces median faults to 334/366 per nine executions and measures 86.931/86.973 ms, a +0.048% difference. This supports allocation sensitivity rather than a stable added computation cost. The diagnostic changes memory retention; runtime allocation settings remain unchanged.
+
+The large Cartesian cost is removed for these IN targets. Extra logical marks, their input handling and the final CASE still have costs. The existing pure floating signed-zero gap remains the next compatibility boundary; these measurements do not establish complete Spark compatibility or universal absence of performance regressions.
+
+[mark-existence-results.json](mark-existence-results.json) records the patch and source hashes, build identity, corpus audit, test output, canonical benchmark results and plans, raw timing samples and counters, and reproduction scripts. It refers to the preceding artifact for the unchanged Spark captures and independent semantic reference. The benchmark source, host source, lockfile, dependency features and release profiles are identical across variants. All builds and correctness runs finish before timing. Timing uses CPU 2, four fresh processes per query/variant/phase in balanced order, two warmups and nine samples, with separate planning and execution counters and no retained results.
+
+To reproduce, start with the built optional runtime from the preceding section, including the seven-query benchmark extension. Reuse that scratch checkout and Cargo target. Set `physical_plan_dir` to the overridden DataFusion physical-plan copy. Create `run_dir` for this comparison and copy the existing dependency override configuration to `$run_dir/override.toml`. Save the baseline executables, apply this patch to the dependency copy, then rebuild and save the candidate executables. From the scratch checkout root:
+
+```bash
+host_repo="$PWD"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/before-bench"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/before-probe"
+git -C "$physical_plan_dir" apply \
+  "$host_repo/experiments/spark-sql/datafusion-mark-existence.patch"
+cargo build --release --locked --config "$run_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml \
+  --example decimal_bench --example decimal_probe \
+  --bin delta-reader-sail-extraction-probe -j 3
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cp experiments/spark-sql/Cargo.lock "$physical_plan_dir/Cargo.lock"
+cargo test --release --config "$run_dir/override.toml" \
+  --manifest-path "$physical_plan_dir/Cargo.toml" \
+  --lib joins::nested_loop_join -j 3
+for variant in before after; do
+  "$run_dir/$variant-bench" "$run_dir/$variant-subquery-check.json" subquery-check
+  "$run_dir/$variant-probe" experiments/spark-sql/projected-subqueries.jsonl \
+    "$run_dir/$variant-projected.json" --physical-plans
+done
+cmp "$run_dir/before-subquery-check.json" "$run_dir/after-subquery-check.json"
+cmp "$run_dir/before-projected.json" "$run_dir/after-projected.json"
+```
+
+Use the artifact's `measure.py` for the balanced, phase-separated performance run after correctness checks. Adapt the recorded local paths and reuse the preceding corpus references for the full replay. The patch applies and reverses exactly. All 37 shared source/lockfile paths and three executable slots were restored, with fresh source timestamps and executable mode 0755. A missing parser keyword input in the scratch directory was temporarily recovered from the repository; its regenerated Rust output matched the previous generated file byte-for-byte. The default project build still leaves this patch disabled.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
