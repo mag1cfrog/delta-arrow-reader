@@ -3011,6 +3011,34 @@ Keep the accepted implementation rather than adding this tradeoff. If small-batc
 
 The artifact preserves both rejected diffs, build identities, samples, counters, test output, and reproduction scripts. Reproduction starts from the accepted optional runtime and applies one embedded candidate diff to its isolated `datafusion-physical-expr` copy. Both timed variants must use the same dependency graph, release settings and harness. All builds and correctness work finished before timing on CPU 2. Both diffs apply and reverse exactly; the replacement passes rustfmt. All 39 shared source/lockfile paths and three executable slots were restored and their hashes rechecked after timing. No candidate patch is enabled or added to the accepted patch sequence.
 
+## Type-specific IN filter investigation
+
+None of the three candidates in [short-float-in-filter-investigation.json](short-float-in-filter-investigation.json) is adopted. The accepted runtime remains at `37ed5d8`. Moving the short-list decision into the existing floating filters improves small floating arrays, but the measured binary introduces a reproducible slowdown in an unrelated native INT control.
+
+The first two candidates wrap the existing floating hash filter. The first reserves a 728-byte stack frame before checking the array length. Moving vector comparison to a separate function removes that reservation but retains the wrapper calls. Across short floating lists, their median eight-row increases are 3.04% and 5.83%, respectively. Neither is retained.
+
+The final candidate removes the wrapper and restores native `InListExpr::evaluate`. Only FLOAT/DOUBLE primitive filters gain a cached short list and a size check after their existing downcast. Construction copies at most three values, so a short slice cannot retain a large input allocation. Large arrays reuse Arrow equality and Kleene OR/NOT; other arrays use the existing hash body. Cached constant casts also qualify. Dictionary recursion selects the path from the dictionary value array's length. Integer filter expansions and the factory remain unchanged.
+
+Four fresh processes per variant measure these native short-list medians against the accepted runtime:
+
+| Rows | Saved per evaluation (ns) | Elapsed change |
+| ---: | ---: | ---: |
+| 1 | 1.95 | -2.23% |
+| 8 | 2.19 | -2.26% |
+| 32 | 2.35 | -1.64% |
+
+The control matrix prevents adoption. An 8192-row INT array tested against a single typed NULL takes 3.673 microseconds before and 5.314 after (+44.69%). The array has both valid and NULL inputs; the list contains only NULL, and every result is NULL. An isolated repeat retains a 45.46% increase with nearly unchanged instruction counts. Some scalar controls also remain slower. Large string increases in the sequential matrix do not reproduce in isolated measurements; both sets of results are retained.
+
+A separate layout experiment relinks the same candidate harness and verified libraries, changing only the `.text` placement. The INT hot loop has identical machine bytes in all variants. In a balanced repeat, the accepted binary takes 3.583 microseconds and the candidate 5.211. Moving the candidate's code section by 16 bytes gives 3.579 microseconds; moving it by 32 bytes gives 5.234. This supports a code-layout effect rather than additional integer semantic work. Moving the entire section does not identify one CPU frontend mechanism. These linker settings are diagnostic only and are not proposed for the build.
+
+Correctness checks pass: 53 native IN tests, including 14,784 bit-oracle evaluations over 44,161,152 row values and 120 strategy checks; 26 planner tests; and four Delta lifecycle tests. The 6332-observation replay retains 6001 raw Spark matches and all 264 independent projected-subquery matches, with no new value, type, status or plan differences. Three parallel CAST observations change only their first invalid input; three repeats per variant preserve the other fields. All 112 million-row captures and plans are identical.
+
+The SQL series measures raw FLOAT/DOUBLE short-IN execution changes of -0.36%/-0.15%, with instructions down 0.41%/0.37%. Against the earlier reference, execution remains 0.54%/4.39% slower and planning 6.01%/6.26% slower in this series. These results do not resolve the remaining normalization, planning or compatibility costs, and the native INT microbenchmark increase is not a measured 45% SQL-query regression.
+
+The next bounded change is to investigate choosing the existing `ArrayStaticFilter` NULL path at construction for a nonempty all-NULL constant list. That can avoid the empty per-row hash loop without adding a check to every evaluation. It must preserve input evaluation and errors, exclude empty lists, and measure planning and other-type controls. This change has not been implemented or tested here. Revisit the floating dispatch candidate after that separate prerequisite.
+
+The artifact includes all three rejected diffs, build identities, test output, native and SQL samples, counter repeats, layout commands and byte checks. Reproduction uses the same accepted optional runtime and isolated dependency copy as the preceding investigation. Apply one embedded diff, then use its recorded build, check and measurement scripts with local paths adjusted. The final candidate applies and reverses exactly and passes rustfmt. All builds and correctness checks finished before timing on CPU 2. All 41 shared source/lockfile paths and three executable slots were restored, with hashes rechecked after the diagnostics. No candidate or linker flag is added to the accepted patch sequence.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
