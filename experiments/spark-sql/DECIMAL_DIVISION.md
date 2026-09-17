@@ -2868,6 +2868,58 @@ python3 "$source_repo/experiments/spark-sql/decimal_division.py" \
 
 The comparison reports the 16 known boundary differences. Use the artifact's scripts for the complete replay, assertions, tests and phase-separated timing, adapting local paths. The patch applies and reverses exactly. The final formatted source was rebuilt and its SQL and benchmark captures rechecked. All 37 shared source/lockfile paths and three executable slots were restored with fresh source timestamps and executable mode 0755. The patch remains optional. The next performance slice should preserve native short-IN optimizations and remove provably redundant normalization; JOIN USING/GROUP BY and ANSI precision remain separate compatibility work.
 
+## Remove redundant floating normalization
+
+[sail-float-normalizer-simplify.patch](sail-float-normalizer-simplify.patch) adds 31 lines to the existing helper's `ScalarUDFImpl::simplify` hook. It removes normalization after integer-to-floating casts, Decimal-to-DOUBLE casts, and another normalization call. If the outer call also widens FLOAT to DOUBLE, that cast remains. The original argument still evaluates once, with its existing cast, error and NULL handling. This uses DataFusion's existing optimization pass and native casts.
+
+Integer casts cannot produce negative zero or NaN. Decimal's coefficient and scale ranges fit within DOUBLE's nonzero range, so Decimal-to-DOUBLE cannot underflow to negative zero. Decimal-to-FLOAT can underflow and retains its normalizer. Raw floating columns and string-to-floating casts also retain normalization. These restrictions let the earlier Decimal-IN inverse rewrite see the original cast again, without weakening the signed-zero fix.
+
+One parameterized Rust test checks 352 scenarios and 2,016 output values. It covers signed and unsigned integer widths, FLOAT/DOUBLE controls with negative zero and a noncanonical negative NaN, all four Decimal widths, extreme negative and maximum positive scales, CAST/TRY_CAST, nested normalization, and optional FLOAT-to-DOUBLE widening. It checks rewrite eligibility, result type, nullability and output bits. All 26 Sail planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 rows, and 116 Delta comparisons pass.
+
+The full 6,332-observation replay, representing 6,324 unique observations, preserves every value, type and execution status. Raw Spark agreement remains 6,001/6,332. All 264 projected-subquery observations still match the independent reference, including the agreed SQL NULL semantics; the floating corpus and original controls remain at 240/256 and 8/8. There are 106 physical-plan changes and no logical-plan changes. Two parallel CAST diagnostics report a different first invalid input; three before/after reruns in both ANSI modes preserve every other field and their physical plans.
+
+All 112 million-row benchmark captures retain identical non-plan fields. Six physical plans change. For the explicit DOUBLE/Decimal short IN and the projected IN with integer keys cast to FLOAT/DOUBLE, both ANSI modes recover the plans used before the pure-floating extension. The older mixed projected-IN case also loses an unnecessary integer-to-DOUBLE normalizer.
+
+Execution per 1,048,576 rows is below. The earlier reference predates the pure-floating extension and already includes the mixed Decimal/floating helper. All three variants use the same benchmark source and input.
+
+| Query | Earlier reference (ms) | Accepted baseline (ms) | After (ms) | Change from baseline |
+| --- | ---: | ---: | ---: | ---: |
+| Decimal cast to DOUBLE, short IN | 4.237 | 5.806 | 4.234 | -27.08% |
+| Projected IN, integer keys cast to FLOAT/DOUBLE | 9.144 | 10.769 | 9.262 | -13.99% |
+| DOUBLE integer key, Decimal subquery | 9.407 | 9.353 | 9.120 | -2.49% |
+
+The first two queries recover their earlier execution plans and have instruction counts within 0.01% of that reference. Their elapsed-time differences from the reference are -0.07% and +1.30%. The third query executes 3.24% fewer instructions. These results support removal of redundant row processing; they do not establish exact elapsed-time equality on every run.
+
+Planning costs remain. Decimal short IN rises from 0.711 to 0.754 ms, an increase of about 0.044 ms (+6.12%), and remains +12.91% above the earlier reference. The FLOAT/DOUBLE projected-IN target improves from 1.480 to 1.423 ms but remains +6.03% above the earlier reference. The twelve controls have unchanged plans, with instruction changes below 0.12% in planning and 0.06% in execution. The unchanged projected-IN control appears 33.91% faster in elapsed time with nearly identical instructions; this recurring timing variability is excluded from the patch's reported benefits.
+
+The remaining raw FLOAT/DOUBLE comparison and short-IN costs from the preceding slice are unchanged. In particular, the pure-floating short lists still use normalization followed by native set lookup. Recovering their short-list optimization while preserving signed zero and NaNs remains the next execution-performance task. The JOIN USING/GROUP BY and ANSI precision compatibility boundaries are also unchanged.
+
+[float-normalizer-simplify-results.json](float-normalizer-simplify-results.json) records the source and executable hashes, changed observations, test output, canonical benchmark plans, all 264 timing runs and counters, and reproduction scripts. Before/after dependency features, release profiles and Arrow libraries are identical; only the common comparison source changes. Measurements use CPU 2, four fresh processes per measured query/variant/phase, two warmups, nine samples, no retained output, and separate planning/execution counters. The balanced order is before/after/reference/reference/after/before, repeated twice; the reference runs only the three affected queries.
+
+To reproduce, use the built optional runtime from the preceding section in a scratch checkout. Set `source_repo` to the repository containing this patch, and use a new `run_dir` with the same dependency override configuration. Save that runtime's executables as the baseline, apply the patch, then rebuild from the scratch checkout root:
+
+```bash
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/before-bench"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/before-probe"
+git apply "$source_repo/experiments/spark-sql/sail-float-normalizer-simplify.patch"
+cargo build --release --locked --config "$run_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml \
+  --example decimal_bench --example decimal_probe \
+  --bin delta-reader-sail-extraction-probe -j 3
+cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/after-bench"
+cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/after-probe"
+cargo test --release --locked --config "$run_dir/override.toml" \
+  --manifest-path experiments/spark-sql/Cargo.toml -p sail-plan --lib -j 3
+for variant in before after; do
+  "$run_dir/$variant-bench" "$run_dir/$variant-subquery-check.json" subquery-check
+  "$run_dir/$variant-probe" \
+    "$source_repo/experiments/spark-sql/float-zero-comparisons.jsonl" \
+    "$run_dir/$variant-float-zero.json" --physical-plans
+done
+```
+
+For the earlier reference, reuse the pre-extension executable and benchmark capture from the preceding section. Use the artifact's scripts for the full replay, diagnostic reruns, lifecycle checks and three-variant timing, adapting local paths. All compilation and correctness runs finish before timing. The patch applies and reverses exactly, and rustfmt passes. All 37 shared source/lockfile paths and three executable slots were restored before measurement and their hashes rechecked afterward. The default project build still leaves this patch disabled.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

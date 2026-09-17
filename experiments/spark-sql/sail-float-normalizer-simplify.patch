@@ -1,0 +1,225 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -335,6 +335,37 @@
+             self.return_type(&[args.arg_fields[0].data_type().clone()])?,
+             args.arg_fields[0].is_nullable(),
+         )))
++    }
++
++    fn simplify(
++        &self,
++        args: Vec<expr::Expr>,
++        info: &datafusion_expr::simplify::SimplifyContext,
++    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
++        use datafusion_expr::simplify::ExprSimplifyResult;
++        let canonical = match &args[0] {
++            expr::Expr::ScalarFunction(f) => f.func.inner().is::<Self>(),
++            expr::Expr::Cast(expr::Cast { expr, field })
++            | expr::Expr::TryCast(expr::TryCast { expr, field }) => {
++                let source = info.get_data_type(expr)?;
++                // Integer casts cannot produce -0 or NaN. Decimal-to-DOUBLE
++                // cannot underflow; Decimal-to-FLOAT can, so keep its check.
++                source.is_integer()
++                    || (source.is_decimal() && field.data_type() == &DataType::Float64)
++            }
++            _ => false,
++        };
++        if !canonical {
++            return Ok(ExprSimplifyResult::Original(args));
++        }
++        let [arg] = datafusion_common::utils::take_function_args(self.name(), args)?;
++        Ok(ExprSimplifyResult::Simplified(
++            if self.widen && info.get_data_type(&arg)? == DataType::Float32 {
++                cast(arg, DataType::Float64)
++            } else {
++                arg
++            },
++        ))
+     }
+ 
+     fn invoke_with_args(
+@@ -794,3 +825,183 @@
+         ))
+     })?)
+ }
++
++#[test]
++fn comparison_float_simplifies_only_canonical_inputs() -> datafusion_common::Result<()> {
++    use arrow::array::{
++        ArrayRef, Decimal32Array, Decimal64Array, Decimal128Array, Decimal256Array, Float32Array,
++        Float64Array, Int64Array, UInt64Array,
++    };
++    use arrow::datatypes::{Field, Schema};
++    use arrow::record_batch::RecordBatch;
++    use datafusion::physical_expr::{create_physical_expr, execution_props::ExecutionProps};
++    use datafusion_common::{DFSchema, scalar::ScalarValue};
++    use datafusion_expr::col;
++    use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
++
++    let mut arrays: Vec<ArrayRef> = vec![
++        Arc::new(Int64Array::from(vec![
++            Some(i64::MIN),
++            Some(-1),
++            Some(0),
++            Some(1),
++            Some(i64::MAX),
++            None,
++        ])),
++        Arc::new(UInt64Array::from(vec![
++            Some(0),
++            Some(1),
++            Some(u64::MAX),
++            None,
++        ])),
++        Arc::new(Float32Array::from(vec![
++            Some(-0.0),
++            Some(f32::from_bits(0xffc00001)),
++            Some(1.5),
++            None,
++        ])),
++        Arc::new(Float64Array::from(vec![
++            Some(-0.0),
++            Some(f64::from_bits(0xfff8000000000001)),
++            Some(1.5),
++            None,
++        ])),
++    ];
++    for data_type in [
++        DataType::Int8,
++        DataType::Int16,
++        DataType::Int32,
++        DataType::UInt8,
++        DataType::UInt16,
++        DataType::UInt32,
++    ] {
++        arrays.push(arrow::compute::cast(arrays[0].as_ref(), &data_type)?);
++    }
++    for scale in [-128, 0, 9] {
++        arrays.push(Arc::new(
++            Decimal32Array::from(vec![
++                Some(-999_999_999),
++                Some(-1),
++                Some(0),
++                Some(1),
++                Some(999_999_999),
++                None,
++            ])
++            .with_precision_and_scale(9, scale)?,
++        ));
++    }
++    for scale in [-128, 0, 18] {
++        arrays.push(Arc::new(
++            Decimal64Array::from(vec![
++                Some(-999_999_999_999_999_999),
++                Some(-1),
++                Some(0),
++                Some(1),
++                Some(999_999_999_999_999_999),
++                None,
++            ])
++            .with_precision_and_scale(18, scale)?,
++        ));
++    }
++    for scale in [-128, 0, 38] {
++        let max = 10_i128.pow(38) - 1;
++        arrays.push(Arc::new(
++            Decimal128Array::from(vec![
++                Some(-max),
++                Some(-1),
++                Some(0),
++                Some(1),
++                Some(max),
++                None,
++            ])
++            .with_precision_and_scale(38, scale)?,
++        ));
++    }
++    for scale in [-128, 0, 76] {
++        let max = "9".repeat(76).parse::<arrow::datatypes::i256>().unwrap();
++        arrays.push(Arc::new(
++            Decimal256Array::from(vec![
++                Some(-max),
++                Some(arrow::datatypes::i256::from_i128(-1)),
++                Some(arrow::datatypes::i256::ZERO),
++                Some(arrow::datatypes::i256::ONE),
++                Some(max),
++                None,
++            ])
++            .with_precision_and_scale(76, scale)?,
++        ));
++    }
++    for input in arrays {
++        let schema = Arc::new(Schema::new(vec![Field::new(
++            "v",
++            input.data_type().clone(),
++            true,
++        )]));
++        let batch = RecordBatch::try_new(schema.clone(), vec![input.clone()])?;
++        let schema = Arc::new(DFSchema::try_from(schema)?);
++        let info = SimplifyContext::builder()
++            .with_schema(schema.clone())
++            .build();
++        for data_type in [DataType::Float32, DataType::Float64] {
++            for safe in [false, true] {
++                let cast = if safe {
++                    try_cast(col("v"), data_type.clone())
++                } else {
++                    cast(col("v"), data_type.clone())
++                };
++                for nested in [false, true] {
++                    let arg = if nested {
++                        ScalarUDF::from(SparkComparisonFloat { widen: false })
++                            .call(vec![cast.clone()])
++                    } else {
++                        cast.clone()
++                    };
++                    for widen in [false, true] {
++                        let function = ScalarUDF::from(SparkComparisonFloat { widen });
++                        let original = function.call(vec![arg.clone()]);
++                        let result = function.simplify(vec![arg.clone()], &info)?;
++                        let should_simplify = nested
++                            || input.data_type().is_integer()
++                            || (input.data_type().is_decimal() && data_type == DataType::Float64);
++                        assert_eq!(
++                            matches!(&result, ExprSimplifyResult::Simplified(_)),
++                            should_simplify
++                        );
++                        let simplified = match result {
++                            ExprSimplifyResult::Simplified(e) => e,
++                            ExprSimplifyResult::Original(args) => function.call(args),
++                        };
++                        assert_eq!(original.get_type(&schema)?, simplified.get_type(&schema)?);
++                        assert_eq!(original.nullable(&schema)?, simplified.nullable(&schema)?);
++                        let evaluate = |e: &expr::Expr| {
++                            create_physical_expr(e, &schema, &ExecutionProps::new())?
++                                .evaluate(&batch)?
++                                .into_array(batch.num_rows())
++                        };
++                        let a = evaluate(&original)?;
++                        let b = evaluate(&simplified)?;
++                        for i in 0..batch.num_rows() {
++                            let bits =
++                                |array: &ArrayRef| -> datafusion_common::Result<Option<u64>> {
++                                    let ScalarValue::Float64(value) =
++                                        ScalarValue::try_from_array(array, i)?
++                                            .cast_to(&DataType::Float64)?
++                                    else {
++                                        unreachable!()
++                                    };
++                                    Ok(value.map(f64::to_bits))
++                                };
++                            assert_eq!(
++                                bits(&a)?,
++                                bits(&b)?,
++                                "input={}, target={data_type}, safe={safe}, nested={nested}, widen={widen}, row={i}",
++                                input.data_type()
++                            );
++                        }
++                    }
++                }
++            }
++        }
++    }
++    Ok(())
++}
