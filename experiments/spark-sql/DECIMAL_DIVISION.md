@@ -2803,6 +2803,71 @@ cmp "$run_dir/before-projected.json" "$run_dir/after-projected.json"
 
 Use the artifact's `measure.py` for the balanced, phase-separated performance run after correctness checks. Adapt the recorded local paths and reuse the preceding corpus references for the full replay. The patch applies and reverses exactly. All 37 shared source/lockfile paths and three executable slots were restored, with fresh source timestamps and executable mode 0755. A missing parser keyword input in the scratch directory was temporarily recovered from the repository; its regenerated Rust output matched the previous generated file byte-for-byte. The default project build still leaves this patch disabled.
 
+## Normalize FLOAT and DOUBLE comparison operands
+
+[sail-float-comparison-zero.patch](sail-float-comparison-zero.patch) extends the existing Rust `SparkComparisonFloat` helper to numeric comparison expressions and IN lists that contain FLOAT or DOUBLE operands. The same builders serve BETWEEN, null-safe comparisons, JOIN ON, and predicate subqueries. They now canonicalize signed zero and NaNs before native comparison or lookup. FLOAT-only expressions keep their original width; mixed DOUBLE or Decimal operands use the existing fused FLOAT-to-DOUBLE path. Numeric coercion outside the existing Decimal rule remains unchanged.
+
+This is a local extension of the comparison helper, with no additional dependency or execution node. Spark also [normalizes floating keys](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/NormalizeFloatingNumbers.scala), and Comet documents the [difference between Spark and Arrow floating comparison semantics](https://datafusion.apache.org/comet/user-guide/1.0/compatibility/floating-point.html). Reusing the helper fixes the expression paths here, but also adds runtime work and changes some optimizer decisions.
+
+All 16 remaining signed-zero failures in the projected-subquery reference are repaired: agreement with the independent reference rises from 248/264 to 264/264. The eight existing ordinary comparison, WHERE and JOIN controls improve from 0/8 to 8/8. Across the previous 6,068 observations, raw Spark agreement rises from 5,745 to 5,753, with no newly failing query IDs. Sixteen results change, all in the repaired projected FLOAT/DOUBLE cases. The agreed SQL NULL semantics remain, including intentional differences from Spark 4.2. There are also 54 logical-plan changes, 46 physical-plan changes, and six variations in which invalid CAST input is reported first. Three before/after reruns of each diagnostic query retain every field except the first-input error text.
+
+[float-zero-comparisons.jsonl](float-zero-comparisons.jsonl) adds 128 queries, observed in both ANSI modes. It covers four FLOAT/DOUBLE type pairings, comparison aliases, null-safe operators, BETWEEN, short/long/dynamic/NULL-containing IN and NOT IN, JOIN ON, WHERE IN/EXISTS, batch sizes 1/3/64, and integer precision controls. Inputs include both zeros, signed NaNs, infinities, subnormals, finite values and NULLs. Agreement improves from 0/256 to 240/256. The remaining 16 observations expose pre-existing boundaries:
+
+- Eight ANSI FLOAT/integer comparisons still round the integer to FLOAT where Spark compares at wider precision. For example, integer `16777217` and FLOAT `16777216` incorrectly compare equal. The zero rows are repaired; the precision rows are unchanged.
+- Four JOIN USING and four GROUP BY observations still distinguish positive and negative zero. Those key-building paths do not use the comparison-expression helpers, and their results are unchanged.
+
+The existing normalizer unit test now checks retained and widened FLOAT output, DOUBLE output, scalars, arrays, slices, empty arrays, nulls and canonical bit patterns. All 25 Sail planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 rows, and 116 Delta comparisons pass. Seven benchmark queries extend the harness from 98 to 112 captures. Every capture validates 1,048,576 output rows against the same Rust expectations before and after. Non-plan fields are identical; 16 physical plans change. The new performance inputs are positive and finite so both implementations produce the same benchmark results; the SQL corpus and unit test cover edge values.
+
+The correctness fix has measured local execution costs:
+
+| Query | Before (ms) | After (ms) | Change |
+| --- | ---: | ---: | ---: |
+| FLOAT comparison | 2.831 | 2.980 | +5.24% |
+| DOUBLE comparison | 3.050 | 3.299 | +8.17% |
+| FLOAT/DOUBLE comparison | 3.475 | 4.115 | +18.42% |
+| FLOAT IN, three literals | 3.438 | 4.526 | +31.65% |
+| DOUBLE IN, three literals | 3.691 | 4.683 | +26.88% |
+| FLOAT IN, dynamic operands | 3.039 | 3.336 | +9.76% |
+| FLOAT/DOUBLE projected IN | 9.038 | 10.113 | +11.89% |
+| Explicit DOUBLE cast of Decimal, IN | 4.212 | 5.793 | +37.52% |
+
+Same-width normalization still maps the array into an intermediate buffer. The short-IN regressions also have an optimizer cause: DataFusion expands a multi-item short IN only when its left expression is a bare column. The normalizer wraps that column, so these queries switch from OR comparisons to `IN (SET)`. Wrapping `CAST(Decimal AS DOUBLE)` also hides the cast from the previously verified Decimal-IN inverse rewrite. These are concrete optimization targets; the timing increase cannot all be attributed to the normalization kernel.
+
+Planning for the eight affected targets adds about 0.026 to 0.125 ms. The eight controls retain identical physical plans, with planning-instruction changes below 0.10% and execution-instruction changes below 0.03%. Elapsed time is less stable: the unchanged projected-IN control measures +16.35% in the main series and +3.67% in a separate balanced repeat, with almost identical instruction counts and slow outliers in both variants. These measurements do not establish a universal absence of performance regression.
+
+[float-zero-comparisons-results.json](float-zero-comparisons-results.json) records the source and binary hashes, Spark/baseline/candidate captures, independent reference checks, remaining differences, changed existing observations, benchmark plans, raw samples and counters, test output, and reproduction scripts. Before/after timing uses the same 112-query harness, dependency features and release profiles. Only the shared comparison source changes at runtime. Measurements use CPU 2, four fresh processes per query/variant/phase in balanced order, two warmups and nine samples, separate planning/execution counters, and no retained output. All builds and correctness runs finish before timing.
+
+To reproduce, start with the optional runtime from the Mark Join section above in a scratch checkout. Set `source_repo` to the repository containing this patch and corpus, and `run_dir` to a new capture directory with the same dependency override configuration. Apply the benchmark part before building either variant, then apply the comparison change. From the scratch checkout root:
+
+```bash
+patch_file="$source_repo/experiments/spark-sql/sail-float-comparison-zero.patch"
+git apply --include=experiments/spark-sql/examples/decimal_bench.rs "$patch_file"
+for variant in before after; do
+  if [ "$variant" = after ]; then
+    git apply --exclude=experiments/spark-sql/examples/decimal_bench.rs "$patch_file"
+  fi
+  cargo build --release --locked --config "$run_dir/override.toml" \
+    --manifest-path experiments/spark-sql/Cargo.toml \
+    --example decimal_bench --example decimal_probe \
+    --bin delta-reader-sail-extraction-probe -j 3
+  cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/$variant-bench"
+  cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/$variant-probe"
+  "$run_dir/$variant-bench" "$run_dir/$variant-subquery-check.json" subquery-check
+  "$run_dir/$variant-probe" \
+    "$source_repo/experiments/spark-sql/float-zero-comparisons.jsonl" \
+    "$run_dir/$variant.json" --physical-plans
+done
+"$SPARK_TEST_PYTHON" "$source_repo/experiments/spark-sql/decimal_division.py" \
+  spark "$run_dir/spark.json" \
+  --cases "$source_repo/experiments/spark-sql/float-zero-comparisons.jsonl"
+python3 "$source_repo/experiments/spark-sql/decimal_division.py" \
+  compare "$run_dir/spark.json" "$run_dir/after.json" \
+  --cases "$source_repo/experiments/spark-sql/float-zero-comparisons.jsonl" \
+  --report "$run_dir/new-check.json"
+```
+
+The comparison reports the 16 known boundary differences. Use the artifact's scripts for the complete replay, assertions, tests and phase-separated timing, adapting local paths. The patch applies and reverses exactly. The final formatted source was rebuilt and its SQL and benchmark captures rechecked. All 37 shared source/lockfile paths and three executable slots were restored with fresh source timestamps and executable mode 0755. The patch remains optional. The next performance slice should preserve native short-IN optimizations and remove provably redundant normalization; JOIN USING/GROUP BY and ANSI precision remain separate compatibility work.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

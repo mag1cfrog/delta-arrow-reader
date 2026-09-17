@@ -1,0 +1,268 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -214,7 +214,7 @@
+     schema: &DFSchemaRef,
+ ) -> PlanResult<expr::Expr> {
+     let mut input = expr::InList::new(Box::new(value), list, negated);
+-    let (mut decimal, mut floating) = (false, false);
++    let (mut decimal, mut floating, mut double) = (false, false, false);
+     for value in std::iter::once(input.expr.as_ref()).chain(&input.list) {
+         let data_type = value.get_type(schema)?;
+         // Leave string promotion and non-numeric coercion to the existing path.
+@@ -223,15 +223,21 @@
+         }
+         decimal |= data_type.is_decimal();
+         floating |= data_type.is_floating();
+-    }
+-    if decimal && floating {
+-        // Spark chooses one DOUBLE type for the entire numeric list. Keep
+-        // native IN evaluation and normalize only original floating operands.
++        double |= data_type == DataType::Float64;
++    }
++    if floating {
++        // Decimal/float lists use DOUBLE. Otherwise preserve operand types
++        // so normalization does not change the existing numeric coercion.
+         let convert = |value: expr::Expr| -> PlanResult<expr::Expr> {
+             Ok(if value.get_type(schema)?.is_floating() {
+-                ScalarUDF::from(SparkComparisonFloat).call(vec![value])
++                ScalarUDF::from(SparkComparisonFloat {
++                    widen: decimal || double,
++                })
++                .call(vec![value])
++            } else if decimal {
++                cast(value, DataType::Float64)
+             } else {
+-                cast(value, DataType::Float64)
++                value
+             })
+         };
+         input.expr = Box::new(convert(*input.expr)?);
+@@ -263,14 +269,24 @@
+     ) {
+         let left_type = left.get_type(schema)?;
+         let right_type = right.get_type(schema)?;
+-        // Spark compares Decimal/float pairs as DOUBLE. Arrow's total ordering
+-        // also needs canonical NaNs and positive zero on the floating side.
+-        if left_type.is_floating() && right_type.is_decimal() {
+-            left = ScalarUDF::from(SparkComparisonFloat).call(vec![left]);
+-            right = cast(right, DataType::Float64);
+-        } else if left_type.is_decimal() && right_type.is_floating() {
+-            left = cast(left, DataType::Float64);
+-            right = ScalarUDF::from(SparkComparisonFloat).call(vec![right]);
++        if (left_type.is_numeric() || left_type == DataType::Null)
++            && (right_type.is_numeric() || right_type == DataType::Null)
++        {
++            let decimal_float = (left_type.is_decimal() && right_type.is_floating())
++                || (left_type.is_floating() && right_type.is_decimal());
++            let widen =
++                decimal_float || left_type == DataType::Float64 || right_type == DataType::Float64;
++            let convert = |value, data_type: DataType| {
++                if data_type.is_floating() {
++                    ScalarUDF::from(SparkComparisonFloat { widen }).call(vec![value])
++                } else if decimal_float {
++                    cast(value, DataType::Float64)
++                } else {
++                    value
++                }
++            };
++            left = convert(left, left_type);
++            right = convert(right, right_type);
+         }
+     }
+     Ok(expr::Expr::BinaryExpr(BinaryExpr::new(
+@@ -281,7 +297,9 @@
+ }
+ 
+ #[derive(Debug, PartialEq, Eq, Hash)]
+-struct SparkComparisonFloat;
++struct SparkComparisonFloat {
++    widen: bool,
++}
+ 
+ impl ScalarUDFImpl for SparkComparisonFloat {
+     fn name(&self) -> &str {
+@@ -300,8 +318,12 @@
+         &SIGNATURE
+     }
+ 
+-    fn return_type(&self, _: &[DataType]) -> datafusion_common::Result<DataType> {
+-        Ok(DataType::Float64)
++    fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
++        Ok(if self.widen {
++            DataType::Float64
++        } else {
++            args[0].clone()
++        })
+     }
+ 
+     fn return_field_from_args(
+@@ -310,7 +332,7 @@
+     ) -> datafusion_common::Result<arrow::datatypes::FieldRef> {
+         Ok(Arc::new(arrow::datatypes::Field::new(
+             self.name(),
+-            DataType::Float64,
++            self.return_type(&[args.arg_fields[0].data_type().clone()])?,
+             args.arg_fields[0].is_nullable(),
+         )))
+     }
+@@ -333,6 +355,27 @@
+             }
+         };
+         let [value] = datafusion_common::utils::take_function_args(self.name(), input.args)?;
++        if !self.widen && value.data_type() == DataType::Float32 {
++            let normalize = |v: f32| {
++                if v == 0.0 {
++                    0.0
++                } else if v.is_nan() {
++                    f32::NAN
++                } else {
++                    v
++                }
++            };
++            return Ok(match value {
++                ColumnarValue::Scalar(ScalarValue::Float32(v)) => {
++                    ColumnarValue::Scalar(ScalarValue::Float32(v.map(normalize)))
++                }
++                ColumnarValue::Array(a) => ColumnarValue::Array(Arc::new(
++                    a.as_primitive::<Float32Type>()
++                        .unary::<_, Float32Type>(normalize),
++                )),
++                _ => unreachable!("FLOAT operand checked above"),
++            });
++        }
+         Ok(match value {
+             ColumnarValue::Scalar(ScalarValue::Float32(v)) => {
+                 ColumnarValue::Scalar(ScalarValue::Float64(v.map(|v| normalize(f64::from(v)))))
+@@ -367,12 +410,17 @@
+     use arrow::datatypes::{Field, Float64Type};
+     use datafusion_common::config::ConfigOptions;
+     use datafusion_expr::{ColumnarValue, ScalarFunctionArgs};
+-    let run = |value: ColumnarValue, rows| {
+-        SparkComparisonFloat.invoke_with_args(ScalarFunctionArgs {
++    let run = |value: ColumnarValue, rows, widen| {
++        let return_type = if widen {
++            DataType::Float64
++        } else {
++            value.data_type()
++        };
++        SparkComparisonFloat { widen }.invoke_with_args(ScalarFunctionArgs {
+             arg_fields: vec![Arc::new(Field::new("x", value.data_type(), true))],
+             args: vec![value],
+             number_rows: rows,
+-            return_field: Arc::new(Field::new("x", DataType::Float64, true)),
++            return_field: Arc::new(Field::new("x", return_type, true)),
+             config_options: Arc::new(ConfigOptions::default()),
+         })
+     };
+@@ -396,32 +444,55 @@
+         Arc::new(Float64Array::from_iter(values)),
+     ];
+     for input in arrays {
+-        for (offset, len) in [(0, values.len()), (1, 10), (0, 0)] {
+-            let input = input.slice(offset, len);
+-            let output = run(ColumnarValue::Array(input.clone()), len)?.into_array(len)?;
+-            let actual = output.as_primitive::<Float64Type>();
+-            let widened = arrow::compute::cast(&input, &DataType::Float64)?;
+-            for (i, value) in widened.as_primitive::<Float64Type>().iter().enumerate() {
+-                let expected = value.map(|v| {
+-                    if v.is_nan() {
+-                        f64::NAN.to_bits()
+-                    } else if v == 0.0 {
+-                        0
++        for widen in [false, true] {
++            for (offset, len) in [(0, values.len()), (1, 10), (0, 0)] {
++                let input = input.slice(offset, len);
++                let output =
++                    run(ColumnarValue::Array(input.clone()), len, widen)?.into_array(len)?;
++                assert_eq!(
++                    output.data_type(),
++                    if widen {
++                        &DataType::Float64
+                     } else {
+-                        v.to_bits()
++                        input.data_type()
+                     }
+-                });
+-                assert_eq!(actual.is_null(i), expected.is_none());
+-                if let Some(bits) = expected {
+-                    assert_eq!(actual.value(i).to_bits(), bits);
++                );
++                let output = arrow::compute::cast(&output, &DataType::Float64)?;
++                let actual = output.as_primitive::<Float64Type>();
++                let widened = arrow::compute::cast(&input, &DataType::Float64)?;
++                for (i, value) in widened.as_primitive::<Float64Type>().iter().enumerate() {
++                    let expected = value.map(|v| {
++                        if v.is_nan() {
++                            f64::NAN.to_bits()
++                        } else if v == 0.0 {
++                            0
++                        } else {
++                            v.to_bits()
++                        }
++                    });
++                    assert_eq!(actual.is_null(i), expected.is_none());
++                    if let Some(bits) = expected {
++                        assert_eq!(actual.value(i).to_bits(), bits);
++                    }
++                    let scalar = ScalarValue::try_from_array(&input, i)?;
++                    let ColumnarValue::Scalar(result) =
++                        run(ColumnarValue::Scalar(scalar), 1, widen)?
++                    else {
++                        panic!("expected scalar")
++                    };
++                    assert_eq!(
++                        result.data_type(),
++                        if widen {
++                            DataType::Float64
++                        } else {
++                            input.data_type().clone()
++                        }
++                    );
++                    let ScalarValue::Float64(result) = result.cast_to(&DataType::Float64)? else {
++                        panic!("expected floating scalar")
++                    };
++                    assert_eq!(result.map(f64::to_bits), expected);
+                 }
+-                let scalar = ScalarValue::try_from_array(&input, i)?;
+-                let ColumnarValue::Scalar(ScalarValue::Float64(result)) =
+-                    run(ColumnarValue::Scalar(scalar), 1)?
+-                else {
+-                    panic!("expected scalar")
+-                };
+-                assert_eq!(result.map(f64::to_bits), expected);
+             }
+         }
+     }
+diff --git a/experiments/spark-sql/examples/decimal_bench.rs b/experiments/spark-sql/examples/decimal_bench.rs
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -243,6 +243,14 @@
+         | "div_null_cast_numeric" => None,
+         "div_constant" => Some(3_000_000),
+         "compare_f32_column" | "compare_f64_column" => Some(1_000_000),
++        "float_compare_f32" | "float_compare_f64" => Some(i128::from(id % 97 + 2 >= 38) * 1_000_000),
++        "float_compare_mixed" => {
++            let value = (id % 97 + 2) as f64 / 100.0 + 0.125;
++            Some(i128::from(f64::from(value as f32) > value) * 1_000_000)
++        }
++        "float_in_f32" | "float_in_f64" => Some(i128::from(matches!(id % 97, 23 | 48 | 73)) * 1_000_000),
++        "float_in_dynamic" => Some(1_000_000),
++        "float_projected_in" => Some(i128::from(key < 256) * 1_000_000),
+         "compare_f64_literal" => Some(i128::from(id % 97 + 2 >= 38) * 1_000_000),
+         "compare_decimal_literal" => Some(i128::from(id % 97 + 2 <= 50) * 1_000_000),
+         "in_f32_short"
+@@ -360,6 +368,13 @@
+         ),
+         ("round_decimal", "ROUND(o.a, 2)".into(), "".into(), false),
+         ("div_integer", "o.id DIV 4".into(), "".into(), false),
++        ("float_compare_f32", "CAST(o.f32 > CAST(0.5 AS FLOAT) AS INT)".into(), "".into(), false),
++        ("float_compare_f64", "CAST(o.f64 > CAST(0.5 AS DOUBLE) AS INT)".into(), "".into(), false),
++        ("float_compare_mixed", "CAST(o.f32 > o.f64 AS INT)".into(), "".into(), false),
++        ("float_in_f32", "CAST(o.f32 IN (CAST(0.375 AS FLOAT),CAST(0.625 AS FLOAT),CAST(0.875 AS FLOAT)) AS INT)".into(), "".into(), false),
++        ("float_in_f64", "CAST(o.f64 IN (CAST(0.375 AS DOUBLE),CAST(0.625 AS DOUBLE),CAST(0.875 AS DOUBLE)) AS INT)".into(), "".into(), false),
++        ("float_in_dynamic", "CAST(o.f32 IN (CAST(o.f64 AS FLOAT),CAST(0.5 AS FLOAT)) AS INT)".into(), "".into(), false),
++        ("float_projected_in", "CAST(CAST(o.k AS FLOAT) IN (SELECT CAST(i.k AS DOUBLE) FROM bench_inner i) AS INT)".into(), "".into(), false),
+         ("compare_f32_column", "CAST(o.f32 > o.a AS INT)".into(), "".into(), false),
+         ("compare_f64_column", "CAST(o.f64 > o.a AS INT)".into(), "".into(), false),
+         ("compare_f64_literal", "CAST(o.f64 >= 0.5 AS INT)".into(), "".into(), false),
