@@ -2534,6 +2534,80 @@ DECIMAL_BENCH_SORT_THRESHOLD=67108864 taskset -c 2 "$bench" concat.json subqueri
 
 The 64 MiB setting remains an experiment, not a proposed runtime default. Further COUNT optimization should evaluate the sort strategy and its memory budget together. These findings do not justify adding a cross-query buffer cache to the Decimal compatibility code.
 
+## Mixed numeric IN and NOT IN lists
+
+Starting from `65b0e70`, [sail-float-decimal-in.patch](sail-float-decimal-in.patch) extends the earlier binary-comparison fix to numeric IN lists. Spark's [IN coercion rule](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/TypeCoercionHelper.scala) selects one common type for the value and every list element. When Decimal and floating types occur together, that type is DOUBLE in both ANSI modes. The previous path instead cast floating operands to Decimal, which could fail on NaN or change matches at rounding boundaries.
+
+The SQL predicate resolver and built-in `in` function now call one shared helper. It widens every numeric/NULL operand to DOUBLE and reuses `SparkComparisonFloat` for original floating operands, preserving Spark's NaN and signed-zero equality. DataFusion still executes the native IN expression and uses a static set for constant lists. Lists containing strings or other non-numeric types, pure floating lists, and IN subqueries retain their existing behavior. The patch adds no dependency or custom execution node.
+
+The [81-query corpus](float-decimal-in.jsonl) runs both ANSI modes against Spark 4.2.0. It covers FLOAT and DOUBLE on either side, Decimal precision boundaries, the common type of the entire list, NULLs, signed NaNs and zeros, infinities, subnormals, 131-element lists, column-valued lists, scalar subqueries inside lists, filters, CASE, aggregates and different batch sizes. The source is a local test design, not a complete Spark CI suite.
+
+| Check | Before | After |
+| --- | ---: | ---: |
+| Existing numeric observations | 5,174 / 5,370 | 5,182 / 5,370 |
+| New IN observations | 20 / 162 | 162 / 162 |
+| Combined observations | 5,194 / 5,532 | 5,344 / 5,532 |
+
+All eight existing FLOAT/DOUBLE IN and NOT IN failures are repaired. The existing corpus retains 188 differences. Outside those eight observations, rows, types, statuses and plans are unchanged. Three parallel CAST queries selected a different first failing value; targeted reruns preserve the same plans and failure status, and one query exhibits both messages in both versions. The comparison does not establish exact Spark error-class or schema-nullability equivalence.
+
+The Rust planner suite passes 25 tests, including a direct test of the built-in function and shared helper with static/dynamic lists, both floating widths, signed NaN payloads, signed zero, NULLs and negation. All four Delta lifecycle tests pass. The integer reference check agrees on 4,064 observations and 187,410 rows, and the Delta corpus preserves 116 captures and passes 18 adapter checks. Both benchmark binaries validate all 1,048,576 rows of each of their 84 captures.
+
+### Performance and the remaining Decimal-column cost
+
+Both release binaries use the same expanded benchmark, lockfile, dependency features, build profiles, Arrow libraries and optimizer patches. The runtime difference is the three Sail planner source files. After all builds and correctness checks, each version runs four fresh processes per query and phase on CPU 2, in balanced order, with two warmups and nine samples. The table reports medians of process medians; instruction changes use separately gated execution counters. Inputs have 1,048,576 rows in batches of 8,192, one partition and ANSI enabled. Both ANSI modes are checked for correctness.
+
+| Query | Before (ms) | After (ms) | Time change | Instructions |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT column, three Decimal literals | 12.579 | 4.854 | -61.4% | -58.0% |
+| DOUBLE column, three Decimal literals | 12.540 | 4.627 | -63.1% | -60.2% |
+| Decimal column, three DOUBLE literals | 4.199 | 5.504 | +31.1% | +30.6% |
+| DOUBLE column, 128 Decimal literals | 12.640 | 4.756 | -62.4% | -60.0% |
+| DOUBLE column with 25% NULLs | 13.552 | 6.878 | -49.2% | -50.6% |
+| NOT IN with NULL in the list | 11.402 | 3.808 | -66.6% | -62.3% |
+| Row-dependent numeric list | 28.833 | 15.728 | -45.5% | -46.6% |
+| Explicit Decimal-to-DOUBLE control | 5.475 | 5.471 | -0.1% | 0.0% |
+| Integer IN control | 5.304 | 5.295 | -0.2% | 0.0% |
+| Plain projection control | 0.776 | 0.773 | -0.3% | 0.0% |
+| Decimal division control | 15.815 | 15.786 | -0.2% | 0.0% |
+
+The Decimal-column case retains a measured local regression of about 31%, or 1.3 ms per million rows. Previously, DataFusion removed Decimal widening casts and reduced the three-element list to direct Decimal comparisons. The corrected plan converts the column to DOUBLE and uses a static set. The explicit DOUBLE control has the same physical plan and nearly the same runtime as the corrected implicit conversion.
+
+Removing that cast generally would restore incorrect results. In `double_wide_decimal_in`, Spark matches Decimal `9007199254740993` with DOUBLE `9007199254740992`, and Decimal `0.100000000000000001` with DOUBLE `0.1`; the old Decimal comparison does not. A follow-up optimization should prove when constants permit an equivalent comparison in the original Decimal type. This slice does not claim that the cost is unavoidable or already solved.
+
+Planning costs also change locally: the row-dependent list rises from 0.829 to 0.908 ms (+9.6%, +13.4% instructions), while the nullable DOUBLE/Decimal path adds about 0.043 ms. The integer IN control's planning instructions rise 0.3%; the other execution controls change less than 0.4% in time and 0.1% in instructions. These measurements do not establish a universal absence of regressions. The first dynamic benchmark reduced to a constant projection; its samples are retained in the artifact but excluded from the final dynamic-list claim. The final case uses a row-dependent CASE and retains native IN evaluation in both plans.
+
+### Reproducing this slice
+
+The [results artifact](float-decimal-in-results.json) contains reference and candidate captures, remaining differences, benchmark plans, raw timing samples and counters, build/source hashes, commands and restoration checks. In an experimental checkout, start from the accepted optional runtime through the preceding sections, including `sail-float-decimal-compare.patch` and the accepted Arrow and CrossJoin patches. Set `run_dir` to the absolute path of the existing experiment directory containing `override.toml`, and use the Spark environment described below. Keep the same dependency overrides for both builds. Apply only the benchmark part of this patch before building the baseline, then apply the planner part for the candidate:
+
+```bash
+export CARGO_TARGET_DIR="$run_dir/target"
+git apply --include=experiments/spark-sql/examples/decimal_bench.rs \
+  experiments/spark-sql/sail-float-decimal-in.patch
+for variant in before after; do
+  if [ "$variant" = after ]; then
+    git apply --exclude=experiments/spark-sql/examples/decimal_bench.rs \
+      experiments/spark-sql/sail-float-decimal-in.patch
+  fi
+  cargo build --release --locked --config "$run_dir/override.toml" \
+    --manifest-path experiments/spark-sql/Cargo.toml \
+    --example decimal_bench --example decimal_probe \
+    --bin delta-reader-sail-extraction-probe -j 3
+  cp "$CARGO_TARGET_DIR/release/examples/decimal_bench" "$run_dir/$variant-bench"
+  cp "$CARGO_TARGET_DIR/release/examples/decimal_probe" "$run_dir/$variant-probe"
+done
+"$SPARK_TEST_PYTHON" experiments/spark-sql/decimal_division.py spark "$run_dir/spark.json" \
+  --cases experiments/spark-sql/float-decimal-in.jsonl
+"$run_dir/after-probe" experiments/spark-sql/float-decimal-in.jsonl \
+  "$run_dir/after.json" --physical-plans
+python3 experiments/spark-sql/decimal_division.py compare \
+  "$run_dir/spark.json" "$run_dir/after.json" --report "$run_dir/check.json" \
+  --cases experiments/spark-sql/float-decimal-in.jsonl
+git apply --reverse experiments/spark-sql/sail-float-decimal-in.patch
+```
+
+The patch applies and reverses exactly. All 30 shared source paths and three cached executables were restored, with fresh timestamps on restored sources and executable mode 0755. The default project build does not enable this patch.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

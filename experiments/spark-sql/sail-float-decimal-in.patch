@@ -1,0 +1,221 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -205,6 +205,43 @@
+         let name = name.to_string();
+         Arc::new(move |_| Err(PlanError::todo(format!("function: {name}"))))
+     }
++}
++
++pub(crate) fn spark_in_list(
++    value: expr::Expr,
++    list: Vec<expr::Expr>,
++    negated: bool,
++    schema: &DFSchemaRef,
++) -> PlanResult<expr::Expr> {
++    let mut input = expr::InList::new(Box::new(value), list, negated);
++    let (mut decimal, mut floating) = (false, false);
++    for value in std::iter::once(input.expr.as_ref()).chain(&input.list) {
++        let data_type = value.get_type(schema)?;
++        // Leave string promotion and non-numeric coercion to the existing path.
++        if !data_type.is_numeric() && data_type != DataType::Null {
++            return Ok(expr::Expr::InList(input));
++        }
++        decimal |= data_type.is_decimal();
++        floating |= data_type.is_floating();
++    }
++    if decimal && floating {
++        // Spark chooses one DOUBLE type for the entire numeric list. Keep
++        // native IN evaluation and normalize only original floating operands.
++        let convert = |value: expr::Expr| -> PlanResult<expr::Expr> {
++            Ok(if value.get_type(schema)?.is_floating() {
++                ScalarUDF::from(SparkComparisonFloat).call(vec![value])
++            } else {
++                cast(value, DataType::Float64)
++            })
++        };
++        input.expr = Box::new(convert(*input.expr)?);
++        input.list = input
++            .list
++            .into_iter()
++            .map(convert)
++            .collect::<PlanResult<_>>()?;
++    }
++    Ok(expr::Expr::InList(input))
+ }
+ 
+ pub(crate) fn spark_binary_expr(
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -244,6 +244,15 @@
+         "compare_f32_column" | "compare_f64_column" => Some(1_000_000),
+         "compare_f64_literal" => Some(i128::from(id % 97 + 2 >= 38) * 1_000_000),
+         "compare_decimal_literal" => Some(i128::from(id % 97 + 2 <= 50) * 1_000_000),
++        "in_f32_short" | "in_f64_short" | "in_decimal_short" | "in_decimal_explicit_double" | "in_integer" => {
++            Some(i128::from(matches!(id % 97, 23 | 48 | 73)) * 1_000_000)
++        }
++        "in_f64_long" => Some(i128::from(id % 97 == 23) * 1_000_000),
++        "in_f64_nulls" => (id % 4 != 0).then_some(
++            i128::from(matches!(id % 97, 23 | 48 | 73)) * 1_000_000,
++        ),
++        "in_f64_not_null" => matches!(id % 97, 23 | 48 | 73).then_some(0),
++        "in_f64_dynamic" => Some(i128::from(id % 2 == 0 || id % 97 == 23) * 1_000_000),
+         _ => unreachable!("unknown benchmark case"),
+     }
+ }
+@@ -340,6 +349,15 @@
+         ("compare_f64_column", "CAST(o.f64 > o.a AS INT)".into(), "".into(), false),
+         ("compare_f64_literal", "CAST(o.f64 >= 0.5 AS INT)".into(), "".into(), false),
+         ("compare_decimal_literal", "CAST(o.a < CAST(0.505 AS DOUBLE) AS INT)".into(), "".into(), false),
++        ("in_f32_short", "CAST(o.f32 IN (0.375,0.625,0.875) AS INT)".into(), "".into(), false),
++        ("in_f64_short", "CAST(o.f64 IN (0.375,0.625,0.875) AS INT)".into(), "".into(), false),
++        ("in_decimal_short", "CAST(o.a IN (CAST(0.25 AS DOUBLE),CAST(0.5 AS DOUBLE),CAST(0.75 AS DOUBLE)) AS INT)".into(), "".into(), false),
++        ("in_decimal_explicit_double", "CAST(CAST(o.a AS DOUBLE) IN (CAST(0.25 AS DOUBLE),CAST(0.5 AS DOUBLE),CAST(0.75 AS DOUBLE)) AS INT)".into(), "".into(), false),
++        ("in_integer", "CAST(o.id % 97 IN (23,48,73) AS INT)".into(), "".into(), false),
++        ("in_f64_long", format!("CAST(o.f64 IN ({}) AS INT)", (0..128).map(|i| format!("{i}.375")).collect::<Vec<_>>().join(",")), "".into(), false),
++        ("in_f64_nulls", "CAST((CASE WHEN o.id % 4 != 0 THEN o.f64 END) IN (0.375,0.625,0.875) AS INT)".into(), "".into(), false),
++        ("in_f64_not_null", "CAST(o.f64 NOT IN (0.375,0.625,0.875,NULL) AS INT)".into(), "".into(), false),
++        ("in_f64_dynamic", "CAST(o.f64 IN (o.a,CASE WHEN o.id % 2 = 0 THEN o.f64 ELSE CAST(0.375 AS DOUBLE) END) AS INT)".into(), "".into(), false),
+         ("div_constant", "CAST(7 AS INT) DIV CAST(2 AS INT)".into(), "".into(), false),
+         (
+             "div_null_cast_values",
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/predicate.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/predicate.rs
+@@ -4,7 +4,7 @@
+ use sail_common::spec;
+ 
+ use crate::error::PlanResult;
+-use crate::function::common::spark_binary_expr;
++use crate::function::common::{spark_binary_expr, spark_in_list};
+ use crate::resolver::PlanResolver;
+ use crate::resolver::expression::NamedExpr;
+ use crate::resolver::state::PlanResolverState;
+@@ -20,11 +20,11 @@
+         schema: &DFSchemaRef,
+         state: &mut PlanResolverState,
+     ) -> PlanResult<NamedExpr> {
+-        let expr = Box::new(self.resolve_expression(expr, schema, state).await?);
++        let expr = self.resolve_expression(expr, schema, state).await?;
+         let list = self.resolve_expressions(list, schema, state).await?;
+         Ok(NamedExpr::new(
+             vec!["in_list".to_string()],
+-            expr::Expr::InList(expr::InList::new(expr, list, negated)),
++            spark_in_list(expr, list, negated, schema)?,
+         ))
+     }
+ 
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/predicate.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/predicate.rs
+@@ -1,3 +1,4 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::functions::expr_fn;
+@@ -7,7 +8,7 @@
+ use sail_function::scalar::predicate::rewrite_like_pattern::RewriteLikePatternFunc;
+ 
+ use crate::error::{PlanError, PlanResult};
+-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
++use crate::function::common::{ScalarFunction, ScalarFunctionInput, spark_in_list};
+ 
+ fn extract_escape_char(escape_expr: expr::Expr) -> PlanResult<Option<char>> {
+     match escape_expr {
+@@ -85,13 +86,93 @@
+ }
+ 
+ fn is_in_list(input: ScalarFunctionInput) -> PlanResult<expr::Expr> {
+-    let ScalarFunctionInput { arguments, .. } = input;
++    let ScalarFunctionInput {
++        arguments,
++        function_context,
++    } = input;
+     let (value, list) = arguments.at_least_one()?;
+-    Ok(expr::Expr::InList(expr::InList {
+-        expr: Box::new(value),
+-        list,
+-        negated: false,
+-    }))
++    spark_in_list(value, list, false, function_context.schema)
++}
++
++#[test]
++fn numeric_in_preserves_nan_zero_and_null_semantics() -> PlanResult<()> {
++    use crate::config::PlanConfig;
++    use crate::function::common::FunctionContextInput;
++    use arrow::array::{ArrayRef, AsArray, Float64Array};
++    use arrow::datatypes::{DataType, Field, Schema};
++    use arrow::record_batch::RecordBatch;
++    use datafusion::physical_expr::create_physical_expr;
++    use datafusion::prelude::SessionContext;
++    use datafusion_common::DFSchema;
++    use datafusion_expr::{col, execution_props::ExecutionProps};
++
++    let values = Float64Array::from(vec![
++        Some(-0.0),
++        Some(0.0),
++        Some(f64::from_bits(0xfff0_0000_0000_1234)),
++        Some(f64::NAN),
++        Some(1.25),
++        None,
++    ]);
++    let other = Float64Array::from(vec![
++        Some(1.0),
++        Some(1.0),
++        Some(f64::NAN),
++        Some(-f64::NAN),
++        None,
++        Some(1.0),
++    ]);
++    let ctx = SessionContext::new();
++    let config = Arc::new(PlanConfig::default());
++    for data_type in [DataType::Float32, DataType::Float64] {
++        let schema = Arc::new(Schema::new(vec![
++            Field::new("v", data_type.clone(), true),
++            Field::new("other", data_type.clone(), true),
++        ]));
++        let batch = RecordBatch::try_new(
++            schema.clone(),
++            vec![
++                arrow::compute::cast(&values, &data_type)?,
++                arrow::compute::cast(&other, &data_type)?,
++            ],
++        )?;
++        let schema = Arc::new(DFSchema::try_from(schema)?);
++        for dynamic in [false, true] {
++            let list = if dynamic {
++                vec![lit(ScalarValue::Decimal128(Some(0), 10, 2)), col("other")]
++            } else {
++                vec![
++                    lit(ScalarValue::Decimal128(Some(0), 10, 2)),
++                    lit(f64::NAN),
++                    lit(ScalarValue::Null),
++                ]
++            };
++            for negated in [false, true] {
++                let expression = if negated {
++                    spark_in_list(col("v"), list.clone(), true, &schema)?
++                } else {
++                    is_in_list(ScalarFunctionInput {
++                        arguments: std::iter::once(col("v")).chain(list.clone()).collect(),
++                        function_context: FunctionContextInput {
++                            argument_display_names: &[],
++                            plan_config: &config,
++                            session_context: &ctx,
++                            schema: &schema,
++                        },
++                    })?
++                };
++                let physical = create_physical_expr(&expression, &schema, &ExecutionProps::new())?;
++                let result: ArrayRef = physical.evaluate(&batch)?.into_array(batch.num_rows())?;
++                let expected = [Some(true), Some(true), Some(true), Some(true), None, None]
++                    .map(|v| v.map(|v| v != negated));
++                assert_eq!(result.as_boolean().iter().collect::<Vec<_>>(), expected);
++            }
++        }
++        let list = vec![lit(ScalarValue::Decimal128(Some(0), 10, 2)), lit("0")];
++        let original = col("v").in_list(list.clone(), false);
++        assert_eq!(spark_in_list(col("v"), list, false, &schema)?, original);
++    }
++    Ok(())
+ }
+ 
+ pub(super) fn list_built_in_predicate_functions() -> Vec<(&'static str, ScalarFunction)> {
