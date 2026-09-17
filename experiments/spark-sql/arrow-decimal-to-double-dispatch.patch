@@ -1,0 +1,84 @@
+diff --git a/src/cast/decimal.rs b/src/cast/decimal.rs
+--- a/src/cast/decimal.rs
++++ b/src/cast/decimal.rs
+@@ -916,32 +916,11 @@
+     // Powers of ten through 10^22 are exactly representable in Float64.
+     // Dividing or multiplying an exact coefficient then rounds only once.
+     let array = if scale.unsigned_abs() <= 22 {
+-        let factor = 10_f64.powi(scale.unsigned_abs() as i32);
+-        let divisor = if (1..=21).contains(&scale) {
+-            10_u128.pow(scale as u32)
++        if scale > 0 {
++            cast_decimal128_small_scale::<false>(array, scale)
+         } else {
+-            0
+-        };
+-        let divisor_bits = 128 - divisor.leading_zeros();
+-        array.unary::<_, Float64Type>(move |v| {
+-            let value = if (-(1_i128 << 53)..=(1_i128 << 53)).contains(&v) {
+-                (v as i64) as f64
+-            } else if v.unsigned_abs().leading_zeros() + v.unsigned_abs().trailing_zeros() >= 75 {
+-                // The discarded low bits are zero. Convert the top 53 bits and
+-                // rescale by an exact power of two without rounding.
+-                let shift = 75 - v.unsigned_abs().leading_zeros();
+-                ((v >> shift) as i64) as f64 * f64::from_bits(((1023 + shift) as u64) << 52)
+-            } else if divisor != 0 {
+-                return decimal128_ratio_to_float64(v, divisor, divisor_bits);
+-            } else {
+-                return parse_decimal128_as_float64(v, scale);
+-            };
+-            if scale > 0 {
+-                value / factor
+-            } else {
+-                value * factor
+-            }
+-        })
++            cast_decimal128_small_scale::<true>(array, scale)
++        }
+     } else if (23..=31).contains(&scale) {
+         // 10^scale = 5^scale * 2^scale. The ratio rounds once; multiplying
+         // by 2^-scale stays normal and is exact. 5^31 fits in 72 bits.
+@@ -955,6 +934,43 @@
+         array.unary::<_, Float64Type>(|v| parse_decimal128_as_float64(v, scale))
+     };
+     Ok(Arc::new(array))
++}
++
++// Specialize negative scales once per array. Retain the general positive
++// loop to avoid extra register spills in the measured wide-coefficient path.
++fn cast_decimal128_small_scale<const NEGATIVE: bool>(
++    array: &Decimal128Array,
++    scale: i8,
++) -> Float64Array {
++    let factor = 10_f64.powi(scale.unsigned_abs() as i32);
++    let divisor = if !NEGATIVE && (1..=21).contains(&scale) {
++        10_u128.pow(scale as u32)
++    } else {
++        0
++    };
++    let divisor_bits = 128 - divisor.leading_zeros();
++    array.unary::<_, Float64Type>(move |v| {
++        let value = if (-(1_i128 << 53)..=(1_i128 << 53)).contains(&v) {
++            (v as i64) as f64
++        } else if v.unsigned_abs().leading_zeros() + v.unsigned_abs().trailing_zeros() >= 75 {
++            // The discarded low bits are zero. Convert the top 53 bits and
++            // rescale by an exact power of two without rounding.
++            let shift = 75 - v.unsigned_abs().leading_zeros();
++            ((v >> shift) as i64) as f64 * f64::from_bits(((1023 + shift) as u64) << 52)
++        } else if divisor != 0 {
++            return decimal128_ratio_to_float64(v, divisor, divisor_bits);
++        } else {
++            return parse_decimal128_as_float64(v, scale);
++        };
++        if NEGATIVE {
++            return value * factor;
++        }
++        if scale > 0 {
++            value / factor
++        } else {
++            value * factor
++        }
++    })
+ }
+ 
+ #[inline(never)]

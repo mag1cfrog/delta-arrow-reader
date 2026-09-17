@@ -26,6 +26,7 @@ fn main() {
         "exact_128" => (18, 1_i128 << 100, false),
         "exact_wide_nulls" => (18, 10_000_000_000_000_000, true),
         "negative_exact" => (-18, 10_000_000_000_000_000, false),
+        "negative_exact_nulls" => (-18, 10_000_000_000_000_000, true),
         "wide" => (18, 987_654_321_098_765_432_101, false),
         "precision38" => (18, 987_654_321_098_765_432_101_987_654_321_001_111, false),
         "wide_nulls" => (18, 987_654_321_098_765_432_101, true),
@@ -42,6 +43,7 @@ fn main() {
         "scale38_wide" => (38, 987_654_321_098_765_432_101, false),
         "scale0" => (0, 987_654_321_098_765_432_101, false),
         "negative_scale" => (-4, 100, false),
+        "negative_scale_nulls" => (-4, 100, true),
         "negative_wide" => (-22, 987_654_321_098_765_432_101, false),
         _ => panic!("unknown case"),
     };

@@ -2405,6 +2405,105 @@ The [results artifact](decimal-double-scale-results.json) records build and sour
 
 This reduces parsing cost for the measured scale 23-31 inputs. Scale 22's wide-coefficient fallback, scales 32-38, large negative scales, general quotient conversion and mixed-comparison materialization remain separate work. The 196 coarse Spark differences, diagnostic gaps and older unattributed timing differences remain. These fixed-batch measurements do not establish complete compatibility or zero performance overhead.
 
+## Select negative Decimal128 scaling once per array
+
+Starting from `4826390`, [arrow-decimal-to-double-dispatch.patch](arrow-decimal-to-double-dispatch.patch) selects multiplication once per array for scales -22 through -1. It applies after [arrow-decimal-to-double-scale.patch](arrow-decimal-to-double-scale.patch). The existing conversion loop moves into one helper with a constant boolean parameter. Negative scales use a multiplication specialization; positive scales retain the general loop. Coefficient normalization, integer ratio conversion, parsing fallback and rounding retain their algorithms. There is no new dependency or allocation.
+
+Specializing both directions initially made the precision-38 control 2.70% slower, confirmed across four diagnostic layouts. That generated positive loop saves and restores its output pointer around each ratio call. The final patch limits specialization to negative scales. Its positive loop retains the baseline instructions, registers and relative branches. The first candidate's results remain in the artifact.
+
+The existing Arrow rounding test covers all 167 allowed scales, both i128 extrema, normalization boundaries, random coefficients, NULLs, empty arrays, offsets and both CAST safety options. All 345 Arrow tests pass. The 27 numeric corpora remain at 5,174/5,370, with no repaired or regressed observations, and all 4,450 non-NULL DOUBLE cells in the conversion corpus remain bit-exact against the saved Spark reference. 5,368 parsed captures are identical, including errors and physical plans. 2 observations with multiple invalid rows select different first invalid values with the same checked error class and target. Repeating the changed Int32 cast query 64 times per version produces both error values in both versions, with otherwise identical captures. All 66 benchmark queries retain identical results and plans. The 24 planner tests, four Delta lifecycle tests, 4,064 integer-reference observations over 187,410 exact rows, 116 Delta comparisons and 18 adapter checks pass.
+
+The [kernel benchmark](decimal_to_double_bench.rs) adds 75%-NULL cases for negative scales with small and exact large coefficients. Both binaries use the same 25-case source and call the corrected Arrow API through the `after` argument. Every process checks all 1,048,576 rows against exact standard-library parsing before timing, including signs and nonzero offsets. Four ABBA blocks give eight processes per version/case, with two warmups and nine samples per process, pinned to CPU 2. All 400 processes have zero oracle differences. Compilation and validation finish before timing.
+
+| Kernel input | Before ms | After ms | Change |
+| --- | ---: | ---: | ---: |
+| `small` | 1.091 | 1.092 | +0.09% |
+| `small_nulls` | 1.103 | 1.104 | +0.08% |
+| `exact_wide` | 2.528 | 2.527 | -0.05% |
+| `exact_128` | 2.527 | 2.527 | +0.00% |
+| `exact_wide_nulls` | 1.269 | 1.276 | +0.60% |
+| `negative_exact` | 2.512 | 2.439 | -2.91% |
+| `negative_exact_nulls` | 1.311 | 1.123 | -14.39% |
+| `wide` | 6.232 | 6.231 | -0.01% |
+| `precision38` | 8.561 | 8.682 | +1.41% |
+| `wide_nulls` | 2.180 | 2.178 | -0.12% |
+| `scale22` | 45.413 | 45.004 | -0.90% |
+| `scale23` | 5.093 | 5.086 | -0.12% |
+| `scale27` | 5.072 | 5.061 | -0.21% |
+| `scale28` | 7.589 | 7.580 | -0.12% |
+| `scale31` | 7.603 | 7.578 | -0.33% |
+| `scale31_small` | 7.584 | 7.570 | -0.18% |
+| `scale31_precision38` | 7.640 | 7.627 | -0.16% |
+| `scale31_nulls` | 7.564 | 7.557 | -0.09% |
+| `scale32` | 43.568 | 43.745 | +0.40% |
+| `scale38_small` | 12.985 | 12.900 | -0.65% |
+| `scale38_wide` | 43.415 | 43.728 | +0.72% |
+| `scale0` | 3.014 | 3.031 | +0.57% |
+| `negative_scale` | 0.983 | 0.777 | -20.94% |
+| `negative_scale_nulls` | 0.984 | 0.783 | -20.45% |
+| `negative_wide` | 45.286 | 45.435 | +0.33% |
+
+Small negative-scale coefficients improve by 20.94%, and their 75%-NULL case by 20.45%. Exact large negative-scale coefficients improve by 2.91%, or 14.39% with NULLs. The positive-scale paths through scale 31 stay close to their preceding timings. The precision-38 control is 1.41% slower in this series; the separate layout series measures the unpadded candidate 0.11% faster than the baseline, with candidate layouts spanning 8.523-8.766 ms. Unlike the rejected candidate's repeatable penalty, this residual difference varies between series and layouts. It remains a timing limitation, not a demonstrated speedup or a guarantee of zero regression.
+
+Assembly checks find two scale-sign comparison sites in the old shared loop, none in the negative specialization, and the same two sites in the retained general loop. The diagnostic binaries vary startup NOPs outside timed code until the negative loop has been placed at each of the four 16-byte offsets within a 64-byte block. All use the same candidate Arrow libraries and retain identical normalized loop instructions. An interleaved 96-process series over negative-scale small coefficients and the precision-38 control measures the four candidate layouts at 0.779-0.786 ms. The original baseline and candidate measure 0.971 and 0.781 ms in that series. The Arrow patch contains no diagnostic padding or alignment setting. These checks test the known placement sensitivity on this host; they do not guarantee equal timings after every future link.
+
+The 14 SQL controls use the same host source, queries and separate planning/execution counter intervals as the preceding slice: 448 processes with identical results and plans. Their fixed positive-scale workloads check surrounding paths; they do not establish a Spark SQL benefit from negative scales.
+
+| SQL execution control | Before ms | After ms | Change |
+| --- | ---: | ---: | ---: |
+| `no_division_ansitrue` | 0.769 | 0.771 | +0.19% |
+| `plain_projection_ansitrue` | 15.866 | 15.885 | +0.12% |
+| `negative_literal_ansitrue` | 16.101 | 16.112 | +0.07% |
+| `wide_projection_ansitrue` | 43.475 | 43.900 | +0.98% |
+| `div_integer_ansitrue` | 2.126 | 2.125 | -0.02% |
+| `div_constant_ansitrue` | 0.294 | 0.293 | -0.33% |
+| `div_null_cast_numeric_ansitrue` | 0.870 | 0.869 | -0.06% |
+| `div_null_cast_values_ansitrue` | 0.868 | 0.870 | +0.25% |
+| `compare_f32_column_ansitrue` | 5.002 | 5.031 | +0.59% |
+| `compare_f64_column_ansitrue` | 4.994 | 4.981 | -0.25% |
+| `compare_f64_literal_ansitrue` | 3.302 | 3.313 | +0.34% |
+| `compare_decimal_literal_ansitrue` | 4.176 | 4.181 | +0.14% |
+| `null_divide_left_ansitrue` | 0.202 | 0.203 | +0.52% |
+| `correlated_count_ansitrue` | 75.503 | 78.110 | +3.45% |
+
+Excluding wide projection and COUNT, execution changes range from -0.33% to +0.59%. Planning changes range from -0.48% to +1.26%, with instruction changes between -0.06% and +0.11%. These controls provide no evidence of a broad increase in execution work.
+
+Wide projection is 0.98% slower in the primary series. A separate 32-process ABBA series repeats it and COUNT: wide projection remains 1.03% slower (43.472 to 43.919 ms), while COUNT changes from +3.45% in the primary series to +1.59% (74.000 to 75.180 ms). Their execution instruction counts remain within 0.001% in both series. Wide projection's plan calls the unchanged `fused_decimal_divide` on Decimal128 values and does not execute Decimal-to-DOUBLE conversion. The repeated elapsed-time difference is still unresolved; unchanged source, plans and instruction counts do not prove zero performance impact from relinking. Both series remain in the artifact. This patch has a measured negative-scale kernel benefit, but is not a claim that all SQL timing differences have been removed.
+
+The [results artifact](decimal-double-dispatch-results.json) retains samples, counters, commands, build hashes, assembly/layout checks and restoration checks. It references the preceding artifact for unchanged reference rows and dependencies. Apply the preceding three Arrow patches and this patch in order to the existing Arrow dependency override, retain the accepted CrossJoin patch, rebuild the optional runtime, and link the kernel benchmark against the recorded Arrow artifacts. The baseline omits only this follow-up patch. The patch applies and reverses exactly. All 26 scratch host paths, both Arrow files, the physical optimizer source and three cached executables were restored with fresh source timestamps. The default project build does not enable the patch.
+
+The remaining scale 22, scale 32-38 and large negative-scale parsing costs are separate work. The 196 coarse Spark differences and earlier diagnostic and COUNT timing gaps remain outside this change.
+
+### Follow-up: wide projection and COUNT timing differences
+
+This follow-up keeps the preceding Rust patch and both measured binaries unchanged. Sixteen execution-only CPU profiles put most wide-projection samples in `fused_decimal_wide_value`, its caller, and Arrow's `sub_assign` and `bits` helpers. COUNT spends most of its time sorting and merging. The four wide functions and two leading COUNT functions have identical normalized instructions before and after, including registers and relative branches, at different link addresses. The comparison names direct call targets and omits relocated RIP displacements; it does not assert byte-identical binaries or equal hardware behavior.
+
+A separate 32-process counter series reproduces the wide-projection difference: 43.303 / 43.748 ms, or +1.03%. Instructions change by +0.00055%, cycles by +1.07%, and branch misses by -0.37%. COUNT changes direction in that series, measuring 76.746 / 73.826 ms (-3.80%), with +0.0024% instructions. Neither query executes the patched Decimal-to-DOUBLE conversion.
+
+The layout experiment compiles the frozen benchmark source once against the candidate's recorded libraries, then links the same objects with four deterministic `.text.*` shuffle seeds. An unshuffled diagnostic link is retained too. All five links preserve the six normalized hot functions and all 66 benchmark results and plans. They run alongside the two original binaries in 56 interleaved processes, four per binary/query, using the existing execution counter interval and row checks:
+
+| Binary | Wide projection ms | COUNT ms |
+| --- | ---: | ---: |
+| Original before | 43.364 | 74.749 |
+| Original after | 43.791 | 74.797 |
+| Diagnostic default link | 43.323 | 78.725 |
+| Shuffle seed 1 | 43.458 | 74.071 |
+| Shuffle seed 2 | 43.140 | 74.617 |
+| Shuffle seed 3 | 42.959 | 74.285 |
+| Shuffle seed 4 | 43.302 | 74.678 |
+
+Changing layout alone moves the wide-query timing across the original baseline without changing its calculation. This supports layout sensitivity as an explanation for the approximately 1% gap. The original gap remains reproducible. Instruction-cache counters do not identify a single cache mechanism, and no linker shuffle, padding or alignment setting is proposed for the runtime.
+
+COUNT also has allocation variability. Across the branch-counter and layout series, total execution time correlates with page faults at Pearson r=0.973 and 0.957. Four separate syscall traces show 177-595 `brk` calls and 13-20 heap contractions during nine executions, followed by renewed heap growth. Both binaries exhibit this behavior; the captured intervals have no `mmap`, `munmap` or `madvise` calls. Traced timings are excluded from the comparisons.
+
+Reusing the earlier diagnostic that fixes both allocation thresholds at 1 MiB does not remove COUNT's faults or slow runs. Its 32-process series remains in the artifact. A second 32-process series uses `MALLOC_MMAP_MAX_=0` and `MALLOC_TRIM_THRESHOLD_=1073741824` only in diagnostic children, disabling direct mmap allocation and raising the heap-return threshold to 1 GiB. These are existing [glibc allocation controls](https://sourceware.org/glibc/manual/latest/html_node/Malloc-Tunable-Parameters.html); they change memory retention and are confined to this experiment.
+
+In the second series, default COUNT medians are 73.328 / 74.980 ms, with 15,000 / 20,401 median faults per nine executions. The diagnostic setting gives 72.400 / 72.717 ms (+0.44%) and 353.5 / 356 median faults. Four separate diagnostic traces show only 6-7 heap-growth calls, no contractions, and no mmap/munmap/madvise calls during execution. Wide projection retains its approximately 1% difference under the same setting. This isolates a substantial allocation contribution to COUNT's variability while leaving the wide query's layout sensitivity intact.
+
+The [follow-up artifact](decimal-double-dispatch-profile-results.json) preserves all series, including the unsuccessful 1 MiB setting, profile counts, counter samples, syscall evidence, normalized assembly, link commands, the frozen benchmark source and diagnostic scripts. Five diagnostic links passed the 66-query check; every measured or traced process also preserved its query's results and plan. The earlier full correctness results remain those of the unchanged Rust patch. The 29 shared scratch sources and three cached executables still match their restored hashes.
+
+This is a diagnosis, not a new runtime performance fix. The evidence does not support adding numerical workarounds for these timing differences. Further allocation work should locate the buffers being released during COUNT execution, starting with its sort/merge paths; these traces do not yet assign every heap adjustment to an operator. Production allocation and linker settings remain unchanged, and no universal zero-overhead claim follows from these measurements.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
