@@ -3039,6 +3039,38 @@ The next bounded change is to investigate choosing the existing `ArrayStaticFilt
 
 The artifact includes all three rejected diffs, build identities, test output, native and SQL samples, counter repeats, layout commands and byte checks. Reproduction uses the same accepted optional runtime and isolated dependency copy as the preceding investigation. Apply one embedded diff, then use its recorded build, check and measurement scripts with local paths adjusted. The final candidate applies and reverses exactly and passes rustfmt. All builds and correctness checks finished before timing on CPU 2. All 41 shared source/lockfile paths and three executable slots were restored, with hashes rechecked after the diagnostics. No candidate or linker flag is added to the accepted patch sequence.
 
+## Direct NULL results for IN lists
+
+[datafusion-null-in-filter.patch](datafusion-null-in-filter.patch) reuses DataFusion's existing NULL filter for nonempty all-NULL integer, FLOAT and DOUBLE lists. Selection happens during filter construction, after type validation and dictionary flattening. Empty lists, mixed lists and generic types keep their previous construction paths. The input still evaluates before filtering, including failing CAST expressions.
+
+The patch also replaces a temporary `Vec` of `None` values with `BooleanArray::new_null` when vector comparison encounters a NULL scalar. The cached NULL filter uses the same Arrow constructor. This creates the result bitmaps directly. The existing large-array floating dispatch decision is preserved, so those arrays benefit without adopting the preceding rejected floating-filter candidate.
+
+Reusing `NullArray` requires a metadata correction: it has no validity bitmap, so its physical NULL count is zero. The NULL filter now reports its length for this type. Other types retain their existing NULL-count calculation. Tests check that non-NULL scalar inputs still produce a nullable result when the list is all NULL.
+
+All 54 native IN tests pass. The two new tests cover ten numeric types, three list lengths, plain and dictionary haystacks, NULL keys and values, arrays, scalars, slices, empty batches, cutoff boundaries, both constructors, constant casts, IN/NOT IN and expression rewrites. They perform 8640 all-NULL evaluations over 53,088,480 result positions, plus 40 empty/mixed-list checks, 40 preserved input CAST failures and 40 constructor type-mismatch rejections. All 26 planner tests and four Delta lifecycle tests pass. The 6332-observation replay adds no value, type, status or plan differences and retains all 264 independent projected-subquery matches. All 112 million-row captures and plans are identical.
+
+The following isolated native measurements use an array with both valid and NULL inputs and a one-item typed NULL list. Each variant runs in four fresh processes, in balanced order, on CPU 2, with two warmups and nine samples per process.
+
+| Input | Rows | Before (microseconds) | After (microseconds) | Elapsed change |
+| --- | ---: | ---: | ---: | ---: |
+| INT | 8192 | 3.617 | 0.105 | -97.09% |
+| BIGINT | 8192 | 5.223 | 0.103 | -98.03% |
+| FLOAT | 8192 | 3.844 | 0.115 | -97.02% |
+| DOUBLE | 8192 | 3.848 | 0.117 | -96.95% |
+| DOUBLE | 8 | 0.136 | 0.087 | -35.75% |
+
+Whole-process instruction counts fall about 95.7%-97.6% for the large cases; these counters include setup and teardown. In the separate native matrix, an 8192-row DOUBLE list containing two values and NULL improves by 25.86%. These are expression microbenchmarks, not whole-query speedups.
+
+The preliminary filter-only build retained the floating NULL vector and measured an unrelated all-NULL Utf8 control 22.55% slower in an isolated repeat. The final build puts that Utf8 control at +0.12% initially and -0.47% in a repeat. Its source path still uses hashing, so this recovery is not a string NULL-filter optimization. The sequential matrix also shows larger string and scalar increases that do not reproduce in isolation. Both sets of results are retained.
+
+Some small increases remain reproducible. In the final isolated repeat, a one-row nullable BIGINT array with a mixed three-item list rises from 136.85 to 142.37 ns (+4.04%); an eight-row mixed four-item list rises from 144.71 to 149.26 ns (+3.15%). An eight-row nullable Utf8 control rises from 416.51 to 421.83 ns (+1.28%). Their instruction counts are effectively unchanged, and the latency cause is not established. The native matrix also retains roughly 2-4 ns increases in some one-row FLOAT profiles; the separate isolated control harness does not reproduce those increases. This patch does not establish zero overhead for every input or binary layout.
+
+The SQL measurements are regression controls with non-NULL list items. The nullable DOUBLE query has NULL inputs, not NULL list items. Its execution change is +0.89% initially and -0.49% in a balanced repeat. Raw DOUBLE short IN changes from +1.58% initially to +0.16% in the repeat; the long DOUBLE list changes from +0.92% to +0.16%. Repeated planning changes range from -1.63% to +0.77%. The INT SQL control executes about 0.15% more instructions in the repeat while taking 0.12% less time. None of these measurements proves an end-to-end gain from the NULL shortcut. SQL planning may fold constant NULL lists before reaching a physical filter.
+
+[null-in-filter-results.json](null-in-filter-results.json) records the final patch, build identities, test output, all samples and repeats, the preliminary candidate, and reproduction scripts. Apply the patch after the accepted short-floating-IN patch to the isolated `datafusion-physical-expr` 54.1.0 copy. Rebuild the accepted optional runtime with the same dependency overrides and locked release profile, then run the recorded native, planner, lifecycle and replay checks before timing. The patch applies and reverses exactly and passes rustfmt. All 42 shared source/lockfile paths and three executable slots were restored and their hashes rechecked after measurement.
+
+This remains an optional experiment patch. Generic string and Decimal NULL lists retain their current filtering paths. Normalization allocation, previous planning costs, the small timing increases above and 331 raw Spark differences remain. The separate floating-dispatch candidate needs a new evaluation on top of this change.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

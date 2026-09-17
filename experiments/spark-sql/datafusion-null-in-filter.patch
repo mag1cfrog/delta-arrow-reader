@@ -1,0 +1,318 @@
+diff --git a/src/expressions/in_list.rs b/src/expressions/in_list.rs
+--- a/src/expressions/in_list.rs
++++ b/src/expressions/in_list.rs
+@@ -373,7 +373,7 @@
+                             // Check if scalar is null once, before the loop
+                             if scalar.is_null() {
+                                 // If scalar is null, all comparisons return null
+-                                Ok(BooleanArray::from(vec![None; num_rows]))
++                                Ok(BooleanArray::new_null(num_rows))
+                             } else if lhs_supports_arrow_eq {
+                                 let scalar_datum = scalar.to_scalar()?;
+                                 Ok(arrow_eq(&value, &scalar_datum)?)
+@@ -493,6 +493,237 @@
+     use datafusion_physical_expr_common::physical_expr::fmt_sql;
+     use insta::assert_snapshot;
+     use itertools::Itertools;
++
++    #[test]
++    fn all_null_primitive_lists_preserve_shapes() -> Result<()> {
++        use arrow::array::new_null_array;
++        use arrow::compute::cast;
++
++        let base = Arc::new(Int32Array::from_iter(
++            (0..8193).map(|i| (i % 3 != 0).then_some(i % 97)),
++        )) as ArrayRef;
++        let mut checks = 0;
++        for dt in [
++            DataType::Int8,
++            DataType::Int16,
++            DataType::Int32,
++            DataType::Int64,
++            DataType::UInt8,
++            DataType::UInt16,
++            DataType::UInt32,
++            DataType::UInt64,
++            DataType::Float32,
++            DataType::Float64,
++        ] {
++            let values = cast(&base, &dt)?;
++            let dictionary = Arc::new(DictionaryArray::try_new(
++                Int32Array::from_iter((0..8193).map(|i| (i % 5 != 0).then_some(i))),
++                Arc::clone(&values),
++            )?) as ArrayRef;
++            for length in [1, 4, 129] {
++                for haystack in [
++                    new_null_array(&dt, length),
++                    Arc::new(DictionaryArray::try_new(
++                        Int32Array::new_null(length),
++                        values.slice(1, 1),
++                    )?) as ArrayRef,
++                    Arc::new(DictionaryArray::try_new(
++                        Int32Array::from(vec![0; length]),
++                        new_null_array(&dt, 1),
++                    )?) as ArrayRef,
++                ] {
++                    for (kind, needle) in [
++                        ("empty", values.slice(1, 0)),
++                        ("one", values.slice(1, 1)),
++                        ("below_cutoff", values.slice(1, 8191)),
++                        ("at_cutoff", values.slice(1, 8192)),
++                        ("above_cutoff", Arc::clone(&values)),
++                        ("dictionary", Arc::clone(&dictionary)),
++                        ("scalar", Arc::clone(&values)),
++                        ("scalar_null", Arc::clone(&values)),
++                    ] {
++                        let schema = Arc::new(Schema::new(vec![Field::new(
++                            "a",
++                            needle.data_type().clone(),
++                            true,
++                        )]));
++                        let batch =
++                            RecordBatch::try_new(Arc::clone(&schema), vec![needle])?;
++                        let input = match kind {
++                            "scalar" => lit(ScalarValue::try_from_array(&values, 1)?),
++                            "scalar_null" => {
++                                lit(ScalarValue::try_from_array(&values, 0)?)
++                            }
++                            _ => col("a", &schema)?,
++                        };
++                        for negated in [false, true] {
++                            for factory in ["array", "literals", "constant_casts"] {
++                                let expr = if factory == "array" {
++                                    InListExpr::try_new_from_array(
++                                        Arc::clone(&input),
++                                        Arc::clone(&haystack),
++                                        negated,
++                                        &schema,
++                                    )?
++                                } else {
++                                    let list = (0..length)
++                                        .map(|i| {
++                                            let literal =
++                                                lit(ScalarValue::try_from_array(
++                                                    &haystack, i,
++                                                )?);
++                                            Ok(if factory == "constant_casts" {
++                                                Arc::new(
++                                                    crate::expressions::CastExpr::new(
++                                                        literal,
++                                                        haystack.data_type().clone(),
++                                                        None,
++                                                    ),
++                                                )
++                                                    as Arc<dyn PhysicalExpr>
++                                            } else {
++                                                literal
++                                            })
++                                        })
++                                        .collect::<Result<Vec<_>>>()?;
++                                    InListExpr::try_new(
++                                        Arc::clone(&input),
++                                        list,
++                                        negated,
++                                        &schema,
++                                    )?
++                                };
++                                assert_eq!(
++                                    expr.static_filter.as_ref().unwrap().null_count(),
++                                    length,
++                                    "{dt:?} {kind} {factory} haystack={haystack:?}"
++                                );
++                                assert!(expr.nullable(&schema)?);
++                                let expr = Arc::new(expr) as Arc<dyn PhysicalExpr>;
++                                let rewritten = Arc::clone(&expr).with_new_children(
++                                    expr.children().into_iter().cloned().collect(),
++                                )?;
++                                for expr in [expr, rewritten] {
++                                    let actual = expr
++                                        .evaluate(&batch)?
++                                        .into_array(batch.num_rows())?;
++                                    assert_eq!(
++                                        as_boolean_array(&actual),
++                                        &BooleanArray::new_null(batch.num_rows()),
++                                        "{dt:?} {kind} {factory} length={length} negated={negated}",
++                                    );
++                                    checks += 1;
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
++        assert_eq!(checks, 8640);
++        Ok(())
++    }
++
++    #[test]
++    fn all_null_lists_preserve_errors_and_controls() -> Result<()> {
++        use arrow::array::new_null_array;
++        use arrow::compute::cast;
++
++        let base = Arc::new(Int32Array::from(vec![Some(1), None, Some(2)])) as ArrayRef;
++        let mixed = Arc::new(Int32Array::from(vec![Some(1), None])) as ArrayRef;
++        let error_schema =
++            Arc::new(Schema::new(vec![Field::new("a", DataType::Utf8, false)]));
++        let error_batch = RecordBatch::try_new(
++            Arc::clone(&error_schema),
++            vec![Arc::new(StringArray::from(vec!["invalid"]))],
++        )?;
++        for dt in [
++            DataType::Int8,
++            DataType::Int16,
++            DataType::Int32,
++            DataType::Int64,
++            DataType::UInt8,
++            DataType::UInt16,
++            DataType::UInt32,
++            DataType::UInt64,
++            DataType::Float32,
++            DataType::Float64,
++        ] {
++            let values = cast(&base, &dt)?;
++            let schema = Arc::new(Schema::new(vec![Field::new("a", dt.clone(), true)]));
++            let batch = RecordBatch::try_new(Arc::clone(&schema), vec![values])?;
++            let failing_input = crate::expressions::cast(
++                col("a", &error_schema)?,
++                &error_schema,
++                dt.clone(),
++            )?;
++            let expected_error = failing_input
++                .evaluate(&error_batch)
++                .unwrap_err()
++                .to_string();
++            for negated in [false, true] {
++                for (haystack, expected) in [
++                    (
++                        new_null_array(&dt, 0),
++                        vec![Some(negated), None, Some(negated)],
++                    ),
++                    (cast(&mixed, &dt)?, vec![Some(!negated), None, None]),
++                ] {
++                    let expr = InListExpr::try_new_from_array(
++                        col("a", &schema)?,
++                        haystack,
++                        negated,
++                        &schema,
++                    )?;
++                    let actual = expr.evaluate(&batch)?.into_array(batch.num_rows())?;
++                    assert_eq!(as_boolean_array(&actual), &BooleanArray::from(expected));
++                }
++                let haystack = new_null_array(&dt, 4);
++                let literals = (0..4)
++                    .map(|i| ScalarValue::try_from_array(&haystack, i).map(lit))
++                    .collect::<Result<Vec<_>>>()?;
++                for expr in [
++                    InListExpr::try_new_from_array(
++                        Arc::clone(&failing_input),
++                        Arc::clone(&haystack),
++                        negated,
++                        &error_schema,
++                    )?,
++                    InListExpr::try_new(
++                        Arc::clone(&failing_input),
++                        literals.clone(),
++                        negated,
++                        &error_schema,
++                    )?,
++                ] {
++                    assert_eq!(
++                        expr.evaluate(&error_batch).unwrap_err().to_string(),
++                        expected_error
++                    );
++                }
++                // Type validation must still reject typed NULL lists before construction.
++                assert!(
++                    InListExpr::try_new_from_array(
++                        col("a", &error_schema)?,
++                        haystack,
++                        negated,
++                        &error_schema
++                    )
++                    .is_err()
++                );
++                assert!(
++                    InListExpr::try_new(
++                        col("a", &error_schema)?,
++                        literals,
++                        negated,
++                        &error_schema
++                    )
++                    .is_err()
++                );
++            }
++        }
++        Ok(())
++    }
+ 
+     #[test]
+     fn short_float_literal_in_matches_bit_oracle() -> Result<()> {
+diff --git a/src/expressions/in_list/strategy.rs b/src/expressions/in_list/strategy.rs
+--- a/src/expressions/in_list/strategy.rs
++++ b/src/expressions/in_list/strategy.rs
+@@ -17,7 +17,7 @@
+ 
+ use std::sync::Arc;
+ 
+-use arrow::array::ArrayRef;
++use arrow::array::{ArrayRef, NullArray};
+ use arrow::compute::cast;
+ use arrow::datatypes::DataType;
+ use datafusion_common::Result;
+@@ -36,6 +36,17 @@
+         DataType::Dictionary(_, value_type) => cast(&in_array, value_type.as_ref())?,
+         _ => in_array,
+     };
++    // Keep generic types on their existing validation and hashing path.
++    // A nonempty all-NULL primitive list can reuse the native NULL filter.
++    if (in_array.data_type().is_integer()
++        || matches!(in_array.data_type(), DataType::Float32 | DataType::Float64))
++        && !in_array.is_empty()
++        && in_array.null_count() == in_array.len()
++    {
++        return Ok(Arc::new(ArrayStaticFilter::try_new(Arc::new(
++            NullArray::new(in_array.len()),
++        ))?));
++    }
+     match in_array.data_type() {
+         // Integer primitive types
+         DataType::Int8 => Ok(Arc::new(Int8StaticFilter::try_new(&in_array)?)),
+diff --git a/src/expressions/in_list/array_static_filter.rs b/src/expressions/in_list/array_static_filter.rs
+--- a/src/expressions/in_list/array_static_filter.rs
++++ b/src/expressions/in_list/array_static_filter.rs
+@@ -19,7 +19,6 @@
+     Array, ArrayRef, BooleanArray, downcast_array, downcast_dictionary_array,
+     make_comparator,
+ };
+-use arrow::buffer::{BooleanBuffer, NullBuffer};
+ use arrow::compute::{SortOptions, take};
+ use arrow::datatypes::DataType;
+ use arrow::util::bit_iterator::BitIndexIterator;
+@@ -44,7 +43,12 @@
+ 
+ impl StaticFilter for ArrayStaticFilter {
+     fn null_count(&self) -> usize {
+-        self.in_array.null_count()
++        // NullArray has no validity bitmap; its physical null count is zero.
++        if self.in_array.data_type() == &DataType::Null {
++            self.in_array.len()
++        } else {
++            self.in_array.null_count()
++        }
+     }
+ 
+     /// Checks if values in `v` are contained in the `in_array` using this hash set for lookup.
+@@ -53,11 +57,7 @@
+         if v.data_type() == &DataType::Null
+             || self.in_array.data_type() == &DataType::Null
+         {
+-            let nulls = NullBuffer::new_null(v.len());
+-            return Ok(BooleanArray::new(
+-                BooleanBuffer::new_unset(v.len()),
+-                Some(nulls),
+-            ));
++            return Ok(BooleanArray::new_null(v.len()));
+         }
+ 
+         // Unwrap dictionary-encoded needles when the value type matches
