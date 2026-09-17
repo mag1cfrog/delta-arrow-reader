@@ -2504,6 +2504,36 @@ The [follow-up artifact](decimal-double-dispatch-profile-results.json) preserves
 
 This is a diagnosis, not a new runtime performance fix. The evidence does not support adding numerical workarounds for these timing differences. Further allocation work should locate the buffers being released during COUNT execution, starting with its sort/merge paths; these traces do not yet assign every heap adjustment to an operator. Production allocation and linker settings remain unchanged, and no universal zero-overhead claim follows from these measurements.
 
+### Follow-up: attribute COUNT heap returns and compare sort strategies
+
+Four complete stack traces now locate the frees that trigger COUNT's heap contractions. The tracer attaches while the benchmark is paused before its nine executions and detaches at the final pause. Both frozen binaries preserve their results and plans. Across 1,671 `brk` calls, 83 shrink the heap: 65 follow destruction of the sort merge's retained batches or cursors, accounting for 90.0% of returned bytes. The remaining contractions follow release of local-sort inputs, join temporaries or cast inputs. A triggering free can coalesce earlier free regions; the returned byte count is not the size of that one object. Traced timings are excluded.
+
+The source explains the retained references. `BatchBuilder` keeps the latest batch for each input stream, and `SortPreservingMergeStream` keeps previous cursors for tie handling. Their owners release the remaining references when the merge ends. The builder already reuses its index vector. These sort files match DataFusion 54.1.0's registry sources. Most subsequent heap growth occurs in the upstream CASE output and Decimal-to-Decimal downscaling, rather than in the merge's output allocation. The evidence identifies a query-wide allocation cycle, not one missing reusable buffer in Decimal-to-DOUBLE conversion.
+
+Before adding allocation code, this experiment compares DataFusion's existing `sort_in_place_threshold_bytes` setting. Its default is 1 MiB. For this COUNT workload, that selects separate batch sorts followed by a merge; 64 MiB selects concatenation followed by a single sort. The optional [benchmark patch](datafusion-sort-threshold-bench.patch) exposes the setting through `DECIMAL_BENCH_SORT_THRESHOLD`, retaining 1 MiB when unset. One diagnostic executable uses the preceding candidate's unchanged libraries for both settings. The original candidate executable remains a separate link control.
+
+The first series has 24 interleaved processes covering the two settings, the frozen control, COUNT and wide projection. A separate 16-process series repeats only COUNT with eight processes per setting. Entries are medians of process medians:
+
+| Sort threshold | COUNT, first series ms | COUNT, repeat ms | Process memory high-water MiB |
+| --- | ---: | ---: | ---: |
+| 1 MiB | 73.948 | 75.795 | 152.8-152.9 |
+| 64 MiB | 61.365 | 60.878 | 192.4-193.1 |
+
+The larger threshold reduces COUNT elapsed time by 17.0% and 19.7%, and execution instructions by 46.8% in both series. Separate profiles move from merge/cursor work to the single sort and indexed output copies. Wide projection, which does not sort, changes by -0.07% between settings in the first series.
+
+The gain has a memory cost. Four separate memory probes, two per setting, show roughly 40 MiB more process high-water memory. That measurement includes input setup, validation, warmups and execution; it is not an isolated execution-phase peak. Median faults over nine executions rise from about 14,450-23,612 to 49,906-49,992. The larger setting's process medians still range from 51.4 to 65.7 ms across the two series. It speeds this query up but does not remove allocation variability, and it has not been evaluated under spilling, memory limits or concurrent queries.
+
+Both settings match all 66 benchmark captures, including results and physical plans. Every timed, profiled and traced process also preserves its query's capture. The [results artifact](count-sort-allocation-results.json) records stack frames and heap transitions, source hashes, counters, timing samples, memory probes and reproduction scripts. The benchmark patch applies and reverses exactly on both the repository example and the frozen benchmark. All 29 shared source paths, three cached executables and 12 direct dependency libraries remain unchanged. Earlier full Spark and Delta lifecycle results still describe the unchanged runtime; this follow-up does not rerun or extend those compatibility checks.
+
+To repeat the setting comparison, reuse the preceding optional runtime and frozen benchmark, apply the benchmark patch in its scratch checkout, and rebuild `decimal_bench` against the same libraries. Run full `subquery-check` captures at both settings before timing. Alternate fresh processes for the same SQL, using the existing FIFO counter interval:
+
+```sh
+DECIMAL_BENCH_SORT_THRESHOLD=1048576 taskset -c 2 "$bench" merge.json subqueries correlated_count_ansitrue
+DECIMAL_BENCH_SORT_THRESHOLD=67108864 taskset -c 2 "$bench" concat.json subqueries correlated_count_ansitrue
+```
+
+The 64 MiB setting remains an experiment, not a proposed runtime default. Further COUNT optimization should evaluate the sort strategy and its memory budget together. These findings do not justify adding a cross-query buffer cache to the Decimal compatibility code.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

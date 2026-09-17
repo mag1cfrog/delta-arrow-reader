@@ -1,0 +1,17 @@
+--- a/experiments/spark-sql/examples/decimal_bench.rs
++++ b/experiments/spark-sql/examples/decimal_bench.rs
+@@ -697,7 +697,13 @@
+             .with_config(
+                 SessionConfig::new()
+                     .with_batch_size(BATCH_SIZE)
+-                    .with_target_partitions(1),
++                    .with_target_partitions(1)
++                    .set_usize(
++                        "datafusion.execution.sort_in_place_threshold_bytes",
++                        std::env::var("DECIMAL_BENCH_SORT_THRESHOLD")
++                            .unwrap_or_else(|_| "1048576".into())
++                            .parse()?,
++                    ),
+             )
+             .with_query_planner(Arc::new(SparkQueryPlanner))
+             .build(),
