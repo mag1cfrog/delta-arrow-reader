@@ -3372,6 +3372,31 @@ All four changed layouts match the preceding candidate's 74 generic and 112 olde
 
 The artifact records the exact reconstruction, section checks, binary hashes, linker commands, samples, counters and runnable scripts. No binary-specific alignment rule joins the runtime or packaging configuration. The native add-zero candidate remains outside the accepted optional sequence. A Rust hash optimization needs a separate evaluation of actual work and query performance; this diagnostic result does not establish that every historical cost is resolved.
 
+## Floating IN hashing: integer bits instead of byte arrays
+
+Keep the [two-line hash patch](datafusion-float-in-hash.patch) as a candidate. Four long-list queries improve by 14.63%-19.26%, but a dynamic DOUBLE IN control remains about 1.3% slower under normal address randomization. The patch does not join the accepted optional sequence yet. The [results artifact](float-in-hash-results.json) records both the gains and the unresolved control.
+
+The candidate changes `OrderedFloat32` and `OrderedFloat64` in DataFusion 54.1.0's private primitive IN filter from `to_ne_bytes().hash(state)` to `to_bits().hash(state)`. Their equality already compares integer bits. This preserves distinctions between signed zeros and NaN payloads, with Spark normalization still handled separately. These keys live only in process-local hash sets. The default hasher, random seed policy, NULL handling and dispatch remain unchanged. Both binaries include the accepted Boolean cast kernel and exclude the deferred native add-zero planner candidate.
+
+The generated FLOAT and DOUBLE lookup loops each lose one of their two multiply instructions. Their static instruction counts fall from 127 to 119 and 120 respectively. This reduces hash computation; the old byte-array conversion did not allocate a heap buffer. Bucket placement also changes, so the entire timing benefit cannot be attributed to instruction removal alone.
+
+| Execution case | Before (ms) | Candidate (ms) | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| DOUBLE, 128 nonzero constants | 2.325 | 1.985 | -14.63% | -11.06% |
+| DOUBLE, long list with NULL | 2.320 | 1.906 | -17.83% | -11.37% |
+| FLOAT, 128 constants including zero | 2.562 | 2.068 | -19.26% | -11.64% |
+| DOUBLE, 128 constants including zero | 2.694 | 2.232 | -17.13% | -9.24% |
+
+Each row uses 16 balanced, randomized fresh-process pairs on CPU 2, with 1,048,576 rows in batches of 8192, two warmups and nine samples per process. Changes are ratios of medians of process medians. All four paired bootstrap intervals exclude zero. The older DOUBLE long-IN query, which also converts the result through INT to DECIMAL, improves by 8.78% across eight pairs. Short lists taking the existing vectorized path do not receive the hash optimization.
+
+The broad series covers 37 execution cases and 15 planning cases, with four processes per variant. Independent repeats do not reproduce its increases for nullable Utf8, all-NULL Utf8, nullable DOUBLE or single-zero planning. The Boolean control is +0.83%, with a paired interval crossing zero. FLOAT comparison falls from an initial +0.17% to +0.06% in a 16-pair repeat, also with an interval crossing zero. These checks do not prove zero impact.
+
+The dynamic DOUBLE control is different. Its row-dependent list uses vectorized comparisons rather than the changed constant hash filter, and its plan stays identical. Normal-launch comparisons give +0.90% and +1.09%. A further series interleaves 16 normal-address and 16 fixed-address pairs: normal launches remain +1.30%, with a paired median of +1.26% and a conditional bootstrap interval of +0.84% to +1.48%. Fixed-address launches give -0.10%, with an interval crossing zero; an earlier fixed-address series gives -0.35%. Identical-before and identical-after normal comparisons give +0.03% and -0.39%. Per-process ASLR control changes code and data placement together, so this identifies address sensitivity without locating the cause. It is a diagnostic, not a runtime setting or a fix.
+
+All 55 native IN tests, 27 planner tests and four Delta lifecycle tests pass. The existing native bit oracle covers 9408 evaluations, including signed zeros, distinct NaNs, infinities, subnormals, NULLs, dictionaries and slices. All 186 benchmark captures retain their results and plans. The 6332 existing observations, 6324 unique, retain 6001 raw Spark agreements and 331 existing differences. Three parallel CAST first-error messages vary; three reruns per variant preserve all other fields. No new Spark reference is generated.
+
+The artifact retains 1008 timing processes, phase-gated counters, generated-code comparisons, build identities, tests and reproduction scripts. Builds and correctness checks finish before timing; code inspection runs separately. Only the primitive filter source differs between the two runtime builds. The patch applies and reverses exactly on pristine DataFusion 54.1.0; it preserves the file's existing macro formatting. Shared sources, lockfiles and executable slots are restored and their hashes verified. Reproduction starts from the accepted Boolean cast runtime, applies this candidate to its isolated `datafusion-physical-expr` copy, and uses the same locked graph and benchmark for both builds. Locating the dynamic DOUBLE control cost remains the next step before adoption.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

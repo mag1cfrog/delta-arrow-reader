@@ -1,0 +1,21 @@
+diff --git a/src/expressions/in_list/primitive_filter.rs b/src/expressions/in_list/primitive_filter.rs
+--- a/src/expressions/in_list/primitive_filter.rs
++++ b/src/expressions/in_list/primitive_filter.rs
+@@ -33,7 +33,7 @@
+ 
+ impl Hash for OrderedFloat32 {
+     fn hash<H: Hasher>(&self, state: &mut H) {
+-        self.0.to_ne_bytes().hash(state);
++        self.0.to_bits().hash(state);
+     }
+ }
+ 
+@@ -58,7 +58,7 @@
+ 
+ impl Hash for OrderedFloat64 {
+     fn hash<H: Hasher>(&self, state: &mut H) {
+-        self.0.to_ne_bytes().hash(state);
++        self.0.to_bits().hash(state);
+     }
+ }
+ 
