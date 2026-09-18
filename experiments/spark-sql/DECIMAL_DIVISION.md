@@ -3214,6 +3214,31 @@ Control increases remain. The unchanged Utf8 WHERE query takes 1.28% and 3.18% l
 
 Keep this as a separate optional optimization for review. The default project build is unchanged. The remaining normalization paths, control timing increases, and 331 raw Spark differences are outside its performance claim.
 
+## String filter control after constant-list normalization
+
+[float-in-string-control-results.json](float-in-string-control-results.json) investigates the unchanged Utf8 WHERE control that previously measured 1.28%, 3.18% and 1.23% slower. It reuses the exact before/after executables from the constant-list experiment. This investigation adds no runtime or benchmark changes.
+
+The query's three-item IN predicate becomes three string equality comparisons joined by OR. It does not execute `spark_comparison_float` or the generic IN hash filter. The string planner returns before the new floating-list condition, and planning is outside the execution timer. Four separate profiles place about 50% of samples in Arrow's string comparison loop and 30%-34% in libc `memcmp`. The comparison loop, integer output filter, and `BinaryExpr::evaluate` have identical instruction sequences after resolving their link addresses, including indirect call targets checked against ELF relocations. This does not make their placement in the executable or process memory identical.
+
+The follow-up uses 320 fresh-process timing runs on CPU 2, with two warmups and nine samples per process. Each pair runs before and after adjacently, with balanced, shuffled order. Identical-binary controls run the same executable under both labels. The final series interleaves normal launches with launches that disable ASLR for that process only.
+
+| Comparison | Pairs | Before (ms) | After (ms) | Change |
+| --- | ---: | ---: | ---: | ---: |
+| Normal launch, first series | 32 | 2.844 | 2.858 | +0.51% |
+| Normal launch, interleaved repeat | 32 | 2.853 | 2.858 | +0.19% |
+| ASLR disabled, first series | 32 | 2.862 | 2.850 | -0.40% |
+| ASLR disabled, interleaved repeat | 32 | 2.873 | 2.867 | -0.19% |
+| Same before executable under both labels | 16 | 2.824 | 2.824 | +0.01% |
+| Same after executable under both labels | 16 | 2.841 | 2.855 | +0.49% |
+
+Times are medians of process medians per 1,048,576 input rows. In the interleaved repeat, instruction counts change by +0.0002% with normal launches and +0.0037% with ASLR disabled. All eight counter events are fully scheduled. Timing, profiling and analysis run separately.
+
+The artifact also reports changes within each adjacent pair. Resampling whole pairs gives a 95% percentile interval of +0.13% to +2.20% for the first normal series' paired median, and -0.53% to +0.92% for its interleaved repeat. The ASLR-disabled repeat's interval is -0.46% to +0.97%. These intervals describe the paired median, not the ratio of medians in the table, and are conditional on this machine and session.
+
+Keep the accepted floating-list optimization. The larger measurements do not establish a fixed 1.2% execution cost, but normal-launch medians remain slightly higher. A small effect from the compiled executable or memory placement remains possible; no particular cache, allocator or branch-predictor cause is established. The earlier observations remain in the record. ASLR changes are diagnostic only, with no system-wide setting change or recommendation to disable it in production.
+
+All 324 invocations, including profiling, validate the 32,433 retained row IDs in both ANSI modes and preserve the canonical plans and results. The frozen binaries and shared source restoration hashes match the previous experiment. No rebuild or full corpus/lifecycle rerun was needed for this measurement-only slice. Other planning controls, floating normalization fallback costs and existing Spark differences remain outside its scope. The artifact contains all timing samples and counters, profiles, selected disassembly, binary identities and reproduction scripts.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
