@@ -1,0 +1,14 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -243,7 +243,10 @@
+                     .and_then(|value| value.cast_to(field.data_type()).ok()),
+                 _ => None,
+             };
+-            match scalar.and_then(|value| value.cast_to(&DataType::Float64).ok()) {
++            match scalar.and_then(|value| match value {
++                value @ ScalarValue::Float64(_) => Some(value),
++                value => value.cast_to(&DataType::Float64).ok(),
++            }) {
+                 Some(ScalarValue::Float64(value)) => value.is_none_or(|value| {
+                     zero |= value == 0.0;
+                     !value.is_nan()
