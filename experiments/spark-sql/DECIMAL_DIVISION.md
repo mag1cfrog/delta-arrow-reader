@@ -3507,6 +3507,31 @@ The measurement record contains 61 initial case/phase comparisons, 18 confirmati
 
 To reproduce, freeze the CASE plus hash executables as `before`, apply the unchanged candidate recorded in `float-in-zero-only-results.json`, then build and validate `after` with the recorded overrides. Run `broad.py`, `confirm.py`, and `confirm.py control` sequentially before the diagnostic scripts. The artifact includes schedules, captures, samples, counters, source/build identities and reproduction scripts. Keep the accepted optional runtime without add-zero. Its previous roughly 0.3% nullable FLOAT observation, the 331 Spark-reference differences and other historical performance questions remain open.
 
+## Generic IN controls: isolate the loop's page offset
+
+The [placement experiment](generic-in-layout-results.json) identifies a layout-sensitive cost in the two remaining add-zero execution controls. Moving the existing generic bitmap loop within a fixed code page changes their elapsed time while preserving its 160 instructions and every other function's linked address. The diagnostic with offset 48 matches the accepted baseline within the observed variation. This is not a portable runtime fix; the add-zero candidate remains deferred and its planning costs are unchanged.
+
+The candidate is first reconstructed byte-for-byte from its existing dependencies and benchmark. Changing one copied input section's alignment to 32 or 64 reproduces the same executable. Alignments 128 and 256 move the function by 64 and 320 bytes, respectively, but keep its offset modulo 64 at zero. Neither produces a clear improvement in the initial eight-pair comparisons.
+
+A diagnostic linker script then reserves one 4096-byte executable section and places the unchanged function at offsets 0, 16, 32 and 48. All ELF section headers and the addresses, sizes and types of 241331 other text function symbols match across those four programs. The linker updates references to the moved function. Introducing the reserved page also changes other code locations relative to the original program; comparisons between the four page variants hold those locations fixed. All four retain the same normalized loop instructions and call targets.
+
+| Execution comparison | Pairs | Utf8 long-list change | Decimal long-list change |
+| --- | ---: | ---: | ---: |
+| Accepted baseline to original candidate | 24 | +0.88% | +1.60% |
+| Fixed-page offset 0 to offset 48 | 24 | -0.85% | -1.52% |
+| Offset 0 to 48, process ASLR disabled | 16 | -0.98% | -1.98% |
+| Accepted baseline to offset-48 diagnostic | 24 | -0.06% | -0.25% |
+
+The normal-address offset comparison's paired bootstrap intervals are -1.09% to -0.47% for Utf8 and -1.80% to -1.34% for Decimal. Execution instruction counts differ by less than 0.0001%. Both offset-48 comparisons against the accepted baseline have intervals crossing zero. Offsets 16 and 32 also improve both controls in the initial sweep; confirmation uses 48, which matches the accepted loop's start modulo 64. No production linker script, padding or alignment attribute is introduced.
+
+Eight-pair same-binary controls range from -0.54% to -0.07%. The Utf8 offset-48 control has a paired median of -0.25%, with an interval of -0.51% to -0.13%; that small difference remains in the record. The experiment demonstrates sensitivity to linked position, but does not identify a particular instruction-cache, decoding or branch-predictor mechanism or guarantee a stable penalty after another build.
+
+There are 672 sequential timing processes across 28 comparisons. They use CPU 2, 1,048,576 preloaded rows, 8192-row batches, two warmups and nine samples per process. Adjacent pairs have balanced shuffled order and identical launch paths. Time changes compare medians of process medians; intervals describe paired medians. Counters are execution-gated and fully scheduled; builds, validation and code inspection finish before each timing group. Bootstrap intervals resample whole process pairs, are conditional on this machine and series, and do not adjust for comparison selection. Fixed-address runs change only the diagnostic child processes.
+
+All eight checked configurations reproduce the existing 186 benchmark query/ANSI captures, including results and plans: 1488 repeated captures with no differences. Two configurations are byte-identical to the original; six are changed diagnostic binaries. Frozen before/after executables, all 380 link inputs, shared sources, lockfiles and executable slots retain their hashes. The prior full corpus and unit-test results are reused; no new Spark reference or compatibility coverage is claimed.
+
+The artifact contains reconstruction/linker commands, section checks, layouts, schedules, samples, counters and runnable scripts. Run its reconstruction and validation scripts, then the three `run-series.py` schedules sequentially. The two controls can reach the accepted baseline's timings through code-placement changes alone in this build. The exact processor mechanism, a portable source improvement, the candidate's added planning work and the existing Spark differences remain outside that result.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
