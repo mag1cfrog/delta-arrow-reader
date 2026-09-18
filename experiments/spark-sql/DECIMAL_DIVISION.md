@@ -3181,6 +3181,39 @@ The artifact includes the rejected diff, tests, build identities, all samples an
 
 Keep the accepted runtime and omit this candidate from the patch sequence. No new older-reference comparison was run, so this experiment cannot update the remaining normalization or planning gaps. The 331 raw Spark differences also remain. The default project build is unchanged.
 
+## Skip normalization for known nonzero IN constants
+
+[sail-float-in-constant.patch](sail-float-in-constant.patch) adds a condition to the existing Rust `spark_in_list` planner. For a FLOAT/DOUBLE input, it omits normalization when every list item is a numeric literal or a successful direct numeric literal cast, and the resulting list contains neither zero nor NaN. NULL items are allowed. DataFusion's existing scalar casts check the constants; the original expressions and required type conversions remain in the plan. Unrecognized expressions retain the existing path.
+
+Normalization changes only signed zero and NaNs. Neither can match a nonzero, non-NaN constant before or after normalization, so skipping it preserves IN, NOT IN and NULL results for these lists. Same-width inputs avoid the normalization buffer and scan. FLOAT to DOUBLE widening still requires its native cast. Lists containing zero, NaN or dynamic expressions keep normalization, as do other floating comparisons and subquery keys.
+
+Same-type casts must also be avoided. An initial draft wrapped DOUBLE inputs in another DOUBLE cast, hiding the earlier Decimal IN inverse rewrite and short-list expansion. The final conversion checks the input type before adding a cast. A unit assertion and the explicit DOUBLE/Decimal query capture guard this boundary. Both raw short-IN queries now use the OR-comparison plans from the reference preceding the pure-floating extension; the Decimal inverse rewrite retains its accepted plan.
+
+All 27 planner tests and four Delta lifecycle tests pass. The new parameterized test checks 608 evaluations and 2,494,016 result values against an independent membership oracle. It covers both widths, random and exceptional values, NULL, IN/NOT IN, empty and long lists, slices, widening, numeric casts, underflow, and expressions that must retain normalization. The 6332-observation replay preserves values, types and execution status, retaining 6001 raw Spark matches and all 264 independent projected-subquery matches. Eight logical and eight physical plans change. Five parallel CAST diagnostics vary only in their first invalid input; three reruns per variant preserve the other fields.
+
+All 112 existing benchmark captures and 38 generic query/ANSI pairs retain their non-plan fields. Fourteen and four physical plans change, respectively. The generic queries validate 37,813,602 values per variant. Another 64 observations compare the accepted implementation with the candidate at integer-precision, subnormal, underflow and CAST/TRY_CAST boundaries: 60 successful results and four expected ANSI errors agree, including diagnostics. These are additional equivalence checks, not new Spark-reference observations.
+
+Repeated execution measurements per 1,048,576 preloaded rows are below. Each uses four fresh processes per variant, CPU 2, two warmups and nine samples. Times are medians of process medians; planning is measured separately.
+
+| Query | Before (ms) | After (ms) | Elapsed change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| Raw FLOAT, three-item IN | 3.467 | 3.415 | -1.48% | -2.75% |
+| Raw DOUBLE, three-item IN | 3.807 | 3.659 | -3.89% | -5.80% |
+| Nullable DOUBLE input, three-item IN | 6.376 | 5.996 | -5.96% | -5.91% |
+| DOUBLE, 128 fractional literals | 4.683 | 4.439 | -5.22% | -5.47% |
+| DOUBLE, 128 integer literals | 2.585 | 2.358 | -8.77% | -10.48% |
+| Nullable DOUBLE, 127 values and NULL | 2.562 | 2.327 | -9.19% | -11.14% |
+
+The first series also improves all six cases. Raw FLOAT/DOUBLE short-IN planning improves 4.65%/4.97% in the repeat, with about 7.1% fewer instructions. Explicit DOUBLE/Decimal IN retains its execution work while planning improves 9.49%, with 12.93% fewer instructions. The long nullable DOUBLE generic query's planning improves 9.53%.
+
+For the two raw short-IN queries, execution instructions are within 0.01% of the older reference in both series. FLOAT elapsed time is +0.66% and -0.10% relative to that reference; DOUBLE is -6.14% and -1.98%. Those varying reference gaps are not attributed entirely to this patch. Planning still uses about 0.12%-0.36% more instructions than the reference. This recovers the measured execution work for these constant lists without establishing universal timing equality.
+
+Control increases remain. The unchanged Utf8 WHERE query takes 1.28% and 3.18% longer in the larger series; an isolated comparison measures 2.808 versus 2.843 ms (+1.23%), with instructions down 0.01%. The cause is not established. Repeated short-Decimal and integer planning controls remain 1.59% and 1.16% slower with nearly unchanged instructions. Long Utf8 planning changes from +1.16% in the repeat to +0.40% in isolation. These results remain in the record rather than being treated as eliminated overhead.
+
+[float-in-constant-results.json](float-in-constant-results.json) contains the patch hash, source/build identities, tests, captures, all timing samples and counters, repeats, and reproduction scripts. Apply the patch to the accepted optional runtime through `63dc74d`, using the benchmark from `a6703ca`. Only the host's common function source changes; dependency features, release settings, native sources, benchmark and lockfile match. The patch applies and reverses exactly and passes rustfmt. Builds, checks and timing run sequentially, and all counter events are fully scheduled. All 42 shared source/lockfile paths and three executable slots were restored and their hashes rechecked after measurement.
+
+Keep this as a separate optional optimization for review. The default project build is unchanged. The remaining normalization paths, control timing increases, and 331 raw Spark differences are outside its performance claim.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

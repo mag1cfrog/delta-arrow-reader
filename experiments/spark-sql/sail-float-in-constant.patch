@@ -1,0 +1,307 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -226,15 +226,39 @@
+         double |= data_type == DataType::Float64;
+     }
+     if floating {
++        // Only zero and NaN can change membership when the input is normalized.
++        // ponytail: recognize literals and direct numeric literal casts only;
++        // leave other constant expressions on the existing normalization path.
++        let skip_normalization = matches!(
++            input.expr.get_type(schema)?,
++            DataType::Float32 | DataType::Float64
++        ) && input.list.iter().all(|value| {
++            let scalar = match value {
++                expr::Expr::Literal(value, _) => Some(value.clone()),
++                expr::Expr::Cast(expr::Cast { expr, field })
++                | expr::Expr::TryCast(expr::TryCast { expr, field }) => expr
++                    .as_literal()
++                    .filter(|value| value.data_type().is_numeric() || value.is_null())
++                    .and_then(|value| value.cast_to(field.data_type()).ok()),
++                _ => None,
++            };
++            matches!(
++                scalar.and_then(|value| value.cast_to(&DataType::Float64).ok()),
++                Some(ScalarValue::Float64(value))
++                    if value.is_none_or(|value| value != 0.0 && !value.is_nan())
++            )
++        });
+         // Decimal/float lists use DOUBLE. Otherwise preserve operand types
+         // so normalization does not change the existing numeric coercion.
+         let convert = |value: expr::Expr| -> PlanResult<expr::Expr> {
+-            Ok(if value.get_type(schema)?.is_floating() {
++            let data_type = value.get_type(schema)?;
++            let floating = data_type.is_floating();
++            Ok(if floating && !skip_normalization {
+                 ScalarUDF::from(SparkComparisonFloat {
+                     widen: decimal || double,
+                 })
+                 .call(vec![value])
+-            } else if decimal {
++            } else if data_type != DataType::Float64 && (decimal || (floating && double)) {
+                 cast(value, DataType::Float64)
+             } else {
+                 value
+@@ -294,6 +318,261 @@
+         op,
+         Box::new(right),
+     )))
++}
++
++#[test]
++fn in_list_skips_only_irrelevant_float_normalization() -> datafusion_common::Result<()> {
++    use arrow::array::{Array, ArrayRef, AsArray, Float32Array, Float64Array};
++    use arrow::datatypes::{Field, Float64Type, Schema};
++    use arrow::record_batch::RecordBatch;
++    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
++    use datafusion::physical_expr::{create_physical_expr, execution_props::ExecutionProps};
++    use datafusion_common::{DFSchema, tree_node::TreeNodeRecursion};
++    use datafusion_expr::{col, simplify::SimplifyContext};
++
++    let half_schema = Arc::new(DFSchema::try_from(Schema::new(vec![Field::new(
++        "v",
++        DataType::Float16,
++        true,
++    )]))?);
++    let half = spark_in_list(col("v"), vec![lit(1.25_f32)], false, &half_schema).unwrap();
++    let expr::Expr::InList(half) = half else {
++        unreachable!()
++    };
++    assert!(matches!(half.expr.as_ref(), expr::Expr::ScalarFunction(f)
++        if f.func.inner().is::<SparkComparisonFloat>()));
++
++    let mut values = vec![
++        None,
++        Some(0.0),
++        Some(-0.0),
++        Some(1.25),
++        Some(1.5),
++        Some(-1.5),
++        Some(f64::INFINITY),
++        Some(f64::NEG_INFINITY),
++        Some(f64::NAN),
++        Some(f64::from_bits(0xfff0_0000_0000_0123)),
++        Some(1e-40),
++        Some(-1e-40),
++    ];
++    let mut bits = 0x1234_5678_9abc_def0_u64;
++    values.extend((0..8192).map(|i| {
++        bits = bits.wrapping_mul(6364136223846793005).wrapping_add(1);
++        (i % 19 != 0).then_some(f64::from_bits(bits))
++    }));
++    let arrays: [ArrayRef; 2] = [
++        Arc::new(Float32Array::from_iter(
++            values.iter().map(|v| v.map(|v| v as f32)),
++        )),
++        Arc::new(Float64Array::from(values)),
++    ];
++    let mut checks = 0;
++    let mut checked_rows = 0;
++    for input in arrays {
++        let ty = input.data_type().clone();
++        let literal = |v: Option<f64>| {
++            lit(match ty {
++                DataType::Float32 => ScalarValue::Float32(v.map(|v| v as f32)),
++                _ => ScalarValue::Float64(v),
++            })
++        };
++        let finite = vec![Some(1.25), Some(1.5), Some(2.0)];
++        let mut cases = vec![
++            (
++                "finite",
++                finite.iter().copied().map(literal).collect::<Vec<_>>(),
++                finite.clone(),
++                true,
++            ),
++            (
++                "nullable",
++                vec![literal(Some(1.25)), literal(None)],
++                vec![Some(1.25), None],
++                true,
++            ),
++            (
++                "zero",
++                vec![literal(Some(0.0)), literal(Some(1.25))],
++                vec![Some(0.0), Some(1.25)],
++                false,
++            ),
++            (
++                "negative_zero",
++                vec![literal(Some(-0.0))],
++                vec![Some(-0.0)],
++                false,
++            ),
++            (
++                "nan",
++                vec![literal(Some(f64::NAN))],
++                vec![Some(f64::NAN)],
++                false,
++            ),
++            (
++                "negative_nan",
++                vec![literal(Some(-f64::NAN))],
++                vec![Some(f64::NAN)],
++                false,
++            ),
++            (
++                "infinity",
++                vec![
++                    literal(Some(f64::INFINITY)),
++                    literal(Some(f64::NEG_INFINITY)),
++                ],
++                vec![Some(f64::INFINITY), Some(f64::NEG_INFINITY)],
++                true,
++            ),
++            ("all_null", vec![literal(None)], vec![None], true),
++            ("empty", vec![], vec![], true),
++            (
++                "integer",
++                vec![lit(1_i64), lit(2_i64)],
++                vec![Some(1.0), Some(2.0)],
++                true,
++            ),
++            (
++                "decimal",
++                vec![lit(ScalarValue::Decimal128(Some(125), 5, 2))],
++                vec![Some(1.25)],
++                true,
++            ),
++            (
++                "casts",
++                vec![cast(
++                    lit(ScalarValue::Decimal128(Some(125), 5, 2)),
++                    ty.clone(),
++                )],
++                vec![Some(1.25)],
++                true,
++            ),
++            (
++                "try_casts",
++                vec![try_cast(lit(1_i64), ty.clone())],
++                vec![Some(1.0)],
++                true,
++            ),
++            (
++                "underflow",
++                vec![cast(lit(1e-50_f64), DataType::Float32)],
++                vec![Some(0.0)],
++                false,
++            ),
++            (
++                "cast_nan",
++                vec![cast(lit(-f64::NAN), DataType::Float32)],
++                vec![Some(f64::NAN)],
++                false,
++            ),
++            (
++                "string_cast",
++                vec![cast(lit("1.25"), ty.clone())],
++                vec![Some(1.25)],
++                false,
++            ),
++            (
++                "nested_cast",
++                vec![cast(cast(lit(1_i64), DataType::Float32), ty.clone())],
++                vec![Some(1.0)],
++                false,
++            ),
++            (
++                "dynamic",
++                vec![col("v"), literal(Some(1.25))],
++                vec![Some(1.25)],
++                false,
++            ),
++        ];
++        let long: Vec<_> = (1..=128).map(|v| Some(f64::from(v))).collect();
++        cases.push((
++            "long",
++            long.iter().copied().map(literal).collect(),
++            long,
++            true,
++        ));
++        for (offset, rows) in [(0, input.len()), (1, input.len() - 1), (2, 1), (0, 0)] {
++            let input = input.slice(offset, rows);
++            let schema = Arc::new(Schema::new(vec![Field::new("v", ty.clone(), true)]));
++            let batch = RecordBatch::try_new(schema.clone(), vec![input.clone()])?;
++            let schema = Arc::new(DFSchema::try_from(schema)?);
++            let simplifier = ExprSimplifier::new(
++                SimplifyContext::builder()
++                    .with_schema(schema.clone())
++                    .build(),
++            );
++            let wide = arrow::compute::cast(&input, &DataType::Float64)?;
++            for (name, list, expected, skip) in &cases {
++                for negated in [false, true] {
++                    let candidate =
++                        spark_in_list(col("v"), list.clone(), negated, &schema).unwrap();
++                    let expr::Expr::InList(in_list) = &candidate else {
++                        unreachable!()
++                    };
++                    let mut normalizers = 0;
++                    in_list.expr.apply(|e| {
++                        if let expr::Expr::ScalarFunction(f) = e {
++                            normalizers += usize::from(f.func.inner().is::<SparkComparisonFloat>());
++                        }
++                        Ok(TreeNodeRecursion::Continue)
++                    })?;
++                    assert_eq!(normalizers, usize::from(!skip), "{ty} {name}");
++                    if *skip && ty == DataType::Float64 {
++                        // An identity cast can hide native IN and inverse-Decimal rewrites.
++                        assert_eq!(in_list.expr.as_ref(), &col("v"));
++                    }
++                    let normalized =
++                        ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![col("v")]);
++                    let baseline =
++                        spark_in_list(normalized, list.clone(), negated, &schema).unwrap();
++                    assert_eq!(baseline.get_type(&schema)?, candidate.get_type(&schema)?);
++                    assert_eq!(baseline.nullable(&schema)?, candidate.nullable(&schema)?);
++                    for expression in [baseline, candidate] {
++                        let expression =
++                            simplifier.simplify(simplifier.coerce(expression, &schema)?)?;
++                        let result =
++                            create_physical_expr(&expression, &schema, &ExecutionProps::new())?
++                                .evaluate(&batch)?
++                                .into_array(rows)?;
++                        for (i, value) in wide.as_primitive::<Float64Type>().iter().enumerate() {
++                            let found = if expected.is_empty() && *name != "dynamic" {
++                                Some(false)
++                            } else {
++                                value.and_then(|v| {
++                                    if *name == "dynamic"
++                                        || expected
++                                            .iter()
++                                            .flatten()
++                                            .any(|w| v == *w || (v.is_nan() && w.is_nan()))
++                                    {
++                                        Some(true)
++                                    } else if expected.contains(&None) {
++                                        None
++                                    } else {
++                                        Some(false)
++                                    }
++                                })
++                            }
++                            .map(|v| v != negated);
++                            assert_eq!(
++                                result.as_boolean().is_null(i),
++                                found.is_none(),
++                                "{ty} {name} {i}"
++                            );
++                            if let Some(found) = found {
++                                assert_eq!(result.as_boolean().value(i), found, "{ty} {name} {i}");
++                            }
++                            checked_rows += 1;
++                        }
++                        checks += 1;
++                    }
++                }
++            }
++        }
++    }
++    assert_eq!(checks, 608);
++    assert_eq!(checked_rows, 2494016);
++    Ok(())
+ }
+ 
+ #[derive(Debug, PartialEq, Eq, Hash)]
