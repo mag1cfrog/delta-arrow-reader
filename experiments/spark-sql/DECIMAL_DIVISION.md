@@ -3319,6 +3319,34 @@ All 346 Arrow tests, 27 planner tests and four Delta lifecycle tests pass. One a
 
 The artifact contains the patch, checks, samples, counters, build identities and reproduction scripts. Shared sources and executable slots are restored and their hashes verified. This is a separate conversion optimization. The previous native add-zero candidate still needs evaluation on this kernel, and existing compatibility differences and historical performance costs remain unresolved.
 
+## Native add-zero after the Boolean cast optimization
+
+The [follow-up evaluation](float-in-zero-bool-results.json) keeps the native add-zero candidate deferred. The former roughly 7% FLOAT comparison regression is not reproduced with the accepted Boolean cast kernel, but the pure DOUBLE long-list control remains slower. Both variants include the Boolean optimization from `a651e99`; the candidate patch is identical to the earlier deferred version. Only the Sail planner's `common.rs` differs. Dependency sources, features, profiles, compiled Arrow libraries, lockfile and benchmark source match.
+
+The main series has 400 generic-query and 152 older-query process runs. Each query processes 1,048,576 rows in batches of 8192 on CPU 2. The table reports medians of process medians from four balanced fresh processes per variant, with two warmups and nine samples each. Planning and execution counters are gated separately and fully scheduled. Builds and correctness checks finish before timing; four profiling processes run afterward.
+
+| Execution case | Before (ms) | Candidate (ms) | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT, one zero | 0.501 | 0.472 | -5.73% | -14.52% |
+| DOUBLE, one zero | 0.682 | 0.640 | -6.23% | -20.75% |
+| FLOAT, three constants | 1.099 | 1.076 | -2.11% | -6.19% |
+| DOUBLE, three constants | 1.418 | 1.380 | -2.67% | -9.57% |
+| FLOAT, zero/one/NULL | 0.891 | 0.861 | -3.33% | -8.30% |
+| DOUBLE, zero/one/NULL | 1.138 | 1.086 | -4.51% | -12.26% |
+| DOUBLE, 128 nonzero constants | 2.326 | 2.395 | +2.98% | -0.04% |
+
+Another 160 processes isolate the three previous controls. Across 16 before/after pairs, FLOAT comparison is +0.01%, versus +0.13% in the broad series. Its paired median is -0.09%, with a conditional bootstrap interval of -0.27% to +0.06%. Utf8 NOT IN is -1.78% in isolation, with a paired interval crossing zero. These results do not reproduce their previous regressions on this build; they do not establish that every historical performance cost is resolved.
+
+The DOUBLE long-list control remains the adoption blocker: +2.22% across 16 normal-launch pairs and +3.27% across 16 pairs with per-process ASLR disabled. The normal paired median is +2.19%, with a bootstrap interval of +1.84% to +2.53%. The interval describes the paired median, not the ratio of overall medians. Eight identical-before and eight identical-after pairs give overall changes of +0.32% and -0.23%. No global ASLR setting changes. Smaller broad-series increases also remain, including older DOUBLE long IN (+1.35%), dynamic FLOAT IN (+1.26%) and dynamic DOUBLE IN (+1.23%); those cases are not individually isolated. Selected generic planning timings range from -0.48% to +2.67%.
+
+All four profiles place about 95% of sampled cycles in the existing DOUBLE IN hash lookup and Boolean bitmap loop. Its 127 normalized instructions match across binaries, while its start address modulo 64 changes from 0 to 16. The query's plan and native dependency sources also match. This narrows the investigation but does not prove that alignment, hash seeds, data placement or processor behavior causes the difference. The candidate stays deferred while that control is investigated.
+
+Validation passes 27 planner tests and four Delta lifecycle tests. The Rust oracle still checks 896 evaluations and 3,675,392 values. All 6332 existing observations, 6324 unique, retain their result/type/status, including 6001 raw Spark agreements and 331 existing differences. There are 26 logical and 26 physical plan changes. Five parallel CAST first-error messages vary; three reruns per variant preserve their other fields. The 128 additional baseline-equivalence observations and 48 direct computed-operand controls pass. All 112 older benchmark captures retain their plans; 30 of the 74 generic captures change only their physical plan. Frozen Spark references are reused. Arrow tests are not rerun because both variants use the previously tested source and identical compiled Arrow libraries.
+
+An additional 48 observations cover computed inputs exposed through subquery and CTE aliases, including CAST/TRY_CAST, IN/NOT IN, projected/filtered results and NULLs. They pass independent expected-row checks. The planner sees these aliases as columns, so they can receive the candidate rewrite; the earlier computed-operand exclusion applies to expressions that are still computed operands at that point. Both versions retain the input CAST in these plans, with normalization replaced by `+ 0` in the candidate. These are correctness probes, not alias performance measurements.
+
+The artifact references the unchanged candidate, benchmark and baseline captures by file hash instead of copying them again. It records new samples, counters, profiles, code comparison, checks and reproduction scripts. Shared sources and executables are restored and verified. No additional runtime patch joins the accepted optional sequence. Existing compatibility differences, fallback costs and smaller-batch performance remain outside this evaluation.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
