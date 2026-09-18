@@ -1,0 +1,257 @@
+diff --git a/src/expressions/case.rs b/src/expressions/case.rs
+--- a/src/expressions/case.rs
++++ b/src/expressions/case.rs
+@@ -42,7 +42,7 @@
+ use crate::expressions::case::literal_lookup_table::LiteralLookupTable;
+ use arrow::compute::kernels::merge::{MergeIndex, merge, merge_n};
+ use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
+-use datafusion_physical_expr_common::datum::compare_with_eq;
++use datafusion_physical_expr_common::datum::{apply, compare_with_eq};
+ use datafusion_physical_expr_common::utils::scatter;
+ use itertools::Itertools;
+ use std::fmt::{Debug, Formatter};
+@@ -1203,6 +1203,22 @@
+                 }
+             }
+         } else {
++            let then_expr = &self.body.when_then_expr[0].1;
++            if let Some(else_expr) = &self.body.else_expr
++                && ((then_expr.is::<Column>() && else_expr.is::<Literal>())
++                    || (then_expr.is::<Literal>() && else_expr.is::<Column>()))
++                && then_expr.data_type(&batch.schema())?
++                    == else_expr.data_type(&batch.schema())?
++            {
++                // These branches need no selective evaluation or type coercion.
++                // zip treats a NULL predicate as false and broadcasts the literal.
++                return apply(
++                    &then_expr.evaluate(batch)?,
++                    &else_expr.evaluate(batch)?,
++                    |then_value, else_value| zip(when_value, then_value, else_value),
++                );
++            }
++
+             // projected.projection may include indexes of lambda variables not available on this batch
+             let projection = projected
+                 .projection
+@@ -2363,6 +2379,221 @@
+         let expected = &Int32Array::from(vec![Some(3), None, Some(777), None]);
+ 
+         assert_eq!(expected, result);
++        Ok(())
++    }
++
++    #[test]
++    fn case_column_literal_selection() -> Result<()> {
++        use arrow::datatypes::{Int8Type, Int32Type};
++
++        let strings = vec![
++            Some("a"),
++            Some(""),
++            None,
++            Some("long string value"),
++            Some("b"),
++            Some("c"),
++            None,
++            Some("literal"),
++        ];
++        let arrays: Vec<ArrayRef> = vec![
++            Arc::new(Int32Array::from(vec![
++                Some(0),
++                Some(1),
++                None,
++                Some(3),
++                Some(4),
++                Some(5),
++                None,
++                Some(7),
++            ])),
++            Arc::new(Float64Array::from(vec![
++                Some(0.0),
++                Some(-0.0),
++                Some(f64::from_bits(0x7ff8_0000_0000_0001)),
++                Some(f64::from_bits(0x7ff8_0000_0000_0002)),
++                Some(f64::INFINITY),
++                Some(f64::NEG_INFINITY),
++                None,
++                Some(0.375),
++            ])),
++            Arc::new(BooleanArray::from(vec![
++                Some(true),
++                Some(false),
++                None,
++                Some(true),
++                Some(false),
++                Some(true),
++                None,
++                Some(false),
++            ])),
++            Arc::new(StringArray::from(strings.clone())),
++            Arc::new(StringViewArray::from(strings.clone())),
++            Arc::new(strings.into_iter().collect::<DictionaryArray<Int8Type>>()),
++            Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(
++                (0..8).map(|i| (i != 6).then_some(vec![Some(i), None])),
++            )),
++            Arc::new(
++                Decimal128Array::from(vec![
++                    Some(0),
++                    Some(-1),
++                    None,
++                    Some(3),
++                    Some(4),
++                    Some(5),
++                    None,
++                    Some(7),
++                ])
++                .with_precision_and_scale(10, 2)?,
++            ),
++        ];
++        let masks = [
++            BooleanArray::from(vec![true; 8]),
++            BooleanArray::from(vec![false; 8]),
++            BooleanArray::from(vec![None; 8]),
++            BooleanArray::from(vec![true, false, true, false, true, false, true, false]),
++            BooleanArray::from(vec![
++                Some(true),
++                None,
++                Some(false),
++                Some(true),
++                None,
++                Some(false),
++                Some(true),
++                None,
++            ]),
++            // NULL positions deliberately have true value bits.
++            BooleanArray::new(
++                vec![true; 8].into(),
++                Some(vec![true, false, true, false, true, false, true, false].into()),
++            ),
++        ];
++        let mut evaluations = 0;
++        for array in arrays {
++            for literal in [
++                ScalarValue::try_from_array(&array, 7)?,
++                ScalarValue::try_new_null(array.data_type())?,
++            ] {
++                for column_then in [true, false] {
++                    for (offset, len) in [(0, 8), (1, 7), (3, 4), (7, 1), (8, 0)] {
++                        for index in 0..masks.len() + 3 {
++                            let mask =
++                                masks[index.min(masks.len() - 1)].slice(offset, len);
++                            let value = array.slice(offset, len);
++                            let batch = RecordBatch::try_from_iter([
++                                ("mask", Arc::new(mask.clone()) as ArrayRef),
++                                ("value", Arc::clone(&value)),
++                            ])?;
++                            let scalar_predicate = [Some(true), Some(false), None]
++                                [index.saturating_sub(masks.len())];
++                            let when = if index < masks.len() {
++                                make_col("mask", 0)
++                            } else {
++                                lit(ScalarValue::Boolean(scalar_predicate))
++                            };
++                            let column = make_col("value", 1);
++                            let (then_expr, else_expr) = if column_then {
++                                (column, lit(literal.clone()))
++                            } else {
++                                (lit(literal.clone()), column)
++                            };
++                            let expr = CaseExpr::try_new(
++                                None,
++                                vec![(when, then_expr)],
++                                Some(else_expr),
++                            )?;
++                            let actual = expr.evaluate(&batch)?.into_array(len)?;
++                            assert_eq!(actual.data_type(), array.data_type());
++                            assert_eq!(actual.len(), len);
++                            for row in 0..len {
++                                let select_then = if index < masks.len() {
++                                    mask.is_valid(row) && mask.value(row)
++                                } else {
++                                    scalar_predicate == Some(true)
++                                };
++                                let expected = if select_then == column_then {
++                                    ScalarValue::try_from_array(&value, row)?
++                                } else {
++                                    literal.clone()
++                                };
++                                // ScalarValue compares floating-point values by their bits.
++                                assert_eq!(
++                                    ScalarValue::try_from_array(&actual, row)?,
++                                    expected
++                                );
++                            }
++                            evaluations += 1;
++                        }
++                    }
++                }
++            }
++        }
++        assert_eq!(evaluations, 1440);
++        Ok(())
++    }
++
++    #[test]
++    fn case_column_literal_preserves_coercion_and_lazy_evaluation() -> Result<()> {
++        let batch = RecordBatch::try_from_iter([
++            (
++                "mask",
++                Arc::new(BooleanArray::from(vec![true, false, true])) as ArrayRef,
++            ),
++            (
++                "value",
++                Arc::new(Int32Array::from(vec![0, 1, 0])) as ArrayRef,
++            ),
++        ])?;
++        for column_then in [true, false] {
++            let column = make_col("value", 1);
++            let (then_expr, else_expr, expected) = if column_then {
++                (
++                    column,
++                    lit(7i64),
++                    Arc::new(Int32Array::from(vec![0, 7, 0])) as ArrayRef,
++                )
++            } else {
++                (
++                    lit(7i64),
++                    column,
++                    Arc::new(Int64Array::from(vec![7, 1, 7])) as ArrayRef,
++                )
++            };
++            let expr = CaseExpr::try_new(
++                None,
++                vec![(make_col("mask", 0), then_expr)],
++                Some(else_expr.clone()),
++            )?;
++            assert_eq!(
++                expr.evaluate(&batch)?.into_array(3)?.as_ref(),
++                expected.as_ref()
++            );
++            // The all-false shortcut still returns ELSE without coercing it to THEN.
++            let expr = CaseExpr::try_new(
++                None,
++                vec![(lit(false), expr.body.when_then_expr[0].1.clone())],
++                Some(else_expr.clone()),
++            )?;
++            assert_eq!(
++                expr.evaluate(&batch)?.data_type(),
++                else_expr.data_type(&batch.schema())?
++            );
++        }
++        let division = binary(
++            lit(1i32),
++            Operator::Divide,
++            make_col("value", 1),
++            &batch.schema(),
++        )?;
++        let expr = CaseExpr::try_new(
++            None,
++            vec![(make_col("mask", 0), make_col("value", 1))],
++            Some(division),
++        )?;
++        assert_eq!(
++            as_int32_array(&expr.evaluate(&batch)?.into_array(3)?)?,
++            &Int32Array::from(vec![0, 1, 0])
++        );
+         Ok(())
+     }
+ 

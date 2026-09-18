@@ -3421,6 +3421,35 @@ The record contains 128 timing processes, eight separate profiles, code comparis
 
 A separate implementation can assess whether the existing Arrow selection kernel reduces work for CASE branches that contain only a column and a literal. It must preserve types, NULL handling and lazy evaluation of fallible expressions. If adopted, apply that optimization to both baselines when re-evaluating the hash candidate. Its total speedup would not, by itself, prove that the hash control difference was removed.
 
+## CASE column/literal selection
+
+The [CASE patch](datafusion-case-zip.patch) is ready for review as the next optional runtime change. It reuses Arrow's `zip` kernel to avoid filtering branch inputs when a single CASE condition selects between a column and a literal of the same type. The target dynamic DOUBLE IN query improves by 9.19%, with 9.33% fewer execution instructions. The [results record](case-zip-results.json) also measures the hash candidate against this new CASE baseline.
+
+The guard accepts either branch order and runs after the existing uniform-predicate shortcuts. NULL predicates still select ELSE. Different branch types retain their existing coercion path, and computed expressions retain selective evaluation, including protection from errors in unselected rows. Scalar/scalar and column/NULL specializations remain unchanged. This adds 17 Rust lines, including the changed import, without a new node, UDF or dependency. The final result array is still constructed.
+
+| CASE-only comparison | Original (ms) | CASE patch (ms) | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| Dynamic DOUBLE IN | 15.178 | 13.782 | -9.19% | -9.33% |
+| Nested lateral, confirmation | 100.906 | 84.259 | -16.50% | -4.16% |
+| Chained lateral | 93.966 | 89.978 | -4.24% | -3.85% |
+| Left lateral | 93.853 | 89.905 | -4.21% | -4.57% |
+
+The lateral plans contain CASE expressions with a literal in THEN and a column in ELSE, including a NULL literal. Their inputs include unmatched join keys. These whole-query timings cover that branch order without introducing another benchmark. The correlated-count control contains a division expression in THEN and retains the original evaluation path; its -0.51% overall change has a paired interval crossing zero.
+
+The dynamic query and nested-lateral confirmation each use 16 balanced, randomized fresh-process pairs; the other table rows use eight. Each process runs 1,048,576 rows in batches of 8192, with two warmups and nine samples. Table changes compare medians of process medians. Nested-lateral timings vary: its paired median is -7.89% in the first eight-pair series and -15.29% in the confirmation, whose conditional bootstrap interval is -17.17% to -8.57%. The confirmation also records 77.15% fewer page faults, but these counters do not isolate the cause of the larger elapsed-time gain.
+
+The selected controls show no stable increase after confirmation. For example, FLOAT comparison changes from +0.29% in four pairs to +0.02% in 16 pairs, with the latter interval crossing zero. These checks cover selected workloads on this machine, not every CASE type, mask pattern or batch size.
+
+Applying CASE to both hash variants gives a dynamic DOUBLE difference of +0.18% across 16 pairs and +0.11% in an independent 24-pair confirmation. The latter paired median is +0.11%, with an interval of -0.25% to +0.88%. Both series use normal ASLR and identical launch arguments. Identical-binary controls give +0.24% and -0.52%; the latter interval excludes zero, again showing why one interval cannot establish a code-level cause. The previous roughly 1% hash control difference is not stable in these new measurements. This is a separate comparison from the 9.19% CASE gain.
+
+The four hash long-list targets retain gains of 15.43%-19.31% against the CASE-only baseline. Keep the hash patch as a separate candidate: this slice repeats its targets and selected controls, not the complete preceding generic benchmark matrix. After review, use CASE as the common baseline for that broader comparison before deciding hash adoption. The native add-zero candidate remains excluded.
+
+Validation passes 38 native CASE tests, 55 native IN tests, 27 planner tests and four Delta lifecycle tests. The new pointwise oracle checks 1440 evaluations and 5760 row values across eight Arrow types, both branch orders, scalar and nullable predicates, slices and empty batches. Separate checks cover coercion and lazy division. Each runtime replays all 6332 existing observations, 6324 unique, retaining 6001 raw Spark agreements and 331 existing differences. Seven observation IDs show parallel CAST first-error text changes across the two replays; three reruns per variant preserve all other fields. Both runtimes retain all 186 benchmark captures exactly, including plans. No fresh Spark reference is generated.
+
+The record contains 544 timing processes, gated counters, source/build identities, test logs, canonical queries and reproduction scripts. Builds, checks and timing run sequentially. Only `case.rs` changes from the accepted runtime to CASE-only; only the two primitive-filter hash calls change from CASE-only to CASE-plus-hash. Dependency features, profiles, Arrow libraries, benchmark and lockfile match. The CASE patch applies and reverses exactly on pristine DataFusion 54.1.0. Shared sources, lockfiles and executable slots are restored and verified.
+
+To reproduce, start with the accepted optional runtime through the Arrow Boolean cast patch and the unchanged benchmark from the preceding hash experiment. Apply `datafusion-case-zip.patch` to the isolated DataFusion 54.1.0 physical-expression copy selected by the Cargo override, then rebuild and freeze its executables. For the hash comparison, apply `datafusion-float-in-hash.patch` to that same copy and rebuild with the same locked release graph. Keep CASE present in both hash variants. The default crate build remains unchanged, and this evaluation does not establish that all historical compatibility or performance differences are resolved.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
