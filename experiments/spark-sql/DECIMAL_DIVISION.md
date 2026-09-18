@@ -3450,6 +3450,33 @@ The record contains 544 timing processes, gated counters, source/build identitie
 
 To reproduce, start with the accepted optional runtime through the Arrow Boolean cast patch and the unchanged benchmark from the preceding hash experiment. Apply `datafusion-case-zip.patch` to the isolated DataFusion 54.1.0 physical-expression copy selected by the Cargo override, then rebuild and freeze its executables. For the hash comparison, apply `datafusion-float-in-hash.patch` to that same copy and rebuild with the same locked release graph. Keep CASE present in both hash variants. The default crate build remains unchanged, and this evaluation does not establish that all historical compatibility or performance differences are resolved.
 
+## Floating IN hashing after CASE: complete control matrix
+
+The [complete comparison](float-in-hash-case-results.json) supports adding the existing [hash patch](datafusion-float-in-hash.patch) to the optional runtime after CASE, subject to review. This recommendation accepts a remaining small nullable FLOAT timing difference. It does not classify that difference as fixed or establish zero impact on every query. The default crate build remains unchanged.
+
+Both frozen executables contain CASE zip. They differ only in the two primitive-filter hash calls and are byte-identical to the preceding CASE experiment. The native add-zero candidate remains absent. This slice adds measurements and a recommendation, with no new Rust changes or rebuilds.
+
+| Long-list execution | CASE only (ms) | CASE plus hash (ms) | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| DOUBLE, nonzero constants | 2.352 | 1.961 | -16.61% | -11.36% |
+| DOUBLE, list with NULL | 2.310 | 1.875 | -18.82% | -9.94% |
+| FLOAT, list including zero | 2.546 | 2.054 | -19.32% | -11.61% |
+| DOUBLE, list including zero | 2.670 | 2.196 | -17.77% | -9.28% |
+
+The first pass covers all 37 existing generic IN execution cases, the same 15 planning cases as the earlier hash experiment, and nine legacy execution controls. Those controls include the earlier five floating comparisons/IN queries and four CASE-related subqueries. Each comparison has four balanced, randomized fresh-process pairs. The older DOUBLE long-IN query improves by 9.71%; the previously problematic dynamic DOUBLE query changes by +0.13%, with a paired interval crossing zero.
+
+Eight comparisons receive 16-pair confirmations after the initial pass. The correlated COUNT increase changes from +5.74% to -3.42%, with the confirmation's paired interval crossing zero. Nullable Boolean changes from +3.69% to +0.37%. The other Boolean, Decimal and planning confirmations also have paired intervals crossing zero. The full record retains both initial results and confirmations.
+
+Nullable FLOAT remains the limitation. Its execution difference is +0.37% across 16 pairs and +0.32% across another 24 pairs, approximately 2.79 microseconds per 1,048,576 rows. The latter paired median is +0.23%, with a conditional bootstrap interval of +0.08% to +0.59%. Nullable DOUBLE changes from +0.24% to +0.14%; its final interval reaches zero. Identical-binary controls overlap this scale: FLOAT is -0.11% for the before binary and +0.31% for the after binary. Those controls do not disprove a small effect associated with the changed binary.
+
+Both nullable queries use three literals and full 8192-row batches. The unchanged `short_float_list` guard selects Arrow comparisons instead of `static_filter.contains` during row evaluation, even though the displayed plan says `IN (SET)`. Filter construction during planning can still hash. Execution instruction counts differ by less than 0.003% in the 24-pair comparisons. This rules out adding row-by-row hash work on that path; it does not identify the cause of the timing difference.
+
+A further FLOAT series interleaves 16 normal-address and 16 fixed-address pairs. Overall differences are +0.30% and +0.19%, respectively, and both paired intervals cross zero. This does not isolate an ASLR cause. Address randomization is disabled only in those diagnostic child processes; no runtime setting or binary-alignment workaround is proposed. The recommendation accepts the remaining roughly 0.3% FLOAT observation alongside the measured long-list gains.
+
+All 968 timing processes check their captures against the frozen references, covering 83 distinct query/ANSI captures with unchanged fields and plans. Counters are gated to execution or planning and fully scheduled. Measurements run sequentially on CPU 2, with 1,048,576 rows, batches of 8192, two warmups and nine samples per process. Both variants use the same launch symlink and argument/environment paths within each comparison. Time changes compare medians of process medians; intervals resample whole process pairs and describe the paired median. They are conditional on this machine and series, and do not account for selecting controls from many comparisons.
+
+The preceding 124 native/planner/lifecycle tests and 6332-observation replay are reused because the binaries are unchanged. No fresh Spark reference or additional Spark coverage is claimed; the 331 raw differences remain. Binary, compiler, source, lockfile and shared executable-slot identities are rechecked. The artifact includes the exact case schedule, canonical captures, samples, counters and reproduction scripts. Reproduction uses the preceding CASE experiment's `before` and `after` executables; preserve CASE in both and run `broad.py`, `confirm.py` and `nullable-confirm.py` sequentially. This review decision does not close the remaining nullable FLOAT observation or other historical performance questions.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
