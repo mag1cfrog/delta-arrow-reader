@@ -121,6 +121,276 @@ async fn plan_query(ctx: &SessionContext, sql: &str, ansi: bool) -> Result<Arc<d
     Ok(frame.create_physical_plan().await?)
 }
 
+// Keep normal SQL optimization enabled: a short IN list may become comparisons
+// or a constant and never reach the generic physical filter.
+async fn generic_in_bench(
+    ctx: &SessionContext,
+    output: &str,
+    selected: Option<&str>,
+    check_only: bool,
+) -> Result<()> {
+    use arrow::array::{BooleanArray, StringArray};
+
+    let phase = std::env::var("DECIMAL_BENCH_PERF_PHASE").unwrap_or_else(|_| "execution".into());
+    if !matches!(phase.as_str(), "planning" | "execution") {
+        return Err("DECIMAL_BENCH_PERF_PHASE must be planning or execution".into());
+    }
+    let mut results = Vec::new();
+    for (family, profiles) in [
+        (
+            "utf8",
+            &[
+                "low",
+                "high",
+                "nullable",
+                "all_null",
+                "long_list",
+                "nullable_long_list",
+                "filter",
+                "not_in",
+            ][..],
+        ),
+        ("long_utf8", &["low", "high", "nullable"][..]),
+        ("decimal", &["low", "high", "nullable", "long_list"][..]),
+        ("boolean", &["low", "nullable"][..]),
+        ("double", &["long_list", "nullable_long_list"][..]),
+    ] {
+        for &profile in profiles {
+            let case = format!("generic_in_{family}_{profile}");
+            if selected.is_some_and(|s| s != case) {
+                continue;
+            }
+            let nullable = matches!(
+                profile,
+                "nullable" | "all_null" | "nullable_long_list" | "not_in"
+            );
+            let length = if profile == "all_null" {
+                1
+            } else if family == "boolean" {
+                2
+            } else if profile.ends_with("long_list") {
+                128
+            } else {
+                3
+            };
+            let domain = if profile == "high" {
+                3
+            } else if family == "boolean" {
+                2
+            } else if profile == "long_list" {
+                997
+            } else {
+                97
+            };
+            let prefix = if family == "long_utf8" {
+                "x".repeat(240)
+            } else {
+                String::new()
+            };
+            let text = |v| format!("{prefix}value{v}");
+            let value = |i| {
+                let id = subquery_input_id(i);
+                if nullable && id % 3 == 0 {
+                    None
+                } else {
+                    Some(id % domain + usize::from(profile == "high"))
+                }
+            };
+            let (data_type, sql_type) = match family {
+                "utf8" | "long_utf8" => (DataType::Utf8, "STRING"),
+                "decimal" => (DataType::Decimal128(18, 2), "DECIMAL(18,2)"),
+                "boolean" => (DataType::Boolean, "BOOLEAN"),
+                "double" => (DataType::Float64, "DOUBLE"),
+                _ => unreachable!(),
+            };
+            let schema = Arc::new(Schema::new(vec![
+                Field::new("id", DataType::Int64, false),
+                Field::new("v", data_type, nullable),
+            ]));
+            let mut batches = Vec::new();
+            for start in (0..ROWS).step_by(BATCH_SIZE) {
+                let positions = start..(start + BATCH_SIZE).min(ROWS);
+                let values = positions.clone().map(value);
+                let array: ArrayRef = match family {
+                    "utf8" | "long_utf8" => {
+                        Arc::new(StringArray::from_iter(values.map(|v| v.map(text))))
+                    }
+                    "decimal" => Arc::new(
+                        Decimal128Array::from_iter(values.map(|v| v.map(|n| n as i128 * 100)))
+                            .with_precision_and_scale(18, 2)?,
+                    ),
+                    "boolean" => Arc::new(BooleanArray::from_iter(
+                        values.map(|v| v.map(|n| n % 2 != 0)),
+                    )),
+                    "double" => {
+                        Arc::new(Float64Array::from_iter(values.map(|v| v.map(|n| n as f64))))
+                    }
+                    _ => unreachable!(),
+                };
+                batches.push(RecordBatch::try_new(
+                    schema.clone(),
+                    vec![
+                        Arc::new(Int64Array::from_iter_values(positions.map(|i| i as i64))),
+                        array,
+                    ],
+                )?);
+            }
+            ctx.deregister_table("generic_in_input")?;
+            ctx.register_table(
+                "generic_in_input",
+                Arc::new(MemTable::try_new(schema, vec![batches])?),
+            )?;
+            let members = (1..=length - usize::from(nullable)).collect::<Vec<_>>();
+            let mut literals = members
+                .iter()
+                .map(|&n| {
+                    let literal = match family {
+                        "utf8" | "long_utf8" => format!("'{}'", text(n)),
+                        "boolean" => (n % 2 != 0).to_string(),
+                        _ => n.to_string(),
+                    };
+                    format!("CAST({literal} AS {sql_type})")
+                })
+                .collect::<Vec<_>>();
+            if nullable {
+                literals.push(format!("CAST(NULL AS {sql_type})"));
+            }
+            let negated = profile == "not_in";
+            let filter = profile == "filter";
+            let predicate = format!(
+                "v {}IN ({})",
+                if negated { "NOT " } else { "" },
+                literals.join(",")
+            );
+            let sql = if filter {
+                format!("SELECT id AS r FROM generic_in_input WHERE {predicate}")
+            } else {
+                format!("SELECT {predicate} AS r FROM generic_in_input")
+            };
+            let expected = (0..ROWS)
+                .map(|i| {
+                    value(i).and_then(|v| {
+                        let found = if family == "boolean" {
+                            members.iter().any(|n| n % 2 == v % 2)
+                        } else {
+                            members.contains(&v)
+                        };
+                        if found {
+                            Some(!negated)
+                        } else if nullable {
+                            None
+                        } else {
+                            Some(negated)
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
+            let expected_ids = (0..ROWS)
+                .filter(|&i| expected[i] == Some(true))
+                .collect::<Vec<_>>();
+            for ansi in [true, false] {
+                let plan = plan_query(ctx, &sql, ansi).await?;
+                let physical_plan = displayable(plan.as_ref()).indent(true).to_string();
+                let output_type = if filter {
+                    DataType::Int64
+                } else {
+                    DataType::Boolean
+                };
+                assert_eq!(plan.schema().fields().len(), 1);
+                assert_eq!(plan.schema().field(0).data_type(), &output_type);
+                let mut stream = execute_stream(plan, ctx.task_ctx())?;
+                let (mut rows, mut nulls) = (0, 0);
+                while let Some(batch) = stream.next().await {
+                    let batch = batch?;
+                    if filter {
+                        let array = batch
+                            .column(0)
+                            .as_any()
+                            .downcast_ref::<Int64Array>()
+                            .unwrap();
+                        for actual in array.iter() {
+                            assert_eq!(
+                                actual,
+                                Some(*expected_ids.get(rows).ok_or("too many filter rows")? as i64)
+                            );
+                            rows += 1;
+                        }
+                    } else {
+                        let array = batch
+                            .column(0)
+                            .as_any()
+                            .downcast_ref::<BooleanArray>()
+                            .unwrap();
+                        for actual in array.iter() {
+                            assert_eq!(Some(&actual), expected.get(rows), "{case}, row {rows}");
+                            rows += 1;
+                        }
+                    }
+                    nulls += batch.column(0).null_count();
+                }
+                assert_eq!(rows, if filter { expected_ids.len() } else { ROWS });
+                let mut result = json!({
+                    "id": format!("{case}_ansi{ansi}"), "sql": sql, "ansi": ansi,
+                    "physical_plan": physical_plan, "validated_rows": rows, "output_nulls": nulls,
+                    "matching_inputs": expected_ids.len(), "list_length": length,
+                    "input_domain": domain, "string_prefix_bytes": prefix.len(),
+                });
+                // Both ANSI modes are validated. Timing uses ANSI on only;
+                // this workload has no failing casts or arithmetic.
+                if !check_only && ansi {
+                    for _ in 0..WARMUPS {
+                        assert_eq!(
+                            consume(ctx, plan_query(ctx, &sql, ansi).await?).await?,
+                            (rows, nulls)
+                        );
+                    }
+                    let (mut plans, mut planning_ms, mut execution_ms) =
+                        (Vec::new(), Vec::new(), Vec::new());
+                    if phase == "planning" {
+                        perf_command(b"enable\n")?;
+                    }
+                    for _ in 0..SAMPLES {
+                        let start = Instant::now();
+                        plans.push(plan_query(ctx, &sql, ansi).await?);
+                        planning_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+                    }
+                    if phase == "planning" {
+                        perf_command(b"disable\n")?;
+                    }
+                    if phase == "execution" {
+                        perf_command(b"enable\n")?;
+                    }
+                    for plan in plans {
+                        let start = Instant::now();
+                        let counts = consume(ctx, plan).await?;
+                        execution_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+                        assert_eq!(counts, (rows, nulls));
+                    }
+                    if phase == "execution" {
+                        perf_command(b"disable\n")?;
+                    }
+                    result["planning_samples_ms"] = json!(planning_ms);
+                    result["samples_ms"] = json!(execution_ms);
+                }
+                results.push(result);
+            }
+        }
+    }
+    if results.is_empty() {
+        return Err("no benchmark case matched CASE_ID".into());
+    }
+    fs::write(
+        output,
+        serde_json::to_vec_pretty(&json!({
+            "rows": ROWS, "batch_size": BATCH_SIZE, "partitions": 1,
+            "input_permutation": "(position * 4099 + 17) % rows",
+            "warmups": WARMUPS, "samples": SAMPLES, "check_only": check_only,
+            "perf_phase": phase, "results": results,
+        }))?,
+    )?;
+    Ok(())
+}
+
 fn subquery_input_id(position: usize) -> usize {
     position.wrapping_mul(4099).wrapping_add(17) % ROWS
 }
@@ -703,6 +973,15 @@ async fn main() -> Result<()> {
             .build(),
     );
     let inputs = match args.get(2).map(String::as_str) {
+        Some(mode @ ("generic-in" | "generic-in-check")) => {
+            return generic_in_bench(
+                &ctx,
+                output,
+                args.get(3).map(String::as_str),
+                mode == "generic-in-check",
+            )
+            .await;
+        }
         Some("casts") => return cast_bench(&ctx, output, args.get(3).map(String::as_str)).await,
         Some(mode @ ("subqueries" | "subquery-check")) => {
             return subquery_bench(
@@ -727,7 +1006,7 @@ async fn main() -> Result<()> {
         Some("high-scale-mixed") => vec![(38, 6, 38, false), (38, 7, 38, false), (38, 6, 38, true)],
         Some(_) => {
             return Err(
-                "expected normal, float, high-scale, high-scale-35, high-scale-mixed, subqueries, subquery-check or casts"
+                "expected normal, float, high-scale, high-scale-35, high-scale-mixed, subqueries, subquery-check, generic-in, generic-in-check or casts"
                     .into(),
             );
         }

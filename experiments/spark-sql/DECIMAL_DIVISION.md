@@ -3128,6 +3128,32 @@ Existing SQL controls show execution changes from -2.45% to +0.47% and planning 
 
 Keep this change separate for review. It removes measured generic result-construction work while preserving the current membership behavior. Whole-query string timings and other generic performance cases remain follow-up work before making broader claims. The default project build remains unchanged.
 
+## Generic IN through SQL
+
+The bitmap patch committed in `63dc74d` reduces execution time for the three SQL cases that reach the generic IN filter. This follow-up adds benchmark coverage without changing the runtime. The new `generic-in` and `generic-in-check` modes in [decimal_bench.rs](examples/decimal_bench.rs) use normal SQL optimization and record the resulting physical plans.
+
+The optimizer changes which cases exercise the patch. Three-item string and Decimal IN lists become OR comparisons; NOT IN becomes AND comparisons. An all-NULL list becomes a NULL literal. The Boolean cases become a constant `true` or `v OR NULL`. The generic filter remains in the two 128-item Utf8 cases and the 128-item Decimal case. The two long DOUBLE cases use the existing floating filter. Long-string cases in this suite have short lists and become comparisons, so they do not measure long-string performance in the generic filter.
+
+All 19 queries pass with ANSI enabled and disabled. Each runtime variant validates 37,813,602 output values, including the row IDs selected by the WHERE case, against an independent Rust membership oracle. Results and physical plans match across all 38 query/mode pairs. Runtime sources match the preceding experiment, and the rebuilt probe and runner binaries match it byte-for-byte. The preceding 6332-observation replay and 55 native, 26 planner and four Delta lifecycle tests are therefore reused, not rerun. This adds query validation without claiming additional Spark-reference coverage.
+
+Each query reads 1,048,576 preloaded rows in batches of 8192, with one partition. Execution timing includes stream creation, consumption of all output and buffer release. Input construction and per-row validation are excluded; planning is measured separately. Each sample uses a fresh physical plan. The initial series has 192 process runs; the targeted repeat has 88. Both use CPU 2, four fresh processes per variant in balanced order, two warmups and nine samples. The table reports medians of process medians from the repeat. Instruction counters cover the selected phase and its control handshake, with every event fully scheduled.
+
+| Query | Before execution (ms) | After execution (ms) | Elapsed change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| Utf8, 128 non-NULL list items | 4.961 | 4.376 | -11.80% | -10.16% |
+| Utf8, 127 values and NULL | 7.245 | 6.808 | -6.03% | -5.53% |
+| Decimal(18,2), 128 list items | 3.814 | 3.289 | -13.76% | -12.99% |
+
+The first series measures reductions of 11.80%, 6.01% and 13.47% for those cases. The non-NULL inputs cycle over 997 values; the nullable case cycles over 97 values, with every third input NULL. Most valid nullable inputs match the list. The short-list and folded-constant cases are controls: their SQL plans bypass the optimized result constructor, so the earlier short-list expression gains do not transfer directly to these queries.
+
+Several initial control increases shrink or change direction on repetition. The folded NULL query changes from +2.15% to -0.36%; nullable Boolean changes from +2.25% to -1.35%. The constant-true Boolean control still rises from 63.22 to 63.73 microseconds (+0.80%). Short Decimal planning remains slower, from 446.02 to 453.19 microseconds (+1.61%), and long nullable DOUBLE planning rises from 4.885 to 4.922 ms (+0.76%). Their instruction counts are effectively unchanged. These measurements do not establish extra planning work or identify the latency causes.
+
+The isolated native repeat puts the previously slower DOUBLE 8192-row, 128-item nullable profile at 16.146 versus 16.220 microseconds (+0.45%), after +0.17% initially. The FLOAT eight-row all-NULL profile changes from +0.96% initially to -0.25% in the repeat. The preceding full-matrix increases of 1.83% and 3.95% do not recur at those magnitudes here. This follow-up adds case selection to the native harness, changing its binary layout; it does not prove that the earlier layout's penalties have been removed. The SQL nullable DOUBLE execution control changes from +0.09% initially to -0.47% in the repeat.
+
+[generic-in-query-results.json](generic-in-query-results.json) contains the query plans, validation counts, build identities, all samples and counters, repeats and reproduction scripts. Apply the recorded benchmark diff to the same optional runtime used by the preceding experiment, then build both variants with the same source paths, dependencies and release profile. Run each frozen binary with `OUTPUT_JSON generic-in-check` before timing. `OUTPUT_JSON generic-in CASE_ID` selects one query and validates both ANSI modes while timing ANSI on. The recorded scripts select planning or execution counters through `DECIMAL_BENCH_PERF_PHASE`. All 42 shared source/lockfile paths and three executable slots were restored before measurement and their hashes checked again afterward.
+
+Retain the bitmap patch. Its three measured generic SQL execution paths improve in both series. These results do not measure combined planning-plus-execution latency, Delta I/O, concurrency or every generic type and distribution. Small control differences, earlier normalization and planning costs, and the 331 raw Spark differences remain. The rejected floating-dispatch candidate is still separate.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
