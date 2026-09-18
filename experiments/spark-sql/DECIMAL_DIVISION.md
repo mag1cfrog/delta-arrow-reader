@@ -3347,6 +3347,31 @@ An additional 48 observations cover computed inputs exposed through subquery and
 
 The artifact references the unchanged candidate, benchmark and baseline captures by file hash instead of copying them again. It records new samples, counters, profiles, code comparison, checks and reproduction scripts. Shared sources and executables are restored and verified. No additional runtime patch joins the accepted optional sequence. Existing compatibility differences, fallback costs and smaller-batch performance remain outside this evaluation.
 
+## DOUBLE long-list control: isolate code placement
+
+The [code-placement experiment](float-in-layout-results.json) removes the selected DOUBLE control gap by changing the linked position of its existing hash loop. The alignment-256 diagnostic executable differs from the accepted baseline by -0.05% in an isolated comparison. This identifies sensitivity to code placement in the measured regression; it does not provide a portable Rust fix or enable the native add-zero candidate.
+
+The experiment first reconstructs the preceding candidate byte-for-byte from its saved dependencies and benchmark source. It then uses `llvm-objcopy` to change the alignment of one input object section and relinks copied archives. Every section payload, symbol, relocation and other attribute remains identical, as do all other archive members. The alignment-16 roundtrip produces the exact original executable. The four changed layouts and both previous binaries have the same 127 normalized hot-loop instructions. Shared sources, libraries, lockfiles and executable slots remain unchanged.
+
+The two inner loops start at offsets `0xa0` and `0x110` within the selected function. In the original candidate and the 32/64-byte layouts, these loops straddle a 4 KiB virtual page boundary. In the accepted baseline and the 128/256-byte layouts, they share one page. With 128-byte alignment, the function prologue still occupies the preceding page.
+
+| Requested section alignment | Inner loops share a page | Original (ms) | Relinked (ms) | Time change |
+| --- | --- | ---: | ---: | ---: |
+| 32 bytes | No | 2.344 | 2.338 | -0.25% |
+| 64 bytes | No | 2.338 | 2.329 | -0.39% |
+| 128 bytes | Yes | 2.340 | 2.286 | -2.30% |
+| 256 bytes | Yes | 2.340 | 2.285 | -2.37% |
+
+Each table row uses 16 balanced, randomized fresh-process pairs, with two warmups and nine samples per process. Timings cover execution on CPU 2, with 1,048,576 rows in batches of 8192. The table reports ratios of medians of process medians. The alignment-256 paired median is -2.25%, with a conditional bootstrap interval of -2.53% to -2.15%; instructions change by +0.003%. Moving from the 64-byte layout to the 256-byte layout improves by 1.65%. With per-process ASLR disabled, original-to-256 improves by 2.32%. Identical-original and identical-256 comparisons change by -0.21% and -0.22% across eight pairs each. No global ASLR setting changes.
+
+The 256-byte diagnostic executable also receives eight comparisons against the accepted baseline. The six existing controls, including FLOAT comparison, Utf8 NOT IN, DOUBLE long IN and dynamic FLOAT/DOUBLE IN, range from -0.11% to +0.15%; their paired intervals include zero. The FLOAT and DOUBLE single-zero targets retain gains of 6.17% and 7.18%, with 14.52% and 20.75% fewer execution instructions. These measurements cover 480 processes in total. Execution counters are phase-gated and fully scheduled. Builds, correctness checks and code inspection finish before each timing group; no competing build, test, profile or timing process runs alongside it.
+
+This intervention changes placement while retaining the Rust and hashing implementations. It supports a layout explanation for the observed control gap. It does not isolate the exact processor mechanism: aligning one section can shift later code and data too. The normal original-to-256 comparison records 7.68% fewer branch misses, but that correlation does not prove a branch-predictor cause. Individual random hash seeds are neither fixed nor captured, so their contribution is not separately measured.
+
+All four changed layouts match the preceding candidate's 74 generic and 112 older benchmark captures exactly, including plans, for 744 repeated observations. These are checks of the relinked executables, not additional unique Spark coverage. The full 6332-observation corpus, Arrow tests and planner tests are not rerun for unchanged Rust code, and no fresh Spark reference is generated.
+
+The artifact records the exact reconstruction, section checks, binary hashes, linker commands, samples, counters and runnable scripts. No binary-specific alignment rule joins the runtime or packaging configuration. The native add-zero candidate remains outside the accepted optional sequence. A Rust hash optimization needs a separate evaluation of actual work and query performance; this diagnostic result does not establish that every historical cost is resolved.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
