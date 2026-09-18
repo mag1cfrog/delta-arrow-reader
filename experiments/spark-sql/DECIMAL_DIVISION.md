@@ -3397,6 +3397,30 @@ All 55 native IN tests, 27 planner tests and four Delta lifecycle tests pass. Th
 
 The artifact retains 1008 timing processes, phase-gated counters, generated-code comparisons, build identities, tests and reproduction scripts. Builds and correctness checks finish before timing; code inspection runs separately. Only the primitive filter source differs between the two runtime builds. The patch applies and reverses exactly on pristine DataFusion 54.1.0; it preserves the file's existing macro formatting. Shared sources, lockfiles and executable slots are restored and their hashes verified. Reproduction starts from the accepted Boolean cast runtime, applies this candidate to its isolated `datafusion-physical-expr` copy, and uses the same locked graph and benchmark for both builds. Locating the dynamic DOUBLE control cost remains the next step before adoption.
 
+## Dynamic DOUBLE control: CASE hotspots and launch checks
+
+The hash candidate remains deferred. The [follow-up record](float-in-dynamic-control-results.json) locates the existing execution work and rules out changing argument paths as an explanation, but does not resolve the roughly 1% control regression. This slice changes no runtime source.
+
+Eight execution-gated profiles cover both binaries with normal and fixed-address launches. Fifteen hot functions account for 87.95%-89.46% of sampled cycles. Their normalized instructions and named relocation targets are identical across binaries, while their locations differ. This comparison covers the selected functions, not all executable code, runtime data or processor state.
+
+The dynamic IN list contains a column and a CASE expression, so it takes the Arrow comparison path. The CASE has a column in its THEN branch and a literal in ELSE. DataFusion 54.1.0 selects `ExpressionOrExpression`, filters the branch inputs, and reconstructs the result through `arrow_select::merge` and `MutableArrayData::extend`. The latter calls both value and validity callbacks, including a no-op validity callback. The alternating condition makes this existing work frequent. Its prominence in profiles does not establish that it causes the small timing difference.
+
+The new timing harness uses one executable symlink, output path and FIFO directory for both frozen binaries. Arguments and benchmark environment paths are identical within each launch mode; only the symlink target changes before starting a process. Every measured query retains its expected values and physical plan.
+
+| Launch comparison | Before (ms) | Candidate (ms) | Time change |
+| --- | ---: | ---: | ---: |
+| Same arguments, normal ASLR | 14.926 | 15.086 | +1.07% |
+| Interleaved series, normal launch | 14.952 | 15.101 | +1.00% |
+| Interleaved series, explicit ELF interpreter | 14.341 | 14.503 | +1.13% |
+
+Each row has 16 balanced, randomized fresh-process pairs. The last two rows come from one interleaved 32-pair series. Direct interpreter invocation retains ASLR and uses the same program interpreter declared in the executable. It changes loading conditions without changing binary contents; it is not a proposed deployment configuration. The normal-launch paired median is +1.19%, with a conditional bootstrap interval of +0.40% to +1.68%; the interpreter-launch paired median is +1.14%, with an interval of +0.82% to +1.60%.
+
+Eight identical-before pairs give -0.27%, and eight identical-after pairs give +0.65%. The latter's paired interval also excludes zero. This illustrates why a narrow interval from one series is not sufficient to establish a source-code cause. The candidate's normal-launch difference nevertheless recurs across series and remains recorded as unresolved.
+
+The record contains 128 timing processes, eight separate profiles, code comparisons, samples, counters and reproduction scripts. Each process handles 1,048,576 rows in batches of 8192, with two warmups and nine samples. Counters are gated to execution and fully scheduled. Frozen binary hashes and shared source, lockfile and executable-slot hashes remain unchanged. The full corpus and native unit tests are not rerun because runtime sources are unchanged; this adds no Spark compatibility coverage.
+
+A separate implementation can assess whether the existing Arrow selection kernel reduces work for CASE branches that contain only a column and a literal. It must preserve types, NULL handling and lazy evaluation of fallible expressions. If adopted, apply that optimization to both baselines when re-evaluating the hash candidate. Its total speedup would not, by itself, prove that the hash control difference was removed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
