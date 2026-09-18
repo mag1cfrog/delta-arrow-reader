@@ -3239,6 +3239,33 @@ Keep the accepted floating-list optimization. The larger measurements do not est
 
 All 324 invocations, including profiling, validate the 32,433 retained row IDs in both ANSI modes and preserve the canonical plans and results. The frozen binaries and shared source restoration hashes match the previous experiment. No rebuild or full corpus/lifecycle rerun was needed for this measurement-only slice. Other planning controls, floating normalization fallback costs and existing Spark differences remain outside its scope. The artifact contains all timing samples and counters, profiles, selected disassembly, binary identities and reproduction scripts.
 
+## Rejected zero-sign expansion for constant floating IN
+
+Keep `sail-float-in-constant.patch` unchanged. The [zero-expansion experiment](float-in-zero-expansion-results.json) tests removing normalization when a constant list contains zero but no NaN. It adds the opposite zero sign to the list so native bitwise comparisons still match both signs. Results remain correct, but short and nullable lists become substantially slower. The candidate is recorded in the artifact and is not part of the accepted patch sequence.
+
+The final candidate applies only to direct FLOAT/DOUBLE columns with recognized numeric constants. Computed operands retain their old path: adding negative zero can block the existing Decimal-to-DOUBLE inverse-cast optimization. NaN constants, dynamic lists and unknown expressions also retain normalization, and required type widening remains.
+
+The main series has 400 process runs across 37 execution cases and 13 planning cases. A separate 64-process repeat reverses the starting variant and confirms the representative results below. Each variant has four fresh processes per case, two warmups and nine samples, pinned to CPU 2. Times are medians of process medians per 1,048,576 input rows; instruction changes use the separately gated execution counters. All six counter events are fully scheduled.
+
+| Repeated execution case | Before (ms) | Candidate (ms) | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT, one zero | 0.495 | 0.702 | +41.92% | +43.82% |
+| DOUBLE, one zero | 0.672 | 0.857 | +27.60% | +23.44% |
+| FLOAT, three constants | 1.086 | 1.932 | +77.93% | +84.69% |
+| DOUBLE, three constants | 1.421 | 1.944 | +36.79% | +44.16% |
+| FLOAT, zero/one/NULL | 0.889 | 2.166 | +143.66% | +143.20% |
+| DOUBLE, zero/one/NULL | 1.151 | 2.185 | +89.77% | +89.63% |
+| FLOAT, 128 constants | 2.523 | 2.393 | -5.14% | -5.46% |
+| DOUBLE, 128 constants | 2.648 | 2.393 | -9.62% | -10.06% |
+
+The source and captured plans explain the regressions. A single normalized equality becomes two comparisons joined by OR. Lists that grow from three to four entries cross the accepted local execution dispatch threshold: at 8192 rows per batch, the old plan uses vectorized comparisons, while the candidate selects a hash filter. Both physical plans print `IN (SET)`, so that label alone does not expose this change. The dependency sources are identical across builds. This threshold belongs to our optional native optimization, not an assertion about every upstream DataFusion version.
+
+The long-list gains and lower planning costs do not justify adopting this candidate. Those long-list inputs use a 97-value domain with mostly matches; they do not establish a safe new size threshold across other selectivities. The 74 generic captures include two repeated DOUBLE `zero_wide` captures with the same SQL and data as `zero_short`.
+
+Validation passes all 27 planner tests and four Delta lifecycle tests. The extended Rust oracle checks 896 evaluations and 3,675,392 values. All 6332 existing observations preserve their result/type/status, retaining 6001 raw Spark agreements and 331 existing differences. There are 48 logical and 48 physical plan changes; four parallel CAST first-error messages vary, with their other fields unchanged in three reruns per variant. The 128 additional baseline-equivalence observations and 48 computed-operand controls pass. All 112 old benchmark captures, including their plans, remain unchanged. New edge queries use the accepted baseline rather than a fresh Spark reference run.
+
+The artifact retains the rejected patch, shared benchmark extension, final source snapshots, build identities, checks, samples, counters and reproduction scripts. Shared sources and executables are restored and their hashes verified. Further optimization should preserve short-list execution and computed-operand rewrites; reducing unnecessary work inside normalization is still an untested direction. Existing fallback costs and small historical timing differences remain unresolved.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
