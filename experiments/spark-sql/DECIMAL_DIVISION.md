@@ -3293,6 +3293,32 @@ All 27 planner tests and four Delta lifecycle tests pass. The Rust oracle checks
 
 The artifact retains the Rust candidate, tests, source and binary identities, all timing samples and counters, profiles, selected disassembly and reproduction scripts. Shared sources and executables are restored and verified. The next investigation should isolate the existing Boolean result-conversion cost before deciding whether to adopt this candidate. Existing compatibility differences and performance costs remain unresolved.
 
+## Boolean-to-numeric casts: bit iteration and shared validity
+
+The optional [Arrow Boolean cast patch](arrow-bool-numeric.patch) reduces the existing result-conversion cost identified in the preceding profiles. It changes one Arrow 58.4.0 kernel shared by eleven numeric destinations. It reads Arrow's packed Boolean values through the existing bit iterator and shares the input NULL bitmap. An entirely NULL array gets a zeroed values buffer without unpacking its bits. The numeric values buffer is still allocated; sharing validity can retain a bitmap allocation larger than a sliced result.
+
+The [results artifact](bool-numeric-cast-results.json) compares this patch with the accepted optional runtime through `88dadd8`. The native add-zero planner candidate remains absent. Host planner sources, other dependencies, features, build profiles, lockfile and benchmark source are identical. The patch also applies and reverses byte-for-byte on pristine Arrow 58.4.0.
+
+These SQL queries project comparison or IN results through INT to DECIMAL(38,6). Their improvement measures that conversion path. Each query processes 1,048,576 rows in batches of 8192 on CPU 2. The table reports medians of process medians from four balanced fresh processes per variant, with two warmups and nine samples each. Planning and execution counters are gated separately and fully scheduled. Builds and correctness checks finish before timing.
+
+| Execution case | Before (ms) | After (ms) | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT comparison | 2.963 | 2.109 | -28.83% | -25.37% |
+| DOUBLE comparison | 3.263 | 2.398 | -26.52% | -23.18% |
+| FLOAT short IN | 3.415 | 2.554 | -25.22% | -21.67% |
+| DOUBLE short IN | 3.663 | 2.789 | -23.86% | -20.43% |
+| Decimal short IN | 4.168 | 3.331 | -20.08% | -17.57% |
+| Integer IN | 5.308 | 4.472 | -15.75% | -15.39% |
+| Nullable DOUBLE IN | 5.911 | 4.640 | -21.49% | -19.85% |
+
+The final series contains 184 SQL timing processes and eight public Arrow kernel processes. At 8192 rows, the public Boolean-to-Int32 cast improves by 53.85% without NULLs, 62.78% with sparse NULLs, 44.20% with half NULLs and 95.02% with all NULLs. The initial bit-iteration implementation was 1.60% slower on all-NULL input at this size and 2.05% slower at 1,048,576 rows. The final all-NULL branch resolves that measured regression; the million-row case improves by 95.45% over the original kernel. The artifact preserves the initial trial separately. Native performance coverage is Int32 at four lengths; semantic coverage includes all eleven destinations.
+
+The no-division SQL control is +0.50%; Boolean-only DOUBLE long-list and FLOAT zero-list controls are -0.08% and -0.14%. Selected planning timings range from -1.01% to +0.46%, with essentially unchanged instructions. Utf8 NOT IN is +4.43% in the broad series, so it receives 64 additional isolated runs. Across 16 independent before/after process pairs, its ratio of overall medians is +0.22%. The paired median is +1.28%, with a bootstrap interval of -1.10% to +1.60%. Identical-before and identical-after comparisons also vary, at +0.44% and -1.08%. The isolated series does not reproduce a stable 4.43% regression and does not prove zero impact.
+
+All 346 Arrow tests, 27 planner tests and four Delta lifecycle tests pass. One added Rust matrix checks 36,960 casts and 31,087,056 values across eleven types, both safety modes, ten lengths, seven slice offsets, four value patterns and six validity patterns. It checks independent expected values and shared validity, including empty and all-NULL arrays. All 186 SQL correctness captures match their baseline exactly, including plans. The 6332 existing observations, 6324 unique, retain 6001 raw Spark agreements and 331 existing differences. Six parallel CAST diagnostics select a different first invalid input; three reruns per variant preserve all other fields. No new Spark reference is generated.
+
+The artifact contains the patch, checks, samples, counters, build identities and reproduction scripts. Shared sources and executable slots are restored and their hashes verified. This is a separate conversion optimization. The previous native add-zero candidate still needs evaluation on this kernel, and existing compatibility differences and historical performance costs remain unresolved.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

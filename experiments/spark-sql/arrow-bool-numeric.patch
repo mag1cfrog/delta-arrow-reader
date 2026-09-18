@@ -1,0 +1,110 @@
+diff --git a/src/cast/mod.rs b/src/cast/mod.rs
+--- a/src/cast/mod.rs
++++ b/src/cast/mod.rs
+@@ -2663,18 +2663,17 @@
+     T: ArrowPrimitiveType,
+     T::Native: num_traits::NumCast,
+ {
+-    let iter = (0..from.len()).map(|i| {
+-        if from.is_null(i) {
+-            None
++    PrimitiveArray::new(
++        if from.null_count() == from.len() {
++            vec![T::Native::ZERO; from.len()].into()
+         } else {
+-            single_bool_to_numeric::<T::Native>(from.value(i))
+-        }
+-    });
+-    // Benefit:
+-    //     20% performance improvement
+-    // Soundness:
+-    //     The iterator is trustedLen because it comes from a Range
+-    unsafe { PrimitiveArray::<T>::from_trusted_len_iter(iter) }
++            from.values()
++                .iter()
++                .map(|v| if v { T::Native::ONE } else { T::Native::ZERO })
++                .collect()
++        },
++        from.nulls().cloned(),
++    )
+ }
+ 
+ /// Cast single bool value to numeric value.
+@@ -4776,6 +4775,77 @@
+                 )
+             }
+         }
++    }
++
++    #[test]
++    fn test_cast_bool_to_numeric_slices() {
++        use arrow_buffer::{BooleanBuffer, NullBuffer};
++
++        fn check<T: ArrowPrimitiveType>() {
++            for n in [0usize, 1, 2, 7, 8, 9, 63, 64, 65, 8192] {
++                for offset in [0, 1, 7, 8, 63, 64, 65] {
++                    for pattern in 0..4 {
++                        let values: Vec<bool> = (0..n + offset)
++                            .map(|i| match pattern {
++                                0 => false,
++                                1 => true,
++                                2 => i % 2 == 0,
++                                _ => i.wrapping_mul(1664525).wrapping_add(1013904223) % 17 < 8,
++                            })
++                            .collect();
++                        for validity in 0..6 {
++                            let valid: Vec<bool> = (0..values.len())
++                                .map(|i| match validity {
++                                    0 | 1 => true,
++                                    2 => i % 127 != 0,
++                                    3 => i % 2 != 0,
++                                    4 => i % 127 == 0,
++                                    _ => false,
++                                })
++                                .collect();
++                            let source = BooleanArray::new(
++                                BooleanBuffer::from(values.clone()),
++                                (validity != 0).then(|| NullBuffer::from(valid.clone())),
++                            )
++                            .slice(offset, n);
++                            let expected: Vec<Option<T::Native>> = (offset..offset + n)
++                                .map(|i| valid[i].then(|| T::Native::usize_as(values[i] as usize)))
++                                .collect();
++                            for safe in [false, true] {
++                                let options = CastOptions {
++                                    safe,
++                                    ..Default::default()
++                                };
++                                let result =
++                                    cast_with_options(&source, &T::DATA_TYPE, &options).unwrap();
++                                let result = result.as_primitive::<T>();
++                                assert_eq!(result.data_type(), &T::DATA_TYPE);
++                                assert_eq!(result.nulls(), source.nulls());
++                                if let Some(nulls) = result.nulls() {
++                                    assert_eq!(
++                                        nulls.buffer().as_ptr(),
++                                        source.nulls().unwrap().buffer().as_ptr()
++                                    );
++                                }
++                                assert_eq!(result.iter().collect::<Vec<_>>(), expected);
++                            }
++                        }
++                    }
++                }
++            }
++        }
++
++        check::<UInt8Type>();
++        check::<UInt16Type>();
++        check::<UInt32Type>();
++        check::<UInt64Type>();
++        check::<Int8Type>();
++        check::<Int16Type>();
++        check::<Int32Type>();
++        check::<Int64Type>();
++        check::<Float16Type>();
++        check::<Float32Type>();
++        check::<Float64Type>();
+     }
+ 
+     #[test]
