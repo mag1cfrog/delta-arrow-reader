@@ -1,0 +1,217 @@
+diff --git a/src/expressions/in_list/array_static_filter.rs b/src/expressions/in_list/array_static_filter.rs
+--- a/src/expressions/in_list/array_static_filter.rs
++++ b/src/expressions/in_list/array_static_filter.rs
+@@ -82,27 +82,28 @@
+ 
+         with_hashes([v], &self.state, |hashes| {
+             let cmp = make_comparator(v, &self.in_array, SortOptions::default())?;
+-            Ok((0..v.len())
+-                .map(|i| {
+-                    // SQL three-valued logic: null IN (...) is always null
+-                    if needle_nulls.is_some_and(|nulls| nulls.is_null(i)) {
+-                        return None;
+-                    }
+-
+-                    let hash = hashes[i];
+-                    let contains = self
+-                        .map
+-                        .raw_entry()
+-                        .from_hash(hash, |idx| cmp(i, *idx).is_eq())
+-                        .is_some();
+-
+-                    match contains {
+-                        true => Some(!negated),
+-                        false if haystack_has_nulls => None,
+-                        false => Some(negated),
+-                    }
+-                })
+-                .collect())
++            let results = (0..v.len()).map(|i| {
++                // SQL three-valued logic: null IN (...) is always null
++                if needle_nulls.is_some_and(|nulls| nulls.is_null(i)) {
++                    return None;
++                }
++
++                let hash = hashes[i];
++                let contains = self
++                    .map
++                    .raw_entry()
++                    .from_hash(hash, |idx| cmp(i, *idx).is_eq())
++                    .is_some();
++
++                match contains {
++                    true => Some(!negated),
++                    false if haystack_has_nulls => None,
++                    false => Some(negated),
++                }
++            });
++            // SAFETY: Range<usize> and Map preserve TrustedLen; the iterator
++            // yields exactly one result per input row.
++            Ok(unsafe { BooleanArray::from_trusted_len_iter(results) })
+         })
+     }
+ }
+@@ -158,3 +159,163 @@
+         })
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use arrow::array::*;
++    use arrow::compute::cast;
++    use arrow::datatypes::*;
++    use datafusion_common::ScalarValue;
++    use std::sync::Arc;
++
++    #[test]
++    fn generic_results_preserve_values_and_bitmap_boundaries() -> Result<()> {
++        fn scalar(array: &dyn Array, index: usize) -> Result<ScalarValue> {
++            let mut value = ScalarValue::try_from_array(array, index)?;
++            while let ScalarValue::Dictionary(_, inner) = value {
++                value = *inner;
++            }
++            Ok(value)
++        }
++
++        let numbers = Arc::new(Int32Array::from(vec![
++            None,
++            Some(1),
++            Some(2),
++            Some(1),
++            Some(3),
++            None,
++        ])) as ArrayRef;
++        let text = Arc::new(StringArray::from(vec![
++            None,
++            Some("a"),
++            Some("b"),
++            Some("a"),
++            Some("z"),
++            None,
++        ])) as ArrayRef;
++        let mut arrays = Vec::new();
++        for dt in [
++            DataType::Boolean,
++            DataType::Date32,
++            DataType::Decimal32(7, 2),
++            DataType::Decimal64(15, 2),
++            DataType::Decimal128(20, 2),
++            DataType::Decimal256(40, 2),
++        ] {
++            arrays.push(cast(&numbers, &dt)?);
++        }
++        let wide = cast(&numbers, &DataType::Int64)?;
++        for dt in [
++            DataType::Date64,
++            DataType::Timestamp(TimeUnit::Nanosecond, Some("UTC".into())),
++            DataType::Duration(TimeUnit::Microsecond),
++        ] {
++            arrays.push(cast(&wide, &dt)?);
++        }
++        for dt in [
++            DataType::Utf8,
++            DataType::LargeUtf8,
++            DataType::Utf8View,
++            DataType::Binary,
++            DataType::LargeBinary,
++            DataType::BinaryView,
++        ] {
++            arrays.push(cast(&text, &dt)?);
++        }
++        arrays.push(cast(
++            &cast(&text, &DataType::Binary)?,
++            &DataType::FixedSizeBinary(1),
++        )?);
++        arrays.push(Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>([
++            None,
++            Some(vec![Some(1), None]),
++            Some(vec![Some(2)]),
++            Some(vec![Some(1), None]),
++            Some(vec![]),
++            None,
++        ])) as ArrayRef);
++        arrays.push(Arc::new(StructArray::new(
++            vec![Field::new("a", DataType::Int32, true)].into(),
++            vec![Arc::clone(&numbers)],
++            numbers.nulls().cloned(),
++        )) as ArrayRef);
++
++        let mut checks = 0;
++        for values in arrays {
++            let expanded = take(
++                values.as_ref(),
++                &UInt32Array::from_iter_values((0..8200).map(|i| i % 6)),
++                None,
++            )?;
++            let mut needles: Vec<ArrayRef> = [
++                (0, 0),
++                (0, 1),
++                (0, 7),
++                (0, 8),
++                (1, 63),
++                (7, 64),
++                (1, 65),
++                (7, 8192),
++            ]
++            .into_iter()
++            .map(|(offset, length)| expanded.slice(offset, length))
++            .collect();
++            needles.push(new_null_array(values.data_type(), 65));
++            needles.push(take(
++                values.as_ref(),
++                &UInt32Array::from(vec![1; 65]),
++                None,
++            )?);
++            needles.push(Arc::new(DictionaryArray::try_new(
++                Int32Array::from_iter((0..129).map(|i| (i % 5 != 0).then_some(i % 6))),
++                Arc::clone(&values),
++            )?) as ArrayRef);
++            for indices in [
++                vec![],
++                vec![0],
++                vec![1],
++                vec![1, 1],
++                vec![1, 0, 2],
++                (0..129).map(|i| i % 6).collect(),
++            ] {
++                let haystack = take(values.as_ref(), &UInt32Array::from(indices), None)?;
++                let expected_values = (0..haystack.len())
++                    .map(|i| scalar(haystack.as_ref(), i))
++                    .collect::<Result<Vec<_>>>()?;
++                let has_null = expected_values.iter().any(ScalarValue::is_null);
++                let filter = ArrayStaticFilter::try_new(haystack)?;
++                for needle in &needles {
++                    let inputs = (0..needle.len())
++                        .map(|i| scalar(needle.as_ref(), i))
++                        .collect::<Result<Vec<_>>>()?;
++                    for negated in [false, true] {
++                        let expected = BooleanArray::from_iter(inputs.iter().map(|v| {
++                            if v.is_null() {
++                                None
++                            } else if expected_values.contains(v) {
++                                Some(!negated)
++                            } else if has_null {
++                                None
++                            } else {
++                                Some(negated)
++                            }
++                        }));
++                        let result = filter.contains(needle.as_ref(), negated)?;
++                        assert_eq!(
++                            result,
++                            expected,
++                            "{:?}, rows={}, negated={negated}",
++                            values.data_type(),
++                            needle.len()
++                        );
++                        checks += 1;
++                    }
++                }
++            }
++        }
++        assert_eq!(checks, 2376);
++        Ok(())
++    }
++}

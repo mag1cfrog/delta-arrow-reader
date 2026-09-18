@@ -3098,6 +3098,36 @@ Keep the accepted NULL patch. The few nanoseconds saved on small floating arrays
 
 The artifact retains the candidate diff, build identities, test output, all timing samples, repeats and reproduction scripts. Reproduction starts from the accepted optional runtime through `3b011a1`; apply the embedded candidate diff to the isolated `datafusion-physical-expr` 54.1.0 copy. It applies and reverses exactly and passes rustfmt. All builds and correctness checks finished before timing on CPU 2. All 42 shared source/lockfile paths and three executable slots were restored and their hashes rechecked after measurement. No candidate patch is added to the accepted sequence.
 
+## Construct generic IN result bitmaps directly
+
+[datafusion-generic-in-bitmap.patch](datafusion-generic-in-bitmap.patch) removes an intermediate result buffer from `ArrayStaticFilter`. It is a separate optional patch on the accepted runtime through `3b011a1`. It does not include the rejected floating-dispatch candidate.
+
+In the locked Arrow 58.4.0 implementation, collecting this iterator into `BooleanArray` calls `BooleanBuilder::extend`. That method collects a `Vec<Option<bool>>`, constructs temporary bitmaps, then appends them into the builder. The patch passes the existing iterator directly to Arrow's `BooleanArray::from_trusted_len_iter`, removing the temporary vector and bitmap copy. The mapper body, hashing, comparison, dictionary recursion, input evaluation, errors and filter selection stay unchanged. The unsafe constructor's length contract is satisfied by the standard `Range<usize>` and `Map`: they yield exactly one result per input row. No custom iterator or bitmap-writing code is added.
+
+Profiles of the preceding investigation's frozen binaries located the existing work before this candidate was built. Hashing and lookup dominate; packing the temporary vector into bitmaps accounts for about 9% of samples in the accepted baseline. Those profiles motivated this change but do not establish the cause of the earlier dispatch candidate's string slowdown.
+
+All 55 native IN tests pass. The new test checks 18 generic types, six list shapes, sliced arrays, empty batches, bitmap boundaries, dictionaries, NULLs and IN/NOT IN against a scalar-value membership oracle: 2376 evaluations over 1,870,344 result positions. All 26 planner tests and four Delta lifecycle tests pass. The 6332-observation replay retains 6001 raw Spark matches and all 264 independent projected-subquery matches, with no new value, type, status or plan differences. Two parallel CAST observations vary only in their first invalid input; three reruns per variant and ANSI mode preserve the other fields. All 112 million-row captures and plans are identical.
+
+The isolated repeat below uses four fresh processes per variant in balanced order, CPU 2, two warmups and nine samples. Reported times are medians of process medians. Lists containing NULL use inputs with every third row NULL; the other inputs contain no NULLs. Values cycle over 97 distinct strings, so match rates are low.
+
+| Utf8 array input | Rows | Before (ns) | After (ns) | Elapsed change | Instruction change |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| One NULL list item | 8192 | 24297.77 | 20679.25 | -14.89% | -14.43% |
+| Two values and NULL | 8192 | 26099.83 | 22206.92 | -14.92% | -13.69% |
+| Three non-NULL list items | 8192 | 32299.38 | 27935.48 | -13.51% | -11.27% |
+| Three non-NULL list items | 1 | 304.03 | 178.12 | -41.41% | -36.62% |
+| Two values and NULL | 8 | 423.33 | 249.06 | -41.17% | -39.76% |
+
+The first isolated series measures comparable array gains. Instruction counters include process setup and teardown, with every event fully scheduled. These are expression microbenchmarks. Generic correctness coverage does not establish performance gains for Boolean, Decimal, nested values, long strings, long lists or high match rates.
+
+Some control differences remain. A one-row nullable BIGINT array with a mixed three-item list rises from 135.49 to 136.83 ns (+0.99%) in the isolated repeat, after +2.83% initially; instructions are effectively unchanged. Scalar increases of roughly 6%-8% in the sequential matrix do not reproduce in isolation. The repeated full native matrix retains a FLOAT eight-row all-NULL increase of 88.30 to 91.78 ns (+3.95%), while that profile is flat in the isolated repeat (-0.30%). A DOUBLE 8192-row, 128-item nullable profile remains 1.83% slower in the full matrix and has not been isolated. Both matrix and isolated results are retained; their differences are not treated as proof that overhead has disappeared.
+
+Existing SQL controls show execution changes from -2.45% to +0.47% and planning changes from -1.79% to +0.25%. This series is not repeated and contains no string-IN query, so it does not measure the target's whole-query benefit. Against the earlier pre-normalization reference, raw FLOAT/DOUBLE execution remains 1.76%/4.40% slower and planning 4.00%/5.61% slower. This patch does not resolve those earlier costs or the 331 raw Spark differences.
+
+[generic-in-bitmap-results.json](generic-in-bitmap-results.json) records the patch, source and binary identities, correctness output, profiles, timing samples, repeats and reproduction scripts. Before/after native and control harnesses use the same absolute source paths as well as identical source bytes and unchanged Arrow/common/serde libraries, removing a possible measurement confounder. This does not explain the previous candidate's regressions. Apply the patch after `datafusion-null-in-filter.patch` to the isolated `datafusion-physical-expr` 54.1.0 copy, then use the recorded locked build and checks. The patch applies and reverses exactly and passes rustfmt. All compilation and correctness checks finish before timing; all 42 shared source/lockfile paths and three executable slots are restored and their hashes rechecked afterward.
+
+Keep this change separate for review. It removes measured generic result-construction work while preserving the current membership behavior. Whole-query string timings and other generic performance cases remain follow-up work before making broader claims. The default project build remains unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
