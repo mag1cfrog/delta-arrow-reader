@@ -3154,6 +3154,33 @@ The isolated native repeat puts the previously slower DOUBLE 8192-row, 128-item 
 
 Retain the bitmap patch. Its three measured generic SQL execution paths improve in both series. These results do not measure combined planning-plus-execution latency, Delta I/O, concurrency or every generic type and distribution. Small control differences, earlier normalization and planning costs, and the 331 raw Spark differences remain. The rejected floating-dispatch candidate is still separate.
 
+## Revisit floating dispatch after generic bitmap construction
+
+The floating-filter candidate is still not adopted. [short-float-in-filter-bitmap-investigation.json](short-float-in-filter-bitmap-investigation.json) reapplies the preceding rejected diff byte-for-byte on the accepted bitmap runtime through `63dc74d`, using the SQL benchmark committed in `a6703ca`. Only shared IN dispatch and the existing FLOAT/DOUBLE filters change. The generic bitmap constructor and numeric all-NULL selection remain intact.
+
+The earlier large-string penalty does not recur. Isolated 8192-row Utf8 inputs with one NULL list item change by -0.02% initially and -0.63% on repetition; with two values and NULL, the changes are -0.16% and -0.07%. These results do not establish what caused the earlier penalty.
+
+Small floating arrays still benefit: across short lists, the native matrix's median changes at 1, 8 and 32 rows are -3.45%, -2.91% and -1.99%. Other increases remain. Two-item nullable FLOAT/DOUBLE profiles at 8192 rows rise by 1.45%/1.25% in the full matrix and 2.12%/1.01% in isolation, with instructions up 0.10%/0.08%. The BIGINT NULL scalar control with 8192 output rows and a mixed four-item list rises by 1.19% initially and 2.80% in the isolated repeat. It uses the existing scalar-NULL shortcut before the filter. Its instructions decrease; the latency cause is not established. Larger sequential-matrix scalar increases shrink in isolation, but some remain about 3% slower. Both measurement contexts are retained.
+
+Full SQL execution per 1,048,576 rows gives little reason to accept those tradeoffs:
+
+| Query | Initial elapsed change | Repeated elapsed change | Repeated instruction change |
+| --- | ---: | ---: | ---: |
+| Raw FLOAT, three-item IN | -0.20% | -0.23% | -0.37% |
+| Raw DOUBLE, three-item IN | +0.33% | -0.42% | -0.38% |
+| Nullable DOUBLE input, three-item IN | +1.17% | +5.15% | -0.27% |
+| DOUBLE, long IN list | +1.13% | +1.23% | -0.13% |
+
+These lists have no NULL items. The nullable-input repeat is variable: candidate process medians range from 6.005 to 7.241 ms, versus 6.128 to 6.360 ms before. The 5.15% median increase is not a stable estimate of the slowdown. Raw DOUBLE planning changes from +0.31% to +1.96%, with almost unchanged instruction counts. No allocator, cache or code-layout explanation is established for these changes.
+
+The three SQL cases that reach the generic filter retain or improve their timings in both series. Repeated changes for long Utf8, nullable Utf8 and Decimal lists are -0.81%, -0.30% and -2.07%, with instruction changes below 0.01%. Those results do not indicate less work in the unchanged generic constructor. The long DOUBLE generic-suite control remains slower by 0.66% initially and 0.78% on repetition.
+
+All 56 native IN tests, 26 planner tests and four Delta lifecycle tests pass. Coverage includes 14,784 floating bit-oracle evaluations, 120 strategy checks, 8640 all-NULL evaluations and 2376 generic evaluations. The 6332-observation replay retains 6001 raw Spark matches and all 264 independent projected-subquery matches, with no new value, type, status or plan differences. Five parallel CAST observations change only their first invalid input; three reruns per variant preserve every other field. All 112 existing benchmark captures and all 38 generic query/ANSI pairs retain their results and plans. Each variant validates 37,813,602 generic-query output values.
+
+The artifact includes the rejected diff, tests, build identities, all samples and counters, and reproduction scripts. Before and after use identical harness source paths and bytes, dependency features, release profiles, Arrow libraries and host sources. Apply the embedded candidate diff to the isolated `datafusion-physical-expr` copy from the preceding experiment; it applies and reverses exactly and passes rustfmt. Timing uses CPU 2, four fresh processes per variant, two warmups and nine samples, after all builds and correctness checks. All counter events are fully scheduled. All 42 shared source/lockfile paths and three executable slots were restored before timing and their hashes rechecked afterward.
+
+Keep the accepted runtime and omit this candidate from the patch sequence. No new older-reference comparison was run, so this experiment cannot update the remaining normalization or planning gaps. The 331 raw Spark differences also remain. The default project build is unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
