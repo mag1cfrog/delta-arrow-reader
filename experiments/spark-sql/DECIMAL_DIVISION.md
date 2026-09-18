@@ -3266,6 +3266,33 @@ Validation passes all 27 planner tests and four Delta lifecycle tests. The exten
 
 The artifact retains the rejected patch, shared benchmark extension, final source snapshots, build identities, checks, samples, counters and reproduction scripts. Shared sources and executables are restored and their hashes verified. Further optimization should preserve short-list execution and computed-operand rewrites; reducing unnecessary work inside normalization is still an untested direction. Existing fallback costs and small historical timing differences remain unresolved.
 
+## Native add-zero candidate: local gains, adoption deferred
+
+Do not adopt the [native add-zero candidate](float-in-zero-only-results.json) yet. It improves the selected zero-list queries, but existing queries that do not trigger the optimization become slower in repeatable measurements. The accepted optional patch sequence remains unchanged.
+
+The candidate uses Arrow's existing floating addition to unify positive and negative zero when the list has known numeric constants and no NaN. It keeps the original list length and RHS handling, preserving the short-list dispatch. Only direct FLOAT/DOUBLE columns qualify; computed operands and FLOAT-to-DOUBLE widening keep their old normalization path. There is no new UDF or dependency, and addition still allocates a full value buffer.
+
+The main generic series has 400 process runs, its repeat 208, and the older-query controls 224. Another 288 runs isolate three controls with normal launches, per-process ASLR disabled, and identical-executable comparisons. All runs use CPU 2, two warmups and nine samples. The table shows medians of process medians from the repeated execution series, with four fresh processes per variant and 1,048,576 input rows per query. Counters are phase-gated and fully scheduled; planning is measured separately. Four profiling processes run after timing finishes.
+
+| Repeated execution case | Before (ms) | Candidate (ms) | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT, one zero | 0.499 | 0.464 | -7.03% | -14.52% |
+| DOUBLE, one zero | 0.678 | 0.629 | -7.23% | -20.75% |
+| FLOAT, three constants | 1.093 | 1.065 | -2.60% | -6.19% |
+| DOUBLE, three constants | 1.424 | 1.380 | -3.08% | -9.57% |
+| FLOAT, zero/one/NULL | 0.890 | 0.855 | -3.92% | -8.30% |
+| DOUBLE, zero/one/NULL | 1.145 | 1.096 | -4.30% | -12.26% |
+
+The repeated 128-constant zero-list cases improve by only 0.29% for FLOAT and 1.65% for DOUBLE. These use mostly matching inputs and do not establish benefits for other selectivities or smaller batches. Some planning cases are slightly slower; for example, single-zero planning uses about 1.1% more instructions.
+
+The older FLOAT comparison control is the adoption blocker. It takes 7.06% longer in the broad series, 7.11% longer across 16 isolated process pairs, and 7.48% longer across 16 pairs with ASLR disabled, with essentially unchanged instructions. The normal-launch paired median is +7.17%, with a paired bootstrap interval of +6.96% to +7.25%. That interval describes the paired median, not the ratio of overall medians. Identical-before and identical-after comparisons are -0.02% and -0.17%. This difference is not dismissed as measurement noise. The pure DOUBLE long-list control also remains slower in isolation: +1.91% normally and +1.81% with ASLR disabled. Utf8 NOT IN is less stable: +0.40% and +3.05%, with wider identical-binary paired intervals. No global ASLR setting is changed.
+
+Profiles point to the existing Boolean-to-integer/Decimal result conversion. The selected Boolean cast, Boolean value accessor and integer-to-Decimal functions have identical normalized instructions in both binaries. The selected FLOAT comparison also has matching operations; its six differently labelled SIMD constants contain identical bytes. This does not establish the exact cause of the timing difference or prove all executable code, data placement or processor behavior equivalent. No cache, allocator, alignment or branch-predictor explanation is established.
+
+All 27 planner tests and four Delta lifecycle tests pass. The Rust oracle checks 896 evaluations and 3,675,392 values. All 6332 existing observations preserve result/type/status, retaining 6001 raw Spark agreements and 331 existing differences. There are 26 logical and 26 physical plan changes; seven parallel CAST first-error messages vary, with other fields preserved in three reruns per variant. The 128 additional baseline-equivalence observations and 48 computed-operand controls pass. All 112 older benchmark captures retain their plans; 30 of the 74 generic captures change only their physical plan. The DOUBLE `zero_wide` case remains duplicate coverage. No new Spark reference is generated.
+
+The artifact retains the Rust candidate, tests, source and binary identities, all timing samples and counters, profiles, selected disassembly and reproduction scripts. Shared sources and executables are restored and verified. The next investigation should isolate the existing Boolean result-conversion cost before deciding whether to adopt this candidate. Existing compatibility differences and performance costs remain unresolved.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
