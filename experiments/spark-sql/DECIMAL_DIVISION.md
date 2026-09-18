@@ -3563,6 +3563,39 @@ There are 864 timing processes for the narrower candidate across 38 comparisons,
 
 To reproduce, use the frozen `after` executables from `float-in-zero-case-results.json` as `before`, apply this patch after that deferred add-zero candidate, and build with the recorded overrides. Run `run.py` and `identity.py`, then the recorded `initial`, `confirmation` and `total` schedules sequentially with `run-series.py`. The artifact embeds the before/after Rust source, scripts, build identities, canonical captures, samples, counters and the broader attempt. The patch is a follow-up to the deferred candidate, not an addition to the accepted patch stack.
 
+## Skip normalizer nodes for canonical constant lists
+
+The [next Rust candidate](sail-float-in-canonical-list.patch) reduces planning work by omitting redundant floating normalizer nodes from recognized constant IN lists. Single-zero planning uses about 4.8% fewer instructions; zero-containing long lists use about 11% fewer. Keep the candidate for review, with the complete add-zero change still deferred: Utf8 and Decimal execution controls become slower again. The [full record](float-in-canonical-list-results.json) retains those regressions and the planning gains.
+
+The planner already evaluates recognized literals and direct numeric literal casts to check for zero and NaN. This change also tracks negative zero during that pass. A list containing neither NaN nor negative zero is already canonical, so its floating constants need no `SparkComparisonFloat` wrapper. Constant expressions, CAST/TRY_CAST, type widening, list order and list length remain intact. Input normalization keeps its existing rules. Lists with negative zero, NaN or unrecognized expressions retain their normalizers.
+
+These eight-pair confirmations compare against the preceding identity-shortcut candidate, with add-zero, CASE and integer-bit hashing present in both variants.
+
+| Planning case | Before (ms) | Candidate (ms) | Time change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT, one zero | 0.350 | 0.335 | -4.30% | -4.77% |
+| DOUBLE, one zero | 0.351 | 0.333 | -5.27% | -4.80% |
+| FLOAT, three constants including zero | 0.438 | 0.401 | -8.37% | -9.99% |
+| DOUBLE, three constants including zero | 0.440 | 0.407 | -7.43% | -9.95% |
+| FLOAT, long list including zero | 4.839 | 4.368 | -9.74% | -10.97% |
+| DOUBLE, long list including zero | 4.901 | 4.401 | -10.21% | -10.78% |
+
+All six paired bootstrap intervals exclude zero. Initial nullable FLOAT/DOUBLE and FLOAT-widening planning cases also improve. Two planning controls remain slower in 16-pair confirmations: nonzero DOUBLE long IN is +0.70%, and Utf8 long IN is +1.62%. Their instruction counts are effectively unchanged. FLOAT NaN-short planning is +0.55%, with its interval crossing zero. Same-binary planning controls range from -0.58% to +0.42%, with all four intervals crossing zero. The control timing causes are not isolated here.
+
+Execution gains are not universal. Utf8 long IN rises 1.30% and Decimal long IN rises 1.98% in 16-pair confirmations, with positive paired intervals and unchanged instruction counts. Their same-binary controls cross zero. The generic IN bitmap function retains the same 160 normalized instructions and 628-byte size, but moves from `0x63e5df0` to `0x63e5b80`, changing its offset modulo 64 from 48 to 0. This matches the slower placement in the earlier controlled experiment. The current edit also moves other code, so this check does not independently isolate placement or establish a portable fix. No alignment workaround is added.
+
+The initial 1.95% nullable DOUBLE execution increase falls to +0.12% in confirmation, with its interval crossing zero. Its execution instructions remain about 0.33% higher; the cause is unresolved. DOUBLE single-zero, FLOAT NaN-short and nullable FLOAT execution confirmations also have intervals crossing zero. The artifact retains initial and confirmation results, including instruction changes that do not translate into a repeatable elapsed-time increase.
+
+Against the historical accepted runtime, single-zero FLOAT/DOUBLE planning is 4.18%/4.45% faster and uses 3.79%/3.83% fewer instructions. DOUBLE zero-long planning is 8.99% faster. This comparison has a limitation: the accepted runtime has not received the same constant-list optimization. These improvements do not prove that add-zero itself has no remaining planning cost. The next comparison should apply this optimization equally to both variants before isolating add-zero. Historical-baseline execution remains slower by 0.45% for Utf8 and 1.99% for Decimal, while DOUBLE single zero and nullable FLOAT retain gains of 7.04% and 3.62%.
+
+All 27 planner and four Delta lifecycle tests pass. The existing independent Rust oracle now includes FLOAT16 positive/negative-zero casts and checks that canonical lists have no normalizer nodes before optimization: 960 evaluations cover 3,937,920 values. The 6332-observation replay retains 6001 raw Spark agreements and 331 raw differences, with no new value, type, status or physical-plan differences. Four unoptimized logical plans omit the expected list wrappers. Two parallel CAST diagnostics vary in their first invalid input; three reruns per variant preserve all other fields.
+
+The 128 edge observations, 48 direct-computed-input controls and 48 alias controls retain their results and physical plans. They have 24, 48 and 48 expected logical-plan changes, respectively. The inherited byte-identity assertion initially rejected those changes. The revised checker verifies the exact replacement of fixed constant-list expressions, including the retained FLOAT-to-DOUBLE cast; it leaves the input expression and every other plan fragment unchanged. All 186 benchmark query/ANSI captures retain their fields and physical plans. No new Spark-reference coverage is claimed.
+
+The record contains 888 sequential timing processes across 58 comparisons. Each uses CPU 2, 1,048,576 preloaded rows, 8192-row batches, two warmups and nine samples per process. Adjacent pairs have balanced shuffled order and identical launch paths. Counters are phase-gated and fully scheduled. Builds, validation, timing and code inspection run separately. Intervals resample whole pairs, are conditional on this machine and series, and do not adjust for comparison selection. The benchmark, dependency sources/features/profiles, Arrow libraries and lockfile match; only Sail `common.rs` changes. Shared source, lockfile and executable-slot restoration hashes are verified.
+
+To reproduce, freeze the `after` executables from `float-in-planning-results.json`, apply this patch after that candidate, and use the recorded overrides. Run `run.py` and `identity.py`, followed by the `initial`, `confirmation` and `total` schedules with `run-series.py`, then `inspect-code.py`. The artifact embeds the sources, checks, scripts, captures, samples, counters and build identities. This remains a candidate experiment; the accepted optional runtime and default build are unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

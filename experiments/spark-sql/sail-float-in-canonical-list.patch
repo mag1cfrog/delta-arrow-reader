@@ -1,0 +1,89 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -229,7 +229,7 @@
+         // Only zero and NaN can change membership when the input is normalized.
+         // ponytail: recognize literals and direct numeric literal casts only;
+         // leave other constant expressions on the existing normalization path.
+-        let mut zero = false;
++        let (mut zero, mut negative_zero) = (false, false);
+         let known_without_nan = matches!(
+             input.expr.get_type(schema)?,
+             DataType::Float32 | DataType::Float64
+@@ -249,6 +249,7 @@
+             }) {
+                 Some(ScalarValue::Float64(value)) => value.is_none_or(|value| {
+                     zero |= value == 0.0;
++                    negative_zero |= value == 0.0 && value.is_sign_negative();
+                     !value.is_nan()
+                 }),
+                 _ => false,
+@@ -263,7 +264,7 @@
+             && !(input.expr.get_type(schema)? == DataType::Float32 && (decimal || double));
+         // Decimal/float lists use DOUBLE. Otherwise preserve operand types
+         // so normalization does not change the existing numeric coercion.
+-        let convert = |value: expr::Expr| -> PlanResult<expr::Expr> {
++        let convert = |value: expr::Expr, skip_normalization: bool| -> PlanResult<expr::Expr> {
+             let data_type = value.get_type(schema)?;
+             let floating = data_type.is_floating();
+             Ok(if floating && !skip_normalization {
+@@ -281,12 +282,12 @@
+             let zero = ScalarValue::new_zero(&input.expr.get_type(schema)?)?;
+             *input.expr + lit(zero)
+         } else {
+-            convert(*input.expr)?
++            convert(*input.expr, skip_normalization)?
+         });
+         input.list = input
+             .list
+             .into_iter()
+-            .map(convert)
++            .map(|value| convert(value, known_without_nan && !negative_zero))
+             .collect::<PlanResult<_>>()?;
+     }
+     Ok(expr::Expr::InList(input))
+@@ -532,6 +533,18 @@
+             (
+                 "zero_negative_underflow",
+                 vec![cast(lit(-1e-50_f64), DataType::Float32)],
++                vec![Some(-0.0)],
++                true,
++            ),
++            (
++                "zero_half",
++                vec![cast(lit(0.0_f64), DataType::Float16)],
++                vec![Some(0.0)],
++                true,
++            ),
++            (
++                "negative_zero_half",
++                vec![cast(lit(-0.0_f64), DataType::Float16)],
+                 vec![Some(-0.0)],
+                 true,
+             ),
+@@ -617,6 +630,15 @@
+                         list.len(),
+                         "preserve native IN dispatch"
+                     );
++                    if matches!(*name, "zero" | "zero_nullable" | "zero_long") {
++                        assert!(
++                            in_list.list.iter().all(|value| {
++                                !matches!(value, expr::Expr::ScalarFunction(f)
++                                if f.func.inner().is::<SparkComparisonFloat>())
++                            }),
++                            "canonical constants do not need normalization: {ty} {name}"
++                        );
++                    }
+                     if *skip && expected.contains(&Some(0.0)) {
+                         assert!(
+                             matches!(
+@@ -681,8 +703,8 @@
+             }
+         }
+     }
+-    assert_eq!(checks, 896);
+-    assert_eq!(checked_rows, 3675392);
++    assert_eq!(checks, 960);
++    assert_eq!(checked_rows, 3937920);
+     Ok(())
+ }
+ 
