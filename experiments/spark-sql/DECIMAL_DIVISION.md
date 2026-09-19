@@ -3978,6 +3978,26 @@ The primary statistic uses each process's median change between matched two-exec
 
 All 186 result and plan captures match their reference. Another 72 executions check both replay orders, and an invalid order is rejected. The [raw record](float-type-adjacent-replay-runs.json.gz) includes the complete schedule, samples, counters, scripts and build identity. Shared source and executable slots are restored and hash-checked. Production runtime code is unchanged. A subsequent candidate comparison must preserve the effects of independently planning each variant and validate its own controls; this A/A result cannot close the earlier roughly 0.5% execution observation.
 
+## Independently planned variants within one executable
+
+The [independent-plan comparison](float-type-independent-plans-results.json) passes its first-execution controls and does not reproduce the earlier roughly 0.5% increase. It preserves independently generated plans and the native randomized IN hasher. The type-inference candidate remains deferred because this single-executable diagnostic does not settle the earlier comparison of two release binaries.
+
+A temporary switch selects original type inference or the five-line candidate before each complete planning call. Each label gets a distinct physical plan and its own native IN table. The benchmark checks every plan's display against the frozen reference, retains 128 plan pairs, and executes each pair in ABBA or BAAB order. Planning and execution orders vary independently. During execution, the switch rejects any matching FLOAT/DOUBLE call to the type-inference helper; none occurs in the measured query.
+
+Four predetermined blocks contain 16 same-original processes, 16 same-candidate processes and 32 candidate/original processes. All 32,768 executions are retained. First executions and two-execution means are analyzed separately. Intervals resample whole processes within each block, with 10000 resamples and seed 88; the individual plans are not treated as independent process samples.
+
+| First-execution comparison | Median paired change, conditional 95% interval | Full-label mean change, conditional 95% interval |
+| --- | --- | --- |
+| Original versus itself | -0.008%, [-0.117%, +0.078%] | +0.070%, [-0.041%, +0.183%] |
+| Candidate versus itself | +0.002%, [-0.078%, +0.126%] | -0.107%, [-0.194%, +0.074%] |
+| Candidate versus original | +0.006%, [-0.057%, +0.111%] | +0.092%, [-0.043%, +0.174%] |
+
+Both first-execution control statistics include zero and meet the +/-1% precision target. All four candidate estimates have upper bounds below +0.5% and include zero. The repeated-execution candidate estimates are +0.022%, [-0.006%, +0.046%], and +0.037%, [-0.003%, +0.122%]. However, the original-versus-itself replay median has a small positive bias: +0.037%, [+0.024%, +0.051%]. That bias remains explicit; small replay differences are not credited as candidate speed changes.
+
+This diagnostic removes differences between executable layouts, retains plans, and formats them before timing. Those changes prevent transferring its intervals directly to the original release experiment. Perf counters aggregate both labels and cannot establish per-label instruction differences. The earlier release mean interval [+0.045%, +1.819%] and later failed release self-comparison remain part of the evidence.
+
+All 372 result and plan captures across both type-inference modes match their references. Another 192 executions check independent plan labels and all four order combinations; five invalid configurations are rejected. The [raw record](float-type-independent-plans-runs.json.gz) includes every sample, capture, counter, script, source patch and build identity. Shared files are restored and hash-checked. This step changes no accepted runtime source and adds no Spark corpus coverage.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

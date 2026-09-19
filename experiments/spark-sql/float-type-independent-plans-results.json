@@ -1,0 +1,924 @@
+{
+  "slice": "Compare independently planned type-inference variants within one executable",
+  "base_commit": "d924e52",
+  "created_utc": "2026-09-19T07:51:03.128190+00:00",
+  "decision": {
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "first_execution_controls_passed": true,
+    "predetermined_diagnostic_no_increase_criteria_met": true,
+    "scope": "First-execution controls calibrate, and this diagnostic does not reproduce the earlier roughly 0.5% increase. It does not establish equivalence of the original two release executables.",
+    "replay_caveat": "The same-before replay median retains a positive self-comparison interval of about +0.024% to +0.051%; do not credit small replay effects as a candidate speed change.",
+    "next_step": "Preserve this result separately from the release-binary observations. Any release-path acceptance must pass controls that retain separately compiled executables and independently generated native plans."
+  },
+  "summary": {
+    "timing_processes": 64,
+    "independent_native_plans": 16384,
+    "timed_executions": 32768,
+    "timing_query_captures": 128,
+    "exact_correctness_captures": 372,
+    "smoke_query_captures": 24,
+    "smoke_executions": 192,
+    "invalid_inputs_rejected": 5,
+    "capture_or_plan_differences": 0,
+    "failed_or_discarded_measurements": 0,
+    "runtime_matching_float_type_trap_triggered": false,
+    "new_builds": 1,
+    "new_spark_corpus_runs": 0
+  },
+  "method": {
+    "base_commit": "d924e529aa51eb78da4cc9b78539ac862bf08bbb",
+    "question": "Does the type shortcut affect execution after independent planning, with native randomized tables and within-process controls?",
+    "case": "generic_in_double_zero_long_list",
+    "warmups": 16,
+    "plan_pairs": 128,
+    "cpu": 2,
+    "controller_cpu": 0,
+    "cooldown_seconds": 30,
+    "schedule": [
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "order_flip": 0
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "order_flip": 1
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "order_flip": 2
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "order_flip": 3
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "order_flip": 0
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "order_flip": 1
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "order_flip": 2
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "order_flip": 3
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "order_flip": 0
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "order_flip": 1
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "order_flip": 2
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "order_flip": 3
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "order_flip": 0
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "order_flip": 1
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "order_flip": 2
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "order_flip": 3
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "order_flip": 1
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "order_flip": 2
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "order_flip": 3
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "order_flip": 0
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "order_flip": 1
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "order_flip": 2
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "order_flip": 3
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "order_flip": 0
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "order_flip": 1
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "order_flip": 2
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "order_flip": 3
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "order_flip": 0
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "order_flip": 1
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "order_flip": 2
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "order_flip": 3
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "order_flip": 0
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "order_flip": 2
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "order_flip": 3
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "order_flip": 0
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "order_flip": 1
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "order_flip": 2
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "order_flip": 3
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "order_flip": 0
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "order_flip": 1
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "order_flip": 2
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "order_flip": 3
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "order_flip": 0
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "order_flip": 1
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "order_flip": 2
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "order_flip": 3
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "order_flip": 0
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "order_flip": 1
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "order_flip": 3
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "order_flip": 0
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "order_flip": 1
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "order_flip": 2
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "order_flip": 3
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "order_flip": 0
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "order_flip": 1
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "order_flip": 2
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "order_flip": 3
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "order_flip": 0
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "order_flip": 1
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "order_flip": 2
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "order_flip": 3
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "order_flip": 0
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "order_flip": 1
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "order_flip": 2
+      }
+    ],
+    "switch": "One executable; a temporary AtomicU8 selects original inference (0) or the five-line shortcut (1) before each independent plan. During execution value 2 panics if matching-float type inference is reached. No native hash implementation or seed change.",
+    "plans": "Each pair is independently parsed, resolved, optimized and physically planned under its label mode. Distinct top-level Arc pointers and exact physical plan display are checked. Each plan retains its own native randomized IN filter. No plan or filter is cloned between labels.",
+    "orders": "ABBA/BAAB execution order alternates within each process. Planning order alternates every two pairs, independently of execution order. All four combinations are balanced. order_flip rotates both directions across processes.",
+    "statistics": "Per process: median independent-plan percentage change for first execution (primary) and mean of two executions (replay), plus full-label mean changes for both. Summaries are medians across processes; 10000 whole-process bootstrap samples stratified within four predetermined blocks, seed 88. No within-process independence claim.",
+    "controls": "Same-before and same-after each have 16 processes. Primary first-execution median and full-label mean 95% intervals must fit +/-1%; inspect resolved bias. Also report replay controls. Paired has 32 processes.",
+    "candidate_interpretation": "Only interpret sub-percent differences if controls calibrate. Report all four estimates. Upper intervals below +0.5% with no resolved positive effect are diagnostic evidence, not automatic production adoption. Keep original release observations separate.",
+    "stopping_rule": "One fixed 64-process schedule, no extensions for a preferred answer, no discarded timings. Builds, source inspection and tests finish before measurement.",
+    "limits": [
+      "Single-executable comparison removes between-binary layout effects; it does not establish equivalence of the original two release executables.",
+      "Retained plans and repeated execution differ from the original one-execution-per-plan protocol. First-execution statistics are kept separate.",
+      "Temporary switch overhead makes recorded planning times diagnostic, not a new planning speed estimate.",
+      "Aggregate perf counters contain both labels and must not be presented as per-label work differences."
+    ]
+  },
+  "comparison": {
+    "same-before": {
+      "processes": 16,
+      "metrics": {
+        "first_median_paired_pct": {
+          "median_process_change_pct": -0.008112089393513822,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.11690684345942448,
+            0.0778424506418518
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.009508657122464514,
+            0.09403739734037408,
+            -0.09266021865699248,
+            0.0303835858496998
+          ],
+          "process_changes_pct": [
+            -0.019697224030340577,
+            0.039411228701558,
+            0.0006799097854115477,
+            -0.13729865707772237,
+            -0.247750743546038,
+            0.24564337200043695,
+            0.08464026401187041,
+            0.10343453066887776,
+            -0.11690684345942448,
+            0.2486258087792348,
+            -0.06841359385456047,
+            -0.15300616447190274,
+            0.07801364101186481,
+            -0.1978699660683758,
+            -0.01690408857243919,
+            0.0776712602718388
+          ]
+        },
+        "first_whole_label_mean_pct": {
+          "median_process_change_pct": 0.0699017428078541,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.04066846748226882,
+            0.18293344075963613
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.271892115389627,
+            0.2040381105029021,
+            0.0699017428078541,
+            0.08163605074443803
+          ],
+          "process_changes_pct": [
+            -0.41089409652335096,
+            -0.2131700849178464,
+            -0.3306141458614076,
+            0.03106522890305996,
+            0.29425647515244346,
+            0.18293344075963613,
+            0.2099312604706638,
+            0.1981449605351404,
+            0.07317000269737584,
+            0.500518020177898,
+            0.06663348291833238,
+            -0.14185541228400878,
+            0.06051847731947113,
+            -0.18709166582605574,
+            0.19042859480364882,
+            0.10275362416940492
+          ]
+        },
+        "replay_median_paired_pct": {
+          "median_process_change_pct": 0.036896924296103695,
+          "stratified_whole_process_bootstrap_95_interval": [
+            0.02354257560510109,
+            0.051372448628050904
+          ],
+          "within_one_percent": true,
+          "contains_zero": false,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": true,
+          "block_medians_pct": [
+            -0.0033994214753613194,
+            0.04742524268337989,
+            0.08602749220895656,
+            -0.10792837730828064
+          ],
+          "process_changes_pct": [
+            0.03022734870231636,
+            -0.07373938997407015,
+            -0.037026191653039,
+            0.046313355677862766,
+            0.03022082618850952,
+            0.05128398547686874,
+            0.1307290201530975,
+            0.04356649988989103,
+            0.09762504841098751,
+            0.0744299360069256,
+            0.15140363838108684,
+            0.02354257560510109,
+            0.051460911779233065,
+            -0.18916781918623116,
+            -0.02668893543033013,
+            -0.20647489457158996
+          ]
+        },
+        "replay_whole_label_mean_pct": {
+          "median_process_change_pct": 0.04208965063255965,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.032332594636519385,
+            0.15831839362322464
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.1273169947707542,
+            0.10558287556804435,
+            0.07770903317351752,
+            0.13479022767964866
+          ],
+          "process_changes_pct": [
+            -0.056121465363756506,
+            -0.30682803835232475,
+            -0.1985125241777519,
+            -0.03960155073895466,
+            -0.032332594636519385,
+            0.015664413427662893,
+            0.19550133770842582,
+            0.20759607589191376,
+            -0.17014078612173078,
+            0.3280202076612726,
+            0.15571741275226536,
+            -0.0002993464052303274,
+            0.17064513713931362,
+            0.0685148878374564,
+            0.16091937449418392,
+            0.10866108086511339
+          ]
+        }
+      },
+      "first_execution_precision_target_met": true,
+      "resolved_first_execution_bias": false
+    },
+    "same-after": {
+      "processes": 16,
+      "metrics": {
+        "first_median_paired_pct": {
+          "median_process_change_pct": 0.0017788995791578888,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.07811920340345946,
+            0.1262879112039983
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.11771316965460688,
+            0.26402039996608617,
+            0.03884631874140343,
+            0.05662148247324583
+          ],
+          "process_changes_pct": [
+            -0.1820226698532712,
+            -0.0707849621399359,
+            -0.15680142922784301,
+            -0.07862491008137074,
+            0.3268890436012084,
+            0.39224417307612836,
+            -0.31224916360232946,
+            0.20115175633096394,
+            0.16522268942527063,
+            0.11223673468817585,
+            -0.07761349672554818,
+            -0.034544097205368995,
+            0.07514106858280689,
+            0.03810189636368477,
+            -0.11175826308992831,
+            0.14033908771982073
+          ]
+        },
+        "first_whole_label_mean_pct": {
+          "median_process_change_pct": -0.10696804280799777,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.19443640882231272,
+            0.0735633904048294
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.10696804280799777,
+            -0.008833965156168633,
+            -0.13061245067190197,
+            -0.03475205259896863
+          ],
+          "process_changes_pct": [
+            -1.0230955403004116,
+            -0.06058752846846982,
+            -0.1533485571475257,
+            0.20215326777026643,
+            -0.22379748056579052,
+            0.3283175474178446,
+            -0.2431075597904453,
+            0.20612955025345325,
+            -0.25529415802715283,
+            0.05521255503595501,
+            -0.6543948487832241,
+            -0.00593074331665111,
+            0.09191422577370378,
+            -0.16141833097164104,
+            0.1908049589004257,
+            -0.16507533707883493
+          ]
+        },
+        "replay_median_paired_pct": {
+          "median_process_change_pct": -0.019625602308109835,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.09963906137257506,
+            0.049717815830840895
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.10579503239361299,
+            0.0884550328578565,
+            0.08304368496637182,
+            -0.005940356501496491
+          ],
+          "process_changes_pct": [
+            -0.03103409540300972,
+            -0.18136636592209765,
+            -0.18055596938421625,
+            -0.023317909611125787,
+            0.22788841429328688,
+            -0.015933295005093884,
+            -0.38661557413114944,
+            0.19284336072080688,
+            0.11298027548076739,
+            0.10172651144211287,
+            -0.11698784297549114,
+            0.06436085849063078,
+            -0.05709783227601517,
+            0.04521711927302219,
+            0.049717815830840895,
+            -0.09963906137257506
+          ]
+        },
+        "replay_whole_label_mean_pct": {
+          "median_process_change_pct": 0.0045702950811465914,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.11663351345430062,
+            0.07595404277382922
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.14942964571537098,
+            -0.06072397886029979,
+            0.05418483978980593,
+            0.040672789056306335
+          ],
+          "process_changes_pct": [
+            -0.5431431837205514,
+            -0.15231932987264107,
+            -0.1465399615581009,
+            0.18858222982045536,
+            -0.08672706535050034,
+            -0.03472089237009923,
+            -0.2567246140575685,
+            0.19908765422240737,
+            0.07595404277382922,
+            0.16417395191523632,
+            -0.3301661496618036,
+            0.03241563680578263,
+            -0.018979654163409077,
+            0.02812024432570226,
+            0.08284297364342663,
+            0.05322533378691041
+          ]
+        }
+      },
+      "first_execution_precision_target_met": true,
+      "resolved_first_execution_bias": false
+    },
+    "paired": {
+      "processes": 32,
+      "metrics": {
+        "first_median_paired_pct": {
+          "median_process_change_pct": 0.005763036960854118,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.057221736363533005,
+            0.11084778983229682
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            0.03630495887238516,
+            0.08210525345951347,
+            -0.007864031119961257,
+            -0.12409505221751271
+          ],
+          "process_changes_pct": [
+            -0.006189068802597841,
+            0.12180319385415306,
+            -0.05920975956672514,
+            0.07879898654736817,
+            -0.057221736363533005,
+            0.22500967773135816,
+            0.2688247576367986,
+            -0.17137478590263933,
+            0.004564390457317824,
+            0.004133766455360899,
+            0.15724882345463653,
+            0.2724731495152066,
+            0.006961683464390411,
+            0.21899548449684225,
+            0.4323066187136404,
+            -0.029380366149139858,
+            -0.12101237947462762,
+            -0.07324275736830255,
+            0.05751469512838003,
+            0.09663665912401642,
+            0.20533567069895842,
+            -0.10936046279442779,
+            -0.25820255892488597,
+            0.20703344826109582,
+            -0.2058397465944939,
+            0.13611849284471678,
+            -0.18548488171148958,
+            0.16706238099155613,
+            -0.2548590262661521,
+            -0.21711887997321044,
+            -0.06270522272353585,
+            0.09989238581044058
+          ]
+        },
+        "first_whole_label_mean_pct": {
+          "median_process_change_pct": 0.09223702942181555,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.04301193883351484,
+            0.1743166052148193
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            0.09223702942181555,
+            0.14777329697908126,
+            0.08197961543658372,
+            -0.04480827468555937
+          ],
+          "process_changes_pct": [
+            -0.10789496832392942,
+            0.0803013740294789,
+            -0.3285622092579765,
+            0.06988994713368335,
+            0.2227588635577371,
+            0.5952521868353156,
+            0.1041726848141522,
+            0.1463939724529073,
+            0.6554984977168443,
+            -0.2390585003168466,
+            0.13127833735164796,
+            0.16426825660651456,
+            -0.1958605216996423,
+            0.184364953823124,
+            0.39318974587125854,
+            0.06150004798857189,
+            -0.049107564300432394,
+            -0.017480309639339442,
+            -0.1206848889005907,
+            0.18143954051250688,
+            1.08317940380398,
+            0.22657914884405272,
+            -0.3144685959399318,
+            0.4915205101003739,
+            -0.12498544106845921,
+            0.501009161375987,
+            -0.05270023600452145,
+            0.13615960106840852,
+            0.5732601173226382,
+            -0.2471189428764453,
+            -0.2946349667921955,
+            -0.036916313366597286
+          ]
+        },
+        "replay_median_paired_pct": {
+          "median_process_change_pct": 0.021513506307863084,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.006105729497671297,
+            0.04646735670180702
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            0.01893406149956478,
+            0.0446268224317925,
+            0.007333189329705725,
+            -0.028846059406245628
+          ],
+          "process_changes_pct": [
+            0.1115033321182679,
+            -0.12339200327571853,
+            -0.0699381611120875,
+            0.017836261180415036,
+            -0.008840584840724697,
+            0.11534808106185013,
+            0.033613065788740126,
+            0.020031861818714525,
+            0.07252014788472483,
+            0.05791595022772711,
+            -0.004022119493696241,
+            0.2919249613919206,
+            0.037809485388506925,
+            0.05144415947507808,
+            0.03665201660720818,
+            0.022995150797011643,
+            -0.07570310276827086,
+            0.018037252814029348,
+            -0.12256885536719997,
+            0.10309244917813265,
+            0.041490553928535956,
+            -0.0033708741546178977,
+            -0.10881505124362145,
+            0.22564689516144654,
+            -0.08033244354467839,
+            0.14073144926957104,
+            -0.010102660174077238,
+            0.11856874843860776,
+            -0.04758945863841402,
+            -0.17268291977639572,
+            -0.048598254767739935,
+            0.05192562361985287
+          ]
+        },
+        "replay_whole_label_mean_pct": {
+          "median_process_change_pct": 0.03680375627950205,
+          "stratified_whole_process_bootstrap_95_interval": [
+            -0.0025839986732334452,
+            0.12245762028965101
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            0.032767851888793054,
+            0.0968748557702015,
+            -0.001976557384797406,
+            0.08668317862196018
+          ],
+          "process_changes_pct": [
+            0.018617367380890926,
+            -0.15326800602126767,
+            -0.13018690247657005,
+            0.053652773521650765,
+            0.020732448393934177,
+            0.3248082891145865,
+            0.0882727159762009,
+            0.04480325538365193,
+            0.2855222519789091,
+            -0.06093500117666517,
+            0.01293535700643833,
+            0.2547757647926474,
+            -0.13280197848893893,
+            0.1321821728729189,
+            0.27605367703591455,
+            0.0615675386674841,
+            0.014150239583310409,
+            -0.027947613639656144,
+            -0.01810335435290522,
+            0.11273306770638314,
+            0.5188987090168462,
+            -0.02221345433988109,
+            -0.12029926411102343,
+            0.2574248502812404,
+            -0.14766653045913403,
+            0.2632665105783305,
+            -0.09534775663934125,
+            0.028804257175352177,
+            0.1874562083844955,
+            0.14456210006856818,
+            -0.5817453111105375,
+            0.16539206946877272
+          ]
+        }
+      },
+      "first_execution_precision_target_met": true,
+      "resolved_first_execution_bias": false
+    }
+  },
+  "source": {
+    "benchmark_patch": "--- a/examples/decimal_bench.rs\n+++ b/examples/decimal_bench.rs\n@@ -20,6 +20,8 @@\n     physical_plan::{ExecutionPlan, displayable, execute_stream},\n     prelude::{SessionConfig, SessionContext},\n };\n+use datafusion::logical_expr::type_coercion::binary::DIAGNOSTIC_FLOAT_TYPE;\n+use std::sync::atomic::Ordering;\n use futures_util::StreamExt;\n use sail_plan::decimal_null::SparkDecimalNullPropagation;\n use sail_plan::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};\n@@ -150,6 +152,22 @@\n     // Generic IN only: keep fresh plans per sample while allowing longer runs.\n     let warmups = timing_count(\"DECIMAL_BENCH_IN_WARMUPS\", WARMUPS)?;\n     let samples = timing_count(\"DECIMAL_BENCH_IN_SAMPLES\", SAMPLES)?;\n+    let comparison = std::env::var(\"DECIMAL_BENCH_IN_COMPARISON\")\n+        .unwrap_or_else(|_| \"same-before\".into());\n+    let modes = match comparison.as_str() {\n+        \"same-before\" => [0, 0],\n+        \"same-after\" => [1, 1],\n+        \"paired\" => [0, 1],\n+        _ => return Err(\"DECIMAL_BENCH_IN_COMPARISON must be same-before, same-after or paired\".into()),\n+    };\n+    let order_flip = std::env::var(\"DECIMAL_BENCH_IN_ORDER_FLIP\")\n+        .unwrap_or_else(|_| \"0\".into()).parse::<usize>()?;\n+    if order_flip > 3 {\n+        return Err(\"DECIMAL_BENCH_IN_ORDER_FLIP must be 0, 1, 2 or 3\".into());\n+    }\n+    if !check_only && phase != \"execution\" {\n+        return Err(\"the independent-plan diagnostic measures execution only\".into());\n+    }\n     let mut results = Vec::new();\n     for (family, profiles) in [\n         (\n@@ -418,37 +436,55 @@\n                 // Both ANSI modes are validated. Timing uses ANSI on only;\n                 // this workload has no failing casts or arithmetic.\n                 if !check_only && ansi {\n-                    for _ in 0..warmups {\n-                        assert_eq!(\n-                            consume(ctx, plan_query(ctx, &sql, ansi).await?).await?,\n-                            (rows, nulls)\n-                        );\n+                    for warmup in 0..warmups {\n+                        for &mode in &modes {\n+                            DIAGNOSTIC_FLOAT_TYPE.store(mode, Ordering::Relaxed);\n+                            let plan = plan_query(ctx, &sql, ansi).await?;\n+                            DIAGNOSTIC_FLOAT_TYPE.store(2, Ordering::Relaxed);\n+                            assert_eq!(consume(ctx, plan).await?, (rows, nulls), \"warmup {warmup}\");\n+                        }\n                     }\n-                    let (mut plans, mut planning_ms, mut execution_ms) =\n-                        (Vec::new(), Vec::new(), Vec::new());\n-                    if phase == \"planning\" {\n-                        perf_command(b\"enable\\n\")?;\n+                    let (mut plans, mut planning_ms, mut planning_modes, mut plan_labels) =\n+                        (Vec::new(), Vec::new(), Vec::new(), Vec::new());\n+                    let mut execution_indices = Vec::with_capacity(4 * samples);\n+                    for pair in 0..samples {\n+                        let planning_reverse = (pair / 2 + order_flip / 2) % 2 != 0;\n+                        let mut by_label = [0, 0];\n+                        for offset in 0..2 {\n+                            let label = if planning_reverse { 1 - offset } else { offset };\n+                            DIAGNOSTIC_FLOAT_TYPE.store(modes[label], Ordering::Relaxed);\n+                            let start = Instant::now();\n+                            let plan = plan_query(ctx, &sql, ansi).await?;\n+                            planning_ms.push(start.elapsed().as_secs_f64() * 1000.0);\n+                            assert_eq!(displayable(plan.as_ref()).indent(true).to_string(), physical_plan);\n+                            by_label[label] = plans.len();\n+                            plans.push(plan);\n+                            planning_modes.push(modes[label]);\n+                            plan_labels.push(label);\n+                        }\n+                        assert!(!Arc::ptr_eq(&plans[by_label[0]], &plans[by_label[1]]));\n+                        let reverse = (pair + order_flip) % 2 != 0;\n+                        let [a, b] = if reverse { [by_label[1], by_label[0]] } else { by_label };\n+                        execution_indices.extend([a, b, b, a]);\n                     }\n-                    for _ in 0..samples {\n-                        let start = Instant::now();\n-                        plans.push(plan_query(ctx, &sql, ansi).await?);\n-                        planning_ms.push(start.elapsed().as_secs_f64() * 1000.0);\n-                    }\n-                    if phase == \"planning\" {\n-                        perf_command(b\"disable\\n\")?;\n-                    }\n-                    if phase == \"execution\" {\n-                        perf_command(b\"enable\\n\")?;\n-                    }\n-                    for plan in plans {\n+                    let mut execution_ms = Vec::with_capacity(4 * samples);\n+                    DIAGNOSTIC_FLOAT_TYPE.store(2, Ordering::Relaxed);\n+                    perf_command(b\"enable\\n\")?;\n+                    for &index in &execution_indices {\n+                        let plan = Arc::clone(&plans[index]);\n                         let start = Instant::now();\n                         let counts = consume(ctx, plan).await?;\n                         execution_ms.push(start.elapsed().as_secs_f64() * 1000.0);\n                         assert_eq!(counts, (rows, nulls));\n                     }\n-                    if phase == \"execution\" {\n-                        perf_command(b\"disable\\n\")?;\n-                    }\n+                    perf_command(b\"disable\\n\")?;\n+                    DIAGNOSTIC_FLOAT_TYPE.store(modes[0], Ordering::Relaxed);\n+                    result[\"sample_plan_indices\"] = json!(execution_indices);\n+                    result[\"planning_modes\"] = json!(planning_modes);\n+                    result[\"plan_labels\"] = json!(plan_labels);\n+                    result[\"comparison\"] = json!(comparison);\n+                    result[\"order_flip\"] = json!(order_flip);\n+                    result[\"execution_type_inference_trap\"] = json!(true);\n                     result[\"planning_samples_ms\"] = json!(planning_ms);\n                     result[\"samples_ms\"] = json!(execution_ms);\n                 }\n@@ -1136,6 +1172,12 @@\n     if cfg!(debug_assertions) {\n         return Err(\"use cargo build --release for timing\".into());\n     }\n+    let initial_type = match std::env::var(\"DELTA_READER_DIAGNOSTIC_FLOAT_TYPE\").as_deref() {\n+        Ok(\"0\") => 0,\n+        Ok(\"1\") => 1,\n+        _ => return Err(\"DELTA_READER_DIAGNOSTIC_FLOAT_TYPE must be 0 or 1\".into()),\n+    };\n+    DIAGNOSTIC_FLOAT_TYPE.store(initial_type, Ordering::Relaxed);\n     let args = std::env::args().collect::<Vec<_>>();\n     let output = args\n         .get(1)\n",
+    "type_switch_patch_against_candidate": "--- a/src/type_coercion/binary.rs\n+++ b/src/type_coercion/binary.rs\n@@ -39,6 +39,12 @@\n };\n use itertools::Itertools;\n \n+// Temporary diagnostic only. The single-threaded benchmark changes this\n+// before planning and sets 2 while executing, to catch unexpected runtime use.\n+#[doc(hidden)]\n+pub static DIAGNOSTIC_FLOAT_TYPE: std::sync::atomic::AtomicU8 =\n+    std::sync::atomic::AtomicU8::new(2);\n+\n /// The type signature of an instantiation of binary operator expression such as\n /// `lhs + rhs`\n ///\n@@ -174,7 +180,11 @@\n         // All five arithmetic kernels preserve matching FLOAT/DOUBLE types.\n         // Avoid allocating empty arrays solely to discover that result type.\n         if lhs == rhs && matches!(lhs, DataType::Float32 | DataType::Float64) {\n-            return Ok(lhs.clone());\n+            match DIAGNOSTIC_FLOAT_TYPE.load(std::sync::atomic::Ordering::Relaxed) {\n+                0 => {},\n+                1 => return Ok(lhs.clone()),\n+                _ => panic!(\"float type inference reached the diagnostic execution phase\"),\n+            }\n         }\n         let l = new_empty_array(lhs);\n         let r = new_empty_array(rhs);\n",
+    "binary_sha256": "7cdb10bdd8faf04bec4d849d08ffe2ef94bf9aa651dc06702d4b25bb3f76bc31",
+    "identity": "One executable, accepted add-zero runtime, unchanged native randomized IN hasher. Only the benchmark and a temporary type-inference switch differ from the frozen source. Dependency versions, features, profiles and lockfile match.",
+    "restoration": "All shared sources, lockfiles and executable slots are restored and hash checked."
+  },
+  "limitations": [
+    "Single-executable comparison removes between-binary layout effects; it does not establish equivalence of the original two release executables.",
+    "Retained plans and repeated execution differ from the original one-execution-per-plan protocol. First-execution statistics are kept separate.",
+    "Temporary switch overhead makes recorded planning times diagnostic, not a new planning speed estimate.",
+    "Aggregate perf counters contain both labels and must not be presented as per-label work differences.",
+    "Each independently created plan is formatted and compared with its frozen physical-plan display before timing; those common verification allocations can change allocation history.",
+    "The execution trap covers matching FLOAT/DOUBLE type inference in this selected query. It is not a proof for all DataFusion workloads.",
+    "First-execution control intervals include zero, but the same-before replay median has a small resolved positive bias. Both are reported.",
+    "Conditional bootstrap intervals describe this host and fixed schedule without multiple-comparison correction.",
+    "The earlier release mean interval of [+0.045%, +1.819%] and later failed release self-comparison remain retained and unresolved by this diagnostic."
+  ],
+  "references": [
+    "float-type-adjacent-replay-results.json",
+    "float-type-release-confirmation-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-independent-plans-runs.json.gz",
+    "sha256": "d04119cfe51da8eb966f11e8664462014cf332622471bf1734b46a223735367e",
+    "uncompressed_sha256": "2be412afecc6ea4450cd321376c3ab65797d53a4005a1b7f60d8e97b505a2bf0",
+    "compressed_bytes": 492345,
+    "uncompressed_bytes": 2675362
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-independent-plans-d924e52",
+    "scripts": "The compressed record contains scripts, source patches, every capture/sample/counter and build identities.",
+    "commands": [
+      "python3 build-replay.py",
+      "python3 check_capture.py",
+      "python3 verify.py",
+      "python3 measure.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Use an empty sibling cache directory and the recorded frozen float-type-planning-f438591 sources. Restore override.toml, paths.json, source inputs and the dependency symlink. Run sequentially, finishing builds and verification before measurement. The build helper restores shared files in finally."
+  }
+}
