@@ -1,7 +1,7 @@
 {
   "slice": "Test whether disabling per-thread allocator caching removes address variability",
   "base_commit": "392ff45",
-  "created_utc": "2026-09-19T14:05:08.952713+00:00",
+  "created_utc": "2026-09-19T14:20:25.549954+00:00",
   "decision": {
     "finding": "All eight processes per seed share the same IN hash fingerprints across allocator modes. With caching disabled, each seed has four address sequences, differing at every position after initial validation. Explicit count 7 has two sequences for seed 0 and one for seed 4.",
     "scope": "Allocator-cache removal does not stabilize addresses. It exposes earlier variability and is rejected as a stabilization method; it does not identify a unique source of variation or a timing effect.",
@@ -1419,7 +1419,7 @@
       "sha256": "9483369e96e740e41221d116053e83502b4eb12ae4a4fa3de9118427713b60ea"
     },
     "reference": "float-type-field-release-results.json",
-    "note": "Exact existing executable; unchanged driver, parser and phase observer. The driver adds only an equal-length per-child GLIBC_TUNABLES setting; the Rust binary is unchanged."
+    "note": "Exact existing executable, parser and phase observer. The driver adds only an equal-length per-child GLIBC_TUNABLES setting."
   },
   "references": [
     "float-type-warmup-count-results.json",
@@ -1429,10 +1429,10 @@
   ],
   "raw_data": {
     "file": "float-type-tcache-count-runs.json.gz",
-    "sha256": "4ee5f9e79d37b4ca2ae56fc5b84cb7c51dd4e27d0eee2094518becc47ee8b595",
-    "uncompressed_sha256": "dbbda807cf26dcd079613501ec648b39054cae4fd0f25ce9adc849ca7a700a3c",
-    "compressed_bytes": 686941,
-    "uncompressed_bytes": 3228337
+    "sha256": "832e66fcfce0e2e9898857c80618815a3011a124a559ea83deb91fe759a5b6c0",
+    "uncompressed_sha256": "94bb0ed872c05804108a30f8411af1ef339888fb431504d7de15d7de1fad62f6",
+    "compressed_bytes": 686926,
+    "uncompressed_bytes": 3228289
   },
   "reproduction": {
     "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-tcache-count-392ff45",
