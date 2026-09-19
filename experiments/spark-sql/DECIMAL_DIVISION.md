@@ -3746,6 +3746,50 @@ To reproduce, use the archived build inputs and benchmark patch, then run `run-b
 
 Subsequent optional-runtime work can use this tested planning patch as its baseline. It still scans additional constants after the first zero; arbitrary unknown or noncanonical lists are not guaranteed to plan faster. No full Spark corpus or Rust unit suite is rerun here, and the 331 raw Spark differences and other historical performance questions remain outside this decision.
 
+## Add-zero against the accepted planning baseline
+
+The [steady add-zero comparison](float-in-add-zero-steady-results.json) reproduces execution gains for all eight targeted FLOAT/DOUBLE IN queries. The earlier Utf8 and Decimal control slowdowns do not recur in these rebuilt binaries. Single-element planning still retires about 1.14-1.19% more instructions, even though elapsed time does not regress in this series. Add-zero remains deferred while a small follow-up checks whether reusing the already computed input type removes some of that work.
+
+This comparison isolates the existing column-only add-zero implementation. Both sides include the accepted constant-list planning optimizations. The baseline reuses the preceding accepted executable; the candidate is rebuilt with exactly the same configurable benchmark. Runtime sources match their previously tested variants, and dependency features, profiles, Arrow libraries, native sources and lockfile match. Applying the existing [matched-baseline patch](sail-float-in-matched-baseline.patch) in reverse reproduces the add-zero source exactly; applying it forward restores the accepted source.
+
+Fresh checks pass all 74 generic IN captures per variant and validate the benchmark count settings. Across variants, 30 physical plans change as expected; all other capture fields agree. Previous planner, lifecycle, Rust-oracle and Spark-corpus checks are reused for the unchanged runtime sources. No full suite is rerun and no Spark coverage is added.
+
+The measurement uses CPU 2, 32 warmups and 257 samples, with a fresh physical plan consumed once per execution. Twelve-pair same-binary DOUBLE controls meet the predeclared +/-1% precision target: their paired-median 95% intervals are [-0.68%, +0.41%] and [-0.39%, +0.57%]. The candidate's Decimal long-list control is [-0.12%, +0.23%]. Builds and validation finish before timing starts.
+
+Execution comparisons use 16 balanced fresh-process pairs. Negative changes mean faster execution:
+
+| Query | Paired time change | Paired 95% interval | Instruction change |
+| --- | --- | --- | --- |
+| FLOAT single zero | -5.74% | [-5.98%, -5.62%] | -14.43% |
+| DOUBLE single zero | -7.03% | [-7.30%, -6.50%] | -20.72% |
+| FLOAT zero short list | -2.71% | [-2.86%, -2.56%] | -6.17% |
+| DOUBLE zero short list | -3.34% | [-3.43%, -3.15%] | -9.55% |
+| FLOAT zero nullable | -3.68% | [-4.16%, -3.13%] | -7.89% |
+| DOUBLE zero nullable | -4.31% | [-4.55%, -4.09%] | -12.18% |
+| FLOAT zero long list | -0.67% | [-0.84%, -0.54%] | -3.28% |
+| DOUBLE zero long list | -1.74% | [-3.99%, -1.26%] | -6.06% |
+| Utf8 long-list control | -0.70% | [-1.07%, -0.61%] | -0.01% |
+| Decimal long-list control | -2.30% | [-2.35%, -2.16%] | +0.01% |
+| Decimal nullable control | -0.23% | [-0.69%, +0.01%] | +0.00% |
+| DOUBLE nonzero long-list control | -0.23% | [-1.06%, +0.53%] | +0.23% |
+
+The eight-pair planning results separate elapsed time from work performed:
+
+| Query | Paired time change | Paired 95% interval | Instruction change |
+| --- | --- | --- | --- |
+| FLOAT single zero | -0.84% | [-2.42%, +0.05%] | +1.19% |
+| DOUBLE single zero | -1.95% | [-2.57%, -1.37%] | +1.14% |
+| FLOAT zero nullable | -1.39% | [-2.59%, -1.07%] | -1.20% |
+| DOUBLE zero long list | +0.03% | [-0.21%, +0.46%] | -0.08% |
+| Utf8 long-list control | -1.59% | [-2.06%, -1.07%] | +0.00% |
+| Decimal long-list control | -0.64% | [-0.87%, -0.02%] | +0.00% |
+
+The control speedups are not add-zero algorithmic gains: their physical plans are unchanged, and Utf8/Decimal instruction counts are effectively unchanged. Historical costs remain recorded. These results do not establish the same behavior for a different binary layout, compiler, host or short-query window. Mean-based estimates, retaining slow samples, also show gains for all eight targeted execution cases; their full intervals are in the record.
+
+All 552 timing processes across 21 comparisons are retained in the [compressed raw JSON](float-in-add-zero-steady-runs.json.gz), with no failed or discarded timing runs. The record includes both statistics, captures, counters, phase observations, build identities, scripts, schedules and archive hashes. Intervals use 10000 whole-pair bootstrap resamples with seed 88, conditional on this host and series, without multiple-comparison correction. Shared sources and executable slots are restored and hash-checked. Default vendored code is unchanged.
+
+To reproduce, prepare the archived inputs and absolute comparison-view links, then run `run-builds.py`, `verify.py`, and the `controls`, `execution` and `planning` schedules in order. The next source change is limited to two redundant `get_type` calls in the add-zero branch; expression construction and eligibility rules remain the subject of the existing correctness checks.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
