@@ -3850,6 +3850,33 @@ Those focused samples show empty Arrow array construction in both added-cost sta
 
 The [compressed record](float-in-planning-stages-runs.json.gz) retains all 128 counter processes, 24 completed profiles, validation captures, sampling quality checks and the failed initial mmap setup. Raw perf files and captured stack bytes remain in the local cache. The result file includes the diagnostic Rust patch, scripts, source identities, calibration residuals and reproduction inputs. Shared files were restored and hash-checked before starting the separate type-inference experiment. No new Spark corpus coverage is claimed.
 
+## Avoiding empty arrays during float type inference
+
+The [type-inference candidate](datafusion-float-type-inference.patch) removes the measured extra add-zero planning work, but remains outside the accepted optional runtime. A DOUBLE long-list execution comparison still shows a possible cost of about 0.5%. The [result record](float-type-planning-results.json) keeps that observation alongside the planning gains.
+
+Five production lines in DataFusion 54.1.0's `BinaryTypeCoercer::get_result` return the known result type when both operands are FLOAT or both are DOUBLE. This avoids constructing empty Arrow arrays and invoking an arithmetic kernel solely to discover its type. Other operand types retain the existing path; row execution source is unchanged. Apply the patch to a local `datafusion-expr-common` copy through the recorded Cargo override, not to Sail's vendored source.
+
+Both main variants use that same dependency path and the accepted add-zero implementation. Dependency versions, features, profiles, other runtime sources and benchmark source match. The candidate passes 152 expression unit tests and 27 Sail planner tests. One new test compares all 845 combinations of 13 operand types and five operators directly with Arrow kernels, including error strings. All 446 generic IN and subquery captures match their frozen references exactly, including physical plans. This does not add full Spark corpus coverage.
+
+The following planning results compare the candidate with unchanged type inference. Negative means less time or fewer instructions. Each comparison has twelve fresh-process pairs:
+
+| Query | Planning time change | Paired 95% interval | Instruction change |
+| --- | ---: | --- | ---: |
+| FLOAT single zero | -3.74% | [-4.57%, -2.38%] | -2.40% |
+| DOUBLE single zero | -4.24% | [-5.67%, -3.06%] | -2.37% |
+| FLOAT nullable list | -2.17% | [-3.18%, -1.07%] | -0.87% |
+| DOUBLE long list | -0.19% | [-0.52%, +0.49%] | -0.06% |
+
+A third binary removes add-zero while retaining the same patched dependency. Against this matched baseline, add-zero's FLOAT/DOUBLE single-element planning takes 3.24%/3.30% less time and retires 1.24%/1.26% fewer instructions. The earlier additional planning cost is therefore removed in these two measured cases. This is not a guarantee for every query or host.
+
+Execution checks cover all eight targeted FLOAT/DOUBLE queries plus unchanged Utf8 and Decimal controls. Four cases receive one fixed precision extension from 16 to 48 pairs, retaining every original pair. The combined DOUBLE single, FLOAT short-list and DOUBLE nullable estimates are -0.77%, -0.37% and -0.62%. DOUBLE long-list remains +0.495%, with interval [-0.012%, +1.241%]. Its secondary mean-based estimate is +0.479%, with interval [+0.045%, +1.819%]; that positive interval prevents a claim of execution equivalence. Utf8 and Decimal control estimates are +0.03% each. Full results and both statistics are in the record.
+
+Selected Float64 IN functions have identical normalized instructions and exact addresses across the binaries. The inspected Arrow Float64 arithmetic helper also has identical normalized instructions, shifted by 64 bytes with unchanged modulo-64 alignment. These checks do not establish equality of every callee or data location, and do not explain the remaining time difference. Cache and memory behavior are the next bounded diagnostic; no padding or new execution abstraction is introduced.
+
+Both initial twelve-pair same-binary controls missed the +/-1% precision target. One fixed extension to 48 pairs produces intervals [-0.71%, +0.95%] and [-0.80%, +0.67%]. All 960 timing processes across 26 comparisons, including the initial controls, are retained in the [compressed record](float-type-planning-runs.json.gz). The record also preserves a rejected lockfile update and a corrected test-compilation failure, neither of which entered timing. The method remains CPU 2, one partition, 1,048,576 rows, batches of 8,192, 32 warmups and 257 samples, with 10000 whole-pair bootstrap resamples. Builds, tests and inspection do not overlap timing. Intervals are conditional on this shared host, without multiple-comparison correction.
+
+The result file contains the exact source patch, dependency override, pinned test lock, build and measurement scripts, schedules, validation logs and archive hashes. Forward and reverse patch replay reproduce the recorded source hashes. Shared sources, lockfiles and executable slots are restored and hash-checked. Default vendored code and the accepted optional runtime remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

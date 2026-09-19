@@ -1,0 +1,67 @@
+--- a/src/type_coercion/binary.rs
++++ b/src/type_coercion/binary.rs
+@@ -171,6 +171,11 @@
+         rhs: &DataType,
+     ) -> arrow::error::Result<DataType> {
+         use arrow::compute::kernels::numeric::*;
++        // All five arithmetic kernels preserve matching FLOAT/DOUBLE types.
++        // Avoid allocating empty arrays solely to discover that result type.
++        if lhs == rhs && matches!(lhs, DataType::Float32 | DataType::Float64) {
++            return Ok(lhs.clone());
++        }
+         let l = new_empty_array(lhs);
+         let r = new_empty_array(rhs);
+ 
+@@ -2084,3 +2089,52 @@
+ 
+ #[cfg(test)]
+ mod tests;
++
++#[cfg(test)]
++#[test]
++fn float_arithmetic_result_type_matches_arrow_kernel() {
++    use arrow::compute::kernels::numeric::*;
++    let types = [
++        DataType::Null,
++        DataType::Float16,
++        DataType::Float32,
++        DataType::Float64,
++        DataType::Int32,
++        DataType::Int64,
++        DataType::UInt64,
++        DataType::Decimal128(10, 2),
++        DataType::Decimal256(40, 4),
++        DataType::Date32,
++        DataType::Duration(Millisecond),
++        DataType::Timestamp(Microsecond, Some("UTC".into())),
++        DataType::Utf8,
++    ];
++    for lhs in &types {
++        for rhs in &types {
++            for op in [
++                Operator::Plus,
++                Operator::Minus,
++                Operator::Multiply,
++                Operator::Divide,
++                Operator::Modulo,
++            ] {
++                let l = new_empty_array(lhs);
++                let r = new_empty_array(rhs);
++                let expected = match op {
++                    Operator::Plus => add_wrapping(&l, &r),
++                    Operator::Minus => sub_wrapping(&l, &r),
++                    Operator::Multiply => mul_wrapping(&l, &r),
++                    Operator::Divide => div(&l, &r),
++                    Operator::Modulo => rem(&l, &r),
++                    _ => unreachable!(),
++                }
++                .map(|value| value.data_type().clone())
++                .map_err(|error| error.to_string());
++                let actual = BinaryTypeCoercer::new(lhs, &op, rhs)
++                    .get_result(lhs, rhs)
++                    .map_err(|error| error.to_string());
++                assert_eq!(actual, expected, "{lhs} {op} {rhs}");
++            }
++        }
++    }
++}
