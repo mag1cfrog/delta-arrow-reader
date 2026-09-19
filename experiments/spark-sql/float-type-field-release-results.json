@@ -1,0 +1,1476 @@
+{
+  "slice": "Control resolver field release order and observe subsequent SQL IN table state",
+  "base_commit": "d0fa0b4",
+  "created_utc": "2026-09-19T13:47:22.576320+00:00",
+  "decision": {
+    "finding": "All eight processes per seed share one complete IN hash-fingerprint sequence across release modes. Sorted release has no early address split in this collection; three of its four groups still differ at constructions 286 through 289.",
+    "scope": "The intervention reduces observed early allocation variability but does not eliminate it. It is diagnostic only and does not establish a performance effect or unique root cause.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 8,
+    "processes": 32,
+    "constructed_table_traces": 9312,
+    "resolver_field_order_traces": 9312,
+    "field_release_events": 27936,
+    "prepared_plan_executions": 8224,
+    "exact_correctness_captures": 372,
+    "collection_query_captures": 64,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "invalid_settings_rejected": 2,
+    "new_builds": 1,
+    "failed_or_discarded_collection_groups": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "d0fa0b4",
+    "question": "Does controlling the three resolver fields release order eliminate the observed IN-table allocation split?",
+    "variant": "One diagnostic executable selects native HashMap retain order or generated-ID order through equal-length child-only settings. All field maps, hash seeds and lookup code stay unchanged.",
+    "trace": "Record the field-key iterator, then each entry selected for removal by HashMap::retain, followed by the existing IN-table fingerprint and occupied address bounds. Check that every original key is released exactly once. Native mode follows the map iterator; sorted mode removes generated IDs in ascending numeric order without constructing a temporary key vector.",
+    "source_reference": "float-type-resolver-drop-a113f28/after-built.json",
+    "native_seed_indices": [
+      0,
+      4,
+      8,
+      12
+    ],
+    "collection": "All processes use setarch -R. For each of the same four native shared inputs, collect one four-process group per release mode. Alternate mode order by input. Use the same 32 warmups and 257 prepared plans, phase barriers and direct stderr files.",
+    "timing": "Timings and counters from the existing driver are incidental diagnostics, not a performance estimate or adoption test. No candidate-versus-original comparison is included.",
+    "stopping_rule": "One build and fixed collection; retain all traces and failures. Do not add groups or select inputs based on outcomes. Finish validation before collection and do not overlap other machine work.",
+    "limits": [
+      "This changes cold resolver destruction in a diagnostic build; both modes explicitly remove entries through retain. It does not reproduce the original implicit Drop byte for byte.",
+      "The sorted diagnostic uses quadratic scans to avoid a temporary key vector. It is not a production optimization proposal.",
+      "Map seeds remain random; the intervention controls release order only. Matching IN fingerprints must be checked before interpreting allocation differences.",
+      "No execution-time effect or candidate adoption is estimated. Hash fingerprints and occupied address ranges retain the limits of earlier traces."
+    ]
+  },
+  "analysis": {
+    "groups": [
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "native",
+        "index": 0,
+        "directory": "group-00",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 287,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 286,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        },
+        "distinct_complete_release_sequences": 4,
+        "all_four_release_orders_match_at": 2,
+        "distinct_complete_field_order_sequences": 4,
+        "all_four_field_orders_match_at": 2,
+        "first_field_order_mismatch_index": 0,
+        "observed_field_orders": [
+          {
+            "order": [
+              "#0",
+              "#1",
+              "#2"
+            ],
+            "count": 273
+          },
+          {
+            "order": [
+              "#0",
+              "#2",
+              "#1"
+            ],
+            "count": 133
+          },
+          {
+            "order": [
+              "#1",
+              "#0",
+              "#2"
+            ],
+            "count": 159
+          },
+          {
+            "order": [
+              "#1",
+              "#2",
+              "#0"
+            ],
+            "count": 238
+          },
+          {
+            "order": [
+              "#2",
+              "#0",
+              "#1"
+            ],
+            "count": 244
+          },
+          {
+            "order": [
+              "#2",
+              "#1",
+              "#0"
+            ],
+            "count": 117
+          }
+        ],
+        "process_pairs": [
+          {
+            "slots": [
+              0,
+              1
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 245,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              2
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 237,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 241,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              2
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 235,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 230,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              2,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 236,
+            "equal_field_orders_with_different_addresses": 0
+          }
+        ]
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "sorted",
+        "index": 1,
+        "directory": "group-01",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 287,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 286,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        },
+        "distinct_complete_release_sequences": 1,
+        "all_four_release_orders_match_at": 291,
+        "distinct_complete_field_order_sequences": 4,
+        "all_four_field_orders_match_at": 0,
+        "first_field_order_mismatch_index": 0,
+        "observed_field_orders": [
+          {
+            "order": [
+              "#0",
+              "#1",
+              "#2"
+            ],
+            "count": 249
+          },
+          {
+            "order": [
+              "#0",
+              "#2",
+              "#1"
+            ],
+            "count": 131
+          },
+          {
+            "order": [
+              "#1",
+              "#0",
+              "#2"
+            ],
+            "count": 161
+          },
+          {
+            "order": [
+              "#1",
+              "#2",
+              "#0"
+            ],
+            "count": 235
+          },
+          {
+            "order": [
+              "#2",
+              "#0",
+              "#1"
+            ],
+            "count": 252
+          },
+          {
+            "order": [
+              "#2",
+              "#1",
+              "#0"
+            ],
+            "count": 136
+          }
+        ],
+        "process_pairs": [
+          {
+            "slots": [
+              0,
+              1
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 243,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              2
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 240,
+            "equal_field_orders_with_different_addresses": 2
+          },
+          {
+            "slots": [
+              0,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 236,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              2
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 245,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 246,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              2,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 234,
+            "equal_field_orders_with_different_addresses": 0
+          }
+        ]
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "sorted",
+        "index": 2,
+        "directory": "group-02",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 291,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 257
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        },
+        "distinct_complete_release_sequences": 1,
+        "all_four_release_orders_match_at": 291,
+        "distinct_complete_field_order_sequences": 4,
+        "all_four_field_orders_match_at": 3,
+        "first_field_order_mismatch_index": 0,
+        "observed_field_orders": [
+          {
+            "order": [
+              "#0",
+              "#1",
+              "#2"
+            ],
+            "count": 253
+          },
+          {
+            "order": [
+              "#0",
+              "#2",
+              "#1"
+            ],
+            "count": 135
+          },
+          {
+            "order": [
+              "#1",
+              "#0",
+              "#2"
+            ],
+            "count": 164
+          },
+          {
+            "order": [
+              "#1",
+              "#2",
+              "#0"
+            ],
+            "count": 241
+          },
+          {
+            "order": [
+              "#2",
+              "#0",
+              "#1"
+            ],
+            "count": 250
+          },
+          {
+            "order": [
+              "#2",
+              "#1",
+              "#0"
+            ],
+            "count": 121
+          }
+        ],
+        "process_pairs": [
+          {
+            "slots": [
+              0,
+              1
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 234,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              2
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 230,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 238,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              2
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 232,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 234,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              2,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 228,
+            "equal_field_orders_with_different_addresses": 0
+          }
+        ]
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "native",
+        "index": 3,
+        "directory": "group-03",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 8,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 6,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 5
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 1
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        },
+        "distinct_complete_release_sequences": 4,
+        "all_four_release_orders_match_at": 2,
+        "distinct_complete_field_order_sequences": 4,
+        "all_four_field_orders_match_at": 2,
+        "first_field_order_mismatch_index": 0,
+        "observed_field_orders": [
+          {
+            "order": [
+              "#0",
+              "#1",
+              "#2"
+            ],
+            "count": 302
+          },
+          {
+            "order": [
+              "#0",
+              "#2",
+              "#1"
+            ],
+            "count": 164
+          },
+          {
+            "order": [
+              "#1",
+              "#0",
+              "#2"
+            ],
+            "count": 150
+          },
+          {
+            "order": [
+              "#1",
+              "#2",
+              "#0"
+            ],
+            "count": 211
+          },
+          {
+            "order": [
+              "#2",
+              "#0",
+              "#1"
+            ],
+            "count": 200
+          },
+          {
+            "order": [
+              "#2",
+              "#1",
+              "#0"
+            ],
+            "count": 137
+          }
+        ],
+        "process_pairs": [
+          {
+            "slots": [
+              0,
+              1
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 235,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              2
+            ],
+            "first_address_mismatch_index": 6,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 8,
+            "equal_field_orders_with_different_addresses": 43
+          },
+          {
+            "slots": [
+              0,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 233,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              2
+            ],
+            "first_address_mismatch_index": 6,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 5,
+            "equal_field_orders_with_different_addresses": 52
+          },
+          {
+            "slots": [
+              1,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 247,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              2,
+              3
+            ],
+            "first_address_mismatch_index": 6,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 6,
+            "equal_field_orders_with_different_addresses": 47
+          }
+        ]
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 8,
+        "shared_seed_setting": "88edaa1d04feec96",
+        "address_mode": "fixed",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "native",
+        "index": 4,
+        "directory": "group-04",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 4,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 8,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 6,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 5
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 1
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        },
+        "distinct_complete_release_sequences": 4,
+        "all_four_release_orders_match_at": 2,
+        "distinct_complete_field_order_sequences": 4,
+        "all_four_field_orders_match_at": 2,
+        "first_field_order_mismatch_index": 0,
+        "observed_field_orders": [
+          {
+            "order": [
+              "#0",
+              "#1",
+              "#2"
+            ],
+            "count": 278
+          },
+          {
+            "order": [
+              "#0",
+              "#2",
+              "#1"
+            ],
+            "count": 141
+          },
+          {
+            "order": [
+              "#1",
+              "#0",
+              "#2"
+            ],
+            "count": 165
+          },
+          {
+            "order": [
+              "#1",
+              "#2",
+              "#0"
+            ],
+            "count": 210
+          },
+          {
+            "order": [
+              "#2",
+              "#0",
+              "#1"
+            ],
+            "count": 251
+          },
+          {
+            "order": [
+              "#2",
+              "#1",
+              "#0"
+            ],
+            "count": 119
+          }
+        ],
+        "process_pairs": [
+          {
+            "slots": [
+              0,
+              1
+            ],
+            "first_address_mismatch_index": 6,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 7,
+            "equal_field_orders_with_different_addresses": 42
+          },
+          {
+            "slots": [
+              0,
+              2
+            ],
+            "first_address_mismatch_index": 6,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 5,
+            "equal_field_orders_with_different_addresses": 67
+          },
+          {
+            "slots": [
+              0,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 234,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              2
+            ],
+            "first_address_mismatch_index": 194,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 155,
+            "equal_field_orders_with_different_addresses": 14
+          },
+          {
+            "slots": [
+              1,
+              3
+            ],
+            "first_address_mismatch_index": 6,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 6,
+            "equal_field_orders_with_different_addresses": 44
+          },
+          {
+            "slots": [
+              2,
+              3
+            ],
+            "first_address_mismatch_index": 6,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 5,
+            "equal_field_orders_with_different_addresses": 59
+          }
+        ]
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 8,
+        "shared_seed_setting": "88edaa1d04feec96",
+        "address_mode": "fixed",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "sorted",
+        "index": 5,
+        "directory": "group-05",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 287,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 286,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        },
+        "distinct_complete_release_sequences": 1,
+        "all_four_release_orders_match_at": 291,
+        "distinct_complete_field_order_sequences": 4,
+        "all_four_field_orders_match_at": 0,
+        "first_field_order_mismatch_index": 0,
+        "observed_field_orders": [
+          {
+            "order": [
+              "#0",
+              "#1",
+              "#2"
+            ],
+            "count": 300
+          },
+          {
+            "order": [
+              "#0",
+              "#2",
+              "#1"
+            ],
+            "count": 137
+          },
+          {
+            "order": [
+              "#1",
+              "#0",
+              "#2"
+            ],
+            "count": 170
+          },
+          {
+            "order": [
+              "#1",
+              "#2",
+              "#0"
+            ],
+            "count": 221
+          },
+          {
+            "order": [
+              "#2",
+              "#0",
+              "#1"
+            ],
+            "count": 214
+          },
+          {
+            "order": [
+              "#2",
+              "#1",
+              "#0"
+            ],
+            "count": 122
+          }
+        ],
+        "process_pairs": [
+          {
+            "slots": [
+              0,
+              1
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 235,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              2
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 232,
+            "equal_field_orders_with_different_addresses": 1
+          },
+          {
+            "slots": [
+              0,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 227,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              2
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 238,
+            "equal_field_orders_with_different_addresses": 2
+          },
+          {
+            "slots": [
+              1,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 245,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              2,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 228,
+            "equal_field_orders_with_different_addresses": 1
+          }
+        ]
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 12,
+        "shared_seed_setting": "1bc957e59536982e",
+        "address_mode": "fixed",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "sorted",
+        "index": 6,
+        "directory": "group-06",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 287,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 286,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        },
+        "distinct_complete_release_sequences": 1,
+        "all_four_release_orders_match_at": 291,
+        "distinct_complete_field_order_sequences": 4,
+        "all_four_field_orders_match_at": 1,
+        "first_field_order_mismatch_index": 0,
+        "observed_field_orders": [
+          {
+            "order": [
+              "#0",
+              "#1",
+              "#2"
+            ],
+            "count": 290
+          },
+          {
+            "order": [
+              "#0",
+              "#2",
+              "#1"
+            ],
+            "count": 155
+          },
+          {
+            "order": [
+              "#1",
+              "#0",
+              "#2"
+            ],
+            "count": 150
+          },
+          {
+            "order": [
+              "#1",
+              "#2",
+              "#0"
+            ],
+            "count": 214
+          },
+          {
+            "order": [
+              "#2",
+              "#0",
+              "#1"
+            ],
+            "count": 218
+          },
+          {
+            "order": [
+              "#2",
+              "#1",
+              "#0"
+            ],
+            "count": 137
+          }
+        ],
+        "process_pairs": [
+          {
+            "slots": [
+              0,
+              1
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 236,
+            "equal_field_orders_with_different_addresses": 1
+          },
+          {
+            "slots": [
+              0,
+              2
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 236,
+            "equal_field_orders_with_different_addresses": 1
+          },
+          {
+            "slots": [
+              0,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 241,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              2
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 247,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 238,
+            "equal_field_orders_with_different_addresses": 1
+          },
+          {
+            "slots": [
+              2,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 237,
+            "equal_field_orders_with_different_addresses": 0
+          }
+        ]
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 12,
+        "shared_seed_setting": "1bc957e59536982e",
+        "address_mode": "fixed",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "native",
+        "index": 7,
+        "directory": "group-07",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 287,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 286,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        },
+        "distinct_complete_release_sequences": 4,
+        "all_four_release_orders_match_at": 1,
+        "distinct_complete_field_order_sequences": 4,
+        "all_four_field_orders_match_at": 1,
+        "first_field_order_mismatch_index": 0,
+        "observed_field_orders": [
+          {
+            "order": [
+              "#0",
+              "#1",
+              "#2"
+            ],
+            "count": 287
+          },
+          {
+            "order": [
+              "#0",
+              "#2",
+              "#1"
+            ],
+            "count": 153
+          },
+          {
+            "order": [
+              "#1",
+              "#0",
+              "#2"
+            ],
+            "count": 161
+          },
+          {
+            "order": [
+              "#1",
+              "#2",
+              "#0"
+            ],
+            "count": 221
+          },
+          {
+            "order": [
+              "#2",
+              "#0",
+              "#1"
+            ],
+            "count": 235
+          },
+          {
+            "order": [
+              "#2",
+              "#1",
+              "#0"
+            ],
+            "count": 107
+          }
+        ],
+        "process_pairs": [
+          {
+            "slots": [
+              0,
+              1
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 239,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              2
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 244,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              0,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 240,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              1,
+              2
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 239,
+            "equal_field_orders_with_different_addresses": 1
+          },
+          {
+            "slots": [
+              1,
+              3
+            ],
+            "first_address_mismatch_index": null,
+            "field_order_prefix_matches_through_first_address_mismatch": null,
+            "different_field_orders_with_equal_addresses": 239,
+            "equal_field_orders_with_different_addresses": 0
+          },
+          {
+            "slots": [
+              2,
+              3
+            ],
+            "first_address_mismatch_index": 286,
+            "field_order_prefix_matches_through_first_address_mismatch": false,
+            "different_field_orders_with_equal_addresses": 242,
+            "equal_field_orders_with_different_addresses": 0
+          }
+        ]
+      }
+    ],
+    "cross_release_mode": [
+      {
+        "seed_index": 0,
+        "processes": 8,
+        "distinct_complete_hash_sequences": 1,
+        "hash_fingerprints_match_across_release_modes": true
+      },
+      {
+        "seed_index": 4,
+        "processes": 8,
+        "distinct_complete_hash_sequences": 1,
+        "hash_fingerprints_match_across_release_modes": true
+      },
+      {
+        "seed_index": 8,
+        "processes": 8,
+        "distinct_complete_hash_sequences": 1,
+        "hash_fingerprints_match_across_release_modes": true
+      },
+      {
+        "seed_index": 12,
+        "processes": 8,
+        "distinct_complete_hash_sequences": 1,
+        "hash_fingerprints_match_across_release_modes": true
+      }
+    ],
+    "processes": 32,
+    "table_traces": 9312,
+    "scope": "Controlled resolver release order and observed table state, with no performance effect estimated."
+  },
+  "release_order_findings": {
+    "fields_per_plan": 3,
+    "sorted_order": [
+      "#0",
+      "#1",
+      "#2"
+    ],
+    "all_fixed_groups_preserve_hash_fingerprints_across_modes": true,
+    "native_first_address_divergences": [
+      286,
+      6,
+      6,
+      286
+    ],
+    "sorted_first_address_divergences": [
+      286,
+      null,
+      286,
+      286
+    ],
+    "sorted_late_differences": "Only construction indices 286 through 289 differ in three groups, corresponding to the final four prepared plans. Post-execution validation at index 290 matches.",
+    "limit": "Both modes explicitly remove entries through retain. The quadratic sorted diagnostic is not a production change; traces can affect allocations. Finite observations do not establish that every native run splits early or every sorted run is identical."
+  },
+  "source": {
+    "only_resolver_release_intervention_added": true,
+    "same_in_table_trace_and_lookup_sources": true,
+    "same_type_inference": true,
+    "same_features_profiles_and_lock": true,
+    "binary_sha256": "9483369e96e740e41221d116053e83502b4eb12ae4a4fa3de9118427713b60ea",
+    "reference_binary_sha256": "ebede04e5c56bb4d8457fcab8573035d6c7a28e775ed59074a79966444f84e3b"
+  },
+  "references": [
+    "float-type-resolver-drop-results.json",
+    "float-type-in-table-state-results.json",
+    "float-type-address-layout-results.json",
+    "float-type-native-seed-pairs-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-field-release-runs.json.gz",
+    "sha256": "7806589e7c9140993cd17a4e376e5e43d025cd704ea5eb11a52ec66fe5d962cc",
+    "uncompressed_sha256": "f97d8e069e9c6f62653149528132e58ee12db9d0266b0b04316ff7384fc5c7d8",
+    "compressed_bytes": 1390322,
+    "uncompressed_bytes": 6897676
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-field-release-d0fa0b4",
+    "commands": [
+      "python3 build-trace.py",
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Use the frozen source inputs and the retained IN-table trace and resolver release-order patch. The build helper restores all shared sources, lockfiles and executable slots in finally. Validate the 372 captures and both phase orders and both release modes before the fixed collection. Preserve the complete ordered trace sequences."
+  }
+}

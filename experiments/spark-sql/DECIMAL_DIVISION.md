@@ -4119,6 +4119,25 @@ No pair with differing addresses has matching key-order history all the way thro
 
 All 372 result and plan captures pass, and eight smoke processes verify that each resolver record precedes its matching IN-table record. Stderr goes directly to per-process files so the larger trace cannot fill a pipe. The [raw record](float-type-resolver-drop-runs.json.gz) retains all 9,312 resolver records and 9,312 IN-table records, scripts, both cold patches and source identities. Incidental timings remain outside the analysis. Shared files are restored and hash-checked, with no change to the accepted runtime or optional patch decision.
 
+## Controlling resolver field release order
+
+The [release-order experiment](float-type-field-release-results.json) removes the early address split from this finite collection when fields are released in generated-ID order. It does not remove all address differences or establish an execution-time benefit.
+
+One diagnostic executable selects either native map iteration or ascending numeric field IDs. Both modes remove entries through `HashMap::retain` and record each removed key. Sorted mode uses repeated scans to avoid allocating a temporary key vector; this quadratic diagnostic is not a production proposal. Map types, random seeds and row lookup remain unchanged. Both modes differ from the original implicit destruction path.
+
+The fixed collection uses four native shared-seed inputs, four processes per release mode and fixed process addresses. Every seed's eight processes share the complete IN hash-fingerprint sequence. Results for the 291 construction positions per process are:
+
+| Native seed index | Native: matching address positions | Sorted: matching address positions | Native: first difference | Sorted: first difference |
+| --- | ---: | ---: | ---: | ---: |
+| 0 | 287/291 | 287/291 | 286 | 286 |
+| 4 | 8/291 | 291/291 | 6 | None |
+| 8 | 8/291 | 287/291 | 6 | 286 |
+| 12 | 287/291 | 287/291 | 286 | 286 |
+
+Indices are zero-based and matching requires all four processes to agree. The three sorted groups with differences disagree only at constructions 286 through 289, the last four prepared plans. Their post-execution validation at construction 290 agrees again. This supports investigating release order, but other allocation variability remains. The next check varies the prepared-plan count in this same executable to distinguish an absolute allocation boundary from an end-of-preparation effect.
+
+All 372 repeated result and plan captures pass. Eight smoke processes check phase and release ordering; missing and invalid release settings are rejected. The [raw record](float-type-field-release-runs.json.gz) retains 9,312 table traces, 9,312 field-order records and 27,936 release events, along with the scripts, patches and build identities. All groups and incidental timings are retained, with no performance effect estimated. Shared files are restored and hash-checked. The optional type-inference patch remains unadopted, and the earlier positive release mean interval remains unresolved.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
