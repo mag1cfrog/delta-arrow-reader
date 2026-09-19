@@ -4090,6 +4090,25 @@ The candidate intervals exceed +/-1%, so the conditional comparison remains bloc
 
 Each executable has one code mapping and one stack mapping across its 32 timing processes, but two heap extents. The probe's repeatability therefore does not establish identical hash states or allocation addresses for the actual SQL IN tables. Those remain a specific follow-up question. The counter audit is exploratory; it neither identifies a unique cause nor establishes that earlier release differences have disappeared. The candidate remains unadopted, and fixed addresses are a diagnostic setting rather than a production proposal.
 
+## Tracing actual SQL IN table state
+
+The [IN-table trace](float-type-in-table-state-results.json) confirms that fixed process addresses reproduce the actual SQL tables' hash fingerprints in this diagnostic build. Their occupied element addresses still vary. This narrows the remaining investigation to allocation placement and other execution-state differences; it does not establish a cause for the earlier timing observations.
+
+One rebuilt candidate adds a cold trace after each `Float64StaticFilter` is populated. It records four native hasher outputs, length, capacity and the lowest and highest occupied element addresses. The trace uses safe references and the existing hasher. Row lookup code, type inference, dependency features and build profiles match the preceding candidate. The initializer still replays the previously captured native shared seeds.
+
+The fixed collection uses four previously selected seed indices, with four processes per seed and address mode. Each process constructs 291 tables: two validation plans, 32 warmups and 257 prepared plans. Under ordinary address randomization, all four processes in every group have distinct complete hash and address sequences. Under fixed addresses:
+
+| Native seed index | Distinct hash sequences | Distinct address sequences | Positions where all four hash fingerprints match | Positions where all four address ranges match |
+| --- | ---: | ---: | ---: | ---: |
+| 0 | 1 | 2 | 291/291 | 8/291 |
+| 4 | 1 | 2 | 291/291 | 8/291 |
+| 8 | 1 | 2 | 291/291 | 287/291 |
+| 12 | 1 | 2 | 291/291 | 8/291 |
+
+The differing address sequences preserve each table's occupied span. They first diverge at zero-based construction 6 for seed indices 0, 4 and 12, and at construction 286 for index 8. Displacements vary across constructions and are not always whole cache-line offsets. These are element address bounds, not allocator block bases or proof of a cache effect.
+
+All 372 result and plan checks pass, along with both address modes in eight smoke processes. The [raw record](float-type-in-table-state-runs.json.gz) retains all 9,312 table traces from 32 collection processes, complete scripts, the construction patch and build identities. Incidental timings are retained but are not analyzed as a performance comparison. The trace itself can affect allocations, so these results do not prove identical state in the older executables. All shared files are restored and hash-checked; the optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

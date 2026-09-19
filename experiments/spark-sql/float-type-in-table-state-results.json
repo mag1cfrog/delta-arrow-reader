@@ -1,0 +1,484 @@
+{
+  "slice": "Compare actual SQL IN hash fingerprints and occupied element addresses",
+  "base_commit": "490e19c",
+  "created_utc": "2026-09-19T12:52:18.430389+00:00",
+  "decision": {
+    "finding": "With fixed process addresses, all four processes in each seed group have identical ordered hash fingerprints for all 291 constructed tables, but still show two occupied-address sequences.",
+    "scope": "Actual SQL table fingerprints are reproducible in this diagnostic build. Allocation placement remains variable. This does not attribute prior timing differences to allocation placement.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 8,
+    "processes": 32,
+    "constructed_table_traces": 9312,
+    "prepared_plan_executions": 8224,
+    "exact_correctness_captures": 372,
+    "collection_query_captures": 64,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "new_builds": 1,
+    "failed_or_discarded_collection_groups": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "490e19c",
+    "question": "Do actual Float64 IN tables reproduce hash fingerprints and occupied element addresses in full SQL processes with controlled shared seeds and process addresses?",
+    "variant": "Existing float type-inference candidate, with a cold construction trace only. Native RandomState and row lookup sources are retained.",
+    "trace": "After each Float64StaticFilter is populated, record four native hasher outputs, set length/capacity and minimum/maximum occupied element addresses. No unsafe reads or added dependencies. The bounds are occupied addresses, not allocator block boundaries.",
+    "source_reference": "float-type-native-seed-pairs-6da1057/after-built.json",
+    "native_seed_indices": [
+      0,
+      4,
+      8,
+      12
+    ],
+    "collection": "For each preselected native shared seed, one four-process group with natural addresses and one with setarch -R. Alternate mode order by seed. Use 32 warmups and 257 independently prepared plans per process, retaining the established preparation/execution barriers. Compare complete ordered trace sequences and all exact query results.",
+    "timing": "Timings and counters from the existing driver are incidental diagnostics, not a performance estimate or adoption test. No candidate-versus-original comparison is included.",
+    "stopping_rule": "One build and fixed collection; retain all traces and failures. Do not add groups or select inputs based on outcomes. Finish validation before collection and do not overlap other machine work.",
+    "limits": [
+      "The cold trace changes the executable and may affect allocations or later hash construction; results apply to this diagnostic build.",
+      "Matching four hash outputs is a fingerprint check, not a mathematical proof that all internal state is identical.",
+      "Address equality does not establish identical physical pages, cache contents or branch predictor state.",
+      "Different hasher versions, standard-library hashing and allocation behavior remain outside the two selected controls."
+    ]
+  },
+  "analysis": {
+    "groups": [
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "natural",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "index": 0,
+        "directory": "group-00",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 4,
+        "distinct_complete_address_sequences": 4,
+        "all_four_hash_fingerprints_match_at": 0,
+        "all_four_occupied_ranges_match_at": 0,
+        "first_hash_mismatch_index": 0,
+        "first_address_mismatch_index": 0,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "index": 1,
+        "directory": "group-01",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 8,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 6,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 5
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 1
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "index": 2,
+        "directory": "group-02",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 8,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 6,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 5
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 1
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "natural",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "index": 3,
+        "directory": "group-03",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 4,
+        "distinct_complete_address_sequences": 4,
+        "all_four_hash_fingerprints_match_at": 0,
+        "all_four_occupied_ranges_match_at": 0,
+        "first_hash_mismatch_index": 0,
+        "first_address_mismatch_index": 0,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 8,
+        "shared_seed_setting": "88edaa1d04feec96",
+        "address_mode": "natural",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "index": 4,
+        "directory": "group-04",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 4,
+        "distinct_complete_address_sequences": 4,
+        "all_four_hash_fingerprints_match_at": 0,
+        "all_four_occupied_ranges_match_at": 0,
+        "first_hash_mismatch_index": 0,
+        "first_address_mismatch_index": 0,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 8,
+        "shared_seed_setting": "88edaa1d04feec96",
+        "address_mode": "fixed",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "index": 5,
+        "directory": "group-05",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 287,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 286,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 12,
+        "shared_seed_setting": "1bc957e59536982e",
+        "address_mode": "fixed",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "index": 6,
+        "directory": "group-06",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "all_four_hash_fingerprints_match_at": 291,
+        "all_four_occupied_ranges_match_at": 8,
+        "first_hash_mismatch_index": null,
+        "first_address_mismatch_index": 6,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 5
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 1
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 12,
+        "shared_seed_setting": "1bc957e59536982e",
+        "address_mode": "natural",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "index": 7,
+        "directory": "group-07",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 4,
+        "distinct_complete_address_sequences": 4,
+        "all_four_hash_fingerprints_match_at": 0,
+        "all_four_occupied_ranges_match_at": 0,
+        "first_hash_mismatch_index": 0,
+        "first_address_mismatch_index": 0,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 0,
+            "matching_address_positions": 0
+          }
+        }
+      }
+    ],
+    "processes": 32,
+    "table_traces": 9312,
+    "scope": "Ordered trace equality in a diagnostic build; incidental execution times are not analyzed as performance evidence."
+  },
+  "address_displacements": {
+    "all_matched_hash_pairs_preserve_occupied_span": true,
+    "observation": "The two address sequences first diverge at construction 6 for native seed indices 0, 4 and 12. For index 8, the first divergence is at construction 286. The offset varies by construction and is not always a multiple of 64 bytes.",
+    "interpretation": "These are differences in occupied element addresses, not exact allocator block bases or proof of a cache effect."
+  },
+  "source": {
+    "only_cold_in_table_trace_added": true,
+    "same_runtime_and_type_inference": true,
+    "same_features_profiles_and_lock": true,
+    "same_foldhash_sources": true,
+    "same_row_lookup_source": true,
+    "binary_sha256": "60af59eaa1fd66ed459015348b6b3a5b2dda6f0da3150ee783874fb4b61b55ed",
+    "reference_binary_sha256": "33f3d8bb6854aa71a67ce08038c23955b629d954c0064ae9a463503fcad48f7c"
+  },
+  "references": [
+    "float-type-address-layout-results.json",
+    "float-type-native-seed-pairs-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-in-table-state-runs.json.gz",
+    "sha256": "6213c656abe189734201310678719711eb7e2dfd14c2ae74a9aeb3996a6fbbc6",
+    "uncompressed_sha256": "8df411258bd5201e5d46a0d56179f74f047c0056eae40f4a8b55f5ce83324299",
+    "compressed_bytes": 1325579,
+    "uncompressed_bytes": 4947269
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-in-table-state-490e19c",
+    "commands": [
+      "python3 build-trace.py",
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Use the frozen source inputs and the retained cold construction patch. The build helper restores all shared sources, lockfiles and executable slots in finally. Validate the 372 captures and both phase orders before the fixed collection. Preserve the complete ordered trace sequences."
+  }
+}
