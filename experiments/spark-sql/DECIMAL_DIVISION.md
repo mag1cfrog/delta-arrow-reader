@@ -4157,6 +4157,25 @@ Every group's hash fingerprints agree. Within each seed, all 12 processes also a
 
 The [raw record](float-type-plan-count-runs.json.gz) retains all 6,984 table traces and 6,168 prepared executions from 24 processes. Eight smoke processes check the copied driver; the unchanged executable reuses its 372 prior result and plan captures. Each collection process also validates the selected query in both ANSI modes. No groups or tail plans were discarded, and no timing effect is estimated. The responsible allocation operation remains unidentified; shorter runs are not a proposed performance fix. The optional patch decision and earlier release result remain unchanged.
 
+## Checking the effect of warmup history
+
+The [warmup-count check](float-type-warmup-count-results.json) limits the preceding boundary finding to its 32-warmup history. Changing the number of executed-and-released warmup plans moves the first address difference substantially; neither a universal total-construction threshold nor a universal retained-plan threshold fits these observations.
+
+The same executable and two native shared-seed inputs run with 261 prepared plans and either 28, 32 or 36 warmups. All groups retain one complete hash-fingerprint sequence. The first differing addresses occur at these zero-based indices:
+
+| Native seed index | Warmups | Construction index | Prepared-plan index |
+| --- | ---: | ---: | ---: |
+| 0 | 28 | 107 | 78 |
+| 0 | 32 | 286 | 253 |
+| 0 | 36 | 250 | 213 |
+| 4 | 36 | 127 | 90 |
+| 4 | 32 | 286 | 253 |
+| 4 | 28 | 151 | 122 |
+
+Within each seed, all 12 processes agree on the initial validation and first 28 warmups, including hashes and occupied address bounds. Later allocation history depends on which plans are executed and released versus retained. This makes allocator reuse a useful next intervention, but does not identify it as the sole cause. In particular, choosing fewer samples or a different warmup count would not resolve the original timing question.
+
+The [raw record](float-type-warmup-count-runs.json.gz) retains all 7,080 table traces and 6,264 prepared executions from 24 processes. The exact executable reuses its 372 prior captures; eight new smoke processes and every collection process pass their result, plan and ordering checks. There are no new Rust builds, discarded groups or performance estimates. The optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
