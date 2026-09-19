@@ -3895,6 +3895,24 @@ Neither selected fill event shows a resolved increase. Within the paired compari
 
 Source inspection also confirms that this IN filter uses `hashbrown`'s default `foldhash::fast::RandomState`. Hash seeds and data addresses are not held identical across fresh processes. No fixed seed, allocator adjustment, ASLR override or padding is introduced. The diagnostic stops at its planned 64 processes; a further timing acceptance decision needs more stable execution controls. The planning improvement remains verified in the preceding record, while execution equivalence remains unproven. Scripts, schedules, event definitions, captures, phase observations and restoration hashes are recorded. There is no new Spark corpus run.
 
+## Float type-inference comparison within one executable
+
+The [single-executable diagnostic](float-type-switch-results.json) does not reproduce a consistent execution penalty from enabling the type shortcut. It also fails one same-mode calibration, so it does not establish execution equivalence or change the adoption decision. The candidate remains deferred.
+
+A temporary once-read environment switch selects either Arrow's empty-array type inference or the candidate's direct FLOAT/DOUBLE result in one release executable. Both modes share the same compiled guard and row execution code. Only execution timing is interpreted: the diagnostic branch makes this unsuitable for estimating the original planning speedup. Absolute stack/heap/shared-library addresses and randomized hash seeds remain uncontrolled. The source patch and build inputs are archived in the result record; this switch is not part of the proposed runtime patch.
+
+Both modes pass all 74 generic IN and 112 subquery captures, for 372 exact comparisons including physical plans. Missing and invalid switch settings are rejected. Builds, checks and inspection finish before a 30-second cooldown and the fixed timing schedule. Four rounds interleave same-off, same-on and off/on comparisons, retaining all 128 processes. Intervals resample whole pairs within each round, with 10000 resamples and seed 88:
+
+| Comparison | Pairs | Median-based time change | Conditional 95% interval | Mean-based time change |
+| --- | ---: | ---: | --- | ---: |
+| Off versus itself | 16 | -0.025% | [-0.093%, +0.483%] | -0.317% |
+| On versus itself | 16 | -1.019% | [-3.152%, -0.074%] | -1.058% |
+| On versus off | 32 | -0.123% | [-1.139%, +0.098%] | -0.807% |
+
+The on/off instruction change is -0.0025%, with interval [-0.0174%, +0.0050%]. Its mean-based time interval is [-1.485%, +0.120%]. However, the same-on control's mean-based interval is also negative, [-2.150%, -0.602%], and its median interval misses the predefined +/-1% precision target. Neither favorable A/B statistic overrides that calibration failure or the earlier actual-release measurements.
+
+Recorded average frequency stays around 4.70-4.75 GHz; runqueue waits and sibling occupancy are small in most intervals. These observations do not identify a cause of the timing variation. The next diagnostic will hold IN hash seeds equal using an existing native hash builder, while retaining the production randomized hasher. The [raw record](float-type-switch-runs.json.gz) preserves every sample, counter, capture and phase observation. Shared files are restored and hash-checked. No new Spark corpus coverage is claimed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
