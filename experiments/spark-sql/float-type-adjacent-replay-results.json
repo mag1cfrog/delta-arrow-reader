@@ -1,0 +1,260 @@
+{
+  "slice": "Calibrate balanced same-plan A/A observations with the native randomized hasher",
+  "base_commit": "1253339",
+  "created_utc": "2026-09-19T07:25:23.331291+00:00",
+  "decision": {
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "adjacent_precision_target_met": true,
+    "adjacent_resolved_bias": false,
+    "sweep_precision_target_met": true,
+    "sweep_resolved_bias": false,
+    "scope": "This is an A/A control of unchanged native plans. It is not a baseline/candidate comparison or validation of the original fresh-process measurement protocol.",
+    "next_step": "Any candidate timing claim must validate the controls and comparison in that candidate experiment. Do not transfer this within-process A/A interval to the earlier release-binary result."
+  },
+  "summary": {
+    "timing_processes": 16,
+    "native_plans": 4112,
+    "timed_executions": 16448,
+    "timing_query_captures": 32,
+    "exact_correctness_captures": 186,
+    "smoke_query_captures": 4,
+    "smoke_executions": 72,
+    "invalid_order_rejected": true,
+    "capture_or_plan_differences": 0,
+    "failed_or_discarded_measurements": 0,
+    "new_builds": 1,
+    "new_spark_corpus_runs": 0
+  },
+  "method": {
+    "base_commit": "1253339",
+    "question": "Does adjacent, balanced native-plan replay yield a sufficiently precise A/A control without replacing the randomized hash implementation?",
+    "case": "generic_in_double_zero_long_list",
+    "warmups": 32,
+    "samples": 257,
+    "executions_per_plan": 4,
+    "cpu": 2,
+    "controller_cpu": 0,
+    "cooldown_seconds": 30,
+    "schedule": [
+      {
+        "pair": 0,
+        "mode": "adjacent",
+        "label_flip": false
+      },
+      {
+        "pair": 0,
+        "mode": "sweep",
+        "label_flip": false
+      },
+      {
+        "pair": 1,
+        "mode": "sweep",
+        "label_flip": true
+      },
+      {
+        "pair": 1,
+        "mode": "adjacent",
+        "label_flip": true
+      },
+      {
+        "pair": 2,
+        "mode": "sweep",
+        "label_flip": false
+      },
+      {
+        "pair": 2,
+        "mode": "adjacent",
+        "label_flip": false
+      },
+      {
+        "pair": 3,
+        "mode": "adjacent",
+        "label_flip": true
+      },
+      {
+        "pair": 3,
+        "mode": "sweep",
+        "label_flip": true
+      },
+      {
+        "pair": 4,
+        "mode": "sweep",
+        "label_flip": false
+      },
+      {
+        "pair": 4,
+        "mode": "adjacent",
+        "label_flip": false
+      },
+      {
+        "pair": 5,
+        "mode": "adjacent",
+        "label_flip": true
+      },
+      {
+        "pair": 5,
+        "mode": "sweep",
+        "label_flip": true
+      },
+      {
+        "pair": 6,
+        "mode": "sweep",
+        "label_flip": false
+      },
+      {
+        "pair": 6,
+        "mode": "adjacent",
+        "label_flip": false
+      },
+      {
+        "pair": 7,
+        "mode": "adjacent",
+        "label_flip": true
+      },
+      {
+        "pair": 7,
+        "mode": "sweep",
+        "label_flip": true
+      }
+    ],
+    "labels": "Each native plan executes four times. The first/fourth occurrences are label A and the second/third label B, inverted for every odd (plan_index + label_flip). Label flip alternates by process pair. No candidate code or runtime mode differs between A and B.",
+    "statistics": "Primary: per-process median of same-plan percentage changes between the means of two B executions and two A executions, then median across all eight processes of each mode. Secondary: per-process percentage change of full A/B means, then median across processes. 10000 whole-process bootstrap resamples, seed 88; no within-process independence claim.",
+    "calibration_target": "Both primary and secondary conditional 95% intervals within +/-1%. Inspect any resolved nonzero bias separately. This target validates only A/A precision, not the candidate or the original fresh-plan benchmark.",
+    "stopping_rule": "One fixed 16-process schedule, with all observations retained. No extensions until a preferred result.",
+    "limits": [
+      "Sweep and adjacent modes use the same compiled executable. Both retain native randomized plans and allocations; only execution ordering changes.",
+      "No candidate versus baseline inference or absolute speed comparison against the prior replay executable.",
+      "No builds, tests or independent machine work during measurements."
+    ]
+  },
+  "calibration": {
+    "adjacent": {
+      "processes": 8,
+      "metrics": {
+        "median_same_plan_change_pct": {
+          "median_process_change_pct": -0.012405915803437306,
+          "whole_process_bootstrap_95_interval": [
+            -0.1790907902303962,
+            0.09800366233425617
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "process_changes_pct": [
+            -0.09513232414224415,
+            0.13914692215817315,
+            -0.1790907902303962,
+            0.09800366233425617,
+            -0.00143135300260111,
+            -0.005984288148286332,
+            -0.2587406468537279,
+            -0.01882754345858828
+          ]
+        },
+        "whole_label_mean_change_pct": {
+          "median_process_change_pct": -0.05226627524467786,
+          "whole_process_bootstrap_95_interval": [
+            -0.091843752789178,
+            0.060461151752733144
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "process_changes_pct": [
+            -0.08798738375279669,
+            0.03154956181738999,
+            -0.24321685238373192,
+            0.060461151752733144,
+            -0.091843752789178,
+            -0.04165215283371548,
+            -0.06288039765564024,
+            0.09484437017626135
+          ]
+        }
+      },
+      "both_precision_targets_met": true,
+      "resolved_bias_in_either_statistic": false
+    },
+    "sweep": {
+      "processes": 8,
+      "metrics": {
+        "median_same_plan_change_pct": {
+          "median_process_change_pct": -0.08885703389623911,
+          "whole_process_bootstrap_95_interval": [
+            -0.26094906830962383,
+            0.01645727771679706
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "process_changes_pct": [
+            -0.1286268017202219,
+            -0.3270991063025086,
+            0.01645727771679706,
+            -0.26094906830962383,
+            -0.03633557606684823,
+            -0.23440820725174616,
+            0.12754332874471697,
+            -0.04908726607225633
+          ]
+        },
+        "whole_label_mean_change_pct": {
+          "median_process_change_pct": -0.04356015624896736,
+          "whole_process_bootstrap_95_interval": [
+            -0.07398351891756416,
+            0.03309399749977793
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "process_changes_pct": [
+            -0.21242915255764716,
+            -0.03373264621406857,
+            -0.06112143985287366,
+            -0.05338766628386615,
+            -0.07398351891756416,
+            0.010064729757108815,
+            0.03309399749977793,
+            0.41360939744765624
+          ]
+        }
+      },
+      "both_precision_targets_met": true,
+      "resolved_bias_in_either_statistic": false
+    }
+  },
+  "source": {
+    "benchmark_patch": "--- a/examples/decimal_bench.rs\n+++ b/examples/decimal_bench.rs\n@@ -147,7 +147,12 @@\n         }\n         Ok(count)\n     };\n-    // Generic IN only: keep fresh plans per sample while allowing longer runs.\n+    let replay_order = std::env::var(\"DECIMAL_BENCH_IN_REPLAY_ORDER\")\n+        .unwrap_or_else(|_| \"adjacent\".into());\n+    if !matches!(replay_order.as_str(), \"adjacent\" | \"sweep\") {\n+        return Err(\"DECIMAL_BENCH_IN_REPLAY_ORDER must be adjacent or sweep\".into());\n+    }\n+    // Diagnostic only: retain native randomized plans across four executions.\n     let warmups = timing_count(\"DECIMAL_BENCH_IN_WARMUPS\", WARMUPS)?;\n     let samples = timing_count(\"DECIMAL_BENCH_IN_SAMPLES\", SAMPLES)?;\n     let mut results = Vec::new();\n@@ -437,10 +442,23 @@\n                     if phase == \"planning\" {\n                         perf_command(b\"disable\\n\")?;\n                     }\n+                    let mut plan_indices = Vec::with_capacity(4 * samples);\n+                    if replay_order == \"adjacent\" {\n+                        for index in 0..samples {\n+                            plan_indices.extend(std::iter::repeat_n(index, 4));\n+                        }\n+                    } else {\n+                        for reverse in [false, true, true, false] {\n+                            for offset in 0..samples {\n+                                plan_indices.push(if reverse { samples - 1 - offset } else { offset });\n+                            }\n+                        }\n+                    }\n                     if phase == \"execution\" {\n                         perf_command(b\"enable\\n\")?;\n                     }\n-                    for plan in plans {\n+                    for &index in &plan_indices {\n+                        let plan = Arc::clone(&plans[index]);\n                         let start = Instant::now();\n                         let counts = consume(ctx, plan).await?;\n                         execution_ms.push(start.elapsed().as_secs_f64() * 1000.0);\n@@ -449,6 +467,8 @@\n                     if phase == \"execution\" {\n                         perf_command(b\"disable\\n\")?;\n                     }\n+                    result[\"sample_plan_indices\"] = json!(plan_indices);\n+                    result[\"replay_order\"] = json!(replay_order);\n                     result[\"planning_samples_ms\"] = json!(planning_ms);\n                     result[\"samples_ms\"] = json!(execution_ms);\n                 }\n",
+    "binary_sha256": "f94e698f8e72d5b10529aaace055ba47252ba2634e4d483bc264c9d1472c812f",
+    "identity": "One executable for both schedules. Original type inference, native randomized hasher, accepted add-zero runtime. Production sources, dependency features/profiles and lockfile match the frozen before build.",
+    "restoration": "All shared sources, lockfiles and executable slots are restored and hash checked."
+  },
+  "limitations": [
+    "Labels A and B execute the exact same retained plan; neither label enables the type-inference candidate.",
+    "Each plan has its own original randomized IN table. The four repeats share that table and its allocations, which differs from measuring a fresh plan once.",
+    "Balanced labels can cancel drift in both schedules. A pass by both modes does not establish that adjacency alone causes better precision.",
+    "The conditional intervals cover eight processes per mode on this host, not other workloads or hosts. No equivalence or universal zero-cost claim is made.",
+    "The earlier original-binary positive mean interval and failed self-comparison remain retained and unresolved by this A/A experiment."
+  ],
+  "references": [
+    "float-type-plan-replay-results.json",
+    "float-type-release-confirmation-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-adjacent-replay-runs.json.gz",
+    "sha256": "17f469cd10faf42abb264f3b5f44c2d8846fc0602d6a7cbed6fad38ec5eed05f",
+    "uncompressed_sha256": "f48b0903b48ce55352057676f88f485607e1b00ca9fbbfaab3697d3e2c64788c",
+    "compressed_bytes": 181286,
+    "uncompressed_bytes": 832350
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-adjacent-replay-1253339",
+    "scripts": "All scripts, capture data, counters and source/build identities are in the compressed record.",
+    "commands": [
+      "python3 build-replay.py",
+      "python3 verify.py",
+      "python3 measure-replay.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Extract into an empty sibling cache directory using the recorded frozen float-type-planning-f438591 sources. Recreate override.toml, paths.json, the dependency symlink and the benchmark source. Run sequentially; finish all builds and validation before measurement. The build helper restores shared files in finally."
+  }
+}

@@ -3963,6 +3963,21 @@ The replay keeps allocations alive and accumulates execution metrics; its rebuil
 
 The next calibration should put balanced A/A executions of each native plan next to one another, reducing the time between matched observations. Passing that control would validate the diagnostic harness; a candidate adoption decision still needs its own comparison.
 
+## Balanced A/A controls with the native randomized hasher
+
+The [balanced replay control](float-type-adjacent-replay-results.json) meets the predefined +/-1% precision target using the original randomized hasher. Both statistics include zero in their conditional 95% intervals. This validates this within-process A/A control, not the deferred type-inference candidate or the earlier fresh-process protocol.
+
+One executable supports two schedules. The adjacent schedule executes each of 257 native plans four times before moving to the next plan. The sweep schedule executes all plans forward, reverse, reverse and forward. Labels A and B select the first/fourth and second/third occurrences, with the labels inverted by alternating plan index and process pair. Both labels execute the same retained plan. Eight processes per schedule run in a predetermined balanced order, for 16,448 executions.
+
+| Schedule | Median same-plan A/A change, conditional 95% interval | Full-label mean change, conditional 95% interval |
+| --- | --- | --- |
+| Adjacent | -0.012%, [-0.179%, +0.098%] | -0.052%, [-0.092%, +0.060%] |
+| Sweep | -0.089%, [-0.261%, +0.016%] | -0.044%, [-0.074%, +0.033%] |
+
+The primary statistic uses each process's median change between matched two-execution means; the secondary uses all its A/B observations. Intervals resample whole processes, keeping their internal observations together. Every sample is retained. Since both schedules pass, the experiment does not isolate adjacency as the cause of improved precision: retaining identical plans and balancing labels are shared changes.
+
+All 186 result and plan captures match their reference. Another 72 executions check both replay orders, and an invalid order is rejected. The [raw record](float-type-adjacent-replay-runs.json.gz) includes the complete schedule, samples, counters, scripts and build identity. Shared source and executable slots are restored and hash-checked. Production runtime code is unchanged. A subsequent candidate comparison must preserve the effects of independently planning each variant and validate its own controls; this A/A result cannot close the earlier roughly 0.5% execution observation.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
