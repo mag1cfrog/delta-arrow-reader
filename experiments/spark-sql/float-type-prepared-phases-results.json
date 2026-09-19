@@ -1,0 +1,1136 @@
+{
+  "slice": "Prepare frozen release processes before running adjacent execution phases",
+  "base_commit": "898bcce",
+  "created_utc": "2026-09-19T08:06:22.212772+00:00",
+  "decision": {
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "controls_passed": false,
+    "predetermined_release_no_increase_criteria_met": false,
+    "finding": "Separating preparation from adjacent execution phases does not calibrate the original release comparison. Both self-comparisons miss precision targets, and the candidate mean-based upper bound exceeds +0.5%.",
+    "scope": "The passing independent-plan single-executable result remains separate. Neither that result nor this inconclusive release comparison erases the earlier positive release mean interval.",
+    "next_step": "No execution-code change is justified by these results. Keep the five-line planning candidate deferred; further attribution would need to isolate process-dependent state rather than extend the same failed measurement schedule."
+  },
+  "summary": {
+    "four_process_groups": 32,
+    "timing_processes": 128,
+    "timed_executions": 32896,
+    "timing_query_captures": 256,
+    "exact_correctness_captures": 372,
+    "smoke_processes": 8,
+    "smoke_query_captures": 16,
+    "smoke_executions": 24,
+    "capture_or_plan_differences": 0,
+    "failed_or_discarded_measurements": 0,
+    "overlapping_benchmark_phases": 0,
+    "peer_runtime_during_other_phases_ns": 0,
+    "new_builds": 0,
+    "runtime_source_changes": 0,
+    "new_spark_corpus_runs": 0
+  },
+  "method": {
+    "base_commit": "898bcce750cf7bfa2df47cab81134e79c4f5f89c",
+    "question": "Can preparing the original frozen release processes before adjacent execution phases calibrate the native randomized comparison?",
+    "case": "generic_in_double_zero_long_list",
+    "warmups": 32,
+    "samples": 257,
+    "cpu": 2,
+    "controller_cpu": 0,
+    "cooldown_seconds": 30,
+    "binaries": {
+      "before": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/before-bench",
+        "sha256": "6bae8a5b50d223abd75c1cbd1c6b05b422e2999b97910576d9fb2058d74c98b2"
+      },
+      "after": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/after-bench",
+        "sha256": "44bec3259cc2c02f41a67588b46eca0d01fb4dd103543bff223de4ce068b204b"
+      }
+    },
+    "schedule": [
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          3,
+          2,
+          1,
+          0
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          0,
+          3,
+          2,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          3,
+          2,
+          1,
+          0
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          0,
+          3,
+          2,
+          1
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          1,
+          0,
+          3,
+          2
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          2,
+          1,
+          0,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          3,
+          2,
+          1,
+          0
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          0,
+          3,
+          2,
+          1
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          3,
+          2,
+          1,
+          0
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          0,
+          3,
+          2,
+          1
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          1,
+          0,
+          3,
+          2
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          2,
+          1,
+          0,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          1,
+          0,
+          3,
+          2
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          2,
+          1,
+          0,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          1,
+          0,
+          3,
+          2
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          2,
+          1,
+          0,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ]
+      }
+    ],
+    "labels": {
+      "0": "A",
+      "1": "A",
+      "2": "B",
+      "3": "B"
+    },
+    "gates": "Launch and prepare each of four independent processes sequentially. Hold their existing enable acknowledgments until all are ready. Execute complete phases in ABBA/BAAB order, holding each disable acknowledgment until every process finishes. Only then permit output serialization, validation and exit.",
+    "runtime": "Reuse byte-identical original before/after release executables; no switch, source change, seed override, replay or build. Every plan is executed once and dropped as in the original benchmark.",
+    "statistics": "Each group has two independent processes per label. Primary: ratio of the average process medians. Secondary: ratio of full-label means. Bootstrap whole four-process groups within four predetermined blocks, 10000 resamples, seed 88. Also report instruction changes. Do not treat within-process executions as independent process samples.",
+    "acceptance": "Both original/original and candidate/candidate time intervals must fit within +/-1% and include zero. Candidate/original primary and secondary upper bounds must be below +0.5%, with no resolved positive effect. Retain all previous evidence even on a pass.",
+    "stopping_rule": "One fixed 32-group, 128-process schedule, no discarded groups or extensions for a preferred result. Smoke checks and other work finish before cooldown and measurement.",
+    "limits": [
+      "The four processes remain resident while each phase runs; allocation lifetime and cache/predictor history differ from sequential process launch.",
+      "Whole phases remain separate in time; this does not interleave individual query executions.",
+      "Conditional intervals cover this fixed host and schedule without multiple-comparison correction."
+    ]
+  },
+  "comparison": {
+    "same-before": {
+      "four_process_groups": 8,
+      "metrics": {
+        "median_ms": {
+          "median_group_change_pct": -1.6922243374671297,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -4.019018930266183,
+            1.118916047299534
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            2.11374823580196,
+            -5.757442358979437,
+            -0.6996803924951389,
+            -1.9405427209913286
+          ],
+          "group_changes_pct": [
+            6.362914775963846,
+            -2.135418304359926,
+            -5.612265161786434,
+            -5.902619556172439,
+            -0.15033041441594452,
+            -1.2490303705743333,
+            2.3881625090150127,
+            -6.26924795099767
+          ]
+        },
+        "mean_ms": {
+          "median_group_change_pct": 0.06887652505279118,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -1.9360731117528507,
+            1.3995881343217498
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            1.9273816302542157,
+            -3.6032702406994632,
+            0.36385654036118487,
+            -1.7559385692444418
+          ],
+          "group_changes_pct": [
+            3.977452491943234,
+            -0.1226892314348027,
+            -3.7494569920708987,
+            -3.457083489328028,
+            0.26044228154038507,
+            0.46727079918198466,
+            2.331905469461515,
+            -5.8437826079503985
+          ]
+        },
+        "instructions": {
+          "median_group_change_pct": -0.013704646225509709,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.028288321080155443,
+            -0.011693820053632065
+          ],
+          "within_one_percent": true,
+          "contains_zero": false,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.01075913269730222,
+            -0.028369946982936822,
+            -0.0037360841473099704,
+            -0.08513702526704026
+          ],
+          "group_changes_pct": [
+            -0.009601367978973041,
+            -0.0119168974156314,
+            -0.042953621837582556,
+            -0.013786272128291088,
+            0.006150852028108389,
+            -0.01362302032272833,
+            -0.15420151118347158,
+            -0.016072539350608928
+          ]
+        }
+      }
+    },
+    "same-after": {
+      "four_process_groups": 8,
+      "metrics": {
+        "median_ms": {
+          "median_group_change_pct": -0.09952416390167085,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.824314485482569,
+            1.2972533810575948
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            0.038027438953514014,
+            -0.7192002419629084,
+            1.8287070466203925,
+            -0.6372746532944507
+          ],
+          "group_changes_pct": [
+            0.18618943737989113,
+            -0.1101345594728631,
+            -0.0889137683304786,
+            -1.3494867155953383,
+            -0.29914225536979977,
+            3.956556348610585,
+            2.4083173247352985,
+            -3.6828666313242
+          ]
+        },
+        "mean_ms": {
+          "median_group_change_pct": -0.343527125073706,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.6627368159761227,
+            1.1799017581797466
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.4978805098405592,
+            0.20229265077902348,
+            1.6292017959753546,
+            -1.0231661743378917
+          ],
+          "group_changes_pct": [
+            -0.4771035499954168,
+            -0.5186574696857016,
+            -0.20995070015199513,
+            0.6145360017100421,
+            -0.8068161622665437,
+            4.065219754217253,
+            1.7452675146494512,
+            -3.7915998633252346
+          ]
+        },
+        "instructions": {
+          "median_group_change_pct": -0.0013183251740656043,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.012825399353383338,
+            0.03122726415936139
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            0.03184726636211721,
+            -0.0040367289023179875,
+            0.0481857427476029,
+            -0.010553346558533905
+          ],
+          "group_changes_pct": [
+            0.006978525017498072,
+            0.05671600770673635,
+            -0.013811978416622406,
+            0.005738520611986431,
+            0.1092907620450223,
+            -0.012919276549816505,
+            -0.01273152215695017,
+            -0.00837517096011764
+          ]
+        }
+      }
+    },
+    "paired": {
+      "four_process_groups": 16,
+      "metrics": {
+        "median_ms": {
+          "median_group_change_pct": -0.4256502501314152,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.8390844709925682,
+            0.47622612378632745
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -1.466175461973157,
+            0.4590731803227277,
+            -0.13945379046139128,
+            -0.25290945965413814
+          ],
+          "group_changes_pct": [
+            -2.550262218881494,
+            0.47622612378632745,
+            -2.155005621144579,
+            -0.7773453028017352,
+            -0.21566913240919083,
+            1.1338154930546462,
+            -2.7890584183088207,
+            2.649899428090907,
+            -0.6356313678536396,
+            -1.0728178181176995,
+            0.35672378693085705,
+            5.969325087334876,
+            0.9345058739320677,
+            0.17181441815821152,
+            -0.6776333374664878,
+            -0.8390844709925682
+          ]
+        },
+        "mean_ms": {
+          "median_group_change_pct": -0.08310861997501418,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -1.2717237141821491,
+            1.3798788967846365
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -1.0283806308382881,
+            0.1882099997721265,
+            0.7608121666068834,
+            0.04326461159916972
+          ],
+          "group_changes_pct": [
+            -1.4738160419157764,
+            1.9006317212186596,
+            -2.621480944849419,
+            -0.5829452197607998,
+            -0.583296654462151,
+            0.9597166540064039,
+            -2.243618429150862,
+            2.3175845421399055,
+            0.1417454364291304,
+            -1.7727843481063266,
+            1.3798788967846365,
+            3.232203259596611,
+            1.5716590661514207,
+            0.3944918995774982,
+            -1.2717237141821491,
+            -0.30796267637915875
+          ]
+        },
+        "instructions": {
+          "median_group_change_pct": 0.01711893990725688,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.00798493771613229,
+            0.09642714352295911
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.00016100541568864202,
+            0.022961441220348267,
+            0.01580192303591854,
+            0.16106423577081364
+          ],
+          "group_changes_pct": [
+            0.014283107673307427,
+            -0.014605118504684711,
+            -0.055736366227510103,
+            0.6137589450163183,
+            0.0259681102994902,
+            -0.03138870799690441,
+            0.019954772141206334,
+            0.09642714352295911,
+            1.5913378505207465,
+            0.024637117838999245,
+            -0.00798493771613229,
+            0.006966728232837838,
+            0.9110073763304527,
+            0.3139402649553924,
+            0.00818820658623487,
+            -0.03288546688513527
+          ]
+        }
+      }
+    }
+  },
+  "post_measurement_order_audit": {
+    "same-before": {
+      "counts_by_slot_then_preparation_position_then_abba_baab": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            0
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            0
+          ]
+        ]
+      ],
+      "every_position_crossed_equally_with_both_directions": false
+    },
+    "same-after": {
+      "counts_by_slot_then_preparation_position_then_abba_baab": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            0
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            0
+          ]
+        ]
+      ],
+      "every_position_crossed_equally_with_both_directions": false
+    },
+    "paired": {
+      "counts_by_slot_then_preparation_position_then_abba_baab": [
+        [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ],
+      "every_position_crossed_equally_with_both_directions": true
+    }
+  },
+  "source": {
+    "identity": "Byte-identical frozen before/after release executables, original randomized native IN hasher, default allocator and ASLR. No temporary Rust type switch, fixed seed or benchmark rebuild.",
+    "controller_change": "Reuse the existing perf FIFO acknowledgments to hold each process after planning and after execution. Native query execution is unchanged.",
+    "observer_patch": "--- a/phase_observer.py\n+++ b/phase_observer.py\n@@ -48,6 +48,9 @@\n         self.directory.mkdir(exist_ok=True)\n         self.records, self.errors = [], []\n         self.ready = threading.Event()\n+        self.prepared, self.start = threading.Event(), threading.Event()\n+        self.completed, self.finish = threading.Event(), threading.Event()\n+        self.cancelled = threading.Event()\n         self.fds = []\n         for file in [self.directory / 'control', self.directory / 'ack']:\n             if not file.exists():\n@@ -80,6 +83,11 @@\n                 while (command := control.readline()) != b'stop\\n':\n                     assert command in [b'enable\\n', b'disable\\n'], command\n                     self.ready.wait()\n+                    if command == b'enable\\n':\n+                        self.prepared.set()\n+                        assert self.start.wait(60), 'Scheduled start timed out'\n+                        if self.cancelled.is_set():\n+                            break\n                     pid = self.benchmark_pid()\n                     if command == b'disable\\n':\n                         record = snapshot(pid, [self.cpu, self.sibling])\n@@ -91,6 +99,11 @@\n                     if command == b'enable\\n':\n                         record = snapshot(pid, [self.cpu, self.sibling])\n                     self.records.append({'command': command.decode().strip(), 'pid': pid, 'snapshot': record})\n+                    if command == b'disable\\n':\n+                        self.completed.set()\n+                        assert self.finish.wait(60), 'Scheduled finish timed out'\n+                        if self.cancelled.is_set():\n+                            break\n                     os.write(self.fds[1], b'ack\\n')\n         except Exception as error:\n             self.errors.append(repr(error))\n@@ -103,5 +116,7 @@\n         for fd in self.fds:\n             os.close(fd)\n         assert not self.errors, self.errors\n+        if self.cancelled.is_set():\n+            return\n         assert [r['command'] for r in self.records] == ['enable', 'disable']\n         assert self.records[0]['pid'] == self.records[1]['pid']\n",
+    "integrity": "All shared source, lockfile and executable hashes still match their recorded starting state."
+  },
+  "limitations": [
+    "The four processes remain resident while each phase runs; allocation lifetime and cache/predictor history differ from sequential process launch.",
+    "Whole phases remain separate in time; this does not interleave individual query executions.",
+    "Conditional intervals cover this fixed host and schedule without multiple-comparison correction.",
+    "Preparation positions and execution directions are marginally balanced. Their joint combinations are fully balanced only for candidate/original. The self-comparisons omit some combinations for slots 1 and 3, so preparation/order interactions are not fully controlled. This does not establish the cause of their wide intervals.",
+    "The failed self-comparisons prevent a sub-percent acceptance conclusion. A negative candidate median is not evidence of a production speedup.",
+    "This rules out neither randomized hash state, address/layout effects nor changing hardware state as contributors; it only shows that this preparation barrier is insufficient.",
+    "The earlier original-release mean interval [+0.045%, +1.819%] remains retained. No zero-cost or mandatory fixed-cost claim is made."
+  ],
+  "references": [
+    "float-type-independent-plans-results.json",
+    "float-type-release-confirmation-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-prepared-phases-runs.json.gz",
+    "sha256": "fa9066149939fe9d0fb5180596d454e85f1b74c94bd70afa60c7e04781e8c5f9",
+    "uncompressed_sha256": "fcb62e8abab878152c8e16809d8e6fffc9ec9c2b7ebb8f1b3806bfd5d2c7b50b",
+    "compressed_bytes": 591257,
+    "uncompressed_bytes": 3865513
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-prepared-phases-898bcce",
+    "commands": [
+      "python3 run_group.py",
+      "python3 verify.py",
+      "python3 measure.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Use an empty sibling cache directory with the recorded initial file manifests, scripts and measurement plan. Retain the frozen executable paths and hashes. Finish all preparation and smoke checks before measurement; do not overlap unrelated work with timing."
+  }
+}

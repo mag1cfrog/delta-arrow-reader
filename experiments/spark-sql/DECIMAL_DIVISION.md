@@ -3998,6 +3998,26 @@ This diagnostic removes differences between executable layouts, retains plans, a
 
 All 372 result and plan captures across both type-inference modes match their references. Another 192 executions check independent plan labels and all four order combinations; five invalid configurations are rejected. The [raw record](float-type-independent-plans-runs.json.gz) includes every sample, capture, counter, script, source patch and build identity. Shared files are restored and hash-checked. This step changes no accepted runtime source and adds no Spark corpus coverage.
 
+## Preparing release processes before adjacent execution phases
+
+The [prepared-phase comparison](float-type-prepared-phases-results.json) still fails calibration. Completing all planning before adjacent execution phases does not make the original release comparison precise enough to accept the type-inference candidate. The candidate remains deferred; no execution-code change follows from this result.
+
+This run reuses the original frozen before/after executables without rebuilding or changing Rust source. Four processes prepare independently, then wait on the benchmark's existing perf acknowledgments. Their complete execution phases run in ABBA or BAAB order. Post-execution acknowledgments remain held until all four finish, preventing result serialization and later validation from overlapping another process's measurements. Each plan executes once, with the original randomized hasher, 32 warmups and 257 samples. Preparation positions and execution orders each have balanced counts.
+
+The fixed schedule contains 32 groups and 128 processes. Each group has two independent processes per label. The primary statistic compares their average process medians; the secondary compares full-label means. Intervals resample complete groups within four predetermined blocks, with 10000 resamples and seed 88:
+
+| Comparison | Median-based change, conditional 95% interval | Mean-based change, conditional 95% interval |
+| --- | --- | --- |
+| Original versus itself | -1.692%, [-4.019%, +1.119%] | +0.069%, [-1.936%, +1.400%] |
+| Candidate versus itself | -0.100%, [-0.824%, +1.297%] | -0.344%, [-0.663%, +1.180%] |
+| Candidate versus original | -0.426%, [-0.839%, +0.476%] | -0.083%, [-1.272%, +1.380%] |
+
+Both self-comparisons miss the +/-1% precision target. The candidate's mean-based upper bound also exceeds +0.5%, so its negative point estimates do not establish a speedup or execution equivalence. Its instruction estimate is +0.017%, [-0.008%, +0.096%]. These results do not identify whether hash state, addresses, code layout or hardware history causes the variation. They show that this preparation barrier and schedule are insufficient. Keeping four processes resident also changes allocation lifetime and cache history relative to sequential launches.
+
+An archive audit found another limitation: the candidate/original schedule crosses every preparation position with both execution directions equally, but the self-comparisons omit some joint combinations for two process slots. Balanced counts for each factor alone do not control their interaction. This limitation is recorded without attributing the observed variation to it; the original schedule and every result remain unchanged, with no extra runs added.
+
+All 372 result and plan captures match the frozen references. Eight smoke processes verify both schedules. All 32,896 measured executions and 256 timing captures are retained, with no failures or discarded groups. Phase snapshots confirm that waiting benchmark processes consume no CPU time during another benchmark's execution. The [raw record](float-type-prepared-phases-runs.json.gz) includes every capture, sample, counter, schedule, script and unchanged build identity. Shared file hashes are unchanged. This experiment does not add Spark corpus coverage or supersede the earlier positive release mean interval.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
