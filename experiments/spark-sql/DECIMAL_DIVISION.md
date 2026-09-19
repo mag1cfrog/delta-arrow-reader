@@ -4176,6 +4176,25 @@ Within each seed, all 12 processes agree on the initial validation and first 28 
 
 The [raw record](float-type-warmup-count-runs.json.gz) retains all 7,080 table traces and 6,264 prepared executions from 24 processes. The exact executable reuses its 372 prior captures; eight new smoke processes and every collection process pass their result, plan and ordering checks. There are no new Rust builds, discarded groups or performance estimates. The optional type-inference patch remains unadopted.
 
+## Disabling the allocator's per-thread cache
+
+The [allocator-cache check](float-type-tcache-count-results.json) rejects disabling that cache as a way to stabilize IN-table addresses. It produces earlier and more extensive differences while preserving the complete hash-fingerprint sequences.
+
+The installed glibc is 2.42. Its [allocation-tunable documentation](https://sourceware.org/glibc/manual/2.42/html_node/Memory-Allocation-Tunables.html) describes `glibc.malloc.tcache_count=7` as the default and zero as disabling the per-thread cache. Equal-length `GLIBC_TUNABLES` values are applied only to the experiment's child processes. The loader recognizes both explicit values. A retained C probe confirms that unconfigured allocation reuse matches explicit seven and differs from zero; the loader's unconfigured tunable display alone is not treated as the effective cache count.
+
+Four-process groups use the same Rust executable, sorted resolver release, fixed addresses, 32 warmups and 261 prepared plans:
+
+| Native seed index | Cache count | Distinct address sequences | Matching address positions | First difference |
+| --- | ---: | ---: | ---: | ---: |
+| 0 | 7 | 2 | 287/295 | 286 |
+| 0 | 0 | 4 | 1/295 | 1 |
+| 4 | 0 | 4 | 1/295 | 1 |
+| 4 | 7 | 1 | 295/295 | None |
+
+Each seed's eight processes share one complete hash-fingerprint sequence across both allocator modes. With the cache disabled, addresses differ at every construction after initial validation, including post-execution validation. This shows sensitivity to allocator behavior, but does not identify the underlying allocation or random container responsible. There is no basis here to recommend disabling the cache in production.
+
+The [raw record](float-type-tcache-count-runs.json.gz) retains all 4,720 table traces and 4,176 prepared executions from 16 processes, along with the probe, scripts and source identities. Eight smoke processes pass with both allocator settings; every collection process validates the selected query in both ANSI modes. The Rust executable reuses its 372 prior captures. No groups are discarded, no timing effect is estimated and no global settings change. The optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
