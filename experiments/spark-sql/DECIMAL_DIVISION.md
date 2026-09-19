@@ -4073,6 +4073,23 @@ All 5,952 result and plan captures match their references: the same 186 cases re
 
 No groups were discarded and no extra timing runs were added. Shared sources, lockfiles and executable slots are restored and hash-checked. The earlier positive release mean interval remains unresolved. These diagnostic builds do not establish zero execution cost, and the repeated checks add no new Spark corpus coverage.
 
+## Controlling process address layout
+
+The [address-layout follow-up](float-type-address-layout-results.json) passes the original executable's self-controls, but the candidate's controls still fail. It reuses the exact preceding binaries and native shared-seed inputs. No Rust rebuild or production change is involved.
+
+`foldhash` also derives per-table randomness from the stack address and thread-local state. A small probe produces different hash sequences across ordinary processes but repeats its sequence when launched with `setarch x86_64 -R`. The follow-up applies that setting only to each benchmark process. It verifies the process flag and records executable, stack and heap mappings before timing; global address randomization and CPU settings remain unchanged.
+
+The fixed 64-process calibration uses the previous seed assignment, crossed schedule and acceptance criteria:
+
+| Self-comparison | Median-based change | 95% interval | Mean-based change | 95% interval |
+| --- | ---: | ---: | ---: | ---: |
+| Original type inference | -0.1798% | [-0.3632%, +0.0590%] | -0.3320% | [-0.8426%, +0.2457%] |
+| Candidate type inference | +0.2983% | [-1.2518%, +0.8446%] | +0.6462% | [-1.2024%, +0.8659%] |
+
+The candidate intervals exceed +/-1%, so the conditional comparison remains blocked. Instruction-count intervals include zero and stay within +/-0.001%; time controls are still required. All 5,952 repeated result and plan checks pass, as do 32 fixed-address seed probes and eight smoke processes. The [raw record](float-type-address-layout-runs.json.gz) retains all 16,448 timed executions and pre-timing mappings. No group was removed or replaced.
+
+Each executable has one code mapping and one stack mapping across its 32 timing processes, but two heap extents. The probe's repeatability therefore does not establish identical hash states or allocation addresses for the actual SQL IN tables. Those remain a specific follow-up question. The counter audit is exploratory; it neither identifies a unique cause nor establishes that earlier release differences have disappeared. The candidate remains unadopted, and fixed addresses are a diagnostic setting rather than a production proposal.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

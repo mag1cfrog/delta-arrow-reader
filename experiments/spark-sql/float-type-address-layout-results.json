@@ -1,0 +1,373 @@
+{
+  "slice": "Control process addresses while retaining native hash generation and previously captured shared seeds",
+  "base_commit": "c561edc",
+  "created_utc": "2026-09-19T12:32:44.028186+00:00",
+  "decision": {
+    "calibration_passed": false,
+    "candidate_compared": false,
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "finding": "Original self-controls pass, but candidate self-controls remain outside the predetermined time precision gate. No candidate-versus-original comparison was run.",
+    "next_question": "Do the actual SQL IN tables have matching hash states and allocation addresses? Reproducing a small probe sequence and virtual mappings alone does not establish this."
+  },
+  "summary": {
+    "four_process_groups": 16,
+    "timing_processes": 64,
+    "timed_executions": 16448,
+    "timing_query_captures": 128,
+    "exact_correctness_captures": 5952,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "initial_address_probe_processes": 4,
+    "fixed_address_seed_probe_processes": 32,
+    "new_builds": 0,
+    "new_native_seed_captures": 0,
+    "failed_or_discarded_measurements": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "question": "Does per-process address-layout control improve self-controls when native per-table seed generation and matched native shared seeds are retained?",
+    "source": "Reuse the byte-identical two executables from float-type-native-seed-pairs-6da1057. No new Rust sources or builds. Launch each benchmark with setarch x86_64 -R and verify ADDR_NO_RANDOMIZE plus executable, heap and stack mappings while all four processes are blocked before timing.",
+    "binaries": {
+      "before": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-native-seed-pairs-6da1057/before-bench",
+        "sha256": "8a158755fdffed0bc9b29b27f6221454fbe3be42e964f558abad316f6f3ea91b"
+      },
+      "after": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-native-seed-pairs-6da1057/after-bench",
+        "sha256": "33f3d8bb6854aa71a67ce08038c23955b629d954c0064ae9a463503fcad48f7c"
+      }
+    },
+    "native_seed_source": {
+      "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-native-seed-pairs-6da1057",
+      "seed_pool_sha256": "bde999f780ad1d4cc8a5cead517d452a2a82c9d188687975386d314349e1c963",
+      "rule": "Reuse all 16 previously captured native inputs and the unchanged predetermined assignment. Do not replace, select or reorder based on timing.",
+      "captured_inputs_reused": 16
+    },
+    "address_layout": "Per-process ADDR_NO_RANDOMIZE only. All global system settings remain unchanged. This controls addresses and may also affect native per-table seeds; it does not isolate one of them alone.",
+    "calibration_criteria": "A fixed 16-group, 64-process phase. Both variants must have median-based and mean-based 95% self-comparison intervals entirely within +/-1% and including zero.",
+    "comparison_criteria": "Only after calibration passes, run the fixed 32-group, 128-process phase. Its contemporaneous self-controls must pass the same criteria. Candidate median-based and mean-based upper interval bounds must be below +0.5%, without a resolved positive effect.",
+    "statistics": "Each group has two independent processes per label. Primary: ratio of the average process medians. Secondary: ratio of full-label means. Bootstrap whole four-process groups within four predetermined blocks, 10000 resamples, seed 88. Also report instruction changes. Do not treat within-process executions as independent process samples.",
+    "stopping_rule": "One fixed 16-group calibration. Only if its original criteria pass, run the fixed 32-group mixed comparison and controls. No discarded groups, changed seeds, extra runs or threshold changes. Finish verification before a 30-second cooldown. No builds, tests or source inspection overlap timing."
+  },
+  "phases": {
+    "calibration": {
+      "phase": "calibration",
+      "groups": {
+        "same-before": {
+          "four_process_groups": 8,
+          "metrics": {
+            "median_ms": {
+              "median_group_change_pct": -0.17981581859667917,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.3632172735821948,
+                0.058986102454622324
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "upper_below_half_percent": true,
+              "resolved_positive_effect": false,
+              "block_medians_pct": [
+                0.337548499792506,
+                -0.22438752799845418,
+                -0.07984364312911829,
+                -2.2497050220463275
+              ],
+              "group_changes_pct": [
+                0.20009320774594386,
+                0.47500379183906816,
+                -0.4077889829839698,
+                -0.04098607301293855,
+                -0.3186455641804198,
+                0.1589582779221832,
+                -0.358689759575026,
+                -4.140720284517629
+              ]
+            },
+            "mean_ms": {
+              "median_group_change_pct": -0.33202113204172656,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.8426075914545195,
+                0.24568532043959257
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "upper_below_half_percent": true,
+              "resolved_positive_effect": false,
+              "block_medians_pct": [
+                0.6290250561316046,
+                -0.4499679857891514,
+                -0.14695428522577547,
+                -1.8583303448992783
+              ],
+              "group_changes_pct": [
+                0.010914269516248964,
+                1.2471358427469603,
+                -0.9548010306912658,
+                0.05486505911296291,
+                -0.7304141522177732,
+                0.43650558176622223,
+                -0.6749565335997021,
+                -3.0417041561988545
+              ]
+            },
+            "instructions": {
+              "median_group_change_pct": -0.00013111904910156902,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.0008059244883007466,
+                0.0009355070447192304
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "upper_below_half_percent": true,
+              "resolved_positive_effect": false,
+              "block_medians_pct": [
+                -0.00013111904910156902,
+                1.1561730511866486e-05,
+                4.861515638387992e-05,
+                0.00019972491211439625
+              ],
+              "group_changes_pct": [
+                -0.00041020001112501703,
+                0.000147961912921879,
+                0.0007740110654408383,
+                -0.0007508876044171053,
+                0.0010970030239976225,
+                -0.0009997727112298627,
+                0.0012604111964131803,
+                -0.0008609613721843878
+              ]
+            }
+          }
+        },
+        "same-after": {
+          "four_process_groups": 8,
+          "metrics": {
+            "median_ms": {
+              "median_group_change_pct": 0.2982890393276372,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -1.2518387277784093,
+                0.8446158605498022
+              ],
+              "within_one_percent": false,
+              "contains_zero": true,
+              "upper_below_half_percent": false,
+              "resolved_positive_effect": false,
+              "block_medians_pct": [
+                -0.01673774424000296,
+                0.2982890393276372,
+                0.7099437457809055,
+                -0.39048512298860416
+              ],
+              "group_changes_pct": [
+                0.392217794637717,
+                -0.4256932831177229,
+                0.24689903429770954,
+                0.3496790443575648,
+                -2.6744932373807595,
+                4.09438072894257,
+                -2.0779841724390957,
+                1.2970139264618874
+              ]
+            },
+            "mean_ms": {
+              "median_group_change_pct": 0.6462394655321502,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -1.2023583233198853,
+                0.8659125155093039
+              ],
+              "within_one_percent": false,
+              "contains_zero": true,
+              "upper_below_half_percent": false,
+              "resolved_positive_effect": false,
+              "block_medians_pct": [
+                0.007620925953660818,
+                0.6961350763433849,
+                0.2777532496768542,
+                -0.39396234457547696
+              ],
+              "group_changes_pct": [
+                0.863294861992947,
+                -0.8480530100856254,
+                0.8685301690256608,
+                0.523739983661109,
+                -3.0829148180285038,
+                3.638421317382212,
+                -1.5566636365541453,
+                0.7687389474031914
+              ]
+            },
+            "instructions": {
+              "median_group_change_pct": -7.985945965627295e-05,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.0009387470233102047,
+                0.0009842119962244489
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "upper_below_half_percent": true,
+              "resolved_positive_effect": false,
+              "block_medians_pct": [
+                6.55591078035922e-05,
+                -2.009413488934797e-05,
+                7.816043606778678e-06,
+                -7.985945965627295e-05
+              ],
+              "group_changes_pct": [
+                0.0010658378981398542,
+                -0.0009347196825326698,
+                0.0009025860943090436,
+                -0.0009427743640877395,
+                0.0010971547046656482,
+                -0.0010815226174520909,
+                -0.00016080334173107502,
+                1.0844224185291296e-06
+              ]
+            }
+          }
+        }
+      },
+      "controls_passed": false,
+      "comparison_gate_open": false,
+      "predetermined_release_no_increase_criteria_met": false
+    }
+  },
+  "address_findings": {
+    "one_executable_mapping_per_variant": true,
+    "one_stack_mapping_per_variant": true,
+    "two_heap_extents_per_variant": true,
+    "native_probe_sequences_repeated_for_all_16_inputs": true,
+    "scope": "The process address setting is verified. Actual SQL table states and allocation addresses have not yet been compared."
+  },
+  "observational_counters": {
+    "same-before": {
+      "processes": 32,
+      "ranges": {
+        "mean_ms": {
+          "min": 2.2203009377431906,
+          "median": 2.2498619007782104,
+          "max": 2.506699233463035
+        },
+        "median_ms": {
+          "min": 2.205546,
+          "median": 2.228955,
+          "max": 2.4715510000000003
+        },
+        "ghz": {
+          "min": 4.686728747498799,
+          "median": 4.736081720164261,
+          "max": 4.757821870124337
+        },
+        "runqueue_wait_pct": {
+          "min": 0.0035798441713781157,
+          "median": 0.014107532255796976,
+          "max": 0.9712003054778243
+        },
+        "sibling_busy_pct": {
+          "min": 0.0,
+          "median": 0.0,
+          "max": 4.615384615384615
+        },
+        "minor_faults": {
+          "min": 7,
+          "median": 7.0,
+          "max": 7
+        },
+        "major_faults": {
+          "min": 0,
+          "median": 0.0,
+          "max": 0
+        }
+      },
+      "mean_time_correlations": {
+        "instructions": -0.016591262747058258,
+        "branch_misses": 0.1726479470747197,
+        "cycles": 0.979189581494629,
+        "ghz": -0.15310434677610898,
+        "runqueue_wait_pct": 0.040843315166541806,
+        "sibling_busy_pct": 0.7553297506622083
+      }
+    },
+    "same-after": {
+      "processes": 32,
+      "ranges": {
+        "mean_ms": {
+          "min": 2.207807151750973,
+          "median": 2.2757791614785994,
+          "max": 2.4508240894941635
+        },
+        "median_ms": {
+          "min": 2.20192,
+          "median": 2.2420695000000004,
+          "max": 2.387525
+        },
+        "ghz": {
+          "min": 4.717173595348297,
+          "median": 4.746925552718527,
+          "max": 4.755859090069622
+        },
+        "runqueue_wait_pct": {
+          "min": 0.0018484764710262568,
+          "median": 0.014910923842778702,
+          "max": 0.0642258597685713
+        },
+        "sibling_busy_pct": {
+          "min": 0.0,
+          "median": 0.0,
+          "max": 4.6875
+        },
+        "minor_faults": {
+          "min": 7,
+          "median": 7.0,
+          "max": 7
+        },
+        "major_faults": {
+          "min": 0,
+          "median": 0.0,
+          "max": 0
+        }
+      },
+      "mean_time_correlations": {
+        "instructions": 0.46677458222748774,
+        "branch_misses": 0.776341986152246,
+        "cycles": 0.9972070828320085,
+        "ghz": -0.14369283191629867,
+        "runqueue_wait_pct": -0.1570067273153124,
+        "sibling_busy_pct": 0.38184197716726875
+      }
+    }
+  },
+  "limitations": [
+    "These reuse the rebuilt diagnostic shared-seed initializer binaries, not the original release executables.",
+    "Disabling address randomization changes code/data placement and can make native per-table seeds reproducible. It does not isolate hashing from address-dependent hardware behavior.",
+    "This diagnostic setting is not a proposed production setting or security change.",
+    "Sixteen fixed native shared inputs are a finite sample. Calibration uses the same predetermined eight inputs; conditional comparisons use all sixteen.",
+    "Four resident processes and complete sequential execution phases retain allocation-lifetime and hardware-history limitations.",
+    "The earlier positive release mean interval and failed native-address controls remain retained.",
+    "Instruction intervals do not replace failed timing controls. Counter correlations are exploratory, not evidence of a unique cause."
+  ],
+  "references": [
+    "float-type-native-seed-pairs-results.json",
+    "float-type-shared-seed-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-address-layout-runs.json.gz",
+    "sha256": "1c3e3f6374a09b200c0e5e2198e932799c95aba190efa242e8a3efeaf74cad31",
+    "uncompressed_sha256": "2043ecb5268c13eeee36e488c0329b90d6d28035cc54c031e641e7a4682fb772",
+    "compressed_bytes": 665284,
+    "uncompressed_bytes": 8448503
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-address-layout-c561edc",
+    "commands": [
+      "python3 verify.py",
+      "python3 measure.py calibration",
+      "python3 analyze.py calibration",
+      "python3 current_observations.py",
+      "python3 record.py"
+    ],
+    "setup": "Reuse the native-seed experiment binaries and input pool at their recorded hashes. The retained launcher adds only per-process setarch -R plus pre-timing checks. Use the unchanged crossed schedule. No comparison may run unless calibration passes."
+  }
+}
