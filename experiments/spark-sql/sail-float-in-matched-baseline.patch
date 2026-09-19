@@ -1,0 +1,57 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -256,12 +256,6 @@
+             }
+         });
+         let skip_normalization = known_without_nan && !zero;
+-        // Adding positive zero preserves NaNs and unifies both zero signs.
+-        // Keep computed operands and fused widening on their existing path.
+-        let zero_only = known_without_nan
+-            && zero
+-            && input.expr.try_as_col().is_some()
+-            && !(input.expr.get_type(schema)? == DataType::Float32 && (decimal || double));
+         // Decimal/float lists use DOUBLE. Otherwise preserve operand types
+         // so normalization does not change the existing numeric coercion.
+         let convert = |value: expr::Expr, skip_normalization: bool| -> PlanResult<expr::Expr> {
+@@ -278,12 +272,7 @@
+                 value
+             })
+         };
+-        input.expr = Box::new(if zero_only {
+-            let zero = ScalarValue::new_zero(&input.expr.get_type(schema)?)?;
+-            *input.expr + lit(zero)
+-        } else {
+-            convert(*input.expr, skip_normalization)?
+-        });
++        input.expr = Box::new(convert(*input.expr, skip_normalization)?);
+         input.list = input
+             .list
+             .into_iter()
+@@ -624,6 +613,7 @@
+                         }
+                         Ok(TreeNodeRecursion::Continue)
+                     })?;
++                    let skip = *skip && !expected.contains(&Some(0.0));
+                     assert_eq!(normalizers, usize::from(!skip), "{ty} {name}");
+                     assert_eq!(
+                         in_list.list.len(),
+@@ -639,18 +629,7 @@
+                             "canonical constants do not need normalization: {ty} {name}"
+                         );
+                     }
+-                    if *skip && expected.contains(&Some(0.0)) {
+-                        assert!(
+-                            matches!(
+-                                in_list.expr.as_ref(),
+-                                expr::Expr::BinaryExpr(BinaryExpr {
+-                                    op: Operator::Plus,
+-                                    ..
+-                                })
+-                            ),
+-                            "{ty} {name}"
+-                        );
+-                    } else if *skip && ty == DataType::Float64 {
++                    if skip && ty == DataType::Float64 {
+                         // An identity cast can hide native IN and inverse-Decimal rewrites.
+                         assert_eq!(in_list.expr.as_ref(), &col("v"));
+                     }

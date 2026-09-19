@@ -3596,6 +3596,43 @@ The record contains 888 sequential timing processes across 58 comparisons. Each 
 
 To reproduce, freeze the `after` executables from `float-in-planning-results.json`, apply this patch after that candidate, and use the recorded overrides. Run `run.py` and `identity.py`, followed by the `initial`, `confirmation` and `total` schedules with `run-series.py`, then `inspect-code.py`. The artifact embeds the sources, checks, scripts, captures, samples, counters and build identities. This remains a candidate experiment; the accepted optional runtime and default build are unchanged.
 
+## Native add-zero with equally optimized constant-list planning
+
+Keep add-zero deferred. The [matched comparison](float-in-matched-results.json) applies the same scalar identity shortcut and canonical-list elision to both variants. Add-zero retains local execution gains, but single-item planning retires more instructions and two unrelated execution controls remain slower. The earlier planning gains against the historical accepted runtime did not isolate this tradeoff.
+
+The [diagnostic subtraction patch](sail-float-in-matched-baseline.patch) removes only the add-zero eligibility and input-expression branch from the frozen canonical-list candidate. It retains both planning optimizations and adjusts the existing structural test expectations. This builds the matched no-add-zero baseline; the other side reuses the frozen add-zero executables. Dependency sources, features, profiles, Arrow libraries, lockfile and benchmark source match. Neither the default build nor the accepted optional runtime changes.
+
+All percentages below compare add-zero with the matched no-add-zero baseline. Negative means faster or fewer instructions. These execution results use eight fresh-process pairs, except DOUBLE zero-long, which uses sixteen:
+
+| Query | No add-zero / add-zero median (ms) | Time change | Paired 95% interval | Instruction change |
+| --- | --- | --- | --- | --- |
+| FLOAT single zero | 0.494113 / 0.466882 | -5.51% | [-5.69%, -4.93%] | -14.49% |
+| DOUBLE single zero | 0.673847 / 0.629815 | -6.53% | [-7.42%, -5.83%] | -20.74% |
+| FLOAT zero short list | 1.097428 / 1.069818 | -2.52% | [-2.62%, -2.11%] | -6.18% |
+| DOUBLE zero short list | 1.417648 / 1.379257 | -2.71% | [-3.26%, -1.47%] | -9.57% |
+| FLOAT zero nullable list | 0.887498 / 0.858610 | -3.26% | [-3.69%, -2.88%] | -7.89% |
+| DOUBLE zero nullable list | 1.139121 / 1.096251 | -3.76% | [-4.88%, -2.62%] | -12.20% |
+| FLOAT zero long list | 2.066163 / 2.042689 | -1.14% | [-2.20%, -0.77%] | -3.18% |
+| DOUBLE zero long list | 2.219313 / 2.197397 | -0.99% | [-2.15%, -0.47%] | -6.06% |
+| Utf8 long-list control | 4.349073 / 4.385435 | +0.84% | [+0.63%, +1.03%] | approximately zero |
+| Decimal long-list control | 3.245279 / 3.309617 | +1.98% | [+0.84%, +2.82%] | approximately zero |
+
+The first four-pair DOUBLE zero-long series was +14.18%, with a wide interval spanning zero; the eight-pair repeat was -1.73%. The artifact retains all runs. Nonzero DOUBLE long-list execution remains unresolved at -0.15% in sixteen pairs, with interval [-1.88%, +0.36%]. Its instruction difference falls from about +0.34% in the earlier series to +0.024%. FLOAT widening, NaN and dynamic-list execution controls have intervals spanning zero in the initial four-pair checks.
+
+Planning does not have one uniform cost. FLOAT/DOUBLE single-item instruction counts rise 1.17%/1.14%, while elapsed changes are +0.03%/+1.05%, both with intervals spanning zero. Short and nullable lists retire about 1.1%-1.2% fewer instructions; their eight-pair time intervals also span zero. DOUBLE zero-long planning is +1.74%, with interval [+1.38%, +2.13%], despite an instruction change of approximately zero. Unchanged-plan nonzero DOUBLE and Utf8 long-list planning are also slower, by 1.21% and 1.66%, with effectively unchanged instruction counts. These elapsed differences cannot all be attributed to additional expression work.
+
+The generic IN bitmap body remains 628 bytes and 160 normalized instructions. Its start is `0x63ebdb0` in matched no-add-zero and `0x63e5b80` in add-zero, at offsets 48 and 0 modulo 64. This agrees with the earlier controlled layout finding for Utf8/Decimal, but does not isolate every residual cost or provide a portable fix. Seven of eight same-binary control intervals include zero. The add-zero Decimal control is +0.37%, with interval [+0.03%, +0.92%], so this experiment is not free of drift.
+
+Validation passes 27 planner tests and four Delta lifecycle tests. The Rust oracle retains 960 evaluations and 3,937,920 checked values, including signed zero, NaN payloads, widening, NULLs and sliced arrays. All 6332 existing observations, representing 6324 unique observations, retain 6001 raw Spark agreements and 331 raw differences. There are no new result, type or status differences. Two parallel CAST diagnostic variations retain the other fields in three reruns per variant and ANSI mode.
+
+The main corpus has 26 expected logical and physical plan changes. Additional checks cover 128 edge observations, 48 direct computed-input controls and 48 alias controls; 32 edge and 48 alias plans change, while direct computed inputs remain identical. Of 186 benchmark query/ANSI captures, 30 have the expected physical changes and the other 156 remain identical. Across all 6742 captures, every available final plan matches the corresponding historical add-zero or no-add-zero variant. Each of the 106 changed logical plans replaces only column-plus-zero with the normalizer. This also verifies that removing add-zero restores inverse-cast filtering through aliases. No new Spark-reference coverage is claimed.
+
+The 55 comparisons contain 720 timing processes. They reuse CPU 2, 1048576 preloaded rows, batches of 8192, two warmups and nine samples per process. Builds, tests and inspection run separately from timing. Balanced adjacent pairs share launch paths; phase-gated counters are fully scheduled. Intervals resample whole pairs and are conditional on this machine and series, without correction for comparison selection.
+
+To reproduce, freeze the canonical-list candidate as build `before`, apply the subtraction patch, and use the recorded overrides to run `run.py`, `identity.py` and `plan-identity.py`. Run `setup-view.py` to reverse the timing labels: timing `before` is matched no-add-zero and `after` is frozen add-zero. Run the `initial`, `confirmation` and `controls` schedules with `run-series.py`; run `inspect-code.py` separately from timing. The artifact records both label mappings, sources, scripts, captures and samples. Shared sources, lockfiles and executable slots are restored and hash-checked before timing.
+
+The next bounded comparison should evaluate the two planning optimizations without add-zero against the historical accepted runtime. Their adoption can then be assessed independently. This result does not close the remaining Spark differences or historical performance questions.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
