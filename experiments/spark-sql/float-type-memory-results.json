@@ -1,0 +1,857 @@
+{
+  "slice": "Cache and memory counters for the float type-inference candidate",
+  "base_commit": "c3539e7",
+  "created_utc": "2026-09-19T05:29:48.211069+00:00",
+  "decision": {
+    "adopted_for_optional_runtime": false,
+    "runtime_sources_changed": false,
+    "finding": "No resolved increase in either selected cache/memory fill event. The memory diagnostic does not identify a removable execution operation or settle the earlier roughly 0.5% timing observation.",
+    "limit": "Same-binary time intervals exceed +/-1%. The paired median time estimate changes direction from the earlier series, but its interval still spans zero. Do not use this series to erase the earlier positive mean-based interval or claim execution equivalence.",
+    "stopping_decision": "Stop this fixed diagnostic after all 64 processes. Keep the planning candidate available but deferred. A further timing acceptance decision needs more stable execution controls, not more speculative runtime changes."
+  },
+  "summary": {
+    "comparisons": 3,
+    "completed_processes": 64,
+    "failed_or_discarded_processes": 0,
+    "repeated_exact_timing_captures": 128,
+    "new_builds": 0,
+    "new_full_spark_corpus_runs": 0
+  },
+  "method": {
+    "question": "Does the unresolved DOUBLE long-list execution cost coincide with additional cache/memory fills?",
+    "scope": "Frozen before/after from float-type-planning, without rebuilds, runtime changes, allocator tuning or fixed addresses.",
+    "schedule": [
+      [
+        "observed",
+        "same-before",
+        "normal",
+        8,
+        "generic_in_double_zero_long_list",
+        "execution",
+        "memory",
+        "memory"
+      ],
+      [
+        "observed",
+        "same-after",
+        "normal",
+        8,
+        "generic_in_double_zero_long_list",
+        "execution",
+        "memory",
+        "memory"
+      ],
+      [
+        "observed",
+        "paired",
+        "normal",
+        16,
+        "generic_in_double_zero_long_list",
+        "execution",
+        "memory",
+        "memory"
+      ]
+    ],
+    "completed_process_target": 64,
+    "samples": 257,
+    "warmups": 32,
+    "rows": 1048576,
+    "batch_rows": 8192,
+    "execution_cpu": 2,
+    "controller_cpu": 0,
+    "primary_counter_diagnostics": [
+      "ls_dmnd_fills_from_sys.local_ccx:u",
+      "ls_dmnd_fills_from_sys.dram_io_near:u"
+    ],
+    "method": "Balanced adjacent process pairs, seed 88. Retain every process, with same-binary controls. Report within-pair counter changes and 95% whole-pair bootstrap intervals, along with absolute counter values and elapsed time. All builds, tests and source inspection finish before measurement.",
+    "stopping_rule": "One fixed 64-process diagnostic. Do not extend merely to obtain timing equivalence. Correlation does not prove that a planning optimization causes execution cache misses. Earlier positive mean-based timing observation remains part of the evidence.",
+    "binary_sha256": {
+      "before": "6bae8a5b50d223abd75c1cbd1c6b05b422e2999b97910576d9fb2058d74c98b2",
+      "after": "44bec3259cc2c02f41a67588b46eca0d01fb4dd103543bff223de4ce068b204b"
+    },
+    "source_result_sha256": "7ce00afc41756d310539b2f6fdcb131d7ebab0d434bc8fface7aa895462692e6"
+  },
+  "statistics": {
+    "primary_time": "Median within-pair percentage change in process sample medians.",
+    "secondary_time": "Median within-pair percentage change in process sample means; no samples discarded.",
+    "counters": "Median within-pair absolute change per execution and percentage change. Also report each label group median count per execution. The ratio of group medians is a different statistic.",
+    "interval": "10000 whole-pair bootstrap resamples, seed 88, 95% percentile interval. Conditional on this shared host and series, without multiple-comparison correction.",
+    "correlation": "Exploratory Pearson correlation of per-process event count with process mean time, separately by comparison and actual binary. Association alone does not establish a causal explanation for the source-change timing difference."
+  },
+  "performance": {
+    "observed-generic_in_double_zero_long_list-same-before-normal-8-memory": {
+      "pairs": 8,
+      "scenario": "same-before",
+      "median_time": {
+        "median_paired_change_pct": -0.6910082988694777,
+        "bootstrap_95_interval": [
+          -4.817478428007904,
+          1.851868560366099
+        ]
+      },
+      "mean_time": {
+        "median": -0.5063696296014941,
+        "bootstrap_95_interval": [
+          -4.576496911000372,
+          4.344727703272011
+        ]
+      },
+      "counters": {
+        "instructions:u": {
+          "before_median_per_execution": 48986288.49610895,
+          "after_median_per_execution": 48979091.59338521,
+          "paired_absolute_change_per_execution": {
+            "median": -4923.324902723735,
+            "bootstrap_95_interval": [
+              -12875.58365758755,
+              11193.249027237354
+            ]
+          },
+          "paired_percentage_change": {
+            "median": -0.010050926291027551,
+            "bootstrap_95_interval": [
+              -0.026280278437884608,
+              0.022856924391279065
+            ]
+          }
+        },
+        "cycles:u": {
+          "before_median_per_execution": 12233778.042801557,
+          "after_median_per_execution": 12040930.780155642,
+          "paired_absolute_change_per_execution": {
+            "median": -71846.89688715954,
+            "bootstrap_95_interval": [
+              -535581.8443579767,
+              531323.9299610895
+            ]
+          },
+          "paired_percentage_change": {
+            "median": -0.6052365240988344,
+            "bootstrap_95_interval": [
+              -4.353413012604324,
+              4.3241158397333335
+            ]
+          }
+        },
+        "ls_dmnd_fills_from_sys.local_ccx:u": {
+          "before_median_per_execution": 19091.33852140078,
+          "after_median_per_execution": 18299.587548638134,
+          "paired_absolute_change_per_execution": {
+            "median": -77.61478599221789,
+            "bootstrap_95_interval": [
+              -2606.2879377431905,
+              217.01167315175098
+            ]
+          },
+          "paired_percentage_change": {
+            "median": -0.42348024432420917,
+            "bootstrap_95_interval": [
+              -13.13916035356012,
+              1.2431029429300855
+            ]
+          }
+        },
+        "ls_dmnd_fills_from_sys.dram_io_near:u": {
+          "before_median_per_execution": 14328.422178988327,
+          "after_median_per_execution": 14061.428015564203,
+          "paired_absolute_change_per_execution": {
+            "median": -99.98443579766537,
+            "bootstrap_95_interval": [
+              -496.9338521400778,
+              1353.5097276264592
+            ]
+          },
+          "paired_percentage_change": {
+            "median": -0.7140394928685512,
+            "bootstrap_95_interval": [
+              -3.475808117494683,
+              8.93632063596128
+            ]
+          }
+        },
+        "task-clock:u": {
+          "before_median_per_execution": 2.6032560914396887,
+          "after_median_per_execution": 2.5614573151750974,
+          "paired_absolute_change_per_execution": {
+            "median": -0.012621254863813339,
+            "bootstrap_95_interval": [
+              -0.11962628793774285,
+              0.1132029455252919
+            ]
+          },
+          "paired_percentage_change": {
+            "median": -0.5060630559424184,
+            "bootstrap_95_interval": [
+              -4.573094386469356,
+              4.324585379882806
+            ]
+          }
+        },
+        "context-switches:u": {
+          "before_median_per_execution": 0.0,
+          "after_median_per_execution": 0.0,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": null
+        },
+        "cpu-migrations:u": {
+          "before_median_per_execution": 0.0,
+          "after_median_per_execution": 0.0,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": null
+        },
+        "page-faults:u": {
+          "before_median_per_execution": 0.027237354085603113,
+          "after_median_per_execution": 0.027237354085603113,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      "within_variant_counter_mean_time_pearson": {
+        "before": {
+          "ls_dmnd_fills_from_sys.local_ccx:u": -0.5852364358027937,
+          "ls_dmnd_fills_from_sys.dram_io_near:u": 0.03882537444772127
+        }
+      }
+    },
+    "observed-generic_in_double_zero_long_list-same-after-normal-8-memory": {
+      "pairs": 8,
+      "scenario": "same-after",
+      "median_time": {
+        "median_paired_change_pct": -0.05184875863780691,
+        "bootstrap_95_interval": [
+          -1.640052520597035,
+          2.852389734884042
+        ]
+      },
+      "mean_time": {
+        "median": 0.3125240968654741,
+        "bootstrap_95_interval": [
+          -1.8473840048223833,
+          4.031184256219245
+        ]
+      },
+      "counters": {
+        "instructions:u": {
+          "before_median_per_execution": 48980141.258754864,
+          "after_median_per_execution": 48983338.62062257,
+          "paired_absolute_change_per_execution": {
+            "median": 902.1206225680935,
+            "bootstrap_95_interval": [
+              -7320.972762645914,
+              9911.287937743191
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 0.0018414683209067029,
+            "bootstrap_95_interval": [
+              -0.014945152921519433,
+              0.020237768777109366
+            ]
+          }
+        },
+        "cycles:u": {
+          "before_median_per_execution": 11189829.488326848,
+          "after_median_per_execution": 11472351.011673152,
+          "paired_absolute_change_per_execution": {
+            "median": 42552.77042801556,
+            "bootstrap_95_interval": [
+              -190845.41245136186,
+              413960.6653696498
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 0.4030376601391161,
+            "bootstrap_95_interval": [
+              -1.7659914448569514,
+              3.750534580312026
+            ]
+          }
+        },
+        "ls_dmnd_fills_from_sys.local_ccx:u": {
+          "before_median_per_execution": 31806.885214007783,
+          "after_median_per_execution": 28602.37354085603,
+          "paired_absolute_change_per_execution": {
+            "median": 778.4124513618677,
+            "bootstrap_95_interval": [
+              -3629.568093385214,
+              2673.5953307392997
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 2.0003521629175958,
+            "bootstrap_95_interval": [
+              -12.472427388613472,
+              8.29326892612503
+            ]
+          }
+        },
+        "ls_dmnd_fills_from_sys.dram_io_near:u": {
+          "before_median_per_execution": 7500.194552529183,
+          "after_median_per_execution": 9345.86186770428,
+          "paired_absolute_change_per_execution": {
+            "median": 378.1031128404669,
+            "bootstrap_95_interval": [
+              -1237.4280155642023,
+              2269.182879377432
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 2.918651200135608,
+            "bootstrap_95_interval": [
+              -16.856511949386842,
+              61.90050329651766
+            ]
+          }
+        },
+        "task-clock:u": {
+          "before_median_per_execution": 2.365238190661479,
+          "after_median_per_execution": 2.429715459143969,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0063783054474706394,
+            "bootstrap_95_interval": [
+              -0.042166743190661556,
+              0.09403431906614798
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 0.3132413985094673,
+            "bootstrap_95_interval": [
+              -1.8419265007476926,
+              4.0253928609983
+            ]
+          }
+        },
+        "context-switches:u": {
+          "before_median_per_execution": 0.0,
+          "after_median_per_execution": 0.0,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": null
+        },
+        "cpu-migrations:u": {
+          "before_median_per_execution": 0.0,
+          "after_median_per_execution": 0.0,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": null
+        },
+        "page-faults:u": {
+          "before_median_per_execution": 0.027237354085603113,
+          "after_median_per_execution": 0.027237354085603113,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      "within_variant_counter_mean_time_pearson": {
+        "after": {
+          "ls_dmnd_fills_from_sys.local_ccx:u": -0.8896582036204446,
+          "ls_dmnd_fills_from_sys.dram_io_near:u": 0.8804723928459945
+        }
+      }
+    },
+    "observed-generic_in_double_zero_long_list-paired-normal-16-memory": {
+      "pairs": 16,
+      "scenario": "paired",
+      "median_time": {
+        "median_paired_change_pct": -0.9556643552602551,
+        "bootstrap_95_interval": [
+          -4.225994447804471,
+          0.3467906494068085
+        ]
+      },
+      "mean_time": {
+        "median": -1.8814208674455823,
+        "bootstrap_95_interval": [
+          -3.244002276835012,
+          1.5374630350797114
+        ]
+      },
+      "counters": {
+        "instructions:u": {
+          "before_median_per_execution": 48982561.0077821,
+          "after_median_per_execution": 48986143.9844358,
+          "paired_absolute_change_per_execution": {
+            "median": 5185.356031128405,
+            "bootstrap_95_interval": [
+              906.8715953307393,
+              9835.634241245136
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 0.010585973584975594,
+            "bootstrap_95_interval": [
+              0.0018510035070917752,
+              0.020082907017959784
+            ]
+          }
+        },
+        "cycles:u": {
+          "before_median_per_execution": 11112537.680933852,
+          "after_median_per_execution": 10959735.103112841,
+          "paired_absolute_change_per_execution": {
+            "median": -211129.826848249,
+            "bootstrap_95_interval": [
+              -381609.673151751,
+              152871.3093385214
+            ]
+          },
+          "paired_percentage_change": {
+            "median": -1.894602982132998,
+            "bootstrap_95_interval": [
+              -3.3840430872538407,
+              1.4003927856763576
+            ]
+          }
+        },
+        "ls_dmnd_fills_from_sys.local_ccx:u": {
+          "before_median_per_execution": 38438.651750972764,
+          "after_median_per_execution": 38845.70233463035,
+          "paired_absolute_change_per_execution": {
+            "median": -397.92217898832683,
+            "bootstrap_95_interval": [
+              -934.2568093385214,
+              1403.7937743190662
+            ]
+          },
+          "paired_percentage_change": {
+            "median": -0.9710754189226567,
+            "bootstrap_95_interval": [
+              -2.3773527702035224,
+              3.740880453582074
+            ]
+          }
+        },
+        "ls_dmnd_fills_from_sys.dram_io_near:u": {
+          "before_median_per_execution": 3665.272373540856,
+          "after_median_per_execution": 3654.7529182879375,
+          "paired_absolute_change_per_execution": {
+            "median": 392.9669260700389,
+            "bootstrap_95_interval": [
+              -704.8677042801556,
+              626.4163424124513
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 12.241165847883506,
+            "bootstrap_95_interval": [
+              -17.384954451954158,
+              24.7204611311733
+            ]
+          }
+        },
+        "task-clock:u": {
+          "before_median_per_execution": 2.3492692140077818,
+          "after_median_per_execution": 2.318617980544747,
+          "paired_absolute_change_per_execution": {
+            "median": -0.04412961867704286,
+            "bootstrap_95_interval": [
+              -0.077371552529183,
+              0.0361971186770426
+            ]
+          },
+          "paired_percentage_change": {
+            "median": -1.8849356651454263,
+            "bootstrap_95_interval": [
+              -3.2480751825907483,
+              1.5675493343850377
+            ]
+          }
+        },
+        "context-switches:u": {
+          "before_median_per_execution": 0.0,
+          "after_median_per_execution": 0.0,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": null
+        },
+        "cpu-migrations:u": {
+          "before_median_per_execution": 0.0,
+          "after_median_per_execution": 0.0,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": null
+        },
+        "page-faults:u": {
+          "before_median_per_execution": 0.027237354085603113,
+          "after_median_per_execution": 0.027237354085603113,
+          "paired_absolute_change_per_execution": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "paired_percentage_change": {
+            "median": 0.0,
+            "bootstrap_95_interval": [
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      "within_variant_counter_mean_time_pearson": {
+        "after": {
+          "ls_dmnd_fills_from_sys.local_ccx:u": -0.838099560702299,
+          "ls_dmnd_fills_from_sys.dram_io_near:u": 0.8281648612441683
+        },
+        "before": {
+          "ls_dmnd_fills_from_sys.local_ccx:u": -0.8131246491235112,
+          "ls_dmnd_fills_from_sys.dram_io_near:u": 0.7692173438269099
+        }
+      }
+    }
+  },
+  "event_descriptions": "\ncache:\n  ls_dmnd_fills_from_sys.all\n       [Demand data cache fills from all types of data sources. Unit: cpu]\n        cpu/event=0x43,umask=0xff/\n  ls_dmnd_fills_from_sys.alternate_memories\n       [Demand data cache fills from extension memory. Unit: cpu]\n        cpu/event=0x43,umask=0x80/\n  ls_dmnd_fills_from_sys.dram_io_far\n       [Demand data cache fills from either DRAM or MMIO in a different NUMA\n        node (same or different socket). Unit: cpu]\n        cpu/event=0x43,umask=0x40/\n  ls_dmnd_fills_from_sys.dram_io_near\n       [Demand data cache fills from either DRAM or MMIO in the same NUMA\n        node. Unit: cpu]\n        cpu/event=0x43,umask=8/\n  ls_dmnd_fills_from_sys.far_cache\n       [Demand data cache fills from cache of another CCX when the address was\n        in a different NUMA node. Unit: cpu]\n        cpu/event=0x43,umask=0x10/\n  ls_dmnd_fills_from_sys.local_ccx\n       [Demand data cache fills from L3 cache or different L2 cache in the\n        same CCX. Unit: cpu]\n        cpu/event=0x43,umask=2/\n  ls_dmnd_fills_from_sys.local_l2\n       [Demand data cache fills from local L2 cache. Unit: cpu]\n        cpu/event=0x43,umask=1/\n  ls_dmnd_fills_from_sys.near_cache\n       [Demand data cache fills from cache of another CCX when the address was\n        in the same NUMA node. Unit: cpu]\n        cpu/event=0x43,umask=4/\n",
+  "source_inspection": {
+    "path": "datafusion-physical-expr 54.1.0 primitive_filter.rs -> datafusion-common::HashSet -> hashbrown 0.17.1 DefaultHashBuilder -> foldhash 0.2.0 fast::RandomState",
+    "finding": "The IN filter uses a randomized hash state. Hash seeds and data addresses are not held identical across these fresh processes. This is a measurement limit, not an established cause of the earlier elapsed-time difference.",
+    "runtime_policy": "No fixed hash seed, allocator tuning, ASLR override or code padding added."
+  },
+  "restoration": {
+    "sources/math.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs",
+      "existed": true,
+      "sha256": "c4befca6320e36532f3e87091622e0b91ecfa59e841646f98af91f704c84846f"
+    },
+    "sources/lateral.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/lateral_join.rs",
+      "existed": true,
+      "sha256": "3a46aea3b3c2af3e500dbfac0cc6999da1cf60d4a99bed9c6b02b789a5bf1020"
+    },
+    "sources/cast.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs",
+      "existed": true,
+      "sha256": "b09ae115b792491460b3ba5fcd60faea4bc1bfd59f60690618063f5cb0d855b3"
+    },
+    "sources/common.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs",
+      "existed": true,
+      "sha256": "41cef0bc27bc314a5ab03ca682acd76448c1780808f5b943722ba85e04af8fc5"
+    },
+    "sources/function-Cargo.toml": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-function/Cargo.toml",
+      "existed": true,
+      "sha256": "0e70f011d3aaabce73b5df5f12bb9e547936a6769cff09099fe5e37641b878a7"
+    },
+    "sources/scalar-mod.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/mod.rs",
+      "existed": true,
+      "sha256": "68c06852a9272ae5c480298c0f4e2c725753bf028a5da6e629fad49a93231925"
+    },
+    "sources/Cargo.lock": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/Cargo.lock",
+      "existed": true,
+      "sha256": "e0970eb4c47224ccf8d0e9be9d2a57b25db09316fed780d5533598f519ab0584"
+    },
+    "sources/decimal_bench.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/examples/decimal_bench.rs",
+      "existed": true,
+      "sha256": "61f32e9a0cf89b4f06b8f579fb3af8a6003f35088b9cdcbe8abd548ef6cb4e3f"
+    },
+    "sources/string-cast.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs",
+      "existed": false
+    },
+    "sources/float-cast.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_float_to_decimal.rs",
+      "existed": false
+    },
+    "sources/lib.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/lib.rs",
+      "existed": true,
+      "sha256": "abf6ed0652f1b3ee7b66bf77313fa56f1fd292a2f48168550c1022335c654a8d"
+    },
+    "sources/main.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/src/main.rs",
+      "existed": true,
+      "sha256": "8609b17aab37b9a84cde88767cacecc267d170048574636d6516300eea47d359"
+    },
+    "sources/decimal_probe.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/examples/decimal_probe.rs",
+      "existed": true,
+      "sha256": "f43728209ba28c00296d5f4789d4a66db06798c398f34f3558ae3944d0322d8f"
+    },
+    "sources/decimal-null.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs",
+      "existed": false
+    },
+    "sources/function-mod.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/mod.rs",
+      "existed": true,
+      "sha256": "2ce9c566265102724d44f5e2f2822d5d82c03e71e1eec907d50e425becbedae2"
+    },
+    "sources/function-scalar-mod.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/mod.rs",
+      "existed": true,
+      "sha256": "b5546d8cd9f41cb1a5bddb3d9102f9618abe7e1ef65746d3946af86b4d973e26"
+    },
+    "sources/delta_lifecycle.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/src/delta_lifecycle.rs",
+      "existed": true,
+      "sha256": "b7b7d860da8f0bf0e9068f2616c74f1ae744d9677a08194b3a5eedcdfe99927d"
+    },
+    "sources/resolver-subquery.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs",
+      "existed": true,
+      "sha256": "aff16f461317fa52a382a2d61d804d45bea4341d7581a536f22bec480879bf5d"
+    },
+    "sources/analyzer-expression.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/expression.rs",
+      "existed": true,
+      "sha256": "c5566a6b118560afeca8020acea0095507000a1956051a0f4c1450c291e66eef"
+    },
+    "sources/analyzer-parser.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-sql-analyzer/src/parser.rs",
+      "existed": true,
+      "sha256": "dd81c91ec888151ebafc7d979b50b33180f825211b4568e2de9ba50738271f42"
+    },
+    "sources/math-mod.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs",
+      "existed": true,
+      "sha256": "45b56693f3dde83b0ed3b535b3d81a26a63917db92106f4ecde8cfeee2ab2236"
+    },
+    "sources/decimal-utils.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/utils/decimal.rs",
+      "existed": true,
+      "sha256": "847f4c18277429a79ae9dcf2da2f5cdecac066f71fa67909cae9f0c99a2189db"
+    },
+    "sources/decimal-round.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_decimal_round.rs",
+      "existed": false
+    },
+    "sources/conditional.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/conditional.rs",
+      "existed": true,
+      "sha256": "cf09fc67b0e567668b037a6ee19ab1f166134e0fa067859269983c2e3f739fb0"
+    },
+    "sources/small-int-divide.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/small_int_divide.rs",
+      "existed": false
+    },
+    "sources/resolver-predicate.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/predicate.rs",
+      "existed": true,
+      "sha256": "ac785ea9d466f3b50f920aeac31b0be0b243f99bc7e63050e796c38caec8e1b8"
+    },
+    "sources/function-predicate.rs": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/predicate.rs",
+      "existed": true,
+      "sha256": "499f472fda6be201451cef2dab3380d7b602a578fa0ce49c91364a26df0df180"
+    },
+    "sources/arrow-mod": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/integer-widening-sparse-owned-542a847/arrow-cast/src/cast/mod.rs",
+      "existed": true,
+      "sha256": "a2b54e3369b6a8bf4bfd46f886720050b94a978c61d0004b33d276932fb0936f"
+    },
+    "sources/arrow-decimal": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/integer-widening-sparse-owned-542a847/arrow-cast/src/cast/decimal.rs",
+      "existed": true,
+      "sha256": "691d21c85206190f0dd49f5f9a5ef31de7065917780d4c9c3d156bc11a8d5549"
+    },
+    "sources/join-selection": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/subquery-performance-a5080f1/datafusion-physical-optimizer/src/join_selection.rs",
+      "existed": true,
+      "sha256": "77f99aa2b07b8d20e2de1c0114bf0eff6b1c7495e1923b8308a123812f044219"
+    },
+    "sources/unwrap-cast": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/subquery-performance-a5080f1/datafusion-optimizer/src/simplify_expressions/unwrap_cast.rs",
+      "existed": true,
+      "sha256": "0a1b250391180380b5722c2e9e31757c8850c3a392c87912d50e313143389012"
+    },
+    "sources/expr-simplifier": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/subquery-performance-a5080f1/datafusion-optimizer/src/simplify_expressions/expr_simplifier.rs",
+      "existed": true,
+      "sha256": "d5a4d4a8ee6e146e616e312e447d30429949b4501b9f45e7979bba14ef57937b"
+    },
+    "sources/optimizer-test-lock": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/subquery-performance-a5080f1/datafusion-optimizer/Cargo.lock",
+      "existed": true,
+      "sha256": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608"
+    },
+    "sources/decorrelate": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/subquery-performance-a5080f1/datafusion-optimizer/src/decorrelate_predicate_subquery.rs",
+      "existed": true,
+      "sha256": "c18f2fd4e6e3c8d20fc3e6070a72c43aa1dc0b517cbf17cb4731734be2651735"
+    },
+    "sources/nested-loop": {
+      "path": "/tmp/delta-reader-spark-planning/filter-order/datafusion-physical-plan/src/joins/nested_loop_join.rs",
+      "existed": true,
+      "sha256": "59b7efeb63dedf071bc8b9f45a39d480c8f8cca62a4702a3f3f670b8a2444967"
+    },
+    "sources/physical-test-lock": {
+      "path": "/tmp/delta-reader-spark-planning/filter-order/datafusion-physical-plan/Cargo.lock",
+      "existed": false
+    },
+    "sources/parser-keywords": {
+      "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-sql-parser/data/keywords.txt",
+      "existed": false
+    },
+    "sources/native-in-list": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-short-in-58ce2ed/datafusion-physical-expr/src/expressions/in_list.rs",
+      "existed": true,
+      "sha256": "310aaf3b97f83bc70bcbf6bffbed44b4fc500027a4d8202aa487f78fedae6d24"
+    },
+    "sources/native-test-lock": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-short-in-58ce2ed/datafusion-physical-expr/Cargo.lock",
+      "existed": true,
+      "sha256": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e"
+    },
+    "sources/native-primitive-filter": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-short-in-58ce2ed/datafusion-physical-expr/src/expressions/in_list/primitive_filter.rs",
+      "existed": true,
+      "sha256": "dea083ca4f3208434559a353ac70e73e12cc3f617a8b3b2bf66761b92097353c"
+    },
+    "sources/native-strategy": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-short-in-58ce2ed/datafusion-physical-expr/src/expressions/in_list/strategy.rs",
+      "existed": true,
+      "sha256": "bc43719e31a52563dd07c5b0dac98a620491d87d6fe2aaf7a88aa86f18b441ac"
+    },
+    "sources/native-array-filter": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-short-in-58ce2ed/datafusion-physical-expr/src/expressions/in_list/array_static_filter.rs",
+      "existed": true,
+      "sha256": "12259bb4c45fd7f57696efc4c6227fab5a69cbabe9f89e2b6a7a03e2e9589040"
+    },
+    "sources/native-case": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-short-in-58ce2ed/datafusion-physical-expr/src/expressions/case.rs",
+      "existed": true,
+      "sha256": "470894816b7dfce4f995b0b3537349ea8b2962ecc199a798575ce2090253dc62"
+    },
+    "executables/bench": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/integer-widening-sparse-owned-542a847/target/release/examples/decimal_bench",
+      "sha256": "41142f9ec9341118f514984c0f690ea9a611aac6b180a26fc0c30329711257bb"
+    },
+    "executables/probe": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/integer-widening-sparse-owned-542a847/target/release/examples/decimal_probe",
+      "sha256": "340658fe8d3f6fcefae60fe38affd1b15d0bc89e5b8888ea2188d7e43fa81155"
+    },
+    "executables/runner": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/integer-widening-sparse-owned-542a847/target/release/delta-reader-sail-extraction-probe",
+      "sha256": "622a12a937afbf5c2a4f26a34e0606ef89a8c5d4dcc3dcbced6f4b6526a1ce5e"
+    }
+  },
+  "references": {
+    "planning_record": "float-type-planning-results.json",
+    "planning_record_sha256": "7ce00afc41756d310539b2f6fdcb131d7ebab0d434bc8fface7aa895462692e6"
+  },
+  "raw_data": {
+    "file": "float-type-memory-runs.json.gz",
+    "sha256": "9b9d081a7876be05ea24d8f028aab417e954557ca4e1beaf3086e06e322512a9",
+    "uncompressed_sha256": "1ea32c9aa9317d97f09007acd12c65e83f8ea29f845ca61566ebae3e28bbeb90",
+    "compressed_bytes": 178503,
+    "uncompressed_bytes": 1503039
+  },
+  "reproduction": {
+    "run_directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-memory-c3539e7",
+    "scripts": {
+      "analyze.py": "import hashlib,json,random,statistics\nfrom pathlib import Path\np=Path(__file__).parent\nload=lambda f:json.loads(Path(f).read_text())\ndef interval(xs):\n rng=random.Random(88)\n b=sorted(statistics.median(rng.choices(xs,k=len(xs))) for _ in range(10000))\n return {'median':statistics.median(xs),'bootstrap_95_interval':[b[249],b[9749]]}\nsummary={}\nfor name,original in load(p/'memory-summary.json').items():\n r=load(p/name/'runs.json')\n rows=[{**x,'mean_ms':statistics.mean(x['samples_ms']),'event_counts':{v['event']:float(v['counter-value']) for v in x['counters']}} for x in r['runs']]\n pairs=[{x['label']:x for x in rows if x['pair']==i} for i in range(r['pair_count'])]\n counters={}\n for event in rows[0]['event_counts']:\n  a=[pair['before']['event_counts'][event] for pair in pairs]\n  b=[pair['after']['event_counts'][event] for pair in pairs]\n  counters[event]={'before_median_per_execution':statistics.median(a)/r['samples'],'after_median_per_execution':statistics.median(b)/r['samples'],'paired_absolute_change_per_execution':interval([(y-x)/r['samples'] for x,y in zip(a,b)]),'paired_percentage_change':interval([100*(y/x-1) for x,y in zip(a,b)]) if all(a) else None}\n means=[100*(pair['after']['mean_ms']/pair['before']['mean_ms']-1) for pair in pairs]\n correlations={}\n for variant in sorted(set(x['variant'] for x in rows)):\n  group=[x for x in rows if x['variant']==variant]\n  correlations[variant]={event:statistics.correlation([x['event_counts'][event] for x in group],[x['mean_ms'] for x in group]) for event in ['ls_dmnd_fills_from_sys.local_ccx:u','ls_dmnd_fills_from_sys.dram_io_near:u']}\n summary[name]={'pairs':r['pair_count'],'scenario':r['scenario'],'median_time':{'median_paired_change_pct':original['median_paired_change_pct'],'bootstrap_95_interval':original['paired_median_bootstrap_95_percentile_interval']},'mean_time':interval(means),'counters':counters,'within_variant_counter_mean_time_pearson':correlations}\n(p/'analysis.json').write_text(json.dumps(summary,indent=2)+'\\n')\nfor name,row in summary.items():\n print(row['scenario'],'time',row['median_time'],'mean',row['mean_time'])\n for event in ['instructions:u','cycles:u','ls_dmnd_fills_from_sys.local_ccx:u','ls_dmnd_fills_from_sys.dram_io_near:u']:\n  print(event,row['counters'][event])\n print('correlations',row['within_variant_counter_mean_time_pearson'])\n",
+      "measure.py": "import json\nfrom phase_observer import PhaseObserver\nimport hashlib\nimport os\nimport random\nimport signal\nimport statistics\nimport shutil\nimport subprocess\nimport sys\nfrom pathlib import Path\n\np = Path(__file__).parent\ncomparison = sys.argv.pop(1)\nassert comparison in ['observed','observed4','plain','overhead','legacy-observed','marginal']\nos.sched_setaffinity(0, {0})\nq = p / comparison\nscenario, address_mode, pair_count = sys.argv[1], sys.argv[2], int(sys.argv[3])\nassert scenario in ['paired', 'same-before', 'same-after']\nassert address_mode in ['normal', 'fixed', 'mixed', 'loader', 'mixed-loader']\ncase = sys.argv[4]\nphase = sys.argv[5] if len(sys.argv) > 5 else 'execution'\ntag = '-' + sys.argv[6] if len(sys.argv) > 6 else ''\nevents = sys.argv[7] if len(sys.argv) > 7 else 'standard'\nsampling = sys.argv[8] if len(sys.argv) > 8 else 'steady'\nwarmups, samples = {'short': (2, 9), 'steady': (32, 257)}[sampling]\nif comparison.startswith('legacy-'):\n    assert sampling == 'short', 'The historical binary has fixed sampling counts'\nassert events in ['standard', 'memory']\nhardware = 'branches:u,branch-misses:u' if events == 'standard' else 'ls_dmnd_fills_from_sys.local_ccx:u,ls_dmnd_fills_from_sys.dram_io_near:u'\nassert phase in ['execution','planning']\nmode = 'subqueries' if case.endswith('_ansitrue') else 'generic-in'\nsuffix = 'subquery-check' if mode == 'subqueries' else 'check'\nout = p / (f'{comparison}-{case}-{scenario}-{address_mode}-{pair_count}' + ('-planning' if phase == 'planning' else '') + tag)\nout.mkdir()\nslot = out / \"launch\"\nslot.mkdir()\nfor name in [\"control\",\"ack\"]: os.mkfifo(slot/name)\nload = lambda path: json.loads(Path(path).read_text())\ncanonical = {v: {r['id']: r for r in load(q / f'{v}-{suffix}.json')['results']} for v in ['before', 'after']}\nenv = os.environ.copy()\nassert not any(k.startswith(('MALLOC_', 'GLIBC_', 'LD_PRELOAD', 'DECIMAL_BENCH_')) for k in env)\ndirections = [False, True] * (pair_count // 2)\nassert len(directions) == pair_count\nrandom.Random(88).shuffle(directions)\npairs = [(reverse, address_mode) for reverse in directions]\nif address_mode in ['mixed','mixed-loader']:\n    assert pair_count % 4 == 0\n    diagnostic = 'loader' if address_mode == 'mixed-loader' else 'fixed'\n    pairs = [(False, 'normal'), (True, 'normal'), (False, diagnostic), (True, diagnostic)] * (pair_count // 4)\n    random.Random(88).shuffle(pairs)\nbinary_sha256 = {v: hashlib.sha256((q / f'{v}-bench').read_bytes()).hexdigest() for v in ['before', 'after']}\nruns = []\nfor pair, (reverse, run_address_mode) in enumerate(pairs):\n    for label in (['after', 'before'] if reverse else ['before', 'after']):\n        variant = label if scenario == 'paired' else scenario.removeprefix('same-')\n        directory = out / f'{pair:02}-{label}'\n        directory.mkdir()\n        executable = slot / 'bench'\n        executable.unlink(missing_ok=True)\n        executable.symlink_to(q / f'{variant}-bench')\n        assert executable.resolve() == (q / f'{variant}-bench').resolve()\n        launch = ['taskset', '-c', '4' if comparison == 'observed4' else '2']\n        if run_address_mode == 'fixed':\n            launch += ['setarch', 'x86_64', '-R']\n        if run_address_mode == 'loader':\n            launch += ['/lib64/ld-linux-x86-64.so.2','--argv0',str(executable)]\n        command = ['perf', 'stat', '--delay=-1',\n                   f'--control=fifo:{slot}/control,{slot}/ack',\n                   '--json-output', '-o', str(slot / 'counters.jsonl'), '-e',\n                   '{instructions:u,cycles:u,' + hardware + '},task-clock:u,context-switches:u,cpu-migrations:u,page-faults:u',\n                   '--', *launch, str(executable),\n                   str(slot / 'capture.json'), mode, case]\n        observer = None if comparison == 'plain' or (comparison == 'overhead' and label == 'before') else PhaseObserver(slot, executable, 4 if comparison == 'observed4' else 2)\n        try:\n            with subprocess.Popen(command, env=env | {'DECIMAL_BENCH_PERF_DIR': str(observer.directory if observer else slot),\n                                  'DECIMAL_BENCH_PERF_PHASE': phase, 'DECIMAL_BENCH_RETAIN': 'none',\n                                  'DECIMAL_BENCH_IN_WARMUPS': str(warmups), 'DECIMAL_BENCH_IN_SAMPLES': str(samples)},\n                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,\n                                  start_new_session=True) as process:\n                if observer: observer.attach(process.pid)\n                try:\n                    stdout, stderr = process.communicate(timeout=30)\n                except subprocess.TimeoutExpired:\n                    os.killpg(process.pid, signal.SIGKILL)\n                    stdout, stderr = process.communicate()\n                    (directory / 'failure.json').write_text(json.dumps({'stdout': stdout, 'stderr': stderr, 'error': 'Our perf process group timed out'}) + '\\n')\n                    raise\n                result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)\n                result.check_returncode()\n        finally:\n            if observer: observer.close()\n        if observer:\n            (directory / 'phase-observation.json').write_text(json.dumps(observer.records, indent=2) + '\\n')\n        for name in ['capture.json','counters.jsonl']: shutil.copyfile(slot/name,directory/name)\n        capture = load(directory / 'capture.json')\n        assert capture['warmups'] == warmups and capture['samples'] == samples\n        assert len(capture['results']) == (1 if mode == 'subqueries' else 2)\n        for row in capture['results']:\n            assert all(row[k] == v for k, v in canonical[variant][row['id']].items())\n            if mode == 'subqueries':\n                assert row['retention'] == 'none' and row['retained_rows'] == 0\n        timed = capture['results'][0] if mode == 'subqueries' else next(r for r in capture['results'] if r['ansi'])\n        assert len(timed['samples_ms']) == len(timed['planning_samples_ms']) == samples\n        counters = [json.loads(line) for line in (directory / 'counters.jsonl').read_text().splitlines() if line.startswith('{')]\n        assert len(counters) == 8 and all(c['pcnt-running'] == 100 for c in counters)\n        assert result.stderr.count('Events enabled') == 1\n        runs.append({'label': label, 'variant': variant, 'pair': pair, 'address_mode': run_address_mode, 'command': command, 'executable_target': str(executable.resolve()),\n                     'phase_observation': observer.records if observer else None,\n                     'samples_ms': timed['samples_ms'], 'planning_samples_ms': timed['planning_samples_ms'],\n                     'median_ms': statistics.median(timed['planning_samples_ms' if phase == 'planning' else 'samples_ms']), 'counters': counters})\n    (out / 'runs.json').write_text(json.dumps({'common_launch': True, 'binary_sha256': binary_sha256, 'case': case, 'phase': phase, 'scenario': scenario, 'address_mode': address_mode, 'event_set': events, 'warmups': warmups, 'samples': samples, 'sampling': sampling,\n                                            'pair_count': pair_count, 'pair_schedule': pairs, 'runs': runs}, indent=2) + '\\n')\n    print(scenario, address_mode, pair + 1, '/', pair_count, flush=True)\n\ngroups = {}\nfor label in ['before', 'after']:\n    selected = [r for r in runs if r['label'] == label]\n    assert len(selected) == pair_count\n    groups[label] = {\n        'process_medians_ms': [r['median_ms'] for r in selected],\n        'median_ms': statistics.median(r['median_ms'] for r in selected),\n        'median_counters': {event: statistics.median(float(next(c['counter-value'] for c in r['counters'] if c['event'] == event)) for r in selected)\n                            for event in [c['event'] for c in selected[0]['counters']]},\n    }\nratios = []\nfor pair in range(pair_count):\n    rows = {r['label']: r for r in runs if r['pair'] == pair}\n    ratios.append(100 * (rows['after']['median_ms'] / rows['before']['median_ms'] - 1))\nrng = random.Random(88)\nresampled = sorted(statistics.median(rng.choices(ratios, k=pair_count)) for _ in range(10000))\nsummary = {\n    'groups': groups,\n    'latency_change_pct': 100 * (groups['after']['median_ms'] / groups['before']['median_ms'] - 1),\n    'paired_changes_pct': ratios,\n    'median_paired_change_pct': statistics.median(ratios),\n    'paired_median_bootstrap_95_percentile_interval': [resampled[249], resampled[9749]],\n    'interval_note': 'Resample whole fresh-process pairs, not the within-process samples. This interval is conditional on this machine and run series.',\n    'counter_changes_pct': {event: 100 * (groups['after']['median_counters'][event] / value - 1)\n                            for event, value in groups['before']['median_counters'].items() if value != 0},\n}\n(out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\\n')\nprint(json.dumps(summary, indent=2), flush=True)\n",
+      "phase_observer.py": "import os\nimport json\nimport select\nimport threading\nimport time\nfrom pathlib import Path\n\n\ndef snapshot(pid, cpus):\n    start = time.monotonic_ns()\n    root = Path('/proc') / str(pid)\n    status = dict(line.split(':', 1) for line in (root / 'status').read_text().splitlines())\n    stat = (root / 'stat').read_text().rsplit(')', 1)[1].split()\n    sched = (root / 'schedstat').read_text().split()\n    cpu_sched = {}\n    for line in Path('/proc/schedstat').read_text().splitlines():\n        row = line.split()\n        if row[0] == 'version':\n            assert row[1] == '17'\n        if row[0] in [f'cpu{cpu}' for cpu in cpus]:\n            assert len(row) == 10\n            cpu_sched[row[0]] = dict(zip(['running_ns', 'waiting_ns', 'timeslices'], map(int, row[7:10])))\n    cpu_ticks = {}\n    for line in Path('/proc/stat').read_text().splitlines():\n        row = line.split()\n        if row[0] in cpu_sched:\n            cpu_ticks[row[0]] = list(map(int, row[1:9]))\n    return {\n        'read_start_ns': start, 'read_end_ns': time.monotonic_ns(),\n        'main_thread': {\n            'voluntary_switches': int(status['voluntary_ctxt_switches']),\n            'involuntary_switches': int(status['nonvoluntary_ctxt_switches']),\n            'runtime_ns': int(sched[0]), 'runqueue_wait_ns': int(sched[1]),\n            'timeslices': int(sched[2]), 'minor_faults': int(stat[7]),\n            'major_faults': int(stat[9]), 'user_ticks': int(stat[11]),\n            'system_ticks': int(stat[12]), 'last_cpu': int(stat[36]),\n            'threads': int(status['Threads']),\n        },\n        'cpu_sched': cpu_sched, 'cpu_ticks': cpu_ticks,\n    }\n\n\nclass PhaseObserver:\n    def __init__(self, slot, executable, cpu):\n        self.slot, self.executable, self.cpu = slot, executable.resolve(), cpu\n        self.sibling = [int(v) for v in Path(f'/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list').read_text().strip().split(',') if int(v) != cpu][0]\n        self.directory = slot / 'observer'\n        self.directory.mkdir(exist_ok=True)\n        self.records, self.errors = [], []\n        self.ready = threading.Event()\n        self.fds = []\n        for file in [self.directory / 'control', self.directory / 'ack']:\n            if not file.exists():\n                os.mkfifo(file)\n        for file in [self.directory / 'control', self.directory / 'ack', slot / 'control', slot / 'ack']:\n            self.fds.append(os.open(file, os.O_RDWR))\n        self.thread = threading.Thread(target=self.relay, daemon=True)\n        self.thread.start()\n\n    def attach(self, perf_pid):\n        self.perf_pid = perf_pid\n        self.ready.set()\n\n    def benchmark_pid(self):\n        todo = [self.perf_pid]\n        while todo:\n            pid = todo.pop()\n            root = Path('/proc') / str(pid)\n            if (root / 'exe').resolve() == self.executable:\n                return pid\n            todo.extend(map(int, (root / 'task' / str(pid) / 'children').read_text().split()))\n        raise AssertionError('The benchmark must be a child of our perf process')\n\n    def relay(self):\n        try:\n            # Keep the controller, perf parent and observer off the benchmark core.\n            os.sched_setaffinity(0, {0})\n            control = os.fdopen(os.dup(self.fds[0]), 'rb', buffering=0)\n            with control:\n                while (command := control.readline()) != b'stop\\n':\n                    assert command in [b'enable\\n', b'disable\\n'], command\n                    self.ready.wait()\n                    pid = self.benchmark_pid()\n                    if command == b'disable\\n':\n                        record = snapshot(pid, [self.cpu, self.sibling])\n                    os.write(self.fds[2], command)\n                    assert select.select([self.fds[3]], [], [], 10)[0], 'perf acknowledgement timed out'\n                    # perf writes the terminating NUL too; consume the complete message.\n                    acknowledgement = os.read(self.fds[3], 256)\n                    assert acknowledgement == b'ack\\n\\x00', acknowledgement\n                    if command == b'enable\\n':\n                        record = snapshot(pid, [self.cpu, self.sibling])\n                    self.records.append({'command': command.decode().strip(), 'pid': pid, 'snapshot': record})\n                    os.write(self.fds[1], b'ack\\n')\n        except Exception as error:\n            self.errors.append(repr(error))\n            (self.directory / 'error.json').write_text(json.dumps(self.errors) + '\\n')\n\n    def close(self):\n        os.write(self.fds[0], b'stop\\n')\n        self.thread.join(timeout=2)\n        assert not self.thread.is_alive(), 'Observer relay did not finish'\n        for fd in self.fds:\n            os.close(fd)\n        assert not self.errors, self.errors\n        assert [r['command'] for r in self.records] == ['enable', 'disable']\n        assert self.records[0]['pid'] == self.records[1]['pid']\n",
+      "record.py": "import datetime\nimport gzip\nimport hashlib\nimport json\nfrom pathlib import Path\n\np = Path(__file__).parent\nearlier = p.parent / 'float-type-planning-f438591'\nout = Path('/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql')\nload = lambda f: json.loads(Path(f).read_text())\nsha = lambda f: hashlib.sha256(Path(f).read_bytes()).hexdigest()\nplan = load(p / 'measurement-plan.json')\nassert sha(out / 'float-type-planning-results.json') == plan['source_result_sha256']\nfor variant, expected in plan['binary_sha256'].items():\n    assert sha(p / 'observed' / f'{variant}-bench') == expected\nrestored = {}\nfor kind in ['sources', 'executables']:\n    for key, row in load(earlier / f'initial-{kind}.json').items():\n        f = Path(row['path'])\n        assert f.exists() == row.get('existed', True), key\n        if f.exists():\n            assert sha(f) == row['sha256'], key\n        restored[f'{kind}/{key}'] = row\ncanonical = {v: {row['id']: row for row in load(p / 'observed' / f'{v}-check.json')['results']}\n             for v in ['before', 'after']}\ncomparisons = {}\nfor name in load(p / 'memory-summary.json'):\n    r = load(p / name / 'runs.json')\n    assert r['binary_sha256'] == plan['binary_sha256']\n    assert len(r['runs']) == r['pair_count'] * 2\n    assert (r['warmups'], r['samples'], r['event_set']) == (32, 257, 'memory')\n    for run in r['runs']:\n        directory = p / name / f\"{run['pair']:02}-{run['label']}\"\n        capture = load(directory / 'capture.json')\n        assert (capture['warmups'], capture['samples']) == (32, 257)\n        assert len(capture['results']) == 2\n        for row in capture['results']:\n            assert all(row[k] == v for k, v in canonical[run['variant']][row['id']].items())\n        assert len(run['counters']) == 8 and all(c['pcnt-running'] == 100 for c in run['counters'])\n        enable, disable = run['phase_observation']\n        assert (enable['command'], disable['command']) == ('enable', 'disable')\n        assert enable['pid'] == disable['pid']\n        for observation in [enable, disable]:\n            assert observation['snapshot']['main_thread']['last_cpu'] == 2\n            assert observation['snapshot']['main_thread']['threads'] == 1\n        assert enable['snapshot']['read_end_ns'] < disable['snapshot']['read_start_ns']\n        run['capture'] = capture\n        run['raw_counter_output'] = (directory / 'counters.jsonl').read_text()\n    comparisons[name] = r\nassert len(comparisons) == 3\nassert sum(len(r['runs']) for r in comparisons.values()) == 64\nassert not list(p.glob('observed-*/*/failure.json'))\nraw = json.dumps({'comparisons': comparisons}, separators=(',', ':'), ensure_ascii=True).encode() + b'\\n'\narchive = out / 'float-type-memory-runs.json.gz'\narchive.write_bytes(gzip.compress(raw, mtime=0))\nassert gzip.decompress(archive.read_bytes()) == raw\nrecord = {\n    'slice': 'Cache and memory counters for the float type-inference candidate',\n    'base_commit': 'c3539e7',\n    'created_utc': datetime.datetime.now(datetime.UTC).isoformat(),\n    'decision': {\n        'adopted_for_optional_runtime': False,\n        'runtime_sources_changed': False,\n        'finding': 'No resolved increase in either selected cache/memory fill event. The memory diagnostic does not identify a removable execution operation or settle the earlier roughly 0.5% timing observation.',\n        'limit': 'Same-binary time intervals exceed +/-1%. The paired median time estimate changes direction from the earlier series, but its interval still spans zero. Do not use this series to erase the earlier positive mean-based interval or claim execution equivalence.',\n        'stopping_decision': 'Stop this fixed diagnostic after all 64 processes. Keep the planning candidate available but deferred. A further timing acceptance decision needs more stable execution controls, not more speculative runtime changes.'\n    },\n    'summary': {'comparisons': 3, 'completed_processes': 64, 'failed_or_discarded_processes': 0,\n                'repeated_exact_timing_captures': 128, 'new_builds': 0, 'new_full_spark_corpus_runs': 0},\n    'method': plan,\n    'statistics': {\n        'primary_time': 'Median within-pair percentage change in process sample medians.',\n        'secondary_time': 'Median within-pair percentage change in process sample means; no samples discarded.',\n        'counters': 'Median within-pair absolute change per execution and percentage change. Also report each label group median count per execution. The ratio of group medians is a different statistic.',\n        'interval': '10000 whole-pair bootstrap resamples, seed 88, 95% percentile interval. Conditional on this shared host and series, without multiple-comparison correction.',\n        'correlation': 'Exploratory Pearson correlation of per-process event count with process mean time, separately by comparison and actual binary. Association alone does not establish a causal explanation for the source-change timing difference.'\n    },\n    'performance': load(p / 'analysis.json'),\n    'event_descriptions': (p / 'event-descriptions.txt').read_text(),\n    'source_inspection': {\n        'path': 'datafusion-physical-expr 54.1.0 primitive_filter.rs -> datafusion-common::HashSet -> hashbrown 0.17.1 DefaultHashBuilder -> foldhash 0.2.0 fast::RandomState',\n        'finding': 'The IN filter uses a randomized hash state. Hash seeds and data addresses are not held identical across these fresh processes. This is a measurement limit, not an established cause of the earlier elapsed-time difference.',\n        'runtime_policy': 'No fixed hash seed, allocator tuning, ASLR override or code padding added.'\n    },\n    'restoration': restored,\n    'references': {'planning_record': 'float-type-planning-results.json', 'planning_record_sha256': plan['source_result_sha256']},\n    'raw_data': {'file': archive.name, 'sha256': sha(archive), 'uncompressed_sha256': hashlib.sha256(raw).hexdigest(),\n                 'compressed_bytes': archive.stat().st_size, 'uncompressed_bytes': len(raw)},\n    'reproduction': {\n        'run_directory': str(p),\n        'scripts': {f.name: f.read_text() for f in sorted(p.glob('*.py'))},\n        'schedule': load(p / 'memory-schedule.json'),\n        'view': {f.name: str(f.resolve()) for f in sorted((p / 'observed').iterdir())},\n        'setup': 'Reuse the preceding record\\'s frozen before/after binaries and exact generic-IN captures. Extract these scripts, plan, event descriptions and schedule, then recreate the absolute comparison-view links. Recreate or update cache paths consistently. No rebuild is part of this diagnostic.',\n        'commands': ['python3 run-series.py memory', 'python3 analyze.py', 'python3 record.py'],\n        'constraints': 'Run timing separately from all builds, tests, source inspection and assembly inspection. Retain all controls and paired runs.'\n    }\n}\n(out / 'float-type-memory-results.json').write_text(json.dumps(record, indent=2) + '\\n')\nprint(record['summary'])\nprint('Archive bytes', archive.stat().st_size)\n",
+      "run-series.py": "import json\nimport subprocess\nimport sys\nfrom pathlib import Path\n\np = Path(__file__).parent\nprefix = sys.argv[1] if len(sys.argv) > 1 else 'initial'\nschedule = json.loads((p / f'{prefix}-schedule.json').read_text())\nsummary = {}\nfor comparison, scenario, address, pairs, case, phase, *extra in schedule:\n    command = ['python3', str(p / 'measure.py'), comparison, scenario, address, str(pairs), case, phase, *extra]\n    name = f'{comparison}-{case}-{scenario}-{address}-{pairs}' + ('-planning' if phase == 'planning' else '') + ('-' + extra[0] if extra else '')\n    with (p / f'{name}.log').open('w') as out:\n        subprocess.run(command, stdout=out, stderr=subprocess.STDOUT, check=True)\n    summary[name] = json.loads((p / name / 'summary.json').read_text())\n    (p / f'{prefix}-summary.json').write_text(json.dumps(summary, indent=2) + '\\n')\n    row = summary[name]\n    print(comparison, case, phase, round(row['median_paired_change_pct'], 3), row['paired_median_bootstrap_95_percentile_interval'], flush=True)\n"
+    },
+    "schedule": [
+      [
+        "observed",
+        "same-before",
+        "normal",
+        8,
+        "generic_in_double_zero_long_list",
+        "execution",
+        "memory",
+        "memory"
+      ],
+      [
+        "observed",
+        "same-after",
+        "normal",
+        8,
+        "generic_in_double_zero_long_list",
+        "execution",
+        "memory",
+        "memory"
+      ],
+      [
+        "observed",
+        "paired",
+        "normal",
+        16,
+        "generic_in_double_zero_long_list",
+        "execution",
+        "memory",
+        "memory"
+      ]
+    ],
+    "view": {
+      "after-bench": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/after-bench",
+      "after-check.json": "/home/hanbo/.cache/delta-reader-spark-planning/float-in-matched-a5b8023/before-check.json",
+      "after-subquery-check.json": "/home/hanbo/.cache/delta-reader-spark-planning/float-in-matched-a5b8023/before-subquery-check.json",
+      "before-bench": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/before-bench",
+      "before-check.json": "/home/hanbo/.cache/delta-reader-spark-planning/float-in-matched-a5b8023/before-check.json",
+      "before-subquery-check.json": "/home/hanbo/.cache/delta-reader-spark-planning/float-in-matched-a5b8023/before-subquery-check.json"
+    },
+    "setup": "Reuse the preceding record's frozen before/after binaries and exact generic-IN captures. Extract these scripts, plan, event descriptions and schedule, then recreate the absolute comparison-view links. Recreate or update cache paths consistently. No rebuild is part of this diagnostic.",
+    "commands": [
+      "python3 run-series.py memory",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "constraints": "Run timing separately from all builds, tests, source inspection and assembly inspection. Retain all controls and paired runs."
+  }
+}

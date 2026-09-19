@@ -3877,6 +3877,24 @@ Both initial twelve-pair same-binary controls missed the +/-1% precision target.
 
 The result file contains the exact source patch, dependency override, pinned test lock, build and measurement scripts, schedules, validation logs and archive hashes. Forward and reverse patch replay reproduce the recorded source hashes. Shared sources, lockfiles and executable slots are restored and hash-checked. Default vendored code and the accepted optional runtime remain unchanged.
 
+## Cache and memory follow-up for float type inference
+
+The [memory diagnostic](float-type-memory-results.json) does not identify an execution cost to remove. The type-inference candidate remains deferred. This fixed follow-up reuses the preceding two binaries, without builds or runtime changes, for eight same-before pairs, eight same-after pairs and sixteen candidate/baseline pairs. All 64 processes and 128 repeated query/ANSI captures are retained in the [raw record](float-type-memory-runs.json.gz); every capture matches its frozen reference.
+
+The two hardware events count demand data fills from L3 or another L2 in the same CCX, and from DRAM or MMIO in the same NUMA node. The recorded `perf list --details` output gives their definitions. These are selected fill events, not all cache misses. Counter results below use the median within-pair change, with whole-pair 95% bootstrap intervals:
+
+| Candidate versus baseline | Paired change | Paired 95% interval |
+| --- | ---: | --- |
+| Same-CCX L3/other-L2 fills | -0.97% | [-2.38%, +3.74%] |
+| Local DRAM/MMIO fills | +12.24% | [-17.38%, +24.72%] |
+| Retired instructions | +0.011% | [+0.002%, +0.020%] |
+| Execution time, process medians | -0.96% | [-4.23%, +0.35%] |
+| Execution time, process means | -1.88% | [-3.24%, +1.54%] |
+
+Neither selected fill event shows a resolved increase. Within the paired comparison, local DRAM/MMIO counts correlate with process mean time at 0.77 for baseline and 0.83 for candidate. This is an exploratory association, not proof that cache behavior caused the earlier source-change difference. Same-binary timing intervals are [-4.82%, +1.85%] and [-1.64%, +2.85%], too wide to settle a roughly 0.5% cost. The reversed time estimate does not erase the preceding positive mean-based interval.
+
+Source inspection also confirms that this IN filter uses `hashbrown`'s default `foldhash::fast::RandomState`. Hash seeds and data addresses are not held identical across fresh processes. No fixed seed, allocator adjustment, ASLR override or padding is introduced. The diagnostic stops at its planned 64 processes; a further timing acceptance decision needs more stable execution controls. The planning improvement remains verified in the preceding record, while execution equivalence remains unproven. Scripts, schedules, event definitions, captures, phase observations and restoration hashes are recorded. There is no new Spark corpus run.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
