@@ -1,0 +1,415 @@
+{
+  "slice": "Distinguish a fixed allocation boundary from the last prepared plans",
+  "base_commit": "cd052fe",
+  "created_utc": "2026-09-19T13:53:33.372210+00:00",
+  "decision": {
+    "finding": "The two groups with address divergence start at construction 286, corresponding to prepared-plan index 253. Differences extend through eight plans at count 261 and four at count 257. Both 253-plan groups have matching addresses.",
+    "scope": "This supports a fixed construction boundary in this diagnostic setup rather than a last-four-plans effect. It does not identify the allocator operation responsible or establish an execution-time effect.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 6,
+    "processes": 24,
+    "constructed_table_traces": 6984,
+    "resolver_field_order_traces": 6984,
+    "field_release_events": 20952,
+    "prepared_plan_executions": 6168,
+    "reused_exact_correctness_captures": 372,
+    "new_full_suite_captures": 0,
+    "collection_query_captures": 48,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "new_builds": 0,
+    "failed_or_discarded_collection_groups": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "cd052fe",
+    "question": "Does the late IN-table address divergence move with the number of prepared plans?",
+    "binary": "Reuse the exact field-release diagnostic executable without rebuilding; fixed process addresses and sorted field release only.",
+    "design": "Two previously used native shared seed indices, 0 and 4; three prepared-plan counts, 253, 257 and 261. All count settings have three characters. Four processes per group, 32 warmups and the existing preparation/execution barriers. Count order is ascending for seed 0 and descending for seed 4.",
+    "analysis": "Retain every address and hash trace. Compare first divergence, all mismatch positions and phases within groups; compare hash prefixes across counts within each seed. No execution-time effect is estimated. A change in count also changes retained memory and post-preparation state.",
+    "correctness": "Reuse the exact binary's 372 validated captures and invalid-setting checks with their source and archive hashes. Run two short four-process smoke groups to check the copied driver and both existing execution orders. Each collection process still validates the selected query in both ANSI modes.",
+    "stopping_rule": "Exactly six groups and 24 processes. No outcome-based extra groups, count changes, seed replacement or omitted tail plans. Preserve failures. Finish verification before collection and do not overlap unrelated work.",
+    "limits": [
+      "This is a diagnostic build with explicit sorted retain removal, not production behavior or a proposed shorter benchmark.",
+      "No new Rust changes, compatibility cases or Spark corpus runs. Original positive release mean interval remains unresolved.",
+      "Vec growth and allocator state are hypotheses, not established causes."
+    ]
+  },
+  "analysis": {
+    "groups": [
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "sorted",
+        "samples": 253,
+        "index": 0,
+        "directory": "group-00",
+        "traces_per_process": 287,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [],
+        "first_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 253,
+            "matching_hash_positions": 253,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "sorted",
+        "samples": 257,
+        "index": 1,
+        "directory": "group-01",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [],
+        "first_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 257
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "sorted",
+        "samples": 261,
+        "index": 2,
+        "directory": "group-02",
+        "traces_per_process": 295,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [
+          286,
+          287,
+          288,
+          289,
+          290,
+          291,
+          292,
+          293
+        ],
+        "first_address_mismatch_index": 286,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 261,
+            "matching_hash_positions": 261,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "sorted",
+        "samples": 261,
+        "index": 3,
+        "directory": "group-03",
+        "traces_per_process": 295,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [],
+        "first_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 261,
+            "matching_hash_positions": 261,
+            "matching_address_positions": 261
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "sorted",
+        "samples": 257,
+        "index": 4,
+        "directory": "group-04",
+        "traces_per_process": 291,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 2,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [
+          286,
+          287,
+          288,
+          289
+        ],
+        "first_address_mismatch_index": 286,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 257,
+            "matching_hash_positions": 257,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "sorted",
+        "samples": 253,
+        "index": 5,
+        "directory": "group-05",
+        "traces_per_process": 287,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [],
+        "first_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 253,
+            "matching_hash_positions": 253,
+            "matching_address_positions": 253
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      }
+    ],
+    "cross_count_prefixes": [
+      {
+        "seed_index": 0,
+        "prefix_length": 286,
+        "processes": 12,
+        "distinct_hash_prefixes": 1,
+        "distinct_address_prefixes": 1,
+        "first_cross_count_hash_mismatch": null,
+        "first_cross_count_address_mismatch": null
+      },
+      {
+        "seed_index": 4,
+        "prefix_length": 286,
+        "processes": 12,
+        "distinct_hash_prefixes": 1,
+        "distinct_address_prefixes": 1,
+        "first_cross_count_hash_mismatch": null,
+        "first_cross_count_address_mismatch": null
+      }
+    ],
+    "processes": 24,
+    "table_traces": 6984,
+    "prepared_plan_executions": 6168,
+    "scope": "Prepared-plan count and address boundary, with no performance effect estimated"
+  },
+  "source": {
+    "binary": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-field-release-d0fa0b4/after-bench",
+      "sha256": "9483369e96e740e41221d116053e83502b4eb12ae4a4fa3de9118427713b60ea"
+    },
+    "reference": "float-type-field-release-results.json",
+    "note": "Exact existing executable; unchanged driver, parser and phase observer. Only prepared-plan count differs within each seed."
+  },
+  "references": [
+    "float-type-field-release-results.json",
+    "float-type-resolver-drop-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-plan-count-runs.json.gz",
+    "sha256": "61b0cb89111e7e6101a14cc0e1d97fb3f026f1cd1d5b1c810f7586c90a9bdcf9",
+    "uncompressed_sha256": "3777ea9d8a4a714139f8a76a8f052efb857b3a178ec17f12ac1a83f5d244fb90",
+    "compressed_bytes": 997780,
+    "uncompressed_bytes": 4615790
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-plan-count-cd052fe",
+    "commands": [
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Reuse the frozen V executable and its verification record. Run short phase checks, freeze protocol/script hashes, then collect exactly the six scheduled groups. Keep every prepared plan, including the differing tail."
+  }
+}

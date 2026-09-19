@@ -4138,6 +4138,25 @@ Indices are zero-based and matching requires all four processes to agree. The th
 
 All 372 repeated result and plan captures pass. Eight smoke processes check phase and release ordering; missing and invalid release settings are rejected. The [raw record](float-type-field-release-runs.json.gz) retains 9,312 table traces, 9,312 field-order records and 27,936 release events, along with the scripts, patches and build identities. All groups and incidental timings are retained, with no performance effect estimated. Shared files are restored and hash-checked. The optional type-inference patch remains unadopted, and the earlier positive release mean interval remains unresolved.
 
+## Varying the number of prepared plans
+
+The [plan-count check](float-type-plan-count-results.json) supports a fixed construction boundary in this diagnostic setup. The address differences do not simply follow the final four plans.
+
+The exact preceding executable runs with sorted release order, fixed process addresses and 32 warmups. Two previously used native shared-seed inputs each get four-process groups at 253, 257 and 261 prepared plans. All sample-count settings have three characters; their order is reversed for the second seed. No Rust rebuild is needed.
+
+| Native seed index | Prepared plans | Construction indices with differing addresses |
+| --- | ---: | --- |
+| 0 | 253 | None |
+| 0 | 257 | None |
+| 0 | 261 | 286 through 293 |
+| 4 | 261 | None |
+| 4 | 257 | 286 through 289 |
+| 4 | 253 | None |
+
+Every group's hash fingerprints agree. Within each seed, all 12 processes also agree on both hash and address prefixes through construction 285. The two groups with differences start at construction 286, the 254th prepared plan. Differences then extend through all remaining prepared plans, followed by matching post-execution validation. Some groups never diverge, so this does not establish that every process crosses the boundary in the same way.
+
+The [raw record](float-type-plan-count-runs.json.gz) retains all 6,984 table traces and 6,168 prepared executions from 24 processes. Eight smoke processes check the copied driver; the unchanged executable reuses its 372 prior result and plan captures. Each collection process also validates the selected query in both ANSI modes. No groups or tail plans were discarded, and no timing effect is estimated. The responsible allocation operation remains unidentified; shorter runs are not a proposed performance fix. The optional patch decision and earlier release result remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
