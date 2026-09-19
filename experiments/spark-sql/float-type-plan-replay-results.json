@@ -1,0 +1,429 @@
+{
+  "slice": "Locate branch-miss variability and replay unchanged native IN plans",
+  "base_commit": "867fd81d5ccb1246a8fa573972f473d70f725c41",
+  "created_utc": "2026-09-19T07:12:51.655317+00:00",
+  "decision": {
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "finding": "Across eight gated profiles, 94.08%-97.16% of branch-miss samples land in the native Float64 IN lookup loop. Replaying the same plans does not reproduce a stable fast/slow ranking by plan identity.",
+    "interpretation": "The seed and bucket layout retained by an individual plan are insufficient to explain the observed time variability. Execution order, predictor history and other changing machine state remain possible contributors; this experiment does not uniquely identify them.",
+    "limit": "This is diagnosis, not an execution-equivalence result. It neither erases the earlier positive mean interval nor establishes a zero-cost production change.",
+    "next_step": "Test adjacent same-plan A/A executions with balanced labels, keeping the native randomized hasher. Separate this harness calibration from any subsequent candidate adoption decision."
+  },
+  "summary": {
+    "profiled_processes": 8,
+    "profiled_query_captures": 16,
+    "lost_profile_samples": 0,
+    "replay_processes": 8,
+    "replay_executions": 8224,
+    "replay_query_captures": 16,
+    "exact_correctness_captures": 186,
+    "smoke_query_captures": 2,
+    "smoke_replay_executions": 36,
+    "capture_or_plan_differences": 0,
+    "failed_or_discarded_measurements": 0,
+    "new_builds": 1,
+    "new_spark_corpus_runs": 0
+  },
+  "profiling": {
+    "method": {
+      "base_commit": "867fd81d5ccb1246a8fa573972f473d70f725c41",
+      "binary_sha256": {
+        "before": "6bae8a5b50d223abd75c1cbd1c6b05b422e2999b97910576d9fb2058d74c98b2",
+        "after": "44bec3259cc2c02f41a67588b46eca0d01fb4dd103543bff223de4ce068b204b"
+      },
+      "case": "generic_in_double_zero_long_list",
+      "schedule": [
+        "before",
+        "after",
+        "after",
+        "before",
+        "after",
+        "before",
+        "before",
+        "after"
+      ],
+      "event": "branch-misses:u",
+      "period": 10007,
+      "cpu": 2,
+      "controller_cpu": 0,
+      "warmups": 32,
+      "samples": 257,
+      "question": "Locate branch-miss samples and temporal shifts in unchanged release binaries. This is profiling, not a performance acceptance comparison.",
+      "limits": [
+        "Non-precise branch event has instruction skid. Sampled IP is not necessarily the mispredicted branch.",
+        "Do not infer performance equivalence from profiled timings.",
+        "No builds, tests or independent inspection during profiling. Preserve all runs, including failures.",
+        "No change to source, hash builder, seeds or frozen binaries."
+      ],
+      "cooldown_seconds": 30
+    },
+    "sample_count": 5557,
+    "native_lookup_sample_pct_range": [
+      94.07744874715262,
+      97.1590909090909
+    ],
+    "processes": [
+      {
+        "directory": "00-before",
+        "total_samples": 740,
+        "categories": {
+          "Float64 IN lookup": 716,
+          "Float64 arithmetic": 8,
+          "Other": 16
+        },
+        "lookup_pct": 96.75675675675676,
+        "quarters": [
+          {
+            "Float64 IN lookup": 139,
+            "Float64 arithmetic": 3,
+            "Other": 6
+          },
+          {
+            "Float64 IN lookup": 192,
+            "Float64 arithmetic": 3,
+            "Other": 2
+          },
+          {
+            "Float64 IN lookup": 196,
+            "Float64 arithmetic": 1,
+            "Other": 2
+          },
+          {
+            "Float64 IN lookup": 189,
+            "Other": 6,
+            "Float64 arithmetic": 1
+          }
+        ]
+      },
+      {
+        "directory": "01-after",
+        "total_samples": 832,
+        "categories": {
+          "Float64 IN lookup": 806,
+          "Other": 26
+        },
+        "lookup_pct": 96.875,
+        "quarters": [
+          {
+            "Float64 IN lookup": 150,
+            "Other": 9
+          },
+          {
+            "Float64 IN lookup": 223,
+            "Other": 6
+          },
+          {
+            "Float64 IN lookup": 214,
+            "Other": 7
+          },
+          {
+            "Float64 IN lookup": 219,
+            "Other": 4
+          }
+        ]
+      },
+      {
+        "directory": "02-after",
+        "total_samples": 439,
+        "categories": {
+          "Float64 IN lookup": 413,
+          "Other": 23,
+          "Float64 arithmetic": 3
+        },
+        "lookup_pct": 94.07744874715262,
+        "quarters": [
+          {
+            "Float64 IN lookup": 105,
+            "Other": 5
+          },
+          {
+            "Float64 IN lookup": 103,
+            "Other": 9
+          },
+          {
+            "Float64 IN lookup": 104,
+            "Other": 4,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 101,
+            "Other": 5,
+            "Float64 arithmetic": 2
+          }
+        ]
+      },
+      {
+        "directory": "03-before",
+        "total_samples": 510,
+        "categories": {
+          "Float64 IN lookup": 485,
+          "Other": 25
+        },
+        "lookup_pct": 95.09803921568627,
+        "quarters": [
+          {
+            "Float64 IN lookup": 119,
+            "Other": 11
+          },
+          {
+            "Float64 IN lookup": 124,
+            "Other": 5
+          },
+          {
+            "Float64 IN lookup": 121,
+            "Other": 5
+          },
+          {
+            "Float64 IN lookup": 121,
+            "Other": 4
+          }
+        ]
+      },
+      {
+        "directory": "04-after",
+        "total_samples": 796,
+        "categories": {
+          "Float64 IN lookup": 768,
+          "Other": 24,
+          "Float64 arithmetic": 4
+        },
+        "lookup_pct": 96.48241206030151,
+        "quarters": [
+          {
+            "Float64 IN lookup": 129,
+            "Other": 8,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 201,
+            "Other": 5,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 224,
+            "Other": 4,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 214,
+            "Other": 7,
+            "Float64 arithmetic": 1
+          }
+        ]
+      },
+      {
+        "directory": "05-before",
+        "total_samples": 825,
+        "categories": {
+          "Float64 IN lookup": 788,
+          "Other": 34,
+          "Float64 arithmetic": 3
+        },
+        "lookup_pct": 95.51515151515152,
+        "quarters": [
+          {
+            "Float64 IN lookup": 130,
+            "Other": 9
+          },
+          {
+            "Float64 IN lookup": 203,
+            "Other": 10,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 227,
+            "Float64 arithmetic": 1,
+            "Other": 7
+          },
+          {
+            "Float64 IN lookup": 228,
+            "Other": 8,
+            "Float64 arithmetic": 1
+          }
+        ]
+      },
+      {
+        "directory": "06-before",
+        "total_samples": 887,
+        "categories": {
+          "Float64 IN lookup": 858,
+          "Other": 24,
+          "Float64 arithmetic": 5
+        },
+        "lookup_pct": 96.73055242390079,
+        "quarters": [
+          {
+            "Float64 IN lookup": 194,
+            "Other": 9,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 220,
+            "Other": 5,
+            "Float64 arithmetic": 2
+          },
+          {
+            "Float64 IN lookup": 219,
+            "Float64 arithmetic": 2,
+            "Other": 5
+          },
+          {
+            "Float64 IN lookup": 225,
+            "Other": 5
+          }
+        ]
+      },
+      {
+        "directory": "07-after",
+        "total_samples": 528,
+        "categories": {
+          "Float64 IN lookup": 513,
+          "Other": 12,
+          "Float64 arithmetic": 3
+        },
+        "lookup_pct": 97.1590909090909,
+        "quarters": [
+          {
+            "Float64 IN lookup": 127,
+            "Other": 2,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 122,
+            "Other": 6,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 122,
+            "Other": 3,
+            "Float64 arithmetic": 1
+          },
+          {
+            "Float64 IN lookup": 142,
+            "Other": 1
+          }
+        ]
+      }
+    ],
+    "limit": "The branch-misses event is non-precise; instruction skid prevents attributing every sample to a particular branch. Profiled timings are not acceptance measurements."
+  },
+  "replay": {
+    "method": {
+      "base_commit": "867fd81",
+      "question": "Does execution variability follow the identity of an unchanged native randomized IN table, or elapsed execution order?",
+      "runtime": "Original type inference, accepted add-zero runtime. All production sources and native hash builder match the frozen before binary. Only the experimental benchmark retains and replays plans.",
+      "case": "generic_in_double_zero_long_list",
+      "warmups": 32,
+      "samples": 257,
+      "passes": [
+        "forward",
+        "reverse",
+        "reverse",
+        "forward"
+      ],
+      "processes": 8,
+      "cpu": 2,
+      "controller_cpu": 0,
+      "cooldown_seconds": 30,
+      "scope": "Diagnostic only; not an acceptance comparison of the type-inference candidate.",
+      "limits": [
+        "Repeating a plan retains allocations and accumulates execution metrics; it is not identical to the original one-execution-per-plan benchmark.",
+        "No joins or subqueries are replayed. This query uses a constant IN filter and MemTable projection.",
+        "No runtime seed override, hash-builder substitution or type-inference switch.",
+        "Retain every process and sample. Do not extend the schedule until a preferred result.",
+        "No builds, tests or independent inspection during measurements."
+      ]
+    },
+    "analysis": {
+      "processes": 8,
+      "executions": 8224,
+      "pass_medians_across_processes_ms": [
+        2.225138,
+        2.239605,
+        2.2383175,
+        2.2514915
+      ],
+      "pair_medians_across_processes": {
+        "0-1": {
+          "same_plan_time_correlation": -0.017068946342177968,
+          "same_position_time_correlation": -0.05779818171576301,
+          "median_same_plan_change_pct": 0.12742464315960156
+        },
+        "0-2": {
+          "same_plan_time_correlation": 0.01503305753113882,
+          "same_position_time_correlation": -0.06293738914504397,
+          "median_same_plan_change_pct": 1.1146453634246045
+        },
+        "0-3": {
+          "same_plan_time_correlation": 0.08852284341225977,
+          "same_position_time_correlation": 0.08852284341225977,
+          "median_same_plan_change_pct": 0.7683120113941899
+        },
+        "1-2": {
+          "same_plan_time_correlation": 0.06078611057638464,
+          "same_position_time_correlation": 0.06078611057638464,
+          "median_same_plan_change_pct": 0.3566699713252297
+        },
+        "1-3": {
+          "same_plan_time_correlation": 0.06497959852616855,
+          "same_position_time_correlation": -0.03341661391270684,
+          "median_same_plan_change_pct": 0.40398216683280586
+        },
+        "2-3": {
+          "same_plan_time_correlation": 0.142046540564773,
+          "same_position_time_correlation": -0.09816645849455825,
+          "median_same_plan_change_pct": 0.026978354573348184
+        }
+      }
+    },
+    "source_change": "--- a/examples/decimal_bench.rs\n+++ b/examples/decimal_bench.rs\n@@ -440,12 +440,22 @@\n                     if phase == \"execution\" {\n                         perf_command(b\"enable\\n\")?;\n                     }\n-                    for plan in plans {\n-                        let start = Instant::now();\n-                        let counts = consume(ctx, plan).await?;\n-                        execution_ms.push(start.elapsed().as_secs_f64() * 1000.0);\n-                        assert_eq!(counts, (rows, nulls));\n-                    }\n+                    // Diagnostic only: retain each original plan and its native\n+                    // randomized hash table across forward/reverse/reverse/forward passes.\n+                    let mut plan_indices = Vec::with_capacity(4 * samples);\n+                    for reverse in [false, true, true, false] {\n+                        for offset in 0..samples {\n+                            let index = if reverse { samples - 1 - offset } else { offset };\n+                            let plan = Arc::clone(&plans[index]);\n+                            let start = Instant::now();\n+                            let counts = consume(ctx, plan).await?;\n+                            execution_ms.push(start.elapsed().as_secs_f64() * 1000.0);\n+                            plan_indices.push(index);\n+                            assert_eq!(counts, (rows, nulls));\n+                        }\n+                    }\n+                    result[\"sample_plan_indices\"] = json!(plan_indices);\n+                    result[\"replay_passes\"] = json!([\"forward\", \"reverse\", \"reverse\", \"forward\"]);\n                     if phase == \"execution\" {\n                         perf_command(b\"disable\\n\")?;\n                     }\n",
+    "binary_sha256": "942190bd9fd78ca23aebc4797880ca380e1e7e1d430982d21ce6b2f384f6843e",
+    "code_identity": "Every runtime source, dependency feature/profile record and lockfile matches the frozen original-type-inference build. Only the benchmark retains and replays plans.",
+    "statistics": "Descriptive per-process Pearson correlations of identical-plan timings and median paired percentage changes. Aggregate by median over all eight processes. No equivalence interval or adoption test is claimed.",
+    "limits": [
+      "All 257 original plans retain their native randomized hash tables and allocations through all four passes. Repeated execution also accumulates metrics.",
+      "This changes plan lifetime and execution ordering relative to the original fresh-plan benchmark; its rebuilt executable can also have a different layout.",
+      "Arc cloning and result indexing are outside Instant samples. Perf phase counters additionally include the diagnostic bookkeeping.",
+      "Warmups still use fresh plans. Replays are limited to this constant-IN MemTable projection, not joins or subqueries."
+    ]
+  },
+  "restoration": {
+    "shared_sources_and_executable_slots_hash_checked": true,
+    "frozen_production_binaries_unchanged": true,
+    "post_build_metadata_check_corrected": {
+      "build_succeeded": true,
+      "initial_post_build_check": "Compared compiler artifact rows in emission order and failed on dependencies after a successful build.",
+      "correction": "Compare the complete multiset of package, features and profile records. Emission order varies with build scheduling. The multiset matches exactly. No rebuild, binary change or timing discard.",
+      "original_exception": "AssertionError: dependencies",
+      "shared_sources_restored_by_finally": true
+    }
+  },
+  "references": [
+    "float-type-planning-results.json",
+    "float-type-fixed-seed-results.json",
+    "float-type-release-confirmation-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-plan-replay-runs.json.gz",
+    "sha256": "ad4d0c668865aba6976acf415873bfe49588aa0cce731b9bb594eea18627444d",
+    "uncompressed_sha256": "4b6e20c5eaddbb255dfcf6ff3fccab1d3ef7a6b2c522119243e7d79c17b36db5",
+    "compressed_bytes": 285402,
+    "uncompressed_bytes": 4674887
+  },
+  "reproduction": {
+    "profile_directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-profile-867fd81",
+    "replay_directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-plan-replay-867fd81",
+    "scripts": "All scripts, profiles, raw captures, counters and build metadata are in the compressed record.",
+    "commands": [
+      "profiling/profile.py",
+      "profiling/analyze.py",
+      "replay/build-replay.py",
+      "replay/verify.py",
+      "replay/measure-replay.py",
+      "replay/analyze.py",
+      "replay/record.py"
+    ],
+    "setup": "Use empty sibling cache directories and the frozen float-type-planning-f438591 sources and binaries. Extract scripts and plans, recreate the recorded override and source symlink, and run sequentially. The build helper restores shared files in finally. Complete compilation and checks before measuring."
+  }
+}

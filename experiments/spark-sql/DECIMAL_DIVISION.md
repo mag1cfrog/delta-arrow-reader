@@ -3951,6 +3951,18 @@ The earlier actual-release mean estimate, +0.479% with interval [+0.045%, +1.819
 
 The [raw record](float-type-release-confirmation-runs.json.gz) contains every sample, counter, capture and phase observation. The result file includes predetermined criteria, schedules, independent direction seeds, scripts and frozen build identities. Shared source, lockfile, executable and diagnostic-restoration hashes are checked. No new Spark corpus run is claimed.
 
+## Branch profiles and replaying the same native IN plans
+
+The [branch-profile and replay diagnostic](float-type-plan-replay-results.json) locates most branch-miss samples in the native Float64 IN lookup loop. It also shows that retaining a plan's random hash state does not give it a stable fast or slow execution time. The type-inference candidate remains deferred.
+
+Eight gated profiles use the unchanged original and candidate release binaries, four processes each. Between 94.08% and 97.16% of their branch-miss samples land in the Float64 lookup loop, with no lost samples. The event is not precise, so these samples locate the loop without identifying every mispredicted branch. Profiled timings are not used for acceptance.
+
+A separate diagnostic changes only the benchmark. It builds 257 plans with original type inference and the native randomized hasher, then retains and executes them in forward, reverse, reverse and forward order. All eight processes finish, producing 8,224 executions. Matching by plan identity gives a median time correlation of -0.017 between the first two passes and 0.089 between the first and fourth. An individual plan therefore does not consistently retain its earlier timing, even though its hash table is unchanged. This does not distinguish predictor history, execution-order effects and other changing machine state.
+
+The replay keeps allocations alive and accumulates execution metrics; its rebuilt executable may also have a different layout. It is not a replacement for the original fresh-plan benchmark. All 186 result and plan captures match their reference, and a separate 36-execution smoke check verifies replay order and row counts. Shared files are restored and hash-checked. The [raw record](float-type-plan-replay-runs.json.gz) retains every profile, replay sample, script and build identity, including a corrected metadata check that had compared dependency records in compiler emission order. No Spark corpus coverage is added.
+
+The next calibration should put balanced A/A executions of each native plan next to one another, reducing the time between matched observations. Passing that control would validate the diagnostic harness; a candidate adoption decision still needs its own comparison.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
