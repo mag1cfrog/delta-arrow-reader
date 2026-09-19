@@ -3635,7 +3635,7 @@ The next bounded comparison should evaluate the two planning optimizations witho
 
 ## Constant-list planning without add-zero
 
-The two planning optimizations now have a [standalone Rust patch](sail-float-in-planning-only.patch) for the accepted runtime. Planning improves in the [new comparison](float-in-planning-only-results.json), but adoption remains deferred because execution measurements are not repeatable enough to close a possible regression. Both variants omit native add-zero.
+The two planning optimizations have a [standalone Rust patch](sail-float-in-planning-only.patch) for the accepted runtime. Planning improves in [this comparison](float-in-planning-only-results.json), but adoption was deferred because execution measurements were not repeatable enough to close a possible regression. Both variants omit native add-zero. The [steady-measurement follow-up](#steady-generic-in-measurement-and-planning-patch-acceptance) below records the later acceptance decision.
 
 The patch combines the Float64 scalar identity shortcut with canonical-list normalizer elision in `spark_in_list`. Input normalization, required casts, list length and the fallback for unknown or noncanonical lists remain. The original classifier stops at its first zero; checking whether the whole list is canonical requires scanning the remaining constants. The measurements include that extra work and the saved normalizer nodes. SQL IN/NOT IN, the scalar function and subqueries continue to use the shared helper.
 
@@ -3702,6 +3702,49 @@ All 656 completed timing processes retain their samples, counters and available 
 To reproduce, reuse the frozen builds from the preceding comparison and extract the archived scripts, schedules and setup instructions. Run the observer smoke check, scheduling and SMT calibrations, the `initial` and `memory` schedules, then the memory-scan calibration sequentially. `check-observer.py` verifies the calibration records and the direct switch-count example; `identity.py` verifies the frozen inputs. Builds, tests and inspection remain outside timing. Bootstrap intervals use 10000 whole-pair resamples with seed 88 and no correction for multiple comparisons. Exploratory fast/slow bins are retained only as diagnostics; no runs are filtered from performance comparisons.
 
 The next measurement change should lengthen the steady execution phase in the experimental Rust benchmark. Rebuild both variants with that same harness and first repeat the same-binary controls in a quiet environment with a reserved core. Only after those controls are repeatable should the planning-only patch be assessed again. This evidence does not justify a new runtime optimization or a claim that historical performance regressions are closed.
+
+## Steady generic IN measurement and planning patch acceptance
+
+The existing [planning-only patch](sail-float-in-planning-only.patch) now joins the accepted optional runtime after CASE and float hashing. The [steady measurement record](float-in-steady-results.json) confirms its planning gains and supplies repeatable execution controls. The earlier approximately 2.8% DOUBLE slowdown is not established as a reproducible cost requiring another execution rewrite. Its original measurements remain in the preceding records.
+
+The Rust benchmark now accepts `DECIMAL_BENCH_IN_WARMUPS` and `DECIMAL_BENCH_IN_SAMPLES` for generic IN queries. Both require positive integers; defaults remain two warmups and nine samples. This investigation uses 32 warmups and 257 samples. Input, SQL, row checks and the fresh physical plan for each execution stay the same. Parsing and planning remain outside execution timing. Other benchmark modes retain their original counts.
+
+Both variants are rebuilt with that same benchmark. Runtime sources match their previously tested versions exactly; dependency features, profiles, Arrow libraries, native sources and lockfile also match. The accepted planning patch applies and reverses exactly, reproducing the tested candidate source. No new runtime algorithm, dependency or default-vendor change is introduced, and add-zero remains deferred.
+
+Before timing, both rebuilt variants pass all 74 generic IN captures against their frozen references. Default counts, smaller custom counts, the longer profile, and rejection of zero, negative and nonnumeric settings are checked. Every timing process also validates its selected query against the reference.
+
+The precision target was set before measurement: same-before and same-after paired-median intervals should both fit within [-1%, +1%] on the selected core. Twelve-pair long-window controls meet that target on CPU 2; CPU 4 is slightly wider. The observer overhead interval is [-0.87%, +0.62%]. A fresh 24-pair confirmation on CPU 2 gives [-0.28%, +0.59%] for the accepted binary against itself and [-0.55%, +0.24%] for the candidate against itself. This establishes useful precision for this workload and series, not a universal 1% performance guarantee.
+
+Execution results use median within-pair percentage changes, with 95% whole-pair bootstrap intervals:
+
+| Query / series | Pairs | Time change | Paired interval |
+| --- | --- | --- | --- |
+| DOUBLE single zero, initial | 16 | +0.23% | [-0.09%, +1.24%] |
+| DOUBLE single zero, independent confirmation | 24 | -0.12% | [-0.55%, +0.20%] |
+| FLOAT zero nullable | 16 | +0.09% | [-0.72%, +0.75%] |
+| Utf8 long list | 16 | +0.08% | [-0.80%, +1.03%] |
+| Decimal nullable | 16 | -0.13% | [-0.81%, +0.77%] |
+| Decimal long list | 16 | +0.14% | [-0.04%, +0.24%] |
+| DOUBLE nonzero long list | 16 | -0.27% | [-1.18%, +0.45%] |
+
+The record also reports process means, retaining slow samples. Their intervals are wider in several cases: the initial DOUBLE mean-based comparison permits up to +2.23%, while its independent confirmation is -0.23%, with interval [-1.01%, +0.34%]. The initial DOUBLE and Utf8 median intervals also extend slightly above +1%. Acceptance does not imply exact execution equivalence for every query or latency statistic.
+
+Retesting the untouched legacy binaries checks the effect of rebuilding the benchmark. Their 32-pair short-window before/after result is -0.35%, with interval [-0.84%, -0.08%], so that series does not reproduce the earlier slowdown either. Its same-before control also shows an apparent improvement, [-1.01%, -0.22%]. A rebuilt short-window same-after control reaches +2.00% at its upper bound. These controls retain evidence of short-window drift; the acceptance decision relies on the independently confirmed longer window.
+
+Four eight-pair planning checks reproduce the gains:
+
+| Query | Paired time change | Paired 95% interval | Instruction change |
+| --- | --- | --- | --- |
+| DOUBLE single zero | -5.61% | [-7.48%, -4.30%] | -4.93% |
+| FLOAT zero nullable | -3.44% | [-4.59%, -2.12%] | -4.65% |
+| FLOAT zero long list | -10.42% | [-10.66%, -9.94%] | -10.51% |
+| DOUBLE zero long list | -10.91% | [-11.30%, -10.53%] | -10.75% |
+
+All 928 timing processes across 25 comparisons are retained in the [compressed raw JSON](float-in-steady-runs.json.gz), including captures, samples, counters and phase observations. Sixteen distinct timed query/ANSI captures preserve their values, types, statuses and plans. The JSON summary contains archive hashes, source and build identities, validation records, scripts and schedules. Two setup failures occurred before timing began in those attempts and are recorded separately. Shared sources and executable slots are restored and hash-checked.
+
+To reproduce, use the archived build inputs and benchmark patch, then run `run-builds.py`, `verify.py`, and the `controls`, `comparison` and `legacy-planning` schedules in order. Run builds, checks and inspection separately from timing. The primary comparisons use CPU 2, 1048576 rows and batches of 8192. Intervals use 10000 whole-pair resamples with seed 88, conditional on this shared host and each series, without multiple-comparison correction. The archive opens with Python's standard `gzip` and `json` modules.
+
+Subsequent optional-runtime work can use this tested planning patch as its baseline. It still scans additional constants after the first zero; arbitrary unknown or noncanonical lists are not guaranteed to plan faster. No full Spark corpus or Rust unit suite is rerun here, and the 331 raw Spark differences and other historical performance questions remain outside this decision.
 
 ## Reproduce
 

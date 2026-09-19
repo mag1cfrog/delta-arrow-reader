@@ -135,6 +135,20 @@ async fn generic_in_bench(
     if !matches!(phase.as_str(), "planning" | "execution") {
         return Err("DECIMAL_BENCH_PERF_PHASE must be planning or execution".into());
     }
+    let timing_count = |name: &str, default: usize| -> Result<usize> {
+        let count = match std::env::var(name) {
+            Ok(value) => value.parse()?,
+            Err(std::env::VarError::NotPresent) => default,
+            Err(error) => return Err(error.into()),
+        };
+        if count == 0 {
+            return Err(format!("{name} must be positive").into());
+        }
+        Ok(count)
+    };
+    // Generic IN only: keep fresh plans per sample while allowing longer runs.
+    let warmups = timing_count("DECIMAL_BENCH_IN_WARMUPS", WARMUPS)?;
+    let samples = timing_count("DECIMAL_BENCH_IN_SAMPLES", SAMPLES)?;
     let mut results = Vec::new();
     for (family, profiles) in [
         (
@@ -338,7 +352,7 @@ async fn generic_in_bench(
                 // Both ANSI modes are validated. Timing uses ANSI on only;
                 // this workload has no failing casts or arithmetic.
                 if !check_only && ansi {
-                    for _ in 0..WARMUPS {
+                    for _ in 0..warmups {
                         assert_eq!(
                             consume(ctx, plan_query(ctx, &sql, ansi).await?).await?,
                             (rows, nulls)
@@ -349,7 +363,7 @@ async fn generic_in_bench(
                     if phase == "planning" {
                         perf_command(b"enable\n")?;
                     }
-                    for _ in 0..SAMPLES {
+                    for _ in 0..samples {
                         let start = Instant::now();
                         plans.push(plan_query(ctx, &sql, ansi).await?);
                         planning_ms.push(start.elapsed().as_secs_f64() * 1000.0);
@@ -384,7 +398,7 @@ async fn generic_in_bench(
         serde_json::to_vec_pretty(&json!({
             "rows": ROWS, "batch_size": BATCH_SIZE, "partitions": 1,
             "input_permutation": "(position * 4099 + 17) % rows",
-            "warmups": WARMUPS, "samples": SAMPLES, "check_only": check_only,
+            "warmups": warmups, "samples": samples, "check_only": check_only,
             "perf_phase": phase, "results": results,
         }))?,
     )?;
