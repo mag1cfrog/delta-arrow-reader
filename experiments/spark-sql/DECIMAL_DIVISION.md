@@ -3672,6 +3672,37 @@ To reproduce, use the recorded historical accepted executable as `before` and th
 
 Keep the accepted optional runtime and default build unchanged. The next step is to establish repeatable same-binary execution controls and recheck DOUBLE single-item, Decimal and Utf8 execution before deciding whether to adopt this standalone patch. These measurements do not justify adding another optimization to address the apparent execution differences.
 
+## Execution measurement: scheduling and cache interference
+
+The [execution stability record](float-in-execution-stability-results.json) identifies a measurement blind spot and evidence of cache sensitivity. It does not resolve the earlier approximately 2.8% DOUBLE observation. The planning-only patch remains deferred; neither Rust runtime code nor the benchmark binary changes in this slice.
+
+The old `context-switches:u` counter cannot rule out preemption on this host. A calibration process observes 20 voluntary switches through its own `getrusage`, while the fully scheduled perf counter reports zero. A small FIFO relay now reads the blocked benchmark thread's scheduling counters at the existing enable and disable gates. The controller, perf parent and relay run on CPU 0; the benchmark stays on CPU 2 or 4. The nine execution timers exclude the snapshots, although gate latency can affect subsequent cache state. The [kernel scheduler statistics documentation](https://docs.kernel.org/scheduler/sched-stats.html) describes the runtime, waiting-time and timeslice fields used here.
+
+Three short calibrations use the accepted binary and a temporary competitor owned by the harness. Each retains four timing processes. A busy loop on the benchmark's own logical CPU produces two involuntary switches per process and 5.25-7.80 ms of queue waiting across nine executions. A busy loop on its SMT sibling increases the median execution sample to 1.258 ms without preemption. A repeated 64 MiB memory scan on a different physical core raises it to 2.517 ms, with approximately 34,512 demand fills from DRAM per nine-execution phase. Ordinary runs below show medians around 0.7-0.9 ms. Instruction counts remain essentially unchanged. These controls demonstrate possible interference mechanisms; they do not identify what interfered with earlier runs.
+
+The calibration also exposes limits in the new observations. CPU-wide scheduler runtime can remain unchanged while the sibling busy loop is running. `/proc/stat` ticks are only 10 ms on this host, longer than many measurement phases. A zero delta therefore does not establish an idle sibling. The relay's own sixteen-pair overhead check is inconclusive: median paired change +6.39%, interval [-3.13%, +20.73%]. Its perturbation is not bounded tightly enough to resolve a few-percent difference.
+
+The main DOUBLE single-item comparisons use 24 fresh-process pairs each:
+
+| Comparison | CPU | Median paired time change | Paired 95% interval |
+| --- | --- | --- | --- |
+| Accepted binary against itself | 2 | +0.49% | [-4.58%, +7.80%] |
+| Candidate binary against itself | 2 | -0.30% | [-10.26%, +6.40%] |
+| Accepted to candidate | 2 | +0.26% | [-7.39%, +9.13%] |
+| Accepted binary against itself | 4 | +2.82% | [-3.76%, +24.02%] |
+| Candidate binary against itself | 4 | -1.46% | [-9.87%, +5.20%] |
+| Accepted to candidate | 4 | +0.56% | [-3.81%, +10.67%] |
+
+These point estimates and intervals both describe the median of within-pair percentage changes. The artifact separately retains ratios of group medians, the point statistic used in preceding sections. Six sixteen-pair checks of Utf8 long lists, nullable Decimal and Decimal long lists, across both cores, also have intervals spanning zero. No performance equivalence follows from these intervals.
+
+Most slow DOUBLE phases do not involve a descheduled benchmark thread. A separate memory-counter diagnostic runs the accepted binary against itself for 32 pairs on each core. Across all 64 processes per core, execution time summed over the nine samples correlates with demand fills from DRAM: Pearson correlations are 0.923 on CPU 2 and 0.842 on CPU 4. Fills from the local cache complex decrease as DRAM fills increase. The total instruction-count range is below 0.0003% on each core. These AMD events count demand fills, excluding prefetch fills; they do not measure all memory traffic. Together with the controlled scan, this supports cache and memory sensitivity as a source of timing variation. It does not attribute every slow sample or the earlier before/after difference to external activity.
+
+All 656 completed timing processes retain their samples, counters and available phase observations. Their eight distinct query/ANSI captures match the frozen values, types, statuses and plans. Source and executable hashes are unchanged. Existing corpus captures and test logs are checked by identity; no Rust test suite or full Spark corpus is rerun, and compatibility coverage does not expand. One incomplete observer smoke process is recorded separately: perf writes a terminating NUL after its acknowledgement, which the initial relay left unread. The corrected relay consumes the complete message and the driver now terminates its own process group on timeout.
+
+To reproduce, reuse the frozen builds from the preceding comparison and extract the archived scripts, schedules and setup instructions. Run the observer smoke check, scheduling and SMT calibrations, the `initial` and `memory` schedules, then the memory-scan calibration sequentially. `check-observer.py` verifies the calibration records and the direct switch-count example; `identity.py` verifies the frozen inputs. Builds, tests and inspection remain outside timing. Bootstrap intervals use 10000 whole-pair resamples with seed 88 and no correction for multiple comparisons. Exploratory fast/slow bins are retained only as diagnostics; no runs are filtered from performance comparisons.
+
+The next measurement change should lengthen the steady execution phase in the experimental Rust benchmark. Rebuild both variants with that same harness and first repeat the same-binary controls in a quiet environment with a reserved core. Only after those controls are repeatable should the planning-only patch be assessed again. This evidence does not justify a new runtime optimization or a claim that historical performance regressions are closed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
