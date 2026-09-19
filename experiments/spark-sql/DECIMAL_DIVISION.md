@@ -3709,7 +3709,7 @@ The existing [planning-only patch](sail-float-in-planning-only.patch) now joins 
 
 The Rust benchmark now accepts `DECIMAL_BENCH_IN_WARMUPS` and `DECIMAL_BENCH_IN_SAMPLES` for generic IN queries. Both require positive integers; defaults remain two warmups and nine samples. This investigation uses 32 warmups and 257 samples. Input, SQL, row checks and the fresh physical plan for each execution stay the same. Parsing and planning remain outside execution timing. Other benchmark modes retain their original counts.
 
-Both variants are rebuilt with that same benchmark. Runtime sources match their previously tested versions exactly; dependency features, profiles, Arrow libraries, native sources and lockfile also match. The accepted planning patch applies and reverses exactly, reproducing the tested candidate source. No new runtime algorithm, dependency or default-vendor change is introduced, and add-zero remains deferred.
+Both variants are rebuilt with that same benchmark. Runtime sources match their previously tested versions exactly; dependency features, profiles, Arrow libraries, native sources and lockfile also match. The accepted planning patch applies and reverses exactly, reproducing the tested candidate source. No new runtime algorithm, dependency or default-vendor change is introduced. Add-zero was deferred at this stage.
 
 Before timing, both rebuilt variants pass all 74 generic IN captures against their frozen references. Default counts, smaller custom counts, the longer profile, and rejection of zero, negative and nonnumeric settings are checked. Every timing process also validates its selected query against the reference.
 
@@ -3748,7 +3748,7 @@ Subsequent optional-runtime work can use this tested planning patch as its basel
 
 ## Add-zero against the accepted planning baseline
 
-The [steady add-zero comparison](float-in-add-zero-steady-results.json) reproduces execution gains for all eight targeted FLOAT/DOUBLE IN queries. The earlier Utf8 and Decimal control slowdowns do not recur in these rebuilt binaries. Single-element planning still retires about 1.14-1.19% more instructions, even though elapsed time does not regress in this series. Add-zero remains deferred while a small follow-up checks whether reusing the already computed input type removes some of that work.
+The [steady add-zero comparison](float-in-add-zero-steady-results.json) reproduces execution gains for all eight targeted FLOAT/DOUBLE IN queries. The earlier Utf8 and Decimal control slowdowns do not recur in these rebuilt binaries. Single-element planning still retires about 1.14-1.19% more instructions, even though elapsed time does not regress in this series. That comparison deferred add-zero pending the input-type follow-up below.
 
 This comparison isolates the existing column-only add-zero implementation. Both sides include the accepted constant-list planning optimizations. The baseline reuses the preceding accepted executable; the candidate is rebuilt with exactly the same configurable benchmark. Runtime sources match their previously tested variants, and dependency features, profiles, Arrow libraries, native sources and lockfile match. Applying the existing [matched-baseline patch](sail-float-in-matched-baseline.patch) in reverse reproduces the add-zero source exactly; applying it forward restores the accepted source.
 
@@ -3789,6 +3789,40 @@ The control speedups are not add-zero algorithmic gains: their physical plans ar
 All 552 timing processes across 21 comparisons are retained in the [compressed raw JSON](float-in-add-zero-steady-runs.json.gz), with no failed or discarded timing runs. The record includes both statistics, captures, counters, phase observations, build identities, scripts, schedules and archive hashes. Intervals use 10000 whole-pair bootstrap resamples with seed 88, conditional on this host and series, without multiple-comparison correction. Shared sources and executable slots are restored and hash-checked. Default vendored code is unchanged.
 
 To reproduce, prepare the archived inputs and absolute comparison-view links, then run `run-builds.py`, `verify.py`, and the `controls`, `execution` and `planning` schedules in order. The next source change is limited to two redundant `get_type` calls in the add-zero branch; expression construction and eligibility rules remain the subject of the existing correctness checks.
+
+## Input-type reuse result and add-zero acceptance
+
+The unchanged add-zero implementation now joins the accepted optional runtime after the planning-only patch. The [input-type follow-up](float-in-input-type-results.json) rejects the attempted lookup reduction: it saves too little work to address the single-element planning cost and slows unrelated execution controls in this build. The accepted source is the preceding comparison's add-zero candidate, without this follow-up change. Default vendored code stays unchanged.
+
+The rejected change caches the input type already obtained by `spark_in_list`, then reuses it for add-zero eligibility and zero-literal construction. This reduces input-type lookups from four to two on the eligible path. Its 27 planner tests pass, and all 186 generic IN and subquery captures match their references exactly, including plans. The benchmark, dependency features/profiles, lockfile, Arrow libraries and native sources match the preceding add-zero binary.
+
+Both twelve-pair same-binary DOUBLE controls meet the +/-1% precision target, with intervals [-0.26%, +0.48%] and [-0.60%, +0.58%]. The follow-up uses the same CPU, 32 warmups, 257 samples and fresh-plan protocol. These results compare type reuse against unchanged add-zero:
+
+| Phase / query | Pairs | Paired time change | Paired 95% interval | Instruction change |
+| --- | --- | --- | --- | --- |
+| Planning / FLOAT single zero | 12 | -0.40% | [-1.73%, +0.68%] | -0.031% |
+| Planning / DOUBLE single zero | 12 | -0.06% | [-1.07%, +0.61%] | -0.031% |
+| Planning / FLOAT zero nullable | 12 | +0.28% | [-0.85%, +0.69%] | -0.022% |
+| Execution / DOUBLE single zero | 16 | +0.20% | [-0.06%, +0.51%] | -0.000% |
+| Execution / FLOAT zero nullable | 16 | -0.37% | [-0.67%, +0.04%] | -0.017% |
+| Execution / Utf8 long-list control | 16 | +0.85% | [+0.36%, +1.35%] | +0.005% |
+| Execution / Decimal long-list control | 16 | +2.47% | [+2.34%, +2.61%] | +0.001% |
+
+The secondary mean-based FLOAT single-element planning estimate does improve: -0.59%, with interval [-1.20%, -0.02%]. The primary planning intervals include zero, and both statistics show the Utf8/Decimal control costs. This small secondary gain does not change the decision.
+
+The selected generic IN bitmap loop still has 628 bytes and 160 identical normalized instructions. Its start modulo 64 changes from 16 to 0. Together with unchanged plans and nearly identical execution instruction counts, this is consistent with the layout sensitivity observed earlier. It does not prove that this address change explains every difference, or provide a portable layout fix. The archived patch is retained as a rejected experiment.
+
+Accepting the unchanged add-zero implementation is a measured tradeoff. The preceding steady comparison finds execution gains of about 0.7-7.0% across all eight targeted queries, with fewer retired execution instructions, and does not reproduce its historical unrelated-control slowdowns. Single-element planning still retires about 1.14-1.19% more instructions. Its measured planning time does not regress in that series, but this is not a zero-cost planning guarantee. The type-reuse result shows that the duplicate lookups explain only a small fraction of the extra work.
+
+The accepted rewrite remains limited to eligible FLOAT/DOUBLE columns with known literal lists containing zero and no NaN. Computed operands, unknown or NaN-containing lists, and fused FLOAT widening retain their existing paths. On top of the accepted planning-only source, apply the existing patch in reverse:
+
+```bash
+git apply -R experiments/spark-sql/sail-float-in-matched-baseline.patch
+```
+
+That patch's exact application and reversal were checked in the preceding comparison. Do not apply the rejected input-type patch from this record. Future work should use this record's `before` source/binary, which is the preceding record's `after` source/binary.
+
+All 248 timing processes across nine comparisons are retained in the [compressed raw JSON](float-in-input-type-runs.json.gz), with no timing failures or discarded runs. The record includes the rejected Rust diff, test log, both median- and mean-based estimates, raw captures, counters, phase observations, assembly comparison, source/build identities, scripts and schedules. Shared sources and executables are restored and hash-checked. The intervals retain the preceding method's host, sampling and multiple-comparison limits. No new Spark coverage is added, and other compatibility and performance questions remain open.
 
 ## Reproduce
 
