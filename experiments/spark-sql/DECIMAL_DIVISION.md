@@ -4109,6 +4109,16 @@ The differing address sequences preserve each table's occupied span. They first 
 
 All 372 result and plan checks pass, along with both address modes in eight smoke processes. The [raw record](float-type-in-table-state-runs.json.gz) retains all 9,312 table traces from 32 collection processes, complete scripts, the construction patch and build identities. Incidental timings are retained but are not analyzed as a performance comparison. The trace itself can affect allocations, so these results do not prove identical state in the older executables. All shared files are restored and hash-checked; the optional type-inference patch remains unadopted.
 
+## Resolver field iteration and later table addresses
+
+The [resolver trace](float-type-resolver-drop-results.json) observes variable field-key iteration, but does not establish that it causes the two IN-table address sequences. `PlanResolverState.fields` uses the standard library's randomized `HashMap`; the resolver state is destroyed before the physical plan is created. A temporary `Drop` implementation records its existing key iterator without sorting or changing entries, alongside the preceding IN-table trace.
+
+The same eight diagnostic groups pass with 32 processes and 291 paired resolver/table records per process. For this query the map contains three fields. Each fixed-address group observes all six key orders and four distinct complete key-order sequences. The IN tables still have one complete hash-fingerprint sequence and two address sequences. In each group, three process pairs share their complete address sequence despite different complete key-order sequences.
+
+No pair with differing addresses has matching key-order history all the way through its first address divergence. The observations therefore neither prove nor exclude a causal role for field release order. A direct release-order intervention is the next bounded check; changing a production map or allocator based on these observations would be premature.
+
+All 372 result and plan captures pass, and eight smoke processes verify that each resolver record precedes its matching IN-table record. Stderr goes directly to per-process files so the larger trace cannot fill a pipe. The [raw record](float-type-resolver-drop-runs.json.gz) retains all 9,312 resolver records and 9,312 IN-table records, scripts, both cold patches and source identities. Incidental timings remain outside the analysis. Shared files are restored and hash-checked, with no change to the accepted runtime or optional patch decision.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
