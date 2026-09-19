@@ -4054,6 +4054,25 @@ The per-seed results reveal a boundary case that limits interpretation: `SharedS
 
 All 930 result and plan captures match their frozen references. Ten small probe processes verify the selected shared parameters, native hash-state size and distinct per-table hashes. Eight smoke processes and four invalid-setting checks pass. The [raw record](float-type-shared-seed-runs.json.gz) retains every sample from 64 timing processes, source and lockfile changes, probe results, scripts and build identities. The initial build check wrongly compared the intentionally changed lockfile hash as runtime source; the corrected check passed without rebuilding or rerunning measurements. All shared files are restored and hash-checked. Production hashing, the accepted runtime and Spark corpus coverage remain unchanged.
 
+## Pairing native shared seeds across separate builds
+
+The [native-seed follow-up](float-type-native-seed-pairs-results.json) fails its self-control gate. Matching process-shared hash seeds does not by itself make this measurement precise enough. The conditional candidate comparison was not run, and the float type-inference patch remains unadopted.
+
+Both rebuilt executables retain native `RandomState`, per-table seed generation and IN lookup code. They share one diagnostic initializer that can record or replay the input to `SharedSeed::from_u64`; their only other source difference is the existing type-inference patch. Sixteen fresh baseline processes supply native initializer inputs. Every input is retained in capture order, with no replacement or performance-based selection. The schedule and seed assignment were fixed before capture.
+
+The calibration uses eight of those inputs, selected by the predetermined assignment, in 16 four-process groups. It fully crosses preparation positions and execution directions for both versions. Each process executes 257 independently prepared plans after 32 warmups. The whole-group bootstrap intervals are:
+
+| Self-comparison | Median-based change | 95% interval | Mean-based change | 95% interval |
+| --- | ---: | ---: | ---: | ---: |
+| Original type inference | -0.1570% | [-1.5490%, +0.1259%] | -0.3911% | [-2.0522%, +0.6220%] |
+| Candidate type inference | +0.3472% | [+0.0007%, +1.9673%] | +0.4761% | [-0.1683%, +1.4765%] |
+
+Each interval had to stay within +/-1% and include zero. Both versions fail that gate; the candidate's median-based self-control also has a small positive lower bound. Instruction-count intervals include zero and remain within +/-0.01%, but they cannot substitute for the failed time controls. These are comparisons of each executable with itself, not candidate-versus-original results.
+
+All 5,952 result and plan captures match their references: the same 186 cases repeated across 16 seeds and two variants. Sixteen seed probes retain distinct per-table hashes, and eight smoke processes verify both phase orders. The [raw record](float-type-native-seed-pairs-runs.json.gz) retains the 16 native inputs, 64 timing processes, all 16,448 measured executions, source identities, scripts and validation corrections. A copied helper initially lacked its adjacent historical fixture; running the byte-identical repository helper resolved that check. The verification script also initially rejected normal subquery status lines; it now checks each line against its result and resumes from the preserved captures. Neither correction changed binaries, seeds or timing rules.
+
+No groups were discarded and no extra timing runs were added. Shared sources, lockfiles and executable slots are restored and hash-checked. The earlier positive release mean interval remains unresolved. These diagnostic builds do not establish zero execution cost, and the repeated checks add no new Spark corpus coverage.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
