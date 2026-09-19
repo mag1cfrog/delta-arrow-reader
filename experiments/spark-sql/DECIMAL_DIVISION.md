@@ -3913,6 +3913,24 @@ The on/off instruction change is -0.0025%, with interval [-0.0174%, +0.0050%]. I
 
 Recorded average frequency stays around 4.70-4.75 GHz; runqueue waits and sibling occupancy are small in most intervals. These observations do not identify a cause of the timing variation. The next diagnostic will hold IN hash seeds equal using an existing native hash builder, while retaining the production randomized hasher. The [raw record](float-type-switch-runs.json.gz) preserves every sample, counter, capture and phase observation. Shared files are restored and hash-checked. No new Spark corpus coverage is claimed.
 
+## Float type inference with controlled IN hash seeds
+
+The [fixed-hash diagnostic](float-type-fixed-seed-results.json) meets the combined same-mode precision target and does not reproduce the earlier roughly 0.5% penalty. This remains a diagnostic: it does not change the adoption decision or replace the production randomized hash builder.
+
+The temporary primitive IN filter uses the existing `datafusion_common::hash_utils::RandomState`, an alias for `foldhash::fast::FixedState`. Four predetermined seeds, 0-3, each receive one round of the preceding interleaved schedule. Both type-inference modes in a pair share the same executable, seed and literal insertion order. Other hash tables and absolute allocation addresses remain uncontrolled. No dependency or comparison algorithm is added. The native builder changes generated hashing code as well as seed selection, so absolute speed differences from the preceding executable are not production gains.
+
+All 1,488 generic IN and subquery captures across both modes and four seeds match the frozen references, including physical plans. Six missing or invalid setting checks pass. The fixed schedule retains all 128 processes, with 32 warmups and 257 samples each. Builds, validation and inspection finish before a 30-second cooldown and timing. Statistics use the same bootstrap within the four rounds:
+
+| Comparison | Pairs | Median-based time change | Conditional 95% interval | Mean-based time change |
+| --- | ---: | ---: | --- | ---: |
+| Off versus itself | 16 | -0.045% | [-0.114%, +0.102%] | -0.094% |
+| On versus itself | 16 | -0.098% | [-0.158%, -0.004%] | -0.058% |
+| On versus off | 32 | -0.133% | [-0.191%, -0.064%] | -0.117% |
+
+The per-seed on/off median estimates are -0.160%, -0.102%, -0.145% and -0.120%. The combined mean-based interval is [-0.455%, +0.001%]. Same-on still has a small negative self-comparison bias, so the small A/B time gain is not credited as a production improvement. Retired instructions increase by 0.00157%, with interval [+0.00139%, +0.00266%]; counts are not exactly identical. One individual four-pair control interval remains wide, and all its observations are retained.
+
+This result supports controlling hash behavior as a useful diagnostic, without uniquely identifying the cause of all earlier noise. The next step is one final interleaved comparison of the original release binaries with their randomized hasher, using independent balanced pair directions in each round. The [raw record](float-type-fixed-seed-runs.json.gz) includes every capture, sample, counter and phase observation. Both temporary Rust changes and all shared sources, locks and executable slots are restored and hash-checked. No new Spark corpus coverage is claimed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
