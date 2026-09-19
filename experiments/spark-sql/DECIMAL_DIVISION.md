@@ -4035,6 +4035,25 @@ The original control passes the median-based criterion but misses the mean-based
 
 All 372 result and plan captures match their references. Eight smoke processes verify both execution orders and control modes. All 16,448 measured executions and 128 timing captures are retained, with no process failures or discarded samples. Waiting benchmark processes consume no CPU time during another benchmark's phase. The [raw record](float-type-crossed-controls-runs.json.gz) includes both predeclared schedules, preflight hashes, checks, scripts, captures, counters and build identities. Shared source and executable hashes remain unchanged. The five-line planning candidate stays deferred until a measurement setup passes its self-controls; no new Spark corpus coverage or execution-equivalence claim follows from this result.
 
+## Separating shared and per-table hash randomness
+
+The [shared-seed diagnostic](float-type-shared-seed-results.json) passes its A/A time controls when processes share the same selected global seed, while the natural-seed control still fails. Per-table randomness and the native hash type remain unchanged. This gives a controlled setting to investigate further; it does not compare or adopt the type-inference candidate.
+
+Inspection of the preceding 64 control processes found median runqueue waits near 0.01% of phase time and average frequencies around 4.75 GHz. Mean execution time correlates with branch misses at 0.71 and 0.94 in the two control groups. These associations do not establish a cause. The source provides a specific variable to test: foldhash 0.2.0's default `RandomState` combines a process-shared seed with a separately generated per-table seed. Its fixed hash builder uses different code, so the earlier fixed-builder experiment did not isolate these two sources of randomness.
+
+A seven-line diagnostic patch selects the shared seed after the original address, clock and allocator entropy calculation. Both modes use the same executable, original type inference and native eight-byte `RandomState`. Per-table seed generation and IN lookup source are unchanged. Four predetermined shared seeds, 0-3, each receive two control groups; another eight groups use natural independent shared seeds. All preparation-position and execution-direction combinations are checked before timing.
+
+| A/A setting | Median-based change, conditional 95% interval | Mean-based change, conditional 95% interval |
+| --- | --- | --- |
+| Natural shared seeds | -0.629%, [-1.665%, +0.925%] | -0.474%, [-1.995%, +1.184%] |
+| Matched shared seed, native per-table randomness | -0.010%, [-0.636%, +0.723%] | +0.500%, [-0.804%, +0.988%] |
+
+The controlled intervals include zero and fit within the predefined +/-1% target. The four-process groups remain the bootstrap sampling units. Fixing the shared seed affects default foldhash 0.2.0 maps in planning as well as execution; it does not isolate only the IN table. This rebuilt diagnostic also cannot replace an acceptance check of the candidate and its own controls.
+
+The per-seed results reveal a boundary case that limits interpretation: `SharedSeed::from_u64(0)` produces six identical forced-bit words. Its median process mean is 35.424 ms, about 15.6 times the natural mode's 2.270 ms. Seeds 1-3 are near 2.25-2.26 ms. All seed-zero groups remain in the predefined analysis. The next comparison should replay seeds actually produced by native initialization, retaining zero as a separate boundary observation.
+
+All 930 result and plan captures match their frozen references. Ten small probe processes verify the selected shared parameters, native hash-state size and distinct per-table hashes. Eight smoke processes and four invalid-setting checks pass. The [raw record](float-type-shared-seed-runs.json.gz) retains every sample from 64 timing processes, source and lockfile changes, probe results, scripts and build identities. The initial build check wrongly compared the intentionally changed lockfile hash as runtime source; the corrected check passed without rebuilding or rerunning measurements. All shared files are restored and hash-checked. Production hashing, the accepted runtime and Spark corpus coverage remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

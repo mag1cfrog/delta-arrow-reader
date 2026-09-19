@@ -1,0 +1,607 @@
+{
+  "slice": "Control only the process-shared foldhash seed while retaining native per-table randomness",
+  "base_commit": "bd194c4",
+  "created_utc": "2026-09-19T11:47:36.758883+00:00",
+  "decision": {
+    "natural_shared_seed_control_passed": false,
+    "controlled_shared_seed_control_passed": true,
+    "candidate_compared": false,
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "finding": "The controlled-shared-seed A/A intervals meet the predeclared precision criteria, while natural shared seeds still fail. This supports investigating shared seed variation without changing the native hash type or fixing per-table seeds.",
+    "next_step": "A candidate comparison needs its own controls. Use recorded outputs of native seed initialization for a matched-input comparison; keep seed zero as a separate boundary observation rather than treating it as a typical random seed."
+  },
+  "summary": {
+    "four_process_groups": 16,
+    "timing_processes": 64,
+    "timed_executions": 16448,
+    "timing_query_captures": 128,
+    "exact_correctness_captures": 930,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "seed_probe_processes": 10,
+    "invalid_settings_rejected": 4,
+    "capture_or_plan_differences": 0,
+    "failed_or_discarded_measurements": 0,
+    "new_benchmark_builds": 1,
+    "new_probe_builds": 1,
+    "new_spark_corpus_runs": 0
+  },
+  "method": {
+    "case": "generic_in_double_zero_long_list",
+    "warmups": 32,
+    "samples": 257,
+    "cpu": 2,
+    "controller_cpu": 0,
+    "cooldown_seconds": 30,
+    "labels": {
+      "0": "A",
+      "1": "A",
+      "2": "B",
+      "3": "B"
+    },
+    "gates": "Launch and prepare each of four independent processes sequentially. Hold their existing enable acknowledgments until all are ready. Execute complete phases in ABBA/BAAB order, holding each disable acknowledgment until every process finishes. Only then permit output serialization, validation and exit.",
+    "statistics": "Each group has two independent processes per label. Primary: ratio of the average process medians. Secondary: ratio of full-label means. Bootstrap whole four-process groups within four predetermined blocks, 10000 resamples, seed 88. Also report instruction changes. Do not treat within-process executions as independent process samples.",
+    "base_commit": "bd194c4",
+    "question": "Does fixing only the process-shared foldhash seed improve fresh-process A/A controls while preserving native per-table randomness?",
+    "schedule": [
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "shared_seed_setting": "random"
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "shared_seed_setting": "random"
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "shared_seed_setting": "000000"
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "shared_seed_setting": "000000"
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "shared_seed_setting": "000001"
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "shared_seed_setting": "000001"
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "shared_seed_setting": "random"
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "shared_seed_setting": "random"
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "shared_seed_setting": "random"
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "shared_seed_setting": "random"
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "shared_seed_setting": "000002"
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "shared_seed_setting": "000002"
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "shared_seed_setting": "000003"
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "shared_seed_setting": "000003"
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "shared_seed_setting": "random"
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "shared_seed_setting": "random"
+      }
+    ],
+    "mode_aliases": {
+      "before": "native random shared seed",
+      "after": "controlled shared seed; native per-table randomness"
+    },
+    "binaries": {
+      "before": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-shared-seed-bd194c4/before-bench",
+        "sha256": "1bf531fd2f39f49929da1297585db8ad48091a4684a8a978385251d198e14c1c"
+      },
+      "after": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-shared-seed-bd194c4/before-bench",
+        "sha256": "1bf531fd2f39f49929da1297585db8ad48091a4684a8a978385251d198e14c1c"
+      }
+    },
+    "source": "One executable uses original type inference and the native RandomState/IN lookup code. The only Rust change selects a shared seed after the original entropy calculation. All accepted runtime and benchmark sources match the frozen before build.",
+    "initialization": "The mandatory setting is random or six-digit seeds 000000..000003. All settings have six bytes. Original address/time/allocator entropy collection occurs in both modes before the setting is read. Per-table seed generation is unchanged.",
+    "controls": "Eight four-process groups per mode in four predetermined blocks. Shared seeds 0..3 each have two fixed-mode groups; natural-mode groups draw normal independent process seeds. Every process/position/direction combination is balanced within each mode.",
+    "acceptance": "Report whether each mode independently meets +/-1% time precision and includes zero in both median-based and mean-based 95% intervals. Preserve small biases. This diagnostic has no candidate/original comparison or automatic patch adoption.",
+    "stopping_rule": "One fixed 16-group, 64-process schedule, no extensions or discarded groups. Complete builds, validation and inspection before a 30-second cooldown. No unrelated work overlaps measurement.",
+    "limits": [
+      "The override affects foldhash 0.2.0 users of the global random seed, including default RandomState planning maps. FixedState keeps its separate fixed global seed. This does not isolate only the IN table.",
+      "The diagnostic binary is rebuilt and has a modified initializer. Neither mode proves equivalence of the two original release executables.",
+      "Four selected shared seeds do not cover all possible seeds. Narrower conditional intervals alone do not prove a unique cause of the historical effect.",
+      "The four resident processes and phase scheduling retain the preceding allocation-lifetime and hardware-history limitations."
+    ]
+  },
+  "calibration": {
+    "same-before": {
+      "mode": "native random shared seed",
+      "four_process_groups": 8,
+      "metrics": {
+        "median_ms": {
+          "median_group_change_pct": -0.6285820574454537,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -1.6647556630111304,
+            0.925415647561878
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "block_medians_pct": [
+            -6.6792945835256745,
+            -0.9745520309891176,
+            0.23521201553986515,
+            -0.6285820574454537
+          ],
+          "group_changes_pct": [
+            -15.199969743100006,
+            1.8413805760486568,
+            -2.543475701997977,
+            0.5943716400197419,
+            -0.7860356240242838,
+            1.2564596551040141,
+            -0.5688499125430013,
+            -0.6883142023479061
+          ]
+        },
+        "mean_ms": {
+          "median_group_change_pct": -0.47350590950897,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -1.9947907558773348,
+            1.1836254337058039
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "block_medians_pct": [
+            -6.555838174942774,
+            -1.1921306893053374,
+            0.541696667032171,
+            -0.5821437085284431
+          ],
+          "group_changes_pct": [
+            -14.530215416141544,
+            1.4185390662559971,
+            -3.3329731797662854,
+            0.9487118011556106,
+            -0.43933273394943795,
+            1.52272606801378,
+            -0.6566083319883842,
+            -0.507679085068502
+          ]
+        },
+        "instructions": {
+          "median_group_change_pct": -0.011022806506938432,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.18794962614396282,
+            0.007613283193730336
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "block_medians_pct": [
+            -8.267575616216384,
+            -0.0032568523830267537,
+            -0.17707949056720573,
+            0.028393691791017694
+          ],
+          "group_changes_pct": [
+            -16.528954433732135,
+            -0.0061967987006306124,
+            0.013716632613203217,
+            -0.020230337379256724,
+            0.0015099337742574548,
+            -0.3556689149086689,
+            -0.01584881431324625,
+            0.07263619789528164
+          ]
+        }
+      },
+      "time_control_passed": false
+    },
+    "same-after": {
+      "mode": "controlled shared seed; native per-table randomness",
+      "four_process_groups": 8,
+      "metrics": {
+        "median_ms": {
+          "median_group_change_pct": -0.00970920314112278,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.6356218226536148,
+            0.7231284008916927
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "block_medians_pct": [
+            -0.00970920314112278,
+            1.3758081248698373,
+            -1.5809464020579311,
+            0.9139698305075772
+          ],
+          "group_changes_pct": [
+            0.024197683756055355,
+            -0.043616090038300914,
+            1.42205911802733,
+            1.3295571317123445,
+            -0.6192356039458335,
+            -2.5426572001700287,
+            -1.2276275552689286,
+            3.055567216284083
+          ]
+        },
+        "mean_ms": {
+          "median_group_change_pct": 0.5000206980788735,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.8040521118575339,
+            0.9875358531114764
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "block_medians_pct": [
+            0.5000206980788735,
+            1.1861382178519064,
+            -1.172365189793012,
+            0.7939937423084187
+          ],
+          "group_changes_pct": [
+            0.2830120222083288,
+            0.7170293739494182,
+            1.1142341034302783,
+            1.2580423322735346,
+            -0.16119711513590262,
+            -2.1835332644501215,
+            -1.8911162459233966,
+            3.479103730540234
+          ]
+        },
+        "instructions": {
+          "median_group_change_pct": 0.006354247658479917,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.0012814613345513148,
+            0.011236787627932898
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "block_medians_pct": [
+            0.48892595959891816,
+            -0.00464364060929201,
+            0.0028339643286023897,
+            0.007121361964779194
+          ],
+          "group_changes_pct": [
+            0.23103216266997517,
+            0.7468197565278611,
+            -0.002744761233586246,
+            -0.006542519984997774,
+            0.010469673321633621,
+            -0.004801744664428842,
+            0.0022388219953262123,
+            0.012003901934232175
+          ]
+        }
+      },
+      "time_control_passed": true
+    }
+  },
+  "seed_zero_boundary": {
+    "shared_seed_words": [
+      9223372039002259457,
+      9223372039002259457,
+      9223372039002259457,
+      9223372039002259457,
+      9223372039002259457,
+      9223372039002259457
+    ],
+    "absolute_times_by_setting": {
+      "random": {
+        "processes": 32,
+        "median_process_mean_ms": 2.2700905194552528,
+        "process_mean_range_ms": [
+          2.218041832684825,
+          3.0370902490272376
+        ]
+      },
+      "000000": {
+        "processes": 8,
+        "median_process_mean_ms": 35.42389994357977,
+        "process_mean_range_ms": [
+          35.04605159533074,
+          35.75857954085603
+        ]
+      },
+      "000001": {
+        "processes": 8,
+        "median_process_mean_ms": 2.2524250389105056,
+        "process_mean_range_ms": [
+          2.212335315175097,
+          2.297471517509728
+        ]
+      },
+      "000002": {
+        "processes": 8,
+        "median_process_mean_ms": 2.2629301789883267,
+        "process_mean_range_ms": [
+          2.2117386147859923,
+          2.2965144630350194
+        ]
+      },
+      "000003": {
+        "processes": 8,
+        "median_process_mean_ms": 2.250354149805448,
+        "process_mean_range_ms": [
+          2.1929504319066147,
+          2.339178252918288
+        ]
+      }
+    },
+    "ratio_to_natural_mode_median_mean": 15.604620009637475,
+    "explanation": "SharedSeed::from_u64(0) produces six identical forced-bit words because the multiply-mix steps remain zero before the final bit mask. Its roughly 35 ms execution time is about 15.6 times the natural-mode median. All zero-seed groups remain in the predefined analysis; this boundary input does not represent the usual distribution of native random initialization."
+  },
+  "source": {
+    "shared_seed_patch": "--- a/src/seed.rs\n+++ b/src/seed.rs\n@@ -170,6 +170,13 @@\n             seed = mix(seed, box_ptr as usize as u64);\n         }\n \n+        // Temporary diagnostic: preserve per-table randomness and native hashing.\n+        #[cfg(feature = \"std\")]\n+        let seed = match std::env::var(\"DELTA_READER_DIAGNOSTIC_SHARED_SEED\").as_deref() {\n+            Ok(\"random\") => seed,\n+            Ok(value @ (\"000000\" | \"000001\" | \"000002\" | \"000003\")) => value.parse().unwrap(),\n+            _ => panic!(\"DELTA_READER_DIAGNOSTIC_SHARED_SEED must be random or 000000..000003\"),\n+        };\n         SharedSeed::from_u64(seed)\n     }\n \n",
+    "binary_sha256": "1bf531fd2f39f49929da1297585db8ad48091a4684a8a978385251d198e14c1c",
+    "identity": "Both control modes use one executable with original type inference. Native RandomState remains eight bytes; its per-table seed generator and IN lookup source are unchanged. Only foldhash 0.2.0 shared-seed initialization changes.",
+    "lockfile": "Only the foldhash 0.2.0 source moves from the registry to the local copy. Versions, dependency features and build profiles are checked.",
+    "restoration": "All shared sources, locks and executable slots are restored and hash checked."
+  },
+  "limitations": [
+    "The override affects foldhash 0.2.0 users of the global random seed, including default RandomState planning maps. FixedState keeps its separate fixed global seed. This does not isolate only the IN table.",
+    "The diagnostic binary is rebuilt and has a modified initializer. Neither mode proves equivalence of the two original release executables.",
+    "Four selected shared seeds do not cover all possible seeds. Narrower conditional intervals alone do not prove a unique cause of the historical effect.",
+    "The four resident processes and phase scheduling retain the preceding allocation-lifetime and hardware-history limitations.",
+    "Passing one control mode is not a candidate timing result or proof of the unique cause of the earlier release observations.",
+    "Seed zero is a pathological boundary for this workload. Its data is retained, and the four small chosen seeds do not establish typical performance over native initialization.",
+    "The earlier original-release positive mean interval and failed controls remain retained; no production hashing change or zero-cost claim follows."
+  ],
+  "references": [
+    "float-type-crossed-controls-results.json",
+    "float-type-fixed-seed-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-shared-seed-runs.json.gz",
+    "sha256": "e4639f322261fa6644ebf9f65511127dfaad57104a3388705f65f53ba7f5083f",
+    "uncompressed_sha256": "e42cbea3f3dc478169d05a0a349943ccd09cae952196279d425a7696f46049e6",
+    "compressed_bytes": 424374,
+    "uncompressed_bytes": 3108520
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-shared-seed-bd194c4",
+    "commands": [
+      "python3 build-shared.py",
+      "python3 build-probe.py",
+      "python3 verify.py",
+      "python3 measure.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Use the frozen source inputs and recorded foldhash patch, override and paths. Recreate an empty sibling cache directory and local foldhash copy. Build and validate before timing. The build helper restores shared files in finally; the initial post-build lockfile-check correction is retained."
+  }
+}
