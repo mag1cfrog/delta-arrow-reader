@@ -4195,6 +4195,25 @@ Each seed's eight processes share one complete hash-fingerprint sequence across 
 
 The [raw record](float-type-tcache-count-runs.json.gz) retains all 4,720 table traces and 4,176 prepared executions from 16 processes, along with the probe, scripts and source identities. Eight smoke processes pass with both allocator settings; every collection process validates the selected query in both ANSI modes. The Rust executable reuses its 372 prior captures. No groups are discarded, no timing effect is estimated and no global settings change. The optional type-inference patch remains unadopted.
 
+## Reusing native execution task contexts
+
+The [task-context experiment](float-type-task-context-results.json) reduces address variation in this collection, but does not eliminate it. Source inspection identifies a concrete allocation path: `SessionContext::task_ctx` creates a native `TaskContext`, cloning four standard `HashMap` function registries from `SessionState`. The benchmark calls it for each validation, warmup and timed execution.
+
+One diagnostic rebuild changes only the benchmark. Both modes create and retain one native context before the generic-IN loop. Fresh mode still creates a context for each execution; reuse mode clones the held context's `Arc`. Function registrations and result checks remain intact. The extra retained context means fresh mode is not identical to the older benchmark's allocation history.
+
+The fixed comparison keeps sorted resolver release, native allocator settings, fixed addresses, 32 warmups and 261 prepared plans. Each seed's eight processes share the complete IN hash-fingerprint sequence:
+
+| Native seed index | Context mode | Distinct address sequences | Matching address positions | First difference |
+| --- | --- | ---: | ---: | ---: |
+| 0 | Fresh | 3 | 61/295 | 58 |
+| 0 | Reuse | 1 | 295/295 | None |
+| 4 | Reuse | 2 | 220/295 | 219 |
+| 4 | Fresh | 2 | 61/295 | 58 |
+
+Indices are zero-based construction positions. The observations support task-context allocation and lifetime as contributors in this setup; they do not identify a unique cause or establish an execution-time benefit. A separate source audit confirms that SELECT planning still clones `SessionState` through `execute_logical_plan` and `state()`. Execution-context reuse does not remove those clones. Their contribution remains untested, and any follow-up must preserve the existing refresh of query start time.
+
+All 372 repeated result and plan captures pass in the new executable, along with eight smoke processes and rejection of missing or invalid mode settings. The [raw record](float-type-task-context-runs.json.gz) retains all 4,720 table traces and 4,176 prepared executions from 16 processes, both source audits, the benchmark patch and prior diagnostic patches. No groups are discarded and no performance effect is estimated. Shared files are restored and hash-checked. The accepted runtime remains unchanged, and the optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
