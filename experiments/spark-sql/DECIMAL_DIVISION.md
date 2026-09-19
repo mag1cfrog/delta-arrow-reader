@@ -3633,6 +3633,45 @@ To reproduce, freeze the canonical-list candidate as build `before`, apply the s
 
 The next bounded comparison should evaluate the two planning optimizations without add-zero against the historical accepted runtime. Their adoption can then be assessed independently. This result does not close the remaining Spark differences or historical performance questions.
 
+## Constant-list planning without add-zero
+
+The two planning optimizations now have a [standalone Rust patch](sail-float-in-planning-only.patch) for the accepted runtime. Planning improves in the [new comparison](float-in-planning-only-results.json), but adoption remains deferred because execution measurements are not repeatable enough to close a possible regression. Both variants omit native add-zero.
+
+The patch combines the Float64 scalar identity shortcut with canonical-list normalizer elision in `spark_in_list`. Input normalization, required casts, list length and the fallback for unknown or noncanonical lists remain. The original classifier stops at its first zero; checking whether the whole list is canonical requires scanning the remaining constants. The measurements include that extra work and the saved normalizer nodes. SQL IN/NOT IN, the scalar function and subqueries continue to use the shared helper.
+
+The before executable is the historical accepted CASE plus hash runtime. The after executable is the already tested no-add-zero build from the preceding matched comparison. Applying this combined patch directly to the accepted source reproduces that after source byte for byte. No build is repeated. Dependency sources, features, profiles, Arrow libraries, lockfile and benchmark source match; only Sail's `common.rs` differs.
+
+Eight fresh-process pairs on CPU 2 confirm these planning gains. Negative percentages mean faster or fewer instructions:
+
+| Query | Before / after median (ms) | Time change | Paired 95% interval | Instruction change |
+| --- | --- | --- | --- | --- |
+| FLOAT single zero | 0.347866 / 0.334912 | -3.72% | [-5.55%, -2.56%] | -4.91% |
+| DOUBLE single zero | 0.349184 / 0.336179 | -3.72% | [-5.41%, -2.83%] | -4.92% |
+| FLOAT zero short list | 0.439502 / 0.411274 | -6.42% | [-8.42%, -5.57%] | -9.75% |
+| DOUBLE zero short list | 0.442843 / 0.413013 | -6.74% | [-8.08%, -5.69%] | -9.79% |
+| FLOAT zero nullable list | 0.430816 / 0.412471 | -4.26% | [-5.53%, -3.18%] | -4.64% |
+| DOUBLE zero nullable list | 0.440318 / 0.421082 | -4.37% | [-5.60%, -1.35%] | -4.83% |
+| FLOAT zero long list | 4.825849 / 4.380381 | -9.23% | [-10.58%, -9.02%] | -10.49% |
+| DOUBLE zero long list | 4.913651 / 4.384674 | -10.77% | [-12.51%, -10.15%] | -10.61% |
+
+Execution has a different level of uncertainty. The initial 61-comparison matrix shows broad timing variation, including queries whose plans and instruction counts do not change. Eight-pair same-binary DOUBLE single-item controls show apparent changes of +16.55% and +6.98%, with wide intervals spanning zero. Fixed-address runs initially look steadier, but interleaving normal and fixed-address runs does not remove the problem.
+
+In that interleaved series, the normal-address before/after DOUBLE single-item comparison is +2.75%, with interval [+0.21%, +5.00%], while a same-after-binary control is -5.20%, with interval [-8.67%, -0.70%]. The fixed-address comparison is +2.89%, with interval [-0.22%, +11.76%]. These are retained as unresolved observations; neither a reliable execution regression nor performance equivalence is established.
+
+A selected CPU 4 follow-up does not reproduce the DOUBLE single-item slowdown: sixteen pairs give -0.50%, with interval [-1.85%, -0.02%]. Its two same-binary controls have intervals spanning zero, although one remains wide. Five other CPU 4 execution checks, covering Utf8, Decimal, nullable FLOAT and nonzero DOUBLE lists, also span zero. This follow-up changes the core and uses a separate launch directory; it does not prove that CPU 2 caused the earlier variation. Read-only CPU samples taken after the initial series show other machine activity, but cannot establish what caused individual timing changes.
+
+The inspected generic IN bitmap loop still has the same 628-byte, 160-instruction body. Both starts are at offset 48 modulo 64, at `0x63ebff0` before and `0x63ebdb0` after. Other code and data placement remains uncontrolled. Identical plans and this selected function body do not guarantee identical elapsed time.
+
+Correctness uses the frozen captures and the candidate's existing passing test logs, with their hashes recorded. The 6332 observations, representing 6324 unique observations, retain 6001 raw Spark agreements and 331 raw differences. Values, types, statuses and final plans are unchanged. Four main-corpus logical plans omit only the redundant list normalizers. The 128 edge observations and two sets of 48 computed-input controls have 24, 48 and 48 corresponding logical-only changes. All 186 benchmark captures remain identical, including the plans that eliminate casts through aliases. Eight affected parallel-error queries were rerun three times per variant in both ANSI modes; only first-error text varies.
+
+The reused Rust results comprise 27 planner tests, four Delta lifecycle tests and an independent oracle with 960 evaluations and 3,937,920 checked values. This is a new comparison of already tested binaries, not a fresh full corpus execution or expanded Spark coverage. Shared Cargo inputs and executable slots are untouched, and their hashes are checked.
+
+The record contains 99 comparisons and 1256 timing processes. It retains every series, including the noisy observations. The existing harness uses 1048576 preloaded rows, batches of 8192, two warmups and nine samples per process, balanced adjacent pairs, identical launch paths within a comparison and eight fully scheduled phase-gated counters. CPU 2 is the primary matrix; CPU 4 covers selected follow-ups. Intervals resample whole pairs, are conditional on each series and do not correct for comparison selection. Mixed address-mode results are also reported separately by mode.
+
+To reproduce, use the recorded historical accepted executable as `before` and the preceding matched no-add-zero executable as `after`. The combined patch applies to the accepted source without any deferred add-zero patches. Run the recorded capture checks and diagnostic reruns, then the `initial`, `noise`, `confirmation`, `execution` and `core4` schedules sequentially with `run-series.py`. Use absolute symlink targets for both measurement views. The artifact includes the sources, patch, scripts, hashes, captures and samples, plus the corrected core-4 setup failure that occurred before any timing process started.
+
+Keep the accepted optional runtime and default build unchanged. The next step is to establish repeatable same-binary execution controls and recheck DOUBLE single-item, Decimal and Utf8 execution before deciding whether to adopt this standalone patch. These measurements do not justify adding another optimization to address the apparent execution differences.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
