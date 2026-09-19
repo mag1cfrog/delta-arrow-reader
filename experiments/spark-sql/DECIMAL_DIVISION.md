@@ -3931,6 +3931,26 @@ The per-seed on/off median estimates are -0.160%, -0.102%, -0.145% and -0.120%. 
 
 This result supports controlling hash behavior as a useful diagnostic, without uniquely identifying the cause of all earlier noise. The next step is one final interleaved comparison of the original release binaries with their randomized hasher, using independent balanced pair directions in each round. The [raw record](float-type-fixed-seed-runs.json.gz) includes every capture, sample, counter and phase observation. Both temporary Rust changes and all shared sources, locks and executable slots are restored and hash-checked. No new Spark corpus coverage is claimed.
 
+## Final interleaved confirmation with the randomized release binaries
+
+The [release confirmation](float-type-release-confirmation-results.json) does not reproduce a resolved positive candidate time effect, but fails a baseline self-comparison calibration. The type-inference patch therefore remains deferred. The accepted optional runtime and default vendored source stay unchanged; no further execution patch is justified by this result.
+
+This comparison reuses the original frozen before/after executables, with their normal randomized IN hasher. It has no diagnostic switch, fixed hash seed, rebuild or source change. Six predetermined rounds use all six comparison-order permutations. Each round includes four same-before pairs, four same-after pairs and eight candidate/baseline pairs; independently balanced direction seeds are 88-93. All 192 processes and 384 repeated query/ANSI captures are retained. Every capture matches its frozen reference, including physical plans.
+
+Before collecting data, the protocol required both same-binary median-time intervals to fit within +/-1%, with secondary controls inspected for bias. It also required the candidate's median-based and mean-based interval upper bounds to be below +0.5%, with no resolved positive time effect. Statistics resample whole pairs within the six rounds, with 10000 resamples and seed 88:
+
+| Comparison | Pairs | Median-based time change | Conditional 95% interval | Mean-based time change | Mean-based 95% interval |
+| --- | ---: | ---: | --- | ---: | --- |
+| Baseline versus itself | 24 | -0.658% | [-2.818%, +0.431%] | -1.126% | [-2.125%, +1.216%] |
+| Candidate versus itself | 24 | +0.122% | [-0.307%, +0.584%] | +0.373% | [-0.859%, +1.020%] |
+| Candidate versus baseline | 48 | -0.330% | [-0.701%, +0.287%] | -0.713% | [-1.291%, +0.466%] |
+
+Both candidate upper bounds meet the +0.5% target, but the baseline calibration fails. The favorable comparison cannot override that failure. The instruction estimate is +0.00144%, with interval [-0.00891%, +0.00784%], without a resolved increase. No run is discarded and no extension is added to seek a passing result.
+
+The earlier actual-release mean estimate, +0.479% with interval [+0.045%, +1.819%], remains part of the evidence. Later opposite estimates and failed controls neither prove that it was entirely noise nor establish a fixed mandatory execution cost. The planning improvement is verified, while the performance acceptance decision still needs a measurement design for the unchanged randomized release path that passes its own controls. Successful fixed-hash diagnostics cannot substitute for that check.
+
+The [raw record](float-type-release-confirmation-runs.json.gz) contains every sample, counter, capture and phase observation. The result file includes predetermined criteria, schedules, independent direction seeds, scripts and frozen build identities. Shared source, lockfile, executable and diagnostic-restoration hashes are checked. No new Spark corpus run is claimed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
