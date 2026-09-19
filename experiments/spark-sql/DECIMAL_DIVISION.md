@@ -3824,6 +3824,32 @@ That patch's exact application and reversal were checked in the preceding compar
 
 All 248 timing processes across nine comparisons are retained in the [compressed raw JSON](float-in-input-type-runs.json.gz), with no timing failures or discarded runs. The record includes the rejected Rust diff, test log, both median- and mean-based estimates, raw captures, counters, phase observations, assembly comparison, source/build identities, scripts and schedules. Shared sources and executables are restored and hash-checked. The intervals retain the preceding method's host, sampling and multiple-comparison limits. No new Spark coverage is added, and other compatibility and performance questions remain open.
 
+## Locating the add-zero planning cost
+
+The [stage attribution record](float-in-planning-stages-results.json) reproduces the single-element DOUBLE planning increase and identifies a concrete allocation candidate. This step changes only a temporary diagnostic benchmark. The accepted add-zero runtime remains unchanged, and the planning cost is not yet eliminated.
+
+The measured query is `SELECT v IN (CAST(0 AS DOUBLE)) AS r FROM generic_in_input`. Before add-zero, its physical expression is `spark_comparison_float(v) = 0`; afterward it is `v + 0 = 0`. Rebuilt diagnostic binaries preserve the corresponding frozen runtime and dependency sources. Both the original API path and a split SELECT planning path match all 74 generic IN captures for each variant, including physical plans: 296 exact comparisons. Invalid stage settings are also rejected.
+
+The diagnostic path separates parsing, Sail resolution, DataFusion analysis, logical optimization, physical planning and local destruction through their public APIs. Each stage uses 32 warmups, 129 measured plans and four balanced process pairs. Counters cover the selected stage and its perf control handshake. These measurements attribute instructions; the handshake makes their elapsed times unsuitable for latency claims.
+
+| Stage | Add-zero minus before, instructions per plan |
+| --- | ---: |
+| Sail resolution | -21,758 |
+| DataFusion analysis | -22,056 |
+| Logical optimization | +48,213 |
+| Physical planning | +22,057 |
+| Complete original API path | +26,877 (+1.133%) |
+
+The extra work concentrates in logical optimization and physical planning, partly offset by earlier savings. Whole-planning same-binary controls differ by fewer than 28 instructions per plan. Empty-stage controls fluctuate by roughly -2,217 to +1,187 instructions, so small stage differences do not support a precise attribution.
+
+The split path's complete difference is +27,731 instructions. Summing the nine stage differences gives +27,689, or +26,609 after subtracting the measured empty-gate difference from each stage. The corresponding residuals are 41 and 1,122 instructions. Splitting the APIs also changes the complete before/after difference by 854 instructions relative to the original path. These residuals stay visible rather than being assigned to a particular function.
+
+Whole-planning DWARF profiles could not recover useful caller frames for about three quarters of samples, even with a larger captured stack. Focused instruction sampling initially triggered kernel throttling and is retained as an unsuccessful attribution attempt. A lower sampling rate completed eight profiles without lost samples or throttle records. Its aggregate estimates agree with the stage counters, but individual function shares remain sensitive to sampling skid, instruction layout and allocator state.
+
+Those focused samples show empty Arrow array construction in both added-cost stages. Source inspection finds a specific reason to investigate: `BinaryTypeCoercer::get_result` creates two empty arrays, runs an arithmetic kernel, and reads the output type. Arrow's five arithmetic kernels preserve matching FLOAT/DOUBLE operand types. A narrow early return could avoid those allocations without changing row execution. This is the next candidate to test against Arrow's existing kernels and the unchanged execution controls; this attribution record does not claim that the candidate works or adopt it.
+
+The [compressed record](float-in-planning-stages-runs.json.gz) retains all 128 counter processes, 24 completed profiles, validation captures, sampling quality checks and the failed initial mmap setup. Raw perf files and captured stack bytes remain in the local cache. The result file includes the diagnostic Rust patch, scripts, source identities, calibration residuals and reproduction inputs. Shared files were restored and hash-checked before starting the separate type-inference experiment. No new Spark corpus coverage is claimed.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
