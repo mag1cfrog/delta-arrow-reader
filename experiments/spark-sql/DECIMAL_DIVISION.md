@@ -4018,6 +4018,23 @@ An archive audit found another limitation: the candidate/original schedule cross
 
 All 372 result and plan captures match the frozen references. Eight smoke processes verify both schedules. All 32,896 measured executions and 256 timing captures are retained, with no failures or discarded groups. Phase snapshots confirm that waiting benchmark processes consume no CPU time during another benchmark's execution. The [raw record](float-type-prepared-phases-runs.json.gz) includes every capture, sample, counter, schedule, script and unchanged build identity. Shared file hashes are unchanged. This experiment does not add Spark corpus coverage or supersede the earlier positive release mean interval.
 
+## Fully crossing preparation positions and execution directions
+
+The [corrected control schedule](float-type-crossed-controls-results.json) fixes the missing combinations found above, but still fails the time calibration. The experiment stops after its predetermined control phase. It does not run a new candidate/original comparison or adopt the type-inference patch.
+
+[prepared_phase_schedule.py](prepared_phase_schedule.py) rotates the four preparation positions across both execution directions. Before any measurement, it checks that every process slot occupies every position equally often under ABBA and BAAB, separately for each comparison, and that each block balances direction. Its standalone regression check rejects the exact historical schedule and an incomplete schedule. Run it with `python3 experiments/spark-sql/prepared_phase_schedule.py`.
+
+The fixed control phase contains eight original/original groups and eight candidate/candidate groups, for 64 processes. The frozen executables, execution controller, phase observer, workload and statistical method match the preceding experiment. Median-based and mean-based 95% intervals must both fit within +/-1% and include zero. A separate 32-group comparison schedule was recorded before timing, but can run only after calibration passes; its own contemporaneous controls would also have to pass.
+
+| Self-comparison | Median-based change, conditional 95% interval | Mean-based change, conditional 95% interval |
+| --- | --- | --- |
+| Original versus itself | -0.690%, [-0.902%, +0.928%] | -0.902%, [-1.615%, +0.775%] |
+| Candidate versus itself | +1.382%, [+0.387%, +2.059%] | +0.466%, [-0.626%, +2.648%] |
+
+The original control passes the median-based criterion but misses the mean-based precision target. The candidate control misses both precision targets and has a positive median-based self-comparison interval. These are comparisons of identical executables within each control, not measurements of a candidate/original effect. Fixing the schedule therefore does not settle the remaining variation. No groups are pooled with earlier experiments, and no extra groups are added. The runner rejects the comparison phase both when calibration is missing and after it fails.
+
+All 372 result and plan captures match their references. Eight smoke processes verify both execution orders and control modes. All 16,448 measured executions and 128 timing captures are retained, with no process failures or discarded samples. Waiting benchmark processes consume no CPU time during another benchmark's phase. The [raw record](float-type-crossed-controls-runs.json.gz) includes both predeclared schedules, preflight hashes, checks, scripts, captures, counters and build identities. Shared source and executable hashes remain unchanged. The five-line planning candidate stays deferred until a measurement setup passes its self-controls; no new Spark corpus coverage or execution-equivalence claim follows from this result.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

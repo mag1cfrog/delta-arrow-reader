@@ -1,0 +1,1066 @@
+{
+  "slice": "Fully cross preparation positions and execution directions before release comparisons",
+  "base_commit": "c1a2245cbe4ee783ea6b63ad4185ed2d031ce5fe",
+  "created_utc": "2026-09-19T11:15:26.447976+00:00",
+  "decision": {
+    "schedule_defect_fixed": true,
+    "controls_passed": false,
+    "between_version_comparison_run": false,
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "finding": "The corrected schedule passes its structural checks, but the time controls still fail. Original/original misses the mean-based precision target; candidate/candidate has a positive median-based self-comparison interval and misses both precision targets.",
+    "action": "Stop at the predeclared calibration stage. The separately scheduled comparison was not run; the runner rejects it after failed calibration.",
+    "next_step": "Keep the planning patch deferred. Further execution acceptance requires a measurement setup that passes its self-controls; do not extend this failed schedule for a preferred outcome."
+  },
+  "summary": {
+    "four_process_groups": 16,
+    "timing_processes": 64,
+    "timed_executions": 16448,
+    "timing_query_captures": 128,
+    "exact_correctness_captures": 372,
+    "smoke_processes": 8,
+    "smoke_query_captures": 16,
+    "smoke_executions": 24,
+    "capture_or_plan_differences": 0,
+    "failed_or_discarded_measurements": 0,
+    "overlapping_benchmark_phases": 0,
+    "peer_runtime_during_other_phases_ns": 0,
+    "between_version_measurements": 0,
+    "new_builds": 0,
+    "runtime_source_changes": 0,
+    "new_spark_corpus_runs": 0
+  },
+  "method": {
+    "case": "generic_in_double_zero_long_list",
+    "warmups": 32,
+    "samples": 257,
+    "cpu": 2,
+    "controller_cpu": 0,
+    "cooldown_seconds": 30,
+    "binaries": {
+      "before": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/before-bench",
+        "sha256": "6bae8a5b50d223abd75c1cbd1c6b05b422e2999b97910576d9fb2058d74c98b2"
+      },
+      "after": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/after-bench",
+        "sha256": "44bec3259cc2c02f41a67588b46eca0d01fb4dd103543bff223de4ce068b204b"
+      }
+    },
+    "labels": {
+      "0": "A",
+      "1": "A",
+      "2": "B",
+      "3": "B"
+    },
+    "gates": "Launch and prepare each of four independent processes sequentially. Hold their existing enable acknowledgments until all are ready. Execute complete phases in ABBA/BAAB order, holding each disable acknowledgment until every process finishes. Only then permit output serialization, validation and exit.",
+    "runtime": "Reuse byte-identical original before/after release executables; no switch, source change, seed override, replay or build. Every plan is executed once and dropped as in the original benchmark.",
+    "statistics": "Each group has two independent processes per label. Primary: ratio of the average process medians. Secondary: ratio of full-label means. Bootstrap whole four-process groups within four predetermined blocks, 10000 resamples, seed 88. Also report instruction changes. Do not treat within-process executions as independent process samples.",
+    "limits": [
+      "The four processes remain resident while each phase runs; allocation lifetime and cache/predictor history differ from sequential process launch.",
+      "Whole phases remain separate in time; this does not interleave individual query executions.",
+      "Conditional intervals cover this fixed host and schedule without multiple-comparison correction."
+    ],
+    "base_commit": "c1a2245cbe4ee783ea6b63ad4185ed2d031ce5fe",
+    "question": "Does a schedule fully crossing each process preparation position with both execution directions calibrate the frozen release controls?",
+    "schedule": [
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      }
+    ],
+    "conditional_comparison_schedule": [
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "paired",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "paired",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "paired",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "paired",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ]
+      }
+    ],
+    "schedule_source_sha256": "aff18f43111b6a396fd042fc193722b790cfefc1765541bb23f74a4306cc11eb",
+    "calibration": "A fixed 16-group, 64-process control schedule: eight same-before and eight same-after groups. No between-version comparison in this phase.",
+    "acceptance": "Both same-before and same-after median-based AND mean-based 95% intervals must fit within +/-1% and include zero. Use the preceding whole-group bootstrap with four blocks, 10000 resamples and seed 88. Report instruction controls without using them to override time criteria.",
+    "conditional_comparison": "Only if calibration passes, run the separately predetermined 32-group comparison schedule. Its own contemporaneous controls must pass the same criteria; both candidate time upper bounds must be below +0.5%, with no resolved positive effect. Do not pool phases.",
+    "stopping_rule": "Stop after the control schedule if either self-comparison fails. No extension, discarded group or changed threshold. Preserve the failed earlier schedule separately. No builds, tests or unrelated work overlap timing.",
+    "schedule_checks": "Validate before launching any measurement. For each scenario and slot, each of four preparation positions occurs equally often with each execution direction. Every block also balances execution direction. Regression check rejects the exact historical schedule and an incomplete schedule."
+  },
+  "calibration": {
+    "same-before": {
+      "four_process_groups": 8,
+      "metrics": {
+        "median_ms": {
+          "median_group_change_pct": -0.6900866845468423,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.9020254404821404,
+            0.9276882917236051
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -1.1873230816525748,
+            0.5245923871830815,
+            0.42336775900701507,
+            -0.27704816724380965
+          ],
+          "group_changes_pct": [
+            -1.2190049917659262,
+            -1.1556411715392234,
+            -0.810743425068583,
+            1.859928199434746,
+            1.4161654620391317,
+            -0.5694299440251016,
+            -0.9933074558956978,
+            0.4392111214080785
+          ]
+        },
+        "mean_ms": {
+          "median_group_change_pct": -0.9015406701087469,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -1.6154842047525875,
+            0.7746419795207071
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -1.071381641880842,
+            -0.8702884447270909,
+            -0.27845762480520064,
+            -0.19328160562812613
+          ],
+          "group_changes_pct": [
+            -0.5184642701115072,
+            -1.6242990136501767,
+            -2.3918069896458616,
+            0.6512301001916798,
+            1.049754146244597,
+            -1.6066693958549982,
+            -1.2846170701059867,
+            0.8980538588497344
+          ]
+        },
+        "instructions": {
+          "median_group_change_pct": -0.023995121567482736,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.14052898151126203,
+            0.02251565798928601
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -1.5823474045723651,
+            -0.023995121567482736,
+            0.188892683863362,
+            -0.1461166322112073
+          ],
+          "group_changes_pct": [
+            0.050059951469516584,
+            -3.214754760614247,
+            -0.005028635490944566,
+            -0.042961607644020905,
+            0.3634603544602877,
+            0.014325013266436315,
+            -0.05413690904391144,
+            -0.23809635537850316
+          ]
+        }
+      }
+    },
+    "same-after": {
+      "four_process_groups": 8,
+      "metrics": {
+        "median_ms": {
+          "median_group_change_pct": 1.3821682708737515,
+          "stratified_whole_group_bootstrap_95_interval": [
+            0.38738584332188575,
+            2.0592994813248167
+          ],
+          "within_one_percent": false,
+          "contains_zero": false,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": true,
+          "block_medians_pct": [
+            2.5755169574812053,
+            0.23569174628872425,
+            -1.5966405085086455,
+            2.6158276999928787
+          ],
+          "group_changes_pct": [
+            1.533862367906913,
+            3.6171715470554977,
+            -0.7590906812631415,
+            1.23047417384059,
+            -0.5287558257965674,
+            -2.6645251912207235,
+            2.343530611176714,
+            2.8881247888090433
+          ]
+        },
+        "mean_ms": {
+          "median_group_change_pct": 0.46627743369852537,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.6262724162123368,
+            2.6480430906326236
+          ],
+          "within_one_percent": false,
+          "contains_zero": true,
+          "upper_below_half_percent": false,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            1.9014571749334075,
+            0.5229318444817554,
+            -1.417919777158072,
+            2.357317114994728
+          ],
+          "group_changes_pct": [
+            -0.39220085135767135,
+            4.195115201224486,
+            -0.8603439810670022,
+            1.906207670030513,
+            -0.44982989481442415,
+            -2.38600965950172,
+            1.324755718754722,
+            3.389878511234734
+          ]
+        },
+        "instructions": {
+          "median_group_change_pct": -0.0021506668622939262,
+          "stratified_whole_group_bootstrap_95_interval": [
+            -0.013905343080616861,
+            0.0018276543083894925
+          ],
+          "within_one_percent": true,
+          "contains_zero": true,
+          "upper_below_half_percent": true,
+          "resolved_positive_effect": false,
+          "block_medians_pct": [
+            -0.009927021909933442,
+            -0.11318789987774247,
+            0.042855994022428234,
+            -0.0021506668622939262
+          ],
+          "group_changes_pct": [
+            -0.02458568043844922,
+            0.0047316366185823355,
+            -0.1607934394328714,
+            -0.06558236032261355,
+            0.07063868765648795,
+            0.015073300388368516,
+            -0.003225005722784502,
+            -0.0010763280018033505
+          ]
+        }
+      }
+    }
+  },
+  "schedule_fix": {
+    "file": "prepared_phase_schedule.py",
+    "sha256": "aff18f43111b6a396fd042fc193722b790cfefc1765541bb23f74a4306cc11eb",
+    "checks": [
+      "Each slot appears at each preparation position equally often under both execution directions, separately for each scenario.",
+      "Every block balances execution direction.",
+      "Both complete schedules pass; the exact historical schedule and an incomplete schedule fail.",
+      "The comparison runner rejects missing and failed calibration before launching a benchmark."
+    ],
+    "standalone_check": "python3 experiments/spark-sql/prepared_phase_schedule.py"
+  },
+  "source": {
+    "identity": "The same frozen before/after release executables as the preceding experiment. Run-group execution and phase-observer scripts are byte-identical to that experiment. Only scheduling, preflight checks and phase selection change.",
+    "integrity": "All recorded shared source, lockfile, executable and preflight script hashes are unchanged."
+  },
+  "limitations": [
+    "The four processes remain resident while each phase runs; allocation lifetime and cache/predictor history differ from sequential process launch.",
+    "Whole phases remain separate in time; this does not interleave individual query executions.",
+    "Conditional intervals cover this fixed host and schedule without multiple-comparison correction.",
+    "Fully crossing the two specified factors does not control all process-dependent hash state, data addresses or hardware history.",
+    "The failure after fixing the schedule does not identify the cause of the remaining variation or measure a candidate/original effect.",
+    "These groups are not pooled with the earlier failed schedule or the passing single-executable diagnostic.",
+    "The earlier positive original-release mean interval remains retained. No zero-cost or mandatory fixed-cost conclusion follows."
+  ],
+  "references": [
+    "float-type-prepared-phases-results.json",
+    "float-type-independent-plans-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-crossed-controls-runs.json.gz",
+    "sha256": "0fa170fd007c2f871748bdf048a2f0565f7f175dc3e963d4e55222def96bd6df",
+    "uncompressed_sha256": "b6ce98bda523243404b7551854341b1097d45eb0e13be62aa401ce0127b2e6c8",
+    "compressed_bytes": 344006,
+    "uncompressed_bytes": 2430931
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-crossed-controls-c1a2245",
+    "commands": [
+      "python3 experiments/spark-sql/prepared_phase_schedule.py",
+      "python3 verify.py",
+      "python3 measure.py calibration",
+      "python3 analyze.py calibration",
+      "python3 record.py"
+    ],
+    "setup": "Use an empty sibling cache directory with the recorded scripts, plan, manifests and frozen binaries. The standalone regression check runs from the repository root. Run comparison only if calibration passes; then recheck contemporaneous controls. Finish all preparation before timing."
+  }
+}
