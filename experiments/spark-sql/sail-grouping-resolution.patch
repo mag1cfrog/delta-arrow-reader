@@ -1,0 +1,276 @@
+--- a/vendor/sail/crates/sail-plan/src/resolver/query/aggregate.rs
++++ b/vendor/sail/crates/sail-plan/src/resolver/query/aggregate.rs
+@@ -120,19 +120,22 @@
+             }
+         }
+ 
+-        let having = {
++        let having = if let Some(having) = having {
++            let mut grouping = Self::named_grouping_expressions(grouping.clone())?;
++            // Repeated sets share a name binding, but retain their result rows.
++            let mut seen = HashSet::new();
++            grouping.retain(|x| seen.insert((x.name[0].to_ascii_lowercase(), Self::unalias_grouping_expr(&x.expr).clone())));
+             let mut scope = state.enter_aggregate_scope(AggregateState::Having {
+                 projections: projections.clone(),
+-                grouping: grouping.clone(),
++                grouping,
+             });
+             let state = scope.state();
+-            match having {
+-                Some(having) => Some(Self::replace_generator_expressions(
+-                    self.resolve_expression(having, schema, state).await?,
+-                    &generator_replacements,
+-                )?),
+-                None => None,
+-            }
++            Some(Self::replace_generator_expressions(
++                self.resolve_expression(having, schema, state).await?,
++                &generator_replacements,
++            )?)
++        } else {
++            None
+         };
+ 
+         self.rewrite_aggregate(
+@@ -228,33 +231,9 @@
+         let plan = LogicalPlanBuilder::from(input)
+             .aggregate(group_exprs, aggregate_exprs.clone())?
+             .build()?;
+-        let (grouping_exprs, aggregate_or_grouping_exprs) = {
+-            let mut grouping_exprs = vec![];
+-            let mut aggregate_or_grouping_exprs = aggregate_exprs;
+-            for expr in grouping {
+-                let NamedExpr {
+-                    name,
+-                    expr,
+-                    metadata,
+-                } = expr;
+-                let exprs = match expr {
+-                    Expr::GroupingSet(g) => g.distinct_expr().into_iter().cloned().collect(),
+-                    expr => vec![expr],
+-                };
+-                if name.len() != exprs.len() {
+-                    return Err(PlanError::internal(format!(
+-                        "group-by name count does not match expression count: {name:?} {exprs:?}",
+-                    )));
+-                }
+-                grouping_exprs.extend(exprs.iter().zip(name).map(|(expr, name)| NamedExpr {
+-                    name: vec![name],
+-                    expr: expr.clone(),
+-                    metadata: metadata.clone(),
+-                }));
+-                aggregate_or_grouping_exprs.extend(exprs);
+-            }
+-            (grouping_exprs, aggregate_or_grouping_exprs)
+-        };
++        let grouping_exprs = Self::named_grouping_expressions(grouping)?;
++        let mut aggregate_or_grouping_exprs = aggregate_exprs;
++        aggregate_or_grouping_exprs.extend(grouping_exprs.iter().map(|x| x.expr.clone()));
+         let projections = if with_grouping_expressions {
+             grouping_exprs.into_iter().chain(projections).collect()
+         } else {
+@@ -683,6 +662,39 @@
+         }
+     }
+ 
++    fn unalias_grouping_expr(mut expr: &Expr) -> &Expr {
++        while let Expr::Alias(alias) = expr {
++            expr = alias.expr.as_ref();
++        }
++        expr
++    }
++
++    fn named_grouping_expressions(grouping: Vec<NamedExpr>) -> PlanResult<Vec<NamedExpr>> {
++        let mut result = Vec::new();
++        for NamedExpr {
++            name,
++            expr,
++            metadata,
++        } in grouping
++        {
++            let exprs = match expr {
++                Expr::GroupingSet(g) => g.distinct_expr().into_iter().cloned().collect(),
++                expr => vec![expr],
++            };
++            if name.len() != exprs.len() {
++                return Err(PlanError::internal(format!(
++                    "group-by name count does not match expression count: {name:?} {exprs:?}",
++                )));
++            }
++            result.extend(exprs.into_iter().zip(name).map(|(expr, name)| NamedExpr {
++                name: vec![name],
++                expr,
++                metadata: metadata.clone(),
++            }));
++        }
++        Ok(result)
++    }
++
+     pub(super) fn has_grouping_set(grouping: &[Expr]) -> bool {
+         grouping.iter().any(|x| matches!(x, Expr::GroupingSet(_)))
+     }
+@@ -700,6 +712,20 @@
+                 expr => vec![expr],
+             })
+             .filter(|expr| seen.insert(*expr))
++            .map(|expr| {
++                // Sort rewriting sees the materialized key; GROUPING arguments
++                // still refer to the original expression before normalization.
++                if let Expr::Alias(alias) = expr
++                    && let Expr::ScalarFunction(function) = alias.expr.as_ref()
++                    && function.func.inner().downcast_ref::<SparkComparisonFloat>()
++                        .is_some_and(|normalizer| !normalizer.widen)
++                    && let [arg] = function.args.as_slice()
++                {
++                    arg
++                } else {
++                    expr
++                }
++            })
+             .cloned()
+             .collect()
+     }
+@@ -879,7 +905,7 @@
+         };
+         let position = grouping_exprs
+             .iter()
+-            .position(|expr| expr == arg)
++            .position(|expr| Self::unalias_grouping_expr(expr) == Self::unalias_grouping_expr(arg))
+             .ok_or_else(|| {
+                 DataFusionError::Plan(format!(
+                     "[GROUPING_COLUMN_MISMATCH] grouping column {} is not in grouping columns ({})",
+@@ -924,7 +950,12 @@
+             ));
+         }
+         let args = &function.params.args;
+-        if !args.is_empty() && args.as_slice() != grouping_exprs {
++        if !args.is_empty()
++            && (args.len() != grouping_exprs.len()
++                || !args.iter().zip(grouping_exprs).all(|(arg, key)| {
++                    Self::unalias_grouping_expr(arg) == Self::unalias_grouping_expr(key)
++                }))
++        {
+             return Err(DataFusionError::Plan(format!(
+                 "[GROUPING_ID_COLUMN_MISMATCH] grouping_id columns ({}) do not match grouping columns ({})",
+                 Self::format_grouping_exprs(args),
+@@ -1278,3 +1309,104 @@
+     }
+     Ok(())
+ }
++
++#[cfg(test)]
++#[tokio::test]
++async fn grouping_functions_resolve_original_keys_in_having_and_order() -> PlanResult<()> {
++    use crate::config::PlanConfig;
++    use crate::physical_plan::SparkQueryPlanner;
++    use arrow::array::Int64Array;
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let source = "(VALUES(CAST('-0' AS FLOAT),1),(CAST('0' AS FLOAT),2),(CAST('1' AS FLOAT),1),(CAST(NULL AS FLOAT),2)) t(v,w)";
++    let ordinary = vec![(0, 1), (0, 1), (0, 2), (1, 4)];
++    let cases = [
++        ("ROLLUP(v)", "", "grouping_id(v),n", ordinary.clone()),
++        ("CUBE(v)", "", "grouping(v),n", ordinary),
++        (
++            "ROLLUP(v)",
++            "HAVING grouping_id(v)=1",
++            "gid,n",
++            vec![(1, 4)],
++        ),
++        ("ROLLUP(v)", "HAVING grouping(v)=1", "gid,n", vec![(1, 4)]),
++        (
++            "ROLLUP(v)",
++            "HAVING v IS NULL",
++            "gid,n",
++            vec![(0, 1), (1, 4)],
++        ),
++        (
++            "ROLLUP(v)",
++            "HAVING count(*)>1",
++            "grouping_id(v),n",
++            vec![(0, 2), (1, 4)],
++        ),
++        (
++            "ROLLUP(v),ROLLUP(v)",
++            "HAVING grouping_id(v)=1",
++            "gid,n",
++            vec![(1, 4)],
++        ),
++        (
++            "ROLLUP(v),ROLLUP(V)",
++            "HAVING grouping_id(v)=1",
++            "gid,n",
++            vec![(1, 4)],
++        ),
++        (
++            "GROUPING SETS((v),(v),())",
++            "HAVING grouping_id(v)=0",
++            "gid,n",
++            vec![(0, 1), (0, 1), (0, 1), (0, 1), (0, 2), (0, 2)],
++        ),
++    ];
++    for ansi in [true, false] {
++        let ctx = SessionContext::new_with_state(
++            SessionStateBuilder::new()
++                .with_default_features()
++                .with_query_planner(Arc::new(SparkQueryPlanner))
++                .build(),
++        );
++        let mut config = PlanConfig::default();
++        config.ansi_mode = ansi;
++        let resolver = PlanResolver::new(&ctx, Arc::new(config));
++        for (grouping, having, order, expected) in &cases {
++            let sql = format!(
++                "SELECT grouping_id(v) AS gid,count(*) AS n FROM {source} GROUP BY {grouping} {having} ORDER BY {order}"
++            );
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let named = resolver.resolve_named_plan(spec).await?;
++            assert_eq!(named.fields, vec!["gid", "n"]);
++            let batches = ctx
++                .execute_logical_plan(named.plan)
++                .await?
++                .collect()
++                .await?;
++            let mut actual = Vec::new();
++            for batch in batches {
++                let ids = batch
++                    .column(0)
++                    .as_any()
++                    .downcast_ref::<Int64Array>()
++                    .unwrap();
++                let counts = batch
++                    .column(1)
++                    .as_any()
++                    .downcast_ref::<Int64Array>()
++                    .unwrap();
++                actual.extend((0..batch.num_rows()).map(|i| (ids.value(i), counts.value(i))));
++            }
++            assert_eq!(&actual, expected, "ansi={ansi}: {sql}");
++        }
++        let sql = format!(
++            "SELECT grouping_id(v) AS gid,count(*) AS n FROM {source} GROUP BY ROLLUP(v) ORDER BY grouping_id(w)"
++        );
++        let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++        assert!(resolver.resolve_named_plan(spec).await.is_err());
++    }
++    Ok(())
++}
+--- a/vendor/sail/crates/sail-plan/src/resolver/query/sort.rs
++++ b/vendor/sail/crates/sail-plan/src/resolver/query/sort.rs
+@@ -98,10 +98,9 @@
+     fn input_aggregate(plan: &LogicalPlan) -> Option<&Aggregate> {
+         match plan {
+             LogicalPlan::Aggregate(aggregate) => Some(aggregate),
+-            LogicalPlan::Window(Window { input, .. }) => match input.as_ref() {
+-                LogicalPlan::Aggregate(aggregate) => Some(aggregate),
+-                _ => None,
+-            },
++            // HAVING filters and windows preserve the aggregate's fields.
++            LogicalPlan::Window(Window { input, .. }) => Self::input_aggregate(input),
++            LogicalPlan::Filter(filter) => Self::input_aggregate(&filter.input),
+             _ => None,
+         }
+     }

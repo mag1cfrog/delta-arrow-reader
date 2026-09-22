@@ -4704,6 +4704,55 @@ captures, fixed measurements and archive checker. All 76 source/lock records,
 three executable slots and temporary Delta input files were restored. Default
 vendored sources remain unchanged.
 
+## Grouping functions in HAVING and ORDER BY
+
+`sail-grouping-resolution.patch` follows the optional runtime at `c7b4e92`.
+HAVING now resolves individual grouping keys, using the existing named-expression
+expansion shared with aggregate output construction. Repeated bindings follow
+the same ASCII-insensitive name comparison as lookup. Grouping-function argument
+matching ignores aliases while preserving the actual grouping-key count.
+ORDER BY metadata recognizes the original expression inside the floating
+normalizer, and aggregate discovery follows HAVING filters and windows.
+Execution still uses the existing native grouping operators and normalizer.
+
+The new corpus improves from 80/238 to 176/238 strict Spark agreements. Fifty
+new observations execute with results matching equivalent Spark queries despite
+Spark rejecting their original form. Two earlier duplicate-HAVING observations
+do the same, changing the previous ID corpus from 128/144 to 126/144 strict
+agreements. The originals remain unchanged in the reference captures. All 56
+equivalent-reference checks pass, including four checks of queries Spark already
+accepts. Invalid grouping arguments and ambiguous projection aliases remain
+errors. The protocols distinguish the initial frozen queries from later review
+cases and equivalent references.
+
+Twelve new observations remain unresolved: Spark canonicalizes two aliases of
+one expression into one grouping key, while the native plan retains two keys.
+That changes the IDs and subtotal values. The first candidate also introduced
+an ordering error within the existing native layout; preserving key identities
+before removing normalizers fixes that error. The parent comparison now passes
+4/4 for those sorts, without counting the native layout as Spark-compatible.
+
+All 34 planner tests and 28 runner tests pass, including four lifecycle tests.
+The other older corpora remain at 5753/6068. Two existing cast errors choose
+different invalid values. All 224 benchmark records, including physical plans,
+are unchanged, and all 116 real-Delta captures match the parent across full
+schemas and rows.
+
+The fixed 160-process comparison retains all samples and same-binary controls,
+with full counter coverage and zero migrations. Every paired planning latency
+interval spans zero. Planning instructions decline about 0.06% for integer
+ROLLUP and ordinary grouping; execution instruction changes are at most 0.001%.
+The unchanged projection control rises 0.554% in time with unchanged instruction
+work. These results do not establish universal equivalence or remove the earlier
+public-ID masking and floating-normalization costs.
+
+`grouping-resolution-results.json` and `grouping-resolution-runs.json.gz` retain
+the rejected candidate, regression audit, original and equivalent references,
+builds, measurements and archive checker. The checker recomputes reference
+agreements from saved captures. All 77 source/lock records, three executables
+and temporary Delta input files were restored. Default vendor sources remain
+unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

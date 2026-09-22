@@ -1,0 +1,2 @@
+{"id": "bindings_float_cross_rollup", "sql": "SELECT * FROM (SELECT grouping_id(v) AS gid,count(*) AS n FROM (VALUES(CAST('-0' AS FLOAT),1),(CAST('0' AS FLOAT),2),(CAST('1' AS FLOAT),1),(CAST(NULL AS FLOAT),2)) t(v,w) GROUP BY ROLLUP(v),ROLLUP(v)) q WHERE gid=1 ORDER BY gid,n", "batch_size": 2}
+{"id": "bindings_int_cross_rollup", "sql": "SELECT * FROM (SELECT grouping_id(v) AS gid,count(*) AS n FROM (VALUES(CAST('-0' AS INT),1),(CAST('0' AS INT),2),(CAST('1' AS INT),1),(CAST(NULL AS INT),2)) t(v,w) GROUP BY ROLLUP(v),ROLLUP(v)) q WHERE gid=1 ORDER BY gid,n", "batch_size": 2}

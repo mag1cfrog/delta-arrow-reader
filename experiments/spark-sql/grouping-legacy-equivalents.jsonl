@@ -1,0 +1,1 @@
+{"id": "having_duplicate_ids", "sql": "SELECT * FROM (SELECT v,grouping_id(v) AS gid,count(*) AS n FROM (VALUES(1),(NULL)) t(v) GROUP BY GROUPING SETS ((v),(v),(),())) q WHERE gid=0 ORDER BY v,gid,n", "batch_size": 1}
