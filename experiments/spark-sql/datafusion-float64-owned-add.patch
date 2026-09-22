@@ -1,0 +1,213 @@
+--- a/src/expressions/binary.rs
++++ b/src/expressions/binary.rs
+@@ -166,6 +166,53 @@
+     let ll = as_boolean_array(left).expect("boolean_op failed to downcast left array");
+     let rr = as_boolean_array(right).expect("boolean_op failed to downcast right array");
+     op(ll, rr).map(|t| Arc::new(t) as _)
++}
++
++/// Reuse an owned floating intermediate before falling back to borrowed addition.
++fn apply_float64_add(lhs: ColumnarValue, rhs: &ColumnarValue) -> Result<ColumnarValue> {
++    use arrow::buffer::NullBuffer;
++    use arrow::compute::kernels::numeric::add;
++
++    let lhs = match (lhs, rhs) {
++        (ColumnarValue::Array(left), ColumnarValue::Array(right))
++            if Arc::strong_count(&left) == 1
++                && left.len() == right.len()
++                && left
++                    .as_primitive::<Float64Type>()
++                    .values()
++                    .inner()
++                    .ptr_offset()
++                    == 0 =>
++        {
++            let values = left.as_primitive::<Float64Type>().clone();
++            drop(left);
++            let (_, values, nulls) = values.into_parts();
++            // Arrow 58's binary_mut converts aligned cast buffers to Vec, copying them.
++            // Retain the allocation layout and explicitly preserve prefix-slice length.
++            match values.into_inner().into_mutable() {
++                Ok(mut values) => {
++                    let right = right.as_primitive::<Float64Type>();
++                    values.truncate(right.len() * size_of::<f64>());
++                    values
++                        .typed_data_mut::<f64>()
++                        .iter_mut()
++                        .zip(right.values())
++                        .for_each(|(left, right)| *left += *right);
++                    let nulls = NullBuffer::union(nulls.as_ref(), right.nulls());
++                    return Ok(ColumnarValue::Array(Arc::new(Float64Array::new(
++                        values.into(),
++                        nulls,
++                    ))));
++                }
++                Err(values) => {
++                    ColumnarValue::Array(Arc::new(Float64Array::new(values.into(), nulls)))
++                }
++            }
++        }
++        // ponytail: nonzero offsets and right-buffer reuse stay on borrowed addition.
++        (lhs, _) => lhs,
++    };
++    apply(&lhs, rhs, add)
+ }
+ 
+ /// Returns true if both operands are Date types (Date32 or Date64)
+@@ -338,6 +385,11 @@
+         let input_schema = schema.as_ref();
+ 
+         match self.op {
++            Operator::Plus
++                if left_data_type == DataType::Float64 && right_data_type == DataType::Float64 =>
++            {
++                return apply_float64_add(lhs, &rhs);
++            }
+             Operator::Plus if self.fail_on_overflow => return apply(&lhs, &rhs, add),
+             Operator::Plus => return apply(&lhs, &rhs, add_wrapping),
+             // Special case: Date - Date returns Int64 (days difference)
+@@ -1022,6 +1074,144 @@
+         let left_expr = try_cast(left, schema, lhs)?;
+         let right_expr = try_cast(right, schema, rhs)?;
+         binary(left_expr, op, right_expr, schema)
++    }
++
++    #[test]
++    fn float64_add_owned_matches_borrowed() -> Result<()> {
++        use arrow::compute::kernels::numeric::add;
++        let bits = |a: &ArrayRef| {
++            a.as_primitive::<Float64Type>()
++                .iter()
++                .map(|v| v.map(f64::to_bits))
++                .collect::<Vec<_>>()
++        };
++        let values = [
++            0.0,
++            -0.0,
++            1.5,
++            -2.25,
++            f64::MAX,
++            f64::MIN_POSITIVE,
++            f64::from_bits(1),
++            f64::INFINITY,
++            f64::NEG_INFINITY,
++            f64::from_bits(0x7ff8000000000001),
++        ];
++        for len in [0, 1, 17, 8192] {
++            for nulls in [false, true] {
++                for ownership in [
++                    "unique",
++                    "shared_arc",
++                    "shared_buffer",
++                    "alias",
++                    "slice",
++                    "prefix",
++                    "cast",
++                    "shared_nulls",
++                ] {
++                    let source_len = if matches!(ownership, "slice" | "prefix") {
++                        len + 2
++                    } else {
++                        len
++                    };
++                    let input: Float64Array = (0..source_len)
++                        .map(|i| (!(nulls && i % 3 == 0)).then_some(values[i % values.len()]))
++                        .collect();
++                    let input = if ownership == "cast" {
++                        input.try_unary(|v| Ok::<f64, ArrowError>(v))?
++                    } else {
++                        input
++                    };
++                    let sliced = if ownership == "slice" {
++                        input.slice(1, len)
++                    } else {
++                        input.slice(0, len)
++                    };
++                    drop(input);
++                    let left: ArrayRef = Arc::new(sliced);
++                    let keepalive: Option<ArrayRef> = match ownership {
++                        "shared_arc" => Some(Arc::clone(&left)),
++                        "shared_buffer" => {
++                            Some(Arc::new(left.as_primitive::<Float64Type>().clone()))
++                        }
++                        _ => None,
++                    };
++                    let shared_nulls = (ownership == "shared_nulls")
++                        .then(|| left.nulls().cloned())
++                        .flatten();
++                    let null_bits = shared_nulls.as_ref().map(|n| n.iter().collect::<Vec<_>>());
++                    let input_bits = bits(&left);
++                    let input_ptr = left.as_primitive::<Float64Type>().values().as_ptr();
++                    let right: ArrayRef = if ownership == "alias" {
++                        Arc::clone(&left)
++                    } else {
++                        Arc::new(
++                            (0..len)
++                                .map(|i| {
++                                    (!(nulls && i % 5 == 0))
++                                        .then_some(values[(i + 3) % values.len()])
++                                })
++                                .collect::<Float64Array>(),
++                        )
++                    };
++                    let right_bits = bits(&right);
++                    let right = ColumnarValue::Array(right);
++                    let left = ColumnarValue::Array(left);
++                    let expected = bits(&apply(&left, &right, add)?.into_array(len)?);
++                    let actual = apply_float64_add(left, &right)?.into_array(len)?;
++                    assert_eq!(bits(&actual), expected, "{len} {nulls} {ownership}");
++                    if matches!(ownership, "unique" | "prefix" | "cast") && len > 0 {
++                        assert_eq!(
++                            actual.as_primitive::<Float64Type>().values().as_ptr(),
++                            input_ptr,
++                            "{len} {nulls} {ownership}"
++                        );
++                    }
++                    if let Some(original) = keepalive {
++                        assert_eq!(bits(&original), input_bits);
++                    }
++                    if let Some(nulls) = shared_nulls {
++                        assert_eq!(Some(nulls.iter().collect::<Vec<_>>()), null_bits);
++                    }
++                    if let ColumnarValue::Array(right) = right {
++                        assert_eq!(bits(&right), right_bits);
++                    }
++                }
++            }
++        }
++        let array = || {
++            ColumnarValue::Array(Arc::new(Float64Array::from(vec![
++                Some(-0.0),
++                None,
++                Some(f64::INFINITY),
++            ])))
++        };
++        for scalar in [Some(0.0), Some(-0.0), Some(f64::NAN), None] {
++            for left_scalar in [false, true] {
++                let scalar = ColumnarValue::Scalar(ScalarValue::Float64(scalar));
++                let (left, right) = if left_scalar {
++                    (scalar, array())
++                } else {
++                    (array(), scalar)
++                };
++                let expected = apply(&left, &right, add)?.into_array(3)?;
++                let actual = apply_float64_add(left, &right)?.into_array(3)?;
++                assert_eq!(bits(&actual), bits(&expected));
++            }
++        }
++        let scalar = ColumnarValue::Scalar(ScalarValue::Float64(Some(-0.0)));
++        let expected = apply(&scalar, &scalar, add)?;
++        let actual = apply_float64_add(scalar.clone(), &scalar)?;
++        assert!(matches!(actual, ColumnarValue::Scalar(_)));
++        assert_eq!(bits(&actual.into_array(1)?), bits(&expected.into_array(1)?));
++        let left = ColumnarValue::Array(Arc::new(Float64Array::from(vec![1.0, 2.0])));
++        let right = ColumnarValue::Array(Arc::new(Float64Array::from(vec![1.0])));
++        let expected = apply(&left, &right, add).unwrap_err().to_string();
++        assert_eq!(
++            apply_float64_add(left, &right).unwrap_err().to_string(),
++            expected
++        );
++        Ok(())
+     }
+ 
+     #[test]

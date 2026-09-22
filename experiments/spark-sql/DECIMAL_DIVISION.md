@@ -5052,6 +5052,93 @@ statistics and diagnostic counts without the build cache. All 77 shared
 source/lock records and three executable slots were restored, and temporary
 inputs are absent. Default vendor sources remain unchanged.
 
+## Reusing the native DOUBLE addition buffer
+
+`datafusion-float64-owned-add.patch` applies to the DataFusion 54.1.0
+`datafusion-physical-expr` crate's `src/expressions/binary.rs`. On top of the
+accepted optional runtime, it changes only native DOUBLE addition. Both overflow
+modes use the same floating addition as before. No dependency, UDF or execution
+node is added; default vendor sources remain unchanged.
+
+When the left array and its values buffer are uniquely owned and start at offset
+zero, the expression consumes that buffer through Arrow's safe `MutableBuffer`
+API. It retains the allocation layout, truncates a prefix view to its logical
+length, adds the right values in place and combines the original NULL bitmaps.
+Shared buffers, nonzero offsets, scalar inputs and length mismatches retain the
+existing borrowed path. Only the left buffer is considered for reuse.
+
+Direct use of Arrow 58.4's `binary_mut` was rejected. An initial ownership test
+accidentally retained the source array; after correcting that fixture, a prefix
+slice exposed a real length difference: a one-row input produced three rows.
+Source inspection traced this to `into_builder` restoring the backing buffer's
+length. A separate executable also confirmed that `binary_mut` preserves a
+Vec-backed array's pointer but copies the aligned buffer produced by
+`try_unary`, which is used by the operand casts. The final implementation avoids
+that builder conversion and the extra copy. Earlier attempts and test setup
+failures remain in the archive.
+
+All 80 native binary-expression tests, 37 planner tests and 28 runner tests pass,
+including four Delta lifecycle tests. The added test covers 64 combinations of
+array length, NULLs and ownership, plus scalar inputs and length errors. It
+compares non-NULL result bits with native borrowed addition, verifies original
+shared values/bitmaps remain intact, and checks pointer reuse for owned normal,
+prefix and aligned-cast buffers. It includes signed zeros, subnormals, extreme
+finite values, infinities and NaN.
+
+All 258 benchmark values and physical plans are unchanged. The older SQL corpus
+retains 5,755 agreements across 6,068 observations; the arithmetic and grouping
+supplements retain 640 across 716. Every previously successful result preserves
+its values and types, and every agreement/difference classification is unchanged.
+The real-Delta oracle preserves all 116 parent comparisons. These checks do not
+remove the existing Spark differences.
+
+The fixed 160-process execution comparison uses the preceding benchmark binary
+as its parent and the exact same benchmark source in the candidate. Runtime
+source and dependency checks find only the added native binary-expression patch.
+Eight warmups, 41 samples, CPU affinity and all existing environment controls
+remain unchanged. All counters have full coverage and CPU migrations are zero.
+
+| Query | Before, ms | After, ms | Paired time change | Paired 95% interval | Instruction change |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Derived DOUBLE sum, native output | 5.369242 | 2.981037 | -44.500% | -44.947% to -44.026% | -0.206% |
+| Stored FLOAT plus integer, native DOUBLE output | 4.008125 | 0.808561 | -79.855% | -79.981% to -79.697% | -0.751% |
+| Derived DOUBLE sum, final Decimal output | 12.577616 | 12.514469 | -0.301% | -0.493% to -0.060% | -0.051% |
+| Shared ready DOUBLE sum | 0.254012 | 0.256371 | +0.817% | +0.164% to +1.473% | +0.346% |
+| Derived FLOAT control | 0.435543 | 0.436480 | -0.081% | -0.955% to +0.800% | +0.014% |
+| FLOAT read control | 0.064319 | 0.064099 | -1.073% | -2.095% to -0.040% | -0.032% |
+
+The native derived query's median page faults across 41 executions fall from
+126,446 to 42,664. The stored FLOAT/integer query falls from 84,386 to 345.
+Instruction reductions are much smaller than time reductions, consistent with
+removing allocation-related work. Both native-output gains are much larger
+than the same-binary control shifts recorded here.
+
+The original final-Decimal query does not show a reliable improvement: its
+-0.301% change is smaller than same-binary Decimal control shifts of -0.556%
+before and -0.967% after. Page faults remain 126,515 before and 126,394.5 after.
+The earlier approximately 19% full-query difference remains unresolved. This
+also shows why separate component timings cannot be added or subtracted to
+predict the complete query's cost.
+
+The shared DOUBLE path adds dispatch work: instructions rise 0.346%. Its
++0.817% timing shift is smaller than its after-binary control's -1.100% shift,
+so the elapsed effect is less certain. All eight controls are retained; their
+remaining shifts are derived DOUBLE -0.773%/+0.358%, derived FLOAT
++0.128%/-0.472%, and shared DOUBLE -0.077% before. This is not a claim of zero
+overhead on the borrowed path.
+
+Performance covers finite non-NULL addition at batch size 8,192. NULLs, slices
+and other ownership shapes have correctness coverage only. The next investigation
+should follow allocation lifetimes through the final floating-to-Decimal
+conversion, whose page-fault count was essentially unchanged by this patch.
+
+`arithmetic-owned-add-results.json` and `arithmetic-owned-add-runs.json.gz`
+retain the patch inputs, all attempts, builds, original Spark references,
+captures, protocols, measurements and scripts. The archived `check-archive.py`
+rechecks patch bytes, corpus comparisons, Delta comparisons and the complete
+timing schedule/statistics without the build cache. All 78 shared source/lock
+records and three executable slots were restored; temporary inputs are absent.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
