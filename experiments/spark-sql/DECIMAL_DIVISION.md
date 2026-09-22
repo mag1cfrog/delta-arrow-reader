@@ -4299,6 +4299,27 @@ The [kernel reference](https://github.com/gregkh/linux/blob/v6.19.14/arch/x86/ev
 
 The [raw archive](float-type-branch-record-runs.json.gz) retains perf files, decoded branch text, captures, scripts, checks and disassembly. Derived branch arrays can be regenerated with the frozen decoder. No Rust rebuild, runtime change or new Spark corpus run is involved. Shared inputs and global settings remain unchanged. The original release interval remains unresolved, and the optional type-inference patch remains unadopted.
 
+## Comparing every occupied IN-table slot
+
+The [complete slot diagnostic](float-type-table-slots-results.json) finds no hidden occupied-key placement difference within its four-process groups. All 604,160 records match in exact element address, Float64 bit pattern and native per-key hash. The earlier address bounds and four-hash fingerprints therefore agree with these fuller records in this rebuild.
+
+The only new Rust code is a cold constructor trace. It borrows the existing Float64 HashSet, iterates its keys and writes each address, bit pattern and hash to stderr without sorting, mutating the table or adding a heap buffer. Lookup and equality code remain unchanged, and the earlier equality counters are absent. As with other diagnostic rebuilds, code layout and machine state can change.
+
+The fixed four groups retain the previous seed inputs, preparation rotations, execution orders, state/context settings, 32 warmups and 261 prepared plans. All 4,720 table dumps have the expected 128 exact key bit patterns and agree with their preceding length, address and hash headers. Absolute and relative key positions match at every corresponding construction index. The 186 existing result/plan captures and eight smoke processes also pass; no new Spark corpus coverage is counted.
+
+A separately labeled post-collection audit examines all retained execution counters. Within each group, retired instruction counts differ by at most 2,116 out of about 12.75 billion, and retired branch counts by at most 473 out of about 1.78 billion. Branch-miss counts still vary:
+
+| Group | Seed index | Minimum branch misses | Maximum branch misses |
+| --- | ---: | ---: | ---: |
+| 0 | 0 | 6,029,247 | 6,211,879 |
+| 1 | 4 | 5,210,941 | 6,208,605 |
+| 2 | 4 | 5,622,271 | 6,172,065 |
+| 3 | 0 | 6,032,990 | 6,202,476 |
+
+These counters cover whole execution phases, not just the lookup loop. They show prediction-count variation alongside matching occupied slots and nearly equal work counts, without identifying a hardware cause. The dump does not capture raw control bytes or absent-input hashes, and it cannot establish the earlier executable's state. Incidental timings are retained without a performance effect estimate.
+
+The [raw archive](float-type-table-slots-runs.json.gz) preserves every slot record in stderr, the parser needed to reconstruct them, captures, scripts, source patch, build identities and counter audit. Shared files are restored and hash-checked. No builds or collection groups failed or were discarded. The accepted runtime is unchanged, the original release interval remains unresolved, and the optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

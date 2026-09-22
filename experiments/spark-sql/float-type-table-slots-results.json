@@ -1,0 +1,591 @@
+{
+  "slice": "Compare complete occupied native IN-table slots",
+  "base_commit": "ba03b02",
+  "created_utc": "2026-09-22T04:54:23.563907+00:00",
+  "decision": {
+    "finding": "All 604160 occupied-slot records match within their four-process groups in exact element address, Float64 bit pattern and native per-key hash. No hidden occupied-key placement difference is observed in this diagnostic build.",
+    "scope": "The cold diagnostic rebuild can alter code layout and machine state. This does not capture raw control bytes, absent-input hashes or the earlier executable. The post-collection counter audit still observes differing branch-miss counts despite matching occupied slots and nearly equal retired instruction/branch counts.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 4,
+    "processes": 16,
+    "constructed_table_traces": 4720,
+    "occupied_slot_records": 604160,
+    "prepared_plan_executions": 4176,
+    "exact_correctness_captures": 186,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "rust_benchmark_builds": 1,
+    "failed_or_discarded_builds_or_collection_groups": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "ba03b02",
+    "question": "Do apparently matching IN-table bounds and four hash fingerprints hide different occupied key positions or per-key hashes?",
+    "implementation": "Add only a cold Float64 constructor trace to the earlier AA source without equality counters. Iterate the existing HashSet and write each element address, exact Float64 bit pattern and native hash to stderr. Use the existing hasher and iterator; no sorting, table mutation, lookup instrumentation or extra heap buffer.",
+    "design": "Exactly four groups and 16 processes with the prior two seed inputs, preparation rotations, execution orders, state/context settings, 32 warmups and 261 prepared plans. Compare every full slot record within each group, preserving both absolute addresses and positions relative to the occupied minimum.",
+    "validation": "Require exact existing 186 SQL result and plan captures. Check parser rejection of malformed, duplicate and out-of-range records. Validate every table dump against its preceding header, expected query keys and field/table ordering. Run eight smoke processes before freezing scripts and the fixed collection.",
+    "stopping_rule": "One fixed four-group collection; retain every failure, correction and group. No outcome-based exclusions, substitute seeds or extension. No other machine work during collection. Restore shared build files and executable slots in finally and hash-check them.",
+    "limits": [
+      "This rebuild and cold tracing can alter code layout, allocation history and hardware state. It is not a snapshot of the earlier executable.",
+      "The dump includes occupied keys and their hashes, not raw control bytes, empty bucket contents or hashes of absent input keys.",
+      "Incidental timings and counters are retained but no performance effect is estimated. The optional type-inference patch remains unadopted."
+    ]
+  },
+  "analysis": {
+    "groups": [
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 0,
+        "directory": "group-00",
+        "table_controls": {
+          "hash_fingerprint": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          },
+          "occupied_address_bounds": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          }
+        },
+        "slot_checks": {
+          "full_records": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "key_hashes": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "absolute_positions": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "relative_positions": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 1,
+        "directory": "group-01",
+        "table_controls": {
+          "hash_fingerprint": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          },
+          "occupied_address_bounds": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          }
+        },
+        "slot_checks": {
+          "full_records": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "key_hashes": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "absolute_positions": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "relative_positions": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 2,
+        "directory": "group-02",
+        "table_controls": {
+          "hash_fingerprint": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          },
+          "occupied_address_bounds": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          }
+        },
+        "slot_checks": {
+          "full_records": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "key_hashes": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "absolute_positions": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "relative_positions": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 3,
+        "directory": "group-03",
+        "table_controls": {
+          "hash_fingerprint": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          },
+          "occupied_address_bounds": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          }
+        },
+        "slot_checks": {
+          "full_records": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "key_hashes": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "absolute_positions": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          },
+          "relative_positions": {
+            "matching_table_positions": 295,
+            "mismatch_indices": [],
+            "distinct_complete_sequences": 1
+          }
+        }
+      }
+    ],
+    "processes": 16,
+    "constructed_query_traces": 4720,
+    "occupied_slot_records": 604160,
+    "prepared_plan_executions": 4176,
+    "all_table_header_controls_match": true,
+    "all_full_slot_records_match_within_groups": true,
+    "scope": "Exact occupied element address, key-bit and native hash records. No performance estimate or raw control-byte coverage."
+  },
+  "descriptive_counter_audit": {
+    "analysis_phase": "post-collection descriptive audit, not a prespecified hypothesis test",
+    "scope": "All four groups. Counters cover whole execution phases, not only the lookup loop. No timing effect estimate, causal attribution, exclusions or collection changes.",
+    "groups": [
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "processes": [
+          {
+            "slot": 0,
+            "instructions:u": 12749487747,
+            "branches:u": 1780914459,
+            "branch-misses:u": 6029247
+          },
+          {
+            "slot": 1,
+            "instructions:u": 12749487798,
+            "branches:u": 1780914472,
+            "branch-misses:u": 6206769
+          },
+          {
+            "slot": 2,
+            "instructions:u": 12749486742,
+            "branches:u": 1780914278,
+            "branch-misses:u": 6211879
+          },
+          {
+            "slot": 3,
+            "instructions:u": 12749487590,
+            "branches:u": 1780914417,
+            "branch-misses:u": 6211307
+          }
+        ],
+        "ranges": {
+          "instructions:u": {
+            "min": 12749486742,
+            "max": 12749487798,
+            "span_relative_to_min_pct": 8.28268636510105e-06
+          },
+          "branches:u": {
+            "min": 1780914278,
+            "max": 1780914472,
+            "span_relative_to_min_pct": 1.0893281186889333e-05
+          },
+          "branch-misses:u": {
+            "min": 6029247,
+            "max": 6211879,
+            "span_relative_to_min_pct": 3.029101312319764
+          }
+        }
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "processes": [
+          {
+            "slot": 0,
+            "instructions:u": 12750850406,
+            "branches:u": 1781109176,
+            "branch-misses:u": 5940739
+          },
+          {
+            "slot": 1,
+            "instructions:u": 12750848570,
+            "branches:u": 1781108754,
+            "branch-misses:u": 5210941
+          },
+          {
+            "slot": 2,
+            "instructions:u": 12750848696,
+            "branches:u": 1781108804,
+            "branch-misses:u": 5869483
+          },
+          {
+            "slot": 3,
+            "instructions:u": 12750849560,
+            "branches:u": 1781108968,
+            "branch-misses:u": 6208605
+          }
+        ],
+        "ranges": {
+          "instructions:u": {
+            "min": 12750848570,
+            "max": 12750850406,
+            "span_relative_to_min_pct": 1.4399041678839418e-05
+          },
+          "branches:u": {
+            "min": 1781108754,
+            "max": 1781109176,
+            "span_relative_to_min_pct": 2.3693106838775326e-05
+          },
+          "branch-misses:u": {
+            "min": 5210941,
+            "max": 6208605,
+            "span_relative_to_min_pct": 19.14556315260526
+          }
+        }
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "processes": [
+          {
+            "slot": 0,
+            "instructions:u": 12750848488,
+            "branches:u": 1781108746,
+            "branch-misses:u": 5622271
+          },
+          {
+            "slot": 1,
+            "instructions:u": 12750848582,
+            "branches:u": 1781108775,
+            "branch-misses:u": 6171995
+          },
+          {
+            "slot": 2,
+            "instructions:u": 12750850038,
+            "branches:u": 1781109076,
+            "branch-misses:u": 6172065
+          },
+          {
+            "slot": 3,
+            "instructions:u": 12750850604,
+            "branches:u": 1781109219,
+            "branch-misses:u": 6169503
+          }
+        ],
+        "ranges": {
+          "instructions:u": {
+            "min": 12750848488,
+            "max": 12750850604,
+            "span_relative_to_min_pct": 1.6594974067736722e-05
+          },
+          "branches:u": {
+            "min": 1781108746,
+            "max": 1781109219,
+            "span_relative_to_min_pct": 2.655649190776586e-05
+          },
+          "branch-misses:u": {
+            "min": 5622271,
+            "max": 6172065,
+            "span_relative_to_min_pct": 9.778859823726036
+          }
+        }
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "processes": [
+          {
+            "slot": 0,
+            "instructions:u": 12749486137,
+            "branches:u": 1780914130,
+            "branch-misses:u": 6202476
+          },
+          {
+            "slot": 1,
+            "instructions:u": 12749487552,
+            "branches:u": 1780914406,
+            "branch-misses:u": 6036408
+          },
+          {
+            "slot": 2,
+            "instructions:u": 12749487415,
+            "branches:u": 1780914377,
+            "branch-misses:u": 6032990
+          },
+          {
+            "slot": 3,
+            "instructions:u": 12749486386,
+            "branches:u": 1780914179,
+            "branch-misses:u": 6200667
+          }
+        ],
+        "ranges": {
+          "instructions:u": {
+            "min": 12749486137,
+            "max": 12749487552,
+            "span_relative_to_min_pct": 1.1098486517770782e-05
+          },
+          "branches:u": {
+            "min": 1780914130,
+            "max": 1780914406,
+            "span_relative_to_min_pct": 1.5497659058946317e-05
+          },
+          "branch-misses:u": {
+            "min": 6032990,
+            "max": 6202476,
+            "span_relative_to_min_pct": 2.80932008838072
+          }
+        }
+      }
+    ]
+  },
+  "source": {
+    "only_cold_float64_slot_trace_added": true,
+    "same_hash_set_implementation_and_equality_result": true,
+    "same_resolver_release_intervention": true,
+    "same_type_inference": true,
+    "same_features_profiles_and_lock": true,
+    "binary_sha256": "920c5a679e5647e4e76a0e81827d7ee3cc0bf68fa45e563cee7ee32ddea24043",
+    "reference_binary_sha256": "967585cc99118a258f7189d928790d5fd846d9a2f30e5766bb08ccccc8a1897c"
+  },
+  "source_audit": {
+    "sources": {
+      "/home/hanbo/.cache/delta-reader-spark-planning/float-type-table-slots-ba03b02/diagnostic-primitive-filter.rs": "28b0312d16d2a88c9a5faa401fdef7720339781bafbb8b100ab8d08ac8dfc1f3",
+      "/home/hanbo/.cache/delta-reader-spark-planning/float-type-table-slots-ba03b02/diagnostic-decimal_bench.rs": "4beb8c231888fa46ef0dcb0f65402a701264277a27d2622da103c56a389e5932",
+      "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.17.1/src/raw.rs": "0c8ad353ba95817e72b0a8fea48fa2599099ea3def374f254ab6402a9c468d22",
+      "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.17.1/src/control/tag.rs": "691dc7aa8d720e6df59a82ac11d66c72802ffffc684620c8ff29523352aefd13"
+    },
+    "constructor": "The existing HashSet is filled before recording. Downcasting a borrowed reference through Any does not allocate or change the set. Iterating yields references to the occupied keys. The trace uses their exact addresses, f64::to_bits and the existing BuildHasher::hash_one.",
+    "lookup": "Hashbrown find_inner matches top-seven-bit hash tags in 16-byte groups, compares full keys at candidates, then checks for an empty tag before advancing the probe sequence. None of this lookup code is changed.",
+    "selected_query": "All 128 occupied keys must have the exact f64 bit patterns of integers 0 through 127. NULLs are not set elements. The trace parser also checks each header length/bounds and any keys covered by the preceding four-hash fingerprint.",
+    "limits": "No raw control-byte dump, absent-input hash coverage, hardware prediction-state capture or assertion about the earlier binary. Only the constructor trace is new."
+  },
+  "restoration": {
+    "sources": {
+      "math.rs": "c4befca6320e36532f3e87091622e0b91ecfa59e841646f98af91f704c84846f",
+      "lateral.rs": "3a46aea3b3c2af3e500dbfac0cc6999da1cf60d4a99bed9c6b02b789a5bf1020",
+      "cast.rs": "b09ae115b792491460b3ba5fcd60faea4bc1bfd59f60690618063f5cb0d855b3",
+      "common.rs": "41cef0bc27bc314a5ab03ca682acd76448c1780808f5b943722ba85e04af8fc5",
+      "function-Cargo.toml": "0e70f011d3aaabce73b5df5f12bb9e547936a6769cff09099fe5e37641b878a7",
+      "scalar-mod.rs": "68c06852a9272ae5c480298c0f4e2c725753bf028a5da6e629fad49a93231925",
+      "Cargo.lock": "e0970eb4c47224ccf8d0e9be9d2a57b25db09316fed780d5533598f519ab0584",
+      "decimal_bench.rs": "61f32e9a0cf89b4f06b8f579fb3af8a6003f35088b9cdcbe8abd548ef6cb4e3f",
+      "string-cast.rs": null,
+      "float-cast.rs": null,
+      "lib.rs": "abf6ed0652f1b3ee7b66bf77313fa56f1fd292a2f48168550c1022335c654a8d",
+      "main.rs": "8609b17aab37b9a84cde88767cacecc267d170048574636d6516300eea47d359",
+      "decimal_probe.rs": "f43728209ba28c00296d5f4789d4a66db06798c398f34f3558ae3944d0322d8f",
+      "decimal-null.rs": null,
+      "function-mod.rs": "2ce9c566265102724d44f5e2f2822d5d82c03e71e1eec907d50e425becbedae2",
+      "function-scalar-mod.rs": "b5546d8cd9f41cb1a5bddb3d9102f9618abe7e1ef65746d3946af86b4d973e26",
+      "delta_lifecycle.rs": "b7b7d860da8f0bf0e9068f2616c74f1ae744d9677a08194b3a5eedcdfe99927d",
+      "resolver-subquery.rs": "aff16f461317fa52a382a2d61d804d45bea4341d7581a536f22bec480879bf5d",
+      "analyzer-expression.rs": "c5566a6b118560afeca8020acea0095507000a1956051a0f4c1450c291e66eef",
+      "analyzer-parser.rs": "dd81c91ec888151ebafc7d979b50b33180f825211b4568e2de9ba50738271f42",
+      "math-mod.rs": "45b56693f3dde83b0ed3b535b3d81a26a63917db92106f4ecde8cfeee2ab2236",
+      "decimal-utils.rs": "847f4c18277429a79ae9dcf2da2f5cdecac066f71fa67909cae9f0c99a2189db",
+      "decimal-round.rs": null,
+      "conditional.rs": "cf09fc67b0e567668b037a6ee19ab1f166134e0fa067859269983c2e3f739fb0",
+      "small-int-divide.rs": null,
+      "resolver-predicate.rs": "ac785ea9d466f3b50f920aeac31b0be0b243f99bc7e63050e796c38caec8e1b8",
+      "function-predicate.rs": "499f472fda6be201451cef2dab3380d7b602a578fa0ce49c91364a26df0df180",
+      "arrow-mod": "a2b54e3369b6a8bf4bfd46f886720050b94a978c61d0004b33d276932fb0936f",
+      "arrow-decimal": "691d21c85206190f0dd49f5f9a5ef31de7065917780d4c9c3d156bc11a8d5549",
+      "join-selection": "77f99aa2b07b8d20e2de1c0114bf0eff6b1c7495e1923b8308a123812f044219",
+      "unwrap-cast": "0a1b250391180380b5722c2e9e31757c8850c3a392c87912d50e313143389012",
+      "expr-simplifier": "d5a4d4a8ee6e146e616e312e447d30429949b4501b9f45e7979bba14ef57937b",
+      "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+      "decorrelate": "c18f2fd4e6e3c8d20fc3e6070a72c43aa1dc0b517cbf17cb4731734be2651735",
+      "nested-loop": "59b7efeb63dedf071bc8b9f45a39d480c8f8cca62a4702a3f3f670b8a2444967",
+      "physical-test-lock": null,
+      "parser-keywords": null,
+      "native-in-list": "310aaf3b97f83bc70bcbf6bffbed44b4fc500027a4d8202aa487f78fedae6d24",
+      "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+      "native-primitive-filter": "dea083ca4f3208434559a353ac70e73e12cc3f617a8b3b2bf66761b92097353c",
+      "native-strategy": "bc43719e31a52563dd07c5b0dac98a620491d87d6fe2aaf7a88aa86f18b441ac",
+      "native-array-filter": "12259bb4c45fd7f57696efc4c6227fab5a69cbabe9f89e2b6a7a03e2e9589040",
+      "native-case": "470894816b7dfce4f995b0b3537349ea8b2962ecc199a798575ce2090253dc62",
+      "expr-common": "f514c989af51ca89d3fb6d3b14971807e9deffaa4227f8a715aee49e6c9c0c3a",
+      "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+      "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+      "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+      "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+      "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+      "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+      "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+      "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca"
+    },
+    "executables": {
+      "bench": "41142f9ec9341118f514984c0f690ea9a611aac6b180a26fc0c30329711257bb",
+      "probe": "340658fe8d3f6fcefae60fe38affd1b15d0bc89e5b8888ea2188d7e43fa81155",
+      "runner": "622a12a937afbf5c2a4f26a34e0606ef89a8c5d4dcc3dcbced6f4b6526a1ce5e"
+    }
+  },
+  "references": {
+    "float-type-session-state-runs.json.gz": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-session-state-runs.json.gz",
+      "sha256": "d05f4d037a9931bff14fc4f7ec8cbec82b86c0c12a3af9135bcd4e87ce42a986"
+    },
+    "float-type-equality-flow-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-equality-flow-results.json",
+      "sha256": "411535b1be63209cc2dfa1f4cfc43cd78cdfd398575d8bde4827cfdb60b1a85c"
+    },
+    "float-type-branch-record-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-branch-record-results.json",
+      "sha256": "c2f0296c3e8799f79f11ab76447a62c64d8cbd2052da6b732a5a8ab1af625e55"
+    }
+  },
+  "raw_data": {
+    "file": "float-type-table-slots-runs.json.gz",
+    "sha256": "b479362b807d09078827f9b4562823ee66849275afd0b3a6c8ecd3a5d95b4e4a",
+    "uncompressed_sha256": "7f76ffe17d36086324dc6007c1620f2ae409581961f70b61e01a26e14cc40d33",
+    "compressed_bytes": 10556245,
+    "uncompressed_bytes": 34018306
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-table-slots-ba03b02",
+    "commands": [
+      "python3 build-trace.py",
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 analyze.py",
+      "python3 counter_audit.py",
+      "python3 record.py"
+    ],
+    "setup": "Use the earlier AA sources without equality counters, adding only the retained cold constructor patch. Build with the same lockfile, features, profiles and dependencies; restore shared inputs in finally. Validate the 186 existing captures and eight gated smoke processes before freezing the fixed collection. Reconstruct every full slot record from archived stderr using the frozen parser. counter_audit.py is a separately labeled post-collection descriptive review of all groups."
+  }
+}
