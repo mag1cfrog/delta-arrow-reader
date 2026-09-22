@@ -4392,6 +4392,29 @@ The optional [diagnostic patch](native-in-buffer-reuse.patch) targets the preced
 
 Result writes, Boolean packing and lookup remain in the reused-buffer path, and rebuilding changes code layout. These results narrow the investigation without resolving the original positive release interval. The optional type-inference patch remains unadopted.
 
+## Branch histories with reused result storage
+
+The [reused-buffer branch profile](float-type-buffer-branches-results.json) places 6,576 of 6,792 recorded hot-loop misprediction entries (96.82%) at the check for candidate hash tags. Full-key equality accounts for 65 (0.96%). This identifies the dominant recorded branch after per-batch result buffer allocation has been removed.
+
+The profile uses the byte-identical executable from the preceding buffer experiment, with mode 2 selected and no Rust rebuild. Its shared lookup/packing loop starts at ELF address `0x51bba0` and spans 444 bytes. Branch meanings were mapped from the retained disassembly before profiling:
+
+| Branch offset | Meaning when taken | Recorded mispredicted entries |
+| --- | --- | ---: |
+| `+0x99` | No candidate hash tags in the current group | 6,576 |
+| `+0x160` | Continue the inner Boolean packing loop | 108 |
+| `+0xba` | Full-key equality succeeds | 65 |
+| `+0x198` | Return from the lookup and packing function | 23 |
+| `+0x17d` | Continue the outer word loop | 15 |
+| `+0xda` | Empty tag ends an unsuccessful lookup | 5 |
+
+Four fixed groups cross both previous seed inputs with both execution orders. All 16 processes pass result and phase-isolation checks, retaining 16,704 full-input executions. Their 2,048 occupied slot records match within each group. The collection uses the existing `perf record` configuration: `branch-misses:u`, period 10,007, 64 mmap pages, monotonic timestamps and `any,u,save_type` branch histories.
+
+The archive retains 49,680 event samples and all 794,880 history entries. Of the sampled instruction pointers, 49,308 (99.25%) are inside the shared loop. Both decoders agree on every sample identity; there are no reported lost records, decoder warnings or samples outside observer bounds. All histories have 16 entries, with 793,519 marked non-speculative and 1,361 speculative on the correct path. None are marked wrong-path. Eight preceding smoke processes pass with 231 samples, and no collection group is failed or discarded.
+
+These are finite, potentially overlapping histories sampled on branch misses. Their shares are not population misprediction rates, and profiling can affect prediction state. They identify a branch to investigate without establishing why matching processes predict it differently. No new runtime change, Spark corpus run or performance effect estimate is involved. The original release interval remains unresolved.
+
+The [raw archive](float-type-buffer-branches-runs.json.gz) preserves perf bytes, decoded text, all captures, frozen scripts, disassembly and source identities. Its `check-archive.py` checks file hashes and reconstructs every sample, branch histogram and occupied-slot comparison from retained text without running a benchmark. Shared inputs and global settings remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
