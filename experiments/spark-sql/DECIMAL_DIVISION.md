@@ -4578,6 +4578,51 @@ byte-identical, and the 74 source/lock records and three executable slots were
 restored. No performance run is needed for these two assertion changes.
 `signed-literal-test-results.json` records the command, hashes and test output.
 
+## Primitive floating grouping keys
+
+`sail-float-grouping.patch` follows the optional runtime at `525020b`. It reuses
+`SparkComparisonFloat` for complete FLOAT/DOUBLE grouping keys and preserves
+qualified field names. Native DataFusion aggregation still executes the query.
+The shared resolver also covers PIVOT grouping. Aggregate arguments and operands
+inside computed keys keep their original values. Ordinary constant expressions
+preserve their output signs; grouping-set keys still normalize.
+This follows the distinction in Spark's [floating normalization rule](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/NormalizeFloatingNumbers.scala)
+and [aggregate planning](https://github.com/apache/spark/blob/v4.2.0/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala).
+
+The 80-query corpus improves from 52/160 to 132/160 observations. A 20-query
+supplement, added before the first candidate capture, improves from 16/40 to
+32/40. It checks computed constants, constant grouping sets and PIVOT spelling.
+The initial candidate introduced 20 constant-sign regressions; its code and
+captures are retained in the archive. The final candidate removes all 20.
+The original floating-zero corpus now passes 256/256, up from 252/256.
+
+The remaining 36 new differences cover duplicate GROUPING_ID bits, DISTINCT,
+DISTINCT aggregate arguments, nested grouping keys, window partitioning and
+PIVOT parser spelling. The parenthesized `FOR (k)` PIVOT cases execute and pass.
+Other prior corpora remain at 5753/6068 with no new failures. Two existing cast
+errors identify different offending input values; their stages remain unchanged.
+All 32 planner tests and 28 runner tests pass, including four Delta lifecycle
+tests. The new Arrow test covers alternate NaN payloads, signed zero, NULL,
+both widths and ANSI modes, multiple partitions and original aggregate inputs.
+All 116 real-Delta captures match the parent, including complete schemas.
+The 74 generic checks are unchanged; the 148 benchmark checks change only the
+physical plans of the eight new floating-group observations.
+
+The fixed 288-process run retains every sample and same-binary control, with
+full counter coverage and no CPU migrations. Floating grouping planning adds
+6.2-7.7% latency, about 0.033-0.046 ms here. Nullable FLOAT grouping execution
+adds 2.512% (interval 2.141-2.886%) and 2.211% instructions. That local cost
+remains. Nonnullable FLOAT timing falls 5.340% while instructions rise 4.647%;
+DOUBLE's time interval spans zero while instructions rise 8.899%. These results
+do not establish a general speedup. Integer and Decimal execution instruction
+counts are unchanged to rounding. Earlier widening and USING costs remain open.
+
+`float-grouping-results.json` records the counts, controls, limitations and
+source hashes; `float-grouping-runs.json.gz` retains captures, plans, rejected
+attempts and reproduction scripts. Its `check-archive.py` verifies the saved
+results independently. All 75 source/lock records, three executable slots and
+temporary Delta input files were restored. The default vendor remains unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

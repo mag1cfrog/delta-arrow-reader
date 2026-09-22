@@ -1,0 +1,203 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -758,8 +758,8 @@
+ }
+
+ #[derive(Debug, PartialEq, Eq, Hash)]
+-struct SparkComparisonFloat {
+-    widen: bool,
++pub(crate) struct SparkComparisonFloat {
++    pub(crate) widen: bool,
+ }
+
+ impl ScalarUDFImpl for SparkComparisonFloat {
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/aggregate.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/aggregate.rs
+@@ -12,7 +12,7 @@
+ use datafusion_expr::utils::find_aggregate_exprs;
+ use datafusion_expr::{
+     Aggregate, AggregateUDF, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder,
+-    Projection, SortExpr, Volatility, bitwise_and, bitwise_shift_right, cast,
++    Projection, ScalarUDF, SortExpr, Volatility, bitwise_and, bitwise_shift_right, cast,
+ };
+ use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
+ use sail_common::spec;
+@@ -24,6 +24,7 @@
+ use sail_logical_plan::spark_partition_id::SparkPartitionIdNode;
+
+ use crate::error::{PlanError, PlanResult};
++use crate::function::common::SparkComparisonFloat;
+ use crate::resolver::PlanResolver;
+ use crate::resolver::expression::NamedExpr;
+ use crate::resolver::state::{AggregateState, PlanResolverState};
+@@ -202,6 +203,27 @@
+             aggregate_candidates.push(having.clone());
+         }
+         let aggregate_exprs = find_aggregate_exprs(&aggregate_candidates);
++        // Normalize only each complete grouping key. Aggregate arguments and
++        // operands inside a computed key must continue to see the original values.
++        let group_exprs = group_exprs.into_iter().map(|expr| {
++            expr.transform_down(|expr| {
++                if matches!(expr, Expr::GroupingSet(_)) {
++                    return Ok(Transformed::no(expr));
++                }
++                let normalize = matches!(expr.get_type(input.schema())?, DataType::Float32 | DataType::Float64)
++                    // Ordinary constant grouping expressions also serve as output
++                    // constants; Spark preserves their original zero sign. Grouping
++                    // sets materialize those keys and must still normalize them.
++                    && (has_grouping_set || expr.any_column_refs() || expr.contains_outer()
++                        || expr.contains_scalar_subquery() || expr.is_volatile());
++                let expr = if normalize {
++                    let (qualifier, name) = expr.qualified_name();
++                    ScalarUDF::from(SparkComparisonFloat { widen: false })
++                        .call(vec![expr.unalias()]).alias_qualified(qualifier, name)
++                } else { expr };
++                Ok(Transformed::new(expr, normalize, TreeNodeRecursion::Jump))
++            }).data()
++        }).collect::<DataFusionResult<Vec<_>>>()?;
+         let plan = LogicalPlanBuilder::from(input)
+             .aggregate(group_exprs, aggregate_exprs.clone())?
+             .build()?;
+@@ -1010,3 +1032,142 @@
+         }
+     }
+ }
++
++#[cfg(test)]
++mod float_grouping_tests {
++    use super::*;
++    use crate::config::PlanConfig;
++    use crate::physical_plan::SparkQueryPlanner;
++    use arrow::array::{Array, ArrayRef, Float32Array, Float64Array, Int64Array};
++    use arrow::datatypes::{Field, Schema};
++    use arrow::record_batch::RecordBatch;
++    use datafusion::datasource::MemTable;
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::{SessionConfig, SessionContext};
++
++    #[tokio::test]
++    async fn grouping_normalizes_keys_without_changing_aggregate_inputs() -> PlanResult<()> {
++        let inputs: Vec<ArrayRef> = vec![
++            Arc::new(Float32Array::from(vec![
++                Some(-0.0),
++                Some(0.0),
++                Some(f32::from_bits(0x7fc00001)),
++                Some(f32::from_bits(0x7fc00002)),
++                Some(f32::from_bits(0xffc00003)),
++                None,
++                Some(1.0),
++                Some(-1.0),
++            ])),
++            Arc::new(Float64Array::from(vec![
++                Some(-0.0),
++                Some(0.0),
++                Some(f64::from_bits(0x7ff8000000000001)),
++                Some(f64::from_bits(0x7ff8000000000002)),
++                Some(f64::from_bits(0xfff8000000000003)),
++                None,
++                Some(1.0),
++                Some(-1.0),
++            ])),
++        ];
++        for input in inputs {
++            for ansi in [true, false] {
++                let ctx = SessionContext::new_with_state(
++                    SessionStateBuilder::new()
++                        .with_default_features()
++                        .with_config(
++                            SessionConfig::new()
++                                .with_target_partitions(2)
++                                .with_batch_size(2),
++                        )
++                        .with_query_planner(Arc::new(SparkQueryPlanner))
++                        .build(),
++                );
++                let schema = Arc::new(Schema::new(vec![Field::new(
++                    "v",
++                    input.data_type().clone(),
++                    true,
++                )]));
++                let batch = RecordBatch::try_new(schema.clone(), vec![input.clone()])?;
++                ctx.register_table(
++                    "t",
++                    Arc::new(MemTable::try_new(
++                        schema,
++                        vec![vec![batch.slice(0, 4)], vec![batch.slice(4, 4)]],
++                    )?),
++                )?;
++                let sql = "SELECT v,count(*) AS n,sum(CASE WHEN CAST(v AS STRING) LIKE '-%' THEN 1 ELSE 0 END) AS negative_inputs FROM t GROUP BY v";
++                let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let mut config = PlanConfig::default();
++                config.ansi_mode = ansi;
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                assert_eq!(named.fields, vec!["v", "n", "negative_inputs"]);
++                assert_eq!(named.plan.schema().field(0).data_type(), input.data_type());
++                let frame = ctx.execute_logical_plan(named.plan).await?;
++                let physical = frame.create_physical_plan().await?;
++                let plan = datafusion::physical_plan::displayable(physical.as_ref())
++                    .indent(true)
++                    .to_string();
++                assert!(plan.contains("AggregateExec"), "{plan}");
++                let batches = datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
++                let mut rows = vec![];
++                for batch in batches {
++                    let counts = batch
++                        .column(1)
++                        .as_any()
++                        .downcast_ref::<Int64Array>()
++                        .unwrap();
++                    let negatives = batch
++                        .column(2)
++                        .as_any()
++                        .downcast_ref::<Int64Array>()
++                        .unwrap();
++                    for i in 0..batch.num_rows() {
++                        let value = if batch.column(0).is_null(i) {
++                            None
++                        } else if input.data_type() == &DataType::Float32 {
++                            Some(f64::from(
++                                batch
++                                    .column(0)
++                                    .as_any()
++                                    .downcast_ref::<Float32Array>()
++                                    .unwrap()
++                                    .value(i),
++                            ))
++                        } else {
++                            Some(
++                                batch
++                                    .column(0)
++                                    .as_any()
++                                    .downcast_ref::<Float64Array>()
++                                    .unwrap()
++                                    .value(i),
++                            )
++                        };
++                        let category = match value {
++                            None => 0,
++                            Some(v) if v.is_nan() => 1,
++                            Some(v) if v == 0.0 => 2,
++                            Some(v) if v > 0.0 => 3,
++                            _ => 4,
++                        };
++                        if matches!(category, 1 | 2) {
++                            assert!(!value.unwrap().is_sign_negative());
++                        }
++                        rows.push((category, counts.value(i), negatives.value(i)));
++                    }
++                }
++                rows.sort_unstable();
++                assert_eq!(
++                    rows,
++                    vec![(0, 1, 0), (1, 3, 0), (2, 2, 1), (3, 1, 0), (4, 1, 1)],
++                    "{} ansi={ansi}",
++                    input.data_type()
++                );
++            }
++        }
++        Ok(())
++    }
++}
