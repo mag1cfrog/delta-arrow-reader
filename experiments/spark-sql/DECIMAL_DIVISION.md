@@ -4415,6 +4415,16 @@ These are finite, potentially overlapping histories sampled on branch misses. Th
 
 The [raw archive](float-type-buffer-branches-runs.json.gz) preserves perf bytes, decoded text, all captures, frozen scripts, disassembly and source identities. Its `check-archive.py` checks file hashes and reconstructs every sample, branch histogram and occupied-slot comparison from retained text without running a benchmark. Shared inputs and global settings remain unchanged.
 
+## Reconstructing the complete lookup decisions
+
+The [lookup replay](float-type-lookup-replay-results.json) reconstructs every hash-table branch decision for the standalone input in eight fresh diagnostic processes. Within each native seed, complete occupied slots, input hashes, native lookup results and ordered decision bytes agree exactly. This is a correctness check of lookup work, with no timed samples.
+
+The preceding slot dumps lacked hashes for several inputs that are absent from the table. A cold constructor trace now records native hashes and `contains` results for all 97 input categories. The benchmark also asserts every normalized Arrow input bit pattern against the input formula, covering 8,388,608 rows across the eight collection processes. The native lookup and result-packing source remain unchanged. Rebuilding can change code layout and preparation history, so these records do not describe the earlier executables' predictor state.
+
+The offline checker replays insertion into the pinned hashbrown 0.17.1 table, verifies all 1,024 occupied addresses, and checks all 776 category lookups against native results. It then expands the full row permutation and compares the decision streams directly within each seed. Each full-input stream has 2,097,152 decision bytes: 994,522 rows find a candidate tag and an equal key; 54,054 rows find no candidate tag and stop at an empty tag. Every lookup stops in its first 16-bucket group, with no unequal full-key comparison. Thus this diagnostic needs neither extra probe groups nor different collision work to describe either seed's input. It does not yet pair those exact records with hardware counters.
+
+Both existing edge checks and seven damaged-record rejection checks pass. The first build stopped before compilation because 12 Sail source files were missing from the old temporary build directory. They were restored from the recorded commit, matching the repository byte-for-byte; the failure and repair remain in the [raw archive](float-type-lookup-replay-runs.json.gz). All 65 shared source/lock records and three executable slots are restored and hash-checked. The archive checker independently replays the native-result checks, complete decision streams and source patch without the original cache. No new Spark corpus run or performance comparison is claimed. The original release interval remains unresolved, and the optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

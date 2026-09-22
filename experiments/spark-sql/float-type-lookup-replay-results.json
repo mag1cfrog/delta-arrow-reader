@@ -1,0 +1,267 @@
+{
+  "slice": "Reconstruct complete native IN lookup decisions from cold records",
+  "base_commit": "52032ac",
+  "created_utc": "2026-09-22T06:40:51.938777+00:00",
+  "decision": "Diagnostic only; the optional type-inference patch remains unadopted and its original release interval unresolved.",
+  "summary": {
+    "processes": 8,
+    "normalized_rows_validated_in_rust": 8388608,
+    "slot_records": 1024,
+    "needle_records": 776,
+    "exact_within_seed_comparison": true
+  },
+  "findings": {
+    "single_probe_group_per_input": true,
+    "no_unequal_full_key_comparisons": true,
+    "native_results_match_replay": true,
+    "event_stream_bytes_per_full_input": 2097152,
+    "per_full_input": {
+      "candidate_present_then_equal": 994522,
+      "no_candidate_then_empty": 54054
+    },
+    "cross_seed_event_stream_hashes_equal": true
+  },
+  "method": {
+    "base_commit": "52032ac",
+    "question": "Can the exact lookup branch outcomes be reconstructed for every normalized input in fresh matching-seed processes?",
+    "implementation": "Extend the prior cold Float64 construction dump with 97 category bit patterns, native hash_one values and native contains results. Assert every normalized Arrow input bit pattern against the category formula during preparation. Do not alter native contains or diagnostic packing source.",
+    "collection": "Eight fresh check-mode processes, four per native seed pool index 0/4, alternating seed order. CPU 2, child-only setarch -R, buffer mode 2. One retained table and no timed execution, warmup or perf record. Also run the existing edge validation for both seeds before collection. Preserve every attempt.",
+    "analysis": "Replay insertion of the 128 members into 256 hashbrown buckets, group width 16, validating every captured occupied address and hash. Replay full-key and tag tests for all 97 categories and compare final Boolean results to native contains. Expand the complete 1048576-row permutation and compare ordered branch outcome bytes directly within each seed, not only hashes. Reject any missing records, mismatched input bits, native results, slot reconstruction or phase inputs.",
+    "limits": [
+      "Cold tracing changes generated layout and preparation history. This is new diagnostic evidence, not a capture of branch outcomes from older binaries.",
+      "Software reconstruction describes architectural decisions, not speculative execution or branch predictor state. Matching work cannot identify a hardware cause.",
+      "No new timing comparison or adoption decision. The original release interval remains unresolved."
+    ]
+  },
+  "validation": {
+    "edge_processes": 2,
+    "collection_processes": 8,
+    "per_row_input_bits_asserted_in_rust": true,
+    "native_and_packed_output_checked": true,
+    "replay_checks": {
+      "exact_replay": true,
+      "rejected_mutations": [
+        "missing needle",
+        "duplicate needle",
+        "wrong native outcome",
+        "unsupported capacity",
+        "wrong input fingerprint",
+        "unexpected timed samples",
+        "wrong process schedule"
+      ]
+    },
+    "shared_sources_restored": 65,
+    "shared_executables_restored": 3,
+    "build_preparation_failure": {
+      "reason": "The first build stopped before compilation because 12 Sail common Rust source files were missing from the old temporary build host. Cause of disappearance not established.",
+      "source_commit": "a2cdf89",
+      "matches_current_repository": true,
+      "files": [
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/geoarrow/extension.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/geoarrow/extension.rs",
+          "sha256": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/geoarrow/mod.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/geoarrow/mod.rs",
+          "sha256": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/geoarrow/projjson.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/geoarrow/projjson.rs",
+          "sha256": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/lib.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/lib.rs",
+          "sha256": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/data_type.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/data_type.rs",
+          "sha256": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/expression.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/expression.rs",
+          "sha256": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/literal.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/literal.rs",
+          "sha256": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/mod.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/mod.rs",
+          "sha256": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/plan.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/spec/plan.rs",
+          "sha256": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/utils/datetime.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/utils/datetime.rs",
+          "sha256": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/utils/mod.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/utils/mod.rs",
+          "sha256": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+          "existed_before_repair": false
+        },
+        {
+          "path": "/tmp/delta-reader-spark-planning/round-constant/checkout/experiments/spark-sql/vendor/sail/crates/sail-common/src/utils/string.rs",
+          "repository_path": "experiments/spark-sql/vendor/sail/crates/sail-common/src/utils/string.rs",
+          "sha256": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+          "existed_before_repair": false
+        }
+      ]
+    },
+    "new_timing_samples": 0,
+    "new_spark_corpus_runs": 0
+  },
+  "binary_sha256": "36e91f03dfe0c35d799429dbf9ab7b712b123f0174214def2c3582edcc9e1d48",
+  "source_change": "--- a/datafusion-physical-expr/src/expressions/in_list/primitive_filter.rs\n+++ b/datafusion-physical-expr/src/expressions/in_list/primitive_filter.rs\n@@ -124,6 +124,14 @@\n                             .expect(\"write slot trace\");\n                     }\n                     writeln!(trace).expect(\"write slot trace\");\n+                    let special = [0, 0, 0x7ff8_0000_0000_0000, 0xfff8_0000_0000_0000,\n+                        0x7ff8_0000_0000_0123, 0xfff8_0000_0000_0123, 0xbff4_0000_0000_0000];\n+                    for category in 0..97 {\n+                        let bits = if category < special.len() { special[category] } else { (category as f64).to_bits() };\n+                        let key = OrderedFloat64(f64::from_bits(bits));\n+                        writeln!(trace, \"DELTA_READER_IN_NEEDLE {category} {bits:016x} {:016x} {}\",\n+                            values.hasher().hash_one(key), values.contains(&key)).expect(\"write needle trace\");\n+                    }\n                 }\n \n                 Ok(Self { null_count, values })\n--- a/experiments/spark-sql/examples/native_in_bench.rs\n+++ b/experiments/spark-sql/examples/native_in_bench.rs\n@@ -204,6 +204,16 @@\n             let bits = value.to_bits();\n             fingerprint = (fingerprint ^ bits).wrapping_mul(0x100_0000_01b3);\n             let member = input_id(start + offset) % 97;\n+            let expected_bits = match member {\n+                0 | 1 => 0,\n+                2 => 0x7ff8_0000_0000_0000,\n+                3 => 0xfff8_0000_0000_0000,\n+                4 => 0x7ff8_0000_0000_0123,\n+                5 => 0xfff8_0000_0000_0123,\n+                6 => 0xbff4_0000_0000_0000,\n+                _ => (member as f64).to_bits(),\n+            };\n+            assert_eq!(bits, expected_bits, \"normalized row {}\", start + offset);\n             if member < normalized_special_bits.len() {\n                 assert!(normalized_special_bits[member].is_none_or(|old| old == bits));\n                 normalized_special_bits[member] = Some(bits);\n",
+  "runs": [
+    {
+      "index": 0,
+      "seed_index": 0,
+      "table_origin": 93825008006736,
+      "rows": 1048576,
+      "architectural_event_counts": {
+        "0": 994522,
+        "1": 54054,
+        "3": 994522,
+        "7": 54054
+      },
+      "event_stream_bytes": 2097152,
+      "event_stream_sha256": "3f01d1e732054e1a7ae2fb4fc347b9af5ab3186b825c378c6cdecfbc8c29fe4b",
+      "input_fingerprint": "b3a71d2973e705fb"
+    },
+    {
+      "index": 1,
+      "seed_index": 4,
+      "table_origin": 93825008006736,
+      "rows": 1048576,
+      "architectural_event_counts": {
+        "0": 994522,
+        "1": 54054,
+        "3": 994522,
+        "7": 54054
+      },
+      "event_stream_bytes": 2097152,
+      "event_stream_sha256": "3f01d1e732054e1a7ae2fb4fc347b9af5ab3186b825c378c6cdecfbc8c29fe4b",
+      "input_fingerprint": "b3a71d2973e705fb"
+    },
+    {
+      "index": 2,
+      "seed_index": 4,
+      "table_origin": 93825008006736,
+      "rows": 1048576,
+      "architectural_event_counts": {
+        "0": 994522,
+        "1": 54054,
+        "3": 994522,
+        "7": 54054
+      },
+      "event_stream_bytes": 2097152,
+      "event_stream_sha256": "3f01d1e732054e1a7ae2fb4fc347b9af5ab3186b825c378c6cdecfbc8c29fe4b",
+      "input_fingerprint": "b3a71d2973e705fb"
+    },
+    {
+      "index": 3,
+      "seed_index": 0,
+      "table_origin": 93825008006736,
+      "rows": 1048576,
+      "architectural_event_counts": {
+        "0": 994522,
+        "1": 54054,
+        "3": 994522,
+        "7": 54054
+      },
+      "event_stream_bytes": 2097152,
+      "event_stream_sha256": "3f01d1e732054e1a7ae2fb4fc347b9af5ab3186b825c378c6cdecfbc8c29fe4b",
+      "input_fingerprint": "b3a71d2973e705fb"
+    },
+    {
+      "index": 4,
+      "seed_index": 0,
+      "table_origin": 93825008006736,
+      "rows": 1048576,
+      "architectural_event_counts": {
+        "0": 994522,
+        "1": 54054,
+        "3": 994522,
+        "7": 54054
+      },
+      "event_stream_bytes": 2097152,
+      "event_stream_sha256": "3f01d1e732054e1a7ae2fb4fc347b9af5ab3186b825c378c6cdecfbc8c29fe4b",
+      "input_fingerprint": "b3a71d2973e705fb"
+    },
+    {
+      "index": 5,
+      "seed_index": 4,
+      "table_origin": 93825008006736,
+      "rows": 1048576,
+      "architectural_event_counts": {
+        "0": 994522,
+        "1": 54054,
+        "3": 994522,
+        "7": 54054
+      },
+      "event_stream_bytes": 2097152,
+      "event_stream_sha256": "3f01d1e732054e1a7ae2fb4fc347b9af5ab3186b825c378c6cdecfbc8c29fe4b",
+      "input_fingerprint": "b3a71d2973e705fb"
+    },
+    {
+      "index": 6,
+      "seed_index": 4,
+      "table_origin": 93825008006736,
+      "rows": 1048576,
+      "architectural_event_counts": {
+        "0": 994522,
+        "1": 54054,
+        "3": 994522,
+        "7": 54054
+      },
+      "event_stream_bytes": 2097152,
+      "event_stream_sha256": "3f01d1e732054e1a7ae2fb4fc347b9af5ab3186b825c378c6cdecfbc8c29fe4b",
+      "input_fingerprint": "b3a71d2973e705fb"
+    },
+    {
+      "index": 7,
+      "seed_index": 0,
+      "table_origin": 93825008006736,
+      "rows": 1048576,
+      "architectural_event_counts": {
+        "0": 994522,
+        "1": 54054,
+        "3": 994522,
+        "7": 54054
+      },
+      "event_stream_bytes": 2097152,
+      "event_stream_sha256": "3f01d1e732054e1a7ae2fb4fc347b9af5ab3186b825c378c6cdecfbc8c29fe4b",
+      "input_fingerprint": "b3a71d2973e705fb"
+    }
+  ],
+  "raw_data": {
+    "file": "float-type-lookup-replay-runs.json.gz",
+    "sha256": "e7acf40e8f80af73370b1ef015ab1e2ecb93799e196653555ea5e43f863bff18",
+    "bytes": 176215
+  },
+  "reproduction": "Extract check-archive.py from files in the gzip JSON archive and pass this result JSON as its sole argument. It needs only Python, git and these two checked-in artifacts."
+}
