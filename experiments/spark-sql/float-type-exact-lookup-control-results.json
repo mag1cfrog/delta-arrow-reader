@@ -1,0 +1,344 @@
+{
+  "slice": "Co-observe exact native IN lookup work with hardware counters",
+  "base_commit": "ce90604",
+  "created_utc": "2026-09-22T06:49:26.691259+00:00",
+  "decision": "Matching architectural lookup work does not eliminate prediction/count variation in this diagnostic. No additional lookup implementation change is justified by this record. Keep the type-inference candidate deferred; its original release interval remains unresolved.",
+  "summary": {
+    "smoke_processes": 8,
+    "collection_processes": 16,
+    "timed_full_input_executions": 16704,
+    "occupied_slot_records": 2048,
+    "needle_records": 1552,
+    "all_groups_match_exact_lookup_work": true,
+    "collection_failures": 0,
+    "discarded_groups": 0,
+    "new_rust_builds": 0,
+    "new_spark_corpus_runs": 0
+  },
+  "protocol": {
+    "base_commit": "ce90604",
+    "question": "Do gated instruction and branch-miss counts vary across processes whose complete input, native hashes, occupied slots and reconstructed lookup decision streams agree?",
+    "implementation": "Reuse the preceding byte-identical executable in reused-buffer mode 2. Extend only the existing Python driver stderr allowlist for cold needle records, and permit the offline replay checker to validate measure-mode captures.",
+    "design": "Exactly four groups of four fresh processes, retaining the prior two-seed/two-direction profile schedule and preparation rotations. 32 warmups and 261 quartets (1044 full-input executions) per process. First run two four-process smoke groups with one warmup and three quartets. Keep every process and sample; no extensions or reruns based on observed counters.",
+    "isolation": "Reuse gated perf stat, CPU 2 child-only fixed ASLR, controller CPU 0, 30-second cooldowns, sleeping peers and nonoverlapping phases. No builds, source inspection or other machine work while collecting. No global settings or shared sources/executables change.",
+    "analysis": "Replay all cold needle records against native contains and every occupied slot. Expand and compare complete ordered input and lookup-decision bytes within each group, directly rather than only comparing hashes. Report every process counter and timing summary, with no bootstrap intervals, equivalence declaration or candidate/original effect estimate. Account for all timings and counters; counter totals cover an entire gated process phase.",
+    "limits": [
+      "Software replay describes architectural lookup decisions, not predictor or speculative state. Counters also include calls, packing, timing and loop overhead.",
+      "The record can show whether variation coexists with matching lookup work in this diagnostic executable; it does not identify a hardware defect or a cause of the original release interval.",
+      "The optional type-inference patch remains unadopted; this is not a performance comparison of that patch."
+    ]
+  },
+  "binary": {
+    "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-lookup-replay-52032ac/after-bench",
+    "sha256": "36e91f03dfe0c35d799429dbf9ab7b712b123f0174214def2c3582edcc9e1d48"
+  },
+  "groups": [
+    {
+      "group": 0,
+      "seed_index": 0,
+      "exact_lookup_work_matches": true,
+      "instruction_span": 126.0,
+      "branch_miss_range": [
+        21863418.0,
+        28835573.0
+      ],
+      "runs": [
+        {
+          "slot": 0,
+          "counter_values": {
+            "instructions:u": 47192707223.0,
+            "cycles:u": 9563227363.0,
+            "branches:u": 6607762007.0,
+            "branch-misses:u": 28835573.0,
+            "task-clock:u": 2010.336728,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.877472,
+          "mean_ms": 1.9257929961685825
+        },
+        {
+          "slot": 1,
+          "counter_values": {
+            "instructions:u": 47192707183.0,
+            "cycles:u": 9286333780.0,
+            "branches:u": 6607761924.0,
+            "branch-misses:u": 22150196.0,
+            "task-clock:u": 1959.234659,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.874597,
+          "mean_ms": 1.8768460785440613
+        },
+        {
+          "slot": 2,
+          "counter_values": {
+            "instructions:u": 47192707097.0,
+            "cycles:u": 9276421851.0,
+            "branches:u": 6607761883.0,
+            "branch-misses:u": 21863418.0,
+            "task-clock:u": 1955.245891,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.871416,
+          "mean_ms": 1.8729921618773946
+        },
+        {
+          "slot": 3,
+          "counter_values": {
+            "instructions:u": 47192707109.0,
+            "cycles:u": 9275436321.0,
+            "branches:u": 6607761896.0,
+            "branch-misses:u": 21877443.0,
+            "task-clock:u": 1956.576567,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.8715815,
+          "mean_ms": 1.8743418668582374
+        }
+      ]
+    },
+    {
+      "group": 1,
+      "seed_index": 4,
+      "exact_lookup_work_matches": true,
+      "instruction_span": 269.0,
+      "branch_miss_range": [
+        21756952.0,
+        38158194.0
+      ],
+      "runs": [
+        {
+          "slot": 0,
+          "counter_values": {
+            "instructions:u": 47192707224.0,
+            "cycles:u": 9313779241.0,
+            "branches:u": 6607761935.0,
+            "branch-misses:u": 22754190.0,
+            "task-clock:u": 1962.821976,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.8717515,
+          "mean_ms": 1.8802757796934866
+        },
+        {
+          "slot": 1,
+          "counter_values": {
+            "instructions:u": 47192707089.0,
+            "cycles:u": 9273035388.0,
+            "branches:u": 6607761894.0,
+            "branch-misses:u": 21824564.0,
+            "task-clock:u": 1955.10757,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.8711004999999998,
+          "mean_ms": 1.8728838659003832
+        },
+        {
+          "slot": 2,
+          "counter_values": {
+            "instructions:u": 47192707358.0,
+            "cycles:u": 9951926860.0,
+            "branches:u": 6607762154.0,
+            "branch-misses:u": 38158194.0,
+            "task-clock:u": 2090.632094,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 2.001151,
+          "mean_ms": 2.0027030814176245
+        },
+        {
+          "slot": 3,
+          "counter_values": {
+            "instructions:u": 47192707147.0,
+            "cycles:u": 9270322822.0,
+            "branches:u": 6607761884.0,
+            "branch-misses:u": 21756952.0,
+            "task-clock:u": 1955.398788,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.870845,
+          "mean_ms": 1.873170709770115
+        }
+      ]
+    },
+    {
+      "group": 2,
+      "seed_index": 4,
+      "exact_lookup_work_matches": true,
+      "instruction_span": 1568.0,
+      "branch_miss_range": [
+        21842455.0,
+        21991756.0
+      ],
+      "runs": [
+        {
+          "slot": 0,
+          "counter_values": {
+            "instructions:u": 47192707085.0,
+            "cycles:u": 9279263901.0,
+            "branches:u": 6607761866.0,
+            "branch-misses:u": 21991756.0,
+            "task-clock:u": 1952.698351,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.869087,
+          "mean_ms": 1.870556575670498
+        },
+        {
+          "slot": 1,
+          "counter_values": {
+            "instructions:u": 47192708653.0,
+            "cycles:u": 9279149910.0,
+            "branches:u": 6607762171.0,
+            "branch-misses:u": 21866639.0,
+            "task-clock:u": 1956.151858,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.8723269999999999,
+          "mean_ms": 1.8738743994252873
+        },
+        {
+          "slot": 2,
+          "counter_values": {
+            "instructions:u": 47192707123.0,
+            "cycles:u": 9270602691.0,
+            "branches:u": 6607761902.0,
+            "branch-misses:u": 21951745.0,
+            "task-clock:u": 1953.717352,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.870158,
+          "mean_ms": 1.8715328199233716
+        },
+        {
+          "slot": 3,
+          "counter_values": {
+            "instructions:u": 47192707108.0,
+            "cycles:u": 9269713823.0,
+            "branches:u": 6607761884.0,
+            "branch-misses:u": 21842455.0,
+            "task-clock:u": 1954.479231,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.8704795,
+          "mean_ms": 1.872269566091954
+        }
+      ]
+    },
+    {
+      "group": 3,
+      "seed_index": 0,
+      "exact_lookup_work_matches": true,
+      "instruction_span": 1295.0,
+      "branch_miss_range": [
+        21756362.0,
+        34625323.0
+      ],
+      "runs": [
+        {
+          "slot": 0,
+          "counter_values": {
+            "instructions:u": 47192708397.0,
+            "cycles:u": 9806446533.0,
+            "branches:u": 6607762272.0,
+            "branch-misses:u": 34625323.0,
+            "task-clock:u": 2063.39133,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 2.001302,
+          "mean_ms": 1.9765995191570882
+        },
+        {
+          "slot": 1,
+          "counter_values": {
+            "instructions:u": 47192707102.0,
+            "cycles:u": 9267168106.0,
+            "branches:u": 6607761898.0,
+            "branch-misses:u": 21815094.0,
+            "task-clock:u": 1954.774905,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.870179,
+          "mean_ms": 1.8725771398467432
+        },
+        {
+          "slot": 2,
+          "counter_values": {
+            "instructions:u": 47192707321.0,
+            "cycles:u": 9773246029.0,
+            "branches:u": 6607762098.0,
+            "branch-misses:u": 33982739.0,
+            "task-clock:u": 2054.288739,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.999018,
+          "mean_ms": 1.9680069454022988
+        },
+        {
+          "slot": 3,
+          "counter_values": {
+            "instructions:u": 47192707107.0,
+            "cycles:u": 9269580799.0,
+            "branches:u": 6607761892.0,
+            "branch-misses:u": 21756362.0,
+            "task-clock:u": 1954.753442,
+            "context-switches:u": 0.0,
+            "cpu-migrations:u": 0.0,
+            "page-faults:u": 0.0
+          },
+          "median_ms": 1.870344,
+          "mean_ms": 1.872559724137931
+        }
+      ]
+    }
+  ],
+  "preservation": {
+    "shared_source_records": 65,
+    "executable_slots": 3,
+    "hashes_match_before_and_after": true,
+    "global_settings_unchanged": {
+      "/proc/sys/kernel/randomize_va_space": "2",
+      "/proc/sys/kernel/perf_event_paranoid": "2",
+      "/sys/devices/system/cpu/cpu2/cpufreq/scaling_governor": "powersave",
+      "/sys/devices/system/cpu/cpu2/cpufreq/scaling_min_freq": "1100980",
+      "/sys/devices/system/cpu/cpu2/cpufreq/scaling_max_freq": "5137904"
+    },
+    "frozen_scripts_match": true
+  },
+  "raw_data": {
+    "file": "float-type-exact-lookup-control-runs.json.gz",
+    "sha256": "2d3e61257a6be41aa1697d2dfe255478b4061763a47d681250dac8850321de6a",
+    "bytes": 602530
+  },
+  "reproduction": "Extract files/check-archive.py from the gzip JSON archive and pass this result JSON. Python plus these artifacts can replay every native-result/lookup check, raw counter and timing summary without the original cache or executable."
+}

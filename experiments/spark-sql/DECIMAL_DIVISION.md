@@ -4425,6 +4425,25 @@ The offline checker replays insertion into the pinned hashbrown 0.17.1 table, ve
 
 Both existing edge checks and seven damaged-record rejection checks pass. The first build stopped before compilation because 12 Sail source files were missing from the old temporary build directory. They were restored from the recorded commit, matching the repository byte-for-byte; the failure and repair remain in the [raw archive](float-type-lookup-replay-runs.json.gz). All 65 shared source/lock records and three executable slots are restored and hash-checked. The archive checker independently replays the native-result checks, complete decision streams and source patch without the original cache. No new Spark corpus run or performance comparison is claimed. The original release interval remains unresolved, and the optional type-inference patch remains unadopted.
 
+## Matching lookup work with different prediction counts
+
+The [counter follow-up](float-type-exact-lookup-control-results.json) observes branch-miss variation in the same processes whose complete lookup work is reconstructed. All four groups agree exactly on occupied slots, native input hashes, native lookup results, input order and full decision bytes. This rules out different probe or full-key comparison work as the explanation for the variation in these groups.
+
+The executable is byte-identical to the preceding replay. Sixteen processes use reused-buffer mode, two native seeds, both execution directions, the retained preparation rotations, 32 warmups and 1,044 full-input executions each. Gated counters cover one process at a time; peers remain asleep. Eight shorter smoke processes pass first. There are no new Rust builds, global setting changes, discarded groups or added repetitions.
+
+| Group | Seed index | Total instruction span across four processes | Branch-miss range |
+| --- | ---: | ---: | ---: |
+| 0 | 0 | 126 | 21,863,418-28,835,573 |
+| 1 | 4 | 269 | 21,756,952-38,158,194 |
+| 2 | 4 | 1,568 | 21,842,455-21,991,756 |
+| 3 | 0 | 1,295 | 21,756,362-34,625,323 |
+
+Each process retires approximately 47.193 billion instructions. In group 1, slot 2 has 38,158,194 branch misses and a 2.001151 ms execution median; the other three have 21.76-22.75 million misses and medians of 1.870845-1.871752 ms. Group 3 also contains higher-count processes. These are descriptive observations of one identical executable, not a patch speedup or a new equivalence test. The counters include packing, calls and timing-loop overhead; software replay describes architectural lookup decisions, not speculative execution or predictor state.
+
+The [raw archive](float-type-exact-lookup-control-runs.json.gz) preserves all 16,704 timings, counters, phase observations, 2,048 occupied slots and 1,552 input-category records, plus the eight smoke processes. Its offline checker reconstructs every lookup stream and timing summary and checks the original counter text against the stored rows. All 65 shared source/lock records, three executable slots and recorded global settings remain unchanged.
+
+This closes the specific question of whether matching table addresses conceal different lookup work in this diagnostic. The evidence does not justify another change to the lookup implementation, identify a hardware defect or resolve the original release interval. The optional type-inference optimization stays deferred. Further compatibility work can proceed without adopting it; reopening that optimization needs a controlled comparison that meets its existing criteria.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
