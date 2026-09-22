@@ -4320,6 +4320,23 @@ These counters cover whole execution phases, not just the lookup loop. They show
 
 The [raw archive](float-type-table-slots-runs.json.gz) preserves every slot record in stderr, the parser needed to reconstruct them, captures, scripts, source patch, build identities and counter audit. Shared files are restored and hash-checked. No builds or collection groups failed or were discarded. The accepted runtime is unchanged, the original release interval remains unresolved, and the optional type-inference patch remains unadopted.
 
+## Checking whether branch variation is confined to startup
+
+The [time-bin analysis](float-type-branch-time-results.json) finds that the higher sample densities in three recorded processes persist beyond startup. It reuses all 16 hardware branch-history profiles and all 11,080 samples, with no new build or collection. This is a post-collection descriptive check.
+
+Each observer-bounded execution phase is split into ten equal wall-time bins. The table compares branch-miss event samples per second in the first two bins and the remaining eight. Every process is shown; values are rounded to whole samples per second.
+
+| Group | Slot 0: first 20% / remaining 80% | Slot 1 | Slot 2 | Slot 3 |
+| --- | ---: | ---: | ---: | ---: |
+| 0 | 1,038 / 1,096 | 1,556 / 1,613 | 1,125 / 1,088 | 1,119 / 1,081 |
+| 1 | 1,095 / 1,102 | 1,583 / 1,585 | 969 / 1,094 | 1,079 / 1,103 |
+| 2 | 967 / 1,060 | 1,096 / 1,096 | 1,583 / 1,581 | 1,093 / 1,093 |
+| 3 | 1,123 / 1,084 | 1,118 / 1,097 | 1,044 / 1,093 | 1,113 / 972 |
+
+Group 0 slot 1, group 1 slot 1 and group 2 slot 2 remain elevated during the later interval. All decoded identities, original sample totals and branch-history totals match, and no sample falls inside the observer's uncertain boundary intervals. The result retains all ten bins for event samples, hot-loop instruction samples, candidate-tag misprediction entries and equality misprediction entries, plus the analysis script and hash-pinned source archive references.
+
+Wall-time bins are not query boundaries or equal instruction-count windows. Sample density is not a population branch-misprediction probability, and these observations do not identify a hardware cause or estimate the optional patch's performance effect. They do not justify removing early observations or changing the warmup count. The benchmark protocol, accepted runtime and deferred adoption decision remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
