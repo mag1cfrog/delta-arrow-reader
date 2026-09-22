@@ -4444,6 +4444,42 @@ The [raw archive](float-type-exact-lookup-control-runs.json.gz) preserves all 16
 
 This closes the specific question of whether matching table addresses conceal different lookup work in this diagnostic. The evidence does not justify another change to the lookup implementation, identify a hardware defect or resolve the original release interval. The optional type-inference optimization stays deferred. Further compatibility work can proceed without adopting it; reopening that optimization needs a controlled comparison that meets its existing criteria.
 
+## ANSI FLOAT/integer predicate precision
+
+The [optional planner patch](sail-ansi-float-integer.patch) fixes mixed FLOAT/integer predicates under ANSI. For example, FLOAT `16777216` compared with INT `16777217` previously returned equal because DataFusion narrowed the integer to FLOAT. Spark compares the two values as DOUBLE and returns false. The same loss affected IN lists, BETWEEN and single-column IN subqueries.
+
+Spark 4.2.0 documents that [ANSI type promotion skips FLOAT when combining it with integers](https://spark.apache.org/docs/4.2.0/sql-ref-ansi-compliance.html#type-coercion). Its [pinned coercion implementation](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/AnsiTypeCoercion.scala) applies that rule to every signed integer width. This is a local adaptation of that rule. The inspected binary and IN builder entry points in Sail revision `51b57bc2e3611aebcb6112ffa5470bd56fe25d04` construct ordinary DataFusion expressions; this patch is not copied from a Sail PR. That source inspection is not a runtime comparison against current Sail.
+
+The existing shared comparison and IN helpers now receive the query's ANSI setting. Under ANSI they promote FLOAT/integer operands to DOUBLE, reusing the existing fused floating normalization/widening function and Arrow integer casts. Every helper caller passes the setting, including BETWEEN, null-safe comparisons, SQL/DataFrame IN builders and single-column IN subqueries. Non-ANSI predicates retain their old coercion. No execution kernel, dependency, Python runtime path or new UDF is added. DOUBLE still has finite precision beyond `2^53`; the change follows Spark's tested coercion, rather than providing arbitrary exact integer comparisons.
+
+The [new corpus](ansi-float-integer.jsonl) was frozen before implementation. Its 172 queries run in both ANSI modes and cover all four signed integer widths, both operand directions, eight comparison operators, BETWEEN, constant and dynamic IN/NOT IN, ON joins and single-column subqueries. Inputs include positive and negative `2^24` boundaries, BIGINT values beyond `2^53`, fractions, signed zero, infinity, NaN and NULL. Existing FLOAT/FLOAT, DOUBLE/integer, integer/integer and FLOAT/Decimal queries are controls. The subquery cases exclude NULL members and inputs to avoid conflating this coercion fix with the documented Spark projected-IN NULL behavior.
+
+| Value/type or error-stage agreement | Before | After |
+| --- | ---: | ---: |
+| New FLOAT/integer observations | 266/344 | 344/344 |
+| Existing signed-zero comparison observations | 240/256 | 248/256 |
+| Other existing numeric/subquery observations | 5,753/6,068 | 5,753/6,068 |
+
+All 78 new repairs are ANSI INT/FLOAT or BIGINT/FLOAT row differences. The old signed-zero corpus gains eight repairs to its integer precision controls; its remaining eight differences concern signed-zero grouping and JOIN USING, outside this patch. No previously agreeing observation regresses. Four existing failed casts report a different invalid input value; status, rows, types and all other captured actual fields remain unchanged. These coarse counts do not require identical field metadata or structured errors, and do not establish complete Spark compatibility.
+
+All 28 planner unit tests pass, including a new direct helper test for both ANSI modes and operand directions. All four real-Parquet Delta lifecycle tests pass. The 74 generic IN and 112 existing benchmark correctness records are unchanged, and the expanded benchmark validates all 124 cases in each build. Three old reference files were missing from temporary directories: two were recovered from committed reference objects and the high-scale corpus was recaptured against Spark 4.2.0. The first lifecycle test could not compile because two fixture source files were also missing; the retry used copies from `a2cdf89`, byte-identical to this repository, then removed them. Failed attempts and recovery records are retained.
+
+The correction has a measured local execution cost. The benchmark reuses the existing in-memory harness and adds six expressions, with 1,048,576 rows, batch size 8,192, eight warmups and 41 samples per process. Before and after have identical outputs on these inputs; the precision-boundary cases are checked separately. Four predeclared alternating ABBA/BAAB quartets cover planning and execution on CPU 2. Same-binary controls use two additional quartets per build. All 448 processes complete with full counter coverage and zero CPU migrations; no observations are dropped. Builds and checks finish before timing.
+
+| ANSI expression | Before median ms | After median ms | Paired execution change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT > INT column | 2.722 | 3.152 | +15.58% | +11.64% |
+| FLOAT > SMALLINT column | 2.793 | 3.226 | +15.55% | +11.46% |
+| FLOAT > integer literal | 2.101 | 2.446 | +16.39% | +13.65% |
+| FLOAT IN (integer column, literal) | 2.853 | 3.151 | +10.29% | +8.42% |
+| FLOAT IN (0, 1, 2) | 2.579 | 2.973 | +15.26% | +16.07% |
+
+The latency change is the geometric mean of quartet ratios; the displayed medians summarize process medians. The [result record](ansi-float-integer-results.json) retains the conditional bootstrap intervals, individual counters and all controls. Non-ANSI, existing FLOAT/DOUBLE and plain projection controls retain instruction counts within 0.01% in this sample. Small latency movements are not improvements: the same-binary plain-projection control shifts by about 3.3%. Planning instruction increases are below 1.8% for the new expressions. Identical formatted plan text does not prove identical internal types: the existing floating helper uses the same display name for its widening and non-widening configurations.
+
+The patch remains an optional overlay on the accepted experimental runtime. The earlier `datafusion-float-type-inference.patch` is absent, and its release interval remains unresolved. The next useful performance step is to check when integer values are representable without widening, while keeping the repaired precision boundaries intact. The 10-16% local widening cost is not resolved by this commit, and the controls do not prove zero global overhead.
+
+The [compressed record](ansi-float-integer-runs.json.gz) contains Spark references, both captures for every corpus, frozen before/after helper sources, commands, build profiles, logs, complete measurement records and reproduction scripts. `check-archive.py` inside its `files` object recomputes the agreement counts using only repository artifacts. Both benchmark builds match their corresponding correctness runtime hashes except for the benchmark source. All 65 shared source/lock records, three executable slots and the two temporarily restored fixture files were restored and checked after the build.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

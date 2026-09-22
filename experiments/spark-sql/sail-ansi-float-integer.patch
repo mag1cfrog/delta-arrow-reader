@@ -1,0 +1,327 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -141,7 +141,13 @@
+                       function_context,
+                   }| {
+                 let (left, right) = arguments.two()?;
+-                spark_binary_expr(left, op, right, function_context.schema)
++                spark_binary_expr(
++                    left,
++                    op,
++                    right,
++                    function_context.schema,
++                    function_context.plan_config.ansi_mode,
++                )
+             },
+         )
+     }
+@@ -212,9 +218,11 @@
+     list: Vec<expr::Expr>,
+     negated: bool,
+     schema: &DFSchemaRef,
++    ansi_mode: bool,
+ ) -> PlanResult<expr::Expr> {
+     let mut input = expr::InList::new(Box::new(value), list, negated);
+-    let (mut decimal, mut floating, mut double) = (false, false, false);
++    let (mut decimal, mut floating, mut double, mut single, mut integer) =
++        (false, false, false, false, false);
+     for value in std::iter::once(input.expr.as_ref()).chain(&input.list) {
+         let data_type = value.get_type(schema)?;
+         // Leave string promotion and non-numeric coercion to the existing path.
+@@ -224,8 +232,12 @@
+         decimal |= data_type.is_decimal();
+         floating |= data_type.is_floating();
+         double |= data_type == DataType::Float64;
++        single |= data_type == DataType::Float32;
++        integer |= data_type.is_signed_integer();
+     }
+     if floating {
++        // Spark ANSI promotes mixed FLOAT/integer predicates to DOUBLE.
++        let coerce_to_double = decimal || (ansi_mode && single && integer && !double);
+         // Only zero and NaN can change membership when the input is normalized.
+         // ponytail: recognize literals and direct numeric literal casts only;
+         // leave other constant expressions on the existing normalization path.
+@@ -261,18 +273,18 @@
+         let zero_only = known_without_nan
+             && zero
+             && input.expr.try_as_col().is_some()
+-            && !(input.expr.get_type(schema)? == DataType::Float32 && (decimal || double));
+-        // Decimal/float lists use DOUBLE. Otherwise preserve operand types
++            && !(input.expr.get_type(schema)? == DataType::Float32 && (coerce_to_double || double));
++        // Decimal/float and ANSI FLOAT/integer lists use DOUBLE. Preserve other types
+         // so normalization does not change the existing numeric coercion.
+         let convert = |value: expr::Expr, skip_normalization: bool| -> PlanResult<expr::Expr> {
+             let data_type = value.get_type(schema)?;
+             let floating = data_type.is_floating();
+             Ok(if floating && !skip_normalization {
+                 ScalarUDF::from(SparkComparisonFloat {
+-                    widen: decimal || double,
++                    widen: coerce_to_double || double,
+                 })
+                 .call(vec![value])
+-            } else if data_type != DataType::Float64 && (decimal || (floating && double)) {
++            } else if data_type != DataType::Float64 && (coerce_to_double || (floating && double)) {
+                 cast(value, DataType::Float64)
+             } else {
+                 value
+@@ -298,6 +310,7 @@
+     op: Operator,
+     mut right: expr::Expr,
+     schema: &DFSchemaRef,
++    ansi_mode: bool,
+ ) -> PlanResult<expr::Expr> {
+     if matches!(
+         op,
+@@ -317,12 +330,17 @@
+         {
+             let decimal_float = (left_type.is_decimal() && right_type.is_floating())
+                 || (left_type.is_floating() && right_type.is_decimal());
+-            let widen =
+-                decimal_float || left_type == DataType::Float64 || right_type == DataType::Float64;
++            let ansi_float_integer = ansi_mode
++                && ((left_type == DataType::Float32 && right_type.is_signed_integer())
++                    || (right_type == DataType::Float32 && left_type.is_signed_integer()));
++            let widen = decimal_float
++                || ansi_float_integer
++                || left_type == DataType::Float64
++                || right_type == DataType::Float64;
+             let convert = |value, data_type: DataType| {
+                 if data_type.is_floating() {
+                     ScalarUDF::from(SparkComparisonFloat { widen }).call(vec![value])
+-                } else if decimal_float {
++                } else if decimal_float || ansi_float_integer {
+                     cast(value, DataType::Float64)
+                 } else {
+                     value
+@@ -354,7 +372,7 @@
+         DataType::Float16,
+         true,
+     )]))?);
+-    let half = spark_in_list(col("v"), vec![lit(1.25_f32)], false, &half_schema).unwrap();
++    let half = spark_in_list(col("v"), vec![lit(1.25_f32)], false, &half_schema, false).unwrap();
+     let expr::Expr::InList(half) = half else {
+         unreachable!()
+     };
+@@ -371,6 +389,7 @@
+             vec![lit(0.0_f64), lit(1.25_f64)],
+             false,
+             &cast_schema,
++            false,
+         )
+         .unwrap() else {
+             unreachable!()
+@@ -613,7 +632,7 @@
+             for (name, list, expected, skip) in &cases {
+                 for negated in [false, true] {
+                     let candidate =
+-                        spark_in_list(col("v"), list.clone(), negated, &schema).unwrap();
++                        spark_in_list(col("v"), list.clone(), negated, &schema, false).unwrap();
+                     let expr::Expr::InList(in_list) = &candidate else {
+                         unreachable!()
+                     };
+@@ -657,7 +676,7 @@
+                     let normalized =
+                         ScalarUDF::from(SparkComparisonFloat { widen: false }).call(vec![col("v")]);
+                     let baseline =
+-                        spark_in_list(normalized, list.clone(), negated, &schema).unwrap();
++                        spark_in_list(normalized, list.clone(), negated, &schema, false).unwrap();
+                     assert_eq!(baseline.get_type(&schema)?, candidate.get_type(&schema)?);
+                     assert_eq!(baseline.nullable(&schema)?, candidate.nullable(&schema)?);
+                     for expression in [baseline, candidate] {
+@@ -1445,3 +1464,82 @@
+     }
+     Ok(())
+ }
++
++#[test]
++fn ansi_float_integer_predicates_preserve_the_single_precision_boundary() -> PlanResult<()> {
++    use arrow::array::{AsArray, Float32Array, Int64Array};
++    use arrow::datatypes::{Field, Schema};
++    use arrow::record_batch::RecordBatch;
++    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
++    use datafusion::physical_expr::create_physical_expr;
++    use datafusion_common::DFSchema;
++    use datafusion_expr::{col, execution_props::ExecutionProps, simplify::SimplifyContext};
++
++    let schema = Arc::new(Schema::new(vec![
++        Field::new("f", DataType::Float32, true),
++        Field::new("i", DataType::Int64, true),
++    ]));
++    let batch = RecordBatch::try_new(
++        schema.clone(),
++        vec![
++            Arc::new(Float32Array::from(vec![
++                Some(16777216.),
++                Some(-16777216.),
++                Some(16777216.),
++                Some(1.5),
++                Some(-0.),
++                None,
++                Some(1.),
++            ])),
++            Arc::new(Int64Array::from(vec![
++                Some(16777217),
++                Some(-16777217),
++                Some(16777216),
++                Some(1),
++                Some(0),
++                Some(1),
++                None,
++            ])),
++        ],
++    )?;
++    let schema = Arc::new(DFSchema::try_from(schema)?);
++    for ansi_mode in [false, true] {
++        let expected = vec![
++            Some(!ansi_mode),
++            Some(!ansi_mode),
++            Some(true),
++            Some(false),
++            Some(true),
++            None,
++            None,
++        ];
++        for (left, right) in [(col("f"), col("i")), (col("i"), col("f"))] {
++            for expression in [
++                spark_binary_expr(
++                    left.clone(),
++                    Operator::Eq,
++                    right.clone(),
++                    &schema,
++                    ansi_mode,
++                )?,
++                spark_in_list(left, vec![right], false, &schema, ansi_mode)?,
++            ] {
++                let simplifier = ExprSimplifier::new(
++                    SimplifyContext::builder()
++                        .with_schema(schema.clone())
++                        .build(),
++                );
++                let expression = simplifier.coerce(expression, &schema)?;
++                let actual = create_physical_expr(&expression, &schema, &ExecutionProps::new())?
++                    .evaluate(&batch)?
++                    .into_array(batch.num_rows())?;
++                assert_eq!(
++                    actual.as_boolean().iter().collect::<Vec<_>>(),
++                    expected,
++                    "ANSI={ansi_mode}"
++                );
++            }
++        }
++    }
++    Ok(())
++}
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/predicate.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/predicate.rs
+@@ -24,7 +24,7 @@
+         let list = self.resolve_expressions(list, schema, state).await?;
+         Ok(NamedExpr::new(
+             vec!["in_list".to_string()],
+-            spark_in_list(expr, list, negated, schema)?,
++            spark_in_list(expr, list, negated, schema, self.config.ansi_mode)?,
+         ))
+     }
+
+@@ -146,8 +146,14 @@
+         let high = self.resolve_expression(high, schema, state).await?;
+
+         // DataFusion's BETWEEN operator has a bug, so we construct the expression manually.
+-        let greater_eq = spark_binary_expr(expr.clone(), Operator::GtEq, low, schema)?;
+-        let less_eq = spark_binary_expr(expr, Operator::LtEq, high, schema)?;
++        let greater_eq = spark_binary_expr(
++            expr.clone(),
++            Operator::GtEq,
++            low,
++            schema,
++            self.config.ansi_mode,
++        )?;
++        let less_eq = spark_binary_expr(expr, Operator::LtEq, high, schema, self.config.ansi_mode)?;
+         let between_expr = expr::Expr::BinaryExpr(BinaryExpr::new(
+             Box::new(greater_eq),
+             Operator::And,
+@@ -172,7 +178,13 @@
+         let right = self.resolve_expression(right, schema, state).await?;
+         Ok(NamedExpr::new(
+             vec!["is_distinct_from".to_string()],
+-            spark_binary_expr(left, Operator::IsDistinctFrom, right, schema)?,
++            spark_binary_expr(
++                left,
++                Operator::IsDistinctFrom,
++                right,
++                schema,
++                self.config.ansi_mode,
++            )?,
+         ))
+     }
+
+@@ -187,7 +199,13 @@
+         let right = self.resolve_expression(right, schema, state).await?;
+         Ok(NamedExpr::new(
+             vec!["is_not_distinct_from".to_string()],
+-            spark_binary_expr(left, Operator::IsNotDistinctFrom, right, schema)?,
++            spark_binary_expr(
++                left,
++                Operator::IsNotDistinctFrom,
++                right,
++                schema,
++                self.config.ansi_mode,
++            )?,
+         ))
+     }
+
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/predicate.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/predicate.rs
+@@ -91,7 +91,13 @@
+         function_context,
+     } = input;
+     let (value, list) = arguments.at_least_one()?;
+-    spark_in_list(value, list, false, function_context.schema)
++    spark_in_list(
++        value,
++        list,
++        false,
++        function_context.schema,
++        function_context.plan_config.ansi_mode,
++    )
+ }
+
+ #[test]
+@@ -149,7 +155,7 @@
+             };
+             for negated in [false, true] {
+                 let expression = if negated {
+-                    spark_in_list(col("v"), list.clone(), true, &schema)?
++                    spark_in_list(col("v"), list.clone(), true, &schema, false)?
+                 } else {
+                     is_in_list(ScalarFunctionInput {
+                         arguments: std::iter::once(col("v")).chain(list.clone()).collect(),
+@@ -170,7 +176,10 @@
+         }
+         let list = vec![lit(ScalarValue::Decimal128(Some(0), 10, 2)), lit("0")];
+         let original = col("v").in_list(list.clone(), false);
+-        assert_eq!(spark_in_list(col("v"), list, false, &schema)?, original);
++        assert_eq!(
++            spark_in_list(col("v"), list, false, &schema, false)?,
++            original
++        );
+     }
+     Ok(())
+ }
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/subquery.rs
+@@ -48,8 +48,13 @@
+             // as IN lists. Resolver field IDs are unique across these scopes.
+             let output = Expr::Column(subquery.schema().columns()[0].clone());
+             let comparison_schema = Arc::new(schema.join(subquery.schema())?);
+-            let Expr::InList(input) =
+-                spark_in_list(expr, vec![output.clone()], negated, &comparison_schema)?
++            let Expr::InList(input) = spark_in_list(
++                expr,
++                vec![output.clone()],
++                negated,
++                &comparison_schema,
++                self.config.ansi_mode,
++            )?
+             else {
+                 unreachable!("spark_in_list returns an IN expression")
+             };
