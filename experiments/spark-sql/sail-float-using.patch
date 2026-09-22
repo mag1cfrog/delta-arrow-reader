@@ -1,0 +1,149 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/join.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/join.rs
+@@ -2,11 +2,11 @@
+ use std::sync::Arc;
+
+ use datafusion_common::{Column, JoinType, NullEquality};
+-use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, build_join_schema};
++use datafusion_expr::{Expr, LogicalPlan, LogicalPlanBuilder, Operator, build_join_schema};
+ use sail_common::spec;
+
+ use crate::error::{PlanError, PlanResult};
+-use crate::function::common::{FunctionContextInput, ScalarFunctionInput};
++use crate::function::common::{FunctionContextInput, ScalarFunctionInput, spark_binary_expr};
+ use crate::function::get_built_in_function;
+ use crate::resolver::PlanResolver;
+ use crate::resolver::state::PlanResolverState;
+@@ -133,13 +133,52 @@
+             .map(|(_, (left, right))| (left.clone(), right.clone()))
+             .unzip::<_, _, Vec<_>, Vec<_>>();
+
+-        let builder = LogicalPlanBuilder::from(left).join_detailed(
+-            right,
+-            join_type,
+-            (left_columns.clone(), right_columns.clone()),
+-            None,
+-            NullEquality::NullEqualsNothing,
+-        )?;
++        // USING and NATURAL need the same equality semantics as an ON predicate.
++        // Use both inputs even when a semi/anti join outputs only one side.
++        let comparison_schema = Arc::new(build_join_schema(
++            left.schema(),
++            right.schema(),
++            &JoinType::Inner,
++        )?);
++        let (left_keys, right_keys): (Vec<_>, Vec<_>) = join_columns
++            .iter()
++            .map(|(_, (left, right))| {
++                let Expr::BinaryExpr(comparison) = spark_binary_expr(
++                    Expr::Column(left.clone()),
++                    Operator::Eq,
++                    Expr::Column(right.clone()),
++                    &comparison_schema,
++                    self.config.ansi_mode,
++                )?
++                else {
++                    unreachable!("spark_binary_expr returns a binary expression")
++                };
++                Ok((*comparison.left, *comparison.right))
++            })
++            .collect::<PlanResult<Vec<_>>>()?
++            .into_iter()
++            .unzip();
++        let unchanged = left_keys
++            .iter()
++            .zip(&left_columns)
++            .chain(right_keys.iter().zip(&right_columns))
++            .all(|(expr, column)| matches!(expr, Expr::Column(key) if key == column));
++        let builder = if unchanged {
++            LogicalPlanBuilder::from(left).join_detailed(
++                right,
++                join_type,
++                (left_columns.clone(), right_columns.clone()),
++                None,
++                NullEquality::NullEqualsNothing,
++            )?
++        } else {
++            LogicalPlanBuilder::from(left).join_with_expr_keys(
++                right,
++                join_type,
++                (left_keys, right_keys),
++                None,
++            )?
++        };
+         // Re-register join key columns as hidden fields so that subsequent
+         // attribute resolution can still find them.
+         let hidden_columns = builder
+@@ -213,3 +252,72 @@
+         Ok(builder.build()?)
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::config::PlanConfig;
++    use crate::physical_plan::SparkQueryPlanner;
++    use arrow::array::Int64Array;
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    #[tokio::test]
++    async fn using_float_keys_match_zero_signs_but_not_nulls() -> PlanResult<()> {
++        let ctx = SessionContext::new_with_state(
++            SessionStateBuilder::new()
++                .with_default_features()
++                .with_query_planner(Arc::new(SparkQueryPlanner))
++                .build(),
++        );
++        for dtype in ["FLOAT", "DOUBLE"] {
++            for (join, using, expected) in [
++                ("INNER JOIN", "USING(v)", vec![Some(0), Some(1)]),
++                ("NATURAL INNER JOIN", "", vec![Some(0), Some(1)]),
++                ("LEFT JOIN", "USING(v)", vec![Some(0), Some(1), Some(2)]),
++                ("RIGHT JOIN", "USING(v)", vec![None, Some(0), Some(1)]),
++                (
++                    "FULL JOIN",
++                    "USING(v)",
++                    vec![None, Some(0), Some(1), Some(2)],
++                ),
++                ("LEFT SEMI JOIN", "USING(v)", vec![Some(0), Some(1)]),
++                ("LEFT ANTI JOIN", "USING(v)", vec![Some(2)]),
++            ] {
++                let sql = format!(
++                    "SELECT CAST(id AS BIGINT) AS id FROM \
++                    (VALUES (0,CAST('-0.0' AS {dtype})),(1,CAST('0.0' AS {dtype})),(2,CAST(NULL AS {dtype}))) l(id,v) \
++                    {join} (VALUES (9,CAST('0.0' AS {dtype})),(10,CAST(NULL AS {dtype}))) r(rid,v) {using} ORDER BY id"
++                );
++                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let named = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()))
++                    .resolve_named_plan(spec)
++                    .await?;
++                let frame = ctx.execute_logical_plan(named.plan).await?;
++                let physical = frame.create_physical_plan().await?;
++                assert!(
++                    datafusion::physical_plan::displayable(physical.as_ref())
++                        .indent(true)
++                        .to_string()
++                        .contains("HashJoinExec"),
++                    "{sql}"
++                );
++                let batches = datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
++                let mut rows = Vec::new();
++                for batch in batches {
++                    rows.extend(
++                        batch
++                            .column(0)
++                            .as_any()
++                            .downcast_ref::<Int64Array>()
++                            .unwrap()
++                            .iter(),
++                    );
++                }
++                assert_eq!(rows, expected, "{sql}");
++            }
++        }
++        Ok(())
++    }
++}

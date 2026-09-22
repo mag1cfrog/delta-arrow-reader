@@ -4506,6 +4506,37 @@ Dynamic INT comparison still needs DOUBLE and remains about 15.0% slower than pr
 
 Both ANSI patches remain optional. The separate type-inference shortcut is still deferred. Signed-zero GROUP BY and JOIN USING differences remain the next compatibility work; the dynamic INT/BIGINT widening cost and small control timing movements are not declared resolved.
 
+## Floating USING and NATURAL join keys
+
+The [optional join patch](sail-float-using.patch) applies the existing Spark equality helper to USING and NATURAL keys. These joins previously bypassed the helper used by explicit ON conditions, so opposite zero signs could fail to match. The patch passes normalized key expressions to DataFusion's native `join_with_expr_keys` builder. Unchanged keys retain the original column-key builder, and merged output columns retain their original values. No execution node, kernel, dependency or Python path is added.
+
+This is a local integration of existing code. The [inspected Sail revision](https://github.com/lakehq/sail/blob/51b57bc2e3611aebcb6112ffa5470bd56fe25d04/crates/sail-plan/src/resolver/query/join.rs) still supplies raw columns to `join_detailed`; it is not a runtime comparison against current Sail. Apply this patch on the accepted optional runtime, including both ANSI FLOAT/integer patches above.
+
+The [frozen corpus](float-using.jsonl) contains 79 queries in both ANSI modes. It covers FLOAT/DOUBLE and mixed widths, inner/outer/semi/anti joins, NATURAL joins, composite keys, duplicate values, NULL, NaN, infinities, merged-key sign and type, qualified keys, ordinary integer/Decimal controls and name errors. FLOAT/integer and FLOAT/Decimal precision cases inspect matched IDs; general mixed-type FULL JOIN output coercion remains outside this test.
+
+| Value/type or error-stage agreement | Before | After |
+| --- | ---: | ---: |
+| New join observations | 62/158 | 148/158 |
+| Existing signed-zero observations | 248/256 | 252/256 |
+| ANSI precision and narrowing observations | 406/406 | 406/406 |
+| Other existing observations | 5,753/6,068 | 5,753/6,068 |
+
+No previously agreeing observation regresses. Eight new observations still cannot resolve qualified hidden keys such as `l.v`; two still reject a duplicate key name that Spark accepts. Those are existing field-resolution differences, separate from key matching. The four remaining old signed-zero differences are GROUP BY. Seven existing failed casts name a different invalid input value; status, rows, types and other actual fields remain unchanged. These counts use the existing coarse comparator, not complete schema or structured-error equality.
+
+All 30 planner tests and four Delta lifecycle tests pass. A new Rust test checks signed-zero matching and NULL non-matching across seven join forms. The benchmark passes all 74 generic IN checks and 136 projection/subquery checks. All 12 added join cases use `HashJoinExec`; only four floating USING formatted plans change.
+
+The frozen performance schedule uses 1,048,576 preloaded rows, batch size 8,192, eight warmups and 41 samples per process. Four alternating ABBA/BAAB quartets compare planning and execution; same-binary controls add two quartets per build. All 384 processes finish with full counter coverage and zero migrations. Nothing is discarded.
+
+| ANSI join key | Before median ms | After median ms | Paired execution change | Instruction change |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT USING | 6.476 | 6.642 | +2.36% | +2.81% |
+| DOUBLE USING | 6.572 | 6.892 | +4.96% | +5.23% |
+| Integer USING | 4.879 | 4.883 | +0.16% | 0.00% |
+
+Non-ANSI floating USING costs rise about 3.00% and 5.17%. Floating planning costs rise about 17%, or roughly 0.11 ms. These are remaining local normalization costs. Candidate FLOAT/DOUBLE execution medians are close to the existing explicit ON path at 6.645/6.896 ms; that descriptive comparison is not a paired equivalence test. Explicit ON and integer execution instruction counts differ by less than 0.01%, while integer USING planning instructions rise 0.34% from key inspection. Timing controls and all conditional intervals remain in the record; this does not prove zero global overhead.
+
+[Results](float-using-results.json) and the [compressed archive](float-using-runs.json.gz) preserve references, both fresh captures, all measurements, source snapshots, commands and reproduction scripts. The archive checker recomputes the agreement counts from repository artifacts. Before and after differ only in `resolver/query/join.rs`. All 68 shared source/lock records and three executable slots, including two temporarily restored lifecycle fixtures, were restored and checked. The patch remains optional, and the separate type-inference shortcut remains deferred.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
