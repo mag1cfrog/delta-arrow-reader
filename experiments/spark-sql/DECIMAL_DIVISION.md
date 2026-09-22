@@ -4243,6 +4243,24 @@ A descriptive follow-up retains all groups and examines their existing counters.
 
 All 64 collection processes pass result and isolation checks, retaining 18,880 table traces and 16,704 prepared executions. Eight new smoke processes also pass. Their first attempt used an invalid zero-warmup setting and failed before a timed phase; the corrected attempt uses one warmup. The [raw archive](float-type-state-control-runs.json.gz) retains that failure, both attempts' scripts, frozen criteria, all samples and counters, and the separately marked descriptive analysis. The preceding 372 correctness captures and 10 statement-state queries are referenced by hash, not rerun or counted as new coverage. Shared inputs and global settings remain unchanged. The original positive release interval remains unresolved, and the optional type-inference patch remains unadopted.
 
+## Locating branch-miss samples in the native lookup
+
+The [branch-sampling follow-up](float-type-branch-sample-results.json) places 11,125 of 11,476 samples (96.94%) in the native `Float64StaticFilter::contains` lookup loop inside Arrow's `MutableBuffer::collect_bool`. All four groups still have matching complete IN-table address and hash sequences. This locates a hotspot but does not explain the variation between processes with apparently matching table state.
+
+The collection reuses the same executable and existing execution-phase gates. Sixteen processes use native seed indices 0 and 4, both execution orders, 32 warmups and 261 prepared plans. `perf record` samples `branch-misses:u` every 10,007 events, with 64 mmap pages and an explicit monotonic clock. All samples have the configured period and lie inside their corresponding observer phase. There are no reported lost records or decoder warnings. Sample shares describe the profile, not exact counts of all mispredicted branches.
+
+Source and disassembly inspection trace the loop through DataFusion's `HashSet` alias to hashbrown 0.17.1. It filters candidate buckets using SIMD tag comparisons, compares full keys, and checks empty tags before continuing a probe. The compiled function starts at ELF address `0x63f8960` and spans 462 bytes:
+
+| Function offset | Generated operation | Samples at this offset |
+| --- | --- | ---: |
+| `+0xa9` | Conditional jump after checking the candidate tag mask | 690 |
+| `+0xca` | Conditional jump after comparing the full stored key with the input bits | 3,586 |
+| `+0xea` | Conditional jump after checking for empty tags | 111 |
+
+Hardware interrupt sampling can skid from the triggering branch, so these offsets cannot assign each misprediction to an exact branch. The raw record includes all other offsets and per-process counts. The next distinction to establish is whether the variation reflects different lookup work or different prediction behavior for identical work; matching address bounds and four hash fingerprints do not capture every bucket or branch outcome.
+
+The [archive](float-type-branch-sample-runs.json.gz) retains the raw perf files, all decoded samples, disassembly, source hashes, 4,720 table traces and 4,176 prepared executions. Setup checks first found a default-buffer mapping failure, then a clock mismatch in eight completed smoke profiles. Both attempts remain recorded. The corrected eight-process smoke check passes with 51 samples. Slow whole-executable symbol demangling was interrupted and replaced with decoding raw names plus demangling only sampled symbols. No formal collection group was discarded, no Rust rebuild or runtime change was made, and no performance effect is estimated. The original release interval and adoption decision remain unresolved.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

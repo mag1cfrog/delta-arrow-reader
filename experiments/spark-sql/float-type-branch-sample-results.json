@@ -1,0 +1,354 @@
+{
+  "slice": "Locate branch-miss samples during long-list IN execution",
+  "base_commit": "d1bf60c",
+  "created_utc": "2026-09-22T04:03:06.173672+00:00",
+  "decision": {
+    "finding": "The native Float64StaticFilter hash-lookup and Boolean-packing loop contains 11125 of 11476 samples (96.9414%). Its most sampled offset is the conditional jump following full-key equality. All four groups retain matching complete IN address and hash sequences.",
+    "scope": "This locates a native lookup hotspot. Interrupt sampling does not establish exact branch causality, explain variation for apparently matching table states, or prove that the optional type-inference patch increases execution cost.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 4,
+    "processes": 16,
+    "prepared_plan_executions": 4176,
+    "constructed_table_traces": 4720,
+    "collection_query_captures": 32,
+    "branch_miss_samples": 11476,
+    "lost_record_lines": 0,
+    "samples_outside_observer_bounds": 0,
+    "final_smoke_processes": 8,
+    "final_smoke_executions": 24,
+    "final_smoke_samples": 51,
+    "earlier_smoke_processes_with_unmatched_clock_retained": 8,
+    "earlier_smoke_samples_retained": 53,
+    "perf_record_startup_failures": 1,
+    "prepared_processes_cancelled_before_timing": 1,
+    "symbol_decoder_interruptions": 1,
+    "failed_or_discarded_collection_groups": 0,
+    "rust_builds": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "d1bf60c",
+    "question": "Which symbols and sampled instruction addresses account for the observed branch misses during long-list IN execution?",
+    "implementation": "Reuse the exact AA executable and previous four-process gate controller. Replace perf stat with perf record for branch-misses:u at period 10007. Keep task context reuse, fresh planning state, sorted resolver release, native allocator settings and child-only fixed addresses. Record only the existing execution phase. Use 64 mmap pages per recorder to stay within the existing memory-lock allowance, and retain lost-record diagnostics. Set CLOCK_MONOTONIC explicitly so sample timestamps can be checked against observer phase boundaries.",
+    "design": "Four fixed groups and 16 fresh processes using previously used native seed inputs 0 and 4, each with ABBA and BAAB execution orders. 32 warmups and 261 prepared plans per process. Preparation rotations 0,1,2,3. This is profiling, not the fully crossed 16-group timing control.",
+    "analysis": "Resolve sampled IPs against the exact executable and retain per-process and grouped symbol/offset histograms, raw perf data, full perf-script output and lost-record diagnostics. Compare observed IN hash/address traces within groups. Do not infer an exact mispredicted branch solely from an interrupt-sampled IP, and do not estimate a runtime performance effect. Smoke validation requires every sample to be inside its observer bounds, with the configured period and no lost records.",
+    "stopping_rule": "Validate the record/control interface using eight short smoke processes. Then freeze the protocol, schedule and collection code and collect exactly four groups. Retain every attempt and failure, without outcome-based extensions, exclusion or input replacement. No other builds, tests or source inspection during collection.",
+    "limits": [
+      "Hardware interrupt sampling can skid from the triggering instruction; symbol attribution is a lead, not precise branch causality.",
+      "Sampling and perf buffer handling change execution conditions. Incidental timings are retained but are not comparable to the earlier unsampled release measurements.",
+      "These diagnostic native-seed inputs and one long-list query do not establish general Spark performance.",
+      "The optional float type-inference patch remains unadopted. No runtime source or shared input is changed."
+    ]
+  },
+  "trace_controls": [
+    {
+      "directory": "group-00",
+      "seed_index": 0,
+      "processes": 4,
+      "traces_per_process": 295,
+      "distinct_complete_hash_sequences": 1,
+      "distinct_complete_address_sequences": 1
+    },
+    {
+      "directory": "group-01",
+      "seed_index": 4,
+      "processes": 4,
+      "traces_per_process": 295,
+      "distinct_complete_hash_sequences": 1,
+      "distinct_complete_address_sequences": 1
+    },
+    {
+      "directory": "group-02",
+      "seed_index": 4,
+      "processes": 4,
+      "traces_per_process": 295,
+      "distinct_complete_hash_sequences": 1,
+      "distinct_complete_address_sequences": 1
+    },
+    {
+      "directory": "group-03",
+      "seed_index": 0,
+      "processes": 4,
+      "traces_per_process": 295,
+      "distinct_complete_hash_sequences": 1,
+      "distinct_complete_address_sequences": 1
+    }
+  ],
+  "hotspot": {
+    "elf_address": "0x63f8960",
+    "elf_size_bytes": 462,
+    "name": "Float64StaticFilter::contains lookup inside MutableBuffer::collect_bool",
+    "sample_count": 11125,
+    "sample_share_pct": 96.94144301150227,
+    "offset_samples": {
+      "0xca": 3586,
+      "0x12c": 1068,
+      "0x114": 947,
+      "0xb0": 767,
+      "0x14e": 690,
+      "0xa9": 690,
+      "0xe4": 381,
+      "0xbd": 316,
+      "0x149": 312,
+      "0xba": 304,
+      "0x11c": 229,
+      "0x90": 184,
+      "0xb6": 157,
+      "0x140": 157,
+      "0x169": 137,
+      "0x12f": 130,
+      "0xea": 111,
+      "0xb3": 110,
+      "0x137": 107,
+      "0x118": 107,
+      "0x166": 94,
+      "0x123": 58,
+      "0x133": 49,
+      "0x129": 47,
+      "0x144": 45,
+      "0xa1": 43,
+      "0x93": 39,
+      "0x112": 31,
+      "0xd4": 22,
+      "0x99": 20,
+      "0x9d": 18,
+      "0x7d": 18,
+      "0x104": 17,
+      "0x177": 17,
+      "0x126": 14,
+      "0x107": 9,
+      "0x100": 8,
+      "0x59": 8,
+      "0x180": 8,
+      "0x6a": 7,
+      "0xc0": 7,
+      "0x183": 7,
+      "0xa6": 7,
+      "0x13b": 6,
+      "0x72": 5,
+      "0x151": 4,
+      "0x120": 4,
+      "0x18d": 3,
+      "0x76": 3,
+      "0x67": 2,
+      "0x19b": 2,
+      "0xc6": 2,
+      "0x163": 1,
+      "0xe8": 1,
+      "0x170": 1,
+      "0xd8": 1,
+      "0x188": 1,
+      "0x80": 1,
+      "0xdb": 1,
+      "0x6e": 1,
+      "0x198": 1,
+      "0x83": 1,
+      "0xe0": 1
+    },
+    "per_process_samples": [
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "slot": 0,
+        "sample_count": 618,
+        "hotspot_samples": 592
+      },
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "slot": 1,
+        "sample_count": 637,
+        "hotspot_samples": 618
+      },
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "slot": 2,
+        "sample_count": 638,
+        "hotspot_samples": 617
+      },
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "slot": 3,
+        "sample_count": 637,
+        "hotspot_samples": 625
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "slot": 0,
+        "sample_count": 638,
+        "hotspot_samples": 616
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "slot": 1,
+        "sample_count": 973,
+        "hotspot_samples": 950
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "slot": 2,
+        "sample_count": 630,
+        "hotspot_samples": 609
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "slot": 3,
+        "sample_count": 974,
+        "hotspot_samples": 946
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "slot": 0,
+        "sample_count": 598,
+        "hotspot_samples": 573
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "slot": 1,
+        "sample_count": 634,
+        "hotspot_samples": 617
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "slot": 2,
+        "sample_count": 634,
+        "hotspot_samples": 613
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "slot": 3,
+        "sample_count": 973,
+        "hotspot_samples": 951
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "slot": 0,
+        "sample_count": 639,
+        "hotspot_samples": 617
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "slot": 1,
+        "sample_count": 639,
+        "hotspot_samples": 615
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "slot": 2,
+        "sample_count": 634,
+        "hotspot_samples": 615
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "slot": 3,
+        "sample_count": 980,
+        "hotspot_samples": 951
+      }
+    ]
+  },
+  "source_audit": {
+    "files": [
+      {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023/diagnostic-primitive-filter.rs",
+        "sha256": "e2c224249e363d16e53f7b96ae8f163aa7c81ba74c76d11e05b974a635c6dafd"
+      },
+      {
+        "path": "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrow-buffer-58.4.0/src/buffer/mutable.rs",
+        "sha256": "344d455292944f18f87d87d241612be935471e1d4a2fa96726575e85863e0e4d"
+      },
+      {
+        "path": "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datafusion-common-54.1.0/src/lib.rs",
+        "sha256": "e0a0a19ca34d81e66456bef7658be0e6037ece9d28df0a060e8bf1befcc347ca"
+      },
+      {
+        "path": "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.17.1/src/set.rs",
+        "sha256": "71485eb08e622a7aeb1978817233f0e9c75f4daec87d2d6fa6eba6e0aaf80f2f"
+      },
+      {
+        "path": "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.17.1/src/map.rs",
+        "sha256": "b79497ce537ffc5ed4f8f3399434b9216c01e7927fdc434fee190e9e9ce2abb0"
+      },
+      {
+        "path": "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.17.1/src/raw.rs",
+        "sha256": "0c8ad353ba95817e72b0a8fea48fa2599099ea3def374f254ab6402a9c468d22"
+      }
+    ],
+    "call_path": [
+      "Float64StaticFilter::contains calls BooleanBuffer::collect_bool with native HashSet::contains.",
+      "Arrow MutableBuffer::collect_bool packs 64 boolean lookup results into each u64.",
+      "DataFusion common HashSet aliases hashbrown::HashSet; hashbrown 0.17.1 checks candidate tags, full key equality, and empty tags before continuing the probe."
+    ],
+    "offset_interpretation": {
+      "0xa9": "Conditional jump after the SIMD hash-tag candidate mask check.",
+      "0xca": "Conditional jump after comparing the full stored key with the input f64 bits.",
+      "0xea": "Conditional jump after checking for empty control tags."
+    },
+    "limits": "The interrupt-sampled instruction pointer can skid. This maps the generated lookup loop and sampled offsets, not the exact branch responsible for each hardware misprediction."
+  },
+  "restoration": {
+    "shared_inputs_changed": false,
+    "checked_inventory_counts": {
+      "sources": 52,
+      "executables": 3
+    },
+    "binary": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023/after-bench",
+      "sha256": "967585cc99118a258f7189d928790d5fd846d9a2f30e5766bb08ccccc8a1897c"
+    },
+    "global_settings_unchanged": true
+  },
+  "references": {
+    "float-type-state-control-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-state-control-results.json",
+      "sha256": "dc3a3f7b3b363dddfdcd60c1966a28b8d1baeea64ba499bcb299439b0d366c97"
+    },
+    "float-type-state-control-runs.json.gz": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-state-control-runs.json.gz",
+      "sha256": "b3c548cf6d5762409614597d39c577289089b64a1b4f3357f75bfbe2158195ea"
+    },
+    "float-type-session-state-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-session-state-results.json",
+      "sha256": "9062f41069db7829ddd8b862031cc85d2873d93e193e99c4ded6e030cc944de8"
+    },
+    "float-type-session-state-runs.json.gz": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-session-state-runs.json.gz",
+      "sha256": "d05f4d037a9931bff14fc4f7ec8cbec82b86c0c12a3af9135bcd4e87ce42a986"
+    }
+  },
+  "raw_data": {
+    "file": "float-type-branch-sample-runs.json.gz",
+    "sha256": "3f646dc850740374d4b81d4cd52d5bdd11f0c7f5239348117ea3c819e309e8ce",
+    "uncompressed_sha256": "51c73e59de503ee057affe05f9d2594c6e093ff8c9c6a65e89bce4d35d78acf8",
+    "compressed_bytes": 1397675,
+    "uncompressed_bytes": 23664023
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-sample-d1bf60c",
+    "commands": [
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 decode.py collection",
+      "python3 record.py"
+    ],
+    "setup": "Use the exact referenced binary and retained profile driver. Record branch-misses:u at period 10007, with 64 mmap pages and CLOCK_MONOTONIC. Validate all smoke timestamps before the fixed collection. Decode without whole-ELF demangling, then resolve only sampled symbol names with c++filt. The archive includes raw perf files as base64, all captures, decoded samples, disassembly, source identities and setup failures. Symbol range/disassembly metadata comes from nm -S -n and the recorded objdump command."
+  }
+}
