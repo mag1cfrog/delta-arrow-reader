@@ -1,0 +1,79 @@
+{
+  "parent_commit": "180794d",
+  "status": "optional test-only follow-up; default source unchanged",
+  "patch": "sail-signed-literal-test.patch",
+  "patch_sha256": "2e283d5a228559f8ee74aa1d783582b43d02ca2adafdd95f43a13efb511651d7",
+  "apply_after": "sail-signed-literal.patch, on the optional runtime recorded by using-qualified-results.json",
+  "change": "Update two expected display names after signed negative literals were normalized in the SQL AST. Production code is byte-identical.",
+  "before": {
+    "passed": 27,
+    "failed": 1,
+    "source": "using-qualified-runs.json.gz: before-full-runner-tests.log and full-runner-tests.log",
+    "test": "native_functions_preserve_spark_precedence_and_formatting"
+  },
+  "after": {
+    "passed": 28,
+    "failed": 0,
+    "delta_lifecycle_included": 4,
+    "command": [
+      "cargo",
+      "test",
+      "--release",
+      "--offline",
+      "--locked",
+      "--config",
+      "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/override.toml",
+      "--bin",
+      "delta-reader-sail-extraction-probe",
+      "-j",
+      "3"
+    ],
+    "returncode": 0,
+    "source_changes_against_parent": [
+      "main.rs"
+    ],
+    "main_before_sha256": "e48fe3a79704d118a3a264550fb40de73d5c9d4fa056a2c0a1efed779b91f527",
+    "main_after_sha256": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+    "production_prefix_sha256": "834c3f2acbaec979d1393ca2aa83c7a802793f1020fbbfd9e34e513e57539aa7",
+    "test_output": [
+      "running 28 tests",
+      "test tests::rejects_external_sources_before_format_or_predicate_resolution ... ok",
+      "test tests::rejects_inline_arrow_payloads_before_decoding ... ok",
+      "test tests::rejects_inline_udf_entrypoints_before_argument_or_input_resolution ... ok",
+      "test tests::rejects_named_arguments_instead_of_discarding_their_names ... ok",
+      "test tests::native_sequence_and_timezone_paths_still_execute ... ok",
+      "test tests::rejects_streaming_and_checkpoints_before_resolving_inputs ... ok",
+      "test tests::rejects_writes_and_snapshot_modifiers_before_table_lookup ... ok",
+      "test tests::rejects_dataframe_statistics_before_resolving_inputs ... ok",
+      "test tests::native_session_catalogs_and_views_need_no_sail_extensions ... ok",
+      "test tests::rejects_commands_during_analysis ... ok",
+      "test tests::native_functions_preserve_spark_precedence_and_formatting ... ok",
+      "test tests::sql_functions_use_the_retained_implementations ... ok",
+      "test tests::rejects_dataframe_expressions_while_sql_fields_remain ... ok",
+      "test tests::sql_literals_decode_without_reconstructing_sql_text ... ok",
+      "test tests::variant_sql_survives_storage_removal ... ok",
+      "test tests::spark_monotonic_ids_keep_ordered_window_inputs ... ok",
+      "test delta_lifecycle::spark_decimal_null_subqueries_do_not_read_delta ... ok",
+      "test tests::rejects_dataframe_transforms_while_sql_paths_remain ... ok",
+      "test tests::rejects_connect_scopes_while_sql_subqueries_remain ... ok",
+      "test tests::spark_monotonic_ids_follow_partition_offsets ... ok",
+      "test delta_lifecycle::spark_delta_stream_drop_and_late_failure_keep_partial_results ... ok",
+      "test tests::spark_partition_ids_follow_execution_partitions ... ok",
+      "test delta_lifecycle::spark_delta_refresh_keeps_retained_plans_and_streams ... ok",
+      "test delta_lifecycle::spark_delta_deletion_vectors_preserve_rows_and_schema ... ok",
+      "test tests::spark_ordered_aggregates_keep_required_sort ... ok",
+      "test tests::spark_sort_by_orders_each_partition ... ok",
+      "test tests::ntile_keeps_larger_buckets_first ... ok",
+      "test tests::first_last_windows_preserve_nulls_frames_and_batches ... ok",
+      "",
+      "test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s",
+      ""
+    ]
+  },
+  "restoration": {
+    "source_and_lock_records": 74,
+    "executable_slots": 3,
+    "all_hashes_match_parent": true
+  },
+  "performance": "Not measured: only two test expectation strings changed."
+}

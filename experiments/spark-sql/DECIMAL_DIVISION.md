@@ -4564,6 +4564,20 @@ Execution instruction differences are below 0.01% in every paired case. FLOAT US
 
 [Results](using-qualified-results.json) and the [raw archive](using-qualified-runs.json.gz) include every final capture, the earlier candidates and failed checks, corrected ordering evidence, build records and reproduction scripts. The offline checker verifies the counts and measurements using repository artifacts. Seven resolver source files differ between parent and candidate. All 74 shared source/lock records, three executable slots and the two temporary Delta corpus files are restored and checked. Default vendored sources remain unchanged; the type-inference shortcut is still deferred.
 
+## Signed-literal runner test expectations
+
+`sail-signed-literal-test.patch` updates the two stale expected column names in
+`native_functions_preserve_spark_precedence_and_formatting` to `probe_native(-7)`
+and `ABS(-7)`. Apply it after the optional signed-literal patch. The default
+runner retains its original expectations until that runtime change is adopted.
+
+The preceding qualified-key experiment reproduced the same failure on both
+parent and candidate. With this test-only patch, all 28 runner tests pass,
+including the four Delta lifecycle tests. The runtime source prefix is
+byte-identical, and the 74 source/lock records and three executable slots were
+restored. No performance run is needed for these two assertion changes.
+`signed-literal-test-results.json` records the command, hashes and test output.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

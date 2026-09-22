@@ -1,0 +1,13 @@
+--- a/experiments/spark-sql/src/main.rs
++++ b/experiments/spark-sql/src/main.rs
+@@ -1772,8 +1772,8 @@
+         assert_eq!(
+             named.fields,
+             [
+-                "probe_native((- 7))",
+-                "ABS((- 7))",
++                "probe_native(-7)",
++                "ABS(-7)",
+                 "1",
+                 "CAST(1 AS BIGINT)",
+                 "typeof(1)"
