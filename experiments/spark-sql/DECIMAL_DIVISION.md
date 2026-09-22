@@ -5290,6 +5290,80 @@ performing that conversion within native addition. It must preserve rounding,
 NULL semantics and operand evaluation order, and pass the complete-query
 comparison before adoption.
 
+## Fusing an integer cast into native DOUBLE addition
+
+`datafusion-float64-fused-integer-add.patch` applies on top of the accepted
+left-buffer reuse patch in DataFusion 54.1.0's `src/expressions/binary.rs`.
+It removes an Int64-to-Float64 temporary array when an existing right-hand cast
+feeds native DOUBLE addition and the left buffer can be reused. The two rejected
+allocation prototypes are excluded. No dependency or execution node is added,
+and default vendor sources remain unchanged.
+
+The expression evaluates the left operand, then the cast's original child,
+each once. For Int64 input, the owned-buffer addition loop performs `as f64`
+before adding. This is the same conversion used by `num_traits` 0.2.19's
+Int64 `ToPrimitive::to_f64`: it can round but cannot overflow. Other source
+types retain the original cast options. Scalar inputs, shared buffers and
+unavailable buffer ownership retain separate casting and borrowed addition.
+NULL masks, prefix lengths, allocation layouts and left-plus-right order are
+preserved. Logical and displayed physical plans remain unchanged.
+
+The candidate is retained. In the fixed 160-process comparison, it improves the
+complete DOUBLE Decimal query by 4.094%, beyond the recorded same-binary control
+shifts. The native-output queries also improve substantially.
+
+| Query | Before, ms | After, ms | Paired time change | Paired 95% interval | Instruction change |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Derived DOUBLE, final Decimal | 12.584764 | 12.077752 | -4.094% | -4.227% to -3.957% | -1.547% |
+| Derived FLOAT, final Decimal | 10.580070 | 10.587970 | +0.157% | -0.067% to +0.555% | +0.005% |
+| Derived DOUBLE, native output | 2.991265 | 0.729119 | -75.645% | -75.817% to -75.486% | -15.841% |
+| Stored FLOAT plus integer, native DOUBLE | 0.827036 | 0.624800 | -24.731% | -26.224% to -23.458% | -21.760% |
+| Shared ready DOUBLE sum | 0.258911 | 0.262347 | +1.572% | +0.583% to +3.242% | +0.420% |
+| FLOAT read control | 0.064425 | 0.064535 | -0.263% | -1.893% to +1.388% | +0.065% |
+
+Median page faults across 41 executions fall from 42,594.5 to 36 for native
+derived DOUBLE and from 291 to 27 for stored FLOAT/integer addition. The complete
+DOUBLE Decimal query remains at 126,439.5/126,380. Its heap-related cost is not
+resolved by this fusion. Pairing the complete DOUBLE and FLOAT queries within
+the same experiment gives an 18.946% difference before (95% interval 18.632% to
+19.181%) and 13.898% after (13.567% to 14.224%). The measured keys are exactly
+representable in both widths; the expressions differ semantically in general.
+
+Shared DOUBLE addition gains no buffer reuse and adds dispatch work: instructions
+rise 0.420%, with a measured 1.572% time increase. This cost remains to be reduced.
+Same-binary control shifts are DOUBLE Decimal -0.732%/-0.513%, FLOAT Decimal
++0.684%/+0.097%, native derived DOUBLE -0.486%/+0.217%, and shared DOUBLE
+-0.098%/-0.689% (before/after). All observations are retained. Eight warmups,
+41 samples, full counter coverage, zero CPU migrations, CPU affinity and allocator,
+ASLR and governor settings remain unchanged. No compilation or other work ran
+during timing.
+
+All 81 native binary tests, 37 planner tests and 28 runner tests pass, including
+four Delta lifecycle tests. The added test compares 320 physical-expression
+evaluations with separate casting and native addition. It covers array length,
+NULLs, shared/owned left input, scalar/array right input, safe/strict casts and
+both overflow modes, including integer rounding around 2^53, i64 limits,
+non-finite floats and invalid strings. The preceding buffer-ownership tests
+remain in place. All 258 benchmark checks/plans, all 6,784 SQL classifications
+and successful values/types, and all 116 real-Delta parent comparisons are
+unchanged. Existing Spark differences remain; performance covers finite non-NULL
+inputs at batch size 8,192.
+
+`float64-fused-integer-add-results.json` and
+`float64-fused-integer-add-runs.json.gz` retain the patch inputs, source/lock
+provenance, original references, captures, frozen protocol, every measurement
+and verification scripts. The archived `check-archive.py` rechecks them without
+the build cache. A stale final stdout label in the initial benchmark checker
+is recorded alongside the corrected reproduction script; its assertions and
+captures were unchanged. All 78 shared source/lock/fixture records and three
+executable slots were restored, and temporary inputs are absent.
+
+The next refinement should separate the fused and ordinary addition paths at
+compile time and avoid inspecting right-hand casts when the left array is shared.
+It must be measured against this accepted candidate, including shared-input
+controls, before being retained. The remaining 13.9% complete-query difference
+is a separate unresolved cost.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

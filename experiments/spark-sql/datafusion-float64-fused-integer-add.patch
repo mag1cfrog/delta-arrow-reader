@@ -1,0 +1,205 @@
+--- a/src/expressions/binary.rs
++++ b/src/expressions/binary.rs
+@@ -169,6 +169,7 @@
+ }
+ 
+ /// Reuse an owned floating intermediate before falling back to borrowed addition.
++/// An Int64 right operand represents a fused Int64-to-Float64 cast.
+ fn apply_float64_add(lhs: ColumnarValue, rhs: &ColumnarValue) -> Result<ColumnarValue> {
+     use arrow::buffer::NullBuffer;
+     use arrow::compute::kernels::numeric::add;
+@@ -191,13 +192,22 @@
+             // Retain the allocation layout and explicitly preserve prefix-slice length.
+             match values.into_inner().into_mutable() {
+                 Ok(mut values) => {
+-                    let right = right.as_primitive::<Float64Type>();
+                     values.truncate(right.len() * size_of::<f64>());
+-                    values
+-                        .typed_data_mut::<f64>()
+-                        .iter_mut()
+-                        .zip(right.values())
+-                        .for_each(|(left, right)| *left += *right);
++                    if right.data_type() == &DataType::Int64 {
++                        // Same conversion as num_traits' Int64-to-Float64 cast:
++                        // rounding is possible, but overflow is not.
++                        values
++                            .typed_data_mut::<f64>()
++                            .iter_mut()
++                            .zip(right.as_primitive::<Int64Type>().values())
++                            .for_each(|(left, right)| *left += *right as f64);
++                    } else {
++                        values
++                            .typed_data_mut::<f64>()
++                            .iter_mut()
++                            .zip(right.as_primitive::<Float64Type>().values())
++                            .for_each(|(left, right)| *left += *right);
++                    }
+                     let nulls = NullBuffer::union(nulls.as_ref(), right.nulls());
+                     return Ok(ColumnarValue::Array(Arc::new(Float64Array::new(
+                         values.into(),
+@@ -212,7 +222,12 @@
+         // ponytail: nonzero offsets and right-buffer reuse stay on borrowed addition.
+         (lhs, _) => lhs,
+     };
+-    apply(&lhs, rhs, add)
++    if rhs.data_type() == DataType::Int64 {
++        // Int64-to-Float64 produces the same values in strict and safe modes.
++        apply(&lhs, &rhs.cast_to(&DataType::Float64, None)?, add)
++    } else {
++        apply(&lhs, rhs, add)
++    }
+ }
+ 
+ /// Returns true if both operands are Date types (Date32 or Date64)
+@@ -377,8 +392,21 @@
+             }
+         }
+ 
++        let left_data_type = lhs.data_type();
++        if self.op == Operator::Plus && left_data_type == DataType::Float64 {
++            if let Some(cast) = self.right.downcast_ref::<crate::expressions::CastExpr>() {
++                if cast.cast_type() == &DataType::Float64 {
++                    // Evaluate each operand once, in the original left-to-right order.
++                    let rhs = cast.expr().evaluate(batch)?;
++                    if rhs.data_type() == DataType::Int64 {
++                        return apply_float64_add(lhs, &rhs);
++                    }
++                    let rhs = rhs.cast_to(cast.cast_type(), Some(cast.cast_options()))?;
++                    return apply_float64_add(lhs, &rhs);
++                }
++            }
++        }
+         let rhs = self.right.evaluate(batch)?;
+-        let left_data_type = lhs.data_type();
+         let right_data_type = rhs.data_type();
+ 
+         let schema = batch.schema();
+@@ -1211,6 +1239,128 @@
+             apply_float64_add(left, &right).unwrap_err().to_string(),
+             expected
+         );
++        Ok(())
++    }
++
++    #[test]
++    fn float64_add_fused_integer_cast_matches_separate_cast() -> Result<()> {
++        use crate::expressions::CastExpr;
++        use arrow::compute::CastOptions;
++        use arrow::compute::kernels::numeric::add;
++
++        let bits = |value: ColumnarValue, len| {
++            Ok::<_, datafusion_common::DataFusionError>(
++                value
++                    .into_array(len)?
++                    .as_primitive::<Float64Type>()
++                    .iter()
++                    .map(|v| v.map(f64::to_bits))
++                    .collect::<Vec<_>>(),
++            )
++        };
++        let floats = [
++            0.0,
++            -0.0,
++            1.25,
++            -2.5,
++            f32::from_bits(1),
++            f32::MIN_POSITIVE,
++            f32::MAX,
++            f32::INFINITY,
++            f32::NEG_INFINITY,
++            f32::NAN,
++        ];
++        let integers = [
++            i64::MIN,
++            i64::MAX,
++            -(1_i64 << 53) - 1,
++            (1_i64 << 53) - 1,
++            1_i64 << 53,
++            (1_i64 << 53) + 1,
++            -1,
++            0,
++            1,
++        ];
++        for len in [0, 1, 17, 8192] {
++            for nulls in [false, true] {
++                let input: Float32Array = (0..len)
++                    .map(|i| (!(nulls && i % 3 == 0)).then_some(floats[i % floats.len()]))
++                    .collect();
++                let shared = input.unary::<_, Float64Type>(|v| v as f64);
++                let right: Int64Array = (0..len)
++                    .map(|i| (!(nulls && i % 5 == 0)).then_some(integers[i % integers.len()]))
++                    .collect();
++                let text: StringArray = (0..len)
++                    .map(|i| match i % 3 {
++                        0 => Some("1.25"),
++                        1 => Some("invalid"),
++                        _ => None,
++                    })
++                    .collect();
++                let batch = RecordBatch::try_from_iter([
++                    ("f32", Arc::new(input) as ArrayRef),
++                    ("f64", Arc::new(shared) as ArrayRef),
++                    ("i64", Arc::new(right) as ArrayRef),
++                    ("text", Arc::new(text) as ArrayRef),
++                ])?;
++                for safe in [false, true] {
++                    let options = CastOptions {
++                        safe,
++                        ..Default::default()
++                    };
++                    for unique_left in [false, true] {
++                        let left: Arc<dyn PhysicalExpr> = if unique_left {
++                            Arc::new(CastExpr::new(
++                                Arc::new(Column::new("f32", 0)),
++                                DataType::Float64,
++                                Some(options.clone()),
++                            ))
++                        } else {
++                            Arc::new(Column::new("f64", 1))
++                        };
++                        // Include non-Int64 casts to exercise the unchanged cast fallback.
++                        let sources: Vec<Arc<dyn PhysicalExpr>> = vec![
++                            Arc::new(Column::new("i64", 2)),
++                            Arc::new(Column::new("f32", 0)),
++                            Arc::new(Column::new("text", 3)),
++                            Arc::new(Literal::new(ScalarValue::Int64(Some(i64::MAX)))),
++                            Arc::new(Literal::new(ScalarValue::Int64(None))),
++                        ];
++                        for source in sources {
++                            let right: Arc<dyn PhysicalExpr> = Arc::new(CastExpr::new(
++                                source,
++                                DataType::Float64,
++                                Some(options.clone()),
++                            ));
++                            let expected = left
++                                .evaluate(&batch)
++                                .and_then(|left| {
++                                    right
++                                        .evaluate(&batch)
++                                        .and_then(|right| apply(&left, &right, add))
++                                })
++                                .and_then(|value| bits(value, len));
++                            for fail_on_overflow in [false, true] {
++                                let expression = BinaryExpr::new(
++                                    Arc::clone(&left),
++                                    Operator::Plus,
++                                    Arc::clone(&right),
++                                )
++                                .with_fail_on_overflow(fail_on_overflow);
++                                let actual = expression.evaluate(&batch).and_then(|v| bits(v, len));
++                                match (&expected, actual) {
++                                    (Ok(expected), Ok(actual)) => assert_eq!(*expected, actual),
++                                    (Err(expected), Err(actual)) => {
++                                        assert_eq!(expected.to_string(), actual.to_string())
++                                    }
++                                    other => panic!("different fused cast outcome: {other:?}"),
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
+         Ok(())
+     }
+ 
