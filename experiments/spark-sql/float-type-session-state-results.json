@@ -1,0 +1,340 @@
+{
+  "slice": "Test planning-state reuse while preserving statement state",
+  "base_commit": "72b7023",
+  "created_utc": "2026-09-22T03:28:01.555434+00:00",
+  "decision": {
+    "finding": "Both fresh and reused planning-state groups have matching addresses at every one of their 295 construction positions. Each seed has matching complete hash fingerprints across modes. The fresh control still clones state per query.",
+    "scope": "The new collection does not distinguish clone removal as the cause of stable addresses, since the cloning control is stable too. Statement-state checks pass, but neither a performance fix nor a unique allocation cause is established.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 4,
+    "processes": 16,
+    "constructed_table_traces": 4720,
+    "resolver_field_order_traces": 4720,
+    "field_release_events": 14160,
+    "prepared_plan_executions": 4176,
+    "exact_correctness_captures": 372,
+    "collection_query_captures": 32,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "invalid_settings_rejected": 2,
+    "successful_rust_builds": 1,
+    "failed_precompile_build_attempts": 1,
+    "repaired_missing_build_inputs": 7,
+    "statement_state_check_processes": 2,
+    "statement_state_queries": 10,
+    "failed_or_discarded_collection_groups": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "72b7023",
+    "question": "Does avoiding the per-query planning SessionState clone reduce the remaining IN-table address variability?",
+    "intervention": "One diagnostic benchmark executable. Both modes retain one native SessionState. Fresh uses the original DataFrame route; reuse calls mark_start_execution and create_physical_plan on the retained state after the unchanged Sail resolver. Generic-IN and subquery suites use the same helper. Execution TaskContext reuse is fixed in both modes.",
+    "semantic_checks": "Preserve the native start-time, config snapshot and alias-generator refresh. Prepare timestamp queries and table-backed scalar subqueries, then execute in reverse to check statement-time and result isolation. Validate all existing 186 captures per state mode.",
+    "design": "Two previously used native shared seed indices, 0 and 4, four processes for each fresh/reuse mode. Sorted resolver release, native allocator settings, fixed addresses, 32 warmups and 261 prepared plans. Reverse mode order for the second seed; use existing preparation and execution barriers.",
+    "analysis": "Compare all hash and address traces. Require within-group and cross-mode hash controls for allocation interpretation. Timings and counters are retained but no performance effect is estimated.",
+    "stopping_rule": "One diagnostic Rust build and exactly four groups. Retain every failure, capture and trace; no outcome-based extensions or input replacement. Validation precedes collection. No unrelated work overlaps collection; shared files are restored and hash-checked in finally.",
+    "limits": [
+      "Reuse applies only to this sequential read-only benchmark with fixed configuration and function registrations. It is not a production API proposal.",
+      "Both modes retain an extra planning state; the fresh diagnostic is not byte-identical to the preceding executable.",
+      "Physical subquery planning can still create its own owned state. This intervention does not remove every internal clone.",
+      "The optional float type-inference patch stays unadopted. No claim of eliminated release cost or new Spark corpus coverage."
+    ]
+  },
+  "analysis": {
+    "groups": [
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "sorted",
+        "warmups": 32,
+        "samples": 261,
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "index": 0,
+        "directory": "group-00",
+        "traces_per_process": 295,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [],
+        "first_address_mismatch_index": null,
+        "prepared_plan_address_mismatch_indices": [],
+        "first_prepared_plan_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 261,
+            "matching_hash_positions": 261,
+            "matching_address_positions": 261
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "release_order": "sorted",
+        "warmups": 32,
+        "samples": 261,
+        "state_mode": "reuse",
+        "context_mode": "reuse",
+        "index": 1,
+        "directory": "group-01",
+        "traces_per_process": 295,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [],
+        "first_address_mismatch_index": null,
+        "prepared_plan_address_mismatch_indices": [],
+        "first_prepared_plan_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 261,
+            "matching_hash_positions": 261,
+            "matching_address_positions": 261
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "sorted",
+        "warmups": 32,
+        "samples": 261,
+        "state_mode": "reuse",
+        "context_mode": "reuse",
+        "index": 2,
+        "directory": "group-02",
+        "traces_per_process": 295,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [],
+        "first_address_mismatch_index": null,
+        "prepared_plan_address_mismatch_indices": [],
+        "first_prepared_plan_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 261,
+            "matching_hash_positions": 261,
+            "matching_address_positions": 261
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      },
+      {
+        "scenario": "same-after",
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "release_order": "sorted",
+        "warmups": 32,
+        "samples": 261,
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "index": 3,
+        "directory": "group-03",
+        "traces_per_process": 295,
+        "distinct_complete_hash_sequences": 1,
+        "distinct_complete_address_sequences": 1,
+        "hash_mismatch_indices": [],
+        "address_mismatch_indices": [],
+        "first_address_mismatch_index": null,
+        "prepared_plan_address_mismatch_indices": [],
+        "first_prepared_plan_address_mismatch_index": null,
+        "phases": {
+          "validation_before": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          },
+          "warmups": {
+            "plans_per_process": 32,
+            "matching_hash_positions": 32,
+            "matching_address_positions": 32
+          },
+          "prepared_plans": {
+            "plans_per_process": 261,
+            "matching_hash_positions": 261,
+            "matching_address_positions": 261
+          },
+          "validation_after": {
+            "plans_per_process": 1,
+            "matching_hash_positions": 1,
+            "matching_address_positions": 1
+          }
+        }
+      }
+    ],
+    "cross_state_modes": [
+      {
+        "seed_index": 0,
+        "processes": 8,
+        "distinct_complete_hash_sequences": 1,
+        "hash_fingerprints_match_across_state_modes": true
+      },
+      {
+        "seed_index": 4,
+        "processes": 8,
+        "distinct_complete_hash_sequences": 1,
+        "hash_fingerprints_match_across_state_modes": true
+      }
+    ],
+    "processes": 16,
+    "table_traces": 4720,
+    "prepared_plan_executions": 4176,
+    "scope": "Planning SessionState cloning and address variability, with no performance effect estimated"
+  },
+  "source_audit": {
+    "files": {
+      "datafusion-54.1.0/src/execution/context/mod.rs": "0c4001bb93aa078a51a8da554cbf444516674c55c37693a87d484e6f0dba4a76",
+      "datafusion-54.1.0/src/execution/session_state.rs": "db71f5ac0b937d476d31d12147519c8b127d3cf5b746e7997ff03445934a58d2",
+      "datafusion-54.1.0/src/physical_planner.rs": "8848f4dc963e26d2a98f7a6ff5897bedc8def50da307fb9e388c342d20452c59",
+      "datafusion-expr-54.1.0/src/execution_props.rs": "5e8af6ae83f54d7b99759dc880446f4464a23bd0df73b91932cb500bee130772"
+    },
+    "findings": [
+      "SessionContext::state clones SessionState and refreshes execution properties.",
+      "mark_start_execution refreshes time, config snapshot and alias generator.",
+      "The physical planner creates an owned clone for scalar-subquery scratch state rather than mutating the caller."
+    ]
+  },
+  "source": {
+    "only_session_state_reuse_intervention_added": true,
+    "same_in_table_trace_and_lookup_sources": true,
+    "same_resolver_release_intervention": true,
+    "same_type_inference": true,
+    "same_features_profiles_and_lock": true,
+    "binary_sha256": "967585cc99118a258f7189d928790d5fd846d9a2f30e5766bb08ccccc8a1897c",
+    "reference_binary_sha256": "7c48f3980b6985de25cff2e793f4ef6b66f5f2bc95c6d81ef984adf086fa27b6"
+  },
+  "references": [
+    "float-type-task-context-results.json",
+    "float-type-tcache-count-results.json",
+    "float-type-field-release-results.json",
+    "float-type-resolver-drop-results.json",
+    "float-type-in-table-state-results.json",
+    "float-type-address-layout-results.json",
+    "float-type-native-seed-pairs-results.json",
+    "float-type-planning-results.json"
+  ],
+  "raw_data": {
+    "file": "float-type-session-state-runs.json.gz",
+    "sha256": "d05f4d037a9931bff14fc4f7ec8cbec82b86c0c12a3af9135bcd4e87ce42a986",
+    "uncompressed_sha256": "810df38ecc5c76b8e273919854b30f2662e1b9854b9ec2a2e0fa66d73531525b",
+    "compressed_bytes": 772492,
+    "uncompressed_bytes": 4174344
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023",
+    "commands": [
+      "python3 build-trace.py",
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Use the frozen source inputs and the retained IN-table trace, resolver release-order patch, task-context patch and planning-state patch; restore the seven recorded missing build inputs from the pinned repository commit. The build helper restores all shared sources, lockfiles and executable slots in finally. Validate the 372 captures and both phase orders, both planning-state modes and statement-time/subquery isolation before the fixed collection. Preserve the complete ordered trace sequences."
+  }
+}

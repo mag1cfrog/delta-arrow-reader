@@ -4214,6 +4214,18 @@ Indices are zero-based construction positions. The observations support task-con
 
 All 372 repeated result and plan captures pass in the new executable, along with eight smoke processes and rejection of missing or invalid mode settings. The [raw record](float-type-task-context-runs.json.gz) retains all 4,720 table traces and 4,176 prepared executions from 16 processes, both source audits, the benchmark patch and prior diagnostic patches. No groups are discarded and no performance effect is estimated. Shared files are restored and hash-checked. The accepted runtime remains unchanged, and the optional type-inference patch remains unadopted.
 
+## Reusing planning state with fresh statement properties
+
+The [planning-state experiment](float-type-session-state-results.json) does not isolate state cloning as the cause of the previous address differences. Both the reuse mode and the control that still clones per query have fully matching address sequences in this collection.
+
+The diagnostic changes only the benchmark. Both modes retain one native `SessionState`; fresh mode uses the original DataFrame path, while reuse mode calls `mark_start_execution` and the same native physical planner on the retained state. That refresh preserves query time, configuration snapshot and alias-generator reset. The long-list comparison keeps execution-context reuse, sorted resolver release, native allocator settings, fixed addresses, 32 warmups and 261 prepared plans.
+
+Each of the four groups, two state modes for each native seed index 0 and 4, has one complete address sequence across its four processes. All 295 construction positions match, and hash fingerprints match across modes within each seed. Because the fresh controls are also stable, this result cannot attribute stability to avoiding state clones. The added retained state and rebuilt benchmark also change allocation history and code layout.
+
+All 372 repeated result and plan captures pass. Two additional check processes prepare timestamp queries and table-backed scalar subqueries, then execute them in reverse. They verify fresh per-statement time, equal time values within a statement, alias reset in reuse mode and independent results of 13, NULL and 7 after table replacement. Eight smoke processes and both invalid-setting checks pass. This validates the sequential benchmark setup, not a general policy for concurrent queries or mutable session configuration.
+
+The first build attempt stopped before Rust compilation because old temporary build inputs were missing. Seven required files were restored from commit `a2cdf89`, with byte-for-byte matches to the current repository. The [raw record](float-type-session-state-runs.json.gz) retains that failure and repair, the successful build, semantic checks, patches and all 4,720 table traces from 16 collection processes. No collection groups were discarded. Shared experiment inputs are restored and hash-checked against the repaired baseline. No timing effect is estimated, and the optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
