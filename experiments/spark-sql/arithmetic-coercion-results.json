@@ -1,0 +1,4701 @@
+{
+  "slice": "Arithmetic operand coercion for Spark SQL",
+  "parent_commit": "664bd05",
+  "status": "accepted optional single-file Rust planner patch; default vendor unchanged",
+  "scope": {
+    "runtime_files_changed": [
+      "math.rs"
+    ],
+    "rule": "Reuse the existing decimal literal precision helper for plus, minus, multiply and modulo. Promote Decimal/floating arithmetic to native DOUBLE in both ANSI modes, and FLOAT/integer arithmetic under ANSI. Preserve the existing shared helper including Spark Byte precision, division NULL handling and temporal arithmetic.",
+    "reuse": "Existing native arithmetic and casts; no new dependency, kernel, execution node or Python runtime path.",
+    "source_references": {
+      "spark-decimal-precision.scala": {
+        "url": "https://raw.githubusercontent.com/apache/spark/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/DecimalPrecisionTypeCoercion.scala",
+        "sha256": "5af598102f02b57517c425b587430f386500e2208568332000cd92ce1b3d86d3"
+      },
+      "spark-ansi-type-coercion.scala": {
+        "url": "https://raw.githubusercontent.com/apache/spark/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/AnsiTypeCoercion.scala",
+        "sha256": "2effce430bf74a3822c4f057a58ad0a4fce8ed702a64b83b54cac6a6885731d5"
+      },
+      "spark-datatype-utils.scala": {
+        "url": "https://raw.githubusercontent.com/apache/spark/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/types/DataTypeUtils.scala",
+        "sha256": "b35219ab83f1c3a60ac7d6eeb679fb40732b33cbb3c8c11c668ecc67485ad9a1"
+      }
+    }
+  },
+  "correctness": {
+    "corpora": {
+      "existing_original": {
+        "before": 164,
+        "after": 166,
+        "total": 168,
+        "repaired": [
+          "other_operators_control_true",
+          "other_operators_control_false"
+        ],
+        "regressed": []
+      },
+      "existing_high": {
+        "before": 314,
+        "after": 314,
+        "total": 314,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_filter": {
+        "before": 120,
+        "after": 120,
+        "total": 120,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_subquery": {
+        "before": 54,
+        "after": 54,
+        "total": 54,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_order": {
+        "before": 30,
+        "after": 30,
+        "total": 30,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_contexts": {
+        "before": 28,
+        "after": 28,
+        "total": 28,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_lateral": {
+        "before": 48,
+        "after": 48,
+        "total": 48,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_nested": {
+        "before": 36,
+        "after": 36,
+        "total": 36,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_null": {
+        "before": 60,
+        "after": 60,
+        "total": 60,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_cast": {
+        "before": 82,
+        "after": 82,
+        "total": 82,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_string": {
+        "before": 180,
+        "after": 180,
+        "total": 180,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_unicode": {
+        "before": 382,
+        "after": 382,
+        "total": 382,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_nonfinite": {
+        "before": 246,
+        "after": 246,
+        "total": 246,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_null-order": {
+        "before": 52,
+        "after": 52,
+        "total": 52,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_null-analyzer": {
+        "before": 100,
+        "after": 100,
+        "total": 100,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_signed-literal": {
+        "before": 112,
+        "after": 112,
+        "total": 112,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_round-types": {
+        "before": 214,
+        "after": 214,
+        "total": 234,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_float-null": {
+        "before": 185,
+        "after": 185,
+        "total": 250,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_nonansi-zero": {
+        "before": 216,
+        "after": 216,
+        "total": 240,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_integral-types": {
+        "before": 150,
+        "after": 150,
+        "total": 152,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_integral-widen": {
+        "before": 186,
+        "after": 186,
+        "total": 188,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_div-zero": {
+        "before": 158,
+        "after": 158,
+        "total": 158,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_div-evaluation": {
+        "before": 314,
+        "after": 314,
+        "total": 350,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_div-null-cast": {
+        "before": 517,
+        "after": 517,
+        "total": 536,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_div-null-numeric": {
+        "before": 580,
+        "after": 580,
+        "total": 588,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_float-decimal-compare": {
+        "before": 380,
+        "after": 380,
+        "total": 384,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_new": {
+        "before": 278,
+        "after": 278,
+        "total": 278,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_new-in": {
+        "before": 162,
+        "after": 162,
+        "total": 162,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_decimal-in-unwrap": {
+        "before": 272,
+        "after": 272,
+        "total": 272,
+        "repaired": [],
+        "regressed": []
+      },
+      "existing_projected": {
+        "before": 133,
+        "after": 133,
+        "total": 264,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_new": {
+        "before": 18,
+        "after": 18,
+        "total": 24,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_supplement": {
+        "before": 138,
+        "after": 138,
+        "total": 174,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_bindings": {
+        "before": 16,
+        "after": 16,
+        "total": 20,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_case": {
+        "before": 4,
+        "after": 4,
+        "total": 8,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_alias-identity": {
+        "before": 8,
+        "after": 8,
+        "total": 8,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_alias-sort": {
+        "before": 0,
+        "after": 0,
+        "total": 4,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_ids": {
+        "before": 126,
+        "after": 126,
+        "total": 144,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_id-bits": {
+        "before": 2,
+        "after": 2,
+        "total": 2,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_id-combinations": {
+        "before": 10,
+        "after": 10,
+        "total": 12,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_grouping": {
+        "before": 136,
+        "after": 136,
+        "total": 160,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_grouping-supplement": {
+        "before": 32,
+        "after": 32,
+        "total": 40,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_qualified": {
+        "before": 228,
+        "after": 228,
+        "total": 230,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_order": {
+        "before": 16,
+        "after": 16,
+        "total": 16,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_using": {
+        "before": 156,
+        "after": 156,
+        "total": 158,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_narrow": {
+        "before": 62,
+        "after": 62,
+        "total": 62,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_ansi": {
+        "before": 344,
+        "after": 344,
+        "total": 344,
+        "repaired": [],
+        "regressed": []
+      },
+      "prior_zero": {
+        "before": 256,
+        "after": 256,
+        "total": 256,
+        "repaired": [],
+        "regressed": []
+      },
+      "new_canonical": {
+        "before": 111,
+        "after": 114,
+        "total": 130,
+        "repaired": [
+          "float_computed_plus_true",
+          "decimal_computed_plus_true",
+          "decimal_computed_plus_false"
+        ],
+        "regressed": []
+      },
+      "new_mixed": {
+        "before": 10,
+        "after": 10,
+        "total": 10,
+        "repaired": [],
+        "regressed": []
+      },
+      "new_permutation": {
+        "before": 76,
+        "after": 76,
+        "total": 86,
+        "repaired": [],
+        "regressed": []
+      },
+      "new_permutation-duplicates": {
+        "before": 8,
+        "after": 8,
+        "total": 10,
+        "repaired": [],
+        "regressed": []
+      },
+      "arithmetic": {
+        "before": 235,
+        "after": 404,
+        "total": 448,
+        "repaired": [
+          "float_tinyint_add_0_true",
+          "float_tinyint_add_1_true",
+          "float_tinyint_sub_0_true",
+          "float_tinyint_sub_1_true",
+          "float_tinyint_mul_0_true",
+          "float_tinyint_mul_1_true",
+          "float_tinyint_mod_0_true",
+          "float_tinyint_mod_1_true",
+          "float_smallint_add_0_true",
+          "float_smallint_add_1_true",
+          "float_smallint_sub_0_true",
+          "float_smallint_sub_1_true",
+          "float_smallint_mul_0_true",
+          "float_smallint_mul_1_true",
+          "float_smallint_mod_0_true",
+          "float_smallint_mod_1_true",
+          "float_int_add_0_true",
+          "float_int_add_1_true",
+          "float_int_sub_0_true",
+          "float_int_sub_1_true",
+          "float_int_mul_0_true",
+          "float_int_mul_1_true",
+          "float_int_mod_0_true",
+          "float_int_mod_1_true",
+          "float_bigint_add_0_true",
+          "float_bigint_add_1_true",
+          "float_bigint_sub_0_true",
+          "float_bigint_sub_1_true",
+          "float_bigint_mul_0_true",
+          "float_bigint_mul_1_true",
+          "float_bigint_mod_0_true",
+          "float_bigint_mod_1_true",
+          "decimal_literal_1_add_0_true",
+          "decimal_literal_1_add_0_false",
+          "decimal_literal_1_add_1_true",
+          "decimal_literal_1_add_1_false",
+          "decimal_literal_1_sub_0_true",
+          "decimal_literal_1_sub_0_false",
+          "decimal_literal_1_sub_1_true",
+          "decimal_literal_1_sub_1_false",
+          "decimal_literal_1_mul_0_true",
+          "decimal_literal_1_mul_0_false",
+          "decimal_literal_1_mul_1_true",
+          "decimal_literal_1_mul_1_false",
+          "decimal_literal_1_mod_0_true",
+          "decimal_literal_1_mod_1_true",
+          "decimal_literal_1_mod_1_false",
+          "decimal_literal_neg1_add_0_true",
+          "decimal_literal_neg1_add_0_false",
+          "decimal_literal_neg1_add_1_true",
+          "decimal_literal_neg1_add_1_false",
+          "decimal_literal_neg1_sub_0_true",
+          "decimal_literal_neg1_sub_0_false",
+          "decimal_literal_neg1_sub_1_true",
+          "decimal_literal_neg1_sub_1_false",
+          "decimal_literal_neg1_mul_0_true",
+          "decimal_literal_neg1_mul_0_false",
+          "decimal_literal_neg1_mul_1_true",
+          "decimal_literal_neg1_mul_1_false",
+          "decimal_literal_neg1_mod_0_true",
+          "decimal_literal_neg1_mod_1_true",
+          "decimal_literal_neg1_mod_1_false",
+          "decimal_literal_10_add_0_true",
+          "decimal_literal_10_add_0_false",
+          "decimal_literal_10_add_1_true",
+          "decimal_literal_10_add_1_false",
+          "decimal_literal_10_sub_0_true",
+          "decimal_literal_10_sub_0_false",
+          "decimal_literal_10_sub_1_true",
+          "decimal_literal_10_sub_1_false",
+          "decimal_literal_10_mul_0_true",
+          "decimal_literal_10_mul_0_false",
+          "decimal_literal_10_mul_1_true",
+          "decimal_literal_10_mul_1_false",
+          "decimal_literal_10_mod_0_true",
+          "decimal_literal_10_mod_1_true",
+          "decimal_literal_10_mod_1_false",
+          "decimal_literal_neg10_add_0_true",
+          "decimal_literal_neg10_add_0_false",
+          "decimal_literal_neg10_add_1_true",
+          "decimal_literal_neg10_add_1_false",
+          "decimal_literal_neg10_sub_0_true",
+          "decimal_literal_neg10_sub_0_false",
+          "decimal_literal_neg10_sub_1_true",
+          "decimal_literal_neg10_sub_1_false",
+          "decimal_literal_neg10_mul_0_true",
+          "decimal_literal_neg10_mul_0_false",
+          "decimal_literal_neg10_mul_1_true",
+          "decimal_literal_neg10_mul_1_false",
+          "decimal_literal_neg10_mod_0_true",
+          "decimal_literal_neg10_mod_1_true",
+          "decimal_literal_neg10_mod_1_false",
+          "decimal_literal_9223372036854775807L_add_0_true",
+          "decimal_literal_9223372036854775807L_add_0_false",
+          "decimal_literal_9223372036854775807L_add_1_true",
+          "decimal_literal_9223372036854775807L_add_1_false",
+          "decimal_literal_9223372036854775807L_sub_0_true",
+          "decimal_literal_9223372036854775807L_sub_0_false",
+          "decimal_literal_9223372036854775807L_sub_1_true",
+          "decimal_literal_9223372036854775807L_sub_1_false",
+          "decimal_literal_9223372036854775807L_mul_0_true",
+          "decimal_literal_9223372036854775807L_mul_0_false",
+          "decimal_literal_9223372036854775807L_mul_1_true",
+          "decimal_literal_9223372036854775807L_mul_1_false",
+          "decimal_literal_neg9223372036854775808L_add_0_true",
+          "decimal_literal_neg9223372036854775808L_add_0_false",
+          "decimal_literal_neg9223372036854775808L_add_1_true",
+          "decimal_literal_neg9223372036854775808L_add_1_false",
+          "decimal_literal_neg9223372036854775808L_sub_0_true",
+          "decimal_literal_neg9223372036854775808L_sub_0_false",
+          "decimal_literal_neg9223372036854775808L_sub_1_true",
+          "decimal_literal_neg9223372036854775808L_sub_1_false",
+          "decimal_literal_neg9223372036854775808L_mul_0_true",
+          "decimal_literal_neg9223372036854775808L_mul_0_false",
+          "decimal_literal_neg9223372036854775808L_mul_1_true",
+          "decimal_literal_neg9223372036854775808L_mul_1_false",
+          "decimal_literal_1S_mul_0_true",
+          "decimal_literal_1S_mul_0_false",
+          "decimal_literal_1S_mul_1_true",
+          "decimal_literal_1S_mul_1_false",
+          "decimal_literal_1S_mod_0_true",
+          "decimal_literal_1S_mod_1_true",
+          "decimal_literal_1S_mod_1_false",
+          "decimal_literal_1L_add_0_true",
+          "decimal_literal_1L_add_0_false",
+          "decimal_literal_1L_add_1_true",
+          "decimal_literal_1L_add_1_false",
+          "decimal_literal_1L_sub_0_true",
+          "decimal_literal_1L_sub_0_false",
+          "decimal_literal_1L_sub_1_true",
+          "decimal_literal_1L_sub_1_false",
+          "decimal_literal_1L_mul_0_true",
+          "decimal_literal_1L_mul_0_false",
+          "decimal_literal_1L_mul_1_true",
+          "decimal_literal_1L_mul_1_false",
+          "decimal_literal_1L_mod_0_true",
+          "decimal_literal_1L_mod_1_true",
+          "decimal_literal_1L_mod_1_false",
+          "decimal_dynamic_float_add_true",
+          "decimal_dynamic_float_add_false",
+          "decimal_dynamic_float_sub_true",
+          "decimal_dynamic_float_sub_false",
+          "decimal_dynamic_float_mul_true",
+          "decimal_dynamic_float_mul_false",
+          "decimal_dynamic_float_mod_true",
+          "decimal_dynamic_float_mod_false",
+          "float_literal_1_add_true",
+          "float_literal_16777217_add_true",
+          "float_literal_1_sub_true",
+          "float_literal_16777217_sub_true",
+          "float_literal_1_mul_true",
+          "float_literal_16777217_mul_true",
+          "boundary_18_4_1_mul_true",
+          "boundary_18_4_1_mul_false",
+          "boundary_18_4_2_mul_true",
+          "boundary_18_4_2_mul_false",
+          "float_literal_1_mod_true",
+          "float_literal_16777217_mod_true",
+          "boundary_38_18_1_mod_true",
+          "boundary_38_18_2_mod_true",
+          "boundary_38_0_1_mod_true",
+          "boundary_38_0_2_mod_true",
+          "boundary_18_4_1_mod_true",
+          "boundary_18_4_2_mod_true",
+          "float_nested_true",
+          "decimal_nested_true",
+          "decimal_nested_false",
+          "float_group_true",
+          "float_filter_true"
+        ],
+        "regressed": []
+      },
+      "literal-supplement": {
+        "before": 16,
+        "after": 16,
+        "total": 16,
+        "repaired": [],
+        "regressed": []
+      },
+      "zero-supplement": {
+        "before": 8,
+        "after": 12,
+        "total": 16,
+        "repaired": [
+          "float_decimal_zero_false",
+          "float_decimal_null_zero_false",
+          "decimal_float_zero_false",
+          "decimal_float_null_zero_false"
+        ],
+        "regressed": []
+      }
+    },
+    "new_remaining": [
+      {
+        "id": "float_bigint_add_0_false",
+        "differences": [
+          "rows"
+        ]
+      },
+      {
+        "id": "float_bigint_add_1_false",
+        "differences": [
+          "rows"
+        ]
+      },
+      {
+        "id": "float_bigint_sub_0_false",
+        "differences": [
+          "rows"
+        ]
+      },
+      {
+        "id": "float_bigint_sub_1_false",
+        "differences": [
+          "rows"
+        ]
+      },
+      {
+        "id": "float_bigint_mul_0_false",
+        "differences": [
+          "rows"
+        ]
+      },
+      {
+        "id": "float_bigint_mul_1_false",
+        "differences": [
+          "rows"
+        ]
+      },
+      {
+        "id": "decimal_literal_1_mod_0_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_neg1_mod_0_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_10_mod_0_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_neg10_mod_0_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_2147483647_mod_1_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_neg2147483648_mod_1_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_9223372036854775807L_mod_1_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_neg9223372036854775808L_mod_1_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_1Y_mod_0_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_1S_mod_0_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_literal_1L_mod_0_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_dynamic_decimal_5_1_mod_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_1_add_true",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_1_add_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_2_add_true",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_2_add_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_1_sub_true",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_1_sub_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_2_sub_true",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_2_sub_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_1_mul_true",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_1_mul_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_2_mul_true",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_2_mul_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_cast_long_mod_1_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_cast_byte_mod_0_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_null_mod_1_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "decimal_typed_null_mod_1_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_1_mod_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_18_2_mod_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_0_1_mod_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_38_0_2_mod_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_18_4_1_mod_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "boundary_18_4_2_mod_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "date_add_true",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "date_add_false",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "date_sub_true",
+        "differences": [
+          "types"
+        ]
+      },
+      {
+        "id": "date_sub_false",
+        "differences": [
+          "types"
+        ]
+      }
+    ],
+    "new_remaining_categories": {
+      "float_display_only": [
+        "float_bigint_add_0_false",
+        "float_bigint_add_1_false",
+        "float_bigint_sub_0_false",
+        "float_bigint_sub_1_false",
+        "float_bigint_mul_0_false",
+        "float_bigint_mul_1_false"
+      ],
+      "decimal_remainder_return_type": [
+        "decimal_literal_1_mod_0_false",
+        "decimal_literal_neg1_mod_0_false",
+        "decimal_literal_10_mod_0_false",
+        "decimal_literal_neg10_mod_0_false",
+        "decimal_literal_2147483647_mod_1_false",
+        "decimal_literal_neg2147483648_mod_1_false",
+        "decimal_literal_9223372036854775807L_mod_1_false",
+        "decimal_literal_neg9223372036854775808L_mod_1_false",
+        "decimal_literal_1Y_mod_0_false",
+        "decimal_literal_1S_mod_0_false",
+        "decimal_literal_1L_mod_0_false",
+        "decimal_dynamic_decimal_5_1_mod_false",
+        "decimal_cast_long_mod_1_false",
+        "decimal_cast_byte_mod_0_false",
+        "decimal_null_mod_1_false",
+        "decimal_typed_null_mod_1_false",
+        "boundary_38_18_1_mod_false",
+        "boundary_38_18_2_mod_false",
+        "boundary_38_0_1_mod_false",
+        "boundary_38_0_2_mod_false",
+        "boundary_18_4_1_mod_false",
+        "boundary_18_4_2_mod_false"
+      ],
+      "decimal_38_result_precision_scale": [
+        "boundary_38_18_1_add_true",
+        "boundary_38_18_1_add_false",
+        "boundary_38_18_2_add_true",
+        "boundary_38_18_2_add_false",
+        "boundary_38_18_1_sub_true",
+        "boundary_38_18_1_sub_false",
+        "boundary_38_18_2_sub_true",
+        "boundary_38_18_2_sub_false",
+        "boundary_38_18_1_mul_true",
+        "boundary_38_18_1_mul_false",
+        "boundary_38_18_2_mul_true",
+        "boundary_38_18_2_mul_false"
+      ],
+      "datediff_return_width": [
+        "date_add_true",
+        "date_add_false",
+        "date_sub_true",
+        "date_sub_false"
+      ]
+    },
+    "new_float_formatting_checks_per_variant": 6,
+    "float_formatting_scope": "Six non-ANSI FLOAT/BIGINT observations have identical IEEE754 Float32 values but different decimal display strings. The original exact-decimal string comparison and its mismatches remain unchanged.",
+    "equivalent_references": {
+      "new": {
+        "before": {
+          "agreement": 22,
+          "total": 22
+        },
+        "after": {
+          "agreement": 22,
+          "total": 22
+        }
+      },
+      "prior": {
+        "before": {
+          "agreement": 56,
+          "total": 56
+        },
+        "after": {
+          "agreement": 56,
+          "total": 56
+        }
+      }
+    },
+    "actual_changes": {
+      "existing_original": [
+        {
+          "id": "other_operators_control_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "other_operators_control_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        }
+      ],
+      "existing_cast": [
+        {
+          "id": "high_scale_batch1_true",
+          "fields": [
+            "error"
+          ]
+        }
+      ],
+      "existing_string": [
+        {
+          "id": "round_precision_cast_batch1_true",
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "id": "max_integer_cast_batch4_true",
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "id": "unicode_cast_batch4_true",
+          "fields": [
+            "error"
+          ]
+        }
+      ],
+      "existing_unicode": [
+        {
+          "id": "invalid_confusables_cast_batch4_true",
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "id": "round_overflow_cast_batch1_true",
+          "fields": [
+            "error"
+          ]
+        }
+      ],
+      "new_canonical": [
+        {
+          "id": "float_computed_plus_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_computed_plus_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_computed_plus_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        }
+      ],
+      "arithmetic": [
+        {
+          "id": "float_tinyint_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_tinyint_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_tinyint_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_tinyint_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_tinyint_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_tinyint_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_tinyint_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_tinyint_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_smallint_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_smallint_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_smallint_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_smallint_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_smallint_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_smallint_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_smallint_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_smallint_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_int_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_int_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_int_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_int_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_int_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_int_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_int_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_int_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_bigint_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_bigint_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_bigint_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_bigint_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_bigint_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_bigint_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_bigint_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_bigint_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_add_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_add_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_sub_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_sub_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_mul_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_mul_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_mod_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1_mod_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_add_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_add_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_sub_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_sub_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_mul_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_mul_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_mod_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg1_mod_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_add_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_add_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_sub_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_sub_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_mul_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_mul_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_mod_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_10_mod_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_add_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_add_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_sub_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_sub_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_mul_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_mul_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_mod_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg10_mod_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_add_0_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_add_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_add_1_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_add_1_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_sub_0_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_sub_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_sub_1_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_sub_1_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_mul_0_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_mul_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_mul_1_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_mul_1_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_mod_0_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_mod_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_mod_1_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_2147483647_mod_1_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_add_0_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_add_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_add_1_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_add_1_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_sub_0_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_sub_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_sub_1_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_sub_1_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_mul_0_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_mul_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_mul_1_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_mul_1_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_mod_0_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_mod_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_mod_1_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg2147483648_mod_1_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_add_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_add_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_sub_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_sub_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_mul_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_mul_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_mod_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_9223372036854775807L_mod_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_add_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_add_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_sub_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_sub_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_mul_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_mul_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_mod_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_neg9223372036854775808L_mod_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_add_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_add_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_sub_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_sub_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_mul_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_mul_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_mod_0_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1S_mod_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_add_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_add_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_add_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_add_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_sub_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_sub_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_sub_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_sub_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_mul_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_mul_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_mul_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_mul_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_mod_0_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_mod_0_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_mod_1_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_literal_1L_mod_1_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_float_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_float_add_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_float_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_float_sub_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_float_mul_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_float_mul_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_float_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_float_mod_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_double_add_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_double_add_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_double_sub_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_double_sub_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_double_mul_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_double_mul_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_double_mod_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "decimal_dynamic_double_mod_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "float_literal_1_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_literal_16777217_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_38_18_1_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_1_add_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_2_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_2_add_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_1_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_1_add_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_2_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_2_add_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_1_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_1_add_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_2_add_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_2_add_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "float_literal_1_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_literal_16777217_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_38_18_1_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_1_sub_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_2_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_2_sub_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_1_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_1_sub_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_2_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_2_sub_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_1_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_1_sub_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_2_sub_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_2_sub_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "float_literal_1_mul_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_literal_16777217_mul_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_38_18_1_mul_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_1_mul_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_2_mul_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_2_mul_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_1_mul_true",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_1_mul_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_2_mul_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_2_mul_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_1_mul_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_18_4_1_mul_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_18_4_2_mul_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_18_4_2_mul_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_literal_1_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_literal_16777217_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_38_18_1_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_38_18_1_mod_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_18_2_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_38_18_2_mod_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_1_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_38_0_1_mod_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_38_0_2_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_38_0_2_mod_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_1_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_18_4_1_mod_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "boundary_18_4_2_mod_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "boundary_18_4_2_mod_false",
+          "fields": [
+            "logical_plan"
+          ]
+        },
+        {
+          "id": "float_nested_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_nested_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_nested_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_group_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows",
+            "types"
+          ]
+        },
+        {
+          "id": "float_filter_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "rows"
+          ]
+        },
+        {
+          "id": "decimal_predicate_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_predicate_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        }
+      ],
+      "zero-supplement": [
+        {
+          "id": "float_integer_zero_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "float_integer_null_zero_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "float_decimal_zero_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "float_decimal_zero_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "float_decimal_null_zero_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "float_decimal_null_zero_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_float_zero_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_float_zero_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "decimal_float_null_zero_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "decimal_float_null_zero_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan",
+            "types"
+          ]
+        },
+        {
+          "id": "double_decimal_zero_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "double_decimal_zero_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "double_decimal_null_zero_true",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        },
+        {
+          "id": "double_decimal_null_zero_false",
+          "fields": [
+            "logical_plan",
+            "physical_plan"
+          ]
+        }
+      ]
+    },
+    "benchmark_checks": {
+      "generic": {
+        "total": 74,
+        "changes": []
+      },
+      "subqueries": {
+        "total": 150,
+        "changes": [
+          {
+            "id": "projected_nullable_ansitrue",
+            "fields": [
+              "physical_plan"
+            ]
+          },
+          {
+            "id": "projected_nullable_ansifalse",
+            "fields": [
+              "physical_plan"
+            ]
+          },
+          {
+            "id": "projected_mixed_ansitrue",
+            "fields": [
+              "physical_plan"
+            ]
+          },
+          {
+            "id": "projected_mixed_ansifalse",
+            "fields": [
+              "physical_plan"
+            ]
+          },
+          {
+            "id": "projected_correlated_in_ansitrue",
+            "fields": [
+              "physical_plan"
+            ]
+          },
+          {
+            "id": "projected_correlated_in_ansifalse",
+            "fields": [
+              "physical_plan"
+            ]
+          }
+        ]
+      }
+    },
+    "regressions": {},
+    "planner_tests": 37,
+    "runner_tests": 28,
+    "delta_lifecycle_tests_in_runner": 4,
+    "delta_parent_comparison": {
+      "reference": {
+        "distribution": "vendored-sail",
+        "version": "0.7.1"
+      },
+      "summary": {
+        "match": 116
+      },
+      "input_schema_match": true,
+      "input_rows_match": true,
+      "cases": [
+        {
+          "id": "spark_null_order",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "databricks_ifnull",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_integer_division",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_concat_null",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_date_format",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_date_add",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_null_safe_equal",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_array_element",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_try_cast",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_filter_projection",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_group",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_cte",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_self_join",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_window",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_column_semantics",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_date_function",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "duplicate_names",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "qualified_table",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "unknown_function",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "reject_ddl",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "reject_time_travel",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "sail_range_extension",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "sail_partition_id",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "sail_sort_within_partitions",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_wildcard",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_star_except",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "reject_wildcard_replace",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_comments_quotes",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_escaped_identifier",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_case_insensitive",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_case_sensitive",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_qualified_wildcard",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_cte_shadow",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_cte_reuse",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_left_unmatched",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_semi",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_anti",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_duplicate_keys",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_null_keys",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_null_safe_keys",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_cross",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_union_all",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_union_distinct",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_intersect",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_except",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_correlated_exists",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_scalar_subquery",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_correlated_scalar",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_subquery_multirow_error",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_empty_projection",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_empty",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_all_null",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_distinct_having",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_count_if",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_collect_list",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_ordered_first",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "windows_rank_ties",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "windows_lag",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "windows_rows_frame",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "windows_range_frame",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "ordering_nulls_desc",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "ordering_explicit_nulls",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "ordering_limit_zero",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_negative_div_mod",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_zero_div_ansi",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_zero_div_legacy",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_overflow_ansi",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_overflow_legacy",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_decimal_division",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_decimal_rounding",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_decimal_overflow",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "casts_invalid_column",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "casts_try_column",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "casts_fraction_to_int",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "casts_invalid_boolean",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_three_valued",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_not_in_null",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_in_subquery",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_conditionals",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_concat_ws",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_unicode",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_like",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_regexp",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_trim_case_column",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_binary",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_column_boundary",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_invalid_date",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_try_date",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_format_tokens",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_timestamp_precision",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_timestamp_ltz",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_dst_gap",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_dst_overlap",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_negative_index",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_zero_index",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_out_of_range_ansi",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_out_of_range_legacy",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_columns",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_explode",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_outer_explode",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_null_array",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "extensions_range_step",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "extensions_monotonic_id",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_empty",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_malformed",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_unknown_table",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_unknown_column",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_ambiguous",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_multi_statement",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_insert",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_delete",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_copy",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_set",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_format_path",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_sample",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_python_udf",
+          "status": "match",
+          "differences": []
+        }
+      ]
+    }
+  },
+  "iterations": {
+    "attempt_00": {
+      "status": "rejected before timing",
+      "reason": "Adding byte arms to the existing literal helper caused seven arithmetic and four division regressions. Spark fromLiteral only minimizes Short, Int and Long; Byte uses its declared width. The new unit also assumed native Decimal remainder result precision already matched Spark; it does not. Original Spark captures are retained.",
+      "main_agreements": 389,
+      "main_total": 448,
+      "division_agreements": 12,
+      "division_total": 16,
+      "planner_tests_passed": 36,
+      "planner_tests_failed": 1,
+      "timed_processes": 0
+    },
+    "final": "Retain the unchanged shared integer literal helper, add existing Decimal/floating promotion in both ANSI modes, and ANSI FLOAT/integer promotion. Keep the frozen SQL and timing schedule; retain all arithmetic result-rule mismatches.",
+    "attempt_01": {
+      "status": "correct but incomplete same-rule coverage, extended before timing",
+      "reason": "The unchanged literal helper removes all regressions. The frozen corpus still contains Decimal/FLOAT arithmetic width differences; include the existing symmetric float/decimal promotion rule in the same operand-coercion helper.",
+      "main_agreements": 396,
+      "main_total": 448,
+      "division_agreements": 16,
+      "division_total": 16,
+      "planner_tests_passed": 37,
+      "planner_tests_failed": 0,
+      "runner_tests_passed": 28,
+      "lifecycle_tests_in_runner": 4,
+      "timed_processes": 0
+    },
+    "attempt_02": {
+      "status": "accepted optional operand-coercion patch with a measured localized FLOAT/integer execution cost",
+      "main_agreements": 404,
+      "main_total": 448,
+      "division_agreements": 16,
+      "division_total": 16,
+      "modulo_zero_agreements": 12,
+      "modulo_zero_total": 16,
+      "planner_tests_passed": 37,
+      "planner_tests_failed": 0,
+      "runner_tests_passed": 28,
+      "lifecycle_tests_in_runner": 4,
+      "timed_processes": 224,
+      "diagnostic_profiles": 8
+    }
+  },
+  "protocol": {
+    "parent": "664bd05",
+    "cases": 224,
+    "observations": 448,
+    "corpus_sha256": "35de3e045d2d1a554c581c72602cc9555a558d9d8b5fb262deadb0a8651aa520",
+    "scope": "Native arithmetic coercion for +, -, *, %. Reuse existing Decimal/floating and integer literal rules; ANSI FLOAT/integer promotion. Preserve division and comparison rules, error handling and temporal arithmetic. High-precision result rules and TRY arithmetic remain separate.",
+    "frozen_before_candidate": true,
+    "scope_amendment": "After attempt-01 correctness, before any timing: include Decimal/FLOAT promotion already covered by the unchanged frozen corpus. Add both operand orders to the same Rust integration test. Corpus and measurement schedule unchanged."
+  },
+  "supplement_protocol": {
+    "cases": 8,
+    "sha256": "9348de2975d55a5581abe9d00cbb2ea0c421989b549802caafb68ca4ea5eef52",
+    "reason": "Shared literal-value helper also serves division. Cover signed byte literal widths after adding its missing Int8/UInt8 arms. Defined before candidate results or performance measurement."
+  },
+  "zero_supplement_protocol": {
+    "cases": 8,
+    "observations": 16,
+    "sha256": "42b79e310bb07b67776cca583a002600be5fa10508f98f697b2f560de0bcbde1",
+    "reason": "After extending Decimal/FLOAT promotion, check dynamic zero, negative zero and NULL dividends through the unchanged modulo guard. Defined before running the extended candidate and before any timing; main corpus remains frozen.",
+    "command": [
+      "/home/hanbo/.cache/delta-reader-spark-oracle-4.2.0/venv/bin/python",
+      "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/decimal_division.py",
+      "spark",
+      "/home/hanbo/.cache/delta-reader-spark-planning/arithmetic-coercion-664bd05/spark-zero-supplement.json",
+      "--cases",
+      "/home/hanbo/.cache/delta-reader-spark-planning/arithmetic-coercion-664bd05/arithmetic-zero-supplement.jsonl"
+    ],
+    "environment_overrides": {
+      "JAVA_HOME": "/home/hanbo/.cache/delta-reader-spark-oracle-4.2.0/java/jdk-21.0.12.1+1-jre"
+    }
+  },
+  "performance_protocol": {
+    "purpose": "Arithmetic coercion planning/execution relative to the accepted parent; native grouping and projection controls.",
+    "targets": [
+      "arithmetic_float_ansitrue",
+      "arithmetic_decimal_ansitrue"
+    ],
+    "unchanged_controls": [
+      "group_integer_ansitrue",
+      "no_division_ansitrue"
+    ],
+    "warmups": 8,
+    "samples_per_process": 41,
+    "rows": 1048576,
+    "batch_size": 8192,
+    "phases": [
+      "planning",
+      "execution"
+    ],
+    "quartets": [
+      [
+        "before",
+        "after",
+        "after",
+        "before"
+      ],
+      [
+        "after",
+        "before",
+        "before",
+        "after"
+      ],
+      [
+        "before",
+        "after",
+        "after",
+        "before"
+      ],
+      [
+        "after",
+        "before",
+        "before",
+        "after"
+      ]
+    ],
+    "same_binary_controls": {
+      "cases": [
+        "arithmetic_float_ansitrue",
+        "arithmetic_decimal_ansitrue",
+        "group_integer_ansitrue"
+      ],
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A",
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "binaries": [
+        "before",
+        "after"
+      ]
+    },
+    "cpu": 2,
+    "controller_cpu": 0,
+    "perf_events": [
+      "instructions:u",
+      "cycles:u",
+      "task-clock:u",
+      "context-switches:u",
+      "cpu-migrations:u",
+      "page-faults:u"
+    ],
+    "benchmark_sha256": "6d674fc68299933c7edcbab8427ccd358cf9ad4abf875a00eb6c58817dbf9c46",
+    "expected_check_cases_per_variant": 156,
+    "inference": "Use process medians, paired quartet log ratios and fixed seed 172 / 10000 bootstrap resamples. Retain all controls and observations.",
+    "runtime": "Accepted 664bd05 runtime, identical harness, only scalar math.rs differs.",
+    "input_limit": "1M rows with integer key 0..511. FLOAT/integer addition has exactly representable results in both binaries; the parent output type is still wrong under ANSI. Boundary correctness is in the 448-observation corpus. Decimal input is Decimal(18,4).",
+    "frozen_before_measurement": true,
+    "expected_processes": 224
+  },
+  "performance": {
+    "paired": {
+      "planning": {
+        "arithmetic_decimal_ansitrue": {
+          "quartet_changes_pct": [
+            0.03900138115752629,
+            -0.6212712851639541,
+            -0.3920787178657337,
+            -0.7233898502783315
+          ],
+          "quartet_geometric_change_pct": -0.42486582839352927,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.6723436912068864,
+            -0.1264769187147455
+          ],
+          "median_change_pct": -0.4036965680258464,
+          "instruction_change_pct": -0.1943005574471024
+        },
+        "arithmetic_float_ansitrue": {
+          "quartet_changes_pct": [
+            -4.051046930721261,
+            19.25733799433483,
+            -5.430512028880064,
+            -3.5265642664047805
+          ],
+          "quartet_geometric_change_pct": 1.081350016496697,
+          "quartet_bootstrap_95_interval_pct": [
+            -4.958077064627006,
+            12.946790198165278
+          ],
+          "median_change_pct": -4.278444895623002,
+          "instruction_change_pct": -2.298887218042134
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.8749269476430805,
+            1.0789005201465545,
+            -0.10406024051033383,
+            0.3097929285328846
+          ],
+          "quartet_geometric_change_pct": 0.538807171383794,
+          "quartet_bootstrap_95_interval_pct": [
+            0.10265247072928359,
+            0.9768622305024184
+          ],
+          "median_change_pct": 0.2849841160860844,
+          "instruction_change_pct": 0.0044221138457256615
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            -0.16613059712427405,
+            -2.569617187844265,
+            -0.23863899136196126,
+            -0.29709090294788015
+          ],
+          "quartet_geometric_change_pct": -0.8230776574381781,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.9920290660508366,
+            -0.19888679136045728
+          ],
+          "median_change_pct": -0.8120222250807552,
+          "instruction_change_pct": 0.004029500446511847
+        }
+      },
+      "execution": {
+        "arithmetic_decimal_ansitrue": {
+          "quartet_changes_pct": [
+            -0.025505111405560228,
+            -0.1622906934430862,
+            0.29797435698238683,
+            0.5227621175820172
+          ],
+          "quartet_geometric_change_pct": 0.15787470640873993,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.09392131227774132,
+            0.41030533347800574
+          ],
+          "median_change_pct": 0.15339592903858001,
+          "instruction_change_pct": 0.004269144688850979
+        },
+        "arithmetic_float_ansitrue": {
+          "quartet_changes_pct": [
+            19.322977152313612,
+            18.168388414658608,
+            18.00706749056453,
+            20.70895528503525
+          ],
+          "quartet_geometric_change_pct": 19.04693696870706,
+          "quartet_bootstrap_95_interval_pct": [
+            18.08770040482566,
+            20.068738170190542
+          ],
+          "median_change_pct": 18.890848818968564,
+          "instruction_change_pct": 5.321848811747221
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.8988485799882946,
+            -0.2532692316471838,
+            0.03126848709715131,
+            0.3517094317620661
+          ],
+          "quartet_geometric_change_pct": 0.25622731761023365,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.11110168692771648,
+            0.681250662487546
+          ],
+          "median_change_pct": 0.030813557002162817,
+          "instruction_change_pct": -1.8144088731464336e-05
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            0.5159780390904302,
+            -0.3119320217116071,
+            0.5359649519495371,
+            -0.01513057864591214
+          ],
+          "quartet_geometric_change_pct": 0.18057131848563404,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.1636415944760395,
+            0.5259709987868003
+          ],
+          "median_change_pct": 0.06944653932232647,
+          "instruction_change_pct": 0.0008634232677939835
+        }
+      }
+    },
+    "same-after": {
+      "planning": {
+        "arithmetic_decimal_ansitrue": {
+          "quartet_changes_pct": [
+            -0.2971326922720582,
+            -0.06332072123314257
+          ],
+          "quartet_geometric_change_pct": -0.18029516520369646,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.2971326922720582,
+            -0.06332072123314257
+          ],
+          "median_change_pct": -0.3326216828037021,
+          "instruction_change_pct": 0.002296991091954581
+        },
+        "arithmetic_float_ansitrue": {
+          "quartet_changes_pct": [
+            -1.6603263230418708,
+            -0.4700533718085511
+          ],
+          "quartet_geometric_change_pct": -1.0669798676831754,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.6603263230418708,
+            -0.4700533718085511
+          ],
+          "median_change_pct": -1.0303507979062876,
+          "instruction_change_pct": 0.003941629879977704
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.03995612545623835,
+            -1.5733640219758007
+          ],
+          "quartet_geometric_change_pct": -0.7699826422579257,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.5733640219758007,
+            0.03995612545623835
+          ],
+          "median_change_pct": -0.5126235457662109,
+          "instruction_change_pct": -0.0026452019819545036
+        }
+      },
+      "execution": {
+        "arithmetic_decimal_ansitrue": {
+          "quartet_changes_pct": [
+            -0.21462413276313205,
+            0.08728280496353429
+          ],
+          "quartet_geometric_change_pct": -0.06378467130286712,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.21462413276313205,
+            0.08728280496353429
+          ],
+          "median_change_pct": 0.016461890535213186,
+          "instruction_change_pct": 0.0008582241491472686
+        },
+        "arithmetic_float_ansitrue": {
+          "quartet_changes_pct": [
+            -0.6162754698986156,
+            -0.31656168832607273
+          ],
+          "quartet_geometric_change_pct": -0.46653139078917727,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.6162754698986156,
+            -0.31656168832607273
+          ],
+          "median_change_pct": -0.4180308207939687,
+          "instruction_change_pct": 0.0014695878121973038
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            -0.41912733975640476,
+            0.39976056962000817
+          ],
+          "quartet_geometric_change_pct": -0.010521691518582047,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.41912733975640476,
+            0.39976056962000817
+          ],
+          "median_change_pct": 0.17140331827434352,
+          "instruction_change_pct": -0.00021664695744050277
+        }
+      }
+    },
+    "same-before": {
+      "planning": {
+        "arithmetic_decimal_ansitrue": {
+          "quartet_changes_pct": [
+            -0.15928915540626198,
+            0.36953623843802874
+          ],
+          "quartet_geometric_change_pct": 0.10477433763019016,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.15928915540626198,
+            0.36953623843802874
+          ],
+          "median_change_pct": -0.13031132519841782,
+          "instruction_change_pct": -0.005213868512121689
+        },
+        "arithmetic_float_ansitrue": {
+          "quartet_changes_pct": [
+            -0.20059891061380758,
+            -0.051549724901355995
+          ],
+          "quartet_geometric_change_pct": -0.12610212239065063,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.20059891061380758,
+            -0.051549724901355995
+          ],
+          "median_change_pct": -0.03435932236942607,
+          "instruction_change_pct": -0.0003517561607213615
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.13207656229700268,
+            0.26979591480950504
+          ],
+          "quartet_geometric_change_pct": 0.2009125778183748,
+          "quartet_bootstrap_95_interval_pct": [
+            0.13207656229700268,
+            0.26979591480950504
+          ],
+          "median_change_pct": 0.34632724051908426,
+          "instruction_change_pct": -0.0032538909934154425
+        }
+      },
+      "execution": {
+        "arithmetic_decimal_ansitrue": {
+          "quartet_changes_pct": [
+            0.7192695419449635,
+            0.25922470902753053
+          ],
+          "quartet_geometric_change_pct": 0.4889838615903831,
+          "quartet_bootstrap_95_interval_pct": [
+            0.25922470902753053,
+            0.7192695419449635
+          ],
+          "median_change_pct": 0.5358204632500252,
+          "instruction_change_pct": -0.0034349125727528573
+        },
+        "arithmetic_float_ansitrue": {
+          "quartet_changes_pct": [
+            -0.5069219595439277,
+            -0.07962973687983858
+          ],
+          "quartet_geometric_change_pct": -0.29350474307162533,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.5069219595439277,
+            -0.07962973687983858
+          ],
+          "median_change_pct": -0.13175914107417253,
+          "instruction_change_pct": 0.00154456060943442
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.543676369956773,
+            -0.5608238798374532
+          ],
+          "quartet_geometric_change_pct": -0.010098798324853607,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.5608238798374532,
+            0.543676369956773
+          ],
+          "median_change_pct": 0.039906665999844826,
+          "instruction_change_pct": 2.569935353413655e-06
+        }
+      }
+    }
+  },
+  "performance_findings": {
+    "scope": "The fixed 224-process schedule measures planning and execution for addition, plus unchanged native grouping and projection controls. Eight subsequent self-cycle profiles are diagnostic only and excluded from timing statistics.",
+    "float_integer": {
+      "paired_execution_time_pct": 19.047,
+      "paired_execution_95_interval_pct": [
+        18.088,
+        20.069
+      ],
+      "instruction_change_pct": 5.322,
+      "median_execution_ms": {
+        "before": 10.6027025,
+        "after": 12.605643
+      },
+      "interpretation": "A measured localized cost for this query. The old ANSI FLOAT result is incorrect at integer precision boundaries; the candidate uses DOUBLE and has the same physical plan as explicit native DOUBLE arithmetic. The benchmark uses small exactly representable keys in both variants.",
+      "plans": "The parent shares CAST(k AS Float32) for both inputs via common-subexpression elimination. The candidate requires CAST(CAST(k AS Float32) AS Float64) and CAST(k AS Float64), preserving their different rounding semantics. It also changes the existing final Float-to-Decimal cast from Float32 to Float64.",
+      "planning": "Paired time +1.081%, 95% interval [-4.958%, +12.947%]; timing is inconclusive. Instruction count -2.299%."
+    },
+    "decimal_literal": "Addition execution +0.158%, 95% interval [-0.094%, +0.410%], instructions +0.004%; smaller than the +0.489% same-before execution control. No resolved execution regression in this measurement.",
+    "unchanged_controls": "Native grouping execution +0.256% and direct projection +0.181%, both intervals include zero; instruction changes are approximately zero. This does not prove universal absence of overhead.",
+    "profiles": {
+      "processes": 8,
+      "lost_samples_per_process": 0,
+      "dominant_work": "The final Arrow Float-to-Decimal conversion, round, float-to-i128 conversion and decimal precision validation dominate self-cycle samples (median share 86.132% before, 77.484% after). Native operand conversions grow from 2.935% to 5.919%, and native floating arithmetic from 1.052% to 3.385%.",
+      "limit": "Sample shares do not isolate the elapsed cost of an operator and cannot assign the full 19.047% to one function. The benchmark includes its final Decimal result cast; it is not a pure floating-addition benchmark."
+    },
+    "next_measurement": "Use a separate bounded benchmark that consumes native FLOAT/DOUBLE outputs to isolate operand conversion and addition from the final Float-to-Decimal result cast before proposing a custom kernel or execution path.",
+    "not_measured": "Decimal/FLOAT promotion, non-addition operators, earlier partial-set bit permutation and universal workload performance."
+  },
+  "profile_summary": {
+    "before": {
+      "processes": 4,
+      "median_samples": 15270.0,
+      "median_share_pct": {
+        "decimal_conversion": 86.1321354265911,
+        "numeric_operand_casts": 2.934895892700682,
+        "arithmetic": 1.051948788354179,
+        "remaining": 9.893643178275813
+      }
+    },
+    "after": {
+      "processes": 4,
+      "median_samples": 16488.0,
+      "median_share_pct": {
+        "decimal_conversion": 77.48369447635048,
+        "numeric_operand_casts": 5.918509065150322,
+        "arithmetic": 3.3851336725409227,
+        "remaining": 13.218266953538059
+      }
+    }
+  },
+  "builds": {
+    "before": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--offline",
+        "--locked",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/override.toml",
+        "--example",
+        "decimal_bench",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json",
+        "-j",
+        "3"
+      ],
+      "binary_sha256": "9431d79cb709fd2ae2b1cda31c19721256ba2f65547c637560bd6c829c0e18b6",
+      "source_hashes": {
+        "math.rs": "558d54ee499f958d6d4bebfd9d2cc8d3e9e2364513c079c76d07223f9db773a9",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+        "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+        "Cargo.lock": "30d9595fbefefaa1a6d7756891a348f0dfd1f485cbf1d1b727ddd367f8654b47",
+        "decimal_bench.rs": "6d674fc68299933c7edcbab8427ccd358cf9ad4abf875a00eb6c58817dbf9c46",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "d9d11fa1fbbf7ea7ddfe67be7a8fceeca6bde90a25973123995e99fe761a05f9",
+        "decimal-null.rs": "2d07ef1c9d0284d0a28605b97570699fa115f6278cc2673c2c994d55b20a7fd0",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "7d0af52df3ef4b5863a3ddd414332850376daf9a5273c64328de512c94ee286b",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "native-aggregates.rs": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+        "resolver-sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180"
+      }
+    },
+    "after": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--offline",
+        "--locked",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/override.toml",
+        "--example",
+        "decimal_bench",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json",
+        "-j",
+        "3"
+      ],
+      "binary_sha256": "919c98153d28f39b120e6aaf1d7c4f9f2462a7746acc84188c5bb7896b42433e",
+      "source_hashes": {
+        "math.rs": "d1720cba3ee58155095296701e32436b1c4615ba43c0a94b966e77dc88480a38",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+        "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+        "Cargo.lock": "30d9595fbefefaa1a6d7756891a348f0dfd1f485cbf1d1b727ddd367f8654b47",
+        "decimal_bench.rs": "6d674fc68299933c7edcbab8427ccd358cf9ad4abf875a00eb6c58817dbf9c46",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "d9d11fa1fbbf7ea7ddfe67be7a8fceeca6bde90a25973123995e99fe761a05f9",
+        "decimal-null.rs": "2d07ef1c9d0284d0a28605b97570699fa115f6278cc2673c2c994d55b20a7fd0",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "7d0af52df3ef4b5863a3ddd414332850376daf9a5273c64328de512c94ee286b",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "native-aggregates.rs": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+        "resolver-sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180"
+      }
+    }
+  },
+  "patch": {
+    "file": "sail-arithmetic-coercion.patch",
+    "sha256": "c7331285f1454a9efa14fcd3c2a17c592897bc754f14d5b619cca228d2a7fcc9",
+    "verification": {
+      "applies_to_664bd05": true,
+      "compiled_source_bytes_match": true,
+      "sha256": "c7331285f1454a9efa14fcd3c2a17c592897bc754f14d5b619cca228d2a7fcc9",
+      "path": "vendor/sail/crates/sail-plan/src/function/scalar/math.rs"
+    }
+  },
+  "raw_archive": {
+    "file": "arithmetic-coercion-runs.json.gz",
+    "sha256": "3eb3eab0fec7659b32a24678fe8491024a7aae8667f30cb9e817857039d69dde",
+    "bytes": 4093451
+  },
+  "preservation": {
+    "sources": {
+      "math.rs": "c4befca6320e36532f3e87091622e0b91ecfa59e841646f98af91f704c84846f",
+      "lateral.rs": "3a46aea3b3c2af3e500dbfac0cc6999da1cf60d4a99bed9c6b02b789a5bf1020",
+      "cast.rs": "b09ae115b792491460b3ba5fcd60faea4bc1bfd59f60690618063f5cb0d855b3",
+      "common.rs": "41cef0bc27bc314a5ab03ca682acd76448c1780808f5b943722ba85e04af8fc5",
+      "function-Cargo.toml": "0e70f011d3aaabce73b5df5f12bb9e547936a6769cff09099fe5e37641b878a7",
+      "scalar-mod.rs": "68c06852a9272ae5c480298c0f4e2c725753bf028a5da6e629fad49a93231925",
+      "Cargo.lock": "e0970eb4c47224ccf8d0e9be9d2a57b25db09316fed780d5533598f519ab0584",
+      "decimal_bench.rs": "61f32e9a0cf89b4f06b8f579fb3af8a6003f35088b9cdcbe8abd548ef6cb4e3f",
+      "string-cast.rs": null,
+      "float-cast.rs": null,
+      "lib.rs": "abf6ed0652f1b3ee7b66bf77313fa56f1fd292a2f48168550c1022335c654a8d",
+      "main.rs": "8609b17aab37b9a84cde88767cacecc267d170048574636d6516300eea47d359",
+      "decimal_probe.rs": "f43728209ba28c00296d5f4789d4a66db06798c398f34f3558ae3944d0322d8f",
+      "decimal-null.rs": null,
+      "function-mod.rs": "2ce9c566265102724d44f5e2f2822d5d82c03e71e1eec907d50e425becbedae2",
+      "function-scalar-mod.rs": "b5546d8cd9f41cb1a5bddb3d9102f9618abe7e1ef65746d3946af86b4d973e26",
+      "delta_lifecycle.rs": "b7b7d860da8f0bf0e9068f2616c74f1ae744d9677a08194b3a5eedcdfe99927d",
+      "resolver-subquery.rs": "aff16f461317fa52a382a2d61d804d45bea4341d7581a536f22bec480879bf5d",
+      "analyzer-expression.rs": "c5566a6b118560afeca8020acea0095507000a1956051a0f4c1450c291e66eef",
+      "analyzer-parser.rs": "dd81c91ec888151ebafc7d979b50b33180f825211b4568e2de9ba50738271f42",
+      "math-mod.rs": "45b56693f3dde83b0ed3b535b3d81a26a63917db92106f4ecde8cfeee2ab2236",
+      "decimal-utils.rs": "847f4c18277429a79ae9dcf2da2f5cdecac066f71fa67909cae9f0c99a2189db",
+      "decimal-round.rs": null,
+      "conditional.rs": "cf09fc67b0e567668b037a6ee19ab1f166134e0fa067859269983c2e3f739fb0",
+      "small-int-divide.rs": null,
+      "resolver-predicate.rs": "ac785ea9d466f3b50f920aeac31b0be0b243f99bc7e63050e796c38caec8e1b8",
+      "function-predicate.rs": "499f472fda6be201451cef2dab3380d7b602a578fa0ce49c91364a26df0df180",
+      "arrow-mod": "a2b54e3369b6a8bf4bfd46f886720050b94a978c61d0004b33d276932fb0936f",
+      "arrow-decimal": "691d21c85206190f0dd49f5f9a5ef31de7065917780d4c9c3d156bc11a8d5549",
+      "join-selection": "77f99aa2b07b8d20e2de1c0114bf0eff6b1c7495e1923b8308a123812f044219",
+      "unwrap-cast": "0a1b250391180380b5722c2e9e31757c8850c3a392c87912d50e313143389012",
+      "expr-simplifier": "d5a4d4a8ee6e146e616e312e447d30429949b4501b9f45e7979bba14ef57937b",
+      "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+      "decorrelate": "c18f2fd4e6e3c8d20fc3e6070a72c43aa1dc0b517cbf17cb4731734be2651735",
+      "nested-loop": "59b7efeb63dedf071bc8b9f45a39d480c8f8cca62a4702a3f3f670b8a2444967",
+      "physical-test-lock": null,
+      "parser-keywords": null,
+      "native-in-list": "310aaf3b97f83bc70bcbf6bffbed44b4fc500027a4d8202aa487f78fedae6d24",
+      "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+      "native-primitive-filter": "dea083ca4f3208434559a353ac70e73e12cc3f617a8b3b2bf66761b92097353c",
+      "native-strategy": "bc43719e31a52563dd07c5b0dac98a620491d87d6fe2aaf7a88aa86f18b441ac",
+      "native-array-filter": "12259bb4c45fd7f57696efc4c6227fab5a69cbabe9f89e2b6a7a03e2e9589040",
+      "native-case": "470894816b7dfce4f995b0b3537349ea8b2962ecc199a798575ce2090253dc62",
+      "expr-common": "f514c989af51ca89d3fb6d3b14971807e9deffaa4227f8a715aee49e6c9c0c3a",
+      "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+      "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+      "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+      "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+      "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+      "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+      "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+      "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+      "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+      "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+      "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+      "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+      "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+      "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+      "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+      "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+      "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+      "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+      "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+      "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+      "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+      "resolver-join.rs": "5cc7e68aa00f578ea1ffcfe2f0ba5d7dbec534cfd1c036469517c10f94a6640b",
+      "resolver-attribute.rs": "9b4db499ff87b2318835105fcd1cca143da0c7c7cad258c913988b094b1d1d41",
+      "resolver-project.rs": "ad0e4731d5c05d158eea972daf6ec334f740184480bf9edf91de01a2e04afee5",
+      "resolver-function.rs": "543b5ecb1d37a8f6d4b51300237157c6c117a4fffde03adbbaf72c33cdb3516b",
+      "resolver-wildcard.rs": "9bb9065f8b1a4e9bec92ef9c84a432123c0981167a85a592de69e8e6adc9fa08",
+      "resolver-schema.rs": "2ae8751f6eaec1b2e3cd5497ea61a67067aa320737f46974602a9088e5509a1d",
+      "scalar-struct.rs": "e1fe639fdb7927e0bbdc44dcc76dd748f26dc9cb83526ea4d5f247549042fd38",
+      "resolver-aggregate.rs": "c9ee3a9dbe00855b36fc7ab1f079dec5808287c33cee6966e1aac48e54d07338",
+      "native-aggregates.rs": "d4e576bc9e2c9c48613b9e8e4c53308dea0baa87aa78200293094430a1e39610",
+      "resolver-sort.rs": "3db6a9e7a0eef7851dd24808af7bd43fb80f3002559809c168d53527f4233bc4",
+      "lifecycle-support-0": null,
+      "lifecycle-support-1": null
+    },
+    "executables": {
+      "bench": "41142f9ec9341118f514984c0f690ea9a611aac6b180a26fc0c30329711257bb",
+      "probe": "340658fe8d3f6fcefae60fe38affd1b15d0bc89e5b8888ea2188d7e43fa81155",
+      "runner": "622a12a937afbf5c2a4f26a34e0606ef89a8c5d4dcc3dcbced6f4b6526a1ce5e"
+    }
+  },
+  "final_restoration": {
+    "sources": {
+      "math.rs": "c4befca6320e36532f3e87091622e0b91ecfa59e841646f98af91f704c84846f",
+      "lateral.rs": "3a46aea3b3c2af3e500dbfac0cc6999da1cf60d4a99bed9c6b02b789a5bf1020",
+      "cast.rs": "b09ae115b792491460b3ba5fcd60faea4bc1bfd59f60690618063f5cb0d855b3",
+      "common.rs": "41cef0bc27bc314a5ab03ca682acd76448c1780808f5b943722ba85e04af8fc5",
+      "function-Cargo.toml": "0e70f011d3aaabce73b5df5f12bb9e547936a6769cff09099fe5e37641b878a7",
+      "scalar-mod.rs": "68c06852a9272ae5c480298c0f4e2c725753bf028a5da6e629fad49a93231925",
+      "Cargo.lock": "e0970eb4c47224ccf8d0e9be9d2a57b25db09316fed780d5533598f519ab0584",
+      "decimal_bench.rs": "61f32e9a0cf89b4f06b8f579fb3af8a6003f35088b9cdcbe8abd548ef6cb4e3f",
+      "string-cast.rs": null,
+      "float-cast.rs": null,
+      "lib.rs": "abf6ed0652f1b3ee7b66bf77313fa56f1fd292a2f48168550c1022335c654a8d",
+      "main.rs": "8609b17aab37b9a84cde88767cacecc267d170048574636d6516300eea47d359",
+      "decimal_probe.rs": "f43728209ba28c00296d5f4789d4a66db06798c398f34f3558ae3944d0322d8f",
+      "decimal-null.rs": null,
+      "function-mod.rs": "2ce9c566265102724d44f5e2f2822d5d82c03e71e1eec907d50e425becbedae2",
+      "function-scalar-mod.rs": "b5546d8cd9f41cb1a5bddb3d9102f9618abe7e1ef65746d3946af86b4d973e26",
+      "delta_lifecycle.rs": "b7b7d860da8f0bf0e9068f2616c74f1ae744d9677a08194b3a5eedcdfe99927d",
+      "resolver-subquery.rs": "aff16f461317fa52a382a2d61d804d45bea4341d7581a536f22bec480879bf5d",
+      "analyzer-expression.rs": "c5566a6b118560afeca8020acea0095507000a1956051a0f4c1450c291e66eef",
+      "analyzer-parser.rs": "dd81c91ec888151ebafc7d979b50b33180f825211b4568e2de9ba50738271f42",
+      "math-mod.rs": "45b56693f3dde83b0ed3b535b3d81a26a63917db92106f4ecde8cfeee2ab2236",
+      "decimal-utils.rs": "847f4c18277429a79ae9dcf2da2f5cdecac066f71fa67909cae9f0c99a2189db",
+      "decimal-round.rs": null,
+      "conditional.rs": "cf09fc67b0e567668b037a6ee19ab1f166134e0fa067859269983c2e3f739fb0",
+      "small-int-divide.rs": null,
+      "resolver-predicate.rs": "ac785ea9d466f3b50f920aeac31b0be0b243f99bc7e63050e796c38caec8e1b8",
+      "function-predicate.rs": "499f472fda6be201451cef2dab3380d7b602a578fa0ce49c91364a26df0df180",
+      "arrow-mod": "a2b54e3369b6a8bf4bfd46f886720050b94a978c61d0004b33d276932fb0936f",
+      "arrow-decimal": "691d21c85206190f0dd49f5f9a5ef31de7065917780d4c9c3d156bc11a8d5549",
+      "join-selection": "77f99aa2b07b8d20e2de1c0114bf0eff6b1c7495e1923b8308a123812f044219",
+      "unwrap-cast": "0a1b250391180380b5722c2e9e31757c8850c3a392c87912d50e313143389012",
+      "expr-simplifier": "d5a4d4a8ee6e146e616e312e447d30429949b4501b9f45e7979bba14ef57937b",
+      "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+      "decorrelate": "c18f2fd4e6e3c8d20fc3e6070a72c43aa1dc0b517cbf17cb4731734be2651735",
+      "nested-loop": "59b7efeb63dedf071bc8b9f45a39d480c8f8cca62a4702a3f3f670b8a2444967",
+      "physical-test-lock": null,
+      "parser-keywords": null,
+      "native-in-list": "310aaf3b97f83bc70bcbf6bffbed44b4fc500027a4d8202aa487f78fedae6d24",
+      "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+      "native-primitive-filter": "dea083ca4f3208434559a353ac70e73e12cc3f617a8b3b2bf66761b92097353c",
+      "native-strategy": "bc43719e31a52563dd07c5b0dac98a620491d87d6fe2aaf7a88aa86f18b441ac",
+      "native-array-filter": "12259bb4c45fd7f57696efc4c6227fab5a69cbabe9f89e2b6a7a03e2e9589040",
+      "native-case": "470894816b7dfce4f995b0b3537349ea8b2962ecc199a798575ce2090253dc62",
+      "expr-common": "f514c989af51ca89d3fb6d3b14971807e9deffaa4227f8a715aee49e6c9c0c3a",
+      "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+      "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+      "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+      "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+      "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+      "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+      "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+      "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+      "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+      "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+      "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+      "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+      "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+      "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+      "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+      "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+      "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+      "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+      "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+      "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+      "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+      "resolver-join.rs": "5cc7e68aa00f578ea1ffcfe2f0ba5d7dbec534cfd1c036469517c10f94a6640b",
+      "resolver-attribute.rs": "9b4db499ff87b2318835105fcd1cca143da0c7c7cad258c913988b094b1d1d41",
+      "resolver-project.rs": "ad0e4731d5c05d158eea972daf6ec334f740184480bf9edf91de01a2e04afee5",
+      "resolver-function.rs": "543b5ecb1d37a8f6d4b51300237157c6c117a4fffde03adbbaf72c33cdb3516b",
+      "resolver-wildcard.rs": "9bb9065f8b1a4e9bec92ef9c84a432123c0981167a85a592de69e8e6adc9fa08",
+      "resolver-schema.rs": "2ae8751f6eaec1b2e3cd5497ea61a67067aa320737f46974602a9088e5509a1d",
+      "scalar-struct.rs": "e1fe639fdb7927e0bbdc44dcc76dd748f26dc9cb83526ea4d5f247549042fd38",
+      "resolver-aggregate.rs": "c9ee3a9dbe00855b36fc7ab1f079dec5808287c33cee6966e1aac48e54d07338",
+      "native-aggregates.rs": "d4e576bc9e2c9c48613b9e8e4c53308dea0baa87aa78200293094430a1e39610",
+      "resolver-sort.rs": "3db6a9e7a0eef7851dd24808af7bd43fb80f3002559809c168d53527f4233bc4",
+      "lifecycle-support-0": null,
+      "lifecycle-support-1": null
+    },
+    "executables": {
+      "bench": "41142f9ec9341118f514984c0f690ea9a611aac6b180a26fc0c30329711257bb",
+      "probe": "340658fe8d3f6fcefae60fe38affd1b15d0bc89e5b8888ea2188d7e43fa81155",
+      "runner": "622a12a937afbf5c2a4f26a34e0606ef89a8c5d4dcc3dcbced6f4b6526a1ce5e"
+    },
+    "temporary_inputs_absent": true
+  },
+  "limitations": [
+    "Decimal remainder result precision and precision-38 result adjustment remain separate native/Spark differences. This patch changes operand coercion, not all arithmetic result rules.",
+    "The numeric corpus includes existing DATE_DIFF output-width differences. They are not caused by arithmetic coercion.",
+    "Four supplementary ANSI NULL-dividend modulo-by-zero observations retain an existing eager-error mismatch; they are separate from operand coercion.",
+    "The implicit FLOAT/integer query has the same physical plan as explicit native DOUBLE arithmetic. Its parent uses the wrong output width; parent timing is not a comparison between generally equivalent semantics.",
+    "The benchmark uses exactly representable integer keys 0..511 and Decimal(18,4) inputs, with a final Decimal(38,6) result cast. Decimal/FLOAT promotion and operators other than addition have correctness coverage but no isolated timing; these measurements do not establish universal performance equivalence.",
+    "Earlier grouping-mask, floating normalization, USING and conversion costs remain; partial-set bit permutation still has no isolated performance measurement."
+  ]
+}

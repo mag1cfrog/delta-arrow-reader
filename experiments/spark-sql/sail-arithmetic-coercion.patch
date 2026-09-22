@@ -1,0 +1,149 @@
+--- a/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -72,6 +72,31 @@
+             "expected string type for interval arithmetic, got {data_type}"
+         ))),
+     }
++}
++
++// Reuse division's Decimal/floating and integer-literal coercion rules.
++// ANSI FLOAT/integer pairs also use DOUBLE. Literal casts fold before execution.
++fn coerce_spark_arithmetic_operands(
++    mut left: Expr,
++    mut right: Expr,
++    left_type: &DataType,
++    right_type: &DataType,
++    ansi_mode: bool,
++) -> (Expr, Expr) {
++    if is_float_decimal_pair(left_type, right_type)
++        || (ansi_mode
++            && ((left_type == &DataType::Float32 && right_type.is_integer())
++                || (right_type == &DataType::Float32 && left_type.is_integer())))
++    {
++        return (cast(left, DataType::Float64), cast(right, DataType::Float64));
++    }
++    if let Some(target) = spark_decimal_literal_datatype(&left, right_type, true) {
++        left = cast(left, target);
++    }
++    if let Some(target) = spark_decimal_literal_datatype(&right, left_type, true) {
++        right = cast(right, target);
++    }
++    (left, right)
+ }
+
+ /// Arguments:
+@@ -136,7 +161,14 @@
+             }
+             // TODO: In case getting the type fails, we don't want to fail the query.
+             //  Future work is needed here, ideally we create something like `Operator::SparkPlus`.
+-            (Ok(_), Ok(_)) | (Err(_), _) | (_, Err(_)) => left + right,
++            (Ok(left_type), Ok(right_type)) => {
++                let (left, right) = coerce_spark_arithmetic_operands(
++                    left, right, &left_type, &right_type,
++                    function_context.plan_config.ansi_mode,
++                );
++                left + right
++            }
++            (Err(_), _) | (_, Err(_)) => left + right,
+         })
+     }
+ }
+@@ -187,7 +219,14 @@
+             }
+             // TODO: In case getting the type fails, we don't want to fail the query.
+             //  Future work is needed here, ideally we create something like `Operator::SparkMinus`.
+-            (Ok(_), Ok(_)) | (Err(_), _) | (_, Err(_)) => left - right,
++            (Ok(left_type), Ok(right_type)) => {
++                let (left, right) = coerce_spark_arithmetic_operands(
++                    left, right, &left_type, &right_type,
++                    function_context.plan_config.ansi_mode,
++                );
++                left - right
++            }
++            (Err(_), _) | (_, Err(_)) => left - right,
+         })
+     }
+ }
+@@ -237,7 +276,14 @@
+         }
+         // TODO: In case getting the type fails, we don't want to fail the query.
+         //  Future work is needed here, ideally we create something like `Operator::SparkMultiply`.
+-        (Ok(_), Ok(_)) | (Err(_), _) | (_, Err(_)) => left * right,
++        (Ok(left_type), Ok(right_type)) => {
++                let (left, right) = coerce_spark_arithmetic_operands(
++                    left, right, &left_type, &right_type,
++                    function_context.plan_config.ansi_mode,
++                );
++                left * right
++            }
++            (Err(_), _) | (_, Err(_)) => left * right,
+     })
+ }
+
+@@ -1396,6 +1442,15 @@
+     }
+
+     let ansi_mode = function_context.plan_config.ansi_mode;
++    let (dividend, divisor) = match (
++        dividend.get_type(function_context.schema),
++        divisor.get_type(function_context.schema),
++    ) {
++        (Ok(left_type), Ok(right_type)) => coerce_spark_arithmetic_operands(
++            dividend, divisor, &left_type, &right_type, ansi_mode,
++        ),
++        _ => (dividend, divisor),
++    };
+     let divisor_type = divisor.get_type(function_context.schema);
+
+     // Apply runtime zero-divisor guard to the divisor before building the modulo expression.
+@@ -1622,3 +1677,50 @@
+         ("width_bucket", F::quaternary(math_fn::width_bucket)),
+     ]
+ }
++
++#[cfg(test)]
++#[tokio::test]
++async fn arithmetic_coercion_preserves_literal_precision_and_ansi_float_width() -> PlanResult<()> {
++    use crate::config::PlanConfig;
++    use crate::resolver::PlanResolver;
++    use datafusion::prelude::SessionContext;
++    use arrow::array::{Array, Decimal128Array, Float64Array};
++    for ansi in [true, false] {
++        let ctx = SessionContext::new();
++        let mut config = PlanConfig::default();
++        config.ansi_mode = ansi;
++        let resolver = PlanResolver::new(&ctx, Arc::new(config));
++        for (operator, expected, decimal_type, coefficient, mixed) in [
++            ("+", 16777218.5, DataType::Decimal128(9, 2), 325, [3.75, 3.75]),
++            ("-", -16777215.5, DataType::Decimal128(9, 2), 125, [-0.75, 0.75]),
++            ("*", 25165825.5, DataType::Decimal128(10, 2), 225, [3.375, 3.375]),
++            ("%", 1.5, DataType::Decimal128(3, 2), 25, [1.5, 0.75]),
++        ] {
++            let sql = format!("SELECT f {operator} i AS r,d {operator} 1 AS d,f {operator} d AS fd,d {operator} f AS df FROM (VALUES(CAST(1.5 AS FLOAT),16777217,CAST(2.25 AS DECIMAL(8,2))),(CAST(NULL AS FLOAT),1,CAST(NULL AS DECIMAL(8,2)))) t(f,i,d)");
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let named = resolver.resolve_named_plan(spec).await?;
++            let batches = ctx.execute_logical_plan(named.plan).await?.collect().await?;
++            let batch = &batches[0];
++            assert_eq!(batch.column(0).data_type(), if ansi { &DataType::Float64 } else { &DataType::Float32 });
++            if ansi {
++                assert_eq!(batch.column(0).as_any().downcast_ref::<Float64Array>().unwrap().value(0), expected);
++            }
++            let decimal = batch.column(1).as_any().downcast_ref::<Decimal128Array>().unwrap();
++            // Native Decimal remainder result precision is a separate known gap;
++            // the frozen Spark corpus retains that mismatch. Check operand
++            // coercion and values here without claiming its schema is repaired.
++            if operator != "%" {
++                assert_eq!(decimal.data_type(), &decimal_type);
++            }
++            assert_eq!(decimal.value(0), coefficient);
++            assert!(decimal.is_null(1) && batch.column(0).is_null(1));
++            for (index, expected) in mixed.into_iter().enumerate() {
++                let values = batch.column(index + 2).as_any().downcast_ref::<Float64Array>().unwrap();
++                assert_eq!(values.value(0), expected);
++                assert!(values.is_null(1));
++            }
++        }
++    }
++    Ok(())
++}

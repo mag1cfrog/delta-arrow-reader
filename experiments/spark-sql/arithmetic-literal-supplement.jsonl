@@ -1,0 +1,8 @@
+{"id": "divide_1Y_0", "sql": "SELECT d / 1Y AS r FROM (VALUES(0,CAST(2.25 AS DECIMAL(8,2))),(1,CAST(NULL AS DECIMAL(8,2)))) t(id,d) ORDER BY id", "batch_size": 2}
+{"id": "divide_1Y_1", "sql": "SELECT 1Y / d AS r FROM (VALUES(0,CAST(2.25 AS DECIMAL(8,2))),(1,CAST(NULL AS DECIMAL(8,2)))) t(id,d) ORDER BY id", "batch_size": 2}
+{"id": "divide_neg1Y_0", "sql": "SELECT d / -1Y AS r FROM (VALUES(0,CAST(2.25 AS DECIMAL(8,2))),(1,CAST(NULL AS DECIMAL(8,2)))) t(id,d) ORDER BY id", "batch_size": 2}
+{"id": "divide_neg1Y_1", "sql": "SELECT -1Y / d AS r FROM (VALUES(0,CAST(2.25 AS DECIMAL(8,2))),(1,CAST(NULL AS DECIMAL(8,2)))) t(id,d) ORDER BY id", "batch_size": 2}
+{"id": "divide_127Y_0", "sql": "SELECT d / 127Y AS r FROM (VALUES(0,CAST(2.25 AS DECIMAL(8,2))),(1,CAST(NULL AS DECIMAL(8,2)))) t(id,d) ORDER BY id", "batch_size": 2}
+{"id": "divide_127Y_1", "sql": "SELECT 127Y / d AS r FROM (VALUES(0,CAST(2.25 AS DECIMAL(8,2))),(1,CAST(NULL AS DECIMAL(8,2)))) t(id,d) ORDER BY id", "batch_size": 2}
+{"id": "divide_neg128Y_0", "sql": "SELECT d / -128Y AS r FROM (VALUES(0,CAST(2.25 AS DECIMAL(8,2))),(1,CAST(NULL AS DECIMAL(8,2)))) t(id,d) ORDER BY id", "batch_size": 2}
+{"id": "divide_neg128Y_1", "sql": "SELECT -128Y / d AS r FROM (VALUES(0,CAST(2.25 AS DECIMAL(8,2))),(1,CAST(NULL AS DECIMAL(8,2)))) t(id,d) ORDER BY id", "batch_size": 2}

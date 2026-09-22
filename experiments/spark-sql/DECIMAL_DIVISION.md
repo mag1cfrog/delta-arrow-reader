@@ -4851,6 +4851,116 @@ build cache. Extract it and pass this experiment directory as its argument.
 All 77 shared source/lock records, three executables and temporary Delta inputs
 were restored. Default vendor sources remain unchanged.
 
+## Arithmetic operand coercion
+
+`sail-arithmetic-coercion.patch` applies after the accepted optional runtime at
+`664bd05`. It changes only `sail-plan/src/function/scalar/math.rs`. The three
+computed-addition type differences in the preceding grouping corpus came from
+arithmetic operand types, not grouping-key canonicalization.
+
+The shared arithmetic builder now reuses the existing division helpers for
+Decimal/floating promotion and minimum integer-literal precision. It also
+promotes FLOAT/integer pairs to DOUBLE under ANSI. Plus, minus, multiply and
+modulo use these rules; their temporal branches and the division implementation
+remain separate. Execution uses native arithmetic and casts, with no new kernel,
+execution node, dependency or Python runtime path.
+
+The rules follow Spark's [ANSI type coercion](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/AnsiTypeCoercion.scala),
+[Decimal coercion](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/DecimalPrecisionTypeCoercion.scala)
+and [literal type selection](https://github.com/apache/spark/blob/v4.2.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/types/DataTypeUtils.scala#L230).
+Short, Int and Long literals use their value's minimum precision; Byte retains
+its declared precision. The first attempt incorrectly extended the existing
+helper to Byte, causing seven arithmetic and four division regressions. That
+attempt was rejected before timing. The accepted patch leaves the literal helper
+unchanged. Both earlier candidates and their original captures are retained.
+
+The main corpus has 224 local queries, each run in both ANSI modes. It covers
+all four arithmetic operators, both operand orders, signed integer widths,
+FLOAT precision boundaries, Decimal literals and dynamic operands, NULLs,
+explicit casts, nested expressions, grouping, filters and date controls.
+Separate supplements cover the reused helper's byte-literal division callers
+and the modulo guard's zero/NULL behavior.
+
+| Corpus | Parent agreements | Candidate agreements | Observations |
+| --- | ---: | ---: | ---: |
+| Arithmetic operand coercion | 235 | 404 | 448 |
+| Byte-literal division supplement | 16 | 16 | 16 |
+| Modulo zero/NULL supplement | 8 | 12 | 16 |
+
+The main corpus retains 44 strict differences: 22 Decimal remainder return
+precisions, 12 precision-38 result schemas, four DATE_DIFF output widths and six
+FLOAT display differences. Those six display cases have identical IEEE754
+Float32 values in both engines; their original exact-decimal string comparisons
+remain unchanged. The zero supplement retains four existing ANSI errors when a
+NULL dividend meets a zero divisor. Spark returns NULL for those rows; the
+existing eager divisor guard raises instead. These are observation counts, not
+counts of independent bugs. No previously agreeing observation regresses.
+
+All 37 planner tests and 28 runner tests pass, including four lifecycle tests.
+The earlier grouping corpus improves from 205/236 to 208/236. The older 6,068
+observations improve from 5,753 to 5,755, with no new disagreements. All 78
+existing equivalent-reference checks still pass. The 116 real-Delta comparisons
+preserve results, schemas, partition invariants and error fields under the
+existing ordering rules.
+
+All 224 prior benchmark records retain their values. Six projected-subquery
+physical plans change only the Decimal subtraction literal's precision from
+10 to 1. Six added arithmetic checks pass in both binaries. For ANSI
+FLOAT/integer addition, the candidate's physical plan is identical to explicit
+native DOUBLE arithmetic. The parent uses the wrong width; timings against it
+compare implementations with different general semantics, even though the
+benchmark's keys 0..511 are exactly representable in both.
+
+Performance retains a measurable local cost in the FLOAT/integer query:
+
+| Query | Execution time change | Paired 95% interval | Instruction change |
+| --- | ---: | ---: | ---: |
+| FLOAT/integer addition under ANSI | +19.047% | +18.088% to +20.069% | +5.322% |
+| Decimal plus integer literal | +0.158% | -0.094% to +0.410% | +0.004% |
+| Native integer grouping control | +0.256% | -0.111% to +0.681% | approximately 0% |
+| Direct projection control | +0.181% | -0.164% to +0.526% | +0.001% |
+
+The FLOAT query's process-median execution times are 10.603 ms before and
+12.606 ms after. Its same-binary controls shift -0.294% and -0.467%, well below
+the measured difference. FLOAT planning time is inconclusive: the paired change
+is +1.081%, with an interval from -4.958% to +12.947%; instructions fall 2.299%.
+Decimal execution's +0.158% shift is smaller than its +0.489% same-parent control.
+All timing processes have full counter coverage and zero CPU migrations.
+
+The old FLOAT query shares `CAST(k AS FLOAT)` for both operands. Correct ANSI
+semantics require `CAST(CAST(k AS FLOAT) AS DOUBLE)` on the left and
+`CAST(k AS DOUBLE)` on the right, so those operands can no longer share one
+conversion. The benchmark also casts its result to Decimal(38,6), changing that
+existing conversion's input from Float32 to Float64. The 19.047% is the cost of
+this complete query, not an isolated addition kernel or a global adapter tax.
+
+Eight subsequent execution-only profiles retain all captures and report zero
+lost samples. Arrow's final floating-to-Decimal conversion, rounding,
+floating-to-i128 conversion and precision validation dominate their self-cycle
+samples: median shares are 86.132% before and 77.484% after. Native operand casts
+increase from 2.935% to 5.919%, and floating arithmetic from 1.052% to 3.385%.
+These shares identify work in the query but do not assign its entire elapsed-time
+increase to one function. Profile timings are excluded from the comparison.
+The next bounded measurement should consume native FLOAT/DOUBLE outputs to
+separate operand conversion and addition from the final Decimal result cast
+before proposing a new kernel.
+
+The fixed 224-process protocol retains every observation, including same-binary
+controls. No allocator, governor, ASLR or hash-seed setting changes. Each process
+uses eight warmups and 41 samples. Decimal/FLOAT promotion and non-addition operators have correctness
+coverage but no isolated timing. Earlier grouping-mask, floating normalization,
+USING and conversion costs remain, and partial-set bit permutation still has no
+isolated measurement. This slice does not establish complete Spark compatibility
+or zero performance overhead.
+
+`arithmetic-coercion-results.json` and `arithmetic-coercion-runs.json.gz` retain
+the original references, candidate attempts, source provenance, builds, fixed
+protocols, raw measurements and scripts. Extract the archived `check-archive.py`
+and pass this experiment directory to recompute the saved comparisons and
+statistics without the build cache. All 77 shared source/lock records, three
+executables and temporary Delta inputs were restored. Default vendor sources
+remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
