@@ -1,0 +1,8 @@
+{"id": "order_v_k_lall", "sql": "SELECT l.* FROM (VALUES (1,10,100),(2,20,200)) l(v,k,id) FULL JOIN (VALUES (1,10,1000),(3,30,3000)) r(v,k,rid) USING(v,k) ORDER BY 1,2,3", "batch_size": 2, "scope": "wildcard_key_order"}
+{"id": "order_v_k_rall", "sql": "SELECT r.* FROM (VALUES (1,10,100),(2,20,200)) l(v,k,id) FULL JOIN (VALUES (1,10,1000),(3,30,3000)) r(v,k,rid) USING(v,k) ORDER BY 1,2,3", "batch_size": 2, "scope": "wildcard_key_order"}
+{"id": "order_v_k_lall_rall", "sql": "SELECT l.*,r.* FROM (VALUES (1,10,100),(2,20,200)) l(v,k,id) FULL JOIN (VALUES (1,10,1000),(3,30,3000)) r(v,k,rid) USING(v,k) ORDER BY 1,2,3", "batch_size": 2, "scope": "wildcard_key_order"}
+{"id": "order_v_k_all", "sql": "SELECT * FROM (VALUES (1,10,100),(2,20,200)) l(v,k,id) FULL JOIN (VALUES (1,10,1000),(3,30,3000)) r(v,k,rid) USING(v,k) ORDER BY 1,2,3", "batch_size": 2, "scope": "wildcard_key_order"}
+{"id": "order_k_v_lall", "sql": "SELECT l.* FROM (VALUES (1,10,100),(2,20,200)) l(v,k,id) FULL JOIN (VALUES (1,10,1000),(3,30,3000)) r(v,k,rid) USING(k,v) ORDER BY 1,2,3", "batch_size": 2, "scope": "wildcard_key_order"}
+{"id": "order_k_v_rall", "sql": "SELECT r.* FROM (VALUES (1,10,100),(2,20,200)) l(v,k,id) FULL JOIN (VALUES (1,10,1000),(3,30,3000)) r(v,k,rid) USING(k,v) ORDER BY 1,2,3", "batch_size": 2, "scope": "wildcard_key_order"}
+{"id": "order_k_v_lall_rall", "sql": "SELECT l.*,r.* FROM (VALUES (1,10,100),(2,20,200)) l(v,k,id) FULL JOIN (VALUES (1,10,1000),(3,30,3000)) r(v,k,rid) USING(k,v) ORDER BY 1,2,3", "batch_size": 2, "scope": "wildcard_key_order"}
+{"id": "order_k_v_all", "sql": "SELECT * FROM (VALUES (1,10,100),(2,20,200)) l(v,k,id) FULL JOIN (VALUES (1,10,1000),(3,30,3000)) r(v,k,rid) USING(k,v) ORDER BY 1,2,3", "batch_size": 2, "scope": "wildcard_key_order"}

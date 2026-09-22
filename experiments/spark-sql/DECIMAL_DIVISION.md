@@ -4537,6 +4537,33 @@ Non-ANSI floating USING costs rise about 3.00% and 5.17%. Floating planning cost
 
 [Results](float-using-results.json) and the [compressed archive](float-using-runs.json.gz) preserve references, both fresh captures, all measurements, source snapshots, commands and reproduction scripts. The archive checker recomputes the agreement counts from repository artifacts. Before and after differ only in `resolver/query/join.rs`. All 68 shared source/lock records and three executable slots, including two temporarily restored lifecycle fixtures, were restored and checked. The patch remains optional, and the separate type-inference shortcut remains deferred.
 
+## Qualified USING keys and wildcard order
+
+The [optional resolver patch](sail-using-qualified.patch), applied after the floating join patch, makes original USING/NATURAL keys accessible through qualified names such as `l.v` and `r.v`. It preserves their qualifiers and keeps hidden keys through chained joins. Derived aliases still remove them. Unqualified `*`, `struct(*)`, distinct counting and NATURAL key discovery continue to omit hidden columns; qualified stars expose keys first, in USING-list order. Only the retained side of a semi/anti join is visible.
+
+The implementation reuses DataFusion qualified aliases and the existing projection wildcard expander. `struct` now calls that same expander, removing its duplicate expansion code. Outer-reference columns keep their field names inside a struct, and case-insensitive stars use the matched schema qualifier. This is a local resolver correction. The [inspected Sail attribute resolver](https://github.com/lakehq/sail/blob/51b57bc2e3611aebcb6112ffa5470bd56fe25d04/crates/sail-plan/src/resolver/expression/attribute.rs) still skips hidden fields before qualified lookup; no full-Sail runtime comparison is claimed.
+
+The [primary corpus](using-qualified.jsonl) has 115 queries in both ANSI modes, covering integer, floating, Decimal and string keys, join forms, filters, sorts, grouping, structs, chained joins, nested fields and alias boundaries. The [eight additional queries](using-qualified-order.jsonl) check composite-key order, including `USING(k,v)` when the input columns are ordered `v,k`. During validation, six multi-star queries gained a complete ORDER BY list: sorting only the left fields leaves unmatched right-side rows tied. Four apparent differences were valid permutations of those tied rows. Predicates, inputs and projected fields did not change; original captures and the correction are retained.
+
+| Value/type or error-stage agreement | Before | After |
+| --- | ---: | ---: |
+| Qualified-key observations | 32/230 | 228/230 |
+| Composite wildcard-order observations | 4/16 | 16/16 |
+| Previous floating join observations | 148/158 | 156/158 |
+| Previous ANSI precision and narrowing observations | 406/406 | 406/406 |
+| Previous signed-zero observations | 252/256 | 252/256 |
+| Other existing observations | 5,753/6,068 | 5,753/6,068 |
+
+No agreeing observation regresses. The two remaining new differences are a nested correlated scalar subquery over `struct(l.*)`. Its names and types now resolve, but DataFusion cannot create its physical plan; the probe records that as an execution error. The Rust test checks that query's resolution separately, while the SQL corpus continues to expose its execution failure. The earlier duplicate-name and signed-zero grouping differences remain. Three failed casts report a different invalid input value; other existing actual fields are unchanged.
+
+All 31 planner tests and four lifecycle tests pass. The full runner suite passes 27/28 on both parent and candidate: its existing formatting test expects `ABS((- 7))`, but the previously adopted signed-literal normalization produces `ABS(-7)`. A fresh parent test build reproduces the identical assertion. That stale test expectation is separate follow-up work. The 116 real-Delta captures match the parent across values, complete schemas and error fields; all 18 adapter checks and 19 seeds pass. Their strict Spark comparison remains 47 matches, 58 differences and 11 host-adapter cases. The missing PyArrow test environment and two temporary corpus files were restored for capture; the corpus files were removed afterward.
+
+All 74 generic IN and 136 projection/subquery benchmark records, including formatted physical plans, match exactly. The fixed performance schedule retains all 288 fresh processes, with full counter coverage and zero migrations. Inputs, eight warmups, 41 samples, CPU affinity and alternating quartets are unchanged from the preceding experiment.
+
+Execution instruction differences are below 0.01% in every paired case. FLOAT USING time rises 0.226%, with conditional interval `[0.152%, 0.299%]`; its same-parent-binary control rises 0.240%, with interval `[0.171%, 0.309%]`, without additional instruction work. Other same-binary shifts include 0.87% execution and 1.38% planning for plain projection. These observations remain visible and do not establish a causal regression or universal equivalence. All paired planning latency intervals span zero. USING planning instruction changes are at most 0.083%, while ON planning instructions decline about 0.2%. This comparison starts from the normalized-key parent, so it does not remove the earlier floating normalization or dynamic integer widening costs.
+
+[Results](using-qualified-results.json) and the [raw archive](using-qualified-runs.json.gz) include every final capture, the earlier candidates and failed checks, corrected ordering evidence, build records and reproduction scripts. The offline checker verifies the counts and measurements using repository artifacts. Seven resolver source files differ between parent and candidate. All 74 shared source/lock records, three executable slots and the two temporary Delta corpus files are restored and checked. Default vendored sources remain unchanged; the type-inference shortcut is still deferred.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

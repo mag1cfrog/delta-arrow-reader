@@ -1,0 +1,395 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/join.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/join.rs
+@@ -30,8 +30,12 @@
+             join_criteria,
+             join_data_type,
+         } = join;
+-        let left = self.resolve_query_plan(*left, state).await?;
+-        let right = self.resolve_query_plan(*right, state).await?;
++        let left = self
++            .resolve_query_plan_with_hidden_fields(*left, state)
++            .await?;
++        let right = self
++            .resolve_query_plan_with_hidden_fields(*right, state)
++            .await?;
+         let join_type = match join_type {
+             spec::JoinType::Inner => Some(JoinType::Inner),
+             spec::JoinType::LeftOuter => Some(JoinType::Left),
+@@ -181,9 +185,17 @@
+         };
+         // Re-register join key columns as hidden fields so that subsequent
+         // attribute resolution can still find them.
+-        let hidden_columns = builder
+-            .schema()
+-            .columns()
++        let mut columns = builder.schema().columns();
++        // Qualified wildcards expose USING keys before the remaining columns,
++        // in USING-list order, including keys retained from earlier joins.
++        columns.sort_by_key(|col| {
++            left_columns
++                .iter()
++                .position(|key| key == col)
++                .or_else(|| right_columns.iter().position(|key| key == col))
++                .unwrap_or(left_columns.len())
++        });
++        let hidden_columns = columns
+             .into_iter()
+             .map(|col| {
+                 if left_columns.iter().any(|x| x.name == col.name)
+@@ -191,7 +203,8 @@
+                 {
+                     let info = state.get_field_info(col.name())?.clone();
+                     let field_id = state.register_hidden_field_name(info.name());
+-                    Ok(Expr::Column(col).alias(field_id))
++                    let qualifier = col.relation.clone();
++                    Ok(Expr::Column(col).alias_qualified(qualifier, field_id))
+                 } else {
+                     Ok(Expr::Column(col))
+                 }
+@@ -320,4 +333,110 @@
+         }
+         Ok(())
+     }
++
++    #[tokio::test]
++    async fn qualified_using_keys_remain_scoped() -> PlanResult<()> {
++        let ctx = SessionContext::new_with_state(
++            SessionStateBuilder::new()
++                .with_default_features()
++                .with_query_planner(Arc::new(SparkQueryPlanner))
++                .build(),
++        );
++        let source =
++            "(VALUES (1,10),(2,20)) l(id,v) FULL JOIN (VALUES (11,10),(12,30)) r(rid,v) USING(v)";
++        let cases = [
++            (
++                format!("SELECT l.v,r.v FROM {source} ORDER BY l.v,r.v"),
++                vec!["v", "v"],
++                vec![
++                    vec![None, Some(30)],
++                    vec![Some(10), Some(10)],
++                    vec![Some(20), None],
++                ],
++            ),
++            (
++                format!("SELECT l.* FROM {source} ORDER BY id,v"),
++                vec!["v", "id"],
++                vec![
++                    vec![None, None],
++                    vec![Some(10), Some(1)],
++                    vec![Some(20), Some(2)],
++                ],
++            ),
++            (
++                format!("SELECT * FROM {source} ORDER BY v"),
++                vec!["v", "id", "rid"],
++                vec![
++                    vec![Some(10), Some(1), Some(11)],
++                    vec![Some(20), Some(2), None],
++                    vec![Some(30), None, Some(12)],
++                ],
++            ),
++            (
++                format!(
++                    "SELECT l.v,r.v FROM {source} NATURAL INNER JOIN (VALUES (10),(20),(30)) t(v) ORDER BY l.v,r.v"
++                ),
++                vec!["v", "v"],
++                vec![
++                    vec![None, Some(30)],
++                    vec![Some(10), Some(10)],
++                    vec![Some(20), None],
++                ],
++            ),
++            (
++                format!("SELECT s.v FROM (SELECT struct(l.*) AS s FROM {source}) q ORDER BY s.v"),
++                vec!["v"],
++                vec![vec![None], vec![Some(10)], vec![Some(20)]],
++            ),
++        ];
++        for (sql, fields, expected) in cases {
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let named = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()))
++                .resolve_named_plan(spec)
++                .await?;
++            assert_eq!(named.fields, fields, "{sql}");
++            let batches = ctx
++                .execute_logical_plan(named.plan)
++                .await?
++                .collect()
++                .await?;
++            let mut rows = Vec::new();
++            for batch in batches {
++                for row in 0..batch.num_rows() {
++                    rows.push(
++                        batch
++                            .columns()
++                            .iter()
++                            .map(|column| {
++                                column
++                                    .as_any()
++                                    .downcast_ref::<arrow::array::Int32Array>()
++                                    .unwrap()
++                                    .iter()
++                                    .nth(row)
++                                    .unwrap()
++                            })
++                            .collect::<Vec<_>>(),
++                    );
++                }
++            }
++            assert_eq!(rows, expected, "{sql}");
++        }
++        // Verify name resolution here. The SQL corpus separately records the
++        // remaining physical-planning gap for this correlated scalar shape.
++        let sql =
++            format!("SELECT id,(SELECT s.v FROM (SELECT struct(l.*) AS s) q) AS v FROM {source}");
++        let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++        let named = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()))
++            .resolve_named_plan(spec)
++            .await?;
++        assert_eq!(named.fields, vec!["id", "v"]);
++        assert_eq!(
++            named.plan.schema().field(1).data_type(),
++            &arrow::datatypes::DataType::Int32
++        );
++        Ok(())
++    }
+ }
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/attribute.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/attribute.rs
+@@ -96,13 +96,11 @@
+                 let Ok(info) = state.get_field_info(field.name()) else {
+                     return vec![];
+                 };
+-                if info.is_hidden() {
+-                    return vec![];
+-                }
+                 candidates
+                     .iter()
+                     .filter_map(|(q, name, inner)| {
+-                        if qualifier_matches(q.as_ref(), qualifier)
++                        if (!info.is_hidden() || q.is_some())
++                            && qualifier_matches(q.as_ref(), qualifier)
+                             && info.name().eq_ignore_ascii_case(name.as_ref())
+                         {
+                             let expr = Self::resolve_potentially_nested_field(
+@@ -209,13 +207,11 @@
+                 let Ok(info) = state.get_field_info(field.name()) else {
+                     return vec![];
+                 };
+-                if info.is_hidden() {
+-                    return vec![];
+-                }
+                 candidates
+                     .iter()
+                     .filter(|(q, name)| {
+-                        qualifier_matches(q.as_ref(), qualifier)
++                        (!info.is_hidden() || q.is_some())
++                            && qualifier_matches(q.as_ref(), qualifier)
+                             && info.name().eq_ignore_ascii_case(name.as_ref())
+                     })
+                     .map(|(_, name)| {
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/project.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/query/project.rs
+@@ -61,20 +61,24 @@
+         }
+     }
+
+-    pub(super) fn rewrite_wildcard(
++    pub(in crate::resolver) fn rewrite_wildcard(
+         &self,
+         input: LogicalPlan,
+         expr: Vec<NamedExpr>,
+         state: &mut PlanResolverState,
+     ) -> PlanResult<(LogicalPlan, Vec<NamedExpr>)> {
+-        fn to_named_expr(expr: Expr, state: &PlanResolverState) -> PlanResult<Option<NamedExpr>> {
++        fn to_named_expr(
++            expr: Expr,
++            state: &PlanResolverState,
++            qualified: bool,
++        ) -> PlanResult<Option<NamedExpr>> {
+             let Expr::Column(column) = expr else {
+                 return Err(PlanError::invalid(
+                     "column expected for expanded wildcard expression",
+                 ));
+             };
+             let info = state.get_field_info(column.name())?;
+-            if info.is_hidden() {
++            if info.is_hidden() && !qualified {
+                 return Ok(None);
+             }
+             Ok(Some(NamedExpr::new(
+@@ -110,7 +114,7 @@
+                         continue;
+                     }
+                     let info = state.get_field_info(field.name())?;
+-                    if info.is_hidden() {
++                    if info.is_hidden() && qualifier_filter.is_none() {
+                         continue;
+                     }
+                     let outer_col = Expr::OuterReferenceColumn(
+@@ -139,7 +143,7 @@
+                     options,
+                 } => {
+                     for e in expand_wildcard(schema, &input, Some(&options))? {
+-                        projected.extend(to_named_expr(e, state)?)
++                        projected.extend(to_named_expr(e, state, false)?)
+                     }
+                     expand_outer_wildcard(None, schema, state, &mut projected)?;
+                 }
+@@ -148,15 +152,24 @@
+                     qualifier: Some(qualifier),
+                     options,
+                 } => {
++                    let start = projected.len();
+                     let qualifier_in_input = schema
+                         .iter()
+                         .any(|(q, _)| q.is_some_and(|q| *q == qualifier));
+                     if qualifier_in_input {
+                         for e in expand_qualified_wildcard(&qualifier, schema, Some(&options))? {
+-                            projected.extend(to_named_expr(e, state)?)
++                            projected.extend(to_named_expr(e, state, true)?)
+                         }
+                     }
+                     expand_outer_wildcard(Some(&qualifier), schema, state, &mut projected)?;
++                    // Match Spark's qualified star order without exposing hidden
++                    // keys in an unqualified star.
++                    projected[start..].sort_by_key(|named| match &named.expr {
++                        Expr::Column(column) | Expr::OuterReferenceColumn(_, column) => !state
++                            .get_field_info(column.name())
++                            .is_ok_and(|info| info.is_hidden()),
++                        _ => true,
++                    });
+                 }
+                 _ => projected.push(NamedExpr {
+                     name,
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/function.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/function.rs
+@@ -2,7 +2,6 @@
+ use datafusion_common::DFSchemaRef;
+ use datafusion_expr::expr::ScalarFunction;
+ use datafusion_expr::registry::FunctionRegistry;
+-use datafusion_expr::utils::{expand_qualified_wildcard, expand_wildcard};
+ use datafusion_expr::{EmptyRelation, Expr, LogicalPlan, expr};
+ use sail_common::spec;
+ use sail_common_datafusion::utils::items::ItemTaker;
+@@ -243,17 +242,6 @@
+         schema: &DFSchemaRef,
+         state: &mut PlanResolverState,
+     ) -> PlanResult<(Vec<String>, Vec<expr::Expr>)> {
+-        fn column_display_name(
+-            column: &datafusion_common::Column,
+-            state: &PlanResolverState,
+-        ) -> PlanResult<Option<String>> {
+-            let info = state.get_field_info(column.name())?;
+-            if info.is_hidden() {
+-                return Ok(None);
+-            }
+-            Ok(Some(info.name().to_string()))
+-        }
+-
+         let mut names: Vec<String> = vec![];
+         let mut exprs: Vec<expr::Expr> = vec![];
+
+@@ -273,21 +261,11 @@
+                         schema: schema.clone(),
+                     });
+
+-                    let expanded = match qualifier {
+-                        Some(q) => expand_qualified_wildcard(&q, schema, Some(&options))?,
+-                        None => expand_wildcard(schema, &plan, Some(&options))?,
+-                    };
+-
+-                    for e in expanded {
+-                        let Expr::Column(column) = e else {
+-                            return Err(PlanError::internal(format!(
+-                                "column expected for expanded wildcard expression in struct, got: {e:?}"
+-                            )));
+-                        };
+-                        if let Some(display_name) = column_display_name(&column, state)? {
+-                            names.push(display_name);
+-                            exprs.push(Expr::Column(column));
+-                        }
++                    let wildcard = NamedExpr::new(name, Expr::Wildcard { qualifier, options });
++                    let (_, expanded) = self.rewrite_wildcard(plan, vec![wildcard], state)?;
++                    for named in expanded {
++                        names.push(named.name.one()?);
++                        exprs.push(named.expr);
+                     }
+                 }
+
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/wildcard.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/wildcard.rs
+@@ -54,20 +54,22 @@
+     ) -> PlanResult<NamedExpr> {
+         for (q, remaining) in Self::generate_qualified_wildcard_candidates(name.parts()) {
+             if remaining.is_empty() {
+-                let in_input = schema
++                let matched = schema
+                     .iter()
+-                    .any(|(qualifier, _)| qualifier_matches(q.as_ref(), qualifier));
+-                let in_outer = state.get_outer_query_schema().is_some_and(|outer_schema| {
+-                    outer_schema
+-                        .iter()
+-                        .any(|(qualifier, _)| qualifier_matches(q.as_ref(), qualifier))
+-                });
+-                if in_input || in_outer {
++                    .find(|(qualifier, _)| qualifier_matches(q.as_ref(), *qualifier))
++                    .or_else(|| {
++                        state.get_outer_query_schema().and_then(|outer| {
++                            outer
++                                .iter()
++                                .find(|(qualifier, _)| qualifier_matches(q.as_ref(), *qualifier))
++                        })
++                    });
++                if let Some((qualifier, _)) = matched {
+                     return Ok(NamedExpr::new(
+                         vec!["*".to_string()],
+                         #[expect(deprecated)]
+                         expr::Expr::Wildcard {
+-                            qualifier: q,
++                            qualifier: qualifier.cloned(),
+                             options: Default::default(),
+                         },
+                     ));
+@@ -85,7 +87,8 @@
+                         let Ok(info) = state.get_field_info(field.name()) else {
+                             return None;
+                         };
+-                        if qualifier_matches(q.as_ref(), qualifier)
++                        if (!info.is_hidden() || q.is_some())
++                            && qualifier_matches(q.as_ref(), qualifier)
+                             && info.name().eq_ignore_ascii_case(column.as_ref())
+                         {
+                             Self::resolve_nested_field_wildcard(
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/schema.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/schema.rs
+@@ -104,7 +104,12 @@
+         schema
+             .fields()
+             .iter()
+-            .map(|field| Ok(state.get_field_info(field.name())?.name().to_string()))
++            .filter_map(|field| {
++                state
++                    .get_field_info(field.name())
++                    .map(|info| (!info.is_hidden()).then(|| info.name().to_string()))
++                    .transpose()
++            })
+             .collect::<PlanResult<Vec<_>>>()
+     }
+ }
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/struct.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/struct.rs
+@@ -15,7 +15,9 @@
+         .enumerate()
+         .map(|(i, (expr, name))| -> PlanResult<_> {
+             match expr {
+-                Expr::Column(_) | Expr::Alias(_) => Ok(name.clone()),
++                Expr::Column(_) | Expr::OuterReferenceColumn(_, _) | Expr::Alias(_) => {
++                    Ok(name.clone())
++                }
+                 #[expect(deprecated)]
+                 Expr::Wildcard { .. } => Err(PlanError::internal(
+                     "wildcard should have been expanded before struct",
