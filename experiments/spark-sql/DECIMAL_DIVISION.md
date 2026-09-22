@@ -4776,6 +4776,81 @@ records and three executables were restored. Resume by correcting the capacity
 test and mixed-key order, then complete the frozen validation before accepting
 the patch. Default vendor sources are unchanged.
 
+## Canonical grouping keys and semantic bit order
+
+`sail-grouping-canonical.patch` completes the preceding investigation. Apply it
+after the accepted optional runtime at `9d74f3b`, including the earlier native
+grouping-ID packing fix. The unaccepted investigation patch is not a prerequisite.
+Only the Rust aggregate and sort resolvers change.
+
+Aliases around a complete grouping key now share one semantic dimension. Repeated
+ROLLUP/CUBE keys use the existing native set-expansion utilities, and every set
+uses the same key order while retaining duplicate occurrences. This also aligns
+native logical ID typing with physical membership masks, fixing the parent probe
+aborts at 8, 16 and 32 keys. The corrected boundary test permits two copies at
+63 keys and rejects three copies, which require 65 bits including the ordinal.
+
+Mixed grouping constructs retain their original semantic argument order. When
+the expansion contains a complete set, putting that set first gives native field
+discovery the required order without runtime bit permutation. Otherwise, existing
+native AND, shift and OR expressions map the public ID bits. SELECT, HAVING and
+ORDER BY share this mapping; private field metadata carries the order between
+resolution stages and does not appear in output schemas. No execution node,
+kernel, dependency or Python execution path is added.
+
+The 118 queries run in both ANSI modes, giving 236 observations:
+
+| Corpus | Parent agreements | Candidate agreements | Observations |
+| --- | ---: | ---: | ---: |
+| Aliases, repeated keys and width boundaries | 18 | 111 | 130 |
+| Earlier mixed-set review | 4 | 10 | 10 |
+| Mixed semantic key order | 20 | 76 | 86 |
+| Mixed order with duplicate ordinals | 0 | 8 | 10 |
+| Total | 42 | 205 | 236 |
+
+Agreement compares values, types and error stages. It includes two matching
+nested-alias parser errors, so it is not a count of executable queries. The
+remaining 31 differences comprise 18 valid forms rejected by Spark, four correct
+empty-input grand totals, six native 64-bit capacity limits and three existing
+computed-addition type differences. Original Spark observations remain unchanged.
+All 22 equivalent-reference checks pass; four concern the earlier alias-sort
+corpus, not the new 236 observations. Four empty-input totals are asserted
+separately. The earlier 238-observation corpus improves from 176 to 184 strict
+agreements, and its 56 equivalent-reference checks still pass.
+
+All 36 planner tests and 28 runner tests pass, including four lifecycle tests.
+The older corpora remain at 5753/6068, with no new differences. Four existing cast
+errors select different invalid values. All 224 existing benchmark records and
+physical plans are unchanged. The 116 real-Delta comparisons preserve schemas,
+results under their SQL ordering rules, partition invariants and error fields.
+
+Performance uses the fixed 160-process parent comparison plus a separate
+64-process comparison of mixed ROLLUP with equivalent explicit GROUPING SETS in
+the candidate binary. Both retain all samples and same-binary/query controls,
+with full counter coverage and zero migrations.
+
+| Comparison | Phase | Paired time change | Instruction change |
+| --- | --- | ---: | ---: |
+| Integer ROLLUP, candidate vs parent | Planning | -0.267% | +0.066% |
+| Integer ROLLUP, candidate vs parent | Execution | -0.283% | +0.001% |
+| Mixed ROLLUP vs explicit sets | Planning | -4.745% | -7.902% |
+| Mixed ROLLUP vs explicit sets | Execution | +0.168% | +0.003% |
+
+Ordinary grouping and projection instruction counts are nearly unchanged. The
+same-reference execution control in the mixed comparison shifts +0.241%, larger
+than the paired +0.168% time difference. The mixed comparison includes query-shape
+and set-order effects; it does not isolate a kernel cost. The partial-set bit
+permutation path has correctness coverage but no isolated performance result.
+Earlier public-ID masking, floating normalization and conversion costs remain.
+
+`grouping-canonical-results.json` and `grouping-canonical-runs.json.gz` retain the
+original and equivalent references, first candidate before the complete-set
+optimization, builds, measurements, protocols and scripts. The archived
+`check-archive.py` recomputes agreements and performance statistics without the
+build cache. Extract it and pass this experiment directory as its argument.
+All 77 shared source/lock records, three executables and temporary Delta inputs
+were restored. Default vendor sources remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

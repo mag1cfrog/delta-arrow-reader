@@ -1,0 +1,626 @@
+--- a/vendor/sail/crates/sail-plan/src/resolver/query/aggregate.rs
++++ b/vendor/sail/crates/sail-plan/src/resolver/query/aggregate.rs
+@@ -1,19 +1,20 @@
+ // Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+-use std::collections::HashSet;
++use std::collections::{BTreeMap, HashSet};
+ use std::sync::Arc;
+
+ use datafusion::functions_aggregate::{average, bit_and_or_xor, bool_and_or, count, min_max, sum};
+ use datafusion_common::arrow::datatypes::DataType;
+ use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRecursion};
+ use datafusion_common::{
+-    Column, DFSchemaRef, DataFusionError, Result as DataFusionResult, ScalarValue,
++    Column, DFSchema, DFSchemaRef, DataFusionError, Result as DataFusionResult, ScalarValue,
+ };
+ use datafusion_expr::expr_rewriter::normalize_col;
+ use datafusion_expr::logical_plan::{FetchType, SkipType};
+-use datafusion_expr::utils::find_aggregate_exprs;
++use datafusion_expr::utils::{enumerate_grouping_sets, find_aggregate_exprs, powerset};
++use datafusion_expr::expr::GroupingSet;
+ use datafusion_expr::{
+     Aggregate, AggregateUDF, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder,
+-    Projection, ScalarUDF, SortExpr, Volatility, bitwise_and, bitwise_shift_right, cast, lit, when,
++    Projection, ScalarUDF, SortExpr, Volatility, bitwise_and, bitwise_or, bitwise_shift_left, bitwise_shift_right, cast, lit, when,
+ };
+ use datafusion_spark::function::aggregate::try_sum::SparkTrySum;
+ use sail_common::spec;
+@@ -40,6 +41,8 @@
+
+ /// A map from a grouping generator expression to the column that materializes it.
+ type GeneratorReplacements = Vec<(Expr, Expr)>;
++
++const GROUPING_KEY_ORDER_METADATA: &str = "sail:grouping_key_order";
+
+ /// Returns the name of a volatile (non-deterministic) scalar expression found
+ /// in an aggregate context. Catches two Spark CheckAnalysis violations:
+@@ -189,15 +192,29 @@
+         state: &mut PlanResolverState,
+     ) -> PlanResult<LogicalPlan> {
+         let grouping = self.resolve_grouping_positions(grouping, &projections)?;
+-        let group_exprs = grouping.iter().map(|x| x.expr.clone()).collect::<Vec<_>>();
++        let (group_exprs, grouping_exprs, grouping_order) =
++            Self::canonicalize_grouping_keys(grouping.iter().map(|x| x.expr.clone()).collect())?;
+         let has_grouping_set = Self::has_grouping_set(&group_exprs);
+-        let grouping_exprs = Self::distinct_grouping_expressions_from_exprs(&group_exprs);
+         let projections = projections
+             .into_iter()
+-            .map(|x| Self::rewrite_grouping_functions(x, &grouping_exprs, has_grouping_set))
++            .map(|x| {
++                Self::rewrite_grouping_functions(
++                    x,
++                    &grouping_exprs,
++                    has_grouping_set,
++                    &grouping_order,
++                )
++            })
+             .collect::<PlanResult<Vec<_>>>()?;
+         let having = having
+-            .map(|having| Self::rewrite_grouping_expr(having, &grouping_exprs, has_grouping_set))
++            .map(|having| {
++                Self::rewrite_grouping_expr(
++                    having,
++                    &grouping_exprs,
++                    has_grouping_set,
++                    &grouping_order,
++                )
++            })
+             .transpose()?;
+         let mut aggregate_candidates = projections
+             .iter()
+@@ -228,12 +245,41 @@
+                 Ok(Transformed::new(expr, normalize, TreeNodeRecursion::Jump))
+             }).data()
+         }).collect::<DataFusionResult<Vec<_>>>()?;
+-        let plan = LogicalPlanBuilder::from(input)
++        let mut plan = LogicalPlanBuilder::from(input)
+             .aggregate(group_exprs, aggregate_exprs.clone())?
+             .build()?;
++        if !grouping_order.is_empty() {
++            // ORDER BY resolves after aggregate construction. Keep the semantic
++            // order on the private ID field, without adding an execution node.
++            let LogicalPlan::Aggregate(aggregate) = &mut plan else {
++                return Err(PlanError::internal("expected aggregate plan"));
++            };
++            let order = serde_json::to_string(&grouping_order)
++                .map_err(|error| PlanError::internal(error.to_string()))?;
++            let fields = aggregate
++                .schema
++                .iter()
++                .map(|(qualifier, field)| {
++                    let field = if field.name() == Aggregate::INTERNAL_GROUPING_ID {
++                        let mut metadata = field.metadata().clone();
++                        metadata.insert(GROUPING_KEY_ORDER_METADATA.into(), order.clone());
++                        Arc::new(field.as_ref().clone().with_metadata(metadata))
++                    } else {
++                        Arc::clone(field)
++                    };
++                    (qualifier.cloned(), field)
++                })
++                .collect();
++            aggregate.schema = Arc::new(
++                DFSchema::new_with_metadata(fields, aggregate.schema.metadata().clone())?
++                    .with_functional_dependencies(
++                        aggregate.schema.functional_dependencies().clone(),
++                    )?,
++            );
++        }
++        let mut aggregate_or_grouping_exprs = aggregate_exprs;
++        aggregate_or_grouping_exprs.extend(grouping_exprs);
+         let grouping_exprs = Self::named_grouping_expressions(grouping)?;
+-        let mut aggregate_or_grouping_exprs = aggregate_exprs;
+-        aggregate_or_grouping_exprs.extend(grouping_exprs.iter().map(|x| x.expr.clone()));
+         let projections = if with_grouping_expressions {
+             grouping_exprs.into_iter().chain(projections).collect()
+         } else {
+@@ -662,6 +708,123 @@
+         }
+     }
+
++    fn canonicalize_grouping_keys(
++        grouping: Vec<Expr>,
++    ) -> DataFusionResult<(Vec<Expr>, Vec<Expr>, Vec<usize>)> {
++        if !Self::has_grouping_set(&grouping) {
++            let keys = grouping.clone();
++            return Ok((grouping, keys, vec![]));
++        }
++        // Aliases name outputs, not independent subtotal dimensions. Only strip
++        // aliases around complete keys; never rewrite aggregate inputs or operands.
++        let grouping = grouping
++            .into_iter()
++            .map(|expr| {
++                expr.transform_down(|mut expr| {
++                    if matches!(expr, Expr::GroupingSet(_)) {
++                        return Ok(Transformed::no(expr));
++                    }
++                    let aliased = matches!(expr, Expr::Alias(_));
++                    while matches!(expr, Expr::Alias(_)) {
++                        expr = expr.unalias();
++                    }
++                    Ok(Transformed::new(expr, aliased, TreeNodeRecursion::Jump))
++                })
++                .data()
++            })
++            .collect::<DataFusionResult<Vec<_>>>()?;
++        let keys = Self::distinct_grouping_expressions_from_exprs(&grouping);
++        if keys.len() > 64 {
++            return Err(DataFusionError::Plan(
++                "[GROUPING_SIZE_LIMIT_EXCEEDED] grouping set size cannot be greater than 64".into(),
++            ));
++        }
++        let grouping = grouping.into_iter().map(|expr| {
++            let (set, cube) = match expr {
++                Expr::GroupingSet(GroupingSet::Rollup(set)) => (set, false),
++                Expr::GroupingSet(GroupingSet::Cube(set)) => (set, true),
++                expr => return Ok(expr),
++            };
++            let mut seen = HashSet::new();
++            if set.iter().all(|key| seen.insert(key)) {
++                return Ok(Expr::GroupingSet(if cube { GroupingSet::Cube(set) } else { GroupingSet::Rollup(set) }));
++            }
++            // Apply the existing mixed-grouping-set limit before expansion.
++            if (cube && set.len() > 12) || (!cube && set.len() >= 4096) {
++                return Err(DataFusionError::Plan(
++                    "The number of grouping_set in grouping_sets exceeds the maximum limit 4096".into(),
++                ));
++            }
++            let sets = if cube {
++                powerset(&set)?.into_iter().map(|set| set.into_iter().cloned().collect()).collect()
++            } else {
++                (0..=set.len()).rev().map(|end| set[..end].to_vec()).collect()
++            };
++            Ok(Expr::GroupingSet(GroupingSet::GroupingSets(sets)))
++        }).collect::<DataFusionResult<Vec<_>>>()?;
++        let mut grouping = enumerate_grouping_sets(grouping)?;
++        if let [Expr::GroupingSet(GroupingSet::GroupingSets(sets))] = grouping.as_mut_slice() {
++            // Native logical typing counts equal expression lists, while execution
++            // counts equal membership masks. Give both the same canonical lists,
++            // retaining every occurrence so duplicate subtotal rows survive.
++            for set in sets {
++                *set = keys
++                    .iter()
++                    .filter(|key| set.contains(key))
++                    .cloned()
++                    .collect();
++            }
++        }
++        let native_keys = Self::distinct_grouping_expressions_from_exprs(&grouping);
++        let order = if keys == native_keys {
++            vec![]
++        } else {
++            // Grouping-set order is not SQL row order. A complete set can lead
++            // native field discovery in semantic order, avoiding runtime bit
++            // permutation for ordinary mixed ROLLUP/CUBE while retaining duplicates.
++            if let [Expr::GroupingSet(GroupingSet::GroupingSets(sets))] = grouping.as_mut_slice()
++                && let Some(full) = sets.iter().position(|set| set.len() == keys.len())
++            {
++                sets.swap(0, full);
++                return Ok((grouping, keys, vec![]));
++            }
++            keys.iter()
++                .map(|key| {
++                    native_keys
++                        .iter()
++                        .position(|native| native == key)
++                        .ok_or_else(|| {
++                            DataFusionError::Internal("missing canonical grouping key".into())
++                        })
++                })
++                .collect::<DataFusionResult<Vec<_>>>()?
++        };
++        Ok((grouping, keys, order))
++    }
++
++    pub(super) fn grouping_key_order(
++        aggregate: &Aggregate,
++        key_count: usize,
++    ) -> PlanResult<Vec<usize>> {
++        let Some(value) = aggregate
++            .schema
++            .fields()
++            .iter()
++            .find(|field| field.name() == Aggregate::INTERNAL_GROUPING_ID)
++            .and_then(|field| field.metadata().get(GROUPING_KEY_ORDER_METADATA))
++        else {
++            return Ok(vec![]);
++        };
++        let order: Vec<usize> =
++            serde_json::from_str(value).map_err(|error| PlanError::internal(error.to_string()))?;
++        let mut indices = order.clone();
++        indices.sort_unstable();
++        if !indices.into_iter().eq(0..key_count) {
++            return Err(PlanError::internal("invalid grouping key permutation"));
++        }
++        Ok(order)
++    }
++
+     fn unalias_grouping_expr(mut expr: &Expr) -> &Expr {
+         while let Expr::Alias(alias) = expr {
+             expr = alias.expr.as_ref();
+@@ -803,6 +966,7 @@
+         named_expr: NamedExpr,
+         grouping_exprs: &[Expr],
+         has_grouping_set: bool,
++        grouping_order: &[usize],
+     ) -> PlanResult<NamedExpr> {
+         let NamedExpr {
+             name,
+@@ -811,7 +975,12 @@
+         } = named_expr;
+         Ok(NamedExpr {
+             name,
+-            expr: Self::rewrite_grouping_expr(expr, grouping_exprs, has_grouping_set)?,
++            expr: Self::rewrite_grouping_expr(
++                expr,
++                grouping_exprs,
++                has_grouping_set,
++                grouping_order,
++            )?,
+             metadata,
+         })
+     }
+@@ -820,6 +989,7 @@
+         expr: Expr,
+         grouping_exprs: &[Expr],
+         has_grouping_set: bool,
++        grouping_order: &[usize],
+     ) -> PlanResult<Expr> {
+         Ok(expr
+             .transform_down(|expr| {
+@@ -829,11 +999,13 @@
+                             function,
+                             grouping_exprs,
+                             has_grouping_set,
++                            grouping_order,
+                         )?)),
+                         "grouping_id" => Ok(Transformed::yes(Self::grouping_id_on_grouping_id(
+                             function,
+                             grouping_exprs,
+                             has_grouping_set,
++                            grouping_order,
+                         )?)),
+                         _ => Ok(Transformed::no(Expr::AggregateFunction(function))),
+                     }
+@@ -890,6 +1062,7 @@
+         function: datafusion_expr::expr::AggregateFunction,
+         grouping_exprs: &[Expr],
+         has_grouping_set: bool,
++        grouping_order: &[usize],
+     ) -> DataFusionResult<Expr> {
+         Self::reject_grouping_clause(&function)?;
+         if !has_grouping_set {
+@@ -913,6 +1086,7 @@
+                     Self::format_grouping_exprs(grouping_exprs)
+                 ))
+             })?;
++        let position = grouping_order.get(position).copied().unwrap_or(position);
+         let bitmap_index = grouping_exprs.len() - 1 - position;
+         let group_bit = bitwise_and(
+             Self::grouping_id_column(),
+@@ -936,6 +1110,7 @@
+         function: datafusion_expr::expr::AggregateFunction,
+         grouping_exprs: &[Expr],
+         has_grouping_set: bool,
++        grouping_order: &[usize],
+     ) -> DataFusionResult<Expr> {
+         Self::reject_grouping_clause(&function)?;
+         if !has_grouping_set {
+@@ -970,10 +1145,43 @@
+         } else {
+             (1_u64 << count) - 1
+         };
+-        let id = bitwise_and(
+-            Self::grouping_id_column(),
+-            Self::grouping_bitmask_literal(mask, count),
+-        );
++        let id = if grouping_order.is_empty() {
++            bitwise_and(
++                Self::grouping_id_column(),
++                Self::grouping_bitmask_literal(mask, count),
++            )
++        } else {
++            // Combine bits with the same displacement into one native operation.
++            // Duplicate ordinals stay internal; only semantic bits are selected.
++            let mut masks = BTreeMap::<isize, u64>::new();
++            for (semantic, &native) in grouping_order.iter().enumerate() {
++                let displacement = native as isize - semantic as isize;
++                *masks.entry(displacement).or_default() |= 1_u64 << (count - 1 - native);
++            }
++            masks
++                .into_iter()
++                .map(|(shift, mask)| {
++                    let bits = bitwise_and(
++                        Self::grouping_id_column(),
++                        Self::grouping_bitmask_literal(mask, count),
++                    );
++                    if shift == 0 {
++                        bits
++                    } else if shift > 0 {
++                        bitwise_shift_left(
++                            bits,
++                            Self::grouping_bitmask_literal(shift as u64, count),
++                        )
++                    } else {
++                        bitwise_shift_right(
++                            bits,
++                            Self::grouping_bitmask_literal((-shift) as u64, count),
++                        )
++                    }
++                })
++                .reduce(bitwise_or)
++                .ok_or_else(|| DataFusionError::Internal("empty grouping key permutation".into()))?
++        };
+         if count == 64 {
+             // Spark's BIGINT is signed. Convert the unsigned bit pattern with
+             // range-safe native expressions instead of an overflowing cast.
+@@ -1410,3 +1618,243 @@
+     }
+     Ok(())
+ }
++
++#[cfg(test)]
++#[tokio::test]
++async fn grouping_aliases_share_semantic_keys_and_keep_duplicate_rows() -> PlanResult<()> {
++    use crate::config::PlanConfig;
++    use crate::physical_plan::SparkQueryPlanner;
++    use arrow::array::{Array, Int64Array};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::{SessionConfig, SessionContext};
++
++    let mut cases = vec![
++        ("SELECT v AS k1,v AS k2,grouping_id() AS gid,count(*) AS n FROM (VALUES(CAST('-0' AS FLOAT)),(CAST('0' AS FLOAT)),(CAST(NULL AS FLOAT))) t(v) GROUP BY ROLLUP(k1,k2) ORDER BY gid,n".to_string(), 2, vec![(0,1),(0,1),(0,2),(0,2),(1,3)]),
++        ("SELECT v AS k1,v AS k2,grouping_id() AS gid,count(*) AS n FROM (VALUES(1),(NULL)) t(v) GROUP BY CUBE(k1,k2) ORDER BY gid,n".to_string(), 2, vec![(0,1),(0,1),(0,1),(0,1),(0,1),(0,1),(1,2)]),
++        ("SELECT grouping_id(v,w) AS gid,count(*) AS n FROM (VALUES(1,2),(1,2)) t(v,w) GROUP BY ROLLUP(v,v,w) ORDER BY gid,n".to_string(), 0, vec![(0,2),(1,2),(1,2),(3,2)]),
++        ("SELECT v AS k1,v AS k2,grouping_id() AS gid,count(*) AS n FROM (SELECT 1 AS v WHERE FALSE) t GROUP BY ROLLUP(k1,k2) ORDER BY gid,n".to_string(), 2, vec![(1,0)]),
++    ];
++    for count in [8, 16, 32, 63] {
++        let columns = (0..count)
++            .map(|i| format!("c{i}"))
++            .collect::<Vec<_>>()
++            .join(",");
++        let reversed = (0..count)
++            .rev()
++            .map(|i| format!("c{i}"))
++            .collect::<Vec<_>>()
++            .join(",");
++        let values = vec!["1"; count].join(",");
++        let (sets, ids) = if count == 63 {
++            (
++                format!("({columns}),({reversed}),()"),
++                vec![(0, 2), (0, 2), (((1_u64 << count) - 1) as i64, 2)],
++            )
++        } else {
++            (
++                format!("({columns}),({reversed}),({columns},c0),()"),
++                vec![(0, 2), (0, 2), (0, 2), (((1_u64 << count) - 1) as i64, 2)],
++            )
++        };
++        cases.push((format!("SELECT grouping_id() AS gid,count(*) AS n FROM (VALUES({values}),({values})) t({columns}) GROUP BY GROUPING SETS ({sets}) ORDER BY gid,n"),0,ids));
++    }
++    for ansi in [true, false] {
++        let ctx = SessionContext::new_with_state(
++            SessionStateBuilder::new()
++                .with_config(
++                    SessionConfig::new()
++                        .with_target_partitions(2)
++                        .with_batch_size(2),
++                )
++                .with_default_features()
++                .with_query_planner(Arc::new(SparkQueryPlanner))
++                .build(),
++        );
++        let mut config = PlanConfig::default();
++        config.ansi_mode = ansi;
++        let resolver = PlanResolver::new(&ctx, Arc::new(config));
++        for (sql, index, expected) in &cases {
++            let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let named = resolver.resolve_named_plan(spec).await?;
++            let batches = ctx
++                .execute_logical_plan(named.plan)
++                .await?
++                .collect()
++                .await?;
++            let mut rows = Vec::new();
++            for batch in batches {
++                let ids = batch
++                    .column(*index)
++                    .as_any()
++                    .downcast_ref::<Int64Array>()
++                    .unwrap();
++                let counts = batch
++                    .column(index + 1)
++                    .as_any()
++                    .downcast_ref::<Int64Array>()
++                    .unwrap();
++                assert_eq!(ids.null_count(), 0);
++                assert_eq!(counts.null_count(), 0);
++                for row in 0..batch.num_rows() {
++                    rows.push((ids.value(row), counts.value(row)));
++                }
++            }
++            assert_eq!(&rows, expected, "ansi={ansi}: {sql}");
++        }
++        let columns = (0..63)
++            .map(|i| format!("c{i}"))
++            .collect::<Vec<_>>()
++            .join(",");
++        let values = vec!["1"; 63].join(",");
++        let sql = format!(
++            "SELECT grouping_id() FROM (VALUES({values})) t({columns}) GROUP BY GROUPING SETS (({columns}),({columns}),({columns}))"
++        );
++        let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++        let named = resolver.resolve_named_plan(spec).await?;
++        let error = ctx
++            .execute_logical_plan(named.plan)
++            .await?
++            .collect()
++            .await
++            .unwrap_err();
++        assert!(error.to_string().contains("require 65 bits"), "{error}");
++        let columns = (0..65)
++            .map(|i| format!("c{i}"))
++            .collect::<Vec<_>>()
++            .join(",");
++        let values = vec!["1"; 65].join(",");
++        for function in ["grouping_id()", "grouping(c0)"] {
++            let sql = format!(
++                "SELECT {function} FROM (VALUES({values})) t({columns}) GROUP BY ROLLUP({columns})"
++            );
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            assert!(
++                resolver
++                    .resolve_named_plan(spec)
++                    .await
++                    .unwrap_err()
++                    .to_string()
++                    .contains("GROUPING_SIZE_LIMIT_EXCEEDED")
++            );
++        }
++    }
++    Ok(())
++}
++
++#[cfg(test)]
++#[tokio::test]
++async fn mixed_grouping_functions_use_semantic_bit_order() -> PlanResult<()> {
++    use crate::config::PlanConfig;
++    use crate::physical_plan::SparkQueryPlanner;
++    use arrow::array::{Array, Int64Array};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::{SessionConfig, SessionContext};
++
++    for ansi in [true, false] {
++        let ctx = SessionContext::new_with_state(
++            SessionStateBuilder::new()
++                .with_config(
++                    SessionConfig::new()
++                        .with_target_partitions(2)
++                        .with_batch_size(1),
++                )
++                .with_default_features()
++                .with_query_planner(Arc::new(SparkQueryPlanner))
++                .build(),
++        );
++        let mut config = PlanConfig::default();
++        config.ansi_mode = ansi;
++        let resolver = PlanResolver::new(&ctx, Arc::new(config));
++        let sql = "SELECT grouping_id(v,w) AS gid FROM (VALUES(1,2)) t(v,w) GROUP BY ROLLUP(v),ROLLUP(w) ORDER BY gid";
++        let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++        let named = resolver.resolve_named_plan(spec).await?;
++        named.plan.apply(|plan| {
++            if let LogicalPlan::Aggregate(aggregate) = plan {
++                assert!(PlanResolver::grouping_key_order(aggregate, 2).unwrap().is_empty());
++            }
++            Ok(TreeNodeRecursion::Continue)
++        })?;
++        for count in [8, 16, 32, 63, 64] {
++            let columns = (0..count)
++                .map(|i| format!("c{i}"))
++                .collect::<Vec<_>>()
++                .join(",");
++            let tail = (2..count)
++                .map(|i| format!("c{i}"))
++                .collect::<Vec<_>>()
++                .join(",");
++            let values = vec!["1"; count].join(",");
++            let last = count - 1;
++            let base = format!(
++                "SELECT grouping_id() AS gid,grouping_id({columns}) AS explicit_gid,CAST(grouping(c0) AS BIGINT) AS first_missing,CAST(grouping(c{last}) AS BIGINT) AS last_missing,count(*) AS n FROM (VALUES({values}),({values})) t({columns}) GROUP BY GROUPING SETS ((c0),(c1)),GROUPING SETS (({tail}))"
++            );
++            let first = (1_u64 << (count - 1)) as i64;
++            let second = (1_u64 << (count - 2)) as i64;
++            let mut expected = vec![vec![first, first, 1, 0, 2], vec![second, second, 0, 0, 2]];
++            expected.sort();
++            for (suffix, expected) in [
++                ("ORDER BY gid".to_string(), expected.clone()),
++                (format!("ORDER BY grouping_id({columns})"), expected),
++                (
++                    "HAVING grouping(c0)=1 ORDER BY grouping_id()".to_string(),
++                    vec![vec![first, first, 1, 0, 2]],
++                ),
++            ] {
++                let sql = format!("{base} {suffix}");
++                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let named = resolver.resolve_named_plan(spec).await?;
++                let batches = ctx
++                    .execute_logical_plan(named.plan)
++                    .await?
++                    .collect()
++                    .await?;
++                let mut actual = Vec::new();
++                for batch in batches {
++                    assert!(
++                        !batch
++                            .schema()
++                            .metadata()
++                            .contains_key(GROUPING_KEY_ORDER_METADATA)
++                    );
++                    assert!(
++                        batch.schema().fields().iter().all(|field| !field
++                            .metadata()
++                            .contains_key(GROUPING_KEY_ORDER_METADATA))
++                    );
++                    for row in 0..batch.num_rows() {
++                        actual.push(
++                            batch
++                                .columns()
++                                .iter()
++                                .map(|column| {
++                                    let column =
++                                        column.as_any().downcast_ref::<Int64Array>().unwrap();
++                                    assert!(!column.is_null(row));
++                                    column.value(row)
++                                })
++                                .collect::<Vec<_>>(),
++                        );
++                    }
++                }
++                assert_eq!(actual, expected, "ansi={ansi}: {sql}");
++            }
++        }
++        let sql = "SELECT grouping_id(w,v) FROM (VALUES(1,2)) t(v,w) GROUP BY ROLLUP(v),ROLLUP(w)";
++        let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++        assert!(
++            resolver
++                .resolve_named_plan(spec)
++                .await
++                .unwrap_err()
++                .to_string()
++                .contains("GROUPING_ID_COLUMN_MISMATCH")
++        );
++    }
++    Ok(())
++}
+--- a/vendor/sail/crates/sail-plan/src/resolver/query/sort.rs
++++ b/vendor/sail/crates/sail-plan/src/resolver/query/sort.rs
+@@ -112,8 +112,22 @@
+             nulls_first,
+         } = sort;
+         let has_grouping_set = Self::has_grouping_set(&aggregate.group_expr);
+-        let grouping_exprs = Self::distinct_grouping_expressions_from_exprs(&aggregate.group_expr);
+-        let expr = Self::rewrite_grouping_expr(expr, &grouping_exprs, has_grouping_set)?;
++        let native_keys = Self::distinct_grouping_expressions_from_exprs(&aggregate.group_expr);
++        let grouping_order = if has_grouping_set {
++            Self::grouping_key_order(aggregate, native_keys.len())?
++        } else {
++            vec![]
++        };
++        let grouping_exprs = if grouping_order.is_empty() {
++            native_keys
++        } else {
++            grouping_order
++                .iter()
++                .map(|&index| native_keys[index].clone())
++                .collect()
++        };
++        let expr =
++            Self::rewrite_grouping_expr(expr, &grouping_exprs, has_grouping_set, &grouping_order)?;
+         Ok(Sort {
+             expr,
+             asc,
