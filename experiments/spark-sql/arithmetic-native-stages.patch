@@ -1,0 +1,133 @@
+--- a/examples/decimal_bench.rs
++++ b/examples/decimal_bench.rs
+@@ -606,6 +606,7 @@
+     match case {
+         "group_id_integer" => Some(i128::from(id == 512) * 1_000_000),
+         "arithmetic_float" | "arithmetic_float_explicit" => Some(key as i128 * 2_000_000),
++        "arithmetic_stage_decimal_f32" | "arithmetic_stage_decimal_f64" => Some(key as i128 * 2_000_000),
+         "arithmetic_decimal" => Some((id % 97 + 2) as i128 * 10_000 + 1_000_000),
+         "group_id_mixed" | "group_id_expanded" => Some(
+             (if id < 512 { 0 } else if id < 1024 { 1 } else if id < 1026 { 2 } else { 3 }) * 1_000_000
+@@ -738,6 +739,56 @@
+         return Err(format!("expected {expected_rows} rows, got {rows}").into());
+     }
+     Ok((rows, nulls, sum))
++}
++
++// Bit checks run before timing. Each timed sample still uses consume(), so
++// neither reference arithmetic nor a result cast enters the measured phase.
++async fn validate_native_arithmetic(
++    ctx: &SessionContext,
++    plan: Arc<dyn ExecutionPlan>,
++    case: &str,
++    ansi: bool,
++) -> Result<(usize, usize, i128)> {
++    let case = case.strip_prefix("arithmetic_stage_").ok_or("unknown native case")?;
++    let f32_output = matches!(case, "derived_f32" | "cast_i64_f32" | "stored_f32" | "ready_f32" | "read_f32")
++        || (!ansi && matches!(case, "derived_f64" | "stored_f64"));
++    let expected_type = if f32_output { DataType::Float32 } else { DataType::Float64 };
++    if plan.schema().fields().len() != 1 || plan.schema().field(0).data_type() != &expected_type {
++        return Err(format!("unexpected native schema: {:?}", plan.schema()).into());
++    }
++    let mut stream = execute_stream(plan, ctx.task_ctx())?;
++    let (mut rows, mut sum) = (0, 0_i128);
++    while let Some(batch) = stream.next().await {
++        let batch = batch?;
++        let values = batch.column(0);
++        if values.null_count() != 0 { return Err("unexpected native NULL".into()); }
++        for i in 0..batch.num_rows() {
++            if rows >= ROWS { return Err("too many native rows".into()); }
++            let id = subquery_input_id(rows);
++            let key = (id % 512) as f64;
++            let stored64 = (id % 97 + 2) as f64 / 100.0 + 0.125;
++            let stored32 = f64::from(stored64 as f32);
++            let expected = match case {
++                "derived_f32" | "derived_f64" | "explicit_f64" => key + key,
++                "cast_i64_f32" | "cast_i64_f64" | "cast_derived_f64" => key,
++                "stored_f32" | "stored_f64" => stored32 + key,
++                "cast_stored_f64" | "read_f32" => stored32,
++                "ready_f32" => stored32 + stored32,
++                "ready_f64" => stored64 + stored64,
++                _ => return Err(format!("unknown native case: {case}").into()),
++            };
++            let (actual, expected) = if f32_output {
++                (u64::from(values.as_any().downcast_ref::<Float32Array>().unwrap().value(i).to_bits()), u64::from((expected as f32).to_bits()))
++            } else {
++                (values.as_any().downcast_ref::<Float64Array>().unwrap().value(i).to_bits(), expected.to_bits())
++            };
++            if actual != expected { return Err(format!("row {rows}: expected bits {expected:x}, got {actual:x}").into()); }
++            sum += i128::from(actual);
++            rows += 1;
++        }
++    }
++    if rows != ROWS { return Err(format!("expected {ROWS} native rows, got {rows}").into()); }
++    Ok((rows, 0, sum))
+ }
+
+ async fn subquery_bench(
+@@ -966,6 +1017,26 @@
+         ]);
+     }
+
++    // Opt-in native-output cases reuse the same inputs and timing loop.
++    if selected.is_some_and(|id| id.starts_with("arithmetic_stage_")) {
++        cases.extend([
++            ("arithmetic_stage_derived_f32", "CAST(o.k AS FLOAT) + CAST(o.k AS FLOAT)".into(), "".into(), false),
++            ("arithmetic_stage_derived_f64", "CAST(o.k AS FLOAT) + o.k".into(), "".into(), false),
++            ("arithmetic_stage_explicit_f64", "CAST(CAST(o.k AS FLOAT) AS DOUBLE) + CAST(o.k AS DOUBLE)".into(), "".into(), false),
++            ("arithmetic_stage_decimal_f32", "CAST(CAST(o.k AS FLOAT) + CAST(o.k AS FLOAT) AS DECIMAL(38,6))".into(), "".into(), false),
++            ("arithmetic_stage_decimal_f64", "CAST(CAST(o.k AS FLOAT) + o.k AS DECIMAL(38,6))".into(), "".into(), false),
++            ("arithmetic_stage_cast_i64_f32", "CAST(o.k AS FLOAT)".into(), "".into(), false),
++            ("arithmetic_stage_cast_i64_f64", "CAST(o.k AS DOUBLE)".into(), "".into(), false),
++            ("arithmetic_stage_cast_derived_f64", "CAST(CAST(o.k AS FLOAT) AS DOUBLE)".into(), "".into(), false),
++            ("arithmetic_stage_stored_f32", "o.f32 + CAST(o.k AS FLOAT)".into(), "".into(), false),
++            ("arithmetic_stage_stored_f64", "o.f32 + o.k".into(), "".into(), false),
++            ("arithmetic_stage_cast_stored_f64", "CAST(o.f32 AS DOUBLE)".into(), "".into(), false),
++            ("arithmetic_stage_ready_f32", "o.f32 + o.f32".into(), "".into(), false),
++            ("arithmetic_stage_ready_f64", "o.f64 + o.f64".into(), "".into(), false),
++            ("arithmetic_stage_read_f32", "o.f32".into(), "".into(), false),
++        ]);
++    }
++
+     // Opt-in arithmetic cases preserve the established check corpus.
+     if selected.is_some_and(|id| id.starts_with("arithmetic_")) {
+         cases.extend([
+@@ -977,9 +1048,12 @@
+     let mut results = Vec::new();
+     for (case, expression, join, sorted) in cases {
+         let order = if sorted { "ORDER BY o.id" } else { "" };
+-        let sql = format!(
+-            "SELECT CAST({expression} AS DECIMAL(38,6)) AS r FROM bench_outer o {join} {order}"
+-        );
++        let native = case.starts_with("arithmetic_stage_") && !case.starts_with("arithmetic_stage_decimal_");
++        let sql = if case.starts_with("arithmetic_stage_") {
++            format!("SELECT {expression} AS r FROM bench_outer o {join} {order}")
++        } else {
++            format!("SELECT CAST({expression} AS DECIMAL(38,6)) AS r FROM bench_outer o {join} {order}")
++        };
+         for ansi in [true, false] {
+             let id = format!("{case}_ansi{ansi}");
+             if selected.is_some_and(|s| s != id) {
+@@ -997,7 +1071,12 @@
+                 Err(error) => return Err(error),
+             };
+             result["physical_plan"] = json!(displayable(plan.as_ref()).indent(true).to_string());
+-            let (rows, nulls, sum) = match validate_subquery(ctx, plan, case, sorted).await {
++            let validation = if native {
++                validate_native_arithmetic(ctx, plan, case, ansi).await
++            } else {
++                validate_subquery(ctx, plan, case, sorted).await
++            };
++            let (rows, nulls, sum) = match validation {
+                 Ok(counts) => counts,
+                 Err(error) if check_only => {
+                     result["status"] = json!("validation_error");
+@@ -1010,7 +1089,7 @@
+             result["status"] = json!("ok");
+             result["validated_rows"] = json!(rows);
+             result["output_nulls"] = json!(nulls);
+-            result["coefficient_sum"] = json!(sum.to_string());
++            result[if native { "value_bits_sum" } else { "coefficient_sum" }] = json!(sum.to_string());
+             if !check_only {
+                 let mut retained = Vec::new();
+                 if retention != "none" {

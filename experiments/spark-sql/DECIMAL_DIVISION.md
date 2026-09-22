@@ -4961,6 +4961,97 @@ statistics without the build cache. All 77 shared source/lock records, three
 executables and temporary Delta inputs were restored. Default vendor sources
 remain unchanged.
 
+## Native arithmetic stages and heap activity
+
+`arithmetic-native-stages.patch` extends the preceding slice's archived benchmark
+source. It applies to `examples/decimal_bench.rs` after reconstructing that
+accepted benchmark. It does not change runtime code or dependencies. One binary
+runs all query variants, so this experiment compares query shapes, not builds.
+
+Fourteen added cases run in both ANSI modes. The native cases consume FLOAT or
+DOUBLE output without the final Decimal cast; two Decimal cases reproduce the
+preceding full query. Each case checks the schema, NULL count and every output
+row before timing. All 28 checks pass, as do the 230 existing value/plan checks.
+The archived checker independently reconstructs native bit-pattern checksums
+over all 1,048,576 input rows. Implicit ANSI FLOAT/integer addition and explicit
+DOUBLE casts have identical physical plans. The two Decimal plans also match
+the preceding slice's plans after normalizing generated field identifiers.
+
+Inputs use batch size 8,192. Integer keys range from 0 to 511; stored floating
+values are finite and non-null. FLOAT and DOUBLE arithmetic have different
+general semantics even when these integer keys are exactly representable in
+both. No NULL, non-finite or other-batch-size performance claim follows.
+
+The fixed 160-process schedule includes eight query pairs and four same-query
+controls. Each process uses eight warmups and 41 execution samples. All six
+counters have full coverage, CPU migrations are zero, and allocator, governor,
+ASLR and hash-seed settings are unchanged. Process-median times and paired
+changes are:
+
+| Query pair, A versus B | A, ms | B, ms | Paired time change | Paired 95% interval |
+| --- | ---: | ---: | ---: | ---: |
+| Derived FLOAT versus DOUBLE sum, Decimal output | 10.514826 | 12.580582 | +19.496% | +18.802% to +19.976% |
+| Derived FLOAT versus DOUBLE sum, native output | 0.434798 | 5.335851 | +1127.841% | +1120.714% to +1134.020% |
+| Stored FLOAT plus integer, FLOAT versus DOUBLE output | 0.517497 | 4.005320 | +673.782% | +665.920% to +681.330% |
+| Stored FLOAT plus itself versus stored DOUBLE plus itself | 0.171929 | 0.254358 | +48.902% | +47.182% to +50.043% |
+| Integer cast to FLOAT versus DOUBLE | 0.307472 | 0.325600 | +5.446% | +4.432% to +6.470% |
+| Integer cast to FLOAT versus FLOAT then DOUBLE | 0.306394 | 0.494579 | +60.913% | +60.708% to +61.118% |
+| Implicit versus explicit DOUBLE sum | 5.355773 | 5.355733 | +0.807% | -0.089% to +1.772% |
+| Read stored FLOAT versus cast it to DOUBLE | 0.064195 | 0.260263 | +311.245% | +307.421% to +314.267% |
+
+The original Decimal query retains approximately the earlier 19% cost. Native
+output exposes a much larger relative difference because the common final
+Decimal conversion is absent. These are complete pipelines; their timings
+cannot be added or subtracted to assign costs to individual kernels.
+Same-query controls shift +0.225% for Decimal output, -0.123% for the derived
+DOUBLE sum, -0.738% for the stored DOUBLE sum and +2.205% for the short FLOAT
+read. The explicit/implicit comparison has the same plan and an interval
+including zero.
+
+Page faults identify a separate source of work beyond wider arithmetic. Across
+41 executions, the native derived FLOAT sum has a median of 41 page faults;
+the corresponding DOUBLE sum has 126,576. The stored FLOAT/integer comparison
+rises from 26 to 84,326.5. Ready FLOAT/DOUBLE addition has only 18 and 26,
+respectively. The isolated integer-to-FLOAT and FLOAT-to-DOUBLE pipeline has 35.
+Eight subsequent cycle profiles retain their full reports with zero lost
+samples. Some addresses remain unresolved, so their self-cycle shares do not
+attribute the elapsed-time gap to a single function.
+
+Kernel syscall tracing failed before benchmark execution because tracefs denied
+access to the requested events. No system permissions or settings were changed.
+Four fixed-order LLDB runs instead recorded `brk` function-entry requests from
+the owned benchmark processes, only between the execution enable/disable markers:
+
+| Native query | First capture | Second capture |
+| --- | ---: | ---: |
+| Derived FLOAT sum | 2 requests | 7 requests |
+| Derived DOUBLE sum | 10,544 requests | 10,544 requests |
+
+Both DOUBLE captures alternate thousands of heap growth and shrink requests,
+with roughly 861-867 MB requested in each direction over 41 executions. These
+are requested addresses, not traced return values; the first request's size is
+unknown, and mmap activity was not captured. Debugger and profile timings are
+excluded from the performance comparison. The initial trace parser rejected
+perf's startup disabled marker; the corrected parser reused that valid first
+capture without rerunning or reordering it. Both diagnostic failures remain
+in the archive.
+
+Together, page faults and heap requests support investigating temporary-buffer
+allocation and release. They do not establish that the 19% cost is inherent to
+DOUBLE precision. The next bounded prototype should test Arrow's existing
+`binary_mut` support for uniquely owned intermediate buffers, preserving the
+borrowed path when reuse is unavailable. No runtime optimization is included
+here, and no measured cost has been removed by this slice.
+
+`arithmetic-native-stages-results.json` and
+`arithmetic-native-stages-runs.json.gz` retain source provenance, checks, fixed
+protocols, all timings, profiles, debugger captures, failures and scripts.
+Extract the archived `check-archive.py` and pass this experiment directory to
+verify the patch, unchanged runtime/dependencies, checksums, plans, timing
+statistics and diagnostic counts without the build cache. All 77 shared
+source/lock records and three executable slots were restored, and temporary
+inputs are absent. Default vendor sources remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
