@@ -4261,6 +4261,23 @@ Hardware interrupt sampling can skid from the triggering branch, so these offset
 
 The [archive](float-type-branch-sample-runs.json.gz) retains the raw perf files, all decoded samples, disassembly, source hashes, 4,720 table traces and 4,176 prepared executions. Setup checks first found a default-buffer mapping failure, then a clock mismatch in eight completed smoke profiles. Both attempts remain recorded. The corrected eight-process smoke check passes with 51 samples. Slow whole-executable symbol demangling was interrupted and replaced with decoding raw names plus demangling only sampled symbols. No formal collection group was discarded, no Rust rebuild or runtime change was made, and no performance effect is estimated. The original release interval and adoption decision remain unresolved.
 
+## Comparing full-key equality work
+
+The [equality-flow diagnostic](float-type-equality-flow-results.json) finds no unequal full-key comparison work within its four-process groups. Every batch position matches in exact comparison count, exact match count, outcome-order fingerprint and operand-pair-order fingerprint. Complete IN-table address and hash sequences also match within each group.
+
+One diagnostic rebuild instruments `OrderedFloat64::eq` with thread-local counters and two ordered 64-bit fingerprints. Recording starts immediately before each native Float64 `contains` loop and stops before NULL-mask handling. The original bitwise equality result, hasher and hashbrown lookup algorithm remain intact. Construction-time comparisons are outside the recording scope. Fingerprints are finite checks, not collision-free proofs of sequence equality.
+
+The fixed four groups retain the prior seeds, preparation rotations, execution orders, state/context settings, 32 warmups and 261 prepared plans. Each process emits 128 batch records per constructed query, including validation and warmups. All 604,160 records and 4,711,873,544 comparisons are retained:
+
+| Native seed index | Processes across two groups | Comparisons per process | Matches per process |
+| --- | ---: | ---: | ---: |
+| 0 | 8 | 294,627,230 | 293,383,990 |
+| 4 | 8 | 294,356,963 | 293,383,990 |
+
+Each query's summed matches equal its canonical SQL result. All 186 existing result and plan captures pass in fresh-state mode, as do eight smoke processes. A standalone Rust test compiles the exact trace helper and equality implementation, checking disabled recording, reset, repeatability, order sensitivity, signed zero and NaN bit patterns. No new Spark corpus comparison is counted.
+
+Instrumentation changes generated code and execution cost, and it does not count tag scans or empty-bucket checks. These results therefore cannot prove identical work in the earlier uninstrumented executable or explain its branch-prediction variation. Hardware branch histories from that executable are the next check. The [raw archive](float-type-equality-flow-runs.json.gz) keeps all stderr records, counters, query captures, source and driver patches, validation and build metadata. Parsed equality arrays can be regenerated from the retained stderr without storing a second copy. Shared files are restored and hash-checked, no runs are discarded, and no performance effect is estimated. The optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

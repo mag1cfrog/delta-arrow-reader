@@ -1,0 +1,529 @@
+{
+  "slice": "Compare native Float64 equality work across processes",
+  "base_commit": "ecfa186",
+  "created_utc": "2026-09-22T04:23:47.381496+00:00",
+  "decision": {
+    "finding": "All 604160 batch records match within their four-process groups in row count, exact comparison count, exact match count, outcome-order fingerprint and operand-pair-order fingerprint. Complete table hash and address controls match too.",
+    "scope": "No unequal full-key comparison work is observed within a group in this diagnostic build. This does not prove identical behavior in the uninstrumented binary, cover tag/empty-bucket branches, or make finite fingerprints collision-free.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 4,
+    "processes": 16,
+    "constructed_query_traces": 4720,
+    "prepared_plan_executions": 4176,
+    "batch_equality_records": 604160,
+    "recorded_comparisons": 4711873544,
+    "exact_correctness_captures": 186,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "std_only_rust_checks": 1,
+    "rust_benchmark_builds": 1,
+    "failed_or_discarded_builds_or_collection_groups": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "ecfa186",
+    "question": "Do full-key comparison counts, equality outcomes and compared input/stored-key sequences match across processes with matched IN-table hash/address traces?",
+    "intervention": "One diagnostic Rust rebuild adds thread-local counters and two ordered 64-bit fingerprints to OrderedFloat64 equality. Reset immediately before each Float64StaticFilter contains loop and emit a record after it. Counts are exact; fingerprints describe comparison outcomes and operand pairs in order. HashSet construction, hashing, lookup algorithm and returned equality remain unchanged.",
+    "validation": "Compile the exact helper and equality implementation in a std-only rustc test. Check trace reset, disabled recording, +0/-0, distinct and equal NaN bit patterns, repeatability, and order-sensitive fingerprints. Validate the existing 74 generic-IN and 112 subquery captures in fresh-state mode. Smoke-check all 128 batches per query and aggregate matches against the canonical SQL result.",
+    "design": "Four groups, 16 processes, native seed indices 0 and 4 with both execution orders. Fresh planning state, retained execution context, sorted resolver release, child-only fixed addresses, 32 warmups and 261 prepared plans. Reuse the previous four-process barriers and observer.",
+    "analysis": "Compare every batch record and its containing query sequence, retaining all mismatches and all runs. Require matching table hash/address controls before interpreting equal comparison traces. Do not use timings or perf counters from this instrumented build to estimate performance.",
+    "stopping_rule": "One diagnostic build and one fixed four-group collection after validation. Retain all failed attempts and corrections. No outcome-based extensions, omitted runs or input replacement. Shared source/lock/executable slots are restored and hash-checked in finally. No unrelated work during collection.",
+    "limits": [
+      "Instrumentation changes generated code, execution cost and allocation history; results do not prove behavior in an uninstrumented executable.",
+      "Equality records do not count tag scans or empty-bucket termination checks.",
+      "Fingerprints are finite diagnostics, not collision-free proofs of complete execution equivalence.",
+      "This does not adopt the optional type-inference patch or resolve the earlier release time interval."
+    ]
+  },
+  "analysis": {
+    "groups": [
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 0,
+        "directory": "group-00",
+        "table_controls": {
+          "hash_fingerprint": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          },
+          "occupied_address_bounds": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          }
+        },
+        "equality_checks": {
+          "rows": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "comparisons": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "matches": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "outcome_fingerprint": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "operand_fingerprint": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          }
+        },
+        "per_process": [
+          {
+            "slot": 0,
+            "comparisons": 294627230,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026955
+          },
+          {
+            "slot": 1,
+            "comparisons": 294627230,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026955
+          },
+          {
+            "slot": 2,
+            "comparisons": 294627230,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026955
+          },
+          {
+            "slot": 3,
+            "comparisons": 294627230,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026955
+          }
+        ]
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 1,
+        "directory": "group-01",
+        "table_controls": {
+          "hash_fingerprint": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          },
+          "occupied_address_bounds": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          }
+        },
+        "equality_checks": {
+          "rows": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "comparisons": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "matches": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "outcome_fingerprint": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "operand_fingerprint": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          }
+        },
+        "per_process": [
+          {
+            "slot": 0,
+            "comparisons": 294356963,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026954
+          },
+          {
+            "slot": 1,
+            "comparisons": 294356963,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026954
+          },
+          {
+            "slot": 2,
+            "comparisons": 294356963,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026954
+          },
+          {
+            "slot": 3,
+            "comparisons": 294356963,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026954
+          }
+        ]
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 2,
+        "directory": "group-02",
+        "table_controls": {
+          "hash_fingerprint": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          },
+          "occupied_address_bounds": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          }
+        },
+        "equality_checks": {
+          "rows": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "comparisons": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "matches": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "outcome_fingerprint": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "operand_fingerprint": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          }
+        },
+        "per_process": [
+          {
+            "slot": 0,
+            "comparisons": 294356963,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026954
+          },
+          {
+            "slot": 1,
+            "comparisons": 294356963,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026954
+          },
+          {
+            "slot": 2,
+            "comparisons": 294356963,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026954
+          },
+          {
+            "slot": 3,
+            "comparisons": 294356963,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026954
+          }
+        ]
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 3,
+        "directory": "group-03",
+        "table_controls": {
+          "hash_fingerprint": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          },
+          "occupied_address_bounds": {
+            "distinct_complete_sequences": 1,
+            "mismatch_indices": []
+          }
+        },
+        "equality_checks": {
+          "rows": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "comparisons": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "matches": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "outcome_fingerprint": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          },
+          "operand_fingerprint": {
+            "matching_batch_positions": 37760,
+            "mismatch_indices": [],
+            "mismatched_query_indices": []
+          }
+        },
+        "per_process": [
+          {
+            "slot": 0,
+            "comparisons": 294627230,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026955
+          },
+          {
+            "slot": 1,
+            "comparisons": 294627230,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026955
+          },
+          {
+            "slot": 2,
+            "comparisons": 294627230,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026955
+          },
+          {
+            "slot": 3,
+            "comparisons": 294627230,
+            "matches": 293383990,
+            "min_query_comparisons": 994522,
+            "max_query_comparisons": 1026955
+          }
+        ]
+      }
+    ],
+    "processes": 16,
+    "constructed_query_traces": 4720,
+    "batch_equality_records": 604160,
+    "prepared_plan_executions": 4176,
+    "all_table_hash_and_address_controls_match": true,
+    "all_equality_record_fields_match_within_groups": true,
+    "scope": "Comparison-count and ordered-fingerprint diagnostics. No performance effect estimate."
+  },
+  "source": {
+    "only_float64_equality_trace_added": true,
+    "same_hash_set_implementation_and_equality_result": true,
+    "same_resolver_release_intervention": true,
+    "same_type_inference": true,
+    "same_features_profiles_and_lock": true,
+    "binary_sha256": "11d9ef6267922fd6da741ea8f9a4bbfe3bdeb33ff9c53aa48beb8abffba8d71e",
+    "reference_binary_sha256": "967585cc99118a258f7189d928790d5fd846d9a2f30e5766bb08ccccc8a1897c"
+  },
+  "restoration": {
+    "sources": {
+      "math.rs": "c4befca6320e36532f3e87091622e0b91ecfa59e841646f98af91f704c84846f",
+      "lateral.rs": "3a46aea3b3c2af3e500dbfac0cc6999da1cf60d4a99bed9c6b02b789a5bf1020",
+      "cast.rs": "b09ae115b792491460b3ba5fcd60faea4bc1bfd59f60690618063f5cb0d855b3",
+      "common.rs": "41cef0bc27bc314a5ab03ca682acd76448c1780808f5b943722ba85e04af8fc5",
+      "function-Cargo.toml": "0e70f011d3aaabce73b5df5f12bb9e547936a6769cff09099fe5e37641b878a7",
+      "scalar-mod.rs": "68c06852a9272ae5c480298c0f4e2c725753bf028a5da6e629fad49a93231925",
+      "Cargo.lock": "e0970eb4c47224ccf8d0e9be9d2a57b25db09316fed780d5533598f519ab0584",
+      "decimal_bench.rs": "61f32e9a0cf89b4f06b8f579fb3af8a6003f35088b9cdcbe8abd548ef6cb4e3f",
+      "string-cast.rs": null,
+      "float-cast.rs": null,
+      "lib.rs": "abf6ed0652f1b3ee7b66bf77313fa56f1fd292a2f48168550c1022335c654a8d",
+      "main.rs": "8609b17aab37b9a84cde88767cacecc267d170048574636d6516300eea47d359",
+      "decimal_probe.rs": "f43728209ba28c00296d5f4789d4a66db06798c398f34f3558ae3944d0322d8f",
+      "decimal-null.rs": null,
+      "function-mod.rs": "2ce9c566265102724d44f5e2f2822d5d82c03e71e1eec907d50e425becbedae2",
+      "function-scalar-mod.rs": "b5546d8cd9f41cb1a5bddb3d9102f9618abe7e1ef65746d3946af86b4d973e26",
+      "delta_lifecycle.rs": "b7b7d860da8f0bf0e9068f2616c74f1ae744d9677a08194b3a5eedcdfe99927d",
+      "resolver-subquery.rs": "aff16f461317fa52a382a2d61d804d45bea4341d7581a536f22bec480879bf5d",
+      "analyzer-expression.rs": "c5566a6b118560afeca8020acea0095507000a1956051a0f4c1450c291e66eef",
+      "analyzer-parser.rs": "dd81c91ec888151ebafc7d979b50b33180f825211b4568e2de9ba50738271f42",
+      "math-mod.rs": "45b56693f3dde83b0ed3b535b3d81a26a63917db92106f4ecde8cfeee2ab2236",
+      "decimal-utils.rs": "847f4c18277429a79ae9dcf2da2f5cdecac066f71fa67909cae9f0c99a2189db",
+      "decimal-round.rs": null,
+      "conditional.rs": "cf09fc67b0e567668b037a6ee19ab1f166134e0fa067859269983c2e3f739fb0",
+      "small-int-divide.rs": null,
+      "resolver-predicate.rs": "ac785ea9d466f3b50f920aeac31b0be0b243f99bc7e63050e796c38caec8e1b8",
+      "function-predicate.rs": "499f472fda6be201451cef2dab3380d7b602a578fa0ce49c91364a26df0df180",
+      "arrow-mod": "a2b54e3369b6a8bf4bfd46f886720050b94a978c61d0004b33d276932fb0936f",
+      "arrow-decimal": "691d21c85206190f0dd49f5f9a5ef31de7065917780d4c9c3d156bc11a8d5549",
+      "join-selection": "77f99aa2b07b8d20e2de1c0114bf0eff6b1c7495e1923b8308a123812f044219",
+      "unwrap-cast": "0a1b250391180380b5722c2e9e31757c8850c3a392c87912d50e313143389012",
+      "expr-simplifier": "d5a4d4a8ee6e146e616e312e447d30429949b4501b9f45e7979bba14ef57937b",
+      "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+      "decorrelate": "c18f2fd4e6e3c8d20fc3e6070a72c43aa1dc0b517cbf17cb4731734be2651735",
+      "nested-loop": "59b7efeb63dedf071bc8b9f45a39d480c8f8cca62a4702a3f3f670b8a2444967",
+      "physical-test-lock": null,
+      "parser-keywords": null,
+      "native-in-list": "310aaf3b97f83bc70bcbf6bffbed44b4fc500027a4d8202aa487f78fedae6d24",
+      "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+      "native-primitive-filter": "dea083ca4f3208434559a353ac70e73e12cc3f617a8b3b2bf66761b92097353c",
+      "native-strategy": "bc43719e31a52563dd07c5b0dac98a620491d87d6fe2aaf7a88aa86f18b441ac",
+      "native-array-filter": "12259bb4c45fd7f57696efc4c6227fab5a69cbabe9f89e2b6a7a03e2e9589040",
+      "native-case": "470894816b7dfce4f995b0b3537349ea8b2962ecc199a798575ce2090253dc62",
+      "expr-common": "f514c989af51ca89d3fb6d3b14971807e9deffaa4227f8a715aee49e6c9c0c3a",
+      "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+      "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+      "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+      "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+      "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+      "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+      "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+      "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca"
+    },
+    "executables": {
+      "bench": "41142f9ec9341118f514984c0f690ea9a611aac6b180a26fc0c30329711257bb",
+      "probe": "340658fe8d3f6fcefae60fe38affd1b15d0bc89e5b8888ea2188d7e43fa81155",
+      "runner": "622a12a937afbf5c2a4f26a34e0606ef89a8c5d4dcc3dcbced6f4b6526a1ce5e"
+    }
+  },
+  "references": {
+    "float-type-session-state-runs.json.gz": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-session-state-runs.json.gz",
+      "sha256": "d05f4d037a9931bff14fc4f7ec8cbec82b86c0c12a3af9135bcd4e87ce42a986"
+    },
+    "float-type-branch-sample-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-branch-sample-results.json",
+      "sha256": "3b14c61dc31f47869093d01faf6ac989515e0dc0ca0f8f40a64b6773e586cce8"
+    },
+    "float-type-state-control-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-state-control-results.json",
+      "sha256": "dc3a3f7b3b363dddfdcd60c1966a28b8d1baeea64ba499bcb299439b0d366c97"
+    }
+  },
+  "raw_data": {
+    "file": "float-type-equality-flow-runs.json.gz",
+    "sha256": "cc0f8d13bfff977e7733db77e9804580fddd08dee44d12ab3c28f6a9e48581a0",
+    "uncompressed_sha256": "766d4fe5a52eaca0f031316757e68ff70b8d282f9c3a1fafdb89f7a353faf3d8",
+    "compressed_bytes": 5802513,
+    "uncompressed_bytes": 76527929
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-equality-flow-ecfa186",
+    "commands": [
+      "python3 check_equality.py",
+      "python3 build-trace.py",
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Reuse the recorded AA build inputs and its benchmark, resolver-release and table-trace sources. Apply only the equality-flow patch to the native primitive filter. The build helper restores shared inputs in finally. Validate the exact Rust trace code, all 186 canonical captures and short gated runs before the fixed collection. Parsed equality arrays can be reconstructed from the complete archived raw stderr using the included parser."
+  }
+}
