@@ -4668,6 +4668,42 @@ restored. The separate native shift-by-64 panic under overflow checks is still
 follow-up work; these integration tests use the release profile. Default vendor
 sources and the deferred type-inference shortcut remain unchanged.
 
+## Full-width native grouping ID packing
+
+`datafusion-grouping-id-pack.patch` fixes the separate native shift-by-64 panic.
+Apply it inside the optional `datafusion-physical-plan` dependency checkout after
+the runtime at `b0c39b8`. The existing capacity check permits 64 semantic bits
+only with a zero duplicate ordinal. `checked_shl` supplies zero ordinal bits in
+that case; smaller widths retain their existing values and integer types.
+Both normal input batches and empty-input grouping use this shared function.
+
+The exact native function and its new unit-test body were compiled with overflow
+checks enabled. The parent panics at 64 keys; the candidate passes 30 valid
+boundary combinations and three capacity errors. A separate test then executes
+the real Sail planner with overflow checks enabled in the actual native crate,
+covering full-width IDs, duplicate rows, empty input and both ANSI modes. It
+passes. This is focused boundary testing plus real integration, not a complete
+native-crate unit suite.
+
+All 33 planner tests and 28 runner tests pass, including four lifecycle tests.
+Every preceding agreement count is unchanged, as are all 224 benchmark values
+and plans. Two existing cast errors choose different invalid values. The 116
+real-Delta captures match the parent, including full schemas and error fields.
+
+The fixed 160-process release comparison retains all samples and controls, with
+full counter coverage and zero migrations. ROLLUP execution instruction work is
+unchanged to three decimal places in percent; latency moves -0.027%, smaller than
+the same-binary control shifts. Ordinary grouping planning moves +0.987% while
+its same-parent control moves +0.831%, with only +0.003% instructions. These
+measurements show no material instruction increase on this input, and do not
+prove universal zero overhead. The earlier public-ID planning cost remains.
+
+`grouping-id-pack-results.json` and `grouping-id-pack-runs.json.gz` retain the
+failing reproduction, passing boundary and integration checks, source hashes,
+captures, fixed measurements and archive checker. All 76 source/lock records,
+three executable slots and temporary Delta input files were restored. Default
+vendored sources remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
