@@ -4753,6 +4753,29 @@ agreements from saved captures. All 77 source/lock records, three executables
 and temporary Delta input files were restored. Default vendor sources remain
 unchanged.
 
+## Grouping-key canonicalization investigation
+
+`grouping-canonical-investigation-results.json` records an unaccepted candidate
+following `9d74f3b`. The fixed 65-query corpus improves from 18/130 to 111/130
+strict Spark agreements. Three parent queries abort the probe at unsigned type
+boundaries; all candidate probe processes complete. Eight valid sort observations
+match accepted equivalent Spark queries, and four empty-input observations retain
+the SQL grand-total row. Four capacity differences and three existing addition
+type differences remain.
+
+The candidate is not part of the accepted patch sequence. Its new Rust test
+incorrectly expects 63 semantic bits plus a two-bit duplicate ordinal to fit in
+64 bits. The other 34 planner tests pass. A separate five-query review also finds
+that six existing wrong-result observations for mixed grouping sets become
+planning errors. Their semantic key order still needs a proper fix. Full prior
+corpus, runner, lifecycle and performance checks have not run for this candidate.
+
+The compressed archive retains the candidate source and patch, failed test,
+original references, process exits and captures. All 77 shared source/lock
+records and three executables were restored. Resume by correcting the capacity
+test and mixed-key order, then complete the frozen validation before accepting
+the patch. Default vendor sources are unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

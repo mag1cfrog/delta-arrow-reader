@@ -1,0 +1,138 @@
+{
+  "status": "investigation checkpoint, not an accepted runtime patch",
+  "parent_commit": "9d74f3b",
+  "counts": {
+    "canonical": {
+      "before": {
+        "agreement": 18,
+        "total": 130
+      },
+      "after": {
+        "agreement": 111,
+        "total": 130
+      }
+    },
+    "mixed": {
+      "before": {
+        "agreement": 4,
+        "total": 10
+      },
+      "after": {
+        "agreement": 4,
+        "total": 10
+      }
+    }
+  },
+  "parent_process_failures": [
+    {
+      "id": "width_8_permuted",
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-individual/width_8_permuted.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-individual/width_8_permuted.json",
+        "--physical-plans"
+      ],
+      "returncode": 101
+    },
+    {
+      "id": "width_16_permuted",
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-individual/width_16_permuted.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-individual/width_16_permuted.json",
+        "--physical-plans"
+      ],
+      "returncode": 101
+    },
+    {
+      "id": "width_32_permuted",
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-individual/width_32_permuted.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/grouping-canonical-9d74f3b/before-individual/width_32_permuted.json",
+        "--physical-plans"
+      ],
+      "returncode": 101
+    }
+  ],
+  "candidate_process_failures": [],
+  "equivalent_sort_checks": [
+    {
+      "id": "int_explicit_sort_true",
+      "reference_id": "int_rollup_true",
+      "agreement": true
+    },
+    {
+      "id": "int_explicit_sort_false",
+      "reference_id": "int_rollup_false",
+      "agreement": true
+    },
+    {
+      "id": "float_explicit_sort_true",
+      "reference_id": "float_rollup_true",
+      "agreement": true
+    },
+    {
+      "id": "float_explicit_sort_false",
+      "reference_id": "float_rollup_false",
+      "agreement": true
+    },
+    {
+      "id": "double_explicit_sort_true",
+      "reference_id": "double_rollup_true",
+      "agreement": true
+    },
+    {
+      "id": "double_explicit_sort_false",
+      "reference_id": "double_rollup_false",
+      "agreement": true
+    },
+    {
+      "id": "decimal_explicit_sort_true",
+      "reference_id": "decimal_rollup_true",
+      "agreement": true
+    },
+    {
+      "id": "decimal_explicit_sort_false",
+      "reference_id": "decimal_rollup_false",
+      "agreement": true
+    }
+  ],
+  "empty_input_checks": 4,
+  "unit_result": {
+    "passed": 34,
+    "failed": 1,
+    "reason": "The new test incorrectly expected three duplicate sets with 63 semantic keys to fit. Ordinal 2 needs 2 additional bits, so this case requires 65 bits and native execution correctly rejects it. Split supported 63+1-bit and rejected 63+2-bit cases before the next build."
+  },
+  "remaining": {
+    "initial_corpus": {
+      "spark_rejects_valid_sort": 8,
+      "correct_sql_empty_totals_differ_from_spark": 4,
+      "native_64_plus_ordinal_capacity": 4,
+      "preexisting_computed_addition_type_differences": 3
+    },
+    "mixed_corpus": "Six existing incorrect-row observations become planning errors because native enumeration changes key order. Resolve semantic-to-native bit order before considering this candidate accepted. Two existing nested-alias planning errors remain matching errors."
+  },
+  "not_run": [
+    "Full runner and real-Delta validation after this candidate",
+    "Full previous compatibility corpus",
+    "The frozen 160-process performance protocol"
+  ],
+  "restored": {
+    "sources": 77,
+    "executables": 3
+  },
+  "default_vendor_changed": false,
+  "candidate_patch": "Only retained inside the raw archive as unaccepted-candidate.patch; not added to the optional accepted patch sequence.",
+  "raw_archive": {
+    "file": "grouping-canonical-investigation-runs.json.gz",
+    "sha256": "4cea7162dc7900a8601f30bb5c810a3281275f98e8260c78f6f059c2e2ccfa11",
+    "bytes": 136807
+  },
+  "next_steps": [
+    "Fix the capacity assertion while preserving the rejected boundary.",
+    "Handle mixed grouping semantic key order without introducing invalid argument errors.",
+    "Run previous corpora, runner and lifecycle checks, then the frozen performance comparison.",
+    "Only commit an accepted runtime patch after those checks pass."
+  ]
+}

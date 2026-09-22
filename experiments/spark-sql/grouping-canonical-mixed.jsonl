@@ -1,0 +1,5 @@
+{"id": "mixed_rollup", "sql": "SELECT v,w,grouping_id(v,w) AS gid,count(*) AS n FROM (VALUES(1,2,3,4),(NULL,2,3,4)) t(v,w,x,y) GROUP BY ROLLUP(v),ROLLUP(w) ORDER BY gid,v,w,n", "batch_size": 2}
+{"id": "mixed_cube", "sql": "SELECT v,w,grouping_id(v,w) AS gid,count(*) AS n FROM (VALUES(1,2,3,4),(NULL,2,3,4)) t(v,w,x,y) GROUP BY CUBE(v),CUBE(w) ORDER BY gid,v,w,n", "batch_size": 2}
+{"id": "mixed_sets", "sql": "SELECT v,w,x,y,grouping_id(v,w,x,y) AS gid,count(*) AS n FROM (VALUES(1,2,3,4),(NULL,2,3,4)) t(v,w,x,y) GROUP BY GROUPING SETS ((v),(w)),GROUPING SETS ((x),(y)) ORDER BY gid,v,w,x,y,n", "batch_size": 2}
+{"id": "mixed_same", "sql": "SELECT v,w,grouping_id(v,w) AS gid,count(*) AS n FROM (VALUES(1,2,3,4),(NULL,2,3,4)) t(v,w,x,y) GROUP BY ROLLUP(v,w),ROLLUP(v,w) ORDER BY gid,v,w,n", "batch_size": 2}
+{"id": "nested_alias", "sql": "SELECT v AS k1,k1+1 AS k2,v+1 AS k3,grouping_id() AS gid,count(*) AS n FROM (VALUES(1,2,3,4),(NULL,2,3,4)) t(v,w,x,y) GROUP BY ROLLUP(k1,k2,k3) ORDER BY gid,k1,k2,k3,n", "batch_size": 2}
