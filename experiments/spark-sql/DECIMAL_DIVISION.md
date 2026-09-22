@@ -5139,6 +5139,71 @@ rechecks patch bytes, corpus comparisons, Delta comparisons and the complete
 timing schedule/statistics without the build cache. All 78 shared source/lock
 records and three executable slots were restored; temporary inputs are absent.
 
+## Rejected dense floating-to-Decimal output prototype
+
+The strict Arrow 58.4 floating-to-Decimal cast uses `try_unary`, which allocates
+and zero-fills an output buffer before converting valid values. A prototype
+replaced that construction with a preallocated `Vec` when the input has no
+NULLs. It reused the exact conversion, rounding, overflow and precision checks;
+nullable inputs and safe-mode casts kept their existing kernels. This also
+changed the allocation layout, so it was not an isolated test of zero-fill cost.
+
+The candidate is rejected. Neither complete Decimal query improved, and their
+instruction counts increased. The accepted runtime remains at `6ced2eb`; the
+candidate patch is retained only inside the diagnostic archive.
+
+| Query | Before, ms | Candidate, ms | Paired time change | Paired 95% interval | Instruction change |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Derived DOUBLE sum, final Decimal | 12.607106 | 12.715341 | +0.976% | +0.469% to +1.612% | +3.248% |
+| Derived FLOAT sum, final Decimal | 10.625867 | 10.680602 | +0.559% | +0.247% to +0.826% | +3.412% |
+| Derived DOUBLE sum, native output | 2.987119 | 2.985159 | -0.316% | -0.845% to +0.216% | -0.004% |
+| Stored FLOAT plus integer, native DOUBLE output | 0.826024 | 0.813411 | -1.532% | -3.126% to -0.035% | -0.099% |
+| Shared ready DOUBLE sum | 0.258414 | 0.259021 | -0.062% | -0.981% to +1.247% | -0.001% |
+| FLOAT read control | 0.063899 | 0.064064 | +2.441% | -1.279% to +8.605% | +0.023% |
+
+Median page faults across 41 executions remain 126,368 before and 126,390.5
+after for the DOUBLE Decimal query, and 84,154/84,026 for FLOAT. Within this
+experiment, pairing the two Decimal queries at equal quartet positions gives
+a DOUBLE/FLOAT time difference of 18.452% before (95% interval 17.473% to
+19.113%) and 18.944% after (18.667% to 19.110%). The earlier approximately 19%
+cost remains. These expressions have different arithmetic semantics in general;
+the measured keys happen to be exactly representable in both widths.
+
+The frozen schedule retains all 160 fresh processes, eight warmups, 41 samples,
+six counters with full coverage and zero CPU migrations. Same-binary control
+shifts are DOUBLE Decimal +0.236%/+0.041%, FLOAT Decimal +0.034%/+0.262%,
+native derived DOUBLE +0.962%/+0.549%, and FLOAT read -0.048%/-0.017%
+(before/candidate). Native-output and read controls do not use the changed
+conversion; their shifts are not credited as gains from the prototype. Allocator
+settings, ASLR and the CPU governor were not changed. No build or other diagnostic
+ran during timing.
+
+All 347 Arrow cast tests, one Spark cast-adapter test, 37 planner tests and 28
+runner tests pass, including four Delta lifecycle tests. The added Arrow test
+compares the dense path with the unchanged nullable kernel across FLOAT/DOUBLE,
+all four Decimal widths, slices, empty arrays, explicit valid bitmaps, rounding
+boundaries, non-finite values, overflow and invalid precision/scale. All 258
+benchmark checks and plans are unchanged. The SQL comparisons retain 5,755/6,068
+older agreements and 640/716 focused agreements, with every successful value/type
+and every classification unchanged. All 116 real-Delta parent comparisons match.
+Existing Spark differences remain; timing covers only finite non-NULL inputs at
+batch size 8,192.
+
+`float-decimal-buffer-results.json` and `float-decimal-buffer-runs.json.gz`
+retain the rejected patch, source/lock provenance, tests, original Spark
+references, both captures, fixed protocols, all measurements and scripts.
+Extract and run the archived `check-archive.py` with this experiment directory
+to verify them without the build cache. The archive also records two tooling
+mistakes: a pre-build relative-path error and an initial verifier assumption
+that the standalone Arrow cast lockfile included the Arrow meta-crate. Both
+were corrected; no test or timing result was discarded or rerun. All 79 shared
+source/lock/fixture records and three executable slots were restored, and
+temporary inputs are absent.
+
+The next diagnostic should identify which allocation and release call stacks
+cause heap growth and shrink requests in the accepted complete query before
+selecting another runtime change. This prototype removed no measured cost.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
