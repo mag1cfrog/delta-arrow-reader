@@ -1,0 +1,245 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/common.rs
+@@ -213,6 +213,34 @@
+     }
+ }
+
++fn numeric_literal(value: &expr::Expr) -> Option<ScalarValue> {
++    match value {
++        expr::Expr::Literal(value, _) => Some(value.clone()),
++        expr::Expr::Cast(expr::Cast { expr, field })
++        | expr::Expr::TryCast(expr::TryCast { expr, field }) => expr
++            .as_literal()
++            .filter(|value| value.data_type().is_numeric() || value.is_null())
++            .and_then(|value| value.cast_to(field.data_type()).ok()),
++        _ => None,
++    }
++}
++
++fn integer_needs_double(value: &expr::Expr, data_type: &DataType) -> bool {
++    // Every TINYINT/SMALLINT value is exactly representable as FLOAT.
++    if !matches!(data_type, DataType::Int32 | DataType::Int64) {
++        return false;
++    }
++    // Compare against Spark's DOUBLE value, including BIGINT's f64 rounding.
++    // ponytail: reuse direct numeric literal evaluation; leave other constants
++    // and dynamic INT/BIGINT values on the widening path.
++    let double = match numeric_literal(value) {
++        Some(ScalarValue::Int32(value)) => value.map(f64::from),
++        Some(ScalarValue::Int64(value)) => value.map(|v| v as f64),
++        _ => return true,
++    };
++    double.is_some_and(|v| f64::from(v as f32) != v)
++}
++
+ pub(crate) fn spark_in_list(
+     value: expr::Expr,
+     list: Vec<expr::Expr>,
+@@ -236,8 +264,17 @@
+         integer |= data_type.is_signed_integer();
+     }
+     if floating {
+-        // Spark ANSI promotes mixed FLOAT/integer predicates to DOUBLE.
+-        let coerce_to_double = decimal || (ansi_mode && single && integer && !double);
++        // A BOOLEAN predicate can keep FLOAT if every integer has the same
++        // value at FLOAT and Spark's DOUBLE comparison precision.
++        let mut coerce_to_double = decimal;
++        if !decimal && ansi_mode && single && integer && !double {
++            for value in std::iter::once(input.expr.as_ref()).chain(&input.list) {
++                if integer_needs_double(value, &value.get_type(schema)?) {
++                    coerce_to_double = true;
++                    break;
++                }
++            }
++        }
+         // Only zero and NaN can change membership when the input is normalized.
+         // ponytail: recognize literals and direct numeric literal casts only;
+         // leave other constant expressions on the existing normalization path.
+@@ -246,15 +283,7 @@
+             input.expr.get_type(schema)?,
+             DataType::Float32 | DataType::Float64
+         ) && input.list.iter().all(|value| {
+-            let scalar = match value {
+-                expr::Expr::Literal(value, _) => Some(value.clone()),
+-                expr::Expr::Cast(expr::Cast { expr, field })
+-                | expr::Expr::TryCast(expr::TryCast { expr, field }) => expr
+-                    .as_literal()
+-                    .filter(|value| value.data_type().is_numeric() || value.is_null())
+-                    .and_then(|value| value.cast_to(field.data_type()).ok()),
+-                _ => None,
+-            };
++            let scalar = numeric_literal(value);
+             match scalar.and_then(|value| match value {
+                 value @ ScalarValue::Float64(_) => Some(value),
+                 value => value.cast_to(&DataType::Float64).ok(),
+@@ -274,7 +303,7 @@
+             && zero
+             && input.expr.try_as_col().is_some()
+             && !(input.expr.get_type(schema)? == DataType::Float32 && (coerce_to_double || double));
+-        // Decimal/float and ANSI FLOAT/integer lists use DOUBLE. Preserve other types
++        // Keep DOUBLE when Decimal or integer precision requires it. Preserve other types
+         // so normalization does not change the existing numeric coercion.
+         let convert = |value: expr::Expr, skip_normalization: bool| -> PlanResult<expr::Expr> {
+             let data_type = value.get_type(schema)?;
+@@ -331,8 +360,9 @@
+             let decimal_float = (left_type.is_decimal() && right_type.is_floating())
+                 || (left_type.is_floating() && right_type.is_decimal());
+             let ansi_float_integer = ansi_mode
+-                && ((left_type == DataType::Float32 && right_type.is_signed_integer())
+-                    || (right_type == DataType::Float32 && left_type.is_signed_integer()));
++                && ((left_type == DataType::Float32 && integer_needs_double(&right, &right_type))
++                    || (right_type == DataType::Float32
++                        && integer_needs_double(&left, &left_type)));
+             let widen = decimal_float
+                 || ansi_float_integer
+                 || left_type == DataType::Float64
+@@ -1543,3 +1573,149 @@
+     }
+     Ok(())
+ }
++
++#[test]
++fn exact_integer_predicates_match_explicit_double_coercion() -> PlanResult<()> {
++    use arrow::array::{Array, ArrayRef, Float32Array, Int8Array, Int16Array};
++    use arrow::datatypes::{Field, Schema};
++    use arrow::record_batch::RecordBatch;
++    use datafusion::optimizer::simplify_expressions::ExprSimplifier;
++    use datafusion::physical_expr::create_physical_expr;
++    use datafusion_common::DFSchema;
++    use datafusion_expr::{col, execution_props::ExecutionProps, simplify::SimplifyContext};
++
++    let floats = vec![
++        Some(f32::NEG_INFINITY),
++        Some(-9223372036854775808.),
++        Some(-16777218.),
++        Some(-16777216.),
++        Some(-32768.),
++        Some(-128.),
++        Some(-1.5),
++        Some(-0.),
++        Some(0.),
++        Some(1.),
++        Some(1.5),
++        Some(127.),
++        Some(32767.),
++        Some(16777216.),
++        Some(16777218.),
++        Some(33554432.),
++        Some(33554436.),
++        Some(9007199254740992.),
++        Some(9223372036854775808.),
++        Some(f32::INFINITY),
++        Some(f32::NAN),
++        None,
++    ];
++    let schema = Arc::new(Schema::new(vec![
++        Field::new("f", DataType::Float32, true),
++        Field::new("tiny", DataType::Int8, true),
++        Field::new("small", DataType::Int16, true),
++    ]));
++    let batch = RecordBatch::try_new(
++        schema.clone(),
++        vec![
++            Arc::new(Float32Array::from(floats.clone())),
++            Arc::new(Int8Array::from_iter((0..floats.len()).map(|i| {
++                (i % 5 != 0).then_some(if i % 2 == 0 { i8::MIN } else { i8::MAX })
++            }))),
++            Arc::new(Int16Array::from_iter((0..floats.len()).map(|i| {
++                (i % 7 != 0).then_some(if i % 2 == 0 { i16::MIN } else { i16::MAX })
++            }))),
++        ],
++    )?;
++    let schema = Arc::new(DFSchema::try_from(schema)?);
++    let evaluate = |expression: expr::Expr| -> PlanResult<ArrayRef> {
++        let simplifier = ExprSimplifier::new(
++            SimplifyContext::builder()
++                .with_schema(schema.clone())
++                .build(),
++        );
++        let expression = simplifier.coerce(expression, &schema)?;
++        Ok(
++            create_physical_expr(&expression, &schema, &ExecutionProps::new())?
++                .evaluate(&batch)?
++                .into_array(batch.num_rows())?,
++        )
++    };
++    let mut integers = vec![
++        col("tiny"),
++        col("small"),
++        lit(ScalarValue::Int32(None)),
++        lit(ScalarValue::Int64(None)),
++    ];
++    for value in [
++        0_i64,
++        1,
++        -1,
++        16777215,
++        16777216,
++        16777217,
++        16777218,
++        -16777217,
++        33554431,
++        33554432,
++        33554434,
++        33554436,
++        9007199254740991,
++        9007199254740992,
++        9007199254740993,
++        9007199254740994,
++        i64::MIN,
++        i64::MIN + 1,
++        i64::MAX,
++    ] {
++        integers.push(lit(value));
++        if let Ok(value) = i32::try_from(value) {
++            integers.push(lit(value));
++        }
++    }
++    for integer in integers {
++        for (left, right) in [(col("f"), integer.clone()), (integer, col("f"))] {
++            let wide = |expr: expr::Expr| -> PlanResult<expr::Expr> {
++                Ok(if expr.get_type(&schema)? == DataType::Float32 {
++                    ScalarUDF::from(SparkComparisonFloat { widen: true }).call(vec![expr])
++                } else {
++                    cast(expr, DataType::Float64)
++                })
++            };
++            let (wide_left, wide_right) = (wide(left.clone())?, wide(right.clone())?);
++            for op in [
++                Operator::Eq,
++                Operator::NotEq,
++                Operator::Lt,
++                Operator::LtEq,
++                Operator::Gt,
++                Operator::GtEq,
++                Operator::IsDistinctFrom,
++                Operator::IsNotDistinctFrom,
++            ] {
++                let candidate = spark_binary_expr(left.clone(), op, right.clone(), &schema, true)?;
++                let reference = expr::Expr::BinaryExpr(BinaryExpr::new(
++                    Box::new(wide_left.clone()),
++                    op,
++                    Box::new(wide_right.clone()),
++                ));
++                assert_eq!(
++                    evaluate(candidate)?.to_data(),
++                    evaluate(reference)?.to_data()
++                );
++            }
++            for negated in [false, true] {
++                let candidate =
++                    spark_in_list(left.clone(), vec![right.clone()], negated, &schema, true)?;
++                let reference = expr::Expr::InList(expr::InList::new(
++                    Box::new(wide_left.clone()),
++                    vec![wide_right.clone()],
++                    negated,
++                ));
++                assert_eq!(
++                    evaluate(candidate)?.to_data(),
++                    evaluate(reference)?.to_data()
++                );
++            }
++        }
++    }
++    Ok(())
++}

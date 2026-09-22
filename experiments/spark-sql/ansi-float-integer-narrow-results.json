@@ -1,0 +1,2066 @@
+{
+  "slice": "Avoid unnecessary ANSI FLOAT/integer widening",
+  "base_commit": "d6540c1",
+  "status": "optional planner follow-up; default vendor unchanged",
+  "protocol": {
+    "scope": "Remove ANSI predicate widening only when integer operands can be represented exactly at FLOAT precision relative to Spark DOUBLE coercion. Small signed widths are exact for every value. Other numeric literals require a successful direct numeric literal evaluation; unknown or lossy values retain DOUBLE.",
+    "baseline_commit": "d6540c1",
+    "queries": 31,
+    "observations": 62,
+    "cases_sha256": "1bfbca70e09a7cc09d7d39c2a60724be3b691d67f5bd134f9e6552b27cf1be37",
+    "predicate_set_frozen_before_implementation": true,
+    "capture_format_correction": "Wrap BOOLEAN predicates in INT casts for the existing numeric comparator; the original failed comparison and captures are preserved in failed-capture-00.",
+    "reference": "Spark 4.2.0, both ANSI modes",
+    "reuse": [
+      "all 344 ANSI FLOAT/integer observations",
+      "all 256 signed-zero observations",
+      "all 6068 existing observations",
+      "existing 124-case performance harness"
+    ],
+    "limits": [
+      "No broad arithmetic/common-type rule",
+      "No runtime inspection of INT/BIGINT column values",
+      "No string literal folding or arbitrary constant evaluation",
+      "Preserve dynamic INT/BIGINT widening and the separate unsigned/decimal/DOUBLE paths"
+    ]
+  },
+  "implementation": {
+    "files_changed": [
+      "sail-plan/src/function/common.rs"
+    ],
+    "rule": "Keep FLOAT for TINYINT/SMALLINT and INT/BIGINT literals whose Spark DOUBLE value survives a FLOAT round trip exactly. Keep DOUBLE for dynamic INT/BIGINT, inexact literals and unrecognized expressions.",
+    "reuse": "Extract and reuse the existing direct numeric literal evaluator; no execution kernel or new dependency.",
+    "proof_boundary": "All predicate results are BOOLEAN. Every FLOAT value embeds exactly into DOUBLE, so order/equality against an integer also representable at FLOAT precision is unchanged, including the existing NaN/zero normalization. BIGINT proof uses its rounded DOUBLE value."
+  },
+  "correctness": {
+    "new_observations": {
+      "before": 62,
+      "after": 62,
+      "total": 62
+    },
+    "previous_ansi_observations": {
+      "before": 344,
+      "after": 344,
+      "total": 344
+    },
+    "previous_float_zero_observations": {
+      "before": 248,
+      "after": 248,
+      "total": 256
+    },
+    "other_existing_observations": {
+      "before": 5753,
+      "after": 5753,
+      "total": 6068
+    },
+    "existing_corpora": {
+      "original": {
+        "before_agreement": 164,
+        "after_agreement": 164,
+        "total": 168,
+        "repaired": [],
+        "regressed": []
+      },
+      "high": {
+        "before_agreement": 314,
+        "after_agreement": 314,
+        "total": 314,
+        "repaired": [],
+        "regressed": []
+      },
+      "filter": {
+        "before_agreement": 120,
+        "after_agreement": 120,
+        "total": 120,
+        "repaired": [],
+        "regressed": []
+      },
+      "subquery": {
+        "before_agreement": 54,
+        "after_agreement": 54,
+        "total": 54,
+        "repaired": [],
+        "regressed": []
+      },
+      "order": {
+        "before_agreement": 30,
+        "after_agreement": 30,
+        "total": 30,
+        "repaired": [],
+        "regressed": []
+      },
+      "contexts": {
+        "before_agreement": 28,
+        "after_agreement": 28,
+        "total": 28,
+        "repaired": [],
+        "regressed": []
+      },
+      "lateral": {
+        "before_agreement": 48,
+        "after_agreement": 48,
+        "total": 48,
+        "repaired": [],
+        "regressed": []
+      },
+      "nested": {
+        "before_agreement": 36,
+        "after_agreement": 36,
+        "total": 36,
+        "repaired": [],
+        "regressed": []
+      },
+      "null": {
+        "before_agreement": 60,
+        "after_agreement": 60,
+        "total": 60,
+        "repaired": [],
+        "regressed": []
+      },
+      "cast": {
+        "before_agreement": 82,
+        "after_agreement": 82,
+        "total": 82,
+        "repaired": [],
+        "regressed": []
+      },
+      "string": {
+        "before_agreement": 180,
+        "after_agreement": 180,
+        "total": 180,
+        "repaired": [],
+        "regressed": []
+      },
+      "unicode": {
+        "before_agreement": 382,
+        "after_agreement": 382,
+        "total": 382,
+        "repaired": [],
+        "regressed": []
+      },
+      "nonfinite": {
+        "before_agreement": 246,
+        "after_agreement": 246,
+        "total": 246,
+        "repaired": [],
+        "regressed": []
+      },
+      "null-order": {
+        "before_agreement": 52,
+        "after_agreement": 52,
+        "total": 52,
+        "repaired": [],
+        "regressed": []
+      },
+      "null-analyzer": {
+        "before_agreement": 100,
+        "after_agreement": 100,
+        "total": 100,
+        "repaired": [],
+        "regressed": []
+      },
+      "signed-literal": {
+        "before_agreement": 112,
+        "after_agreement": 112,
+        "total": 112,
+        "repaired": [],
+        "regressed": []
+      },
+      "round-types": {
+        "before_agreement": 214,
+        "after_agreement": 214,
+        "total": 234,
+        "repaired": [],
+        "regressed": []
+      },
+      "float-null": {
+        "before_agreement": 185,
+        "after_agreement": 185,
+        "total": 250,
+        "repaired": [],
+        "regressed": []
+      },
+      "nonansi-zero": {
+        "before_agreement": 216,
+        "after_agreement": 216,
+        "total": 240,
+        "repaired": [],
+        "regressed": []
+      },
+      "integral-types": {
+        "before_agreement": 150,
+        "after_agreement": 150,
+        "total": 152,
+        "repaired": [],
+        "regressed": []
+      },
+      "integral-widen": {
+        "before_agreement": 186,
+        "after_agreement": 186,
+        "total": 188,
+        "repaired": [],
+        "regressed": []
+      },
+      "div-zero": {
+        "before_agreement": 158,
+        "after_agreement": 158,
+        "total": 158,
+        "repaired": [],
+        "regressed": []
+      },
+      "div-evaluation": {
+        "before_agreement": 314,
+        "after_agreement": 314,
+        "total": 350,
+        "repaired": [],
+        "regressed": []
+      },
+      "div-null-cast": {
+        "before_agreement": 517,
+        "after_agreement": 517,
+        "total": 536,
+        "repaired": [],
+        "regressed": []
+      },
+      "div-null-numeric": {
+        "before_agreement": 580,
+        "after_agreement": 580,
+        "total": 588,
+        "repaired": [],
+        "regressed": []
+      },
+      "float-decimal-compare": {
+        "before_agreement": 380,
+        "after_agreement": 380,
+        "total": 384,
+        "repaired": [],
+        "regressed": []
+      },
+      "new": {
+        "before_agreement": 278,
+        "after_agreement": 278,
+        "total": 278,
+        "repaired": [],
+        "regressed": []
+      },
+      "new-in": {
+        "before_agreement": 162,
+        "after_agreement": 162,
+        "total": 162,
+        "repaired": [],
+        "regressed": []
+      },
+      "decimal-in-unwrap": {
+        "before_agreement": 272,
+        "after_agreement": 272,
+        "total": 272,
+        "repaired": [],
+        "regressed": []
+      },
+      "projected": {
+        "before_agreement": 133,
+        "after_agreement": 133,
+        "total": 264,
+        "repaired": [],
+        "regressed": []
+      }
+    },
+    "exact_value_changes": {
+      "cast": [
+        {
+          "id": "high_scale_batch1_true",
+          "changed_fields": [
+            "error"
+          ],
+          "before": {
+            "status": "execution_error",
+            "error": "Arrow error: Invalid argument error: 1.00000000000000000000000000000000000000 is too large to store in a Decimal128 of precision 38. Max is 0.99999999999999999999999999999999999999",
+            "logical_plan": "Projection: #4\n  Sort: t.#2 ASC NULLS FIRST\n    Projection: CAST(t.#3 AS Decimal128(38, 38)) AS r AS #4, t.#2\n      SubqueryAlias: t\n        Projection: #0 AS #2, #1 AS #3\n          Projection: column1 AS #0, column2 AS #1\n            Values: (Int32(0), spark_cast_string_to_decimal(Utf8(\"0\"))), (Int32(1), spark_cast_string_to_decimal(Utf8(\"1\"))), (Int32(2), spark_cast_string_to_decimal(Utf8(\"-1\"))), (Int32(3), CAST(NULL AS Decimal128(38, 0)))",
+            "physical_plan": "ProjectionExec: expr=[#4@0 as #4]\n  SortPreservingMergeExec: [#2@1 ASC]\n    SortExec: expr=[#2@1 ASC], preserve_partitioning=[true]\n      ProjectionExec: expr=[CAST(#3@1 AS Decimal128(38, 38)) as #4, #2@0 as #2]\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #2, column2@1 as #3]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+          },
+          "after": {
+            "status": "execution_error",
+            "error": "Arrow error: Invalid argument error: -1.00000000000000000000000000000000000000 is too small to store in a Decimal128 of precision 38. Min is -0.99999999999999999999999999999999999999",
+            "logical_plan": "Projection: #4\n  Sort: t.#2 ASC NULLS FIRST\n    Projection: CAST(t.#3 AS Decimal128(38, 38)) AS r AS #4, t.#2\n      SubqueryAlias: t\n        Projection: #0 AS #2, #1 AS #3\n          Projection: column1 AS #0, column2 AS #1\n            Values: (Int32(0), spark_cast_string_to_decimal(Utf8(\"0\"))), (Int32(1), spark_cast_string_to_decimal(Utf8(\"1\"))), (Int32(2), spark_cast_string_to_decimal(Utf8(\"-1\"))), (Int32(3), CAST(NULL AS Decimal128(38, 0)))",
+            "physical_plan": "ProjectionExec: expr=[#4@0 as #4]\n  SortPreservingMergeExec: [#2@1 ASC]\n    SortExec: expr=[#2@1 ASC], preserve_partitioning=[true]\n      ProjectionExec: expr=[CAST(#3@1 AS Decimal128(38, 38)) as #4, #2@0 as #2]\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #2, column2@1 as #3]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+          }
+        }
+      ],
+      "string": [
+        {
+          "id": "round_precision_cast_batch1_true",
+          "changed_fields": [
+            "error"
+          ],
+          "before": {
+            "status": "execution_error",
+            "error": "Execution error: Cannot cast Some(\"99999999.995\") to DECIMAL(10,2)",
+            "logical_plan": "Projection: #4\n  Sort: t.#2 ASC NULLS FIRST\n    Projection: spark_cast_string_to_decimal(t.#3) AS r AS #4, t.#2\n      SubqueryAlias: t\n        Projection: #0 AS #2, #1 AS #3\n          Projection: column1 AS #0, column2 AS #1\n            Values: (Int32(0), Utf8(\"99999999.994\")), (Int32(1), Utf8(\"99999999.995\")), (Int32(2), Utf8(\"-99999999.995\")), (Int32(3), Utf8(\"0.00499\")), (Int32(4), Utf8(\"0.005\"))...",
+            "physical_plan": "ProjectionExec: expr=[#4@0 as #4]\n  SortPreservingMergeExec: [#2@1 ASC]\n    SortExec: expr=[#2@1 ASC], preserve_partitioning=[true]\n      ProjectionExec: expr=[spark_cast_string_to_decimal(#3@1) as #4, #2@0 as #2]\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #2, column2@1 as #3]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+          },
+          "after": {
+            "status": "execution_error",
+            "error": "Execution error: Cannot cast Some(\"-99999999.995\") to DECIMAL(10,2)",
+            "logical_plan": "Projection: #4\n  Sort: t.#2 ASC NULLS FIRST\n    Projection: spark_cast_string_to_decimal(t.#3) AS r AS #4, t.#2\n      SubqueryAlias: t\n        Projection: #0 AS #2, #1 AS #3\n          Projection: column1 AS #0, column2 AS #1\n            Values: (Int32(0), Utf8(\"99999999.994\")), (Int32(1), Utf8(\"99999999.995\")), (Int32(2), Utf8(\"-99999999.995\")), (Int32(3), Utf8(\"0.00499\")), (Int32(4), Utf8(\"0.005\"))...",
+            "physical_plan": "ProjectionExec: expr=[#4@0 as #4]\n  SortPreservingMergeExec: [#2@1 ASC]\n    SortExec: expr=[#2@1 ASC], preserve_partitioning=[true]\n      ProjectionExec: expr=[spark_cast_string_to_decimal(#3@1) as #4, #2@0 as #2]\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #2, column2@1 as #3]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+          }
+        },
+        {
+          "id": "unicode_cast_batch4_true",
+          "changed_fields": [
+            "error"
+          ],
+          "before": {
+            "status": "execution_error",
+            "error": "Execution error: Cannot cast Some(\"\ud835\udfd9\ud835\udfda.\ud835\udfdb\ud835\udfdd\") to DECIMAL(10,2)",
+            "logical_plan": "Projection: #4\n  Sort: t.#2 ASC NULLS FIRST\n    Projection: spark_cast_string_to_decimal(t.#3) AS r AS #4, t.#2\n      SubqueryAlias: t\n        Projection: #0 AS #2, #1 AS #3\n          Projection: column1 AS #0, column2 AS #1\n            Values: (Int32(0), Utf8(\"\uff11\uff12.\uff13\uff15\")), (Int32(1), Utf8(\"\u0661\u0662.\u0663\u0665\")), (Int32(2), Utf8(\"\u0967\u0968.\u0969\u096b\")), (Int32(3), Utf8(\"\ud835\udfd9\ud835\udfda.\ud835\udfdb\ud835\udfdd\")), (Int32(4), Utf8(\"\u00a012.35\u00a0\"))...",
+            "physical_plan": "ProjectionExec: expr=[#4@0 as #4]\n  SortPreservingMergeExec: [#2@1 ASC]\n    SortExec: expr=[#2@1 ASC], preserve_partitioning=[true]\n      ProjectionExec: expr=[spark_cast_string_to_decimal(#3@1) as #4, #2@0 as #2]\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #2, column2@1 as #3]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+          },
+          "after": {
+            "status": "execution_error",
+            "error": "Execution error: Cannot cast Some(\"\\u{a0}12.35\\u{a0}\") to DECIMAL(10,2)",
+            "logical_plan": "Projection: #4\n  Sort: t.#2 ASC NULLS FIRST\n    Projection: spark_cast_string_to_decimal(t.#3) AS r AS #4, t.#2\n      SubqueryAlias: t\n        Projection: #0 AS #2, #1 AS #3\n          Projection: column1 AS #0, column2 AS #1\n            Values: (Int32(0), Utf8(\"\uff11\uff12.\uff13\uff15\")), (Int32(1), Utf8(\"\u0661\u0662.\u0663\u0665\")), (Int32(2), Utf8(\"\u0967\u0968.\u0969\u096b\")), (Int32(3), Utf8(\"\ud835\udfd9\ud835\udfda.\ud835\udfdb\ud835\udfdd\")), (Int32(4), Utf8(\"\u00a012.35\u00a0\"))...",
+            "physical_plan": "ProjectionExec: expr=[#4@0 as #4]\n  SortPreservingMergeExec: [#2@1 ASC]\n    SortExec: expr=[#2@1 ASC], preserve_partitioning=[true]\n      ProjectionExec: expr=[spark_cast_string_to_decimal(#3@1) as #4, #2@0 as #2]\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #2, column2@1 as #3]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+          }
+        }
+      ],
+      "unicode": [
+        {
+          "id": "invalid_confusables_cast_batch1_true",
+          "changed_fields": [
+            "error"
+          ],
+          "before": {
+            "status": "execution_error",
+            "error": "Execution error: Cannot cast Some(\"\u2460\") to DECIMAL(18,2)",
+            "logical_plan": "Projection: #4\n  Sort: t.#2 ASC NULLS FIRST\n    Projection: spark_cast_string_to_decimal(t.#3) AS r AS #4, t.#2\n      SubqueryAlias: t\n        Projection: #0 AS #2, #1 AS #3\n          Projection: column1 AS #0, column2 AS #1\n            Values: (Int32(0), Utf8(\"\u00b2\")), (Int32(1), Utf8(\"\u2460\")), (Int32(2), Utf8(\"\u2163\")), (Int32(3), Utf8(\"\u56db\")), (Int32(4), Utf8(\"\u00bd\"))...",
+            "physical_plan": "ProjectionExec: expr=[#4@0 as #4]\n  SortPreservingMergeExec: [#2@1 ASC]\n    SortExec: expr=[#2@1 ASC], preserve_partitioning=[true]\n      ProjectionExec: expr=[spark_cast_string_to_decimal(#3@1) as #4, #2@0 as #2]\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #2, column2@1 as #3]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+          },
+          "after": {
+            "status": "execution_error",
+            "error": "Execution error: Cannot cast Some(\"\u00b2\") to DECIMAL(18,2)",
+            "logical_plan": "Projection: #4\n  Sort: t.#2 ASC NULLS FIRST\n    Projection: spark_cast_string_to_decimal(t.#3) AS r AS #4, t.#2\n      SubqueryAlias: t\n        Projection: #0 AS #2, #1 AS #3\n          Projection: column1 AS #0, column2 AS #1\n            Values: (Int32(0), Utf8(\"\u00b2\")), (Int32(1), Utf8(\"\u2460\")), (Int32(2), Utf8(\"\u2163\")), (Int32(3), Utf8(\"\u56db\")), (Int32(4), Utf8(\"\u00bd\"))...",
+            "physical_plan": "ProjectionExec: expr=[#4@0 as #4]\n  SortPreservingMergeExec: [#2@1 ASC]\n    SortExec: expr=[#2@1 ASC], preserve_partitioning=[true]\n      ProjectionExec: expr=[spark_cast_string_to_decimal(#3@1) as #4, #2@0 as #2]\n        RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1\n          ProjectionExec: expr=[column1@0 as #2, column2@1 as #3]\n            DataSourceExec: partitions=1, partition_sizes=[1]\n"
+          }
+        }
+      ]
+    },
+    "benchmark_checks": {
+      "generic": {
+        "count": 74,
+        "changed": []
+      },
+      "subqueries": {
+        "count": 124,
+        "changed": [
+          {
+            "id": "ansi_float_i16_column_ansitrue",
+            "fields": [
+              "physical_plan"
+            ]
+          },
+          {
+            "id": "ansi_float_integer_in_constant_ansitrue",
+            "fields": [
+              "physical_plan"
+            ]
+          }
+        ]
+      }
+    },
+    "planner_tests": 29,
+    "delta_lifecycle_tests": 4,
+    "error_text_note": "Four existing failed casts report a different invalid input value; no status, rows, types or other actual fields change."
+  },
+  "performance_protocol": {
+    "purpose": "Measure the safe narrowing optimization against the corrected parent and compare selected equal-result inputs with the original pre-fix runtime. Dynamic INT/BIGINT precision protection must remain.",
+    "targets": [
+      "ansi_float_i32_column_ansitrue",
+      "ansi_float_i16_column_ansitrue",
+      "ansi_float_i32_explicit_ansitrue",
+      "ansi_float_integer_literal_ansitrue",
+      "ansi_float_integer_in_column_ansitrue",
+      "ansi_float_integer_in_constant_ansitrue"
+    ],
+    "unchanged_controls": [
+      "ansi_float_i32_column_ansifalse",
+      "ansi_float_integer_in_column_ansifalse",
+      "float_compare_f32_ansitrue",
+      "float_in_f64_ansitrue",
+      "no_division_ansitrue"
+    ],
+    "warmups": 8,
+    "samples_per_process": 41,
+    "rows": 1048576,
+    "batch_size": 8192,
+    "phases": [
+      "planning",
+      "execution"
+    ],
+    "quartets": [
+      [
+        "before",
+        "after",
+        "after",
+        "before"
+      ],
+      [
+        "after",
+        "before",
+        "before",
+        "after"
+      ],
+      [
+        "before",
+        "after",
+        "after",
+        "before"
+      ],
+      [
+        "after",
+        "before",
+        "before",
+        "after"
+      ]
+    ],
+    "same_binary_controls": {
+      "cases": [
+        "ansi_float_i32_column_ansitrue",
+        "float_compare_f32_ansitrue",
+        "no_division_ansitrue"
+      ],
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A",
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "binaries": [
+        "before",
+        "after"
+      ]
+    },
+    "cpu": 2,
+    "controller_cpu": 0,
+    "perf_events": [
+      "instructions:u",
+      "cycles:u",
+      "task-clock:u",
+      "context-switches:u",
+      "cpu-migrations:u",
+      "page-faults:u"
+    ],
+    "inference": "Process medians are the unit; report paired quartet log ratios with fixed seed 172 and 10000-resample percentile intervals. Retain all observations including failed controls. No uniform no-regression claim or threshold-based retries.",
+    "runtime": "parent d6540c1 plus only the safe-narrowing planner patch; no type-inference shortcut or hash diagnostics",
+    "benchmark_sha256": "b164e72ab1c1a2a367940f04d5104c587ae63b2379ddf75ca3650c088382ce9d",
+    "frozen_before_measurement": true,
+    "pre_fix_comparison": {
+      "cases": [
+        "ansi_float_i16_column_ansitrue",
+        "ansi_float_integer_literal_ansitrue",
+        "ansi_float_integer_in_constant_ansitrue",
+        "ansi_float_i32_column_ansitrue",
+        "float_compare_f32_ansitrue",
+        "no_division_ansitrue"
+      ],
+      "quartets": [
+        [
+          "before",
+          "after",
+          "after",
+          "before"
+        ],
+        [
+          "after",
+          "before",
+          "before",
+          "after"
+        ],
+        [
+          "before",
+          "after",
+          "after",
+          "before"
+        ],
+        [
+          "after",
+          "before",
+          "before",
+          "after"
+        ]
+      ],
+      "note": "The pre-fix runtime is not Spark-compatible at integer precision boundaries. These benchmark inputs have equal outputs; correctness uses the corrected parent as baseline."
+    }
+  },
+  "performance": {
+    "paired": {
+      "planning": {
+        "ansi_float_i16_column_ansitrue": {
+          "quartet_changes_pct": [
+            0.3128002584230722,
+            1.155462348440315,
+            -0.10367753716660888,
+            0.07263187660554225
+          ],
+          "quartet_geometric_change_pct": 0.3581458429093103,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.015561692582344704,
+            0.8836612114957774
+          ],
+          "median_change_pct": -0.02369572321813118,
+          "instruction_change_pct": -0.43869333003559996,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5064204999999999,
+              "median_instructions": 175316205.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5063005,
+              "median_instructions": 174547105.0
+            }
+          }
+        },
+        "ansi_float_i32_column_ansifalse": {
+          "quartet_changes_pct": [
+            -0.5960630201106407,
+            -0.5812452191892165,
+            -0.2092727679424567,
+            0.9555034379637071
+          ],
+          "quartet_geometric_change_pct": -0.10976777700839084,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.5886543957341402,
+            0.5691035522976252
+          ],
+          "median_change_pct": -0.10398644063814855,
+          "instruction_change_pct": 0.0004661133464090028,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5106435,
+              "median_instructions": 174635634.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5101125,
+              "median_instructions": 174636448.5
+            }
+          }
+        },
+        "ansi_float_i32_column_ansitrue": {
+          "quartet_changes_pct": [
+            -0.5268229941829145,
+            -1.7674102744867444,
+            0.04984813338065408,
+            -0.8224800014722243
+          ],
+          "quartet_geometric_change_pct": -0.7688978379535991,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.4587215526243928,
+            -0.1689505899377881
+          ],
+          "median_change_pct": -0.7464451342047984,
+          "instruction_change_pct": 0.0010867267933534208,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5053285000000001,
+              "median_instructions": 175389068.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5015565,
+              "median_instructions": 175390974.5
+            }
+          }
+        },
+        "ansi_float_i32_explicit_ansitrue": {
+          "quartet_changes_pct": [
+            1.474340113143882,
+            -0.8094657852906374,
+            0.8370863032856317,
+            0.10327581953629905
+          ],
+          "quartet_geometric_change_pct": 0.3976993136991916,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.40036566005187446,
+            1.155211391000754
+          ],
+          "median_change_pct": 0.35999435646629774,
+          "instruction_change_pct": 0.0034878788696568463,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5705644999999999,
+              "median_instructions": 207317979.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5726185,
+              "median_instructions": 207325210.5
+            }
+          }
+        },
+        "ansi_float_integer_in_column_ansifalse": {
+          "quartet_changes_pct": [
+            -0.3255290472779303,
+            0.47584653764720314,
+            -0.31339201868097694,
+            -0.7407847381165695
+          ],
+          "quartet_geometric_change_pct": -0.22693420743507514,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.6341086522470912,
+            0.27490062435042606
+          ],
+          "median_change_pct": -0.22507684576332787,
+          "instruction_change_pct": -0.0021039732815530954,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5631410000000001,
+              "median_instructions": 193776225.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5618735,
+              "median_instructions": 193772148.0
+            }
+          }
+        },
+        "ansi_float_integer_in_column_ansitrue": {
+          "quartet_changes_pct": [
+            -0.3424379862859241,
+            0.08014020207809146,
+            -0.40071596160404815,
+            0.4109215817233072
+          ],
+          "quartet_geometric_change_pct": -0.06356951468422432,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.3715812351818609,
+            0.2453944563975339
+          ],
+          "median_change_pct": -0.2854897618388419,
+          "instruction_change_pct": 0.017441609347801368,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5599149999999999,
+              "median_instructions": 194248130.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5583165,
+              "median_instructions": 194282010.0
+            }
+          }
+        },
+        "ansi_float_integer_in_constant_ansitrue": {
+          "quartet_changes_pct": [
+            -1.8457078310500596,
+            -2.650137661040317,
+            -0.4411201009754548,
+            -2.8843032362468297
+          ],
+          "quartet_geometric_change_pct": -1.9599515099977725,
+          "quartet_bootstrap_95_interval_pct": [
+            -2.767290941250004,
+            -0.9980299307022742
+          ],
+          "median_change_pct": -1.9604184825135484,
+          "instruction_change_pct": -1.707059949368428,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5386605,
+              "median_instructions": 190005746.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5281005000000001,
+              "median_instructions": 186762234.5
+            }
+          }
+        },
+        "ansi_float_integer_literal_ansitrue": {
+          "quartet_changes_pct": [
+            -0.45576098527209824,
+            -0.8903213292132544,
+            0.2938040247327363,
+            0.005924454082976912
+          ],
+          "quartet_geometric_change_pct": -0.26260797327394986,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.6732788103942509,
+            0.1497608010624519
+          ],
+          "median_change_pct": -0.540351859776711,
+          "instruction_change_pct": -0.3529809808346607,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.507077,
+              "median_instructions": 174738451.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.504337,
+              "median_instructions": 174121658.0
+            }
+          }
+        },
+        "float_compare_f32_ansitrue": {
+          "quartet_changes_pct": [
+            -0.42575780056914886,
+            -0.8806853394568668,
+            -0.4117159849663994,
+            -0.0502874064518577
+          ],
+          "quartet_geometric_change_pct": -0.44254759607297367,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.7636504470499683,
+            -0.14428752888831217
+          ],
+          "median_change_pct": -0.4927340463301011,
+          "instruction_change_pct": 0.00021284029974033558,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5337565,
+              "median_instructions": 186759744.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5311265000000001,
+              "median_instructions": 186760142.0
+            }
+          }
+        },
+        "float_in_f64_ansitrue": {
+          "quartet_changes_pct": [
+            -0.2150252326199766,
+            -0.9290376999564667,
+            -1.7110544237484533,
+            0.32505052572329524
+          ],
+          "quartet_geometric_change_pct": -0.635466231540279,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.3391631167450848,
+            0.05464824407422287
+          ],
+          "median_change_pct": -0.5632840423295149,
+          "instruction_change_pct": -0.007503005650000283,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.627836,
+              "median_instructions": 238604378.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.6242995,
+              "median_instructions": 238586476.0
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            0.9787010062567889,
+            -0.6043423346518204,
+            0.03058424364728435,
+            -0.1584509595504271
+          ],
+          "quartet_geometric_change_pct": 0.05996042325698163,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.4459895133595603,
+            0.6932045215478088
+          ],
+          "median_change_pct": 0.2239689456511318,
+          "instruction_change_pct": 0.0016060189252264934,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.3982695,
+              "median_instructions": 132345887.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.3991615,
+              "median_instructions": 132348013.0
+            }
+          }
+        }
+      },
+      "execution": {
+        "ansi_float_i16_column_ansitrue": {
+          "quartet_changes_pct": [
+            -13.998671126920954,
+            -15.94743197973746,
+            -13.665104269639864,
+            -13.374214429067049
+          ],
+          "quartet_geometric_change_pct": -14.252310651116304,
+          "quartet_bootstrap_95_interval_pct": [
+            -15.382569710109598,
+            -13.519781655993537
+          ],
+          "median_change_pct": -13.67983371841337,
+          "instruction_change_pct": -10.299236695037784,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 3.2333105,
+              "median_instructions": 2819850068.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.7909990000000002,
+              "median_instructions": 2529427035.5
+            }
+          }
+        },
+        "ansi_float_i32_column_ansifalse": {
+          "quartet_changes_pct": [
+            -0.6254551354588544,
+            -0.11820284118177687,
+            2.0435056620560736,
+            0.13129614154603783
+          ],
+          "quartet_geometric_change_pct": 0.35272667485955883,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.43680518832355214,
+            1.4987315076598984
+          ],
+          "median_change_pct": -0.1182029632083248,
+          "instruction_change_pct": -0.0006335862127393455,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.729204,
+              "median_instructions": 2490663414.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.725978,
+              "median_instructions": 2490647634.0
+            }
+          }
+        },
+        "ansi_float_i32_column_ansitrue": {
+          "quartet_changes_pct": [
+            -10.996757812410376,
+            -0.15878439934829955,
+            0.38135384057011157,
+            0.7165260993070991
+          ],
+          "quartet_geometric_change_pct": -2.642958403739849,
+          "quartet_bootstrap_95_interval_pct": [
+            -8.279242532766693,
+            0.5488003109314107
+          ],
+          "median_change_pct": 0.22947152435290885,
+          "instruction_change_pct": -0.0032607082227631423,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 3.154204,
+              "median_instructions": 2780960264.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 3.161442,
+              "median_instructions": 2780869585.0
+            }
+          }
+        },
+        "ansi_float_i32_explicit_ansitrue": {
+          "quartet_changes_pct": [
+            2.0614995229970967,
+            0.18235357310089176,
+            0.9032910677439425,
+            1.7000255632006922
+          ],
+          "quartet_geometric_change_pct": 1.2091767295420743,
+          "quartet_bootstrap_95_interval_pct": [
+            0.5421761373715078,
+            1.8806022288217532
+          ],
+          "median_change_pct": 0.21350884781892177,
+          "instruction_change_pct": 0.009278343979812753,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 6.6845005,
+              "median_instructions": 2857918402.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 6.6987725000000005,
+              "median_instructions": 2858183569.5
+            }
+          }
+        },
+        "ansi_float_integer_in_column_ansifalse": {
+          "quartet_changes_pct": [
+            -0.4622595104296645,
+            -0.015505554935922034,
+            0.16226391886757582,
+            0.13809109214531673
+          ],
+          "quartet_geometric_change_pct": -0.04466745702537812,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.3125101341243095,
+            0.15017677619476602
+          ],
+          "median_change_pct": -0.15934519221768584,
+          "instruction_change_pct": -0.0017303610474583841,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.8576325000000002,
+              "median_instructions": 2633294367.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.853079,
+              "median_instructions": 2633248802.0
+            }
+          }
+        },
+        "ansi_float_integer_in_column_ansitrue": {
+          "quartet_changes_pct": [
+            0.7058309752496792,
+            0.34804509642270365,
+            0.16984997901341656,
+            0.05865616650746429
+          ],
+          "quartet_geometric_change_pct": 0.32029618979125596,
+          "quartet_bootstrap_95_interval_pct": [
+            0.11423763531707774,
+            0.5715674595810702
+          ],
+          "median_change_pct": 0.5691388712508072,
+          "instruction_change_pct": -0.0023587661856061537,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 3.1473864999999996,
+              "median_instructions": 2855115543.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 3.1652994999999997,
+              "median_instructions": 2855048198.0
+            }
+          }
+        },
+        "ansi_float_integer_in_constant_ansitrue": {
+          "quartet_changes_pct": [
+            -13.061953948497509,
+            -13.659363360564619,
+            -13.255491303601948,
+            -13.129343500487794
+          ],
+          "quartet_geometric_change_pct": -13.276847982944929,
+          "quartet_bootstrap_95_interval_pct": [
+            -13.527162336281645,
+            -13.095655256605
+          ],
+          "median_change_pct": -13.321106836784669,
+          "instruction_change_pct": -13.843429251695849,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.9757775,
+              "median_instructions": 2768188398.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.579371,
+              "median_instructions": 2384976196.0
+            }
+          }
+        },
+        "ansi_float_integer_literal_ansitrue": {
+          "quartet_changes_pct": [
+            -13.801046470482525,
+            -14.677506429050839,
+            -13.23996200385595,
+            -13.784650480491194
+          ],
+          "quartet_geometric_change_pct": -13.877334087165078,
+          "quartet_bootstrap_95_interval_pct": [
+            -14.455163065417864,
+            -13.380574588979636
+          ],
+          "median_change_pct": -14.117769929019875,
+          "instruction_change_pct": -12.009079035317761,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.4463885000000003,
+              "median_instructions": 2190826151.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.101013,
+              "median_instructions": 1927728107.0
+            }
+          }
+        },
+        "float_compare_f32_ansitrue": {
+          "quartet_changes_pct": [
+            -0.15465656007473483,
+            -0.6800517096664973,
+            0.36999679454516426,
+            0.1929856205355496
+          ],
+          "quartet_geometric_change_pct": -0.06873567686855409,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.46250815989571537,
+            0.2814521512780191
+          ],
+          "median_change_pct": 0.11095396600904195,
+          "instruction_change_pct": 0.000636203331239038,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.09997,
+              "median_instructions": 1927685599.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.1023,
+              "median_instructions": 1927697863.5
+            }
+          }
+        },
+        "float_in_f64_ansitrue": {
+          "quartet_changes_pct": [
+            0.2158751319301846,
+            0.23030493542240807,
+            0.11352817078157809,
+            0.6240453605834028
+          ],
+          "quartet_geometric_change_pct": 0.29574963719215236,
+          "quartet_bootstrap_95_interval_pct": [
+            0.14270960060946608,
+            0.5218472135042999
+          ],
+          "median_change_pct": 0.13534755241135787,
+          "instruction_change_pct": -0.004699905883953637,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.7905935,
+              "median_instructions": 2551040445.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.7943705000000003,
+              "median_instructions": 2550920549.0
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            -0.31323539225171754,
+            0.17196558494654454,
+            0.9037181953974275,
+            0.21535257558612403
+          ],
+          "quartet_geometric_change_pct": 0.24351376830177673,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.18135035596538546,
+            0.7202804281273728
+          ],
+          "median_change_pct": 0.16408388878166313,
+          "instruction_change_pct": -0.001466591235699255,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.7694235,
+              "median_instructions": 593587346.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.770686,
+              "median_instructions": 593578641.0
+            }
+          }
+        }
+      }
+    },
+    "pre-fix": {
+      "planning": {
+        "ansi_float_i16_column_ansitrue": {
+          "quartet_changes_pct": [
+            -1.5241902402085223,
+            0.02899322056444693,
+            -0.0948769657485159,
+            -0.7807624929100596
+          ],
+          "quartet_geometric_change_pct": -0.5946461400309829,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.1687905141023085,
+            -0.03296105869295744
+          ],
+          "median_change_pct": -0.47002714727025774,
+          "instruction_change_pct": 0.0040003585971337685,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5074175000000001,
+              "median_instructions": 174546852.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5050325,
+              "median_instructions": 174553834.5
+            }
+          }
+        },
+        "ansi_float_i32_column_ansitrue": {
+          "quartet_changes_pct": [
+            -1.7379311489804454,
+            -1.8701741435659762,
+            -1.7941533921655297,
+            -0.4105165497970794
+          ],
+          "quartet_geometric_change_pct": -1.455035158038238,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.8371300894563691,
+            -0.7582427032838883
+          ],
+          "median_change_pct": -0.9896371787648017,
+          "instruction_change_pct": 0.4301445687587613,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5102375,
+              "median_instructions": 174638146.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.505188,
+              "median_instructions": 175389342.5
+            }
+          }
+        },
+        "ansi_float_integer_in_constant_ansitrue": {
+          "quartet_changes_pct": [
+            0.7245821613680407,
+            -0.5483498101113484,
+            -2.006810868273455,
+            0.6881099678846134
+          ],
+          "quartet_geometric_change_pct": -0.2919122632462631,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.3399193817955746,
+            0.7063444135127671
+          ],
+          "median_change_pct": -0.516237367075989,
+          "instruction_change_pct": 0.032668582035233484,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5288265000000001,
+              "median_instructions": 186719154.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.5260965,
+              "median_instructions": 186780152.5
+            }
+          }
+        },
+        "ansi_float_integer_literal_ansitrue": {
+          "quartet_changes_pct": [
+            -0.09217887710070703,
+            0.3465196824723219,
+            -0.33670935720328954,
+            0.16059355220291413
+          ],
+          "quartet_geometric_change_pct": 0.019223482033544913,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.2145190217531865,
+            0.25351351595733507
+          ],
+          "median_change_pct": 0.01981897349607742,
+          "instruction_change_pct": 0.038774604933933254,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.504567,
+              "median_instructions": 174053353.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.504667,
+              "median_instructions": 174120841.5
+            }
+          }
+        },
+        "float_compare_f32_ansitrue": {
+          "quartet_changes_pct": [
+            -0.641507952658623,
+            -1.2212377048862049,
+            -1.3521102795419442,
+            0.41193797704322055
+          ],
+          "quartet_geometric_change_pct": -0.7031594937820984,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.28669568081653,
+            0.0011298612959913495
+          ],
+          "median_change_pct": -0.820307909272544,
+          "instruction_change_pct": -0.0011399444597048891,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.5318125,
+              "median_instructions": 186763485.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.52745,
+              "median_instructions": 186761356.0
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            0.840648592780256,
+            -1.0685121847059431,
+            -1.6393677087157503,
+            0.39445742471921885
+          ],
+          "quartet_geometric_change_pct": -0.3734009930657388,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.3543528835164116,
+            0.6173056776464741
+          ],
+          "median_change_pct": -0.7741138152446703,
+          "instruction_change_pct": -0.005209965599228816,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.397293,
+              "median_instructions": 132352121.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.3942175,
+              "median_instructions": 132345226.0
+            }
+          }
+        }
+      },
+      "execution": {
+        "ansi_float_i16_column_ansitrue": {
+          "quartet_changes_pct": [
+            -0.4286957915723605,
+            -0.9304385275421218,
+            -0.42867578266680506,
+            0.44157846042072924
+          ],
+          "quartet_geometric_change_pct": -0.33777882450827473,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.8052353871085647,
+            0.22329938343979208
+          ],
+          "median_change_pct": -0.5390540917695641,
+          "instruction_change_pct": -0.0069425724563698665,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.8037075,
+              "median_instructions": 2529429849.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.788594,
+              "median_instructions": 2529254241.5
+            }
+          }
+        },
+        "ansi_float_i32_column_ansitrue": {
+          "quartet_changes_pct": [
+            14.544222660451933,
+            15.253379140395603,
+            14.368001826233694,
+            15.829054801043682
+          ],
+          "quartet_geometric_change_pct": 14.99718928519387,
+          "quartet_bootstrap_95_interval_pct": [
+            14.456078328829204,
+            15.540858437430465
+          ],
+          "median_change_pct": 15.07229153565084,
+          "instruction_change_pct": 11.658010289674525,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.739809,
+              "median_instructions": 2490562740.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 3.152761,
+              "median_instructions": 2780912800.5
+            }
+          }
+        },
+        "ansi_float_integer_in_constant_ansitrue": {
+          "quartet_changes_pct": [
+            0.058399396173829866,
+            1.1037233951330225,
+            0.16012087491236945,
+            -0.24501676911694611
+          ],
+          "quartet_geometric_change_pct": 0.2680422329255245,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.1438862496096029,
+            0.8413730155290486
+          ],
+          "median_change_pct": 0.01867621366753447,
+          "instruction_change_pct": 0.001444595476041144,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.5754685,
+              "median_instructions": 2384923708.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.5759495,
+              "median_instructions": 2384958161.0
+            }
+          }
+        },
+        "ansi_float_integer_literal_ansitrue": {
+          "quartet_changes_pct": [
+            -0.33232032926083044,
+            -0.4135428891727067,
+            0.28914695254027567,
+            -0.0012162194220931366
+          ],
+          "quartet_geometric_change_pct": -0.11487411467393431,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.37293988646588777,
+            0.14386012954403155
+          ],
+          "median_change_pct": -0.03744768565451251,
+          "instruction_change_pct": -0.0038914376573551124,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.1015984999999997,
+              "median_instructions": 1927693737.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.1008115,
+              "median_instructions": 1927618722.0
+            }
+          }
+        },
+        "float_compare_f32_ansitrue": {
+          "quartet_changes_pct": [
+            -0.35314590726112477,
+            -0.43161515768311615,
+            -0.12078200932645519,
+            -0.0409810385902427
+          ],
+          "quartet_geometric_change_pct": -0.2367604522349699,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.39238825957112844,
+            -0.08088949064590766
+          ],
+          "median_change_pct": -0.04812938624806362,
+          "instruction_change_pct": -0.000678210430871129,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.1026655,
+              "median_instructions": 1927720277.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.1016535000000003,
+              "median_instructions": 1927707203.5
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            1.1121583660112309,
+            -0.9196229843403952,
+            -0.5607710718189042,
+            -3.0318541570661424
+          ],
+          "quartet_geometric_change_pct": -0.8610151084698295,
+          "quartet_bootstrap_95_interval_pct": [
+            -2.4199007348352635,
+            0.6003399751739653
+          ],
+          "median_change_pct": -0.2408560668449855,
+          "instruction_change_pct": -0.0023586064479053093,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.7734909999999999,
+              "median_instructions": 593592034.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.771628,
+              "median_instructions": 593578034.0
+            }
+          }
+        }
+      }
+    },
+    "same-after": {
+      "planning": {
+        "ansi_float_i32_column_ansitrue": {
+          "quartet_changes_pct": [
+            -1.2210081600593758,
+            1.3590218339494415
+          ],
+          "quartet_geometric_change_pct": 0.06069153588763516,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.2210081600593758,
+            1.3590218339494415
+          ],
+          "median_change_pct": -0.3274573372267331,
+          "instruction_change_pct": 0.002152614881723025,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.5063255,
+              "median_instructions": 175391336.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.5046675,
+              "median_instructions": 175395111.5
+            }
+          }
+        },
+        "float_compare_f32_ansitrue": {
+          "quartet_changes_pct": [
+            0.2919714649033138,
+            0.723660524758534
+          ],
+          "quartet_geometric_change_pct": 0.5075842272098949,
+          "quartet_bootstrap_95_interval_pct": [
+            0.2919714649033138,
+            0.723660524758534
+          ],
+          "median_change_pct": 0.3994807413165713,
+          "instruction_change_pct": 0.0007014351207201841,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.5280605,
+              "median_instructions": 186759967.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.53017,
+              "median_instructions": 186761277.0
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            -1.0146477302954824,
+            -0.5176796471166605
+          ],
+          "quartet_geometric_change_pct": -0.7664747943632066,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.0146477302954824,
+            -0.5176796471166605
+          ],
+          "median_change_pct": -0.5173379832612568,
+          "instruction_change_pct": -0.0018980279568814318,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.397999,
+              "median_instructions": 132347892.5
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.39594,
+              "median_instructions": 132345380.5
+            }
+          }
+        }
+      },
+      "execution": {
+        "ansi_float_i32_column_ansitrue": {
+          "quartet_changes_pct": [
+            -0.4673054847923271,
+            -0.5675770380405754
+          ],
+          "quartet_geometric_change_pct": -0.5174538947679109,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.5675770380405754,
+            -0.4673054847923271
+          ],
+          "median_change_pct": -0.4678953940588704,
+          "instruction_change_pct": 0.0021530059834962145,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 3.162459,
+              "median_instructions": 2780693619.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 3.147662,
+              "median_instructions": 2780753487.5
+            }
+          }
+        },
+        "float_compare_f32_ansitrue": {
+          "quartet_changes_pct": [
+            -0.039803492888076955,
+            0.1702385637415206
+          ],
+          "quartet_geometric_change_pct": 0.06516242427173118,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.039803492888076955,
+            0.1702385637415206
+          ],
+          "median_change_pct": 0.1704247540406545,
+          "instruction_change_pct": 0.006025408239151986,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 2.0988735000000003,
+              "median_instructions": 1927661917.5
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 2.1024504999999998,
+              "median_instructions": 1927778067.0
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            -1.3810997651546342,
+            -0.1377410950310049
+          ],
+          "quartet_geometric_change_pct": -0.7613676627119395,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.3810997651546342,
+            -0.1377410950310049
+          ],
+          "median_change_pct": -0.2636366819384839,
+          "instruction_change_pct": 0.0018260421601690169,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.771137,
+              "median_instructions": 593578847.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.769104,
+              "median_instructions": 593589686.0
+            }
+          }
+        }
+      }
+    },
+    "same-before": {
+      "planning": {
+        "ansi_float_i32_column_ansitrue": {
+          "quartet_changes_pct": [
+            -0.6557668104417974,
+            0.31892985154826575
+          ],
+          "quartet_geometric_change_pct": -0.16960803192675858,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.6557668104417974,
+            0.31892985154826575
+          ],
+          "median_change_pct": 0.04148502597494108,
+          "instruction_change_pct": -0.0004327526882175192,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.507412,
+              "median_instructions": 175388858.5
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.5076225,
+              "median_instructions": 175388099.5
+            }
+          }
+        },
+        "float_compare_f32_ansitrue": {
+          "quartet_changes_pct": [
+            1.6576155429530222,
+            0.9089662350562926
+          ],
+          "quartet_geometric_change_pct": 1.2825991686636184,
+          "quartet_bootstrap_95_interval_pct": [
+            0.9089662350562926,
+            1.6576155429530222
+          ],
+          "median_change_pct": 1.3223985947557582,
+          "instruction_change_pct": 0.0006128225988666358,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.5268835000000001,
+              "median_instructions": 186758778.5
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.533851,
+              "median_instructions": 186759923.0
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            -0.6889180063577498,
+            -0.8727039991627663
+          ],
+          "quartet_geometric_change_pct": -0.7808535566486944,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.8727039991627663,
+            -0.6889180063577498
+          ],
+          "median_change_pct": -0.9943900091722413,
+          "instruction_change_pct": -0.0040453403927220855,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.3984855,
+              "median_instructions": 132349802.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.39452299999999996,
+              "median_instructions": 132344448.0
+            }
+          }
+        }
+      },
+      "execution": {
+        "ansi_float_i32_column_ansitrue": {
+          "quartet_changes_pct": [
+            -11.326224998659084,
+            0.17062374467030147
+          ],
+          "quartet_geometric_change_pct": -5.752945129946516,
+          "quartet_bootstrap_95_interval_pct": [
+            -11.326224998659084,
+            0.17062374467030147
+          ],
+          "median_change_pct": 0.10921267018657588,
+          "instruction_change_pct": -0.002486091691999981,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 3.1644680000000003,
+              "median_instructions": 2781051890.5
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 3.167924,
+              "median_instructions": 2780982751.0
+            }
+          }
+        },
+        "float_compare_f32_ansitrue": {
+          "quartet_changes_pct": [
+            -0.3793601727063954,
+            -0.04258837950423083
+          ],
+          "quartet_geometric_change_pct": -0.21111634498589404,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.3793601727063954,
+            -0.04258837950423083
+          ],
+          "median_change_pct": -0.21435422165864138,
+          "instruction_change_pct": -0.0001441365019116958,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 2.1035275,
+              "median_instructions": 1927686577.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 2.0990184999999997,
+              "median_instructions": 1927683798.5
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            -0.41080364396953944,
+            -1.6108018552612107
+          ],
+          "quartet_geometric_change_pct": -1.0126211411334562,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.6108018552612107,
+            -0.41080364396953944
+          ],
+          "median_change_pct": -0.8672378532473934,
+          "instruction_change_pct": -0.00036515266034209404,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.774528,
+              "median_instructions": 593587350.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.767811,
+              "median_instructions": 593585182.5
+            }
+          }
+        }
+      }
+    }
+  },
+  "performance_findings": [
+    "Relative to the corrected parent, SMALLINT column comparison, exact integer literal comparison and constant IN execute about 13-14 percent faster, with 10-14 percent fewer instructions.",
+    "Direct pre-fix comparisons for those three cases have conditional intervals spanning zero and execution instruction differences within 0.01 percent. This removes their added widening work on the tested inputs.",
+    "Dynamic INT column comparison still uses DOUBLE and is about 15 percent slower than pre-fix, with about 11.7 percent more instructions. That local cost remains.",
+    "The unchanged explicit-DOUBLE control rises about 1.2 percent against the parent, while a same-parent INT control shifts about 5.8 percent without changed instruction work. Retain these observations; no blanket no-regression claim is made."
+  ],
+  "builds": {
+    "before": {
+      "binary_sha256": "115c9a5f893e01e09d403a3059c822457ec3d4ec99196987ff6e322058df26d5",
+      "source_hashes": {
+        "math.rs": "558d54ee499f958d6d4bebfd9d2cc8d3e9e2364513c079c76d07223f9db773a9",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+        "common.rs": "dd5805fcf7c90a517895f50a5da218cdfd68bcf644f4d1730eed778a2563637f",
+        "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+        "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+        "Cargo.lock": "30d9595fbefefaa1a6d7756891a348f0dfd1f485cbf1d1b727ddd367f8654b47",
+        "decimal_bench.rs": "b164e72ab1c1a2a367940f04d5104c587ae63b2379ddf75ca3650c088382ce9d",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "e48fe3a79704d118a3a264550fb40de73d5c9d4fa056a2c0a1efed779b91f527",
+        "decimal_probe.rs": "d9d11fa1fbbf7ea7ddfe67be7a8fceeca6bde90a25973123995e99fe761a05f9",
+        "decimal-null.rs": "2d07ef1c9d0284d0a28605b97570699fa115f6278cc2673c2c994d55b20a7fd0",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "7d0af52df3ef4b5863a3ddd414332850376daf9a5273c64328de512c94ee286b",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180"
+      }
+    },
+    "after": {
+      "binary_sha256": "d6850fd57bf551bb8e160bcc19285c3ac2ce44c2aabc063a40cdea368b45ae7a",
+      "source_hashes": {
+        "math.rs": "558d54ee499f958d6d4bebfd9d2cc8d3e9e2364513c079c76d07223f9db773a9",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+        "common.rs": "0b055d35a6dd372b4b964a637708cff5ade90f333cf3c7c049d3fed319baed2a",
+        "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+        "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+        "Cargo.lock": "30d9595fbefefaa1a6d7756891a348f0dfd1f485cbf1d1b727ddd367f8654b47",
+        "decimal_bench.rs": "b164e72ab1c1a2a367940f04d5104c587ae63b2379ddf75ca3650c088382ce9d",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "e48fe3a79704d118a3a264550fb40de73d5c9d4fa056a2c0a1efed779b91f527",
+        "decimal_probe.rs": "d9d11fa1fbbf7ea7ddfe67be7a8fceeca6bde90a25973123995e99fe761a05f9",
+        "decimal-null.rs": "2d07ef1c9d0284d0a28605b97570699fa115f6278cc2673c2c994d55b20a7fd0",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "7d0af52df3ef4b5863a3ddd414332850376daf9a5273c64328de512c94ee286b",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180"
+      }
+    },
+    "legacy": {
+      "binary_sha256": "f0a987009c26337a1df5c31d9557ca4c6c6f1432cad2b59243ae96d5b5a6adfa",
+      "source_hashes": {
+        "math.rs": "558d54ee499f958d6d4bebfd9d2cc8d3e9e2364513c079c76d07223f9db773a9",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+        "common.rs": "028ae108f12d3c2cb8acb4208d865a52e030f52ceb53cc1aa210d14602e210e8",
+        "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+        "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+        "Cargo.lock": "30d9595fbefefaa1a6d7756891a348f0dfd1f485cbf1d1b727ddd367f8654b47",
+        "decimal_bench.rs": "b164e72ab1c1a2a367940f04d5104c587ae63b2379ddf75ca3650c088382ce9d",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "e48fe3a79704d118a3a264550fb40de73d5c9d4fa056a2c0a1efed779b91f527",
+        "decimal_probe.rs": "d9d11fa1fbbf7ea7ddfe67be7a8fceeca6bde90a25973123995e99fe761a05f9",
+        "decimal-null.rs": "2d07ef1c9d0284d0a28605b97570699fa115f6278cc2673c2c994d55b20a7fd0",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "dfa19c558010c3a8a4cabadc831fecea8ffe8f3f88c3522f2114bda59b82e659",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "7d0af52df3ef4b5863a3ddd414332850376daf9a5273c64328de512c94ee286b",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+        "resolver-predicate.rs": "c6114dc1452e933a1dc1aea8a8b9157b1d0b0cd16a82d136a5e525db9bdeaf48",
+        "function-predicate.rs": "46a5b8200309311a0d1fb02f8d90200930792446cf2d12645463fe4df44fe3b0",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180"
+      }
+    }
+  },
+  "source_difference": "The parent and narrowed benchmark builds differ only in common.rs; benchmark, dependency and other runtime sources are identical.",
+  "baseline_reuse": "The parent probe and benchmark binaries are reused from d6540c1 with recorded hashes. Existing 6068 before captures are reused from that identical parent probe; new/ANSI/zero and all candidate captures are fresh.",
+  "patch": {
+    "file": "sail-ansi-float-integer-narrow.patch",
+    "sha256": "07ba18284b711c61430ce94dfc15c0204437e7dbe3f84771853cd3be60c2a2b2",
+    "verification": {
+      "forward_reverse_exact": true,
+      "patch_sha256": "07ba18284b711c61430ce94dfc15c0204437e7dbe3f84771853cd3be60c2a2b2"
+    }
+  },
+  "raw_archive": {
+    "file": "ansi-float-integer-narrow-runs.json.gz",
+    "sha256": "308c0cc9837ace31df3fd631ad2a90ebcca94c85c43e7a89783b292396dbe2d0",
+    "bytes": 1292855
+  },
+  "preservation": {
+    "sources": {
+      "math.rs": "c4befca6320e36532f3e87091622e0b91ecfa59e841646f98af91f704c84846f",
+      "lateral.rs": "3a46aea3b3c2af3e500dbfac0cc6999da1cf60d4a99bed9c6b02b789a5bf1020",
+      "cast.rs": "b09ae115b792491460b3ba5fcd60faea4bc1bfd59f60690618063f5cb0d855b3",
+      "common.rs": "41cef0bc27bc314a5ab03ca682acd76448c1780808f5b943722ba85e04af8fc5",
+      "function-Cargo.toml": "0e70f011d3aaabce73b5df5f12bb9e547936a6769cff09099fe5e37641b878a7",
+      "scalar-mod.rs": "68c06852a9272ae5c480298c0f4e2c725753bf028a5da6e629fad49a93231925",
+      "Cargo.lock": "e0970eb4c47224ccf8d0e9be9d2a57b25db09316fed780d5533598f519ab0584",
+      "decimal_bench.rs": "61f32e9a0cf89b4f06b8f579fb3af8a6003f35088b9cdcbe8abd548ef6cb4e3f",
+      "string-cast.rs": null,
+      "float-cast.rs": null,
+      "lib.rs": "abf6ed0652f1b3ee7b66bf77313fa56f1fd292a2f48168550c1022335c654a8d",
+      "main.rs": "8609b17aab37b9a84cde88767cacecc267d170048574636d6516300eea47d359",
+      "decimal_probe.rs": "f43728209ba28c00296d5f4789d4a66db06798c398f34f3558ae3944d0322d8f",
+      "decimal-null.rs": null,
+      "function-mod.rs": "2ce9c566265102724d44f5e2f2822d5d82c03e71e1eec907d50e425becbedae2",
+      "function-scalar-mod.rs": "b5546d8cd9f41cb1a5bddb3d9102f9618abe7e1ef65746d3946af86b4d973e26",
+      "delta_lifecycle.rs": "b7b7d860da8f0bf0e9068f2616c74f1ae744d9677a08194b3a5eedcdfe99927d",
+      "resolver-subquery.rs": "aff16f461317fa52a382a2d61d804d45bea4341d7581a536f22bec480879bf5d",
+      "analyzer-expression.rs": "c5566a6b118560afeca8020acea0095507000a1956051a0f4c1450c291e66eef",
+      "analyzer-parser.rs": "dd81c91ec888151ebafc7d979b50b33180f825211b4568e2de9ba50738271f42",
+      "math-mod.rs": "45b56693f3dde83b0ed3b535b3d81a26a63917db92106f4ecde8cfeee2ab2236",
+      "decimal-utils.rs": "847f4c18277429a79ae9dcf2da2f5cdecac066f71fa67909cae9f0c99a2189db",
+      "decimal-round.rs": null,
+      "conditional.rs": "cf09fc67b0e567668b037a6ee19ab1f166134e0fa067859269983c2e3f739fb0",
+      "small-int-divide.rs": null,
+      "resolver-predicate.rs": "ac785ea9d466f3b50f920aeac31b0be0b243f99bc7e63050e796c38caec8e1b8",
+      "function-predicate.rs": "499f472fda6be201451cef2dab3380d7b602a578fa0ce49c91364a26df0df180",
+      "arrow-mod": "a2b54e3369b6a8bf4bfd46f886720050b94a978c61d0004b33d276932fb0936f",
+      "arrow-decimal": "691d21c85206190f0dd49f5f9a5ef31de7065917780d4c9c3d156bc11a8d5549",
+      "join-selection": "77f99aa2b07b8d20e2de1c0114bf0eff6b1c7495e1923b8308a123812f044219",
+      "unwrap-cast": "0a1b250391180380b5722c2e9e31757c8850c3a392c87912d50e313143389012",
+      "expr-simplifier": "d5a4d4a8ee6e146e616e312e447d30429949b4501b9f45e7979bba14ef57937b",
+      "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+      "decorrelate": "c18f2fd4e6e3c8d20fc3e6070a72c43aa1dc0b517cbf17cb4731734be2651735",
+      "nested-loop": "59b7efeb63dedf071bc8b9f45a39d480c8f8cca62a4702a3f3f670b8a2444967",
+      "physical-test-lock": null,
+      "parser-keywords": null,
+      "native-in-list": "310aaf3b97f83bc70bcbf6bffbed44b4fc500027a4d8202aa487f78fedae6d24",
+      "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+      "native-primitive-filter": "dea083ca4f3208434559a353ac70e73e12cc3f617a8b3b2bf66761b92097353c",
+      "native-strategy": "bc43719e31a52563dd07c5b0dac98a620491d87d6fe2aaf7a88aa86f18b441ac",
+      "native-array-filter": "12259bb4c45fd7f57696efc4c6227fab5a69cbabe9f89e2b6a7a03e2e9589040",
+      "native-case": "470894816b7dfce4f995b0b3537349ea8b2962ecc199a798575ce2090253dc62",
+      "expr-common": "f514c989af51ca89d3fb6d3b14971807e9deffaa4227f8a715aee49e6c9c0c3a",
+      "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+      "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+      "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+      "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+      "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+      "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+      "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+      "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+      "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+      "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+      "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+      "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+      "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+      "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+      "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+      "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+      "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+      "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+      "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+      "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+      "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+      "lifecycle-support-0": null,
+      "lifecycle-support-1": null
+    },
+    "executables": {
+      "bench": "41142f9ec9341118f514984c0f690ea9a611aac6b180a26fc0c30329711257bb",
+      "probe": "340658fe8d3f6fcefae60fe38affd1b15d0bc89e5b8888ea2188d7e43fa81155",
+      "runner": "622a12a937afbf5c2a4f26a34e0606ef89a8c5d4dcc3dcbced6f4b6526a1ce5e"
+    }
+  },
+  "setup_correction": "The initial 31 predicates produced BOOLEAN output, unsupported by the existing numeric comparator. Wrap only their outputs in CAST(... AS INT), preserving NULL, and recapture Spark and Rust. Predicate set and candidate logic are unchanged; initial captures and failed comparison are retained.",
+  "limitations": [
+    "Only the documented predicate precision rule is optimized. Other constant expressions and dynamic INT/BIGINT retain the widening cost.",
+    "The existing signed-zero GROUP BY and JOIN USING differences remain outside this change.",
+    "The coarse corpus excludes schema metadata and structured error equality and is not complete Spark compatibility.",
+    "Measurements are bounded to this machine, preloaded inputs and the fixed schedule; controls show timing variation.",
+    "The separate type-inference shortcut stays deferred and unapplied. No original timing interval is declared resolved."
+  ]
+}

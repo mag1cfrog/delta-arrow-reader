@@ -4480,6 +4480,32 @@ The patch remains an optional overlay on the accepted experimental runtime. The 
 
 The [compressed record](ansi-float-integer-runs.json.gz) contains Spark references, both captures for every corpus, frozen before/after helper sources, commands, build profiles, logs, complete measurement records and reproduction scripts. `check-archive.py` inside its `files` object recomputes the agreement counts using only repository artifacts. Both benchmark builds match their corresponding correctness runtime hashes except for the benchmark source. All 65 shared source/lock records, three executable slots and the two temporarily restored fixture files were restored and checked after the build.
 
+## Avoiding unnecessary integer widening
+
+The [follow-up planner patch](sail-ansi-float-integer-narrow.patch), applied after the ANSI precision patch, removes widening when a BOOLEAN predicate has the same result at FLOAT precision. Every TINYINT/SMALLINT value is exactly representable as FLOAT. An INT/BIGINT literal qualifies only if its Spark DOUBLE value survives a FLOAT round trip exactly. Using the DOUBLE value matters for BIGINT: Spark already rounds integers beyond `2^53` during its comparison coercion. Dynamic INT/BIGINT values, inexact literals and unrecognized expressions keep DOUBLE.
+
+The patch changes only `sail-plan/src/function/common.rs`. It extracts and reuses the existing direct numeric literal evaluator, without folding arbitrary constant expressions or string conversions. Comparisons and IN lists share the precision check. Decimal and existing DOUBLE operands, non-ANSI behavior, zero/NaN normalization and NULL handling retain their existing rules. No execution kernel or dependency changes. This is a local optimization of the previous correction.
+
+The [additional corpus](ansi-float-integer-narrow.jsonl) contains 31 queries, run in both ANSI modes. It covers eight comparison operators in both directions, nullable IN/NOT IN, BETWEEN, signed-width limits, `2^24` and `2^25` neighbors, BIGINT rounding boundaries and mixed lists with one inexact member. All 62 observations match Spark before and after. The initial capture used BOOLEAN output, which the numeric comparator could not read; only the output was changed to `CAST(predicate AS INT)`, preserving NULL, before recapturing both runtimes. The original predicates, failed comparison and captures are retained.
+
+All previous 344 ANSI precision observations still match Spark. Signed-zero observations remain 248/256, and the other 6,068 observations remain 5,753/6,068, with no new differences. Four failed casts report a different invalid input value; other actual fields are unchanged. All 29 planner tests and four Delta lifecycle tests pass. The new Rust test compares optimized predicates directly with explicit DOUBLE coercion across NULLs, nonfinite values, small integer columns and large literals. All 74 generic IN and 124 projection/subquery benchmark checks pass; only two formatted physical plans change. As above, the helper's display name does not expose its widening configuration.
+
+The benchmark source, input, sampling counts and CPU are unchanged from the previous section. A frozen schedule runs 640 fresh processes: four alternating quartets against the corrected parent, four against the original pre-fix runtime for selected cases, and two same-binary control quartets per build. All samples are retained, counters have full coverage and no CPU migrations occur. The pre-fix comparison uses equal-result inputs; it does not make that runtime correct at the precision boundaries.
+
+| ANSI expression | Corrected parent median ms | Narrowed median ms | Paired change vs parent | Paired change vs pre-fix |
+| --- | ---: | ---: | ---: | ---: |
+| FLOAT > SMALLINT column | 3.233 | 2.791 | -14.25% | -0.34% |
+| FLOAT > exact integer literal | 2.446 | 2.101 | -13.88% | -0.12% |
+| FLOAT IN (0, 1, 2) | 2.976 | 2.579 | -13.28% | +0.27% |
+
+These three paths execute 10-14% fewer instructions than the corrected parent. Against pre-fix, their instruction counts differ by less than 0.01%, and the conditional latency intervals span zero: SMALLINT `[-0.81%, +0.22%]`, integer literal `[-0.37%, +0.14%]`, constant IN `[-0.14%, +0.84%]`. On this input, the added widening work is removed without restoring the precision bug. Medians and paired geometric changes summarize different parts of the same recorded samples.
+
+Dynamic INT comparison still needs DOUBLE and remains about 15.0% slower than pre-fix, with 11.7% more execution instructions. Its cost is unchanged by this optimization. The data do not establish a universal absence of regressions: the untouched explicit-DOUBLE control rises about 1.2% against the parent, and a same-parent INT comparison control shifts about 5.8% without changed instruction work. Those results remain in the record rather than being filtered or used to justify another kernel change.
+
+[Results](ansi-float-integer-narrow-results.json) and the [compressed captures](ansi-float-integer-narrow-runs.json.gz) retain all comparisons, conditional intervals, failed setup, frozen sources and reproduction scripts. The archive's `check-archive.py` verifies the counts without depending on the old cache. The parent and candidate source inventories differ only in `common.rs`; benchmark and dependency sources match. The parent binaries and old 6,068-observation baseline are reused by hash; all candidate captures and the additional parent captures are fresh. Shared sources, lockfiles, executable slots and temporary lifecycle fixture files are restored and checked.
+
+Both ANSI patches remain optional. The separate type-inference shortcut is still deferred. Signed-zero GROUP BY and JOIN USING differences remain the next compatibility work; the dynamic INT/BIGINT widening cost and small control timing movements are not declared resolved.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
