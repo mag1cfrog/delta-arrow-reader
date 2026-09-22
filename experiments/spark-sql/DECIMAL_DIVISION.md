@@ -5204,6 +5204,92 @@ The next diagnostic should identify which allocation and release call stacks
 cause heap growth and shrink requests in the accepted complete query before
 selecting another runtime change. This prototype removed no measured cost.
 
+## Rejected right-buffer preference in native DOUBLE addition
+
+Six fixed debugger captures of the accepted `6ced2eb` binary sampled the call
+stacks behind heap growth and shrink requests. In the DOUBLE queries, sampled
+growth enters `posix_memalign` from the Int64-to-Float64 cast; shrink stacks
+include both releasing a binary operand and releasing a consumed result batch.
+The FLOAT Decimal control instead grows the heap inside its Float32-to-Decimal
+cast, then shrinks it while releasing the result batch.
+
+| Query, in capture order | Heap requests | Sampled stacks and returns |
+| --- | ---: | ---: |
+| DOUBLE, final Decimal | 13,322 | 37 |
+| FLOAT, final Decimal | 10,496 | 34 |
+| DOUBLE, native output | 15,794 | 39 |
+| DOUBLE, native output | 15,795 | 39 |
+| FLOAT, final Decimal | 10,496 | 34 |
+| DOUBLE, final Decimal | 13,322 | 37 |
+
+All 220 sampled `brk` returns are zero. These are function-entry requests and
+selected return values, not a complete syscall trace. The window includes the
+existing perf control/ack handshake. Sampled stack proportions are not estimates
+of all calls, and debugger timings are excluded from performance conclusions.
+Release builds also merge some drop routines across array types; their symbol
+type names alone do not identify the released array's type.
+
+The resulting prototype preferred the right input buffer, which is evaluated
+later, when that buffer was uniquely owned and started at offset zero. It kept
+left-buffer reuse otherwise and preserved the expression's left-plus-right
+calculation order, NULL masks and prefix lengths. The intent was to release the
+earlier allocation while retaining the later one for the result.
+
+The prototype is rejected: it improves the native derived query but makes the
+complete Decimal query substantially slower. The accepted runtime remains at
+`6ced2eb`, and the patch is retained only inside the diagnostic archive.
+
+| Query | Before, ms | Candidate, ms | Paired time change | Paired 95% interval | Instruction change |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Derived DOUBLE, final Decimal | 12.605643 | 14.907898 | +19.147% | +17.834% to +21.431% | +0.009% |
+| Derived FLOAT, final Decimal | 10.589482 | 10.579004 | -0.041% | -0.072% to -0.009% | -0.001% |
+| Derived DOUBLE, native output | 2.985750 | 2.758904 | -7.556% | -8.043% to -7.002% | +0.018% |
+| Stored FLOAT plus integer, native DOUBLE | 0.829010 | 0.815009 | -1.400% | -1.760% to -0.992% | +0.158% |
+| Shared ready DOUBLE sum | 0.256526 | 0.259106 | +1.418% | -0.099% to +2.957% | +0.149% |
+| FLOAT read control | 0.064204 | 0.063798 | -0.175% | -0.804% to +0.359% | +0.052% |
+
+The complete DOUBLE query's median page faults across 41 executions rise from
+126,459 to 210,412, while native derived DOUBLE remains 42,594.5/42,469.5.
+Within this experiment, the complete DOUBLE/FLOAT time difference grows from
+19.154% (95% interval 18.766% to 19.572%) to 42.027% (40.490% to 44.785%).
+The accepted runtime's approximately 19% cost remains unresolved. These FLOAT
+and DOUBLE expressions are not semantically interchangeable in general.
+
+All 160 processes in the frozen comparison completed with eight warmups, 41
+samples, full counter coverage and zero CPU migrations. Same-binary control
+shifts are DOUBLE Decimal +0.767%/-0.267%, FLOAT Decimal +0.068%/+0.351%,
+native derived DOUBLE -0.786%/-0.137%, and shared DOUBLE -0.802%/-1.555%
+(before/candidate). The shared path's instruction increase is retained even
+though its time interval includes zero. No allocator, ASLR or governor setting
+changed, and no compilation or other work ran during timing or debugger captures.
+
+All 80 native binary tests, 37 planner tests and 28 runner tests pass. The expanded
+ownership test covers 128 length/NULL/ownership/side combinations and verifies
+both-owned right-buffer preference with distinct NaN payloads and signed zeros.
+It retains scalar, length-error, prefix and aligned-buffer checks. All 258
+benchmark checks/plans, 6,784 SQL comparison classifications and successful
+values/types, and 116 real-Delta parent comparisons are unchanged. The four
+Delta lifecycle tests also pass. Existing Spark differences remain; performance
+coverage is finite non-NULL data at batch size 8,192.
+
+`float64-right-reuse-results.json` and `float64-right-reuse-runs.json.gz` retain
+the rejected patch, six debugger captures, the incomplete first debugger attempt,
+test/build provenance, original references, all measurements and verification
+scripts. The first debugger attempt stopped because a return breakpoint was not
+removed after its callback; explicit deletion fixed the driver before restarting
+the full schedule. The archive also records a formatting setup error and a
+relative-path error that delayed writing the timing protocol until compilation
+was underway. Candidate source was fixed before compilation, and the schedule
+was recorded before any candidate capture or timing. No observation was discarded.
+The archived `check-archive.py` rechecks all evidence without the build cache.
+All 78 shared source/lock/fixture records and three executable slots were restored;
+temporary inputs are absent.
+
+The next candidate should try removing the Int64-to-Float64 temporary array by
+performing that conversion within native addition. It must preserve rounding,
+NULL semantics and operand evaluation order, and pass the complete-query
+comparison before adoption.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
