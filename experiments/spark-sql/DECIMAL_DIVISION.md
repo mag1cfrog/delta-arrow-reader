@@ -4337,6 +4337,36 @@ Group 0 slot 1, group 1 slot 1 and group 2 slot 2 remain elevated during the lat
 
 Wall-time bins are not query boundaries or equal instruction-count windows. Sample density is not a population branch-misprediction probability, and these observations do not identify a hardware cause or estimate the optional patch's performance effect. They do not justify removing early observations or changing the warmup count. The benchmark protocol, accepted runtime and deferred adoption decision remain unchanged.
 
+## Native IN without SQL planning
+
+The [standalone native-expression experiment](float-type-native-in-results.json) reproduces cross-process variation without SQL parsing, planning or execution-plan scheduling. Three groups have median-based self-comparison changes of -4.166%, +4.167% and +4.082%, despite identical occupied table slots within each group. The outer SQL machinery is therefore not necessary for this observation; its underlying cause remains unresolved.
+
+The synchronous [Rust example](examples/native_in_bench.rs) constructs one native `InListExpr` and calls `PhysicalExpr::evaluate` directly. It retains the original 1,048,576 input rows, permutation, 128 members and 8,192-row batches. Arrow normalizes `v + 0` once before measurement. The native lookup, hasher and cold slot trace match the preceding build; only the benchmark source changes. No SQL session or Tokio runtime is invoked, although the existing workspace still builds its dependencies.
+
+The fixed collection has 16 fully crossed four-process groups, eight per seed input. Each process keeps one table, performs 32 warmups and records 1,044 executions, totaling 66,816. Within-process A/B labels are assigned afterward to alternating ABBA/BAAB quartets. Both labels execute identical code on the same table. Historical `same-before` and `same-after` names distinguish seed strata, not code versions.
+
+Within-process primary estimates use median quartet changes; cross-process primary estimates compare process medians. Both analyses bootstrap whole four-process groups within four blocks. The existing criteria require both intervals to include zero and remain inside +/-1%.
+
+| Seed index | Comparison | Primary change, 95% interval | Mean-based change, 95% interval | Pass |
+| --- | --- | ---: | ---: | --- |
+| 0 | Within process | +0.0016% [-0.0055%, +0.0090%] | -0.0137% [-0.0202%, +0.0228%] | Yes |
+| 4 | Within process | +0.0009% [-0.0016%, +0.0032%] | +0.0075% [+0.0033%, +0.0224%] | No |
+| 0 | Across processes | +0.0256% [-0.0803%, +0.2427%] | +0.1392% [-0.4571%, +1.4242%] | No |
+| 4 | Across processes | -0.0124% [-0.0443%, +0.0921%] | -0.1359% [-0.7405%, +0.9090%] | Yes |
+
+All 8,192 occupied-slot records match within their 16 groups. In the three groups above, faster processes have fewer branch misses alongside nearly equal retired instruction counts. These counters cover entire execution phases, not individual within-process labels, and do not establish a CPU or hashbrown defect. The two failed controls remain failures, including the small positive within-process mean interval.
+
+Every Boolean output row is checked in validation passes before and after measurement. Input checks compare an independently reconstructed ordered 64-bit fingerprint and seven special-value bit patterns; the fingerprint is not collision-free. Eight smoke processes and five invalid-setting checks pass. Existing SQL captures supply expected counts; no new full SQL or Spark corpus run is claimed. The [raw archive](float-type-native-in-runs.json.gz) retains every run, frozen scripts, build identities, initial design and corrected input-check wording. Its `check-archive.py` reconstructs the complete analysis without benchmarking. Shared files and global settings remain unchanged.
+
+Run the standalone correctness check from the repository root:
+
+```bash
+cargo run --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
+  --example native_in_bench -- /tmp/native-in-check.json check
+```
+
+Reproducing the recorded diagnostic build requires the frozen dependency overrides and build scripts in the archive. This smaller executable has different code layout and omits normalization from timing, so its absolute speed is not a production improvement. The original positive release interval remains unresolved, and the optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

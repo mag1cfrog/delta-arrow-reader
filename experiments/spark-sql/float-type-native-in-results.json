@@ -1,0 +1,3262 @@
+{
+  "slice": "Isolate native Float64 IN execution from SQL planning",
+  "base_commit": "176b1b7",
+  "created_utc": "2026-09-22T05:34:37.783329+00:00",
+  "decision": {
+    "finding": "The standalone native-expression executable reproduces cross-process timing and branch-miss variation with matching occupied table slots. SQL parsing, planning and execution-plan scheduling are not necessary conditions for this observation.",
+    "controls": "Both within-process primary median controls pass. Seed 4 within-process mean excludes zero (+0.003262% to +0.022359%); seed 0 cross-process mean exceeds the existing +/-1% bound (-0.457099% to +1.424153%). All groups and both failed controls are retained.",
+    "scope": "This rebuild uses one retained table and pre-normalized input, changing executable layout and measured work. It does not establish a hardware or hashbrown defect, compare the type-inference candidate, or resolve the original positive release interval.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 16,
+    "processes": 64,
+    "timed_executions": 66816,
+    "retained_tables": 64,
+    "occupied_slot_records": 8192,
+    "rows_validated_before_and_after_per_process": 1048576,
+    "input_validation": "Independently reconstructed ordered 64-bit fingerprint and seven exact special-value bit patterns; finite input check, exact row-by-row Boolean output check.",
+    "smoke_processes": 8,
+    "smoke_executions": 96,
+    "invalid_setting_checks": 5,
+    "rust_benchmark_builds": 1,
+    "failed_or_discarded_builds_or_collection_groups": 0,
+    "new_spark_corpus_runs": 0,
+    "new_full_sql_correctness_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "176b1b7",
+    "question": "Does the native Float64 IN expression still vary within and across processes after removing SQL planning, execution-plan scheduling and per-query table construction?",
+    "implementation": "A standalone synchronous Rust example calls the existing InListExpr::try_new_from_array and PhysicalExpr::evaluate. It uses the same 1048576-row permutation, Float64 values, 128 constants and 8192-row batches as the SQL case. Arrow add_wrapping with scalar zero normalizes the input once before measurement. The native filter, original RandomState implementation, shared-seed diagnostic and cold complete-slot trace are byte-identical to the preceding build.",
+    "design": "Exactly sixteen groups of four fresh processes. Each prior native seed input (0 and 4) receives eight groups fully crossing every preparation position with both ABBA/BAAB execution orders, verified by the existing prepared_phase_schedule.py helper. Both historical scenario labels refer to the same standalone executable; they distinguish only the two seed strata. Each process retains one table and the input batches, checks every output row before/after measurement, performs 32 warmups, then records 261 quartets (1044 executions). Timing labels are assigned afterward as alternating ABBA/BAAB by quartet and process slot, so the executable never branches on a label. Preserve every timing and counter.",
+    "validation": "Check the expected 994522 matches against both frozen ANSI captures. Verify all rows, native SET dispatch, zero normalization, input bit fingerprint, one full table trace and 128 exact member bit patterns. Reject invalid CLI modes and sample settings. Eight short gated smoke processes must pass before freezing the fixed collection.",
+    "analysis": "Report the full timing distributions and process-level median/mean controls within and across processes. Analyze each seed stratum separately. For both cross-process and within-process controls, bootstrap complete four-process groups within the four balanced schedule blocks, with 10000 resamples and seed 88. Within-process group statistics are medians of the four process estimates; both timing labels use exactly the same retained table. Keep the historical +/-1% and include-zero control criteria unchanged. Hardware counters aggregate the entire execution phase and cannot assign misses to individual within-process labels. Compare all cold table traces and addresses; mismatches remain findings, not exclusions.",
+    "stopping_rule": "One fixed sixteen-group collection, no outcome-based extensions, input replacement or discarded runs. No other machine work during timing. Restore shared source, lock and executable slots in finally. No global settings change.",
+    "limits": [
+      "This rebuild has different executable layout and omits input normalization from the measured loop. Its absolute speed is not a production improvement.",
+      "One retained table differs from the original sequence of independently constructed tables. Failure to reproduce variation cannot by itself blame SQL planning or scheduling.",
+      "This experiment neither compares the type-inference candidate nor changes its deferred adoption decision."
+    ],
+    "design_revision_before_measurement": "The initial four-group sketch was expanded before any benchmark run because time-control interpretation requires the already established fully crossed schedule. Both initial design files are retained."
+  },
+  "analysis": {
+    "seed_strata": {
+      "same-before": {
+        "seed_index": 0,
+        "four_process_groups": 8,
+        "controls": {
+          "within_process": {
+            "median_ms": {
+              "median_group_change_pct": 0.0016302675450885484,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.005516821324050292,
+                0.009044525818827087
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "block_medians_pct": [
+                -0.00024712340349619666,
+                -0.006836231914059132,
+                -0.0010484383336589742,
+                0.010778711695233478
+              ],
+              "group_changes_pct": [
+                0.004684498620971533,
+                -0.005178745427963927,
+                0.013404553016682641,
+                -0.027077016844800905,
+                0.0037580205528187083,
+                -0.005854897220136657,
+                0.022054908853108568,
+                -0.0004974854626416114
+              ]
+            },
+            "mean_ms": {
+              "median_group_change_pct": -0.013739845492785618,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.020184076838616893,
+                0.022805280871285305
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "block_medians_pct": [
+                -0.0028944077967274495,
+                -0.01675455338053522,
+                0.011425868855668986,
+                0.005515611829395861
+              ],
+              "group_changes_pct": [
+                0.012450646605965954,
+                -0.018239462199420853,
+                -0.010187672151767968,
+                -0.02332143460930247,
+                0.04014375654514124,
+                -0.01729201883380327,
+                0.033159915136604656,
+                -0.022128691477812934
+              ]
+            }
+          },
+          "cross_process": {
+            "median_ms": {
+              "median_group_change_pct": 0.025550669274121418,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.08026927274872864,
+                0.24267176516837852
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "block_medians_pct": [
+                -2.049167074632069,
+                0.141978506662932,
+                2.0088106169504014,
+                0.04461428611595153
+              ],
+              "group_changes_pct": [
+                0.06736109842888638,
+                -4.165695247693025,
+                0.37985519822421043,
+                -0.09589818489834645,
+                -0.06464036059911082,
+                4.082261594499914,
+                0.1054883321125466,
+                -0.016259759880643543
+              ]
+            },
+            "mean_ms": {
+              "median_group_change_pct": 0.1391817793022332,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.45709896276634465,
+                1.424153052810495
+              ],
+              "within_one_percent": false,
+              "contains_zero": true,
+              "block_medians_pct": [
+                -0.9638410254205976,
+                0.7825125594730753,
+                1.2048011719351825,
+                0.1391817793022332
+              ],
+              "group_changes_pct": [
+                0.6493008509944387,
+                -2.576982901835634,
+                2.1990052546265515,
+                -0.6339801356804009,
+                -0.2802177898522884,
+                2.6898201337226535,
+                0.053092954779443424,
+                0.22527060382502295
+              ]
+            }
+          }
+        },
+        "controls_passed": {
+          "within_process": true,
+          "cross_process": false
+        }
+      },
+      "same-after": {
+        "seed_index": 4,
+        "four_process_groups": 8,
+        "controls": {
+          "within_process": {
+            "median_ms": {
+              "median_group_change_pct": 0.0008696303721827947,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.0016474413573441815,
+                0.003229035062937702
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "block_medians_pct": [
+                0.001938929934283684,
+                -0.0003573362286901638,
+                -0.003397269892829735,
+                0.005927480836595556
+              ],
+              "group_changes_pct": [
+                0.004356810766409369,
+                -0.00047895089784200096,
+                0.0021012593594660345,
+                -0.002815931816846362,
+                -0.00036199861510044506,
+                -0.006432541170559025,
+                0.0030644095192877696,
+                0.008790552153903342
+              ]
+            },
+            "mean_ms": {
+              "median_group_change_pct": 0.0074871507349888455,
+              "stratified_whole_group_bootstrap_95_interval": [
+                0.003262391917036034,
+                0.022359142893693673
+              ],
+              "within_one_percent": true,
+              "contains_zero": false,
+              "block_medians_pct": [
+                0.0183318648260683,
+                0.011038918755723603,
+                0.001228463730834628,
+                0.017284932836186817
+              ],
+              "group_changes_pct": [
+                0.0319832623578431,
+                0.0046804672942935,
+                0.0018443165397785677,
+                0.02023352097166864,
+                0.004889200613322764,
+                -0.002432273151653508,
+                0.024484764815718707,
+                0.010085100856654927
+              ]
+            }
+          },
+          "cross_process": {
+            "median_ms": {
+              "median_group_change_pct": -0.01236775310958782,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.04427550347244069,
+                0.09212883721280152
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "block_medians_pct": [
+                -0.03663129843192725,
+                2.057449849674875,
+                0.08910878560484115,
+                -0.01699190654214089
+              ],
+              "group_changes_pct": [
+                -0.03698250416485083,
+                -0.036280092699003674,
+                4.1674140007816,
+                -0.05251430143184965,
+                0.011544586479828034,
+                0.16667298472985426,
+                -0.051568502780030556,
+                0.01758468969574878
+              ]
+            },
+            "mean_ms": {
+              "median_group_change_pct": -0.13594265486259194,
+              "stratified_whole_group_bootstrap_95_interval": [
+                -0.7404818001077507,
+                0.9089924669896554
+              ],
+              "within_one_percent": true,
+              "contains_zero": true,
+              "block_medians_pct": [
+                -0.3228585295467823,
+                0.7961378861563673,
+                0.5969643003356728,
+                -0.3361296897873567
+              ],
+              "group_changes_pct": [
+                0.31551124880939696,
+                -0.9612283079029615,
+                2.364320218180138,
+                -0.7720444458674036,
+                -0.3085450844985682,
+                1.5024736851699139,
+                -0.7089191543480977,
+                0.036659774773384335
+              ]
+            }
+          }
+        },
+        "controls_passed": {
+          "within_process": false,
+          "cross_process": true
+        }
+      }
+    },
+    "groups": [
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 0,
+        "directory": "group-00",
+        "cross_process": {
+          "median_ms": 0.06736109842888638,
+          "mean_ms": 0.6493008509944387,
+          "instructions": -2.616160599266948e-06
+        },
+        "within_process": {
+          "median_ms": 0.004684498620971533,
+          "mean_ms": 0.012450646605965954
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.027697316223873614,
+              "mean_ms": -0.02809111281254495,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.024666,
+            "mean_ms": 2.005022527777778,
+            "min_ms": 1.802188,
+            "max_ms": 2.28262,
+            "p05_ms": 1.844175,
+            "p95_ms": 2.050649,
+            "counters": {
+              "instructions:u": 47321254785.0,
+              "cycles:u": 9900228484.0,
+              "branches:u": 6622860946.0,
+              "branch-misses:u": 35705840.0,
+              "task-clock:u": 2093.020063,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.033314513382776134,
+              "mean_ms": 0.035570453564148785,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0273760000000003,
+            "mean_ms": 2.028497975095785,
+            "min_ms": 1.977373,
+            "max_ms": 2.5872159999999997,
+            "p05_ms": 2.016095,
+            "p95_ms": 2.042373,
+            "counters": {
+              "instructions:u": 47321253102.0,
+              "cycles:u": 10018057282.0,
+              "branches:u": 6622860479.0,
+              "branch-misses:u": 38555807.0,
+              "task-clock:u": 2117.549654,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.018328318981930547,
+              "mean_ms": -0.010669160352216878,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.026564,
+            "mean_ms": 2.027650530651341,
+            "min_ms": 1.9723240000000002,
+            "max_ms": 2.511215,
+            "p05_ms": 2.014823,
+            "p95_ms": 2.042062,
+            "counters": {
+              "instructions:u": 47321252879.0,
+              "cycles:u": 10020564041.0,
+              "branches:u": 6622860459.0,
+              "branch-misses:u": 38603223.0,
+              "task-clock:u": 2116.631541,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.03930501431314015,
+              "mean_ms": 0.29028572652138873,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0282075,
+            "mean_ms": 2.032059655172414,
+            "min_ms": 1.9705,
+            "max_ms": 4.647142,
+            "p05_ms": 2.0162549999999997,
+            "p95_ms": 2.0437160000000003,
+            "counters": {
+              "instructions:u": 47321252532.0,
+              "cycles:u": 10023942909.0,
+              "branches:u": 6622860376.0,
+              "branch-misses:u": 38586046.0,
+              "task-clock:u": 2118.647069,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252532.0,
+            "max": 47321254785.0
+          },
+          "cycles:u": {
+            "min": 9900228484.0,
+            "max": 10023942909.0
+          },
+          "branches:u": {
+            "min": 6622860376.0,
+            "max": 6622860946.0
+          },
+          "branch-misses:u": {
+            "min": 35705840.0,
+            "max": 38603223.0
+          },
+          "task-clock:u": {
+            "min": 2093.020063,
+            "max": 2118.647069
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 1,
+        "directory": "group-01",
+        "cross_process": {
+          "median_ms": -4.165695247693025,
+          "mean_ms": -2.576982901835634,
+          "instructions": -8.135879081550002e-07
+        },
+        "within_process": {
+          "median_ms": -0.005178745427963927,
+          "mean_ms": -0.018239462199420853
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.02059768483013702,
+              "mean_ms": -0.0595196541255838,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.028253,
+            "mean_ms": 2.028968033524904,
+            "min_ms": 1.982532,
+            "max_ms": 2.459849,
+            "p05_ms": 2.0149719999999998,
+            "p95_ms": 2.044277,
+            "counters": {
+              "instructions:u": 47321252701.0,
+              "cycles:u": 10018870861.0,
+              "branches:u": 6622860422.0,
+              "branch-misses:u": 38603888.0,
+              "task-clock:u": 2118.032207,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.02177345534365438,
+              "mean_ms": 0.023040729726742093,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0272405,
+            "mean_ms": 2.0275280593869733,
+            "min_ms": 1.977313,
+            "max_ms": 2.579671,
+            "p05_ms": 2.014471,
+            "p95_ms": 2.040881,
+            "counters": {
+              "instructions:u": 47321254615.0,
+              "cycles:u": 10016291578.0,
+              "branches:u": 6622860836.0,
+              "branch-misses:u": 38541951.0,
+              "task-clock:u": 2116.528006,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.016283266076955183,
+              "mean_ms": -0.08418328488873916,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 1.859609,
+            "mean_ms": 1.9248386159003832,
+            "min_ms": 1.8125769999999999,
+            "max_ms": 2.3186169999999997,
+            "p05_ms": 1.8392359999999999,
+            "p95_ms": 2.0380350000000003,
+            "counters": {
+              "instructions:u": 47321253578.0,
+              "cycles:u": 9493506901.0,
+              "branches:u": 6622860448.0,
+              "branch-misses:u": 26143659.0,
+              "task-clock:u": 2009.327395,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.0059257752210273296,
+              "mean_ms": 0.08250073318687434,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.026945,
+            "mean_ms": 2.027122266283525,
+            "min_ms": 1.987793,
+            "max_ms": 2.392324,
+            "p05_ms": 2.014632,
+            "p95_ms": 2.0398389999999997,
+            "counters": {
+              "instructions:u": 47321252968.0,
+              "cycles:u": 10015511303.0,
+              "branches:u": 6622860441.0,
+              "branch-misses:u": 38567158.0,
+              "task-clock:u": 2116.102768,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252701.0,
+            "max": 47321254615.0
+          },
+          "cycles:u": {
+            "min": 9493506901.0,
+            "max": 10018870861.0
+          },
+          "branches:u": {
+            "min": 6622860422.0,
+            "max": 6622860836.0
+          },
+          "branch-misses:u": {
+            "min": 26143659.0,
+            "max": 38603888.0
+          },
+          "task-clock:u": {
+            "min": 2009.327395,
+            "max": 2118.032207
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 2,
+        "directory": "group-02",
+        "cross_process": {
+          "median_ms": -0.03698250416485083,
+          "mean_ms": 0.31551124880939696,
+          "instructions": -7.170139304513157e-06
+        },
+        "within_process": {
+          "median_ms": 0.004356810766409369,
+          "mean_ms": 0.0319832623578431
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.039849067336783506,
+              "mean_ms": -0.011925486245101258,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0255419999999997,
+            "mean_ms": 2.0139989224137933,
+            "min_ms": 1.8021070000000001,
+            "max_ms": 2.394958,
+            "p05_ms": 1.850427,
+            "p95_ms": 2.038145,
+            "counters": {
+              "instructions:u": 47321256622.0,
+              "cycles:u": 9955569246.0,
+              "branches:u": 6622861144.0,
+              "branch-misses:u": 36864243.0,
+              "task-clock:u": 2102.391508,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.0014826467319761782,
+              "mean_ms": 0.07589201096078746,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.025022,
+            "mean_ms": 2.027676201149425,
+            "min_ms": 1.9807689999999998,
+            "max_ms": 2.478283,
+            "p05_ms": 2.016726,
+            "p95_ms": 2.041312,
+            "counters": {
+              "instructions:u": 47321256014.0,
+              "cycles:u": 10029703591.0,
+              "branches:u": 6622860991.0,
+              "branch-misses:u": 38605070.0,
+              "task-clock:u": 2116.680843,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.010196268264794917,
+              "mean_ms": -0.06763003282249658,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.023965,
+            "mean_ms": 2.02650338697318,
+            "min_ms": 1.973195,
+            "max_ms": 2.563631,
+            "p05_ms": 2.015203,
+            "p95_ms": 2.038897,
+            "counters": {
+              "instructions:u": 47321253221.0,
+              "cycles:u": 10023615767.0,
+              "branches:u": 6622860503.0,
+              "branch-misses:u": 38504747.0,
+              "task-clock:u": 2115.475995,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.004713982214221701,
+              "mean_ms": 0.08667467594023481,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0251010000000003,
+            "mean_ms": 2.027923676245211,
+            "min_ms": 1.978705,
+            "max_ms": 2.9454,
+            "p05_ms": 2.016336,
+            "p95_ms": 2.039679,
+            "counters": {
+              "instructions:u": 47321252629.0,
+              "cycles:u": 10029905543.0,
+              "branches:u": 6622860388.0,
+              "branch-misses:u": 38570317.0,
+              "task-clock:u": 2116.928004,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252629.0,
+            "max": 47321256622.0
+          },
+          "cycles:u": {
+            "min": 9955569246.0,
+            "max": 10029905543.0
+          },
+          "branches:u": {
+            "min": 6622860388.0,
+            "max": 6622861144.0
+          },
+          "branch-misses:u": {
+            "min": 36864243.0,
+            "max": 38605070.0
+          },
+          "task-clock:u": {
+            "min": 2102.391508,
+            "max": 2116.928004
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 3,
+        "directory": "group-03",
+        "cross_process": {
+          "median_ms": -0.036280092699003674,
+          "mean_ms": -0.9612283079029615,
+          "instructions": 3.3071820837449195e-07
+        },
+        "within_process": {
+          "median_ms": -0.00047895089784200096,
+          "mean_ms": 0.0046804672942935
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.012816425570516543,
+              "mean_ms": -0.03132587139376142,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0222759999999997,
+            "mean_ms": 2.025281287356322,
+            "min_ms": 1.989024,
+            "max_ms": 2.439171,
+            "p05_ms": 2.016064,
+            "p95_ms": 2.037194,
+            "counters": {
+              "instructions:u": 47321253298.0,
+              "cycles:u": 10022495031.0,
+              "branches:u": 6622860500.0,
+              "branch-misses:u": 38375631.0,
+              "task-clock:u": 2114.201964,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.008439455568498566,
+              "mean_ms": 0.055575124121354236,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.022642,
+            "mean_ms": 2.02576320210728,
+            "min_ms": 1.989055,
+            "max_ms": 2.98256,
+            "p05_ms": 2.014211,
+            "p95_ms": 2.037554,
+            "counters": {
+              "instructions:u": 47321253118.0,
+              "cycles:u": 10025672601.0,
+              "branches:u": 6622860532.0,
+              "branch-misses:u": 38412569.0,
+              "task-clock:u": 2114.630358,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.02996771794345765,
+              "mean_ms": -0.02685325290334717,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.021996,
+            "mean_ms": 1.9878124511494253,
+            "min_ms": 1.811625,
+            "max_ms": 2.806102,
+            "p05_ms": 1.844726,
+            "p95_ms": 2.041011,
+            "counters": {
+              "instructions:u": 47321253557.0,
+              "cycles:u": 9820746797.0,
+              "branches:u": 6622860480.0,
+              "branch-misses:u": 33551803.0,
+              "task-clock:u": 2074.885664,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.009397357364182568,
+              "mean_ms": 0.03621418749193417,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0214545,
+            "mean_ms": 2.0242922519157087,
+            "min_ms": 1.9899459999999998,
+            "max_ms": 2.445472,
+            "p05_ms": 2.012598,
+            "p95_ms": 2.037805,
+            "counters": {
+              "instructions:u": 47321253172.0,
+              "cycles:u": 10021407007.0,
+              "branches:u": 6622860504.0,
+              "branch-misses:u": 38405606.0,
+              "task-clock:u": 2113.145112,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321253118.0,
+            "max": 47321253557.0
+          },
+          "cycles:u": {
+            "min": 9820746797.0,
+            "max": 10025672601.0
+          },
+          "branches:u": {
+            "min": 6622860480.0,
+            "max": 6622860532.0
+          },
+          "branch-misses:u": {
+            "min": 33551803.0,
+            "max": 38412569.0
+          },
+          "task-clock:u": {
+            "min": 2074.885664,
+            "max": 2114.630358
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 4,
+        "directory": "group-04",
+        "cross_process": {
+          "median_ms": 4.1674140007816,
+          "mean_ms": 2.364320218180138,
+          "instructions": -2.928916353894806e-06
+        },
+        "within_process": {
+          "median_ms": 0.0021012593594660345,
+          "mean_ms": 0.0018443165397785677
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.022597309509375663,
+              "mean_ms": -0.05152044043565951,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 1.8605304999999999,
+            "mean_ms": 1.9313770268199233,
+            "min_ms": 1.8042710000000002,
+            "max_ms": 2.324558,
+            "p05_ms": 1.837333,
+            "p95_ms": 2.034318,
+            "counters": {
+              "instructions:u": 47321253079.0,
+              "cycles:u": 9549895820.0,
+              "branches:u": 6622860308.0,
+              "branch-misses:u": 27290059.0,
+              "task-clock:u": 2016.161702,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.01809808219748188,
+              "mean_ms": 0.06694302302985289,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0227169999999997,
+            "mean_ms": 2.024784004789272,
+            "min_ms": 1.9844860000000002,
+            "max_ms": 2.496597,
+            "p05_ms": 2.010043,
+            "p95_ms": 2.038396,
+            "counters": {
+              "instructions:u": 47321258371.0,
+              "cycles:u": 10026156233.0,
+              "branches:u": 6622861898.0,
+              "branch-misses:u": 38360008.0,
+              "task-clock:u": 2113.655782,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.021301152384922695,
+              "mean_ms": -0.002067195253974141,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.022707,
+            "mean_ms": 2.0251377749042145,
+            "min_ms": 1.9832439999999998,
+            "max_ms": 2.561137,
+            "p05_ms": 2.0107150000000003,
+            "p95_ms": 2.040259,
+            "counters": {
+              "instructions:u": 47321256204.0,
+              "cycles:u": 10025511949.0,
+              "branches:u": 6622861243.0,
+              "branch-misses:u": 38422713.0,
+              "task-clock:u": 2114.043308,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.017098633665990626,
+              "mean_ms": 0.0057558283335312765,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0223715,
+            "mean_ms": 2.0245595718390805,
+            "min_ms": 1.985408,
+            "max_ms": 2.437137,
+            "p05_ms": 2.011387,
+            "p95_ms": 2.0364720000000003,
+            "counters": {
+              "instructions:u": 47321252474.0,
+              "cycles:u": 10024288474.0,
+              "branches:u": 6622860350.0,
+              "branch-misses:u": 38420900.0,
+              "task-clock:u": 2113.412074,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252474.0,
+            "max": 47321258371.0
+          },
+          "cycles:u": {
+            "min": 9549895820.0,
+            "max": 10026156233.0
+          },
+          "branches:u": {
+            "min": 6622860308.0,
+            "max": 6622861898.0
+          },
+          "branch-misses:u": {
+            "min": 27290059.0,
+            "max": 38422713.0
+          },
+          "task-clock:u": {
+            "min": 2016.161702,
+            "max": 2114.043308
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 5,
+        "directory": "group-05",
+        "cross_process": {
+          "median_ms": -0.05251430143184965,
+          "mean_ms": -0.7720444458674036,
+          "instructions": 3.427635331121337e-06
+        },
+        "within_process": {
+          "median_ms": -0.002815931816846362,
+          "mean_ms": 0.02023352097166864
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.004938500848938876,
+              "mean_ms": -0.03156073293861805,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0217245,
+            "mean_ms": 2.0234501034482757,
+            "min_ms": 1.9895350000000003,
+            "max_ms": 2.4094849999999997,
+            "p05_ms": 2.009713,
+            "p95_ms": 2.036482,
+            "counters": {
+              "instructions:u": 47321253082.0,
+              "cycles:u": 10022795128.0,
+              "branches:u": 6622860512.0,
+              "branch-misses:u": 38459551.0,
+              "task-clock:u": 2112.280611,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.0006933627847538482,
+              "mean_ms": 0.07202777488195533,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.022888,
+            "mean_ms": 2.0243814166666665,
+            "min_ms": 1.9801380000000002,
+            "max_ms": 2.505724,
+            "p05_ms": 2.010043,
+            "p95_ms": 2.0372239999999997,
+            "counters": {
+              "instructions:u": 47321253506.0,
+              "cycles:u": 10026212838.0,
+              "branches:u": 6622860569.0,
+              "branch-misses:u": 38472904.0,
+              "task-clock:u": 2113.248897,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.012632527200096,
+              "mean_ms": -0.10909391074255259,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0203425,
+            "mean_ms": 1.9924742586206896,
+            "min_ms": 1.810734,
+            "max_ms": 2.7794529999999997,
+            "p05_ms": 1.8419109999999999,
+            "p95_ms": 2.0347500000000003,
+            "counters": {
+              "instructions:u": 47321253580.0,
+              "cycles:u": 9862123440.0,
+              "branches:u": 6622860507.0,
+              "branch-misses:u": 34588774.0,
+              "task-clock:u": 2079.93334,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.005471349316432672,
+              "mean_ms": 0.09444715787891855,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0221459999999998,
+            "mean_ms": 2.0241062030651342,
+            "min_ms": 1.976621,
+            "max_ms": 2.592876,
+            "p05_ms": 2.0094629999999998,
+            "p95_ms": 2.037344,
+            "counters": {
+              "instructions:u": 47321256252.0,
+              "cycles:u": 10024294624.0,
+              "branches:u": 6622861127.0,
+              "branch-misses:u": 38452469.0,
+              "task-clock:u": 2112.738251,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321253082.0,
+            "max": 47321256252.0
+          },
+          "cycles:u": {
+            "min": 9862123440.0,
+            "max": 10026212838.0
+          },
+          "branches:u": {
+            "min": 6622860507.0,
+            "max": 6622861127.0
+          },
+          "branch-misses:u": {
+            "min": 34588774.0,
+            "max": 38472904.0
+          },
+          "task-clock:u": {
+            "min": 2079.93334,
+            "max": 2113.248897
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 6,
+        "directory": "group-06",
+        "cross_process": {
+          "median_ms": 0.37985519822421043,
+          "mean_ms": 2.1990052546265515,
+          "instructions": -1.1279285527798777e-05
+        },
+        "within_process": {
+          "median_ms": 0.013404553016682641,
+          "mean_ms": -0.010187672151767968
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.0168390340197222,
+              "mean_ms": -0.07091970164125883,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0051245,
+            "mean_ms": 1.9353733591954023,
+            "min_ms": 1.805564,
+            "max_ms": 2.252393,
+            "p05_ms": 1.8352279999999999,
+            "p95_ms": 2.0326760000000004,
+            "counters": {
+              "instructions:u": 47321262973.0,
+              "cycles:u": 9578147874.0,
+              "branches:u": 6622862856.0,
+              "branch-misses:u": 28073424.0,
+              "task-clock:u": 2020.328789,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.015349106768658416,
+              "mean_ms": 0.09141558428791274,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0185139999999997,
+            "mean_ms": 2.0203750737547894,
+            "min_ms": 1.978164,
+            "max_ms": 2.46544,
+            "p05_ms": 2.005856,
+            "p95_ms": 2.034619,
+            "counters": {
+              "instructions:u": 47321256453.0,
+              "cycles:u": 10008080361.0,
+              "branches:u": 6622861113.0,
+              "branch-misses:u": 38481984.0,
+              "task-clock:u": 2109.065579,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.012656610038686011,
+              "mean_ms": -0.04841294162570842,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0189855,
+            "mean_ms": 2.020352001915709,
+            "min_ms": 1.976491,
+            "max_ms": 2.353641,
+            "p05_ms": 2.006307,
+            "p95_ms": 2.034459,
+            "counters": {
+              "instructions:u": 47321255739.0,
+              "cycles:u": 10008868758.0,
+              "branches:u": 6622861217.0,
+              "branch-misses:u": 38512421.0,
+              "task-clock:u": 2108.990231,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.01415249599467927,
+              "mean_ms": 0.02803759732217248,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.019937,
+            "mean_ms": 2.022383546934866,
+            "min_ms": 1.9786959999999998,
+            "max_ms": 2.3506159999999996,
+            "p05_ms": 2.0077,
+            "p95_ms": 2.038707,
+            "counters": {
+              "instructions:u": 47321253012.0,
+              "cycles:u": 10015949394.0,
+              "branches:u": 6622860466.0,
+              "branch-misses:u": 38544420.0,
+              "task-clock:u": 2111.006311,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321253012.0,
+            "max": 47321262973.0
+          },
+          "cycles:u": {
+            "min": 9578147874.0,
+            "max": 10015949394.0
+          },
+          "branches:u": {
+            "min": 6622860466.0,
+            "max": 6622862856.0
+          },
+          "branch-misses:u": {
+            "min": 28073424.0,
+            "max": 38544420.0
+          },
+          "task-clock:u": {
+            "min": 2020.328789,
+            "max": 2111.006311
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 7,
+        "directory": "group-07",
+        "cross_process": {
+          "median_ms": -0.09589818489834645,
+          "mean_ms": -0.6339801356804009,
+          "instructions": 7.277913804948355e-06
+        },
+        "within_process": {
+          "median_ms": -0.027077016844800905,
+          "mean_ms": -0.02332143460930247
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.03965126686045206,
+              "mean_ms": -0.07789011505711096,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.020192,
+            "mean_ms": 2.0223294425287355,
+            "min_ms": 1.974268,
+            "max_ms": 2.42319,
+            "p05_ms": 2.0074490000000003,
+            "p95_ms": 2.037344,
+            "counters": {
+              "instructions:u": 47321253206.0,
+              "cycles:u": 10014869814.0,
+              "branches:u": 6622860501.0,
+              "branch-misses:u": 38571941.0,
+              "task-clock:u": 2111.125975,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.0323104501120941,
+              "mean_ms": 0.31399291494973447,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.022116,
+            "mean_ms": 2.025981704980843,
+            "min_ms": 1.9726240000000002,
+            "max_ms": 4.644747000000001,
+            "p05_ms": 2.00771,
+            "p95_ms": 2.039317,
+            "counters": {
+              "instructions:u": 47321252758.0,
+              "cycles:u": 10025145812.0,
+              "branches:u": 6622860413.0,
+              "branch-misses:u": 38528586.0,
+              "task-clock:u": 2112.326748,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.015413566813349266,
+              "mean_ms": -0.04117939047934005,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.019787,
+            "mean_ms": 2.0019331446360153,
+            "min_ms": 1.816263,
+            "max_ms": 2.341008,
+            "p05_ms": 1.841501,
+            "p95_ms": 2.0424029999999997,
+            "counters": {
+              "instructions:u": 47321260012.0,
+              "cycles:u": 9904227827.0,
+              "branches:u": 6622862114.0,
+              "branch-misses:u": 35801642.0,
+              "task-clock:u": 2089.785346,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.021843583577507708,
+              "mean_ms": -0.005463478739264893,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0186444999999997,
+            "mean_ms": 2.020712514367816,
+            "min_ms": 1.9699790000000001,
+            "max_ms": 2.4550599999999996,
+            "p05_ms": 2.0066070000000003,
+            "p95_ms": 2.034799,
+            "counters": {
+              "instructions:u": 47321252840.0,
+              "cycles:u": 10007870816.0,
+              "branches:u": 6622860416.0,
+              "branch-misses:u": 38551899.0,
+              "task-clock:u": 2109.418194,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252758.0,
+            "max": 47321260012.0
+          },
+          "cycles:u": {
+            "min": 9904227827.0,
+            "max": 10025145812.0
+          },
+          "branches:u": {
+            "min": 6622860413.0,
+            "max": 6622862114.0
+          },
+          "branch-misses:u": {
+            "min": 35801642.0,
+            "max": 38571941.0
+          },
+          "task-clock:u": {
+            "min": 2089.785346,
+            "max": 2112.326748
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 8,
+        "directory": "group-08",
+        "cross_process": {
+          "median_ms": -0.06464036059911082,
+          "mean_ms": -0.2802177898522884,
+          "instructions": -1.1275059130788634e-05
+        },
+        "within_process": {
+          "median_ms": 0.0037580205528187083,
+          "mean_ms": 0.04014375654514124
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.009414826419085198,
+              "mean_ms": 0.004476431122846236,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.019952,
+            "mean_ms": 2.021060328544061,
+            "min_ms": 1.9821819999999999,
+            "max_ms": 2.3789990000000003,
+            "p05_ms": 2.0057650000000002,
+            "p95_ms": 2.035992,
+            "counters": {
+              "instructions:u": 47321261304.0,
+              "cycles:u": 10017314721.0,
+              "branches:u": 6622862157.0,
+              "branch-misses:u": 38458412.0,
+              "task-clock:u": 2109.80557,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.016930867524722615,
+              "mean_ms": 0.08223753916107857,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.017773,
+            "mean_ms": 2.0195546647509577,
+            "min_ms": 1.964749,
+            "max_ms": 2.532825,
+            "p05_ms": 2.005736,
+            "p95_ms": 2.033678,
+            "counters": {
+              "instructions:u": 47321257839.0,
+              "cycles:u": 10008718871.0,
+              "branches:u": 6622861611.0,
+              "branch-misses:u": 38445723.0,
+              "task-clock:u": 2108.206099,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.02675316610010192,
+              "mean_ms": -0.03972889091586884,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0175929999999997,
+            "mean_ms": 2.0100950249042144,
+            "min_ms": 1.799553,
+            "max_ms": 2.345907,
+            "p05_ms": 1.859203,
+            "p95_ms": 2.033848,
+            "counters": {
+              "instructions:u": 47321253344.0,
+              "cycles:u": 9957909851.0,
+              "branches:u": 6622860499.0,
+              "branch-misses:u": 37233279.0,
+              "task-clock:u": 2098.293961,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.02579930718936696,
+              "mean_ms": 0.07581108196743624,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0175219999999996,
+            "mean_ms": 2.0191974463601534,
+            "min_ms": 1.988143,
+            "max_ms": 2.999551,
+            "p05_ms": 2.005134,
+            "p95_ms": 2.032254,
+            "counters": {
+              "instructions:u": 47321255128.0,
+              "cycles:u": 10005803130.0,
+              "branches:u": 6622860942.0,
+              "branch-misses:u": 38442602.0,
+              "task-clock:u": 2107.85955,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321253344.0,
+            "max": 47321261304.0
+          },
+          "cycles:u": {
+            "min": 9957909851.0,
+            "max": 10017314721.0
+          },
+          "branches:u": {
+            "min": 6622860499.0,
+            "max": 6622862157.0
+          },
+          "branch-misses:u": {
+            "min": 37233279.0,
+            "max": 38458412.0
+          },
+          "task-clock:u": {
+            "min": 2098.293961,
+            "max": 2109.80557
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 9,
+        "directory": "group-09",
+        "cross_process": {
+          "median_ms": 4.082261594499914,
+          "mean_ms": 2.6898201337226535,
+          "instructions": -1.9187994637626105e-06
+        },
+        "within_process": {
+          "median_ms": -0.005854897220136657,
+          "mean_ms": -0.01729201883380327
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.014096794009521574,
+              "mean_ms": -0.02137720237861407,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 1.8617179999999998,
+            "mean_ms": 1.915333587164751,
+            "min_ms": 1.8227950000000002,
+            "max_ms": 2.321622,
+            "p05_ms": 1.83585,
+            "p95_ms": 2.0317540000000003,
+            "counters": {
+              "instructions:u": 47321253870.0,
+              "cycles:u": 9482495505.0,
+              "branches:u": 6622860503.0,
+              "branch-misses:u": 25363892.0,
+              "task-clock:u": 1999.38256,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.003247903552638931,
+              "mean_ms": 0.10042849606195503,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.017492,
+            "mean_ms": 2.0191397413793104,
+            "min_ms": 1.977884,
+            "max_ms": 2.520181,
+            "p05_ms": 2.005425,
+            "p95_ms": 2.033146,
+            "counters": {
+              "instructions:u": 47321257661.0,
+              "cycles:u": 10008065560.0,
+              "branches:u": 6622861518.0,
+              "branch-misses:u": 38467965.0,
+              "task-clock:u": 2107.723915,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.014957697992912244,
+              "mean_ms": -0.04347403456114174,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.019,
+            "mean_ms": 2.0201926312260534,
+            "min_ms": 1.974718,
+            "max_ms": 2.544266,
+            "p05_ms": 2.006386,
+            "p95_ms": 2.034709,
+            "counters": {
+              "instructions:u": 47321256921.0,
+              "cycles:u": 10014141625.0,
+              "branches:u": 6622861425.0,
+              "branch-misses:u": 38431424.0,
+              "task-clock:u": 2108.86654,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.036175066551724644,
+              "mean_ms": -0.013206835288992469,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0185695,
+            "mean_ms": 2.020110953065134,
+            "min_ms": 1.9919790000000002,
+            "max_ms": 2.52534,
+            "p05_ms": 2.006487,
+            "p95_ms": 2.033797,
+            "counters": {
+              "instructions:u": 47321252794.0,
+              "cycles:u": 10012547414.0,
+              "branches:u": 6622860410.0,
+              "branch-misses:u": 38460229.0,
+              "task-clock:u": 2108.781289,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252794.0,
+            "max": 47321257661.0
+          },
+          "cycles:u": {
+            "min": 9482495505.0,
+            "max": 10014141625.0
+          },
+          "branches:u": {
+            "min": 6622860410.0,
+            "max": 6622861518.0
+          },
+          "branch-misses:u": {
+            "min": 25363892.0,
+            "max": 38467965.0
+          },
+          "task-clock:u": {
+            "min": 1999.38256,
+            "max": 2108.86654
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 10,
+        "directory": "group-10",
+        "cross_process": {
+          "median_ms": 0.011544586479828034,
+          "mean_ms": -0.3085450844985682,
+          "instructions": 2.7334441154991396e-06
+        },
+        "within_process": {
+          "median_ms": -0.00036199861510044506,
+          "mean_ms": 0.004889200613322764
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.027601770679630544,
+              "mean_ms": -0.019495115289314136,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.020668,
+            "mean_ms": 2.0214705747126436,
+            "min_ms": 1.9732349999999999,
+            "max_ms": 2.402552,
+            "p05_ms": 2.009332,
+            "p95_ms": 2.03518,
+            "counters": {
+              "instructions:u": 47321252863.0,
+              "cycles:u": 10024745664.0,
+              "branches:u": 6622860434.0,
+              "branch-misses:u": 38498310.0,
+              "task-clock:u": 2110.204698,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.02927009737632158,
+              "mean_ms": 0.029273516515959663,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.020187,
+            "mean_ms": 2.020566188697318,
+            "min_ms": 1.987933,
+            "max_ms": 2.408734,
+            "p05_ms": 2.00796,
+            "p95_ms": 2.0347,
+            "counters": {
+              "instructions:u": 47321252859.0,
+              "cycles:u": 10023614577.0,
+              "branches:u": 6622860435.0,
+              "branch-misses:u": 38437163.0,
+              "task-clock:u": 2109.273112,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.0037123796724936042,
+              "mean_ms": -0.023436859316827707,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0209135,
+            "mean_ms": 2.00773580651341,
+            "min_ms": 1.7982099999999999,
+            "max_ms": 2.289943,
+            "p05_ms": 1.848895,
+            "p95_ms": 2.035561,
+            "counters": {
+              "instructions:u": 47321255604.0,
+              "cycles:u": 9951599285.0,
+              "branches:u": 6622861154.0,
+              "branch-misses:u": 36693835.0,
+              "task-clock:u": 2095.776248,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.004436376902694494,
+              "mean_ms": 0.09172933733219146,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0204079999999998,
+            "mean_ms": 2.0218294511494252,
+            "min_ms": 1.978094,
+            "max_ms": 2.9893929999999997,
+            "p05_ms": 2.0077290000000003,
+            "p95_ms": 2.036112,
+            "counters": {
+              "instructions:u": 47321252705.0,
+              "cycles:u": 10022122292.0,
+              "branches:u": 6622860415.0,
+              "branch-misses:u": 38399558.0,
+              "task-clock:u": 2110.575386,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252705.0,
+            "max": 47321255604.0
+          },
+          "cycles:u": {
+            "min": 9951599285.0,
+            "max": 10024745664.0
+          },
+          "branches:u": {
+            "min": 6622860415.0,
+            "max": 6622861154.0
+          },
+          "branch-misses:u": {
+            "min": 36693835.0,
+            "max": 38498310.0
+          },
+          "task-clock:u": {
+            "min": 2095.776248,
+            "max": 2110.575386
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 11,
+        "directory": "group-11",
+        "cross_process": {
+          "median_ms": 0.16667298472985426,
+          "mean_ms": 1.5024736851699139,
+          "instructions": 5.5323969849752075e-06
+        },
+        "within_process": {
+          "median_ms": -0.006432541170559025,
+          "mean_ms": -0.002432273151653508
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.025066511710059025,
+              "mean_ms": -0.0538589237274234,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0148375,
+            "mean_ms": 1.9631688687739464,
+            "min_ms": 1.8143600000000002,
+            "max_ms": 2.3225339999999997,
+            "p05_ms": 1.838034,
+            "p95_ms": 2.033066,
+            "counters": {
+              "instructions:u": 47321265830.0,
+              "cycles:u": 9731046441.0,
+              "branches:u": 6622863709.0,
+              "branch-misses:u": 31385625.0,
+              "task-clock:u": 2049.345441,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.02829803430257627,
+              "mean_ms": 0.07469744827868219,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0212095,
+            "mean_ms": 2.0215554865900383,
+            "min_ms": 1.984637,
+            "max_ms": 2.387064,
+            "p05_ms": 2.0093110000000003,
+            "p95_ms": 2.0362129999999996,
+            "counters": {
+              "instructions:u": 47321255551.0,
+              "cycles:u": 10029401171.0,
+              "branches:u": 6622861113.0,
+              "branch-misses:u": 38588062.0,
+              "task-clock:u": 2110.294937,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.001706209936513936,
+              "mean_ms": -0.05737173455113709,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0217,
+            "mean_ms": 2.0227469607279693,
+            "min_ms": 1.978896,
+            "max_ms": 2.885389,
+            "p05_ms": 2.009973,
+            "p95_ms": 2.036924,
+            "counters": {
+              "instructions:u": 47321272120.0,
+              "cycles:u": 10028417995.0,
+              "branches:u": 6622865103.0,
+              "branch-misses:u": 38552044.0,
+              "task-clock:u": 2111.520977,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.011158872404604114,
+              "mean_ms": 0.048994377424116387,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.021074,
+            "mean_ms": 2.0218468295019156,
+            "min_ms": 1.982602,
+            "max_ms": 2.6025739999999997,
+            "p05_ms": 2.009382,
+            "p95_ms": 2.036052,
+            "counters": {
+              "instructions:u": 47321254497.0,
+              "cycles:u": 10028577029.0,
+              "branches:u": 6622860801.0,
+              "branch-misses:u": 38556256.0,
+              "task-clock:u": 2110.57233,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321254497.0,
+            "max": 47321272120.0
+          },
+          "cycles:u": {
+            "min": 9731046441.0,
+            "max": 10029401171.0
+          },
+          "branches:u": {
+            "min": 6622860801.0,
+            "max": 6622865103.0
+          },
+          "branch-misses:u": {
+            "min": 31385625.0,
+            "max": 38588062.0
+          },
+          "task-clock:u": {
+            "min": 2049.345441,
+            "max": 2111.520977
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 12,
+        "directory": "group-12",
+        "cross_process": {
+          "median_ms": -0.051568502780030556,
+          "mean_ms": -0.7089191543480977,
+          "instructions": -4.996697522408056e-06
+        },
+        "within_process": {
+          "median_ms": 0.0030644095192877696,
+          "mean_ms": 0.024484764815718707
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.0245804004352701,
+              "mean_ms": -0.04650543666681051,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0199015,
+            "mean_ms": 2.020691977011494,
+            "min_ms": 1.9814899999999998,
+            "max_ms": 2.474657,
+            "p05_ms": 2.0077990000000003,
+            "p95_ms": 2.0355109999999996,
+            "counters": {
+              "instructions:u": 47321254203.0,
+              "cycles:u": 10026079418.0,
+              "branches:u": 6622860664.0,
+              "branch-misses:u": 38422952.0,
+              "task-clock:u": 2109.397817,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.02378307658571499,
+              "mean_ms": 0.12397225135534207,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.021325,
+            "mean_ms": 2.0221860316091953,
+            "min_ms": 1.976822,
+            "max_ms": 2.999672,
+            "p05_ms": 2.008951,
+            "p95_ms": 2.036352,
+            "counters": {
+              "instructions:u": 47321256732.0,
+              "cycles:u": 10030827203.0,
+              "branches:u": 6622861285.0,
+              "branch-misses:u": 38447402.0,
+              "task-clock:u": 2110.974501,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.02991189562429053,
+              "mean_ms": -0.13538166467966795,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.01872,
+            "mean_ms": 1.9933156772030651,
+            "min_ms": 1.7941719999999999,
+            "max_ms": 2.791875,
+            "p05_ms": 1.839817,
+            "p95_ms": 2.03506,
+            "counters": {
+              "instructions:u": 47321253493.0,
+              "cycles:u": 9883546149.0,
+              "branches:u": 6622860495.0,
+              "branch-misses:u": 35048750.0,
+              "task-clock:u": 2080.822239,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.052309208847978184,
+              "mean_ms": 0.09547496629824792,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0204225,
+            "mean_ms": 2.020901594827586,
+            "min_ms": 1.972564,
+            "max_ms": 2.479565,
+            "p05_ms": 2.007819,
+            "p95_ms": 2.035571,
+            "counters": {
+              "instructions:u": 47321252713.0,
+              "cycles:u": 10024275131.0,
+              "branches:u": 6622860390.0,
+              "branch-misses:u": 38374999.0,
+              "task-clock:u": 2109.612728,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252713.0,
+            "max": 47321256732.0
+          },
+          "cycles:u": {
+            "min": 9883546149.0,
+            "max": 10030827203.0
+          },
+          "branches:u": {
+            "min": 6622860390.0,
+            "max": 6622861285.0
+          },
+          "branch-misses:u": {
+            "min": 35048750.0,
+            "max": 38447402.0
+          },
+          "task-clock:u": {
+            "min": 2080.822239,
+            "max": 2110.974501
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 13,
+        "directory": "group-13",
+        "cross_process": {
+          "median_ms": 0.01758468969574878,
+          "mean_ms": 0.036659774773384335,
+          "instructions": 3.317748076270277e-07
+        },
+        "within_process": {
+          "median_ms": 0.008790552153903342,
+          "mean_ms": 0.010085100856654927
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.06334009999426904,
+              "mean_ms": -0.06351940475383122,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0207585,
+            "mean_ms": 2.021297054597701,
+            "min_ms": 1.983795,
+            "max_ms": 2.410608,
+            "p05_ms": 2.008821,
+            "p95_ms": 2.036362,
+            "counters": {
+              "instructions:u": 47321253858.0,
+              "cycles:u": 10028272328.0,
+              "branches:u": 6622860626.0,
+              "branch-misses:u": 38568865.0,
+              "task-clock:u": 2109.805007,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.015574075246016506,
+              "mean_ms": 0.03761716886192534,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0225315000000004,
+            "mean_ms": 2.0234234865900382,
+            "min_ms": 1.9784440000000003,
+            "max_ms": 2.5091699999999997,
+            "p05_ms": 2.010415,
+            "p95_ms": 2.038195,
+            "counters": {
+              "instructions:u": 47321252360.0,
+              "cycles:u": 10032614443.0,
+              "branches:u": 6622860325.0,
+              "branch-misses:u": 38615920.0,
+              "task-clock:u": 2112.228653,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.023486168130326668,
+              "mean_ms": -0.01744696714861549,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0218499999999997,
+            "mean_ms": 2.0227244923371646,
+            "min_ms": 1.986711,
+            "max_ms": 2.451193,
+            "p05_ms": 2.008861,
+            "p95_ms": 2.037955,
+            "counters": {
+              "instructions:u": 47321253745.0,
+              "cycles:u": 10030622056.0,
+              "branches:u": 6622860652.0,
+              "branch-misses:u": 38569272.0,
+              "task-clock:u": 2111.323281,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.0020070290617901776,
+              "mean_ms": 0.04272689712769839,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.022151,
+            "mean_ms": 2.0234788342911876,
+            "min_ms": 1.989284,
+            "max_ms": 2.3900789999999996,
+            "p05_ms": 2.010434,
+            "p95_ms": 2.037705,
+            "counters": {
+              "instructions:u": 47321252787.0,
+              "cycles:u": 10034274367.0,
+              "branches:u": 6622860422.0,
+              "branch-misses:u": 38604835.0,
+              "task-clock:u": 2112.300749,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252360.0,
+            "max": 47321253858.0
+          },
+          "cycles:u": {
+            "min": 10028272328.0,
+            "max": 10034274367.0
+          },
+          "branches:u": {
+            "min": 6622860325.0,
+            "max": 6622860652.0
+          },
+          "branch-misses:u": {
+            "min": 38568865.0,
+            "max": 38615920.0
+          },
+          "task-clock:u": {
+            "min": 2109.805007,
+            "max": 2112.300749
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 14,
+        "directory": "group-14",
+        "cross_process": {
+          "median_ms": 0.1054883321125466,
+          "mean_ms": 0.053092954779443424,
+          "instructions": -2.9257465561371987e-06
+        },
+        "within_process": {
+          "median_ms": 0.022054908853108568,
+          "mean_ms": 0.033159915136604656
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.019403667243467204,
+              "mean_ms": -0.35296435347638155,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0158094999999996,
+            "mean_ms": 2.0196628706896553,
+            "min_ms": 1.971572,
+            "max_ms": 4.639908,
+            "p05_ms": 2.0035320000000003,
+            "p95_ms": 2.031173,
+            "counters": {
+              "instructions:u": 47321253913.0,
+              "cycles:u": 10001803782.0,
+              "branches:u": 6622860677.0,
+              "branch-misses:u": 38319522.0,
+              "task-clock:u": 2105.72486,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.047907149398151994,
+              "mean_ms": 0.07039102312842438,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.01639,
+            "mean_ms": 2.01756347605364,
+            "min_ms": 1.9802880000000003,
+            "max_ms": 2.548574,
+            "p05_ms": 2.004042,
+            "p95_ms": 2.031854,
+            "counters": {
+              "instructions:u": 47321256811.0,
+              "cycles:u": 10003598576.0,
+              "branches:u": 6622861172.0,
+              "branch-misses:u": 38378097.0,
+              "task-clock:u": 2106.123027,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.0037973316919348576,
+              "mean_ms": -0.004071192855215067,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0192560000000004,
+            "mean_ms": 2.0206041858237547,
+            "min_ms": 1.9772129999999999,
+            "max_ms": 2.475678,
+            "p05_ms": 2.005645,
+            "p95_ms": 2.03511,
+            "counters": {
+              "instructions:u": 47321253480.0,
+              "cycles:u": 10013067152.0,
+              "branches:u": 6622860585.0,
+              "branch-misses:u": 38362067.0,
+              "task-clock:u": 2109.285827,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.06278171281390854,
+              "mean_ms": 0.12287306283473853,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.017197,
+            "mean_ms": 2.018765643678161,
+            "min_ms": 1.971492,
+            "max_ms": 2.617321,
+            "p05_ms": 2.003832,
+            "p95_ms": 2.034329,
+            "counters": {
+              "instructions:u": 47321254475.0,
+              "cycles:u": 10004897306.0,
+              "branches:u": 6622860780.0,
+              "branch-misses:u": 38394640.0,
+              "task-clock:u": 2107.368686,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321253480.0,
+            "max": 47321256811.0
+          },
+          "cycles:u": {
+            "min": 10001803782.0,
+            "max": 10013067152.0
+          },
+          "branches:u": {
+            "min": 6622860585.0,
+            "max": 6622861172.0
+          },
+          "branch-misses:u": {
+            "min": 38319522.0,
+            "max": 38394640.0
+          },
+          "task-clock:u": {
+            "min": 2105.72486,
+            "max": 2109.285827
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 15,
+        "directory": "group-15",
+        "cross_process": {
+          "median_ms": -0.016259759880643543,
+          "mean_ms": 0.22527060382502295,
+          "instructions": -1.4295902017735784e-06
+        },
+        "within_process": {
+          "median_ms": -0.0004974854626416114,
+          "mean_ms": -0.022128691477812934
+        },
+        "distinct_full_slot_records": 1,
+        "distinct_key_hashes": 1,
+        "distinct_relative_key_layouts": 1,
+        "processes": [
+          {
+            "slot": 0,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.004949410834498291,
+              "mean_ms": -0.07387793066596648,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0190105,
+            "mean_ms": 2.0100014013409964,
+            "min_ms": 1.801606,
+            "max_ms": 2.371725,
+            "p05_ms": 1.8516789999999999,
+            "p95_ms": 2.035692,
+            "counters": {
+              "instructions:u": 47321254160.0,
+              "cycles:u": 9968683767.0,
+              "branches:u": 6622860713.0,
+              "branch-misses:u": 37282491.0,
+              "task-clock:u": 2098.214202,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 1,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": -0.04720243665825574,
+              "mean_ms": 0.029620547710340617,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0185645,
+            "mean_ms": 2.019827595785441,
+            "min_ms": 1.9724539999999997,
+            "max_ms": 2.5148219999999997,
+            "p05_ms": 2.006336,
+            "p95_ms": 2.033847,
+            "counters": {
+              "instructions:u": 47321252731.0,
+              "cycles:u": 10019371826.0,
+              "branches:u": 6622860405.0,
+              "branch-misses:u": 38519618.0,
+              "task-clock:u": 2108.266895,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 2,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.003954439909215068,
+              "mean_ms": -0.07939641162630906,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0179085,
+            "mean_ms": 2.0186806925287355,
+            "min_ms": 1.9754490000000002,
+            "max_ms": 2.4295430000000002,
+            "p05_ms": 2.005726,
+            "p95_ms": 2.0326049999999998,
+            "counters": {
+              "instructions:u": 47321252668.0,
+              "cycles:u": 10011625953.0,
+              "branches:u": 6622860405.0,
+              "branch-misses:u": 38637645.0,
+              "task-clock:u": 2107.287439,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          },
+          {
+            "slot": 3,
+            "samples": 1044,
+            "within_process": {
+              "median_ms": 0.011194503126632505,
+              "mean_ms": 0.1035168838555256,
+              "label_a_samples": 522,
+              "label_b_samples": 522
+            },
+            "median_ms": 2.0190099999999997,
+            "mean_ms": 2.0202263247126435,
+            "min_ms": 1.978685,
+            "max_ms": 2.559344,
+            "p05_ms": 2.006286,
+            "p95_ms": 2.034449,
+            "counters": {
+              "instructions:u": 47321252870.0,
+              "cycles:u": 10022313806.0,
+              "branches:u": 6622860421.0,
+              "branch-misses:u": 38571702.0,
+              "task-clock:u": 2108.932953,
+              "context-switches:u": 0.0,
+              "cpu-migrations:u": 0.0,
+              "page-faults:u": 0.0
+            }
+          }
+        ],
+        "counter_ranges": {
+          "instructions:u": {
+            "min": 47321252668.0,
+            "max": 47321254160.0
+          },
+          "cycles:u": {
+            "min": 9968683767.0,
+            "max": 10022313806.0
+          },
+          "branches:u": {
+            "min": 6622860405.0,
+            "max": 6622860713.0
+          },
+          "branch-misses:u": {
+            "min": 37282491.0,
+            "max": 38637645.0
+          },
+          "task-clock:u": {
+            "min": 2098.214202,
+            "max": 2108.932953
+          },
+          "context-switches:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "cpu-migrations:u": {
+            "min": 0.0,
+            "max": 0.0
+          },
+          "page-faults:u": {
+            "min": 0.0,
+            "max": 0.0
+          }
+        }
+      }
+    ],
+    "processes": 64,
+    "timed_executions": 66816,
+    "retained_tables_per_process": 1,
+    "groups_with_matching_full_slot_records": 16,
+    "groups_with_matching_key_hashes": 16,
+    "scope": "Same-executable native-expression controls. Counter totals are per execution phase, not per within-process timing label. No candidate/original or production speedup estimate."
+  },
+  "source": {
+    "only_benchmark_source_changed": true,
+    "native_filter_and_cold_trace_unchanged": true,
+    "same_hash_set_implementation_and_equality_result": true,
+    "same_resolver_release_intervention": true,
+    "same_type_inference": true,
+    "same_features_profiles_and_lock": true,
+    "binary_sha256": "53188df1f51f04b0118caa4d40acea7b0e39f004a225a362bea5c364b32ee0a8",
+    "reference_binary_sha256": "920c5a679e5647e4e76a0e81827d7ee3cc0bf68fa45e563cee7ee32ddea24043"
+  },
+  "source_audit": {
+    "standalone_source": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/examples/native_in_bench.rs",
+      "sha256": "5f00c55f43832e9ea7af26357437fb84812af0ee4c185a5deca09070c80d5154"
+    },
+    "native_source_comparison": {
+      "only_benchmark_source_changed": true,
+      "native_filter_and_cold_trace_unchanged": true,
+      "same_hash_set_implementation_and_equality_result": true,
+      "same_resolver_release_intervention": true,
+      "same_type_inference": true,
+      "same_features_profiles_and_lock": true,
+      "binary_sha256": "53188df1f51f04b0118caa4d40acea7b0e39f004a225a362bea5c364b32ee0a8",
+      "reference_binary_sha256": "920c5a679e5647e4e76a0e81827d7ee3cc0bf68fa45e563cee7ee32ddea24043"
+    },
+    "execution_path": "Synchronous main constructs InListExpr from a Float64 array and calls PhysicalExpr::evaluate on pre-normalized RecordBatches. The 128-member list bypasses the native short-list path and reaches Float64StaticFilter::contains. There is no SessionContext, SQL parser, logical planner, execution-plan scheduler or Tokio runtime in this program.",
+    "build_scope": "The existing experiment workspace and frozen override inputs are reused, compiling the new example temporarily in the decimal_bench target slot. Unused workspace dependencies may be built; the example does not call their SQL/Sail entrypoints. Shared sources and executable slots were restored and hash-checked.",
+    "validation": "Every output row is checked before and after measurement. Normalized input is checked with an independently reconstructed ordered 64-bit fingerprint and seven exact special-value bit patterns; the fingerprint is finite, not a collision-free comparison of every input row. The frozen SQL case supplies the expected 994522 matching rows in both ANSI settings.",
+    "measurement_scope": "One retained table and 128 input batches per process. Arrow add-zero normalization, table construction, validation and output serialization are outside the measured phase. Per-phase perf counters include the FIFO handshake and timing-loop overhead.",
+    "wording_correction": "Post-collection clarification only: the initial source audit and frozen verification stdout overstate the input check as every input bit. Their original contents are retained; the check implementation and measured data are unchanged."
+  },
+  "restoration": {
+    "sources": {
+      "math.rs": "c4befca6320e36532f3e87091622e0b91ecfa59e841646f98af91f704c84846f",
+      "lateral.rs": "3a46aea3b3c2af3e500dbfac0cc6999da1cf60d4a99bed9c6b02b789a5bf1020",
+      "cast.rs": "b09ae115b792491460b3ba5fcd60faea4bc1bfd59f60690618063f5cb0d855b3",
+      "common.rs": "41cef0bc27bc314a5ab03ca682acd76448c1780808f5b943722ba85e04af8fc5",
+      "function-Cargo.toml": "0e70f011d3aaabce73b5df5f12bb9e547936a6769cff09099fe5e37641b878a7",
+      "scalar-mod.rs": "68c06852a9272ae5c480298c0f4e2c725753bf028a5da6e629fad49a93231925",
+      "Cargo.lock": "e0970eb4c47224ccf8d0e9be9d2a57b25db09316fed780d5533598f519ab0584",
+      "decimal_bench.rs": "61f32e9a0cf89b4f06b8f579fb3af8a6003f35088b9cdcbe8abd548ef6cb4e3f",
+      "string-cast.rs": null,
+      "float-cast.rs": null,
+      "lib.rs": "abf6ed0652f1b3ee7b66bf77313fa56f1fd292a2f48168550c1022335c654a8d",
+      "main.rs": "8609b17aab37b9a84cde88767cacecc267d170048574636d6516300eea47d359",
+      "decimal_probe.rs": "f43728209ba28c00296d5f4789d4a66db06798c398f34f3558ae3944d0322d8f",
+      "decimal-null.rs": null,
+      "function-mod.rs": "2ce9c566265102724d44f5e2f2822d5d82c03e71e1eec907d50e425becbedae2",
+      "function-scalar-mod.rs": "b5546d8cd9f41cb1a5bddb3d9102f9618abe7e1ef65746d3946af86b4d973e26",
+      "delta_lifecycle.rs": "b7b7d860da8f0bf0e9068f2616c74f1ae744d9677a08194b3a5eedcdfe99927d",
+      "resolver-subquery.rs": "aff16f461317fa52a382a2d61d804d45bea4341d7581a536f22bec480879bf5d",
+      "analyzer-expression.rs": "c5566a6b118560afeca8020acea0095507000a1956051a0f4c1450c291e66eef",
+      "analyzer-parser.rs": "dd81c91ec888151ebafc7d979b50b33180f825211b4568e2de9ba50738271f42",
+      "math-mod.rs": "45b56693f3dde83b0ed3b535b3d81a26a63917db92106f4ecde8cfeee2ab2236",
+      "decimal-utils.rs": "847f4c18277429a79ae9dcf2da2f5cdecac066f71fa67909cae9f0c99a2189db",
+      "decimal-round.rs": null,
+      "conditional.rs": "cf09fc67b0e567668b037a6ee19ab1f166134e0fa067859269983c2e3f739fb0",
+      "small-int-divide.rs": null,
+      "resolver-predicate.rs": "ac785ea9d466f3b50f920aeac31b0be0b243f99bc7e63050e796c38caec8e1b8",
+      "function-predicate.rs": "499f472fda6be201451cef2dab3380d7b602a578fa0ce49c91364a26df0df180",
+      "arrow-mod": "a2b54e3369b6a8bf4bfd46f886720050b94a978c61d0004b33d276932fb0936f",
+      "arrow-decimal": "691d21c85206190f0dd49f5f9a5ef31de7065917780d4c9c3d156bc11a8d5549",
+      "join-selection": "77f99aa2b07b8d20e2de1c0114bf0eff6b1c7495e1923b8308a123812f044219",
+      "unwrap-cast": "0a1b250391180380b5722c2e9e31757c8850c3a392c87912d50e313143389012",
+      "expr-simplifier": "d5a4d4a8ee6e146e616e312e447d30429949b4501b9f45e7979bba14ef57937b",
+      "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+      "decorrelate": "c18f2fd4e6e3c8d20fc3e6070a72c43aa1dc0b517cbf17cb4731734be2651735",
+      "nested-loop": "59b7efeb63dedf071bc8b9f45a39d480c8f8cca62a4702a3f3f670b8a2444967",
+      "physical-test-lock": null,
+      "parser-keywords": null,
+      "native-in-list": "310aaf3b97f83bc70bcbf6bffbed44b4fc500027a4d8202aa487f78fedae6d24",
+      "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+      "native-primitive-filter": "dea083ca4f3208434559a353ac70e73e12cc3f617a8b3b2bf66761b92097353c",
+      "native-strategy": "bc43719e31a52563dd07c5b0dac98a620491d87d6fe2aaf7a88aa86f18b441ac",
+      "native-array-filter": "12259bb4c45fd7f57696efc4c6227fab5a69cbabe9f89e2b6a7a03e2e9589040",
+      "native-case": "470894816b7dfce4f995b0b3537349ea8b2962ecc199a798575ce2090253dc62",
+      "expr-common": "f514c989af51ca89d3fb6d3b14971807e9deffaa4227f8a715aee49e6c9c0c3a",
+      "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+      "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+      "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+      "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+      "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+      "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+      "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+      "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca"
+    },
+    "executables": {
+      "bench": "41142f9ec9341118f514984c0f690ea9a611aac6b180a26fc0c30329711257bb",
+      "probe": "340658fe8d3f6fcefae60fe38affd1b15d0bc89e5b8888ea2188d7e43fa81155",
+      "runner": "622a12a937afbf5c2a4f26a34e0606ef89a8c5d4dcc3dcbced6f4b6526a1ce5e"
+    }
+  },
+  "references": {
+    "float-type-table-slots-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-table-slots-results.json",
+      "sha256": "a16a1fea630d5b69fa0f2e909d129bc6e78e862bafad6cf53a9bb8cc9e9cc0fb"
+    },
+    "float-type-table-slots-runs.json.gz": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-table-slots-runs.json.gz",
+      "sha256": "b479362b807d09078827f9b4562823ee66849275afd0b3a6c8ecd3a5d95b4e4a"
+    },
+    "float-type-branch-time-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-branch-time-results.json",
+      "sha256": "a92dc974ce83b4d6ac44b5ef806c72f46136a034002d7d078a2a923eb275e6cb"
+    },
+    "prepared_phase_schedule.py": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/prepared_phase_schedule.py",
+      "sha256": "aff18f43111b6a396fd042fc193722b790cfefc1765541bb23f74a4306cc11eb"
+    }
+  },
+  "raw_data": {
+    "file": "float-type-native-in-runs.json.gz",
+    "sha256": "c9a502ca581bd6151151f3785b319ff36e776a0cd37cf8f95a167d17fcaa0eb6",
+    "uncompressed_sha256": "68653793283c511fb01186546eefc666a0bf22fae004a49c71cf3937b9044b85",
+    "compressed_bytes": 694565,
+    "uncompressed_bytes": 4265225
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-native-in-176b1b7",
+    "commands": [
+      "python3 build-trace.py",
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 analyze.py",
+      "python3 record.py"
+    ],
+    "setup": "Reuse the frozen table-slot diagnostic dependencies and lockfile, replacing only the benchmark source with examples/native_in_bench.rs. The recorded build temporarily uses the decimal_bench target slot; the build script restores shared files and executable slots in finally. Keep the fully crossed schedule, seeds and criteria fixed before collection. The standalone native_in_bench example also runs against the normal experiment dependencies, without reproducing these exact diagnostic identities.",
+    "offline_check": "Extract scripts[\"check-archive.py\"] from the gzip JSON to a temporary file, then run python3 CHECK.py /path/to/float-type-native-in-results.json."
+  }
+}
