@@ -1,0 +1,224 @@
+--- a/datafusion-physical-expr/src/expressions/in_list/primitive_filter.rs
++++ b/datafusion-physical-expr/src/expressions/in_list/primitive_filter.rs
+@@ -131,6 +131,42 @@
+         }
+ 
+         impl StaticFilter for $Name {
++
++            #[inline(never)]
++            fn diagnostic_collect_into(&self, v: &dyn Array, output: &mut Vec<u64>) -> Result<()> {
++                let v = v.as_primitive_opt::<$ArrowType>()
++                    .ok_or_else(|| exec_datafusion_err!("diagnostic packing requires primitive input"))?;
++                let needle_values = v.values();
++                let len = needle_values.len();
++                if self.null_count != 0 || v.null_count() != 0 {
++                    return Err(exec_datafusion_err!("diagnostic packing requires non-null input and members"));
++                }
++                if output.capacity() < len.div_ceil(64) {
++                    return Err(exec_datafusion_err!("diagnostic output capacity is too small"));
++                }
++                output.clear();
++                // Arrow 58.4 MutableBuffer::collect_bool packing, writing into the supplied Vec.
++                // Both fresh and reused buffers call this same non-inlined implementation.
++                let chunks = len / 64;
++                let remainder = len % 64;
++                output.extend((0..chunks).map(|chunk| {
++                    let mut packed = 0;
++                    for bit_idx in 0..64 {
++                        let i = bit_idx + chunk * 64;
++                        packed |= (self.values.contains(&($to_set_value)(needle_values[i])) as u64) << bit_idx;
++                    }
++                    packed
++                }));
++                if remainder != 0 {
++                    let mut packed = 0;
++                    for bit_idx in 0..remainder {
++                        let i = bit_idx + chunks * 64;
++                        packed |= (self.values.contains(&($to_set_value)(needle_values[i])) as u64) << bit_idx;
++                    }
++                    output.push(packed);
++                }
++                Ok(())
++            }
+             fn null_count(&self) -> usize {
+                 self.null_count
+             }
+--- a/datafusion-physical-expr/src/expressions/in_list/static_filter.rs
++++ b/datafusion-physical-expr/src/expressions/in_list/static_filter.rs
+@@ -34,4 +34,9 @@
+     /// haystack. `v` may be dictionary-encoded, in which case the
+     /// implementation unwraps the dictionary and operates on its values.
+     fn contains(&self, v: &dyn Array, negated: bool) -> Result<BooleanArray>;
++
++    // ponytail: diagnostic primitive, non-null positive IN only; use contains otherwise.
++    fn diagnostic_collect_into(&self, _v: &dyn Array, _output: &mut Vec<u64>) -> Result<()> {
++        datafusion_common::exec_err!("diagnostic packing requires a primitive static filter")
++    }
+ }
+--- a/datafusion-physical-expr/src/expressions/in_list.rs
++++ b/datafusion-physical-expr/src/expressions/in_list.rs
+@@ -141,6 +141,19 @@
+ }
+ 
+ impl InListExpr {
++
++    /// Diagnostic only: evaluate positive, non-null primitive IN into existing words.
++    #[doc(hidden)]
++    pub fn diagnostic_collect_into(&self, batch: &RecordBatch, output: &mut Vec<u64>) -> Result<()> {
++        if self.negated {
++            return exec_err!("diagnostic packing does not support NOT IN");
++        }
++        let values = self.expr.evaluate(batch)?.into_array(batch.num_rows())?;
++        match &self.static_filter {
++            Some(filter) => filter.diagnostic_collect_into(values.as_ref(), output),
++            None => exec_err!("diagnostic packing requires a static filter"),
++        }
++    }
+     /// Create a new InList expression
+     fn new(
+         expr: Arc<dyn PhysicalExpr>,
+--- a/experiments/spark-sql/examples/native_in_bench.rs
++++ b/experiments/spark-sql/examples/native_in_bench.rs
+@@ -67,9 +67,88 @@
+     Ok(value)
+ }
+ 
+-fn execute(expr: &dyn PhysicalExpr, batches: &[RecordBatch]) -> Result<()> {
++fn execute(
++    expr: &InListExpr,
++    batches: &[RecordBatch],
++    buffer_mode: u8,
++    output: &mut Vec<u64>,
++) -> Result<()> {
++    match buffer_mode {
++        0 => {
++            for batch in batches {
++                black_box(expr.evaluate(black_box(batch))?);
++            }
++        }
++        1 => {
++            for batch in batches {
++                let mut fresh = Vec::with_capacity(batch.num_rows().div_ceil(64));
++                expr.diagnostic_collect_into(black_box(batch), &mut fresh)?;
++                black_box(&fresh);
++            }
++        }
++        2 => {
++            for batch in batches {
++                expr.diagnostic_collect_into(black_box(batch), output)?;
++                black_box(&*output);
++            }
++        }
++        _ => unreachable!(),
++    }
++    Ok(())
++}
++
++fn validate_packed(
++    expr: &InListExpr,
++    batches: &[RecordBatch],
++    output: &mut Vec<u64>,
++) -> Result<()> {
++    let pointer = output.as_ptr();
++    let capacity = output.capacity();
+     for batch in batches {
+-        black_box(expr.evaluate(black_box(batch))?);
++        output.resize(capacity, u64::MAX);
++        output.fill(u64::MAX);
++        expr.diagnostic_collect_into(batch, output)?;
++        let native = expr.evaluate(batch)?.into_array(batch.num_rows())?;
++        let native = native
++            .as_any()
++            .downcast_ref::<arrow::array::BooleanArray>()
++            .unwrap();
++        assert_eq!(output.len(), batch.num_rows().div_ceil(64));
++        assert_eq!(output.as_ptr(), pointer);
++        assert_eq!(output.capacity(), capacity);
++        for i in 0..batch.num_rows() {
++            assert_eq!((output[i / 64] >> (i % 64)) & 1 != 0, native.value(i));
++        }
++        let remainder = batch.num_rows() % 64;
++        if remainder != 0 {
++            assert_eq!(output.last().unwrap() >> remainder, 0);
++        }
++    }
++    Ok(())
++}
++
++fn check_edges(expr: &InListExpr, batch: &RecordBatch, output: &mut Vec<u64>) -> Result<()> {
++    for rows in [0, 1, 63, 64, 65, 127, 128, 129, BATCH_SIZE] {
++        validate_packed(expr, &[batch.slice(0, rows)], output)?;
++    }
++    assert!(
++        expr.diagnostic_collect_into(batch, &mut Vec::new())
++            .is_err()
++    );
++    let schema = Arc::new(Schema::new(vec![Field::new("v", DataType::Float64, true)]));
++    let nullable = RecordBatch::try_new(
++        Arc::clone(&schema),
++        vec![Arc::new(Float64Array::from(vec![Some(1.), None]))],
++    )?;
++    assert!(expr.diagnostic_collect_into(&nullable, output).is_err());
++    for (members, negated) in [(vec![Some(1.), None], false), (vec![Some(1.)], true)] {
++        let other = InListExpr::try_new_from_array(
++            Arc::new(Column::new("v", 0)),
++            Arc::new(Float64Array::from(members)),
++            negated,
++            &schema,
++        )?;
++        assert!(other.diagnostic_collect_into(batch, output).is_err());
+     }
+     Ok(())
+ }
+@@ -99,8 +178,14 @@
+ 
+ fn main() -> Result<()> {
+     let args = std::env::args().collect::<Vec<_>>();
+-    if args.len() != 3 || !matches!(args[2].as_str(), "check" | "measure") {
+-        return Err("usage: native_in_bench OUTPUT.json check|measure".into());
++    if args.len() != 3 || !matches!(args[2].as_str(), "check" | "measure" | "edges") {
++        return Err("usage: native_in_bench OUTPUT.json check|measure|edges".into());
++    }
++    let buffer_mode: u8 = std::env::var("DECIMAL_BENCH_IN_BUFFER_MODE")
++        .unwrap_or_else(|_| "0".into())
++        .parse()?;
++    if buffer_mode > 2 {
++        return Err("invalid buffer mode".into());
+     }
+     let warmups = positive_setting("DECIMAL_BENCH_IN_WARMUPS", 32)?;
+     let quartets = positive_setting("DECIMAL_BENCH_IN_SAMPLES", 261)?;
+@@ -135,25 +220,31 @@
+         InListExpr::try_new_from_array(Arc::new(Column::new("v", 0)), members, false, &schema)?;
+     let expression = expr.to_string();
+     assert!(expression.contains("IN (SET)"));
++    let mut output = Vec::with_capacity(BATCH_SIZE.div_ceil(64));
+     let matching = validate(&expr, &batches)?;
++    validate_packed(&expr, &batches, &mut output)?;
++    if args[2] == "edges" {
++        check_edges(&expr, &batches[0], &mut output)?;
++    }
+     let mut samples_ms = Vec::with_capacity(if args[2] == "measure" { executions } else { 0 });
+     if args[2] == "measure" {
+         for _ in 0..warmups {
+-            execute(&expr, &batches)?;
++            execute(&expr, &batches, buffer_mode, &mut output)?;
+         }
+         perf_command(b"enable\n")?;
+         for _ in 0..executions {
+             let start = Instant::now();
+-            execute(&expr, &batches)?;
++            execute(&expr, &batches, buffer_mode, &mut output)?;
+             samples_ms.push(start.elapsed().as_secs_f64() * 1000.0);
+         }
+         perf_command(b"disable\n")?;
+         assert_eq!(validate(&expr, &batches)?, matching);
++        validate_packed(&expr, &batches, &mut output)?;
+     }
+     fs::write(
+         &args[1],
+         serde_json::to_vec_pretty(&serde_json::json!({
+-            "mode": args[2], "rows": ROWS, "batch_size": BATCH_SIZE,
++            "mode": args[2], "buffer_mode": buffer_mode, "rows": ROWS, "batch_size": BATCH_SIZE,
+             "members": MEMBERS, "input_domain": 97, "matching_inputs": matching,
+             "input_permutation": "(position * 4099 + 17) % rows",
+             "normalized_input_fingerprint": format!("{fingerprint:016x}"),

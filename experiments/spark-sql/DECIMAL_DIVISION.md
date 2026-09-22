@@ -4367,6 +4367,31 @@ cargo run --release --locked --manifest-path experiments/spark-sql/Cargo.toml \
 
 Reproducing the recorded diagnostic build requires the frozen dependency overrides and build scripts in the archive. This smaller executable has different code layout and omits normalization from timing, so its absolute speed is not a production improvement. The original positive release interval remains unresolved, and the optional type-inference patch remains unadopted.
 
+## Reusing IN result storage
+
+The [buffer-reuse diagnostic](float-type-buffer-reuse-results.json) still shows cross-process variation when each process reuses one preallocated output buffer. Reuse groups 20, 45 and 32 have median-based self-control changes of -2.6284%, -2.4000% and -7.0813%. Per-batch result buffer allocation and deallocation are therefore not necessary for this observation.
+
+One executable retains the original native path and adds two diagnostic modes: allocate a fresh `Vec<u64>` for each batch, or reuse the same vector. Both diagnostic modes call one non-inlined filter method using the actual native HashSet, hasher and equality implementation. Its packing loop comes from Arrow 58.4 `MutableBuffer::collect_bool`. A capacity guard and `clear` allow every result word to be rewritten without growing the reused vector. Symbol inspection retains the shared method and its compiler-outlined lookup loop. Both modes omit native BooleanArray/Arc wrapping, so their absolute times are not an allocation-only comparison with the original path.
+
+The fixed collection repeats the preceding fully crossed schedule for each mode, interleaving their order. All 48 groups, 192 processes and 200,448 timed executions are retained. Each process uses 32 warmups and 1,044 executions. All 24,576 occupied table-slot records match within their groups. Cross-process controls use the unchanged whole-group bootstrap and require both intervals to include zero and remain inside +/-1%:
+
+| Mode | Seed index | Median-based change, 95% interval | Mean-based change, 95% interval | Pass |
+| --- | ---: | ---: | ---: | --- |
+| Native | 0 | -0.0056% [-0.1271%, +0.1500%] | -0.0621% [-0.4100%, +0.4314%] | Yes |
+| Native | 4 | +0.0094% [-0.1099%, +0.0466%] | +0.0766% [-0.1323%, +0.2304%] | Yes |
+| Fresh buffer | 0 | +0.1465% [-0.0218%, +1.5056%] | +0.6231% [+0.1433%, +1.3296%] | No |
+| Fresh buffer | 4 | -0.0367% [-0.0642%, -0.0094%] | -0.0510% [-0.1263%, -0.0108%] | No |
+| Reused buffer | 0 | +0.0058% [-1.3700%, +0.1411%] | +0.1244% [-1.0365%, +0.4308%] | No |
+| Reused buffer | 4 | -0.0312% [-0.6443%, +0.0186%] | -0.2981% [-0.4104%, -0.1520%] | No |
+
+Both reused-buffer strata pass within-process controls. Native within-process mean intervals and fresh-buffer seed 0's mean interval exclude zero; those failures also remain recorded. A descriptive counter check finds that reused-buffer group 20 spans only 637 instructions out of about 47.35 billion, while branch misses range from 16,256,976 to 27,474,035. Counters cover entire execution phases and do not identify the responsible branch or a hardware cause.
+
+Before and after each phase, validation checks every native Boolean result against the scalar expectation and every packed bit against the native result. It also checks the reused pointer/capacity and unused tail bits. Tests cover nine lengths from zero through 8,192, insufficient capacity, NULL input/members and NOT IN rejection, plus seven invalid CLI/settings cases. All 24 smoke processes pass. No new full SQL or Spark corpus run is counted.
+
+The optional [diagnostic patch](native-in-buffer-reuse.patch) targets the preceding diagnostic DataFusion sources and benchmark. It is not applied to the default runtime. The [raw archive](float-type-buffer-reuse-runs.json.gz) includes the exact compiled sources, patch, disassembly, frozen scripts, every observation and two corrected preparation errors: a relative archive-script path and a symbol matcher that also selected an outlined closure. No build or collection group failed or was discarded. Shared files and global settings remain unchanged. The archived `check-archive.py` reconstructs the complete analysis without benchmarking.
+
+Result writes, Boolean packing and lookup remain in the reused-buffer path, and rebuilding changes code layout. These results narrow the investigation without resolving the original positive release interval. The optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
