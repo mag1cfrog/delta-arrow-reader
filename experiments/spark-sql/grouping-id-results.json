@@ -1,0 +1,1615 @@
+{
+  "slice": "Expose semantic GROUPING_ID bits",
+  "parent_commit": "19705f2",
+  "status": "optional Rust planner patch; default vendor unchanged",
+  "protocol": {
+    "queries": 72,
+    "observations": 144,
+    "cases_sha256": "2600af8b25daf66b41be4e90c0e1eea604f66d2f428c07744d0564b410f0595b",
+    "frozen_before_implementation": true,
+    "reference": "Spark 4.2.0 in both ANSI modes",
+    "scope": "Expose semantic GROUPING_ID bits while preserving duplicate grouping-set rows; test unsigned storage widths, signed BIGINT output, NULL, empty input and HAVING.",
+    "boundary": "64 columns plus duplicates can exceed DataFusion internal grouping ID capacity; preserve explicit failures rather than silently deduplicating.",
+    "parent_commit": "19705f2"
+  },
+  "supplemental_protocol": {
+    "why": "Add several positive and negative 64-bit bitmap patterns beyond zero and all-ones.",
+    "frozen_before_implementation": false,
+    "frozen_before_first_candidate_capture": true,
+    "queries": 1,
+    "observations": 2,
+    "cases_sha256": "f4f21e105ded7cf45d8b634af2f321ff091a146816b11c1f6f36c976ffbd442a"
+  },
+  "combinations_protocol": {
+    "frozen_before_implementation": false,
+    "added_after_initial_candidate_capture": true,
+    "why": "Review actual grouping-key count for cross-products and repeated grouping expressions; keep the original 72-query corpus and 64-bit supplement unchanged.",
+    "queries": 6,
+    "observations": 12,
+    "cases_sha256": "f3a411b4098e489a24f39ea2b8d1affbfd1ac4f434d71fd01c5badf01066bd9c"
+  },
+  "implementation": {
+    "files_changed": [
+      "resolver-aggregate.rs"
+    ],
+    "rule": "Mask duplicate ordinals out of the public ID while preserving duplicate result rows. Map full-width unsigned patterns to signed BIGINT with range-safe native CASE expressions. Deduplicate shared grouping-key metadata in first-appearance order for projection, HAVING and ORDER BY rewriting.",
+    "reuse": "Existing native bitwise expressions, CASE and casts; stdlib HashSet for metadata. No new execution node, dependency or Python runtime path."
+  },
+  "correctness": {
+    "counts_before_after_total": {
+      "new": [
+        28,
+        128,
+        144
+      ],
+      "supplement": [
+        0,
+        2,
+        2
+      ],
+      "combinations": [
+        2,
+        8,
+        12
+      ],
+      "grouping": [
+        132,
+        136,
+        160
+      ],
+      "grouping-supplement": [
+        32,
+        32,
+        40
+      ],
+      "qualified": [
+        228,
+        228,
+        230
+      ],
+      "order": [
+        16,
+        16,
+        16
+      ],
+      "using": [
+        156,
+        156,
+        158
+      ],
+      "narrow": [
+        62,
+        62,
+        62
+      ],
+      "ansi": [
+        344,
+        344,
+        344
+      ],
+      "zero": [
+        256,
+        256,
+        256
+      ]
+    },
+    "existing_agreement": {
+      "before": 5753,
+      "after": 5753,
+      "total": 6068
+    },
+    "newly_recorded_corpora_have_no_regressions": true,
+    "existing_actual_field_changes": {
+      "cast": [
+        {
+          "id": "string_values_batch4_true",
+          "fields": [
+            "error"
+          ]
+        }
+      ],
+      "string": [
+        {
+          "id": "max_integer_cast_batch4_true",
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "id": "unicode_cast_batch4_true",
+          "fields": [
+            "error"
+          ]
+        }
+      ],
+      "unicode": [
+        {
+          "id": "supplementary_digits_cast_batch4_true",
+          "fields": [
+            "error"
+          ]
+        },
+        {
+          "id": "round_overflow_cast_batch1_true",
+          "fields": [
+            "error"
+          ]
+        }
+      ]
+    },
+    "benchmark_checks": {
+      "generic": {
+        "count": 74,
+        "changed": []
+      },
+      "subqueries": {
+        "count": 150,
+        "changed": [
+          {
+            "id": "group_id_integer_ansitrue",
+            "fields": [
+              "physical_plan"
+            ]
+          },
+          {
+            "id": "group_id_integer_ansifalse",
+            "fields": [
+              "physical_plan"
+            ]
+          }
+        ]
+      }
+    },
+    "planner_tests": 33,
+    "runner_tests": 28,
+    "delta_lifecycle_tests_in_runner": 4,
+    "rust_unit_coverage": "Both ANSI modes, signed 64-bit IDs, duplicate sets at storage-width boundaries, zero grouping keys, mixed ROLLUP and empty-input grand totals. Verify values, names, types and row multiplicity.",
+    "delta_parent_comparison": {
+      "reference": {
+        "distribution": "vendored-sail",
+        "version": "0.7.1"
+      },
+      "summary": {
+        "match": 116
+      },
+      "input_schema_match": true,
+      "input_rows_match": true,
+      "cases": [
+        {
+          "id": "spark_null_order",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "databricks_ifnull",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_integer_division",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_concat_null",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_date_format",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_date_add",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_null_safe_equal",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_array_element",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "spark_try_cast",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_filter_projection",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_group",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_cte",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_self_join",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_window",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_column_semantics",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_date_function",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "duplicate_names",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "qualified_table",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "unknown_function",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "reject_ddl",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "reject_time_travel",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "sail_range_extension",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "sail_partition_id",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "sail_sort_within_partitions",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_wildcard",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "delta_star_except",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "reject_wildcard_replace",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_comments_quotes",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_escaped_identifier",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_case_insensitive",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_case_sensitive",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_qualified_wildcard",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_cte_shadow",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "names_cte_reuse",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_left_unmatched",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_semi",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_anti",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_duplicate_keys",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_null_keys",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_null_safe_keys",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "joins_cross",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_union_all",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_union_distinct",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_intersect",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_except",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_correlated_exists",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_scalar_subquery",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_correlated_scalar",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_subquery_multirow_error",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "relational_empty_projection",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_empty",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_all_null",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_distinct_having",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_count_if",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_collect_list",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "aggregation_ordered_first",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "windows_rank_ties",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "windows_lag",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "windows_rows_frame",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "windows_range_frame",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "ordering_nulls_desc",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "ordering_explicit_nulls",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "ordering_limit_zero",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_negative_div_mod",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_zero_div_ansi",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_zero_div_legacy",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_overflow_ansi",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_overflow_legacy",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_decimal_division",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_decimal_rounding",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "arithmetic_decimal_overflow",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "casts_invalid_column",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "casts_try_column",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "casts_fraction_to_int",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "casts_invalid_boolean",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_three_valued",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_not_in_null",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_in_subquery",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_conditionals",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nulls_concat_ws",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_unicode",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_like",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_regexp",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_trim_case_column",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "strings_binary",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_column_boundary",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_invalid_date",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_try_date",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_format_tokens",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_timestamp_precision",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_timestamp_ltz",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_dst_gap",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "dates_dst_overlap",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_negative_index",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_zero_index",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_out_of_range_ansi",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_out_of_range_legacy",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_columns",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_explode",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_outer_explode",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "nested_null_array",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "extensions_range_step",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "extensions_monotonic_id",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_empty",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_malformed",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_unknown_table",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_unknown_column",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "errors_ambiguous",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_multi_statement",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_insert",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_delete",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_copy",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_set",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_format_path",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_sample",
+          "status": "match",
+          "differences": []
+        },
+        {
+          "id": "excluded_python_udf",
+          "status": "match",
+          "differences": []
+        }
+      ]
+    },
+    "delta_spark_summaries": {
+      "before": {
+        "match": 47,
+        "difference": 58,
+        "pending_host_adapter": 11
+      },
+      "after": {
+        "match": 47,
+        "difference": 58,
+        "pending_host_adapter": 11
+      }
+    },
+    "remaining_new_observations": {
+      "new": [
+        "keys_63_three_copies_true",
+        "keys_63_three_copies_false",
+        "keys_64_duplicate_full_true",
+        "keys_64_duplicate_full_false",
+        "keys_64_duplicate_empty_true",
+        "keys_64_duplicate_empty_false",
+        "keys_64_three_copies_true",
+        "keys_64_three_copies_false",
+        "keys_64_mixed_true",
+        "keys_64_mixed_false",
+        "empty_input_1_true",
+        "empty_input_1_false",
+        "empty_input_2_true",
+        "empty_input_2_false",
+        "empty_input_8_true",
+        "empty_input_8_false"
+      ],
+      "supplement": [],
+      "combinations": [
+        "repeated_rollup_key_true",
+        "repeated_rollup_key_false",
+        "nested_sets_true",
+        "nested_sets_false"
+      ]
+    },
+    "empty_input_semantic_policy": {
+      "observations": 6,
+      "expected": "Two grand-total rows, each with zero count and the semantic missing-key bitmask.",
+      "passed": true,
+      "spark_4_2_rows": [],
+      "policy": "Retain correct SQL semantics as authorized by the user.",
+      "source": "https://www.postgresql.org/docs/18/queries-table-expressions.html#QUERIES-GROUPING-SETS"
+    }
+  },
+  "iterations": {
+    "attempt_00": {
+      "source": "attempt-00/candidate-resolver-aggregate.rs",
+      "new_agreement": [
+        128,
+        144
+      ],
+      "supplement_agreement": [
+        2,
+        2
+      ],
+      "combinations_agreement": [
+        4,
+        12
+      ],
+      "reason_for_revision": "The supplemental cross-product queries exposed duplicate keys in Sail grouping-function metadata. Retain first-appearance order while removing duplicate metadata entries.",
+      "all_original_builds_and_captures_retained": true
+    },
+    "final_candidate": "candidate-resolver-aggregate.rs",
+    "validation_scope": "The original 72-query corpus was frozen before implementation; the signed-bit supplement preceded initial candidate capture; the six combination queries were added afterward."
+  },
+  "performance_protocol": {
+    "purpose": "Measure GROUPING_ID semantic-bit masking on an already-correct nonduplicate ROLLUP. Preserve identical values and native input work; keep ordinary grouping and projection controls.",
+    "targets": [
+      "group_id_integer_ansitrue"
+    ],
+    "unchanged_controls": [
+      "group_integer_ansitrue",
+      "no_division_ansitrue"
+    ],
+    "warmups": 8,
+    "samples_per_process": 41,
+    "rows": 1048576,
+    "batch_size": 8192,
+    "phases": [
+      "planning",
+      "execution"
+    ],
+    "quartets": [
+      [
+        "before",
+        "after",
+        "after",
+        "before"
+      ],
+      [
+        "after",
+        "before",
+        "before",
+        "after"
+      ],
+      [
+        "before",
+        "after",
+        "after",
+        "before"
+      ],
+      [
+        "after",
+        "before",
+        "before",
+        "after"
+      ]
+    ],
+    "same_binary_controls": {
+      "cases": [
+        "group_id_integer_ansitrue",
+        "group_integer_ansitrue"
+      ],
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A",
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "binaries": [
+        "before",
+        "after"
+      ]
+    },
+    "cpu": 2,
+    "controller_cpu": 0,
+    "perf_events": [
+      "instructions:u",
+      "cycles:u",
+      "task-clock:u",
+      "context-switches:u",
+      "cpu-migrations:u",
+      "page-faults:u"
+    ],
+    "benchmark_sha256": "2712ce34ddc459b3884f747dc984f50fe6822d383d92bb3fceae40b2279d9598",
+    "expected_check_cases_per_variant": 150,
+    "inference": "Use process medians, paired quartet log ratios and fixed seed 172 / 10000 bootstrap resamples. Retain all controls and observations.",
+    "runtime": "19705f2 optional runtime with one-file GROUPING_ID correction",
+    "input_limit": "512 integer keys and a nonduplicate grand total produce 513 sorted IDs. Duplicate and full-width correctness is covered separately in the SQL corpus.",
+    "frozen_before_measurement": true
+  },
+  "performance": {
+    "paired": {
+      "planning": {
+        "group_id_integer_ansitrue": {
+          "quartet_changes_pct": [
+            9.340521661264603,
+            8.583098844614902,
+            9.390978329819358,
+            8.641081969716165
+          ],
+          "quartet_geometric_change_pct": 8.988265362608432,
+          "quartet_bootstrap_95_interval_pct": [
+            8.612086537841636,
+            9.365747085723966
+          ],
+          "median_change_pct": 8.892183747186877,
+          "instruction_change_pct": 9.872722062088846,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.6609624999999999,
+              "median_instructions": 209853887.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.7197365,
+              "median_instructions": 230572178.0
+            }
+          }
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.5069288353445435,
+            -0.053689728303920596,
+            1.6805703416448368,
+            0.30387953667834744
+          ],
+          "quartet_geometric_change_pct": 0.6073287811666821,
+          "quartet_bootstrap_95_interval_pct": [
+            0.08617106539321376,
+            1.3346362537687468
+          ],
+          "median_change_pct": 0.8043075258554966,
+          "instruction_change_pct": -0.0317346146990527,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.454739,
+              "median_instructions": 137961341.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.4583965,
+              "median_instructions": 137917559.5
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            -0.4525859905765226,
+            0.28953653588067524,
+            -0.04116001188142434,
+            0.0966535971142055
+          ],
+          "quartet_geometric_change_pct": -0.02726044437286231,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.31555927865059197,
+            0.20675997265312704
+          ],
+          "median_change_pct": 0.3390625693435956,
+          "instruction_change_pct": 0.016430482200235907,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.3943225,
+              "median_instructions": 132339390.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.39565949999999994,
+              "median_instructions": 132361134.5
+            }
+          }
+        }
+      },
+      "execution": {
+        "group_id_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.011168398785190934,
+            0.5315026814624745,
+            0.04960214201612785,
+            0.4154246638939084
+          ],
+          "quartet_geometric_change_pct": 0.25167040170311805,
+          "quartet_bootstrap_95_interval_pct": [
+            0.030383424520744533,
+            0.47344690941205864
+          ],
+          "median_change_pct": 0.24236015890710672,
+          "instruction_change_pct": 0.004695098676577025,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 14.7468545,
+              "median_instructions": 14699478063.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 14.782595,
+              "median_instructions": 14700168218.0
+            }
+          }
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.052590312189077316,
+            0.057441932781534956,
+            0.07483845102670829,
+            -0.17771733429627454
+          ],
+          "quartet_geometric_change_pct": 0.00173425295626437,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.11897938220910673,
+            0.06927595256072905
+          ],
+          "median_change_pct": 0.03889804691954435,
+          "instruction_change_pct": -0.0004947027666513115,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 2.8857489999999997,
+              "median_instructions": 2587614394.5
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 2.8868715,
+              "median_instructions": 2587601593.5
+            }
+          }
+        },
+        "no_division_ansitrue": {
+          "quartet_changes_pct": [
+            1.4744014317892122,
+            0.24916209655815552,
+            0.7675900717235183,
+            0.24267056285653366
+          ],
+          "quartet_geometric_change_pct": 0.6821978625178705,
+          "quartet_bootstrap_95_interval_pct": [
+            0.245916277161551,
+            1.1666948107242054
+          ],
+          "median_change_pct": 0.8582890678213939,
+          "instruction_change_pct": 0.0011530927858993678,
+          "groups": {
+            "before": {
+              "processes": 8,
+              "median_ms": 0.7722340000000001,
+              "median_instructions": 593577558.0
+            },
+            "after": {
+              "processes": 8,
+              "median_ms": 0.7788619999999999,
+              "median_instructions": 593584402.5
+            }
+          }
+        }
+      }
+    },
+    "same-after": {
+      "planning": {
+        "group_id_integer_ansitrue": {
+          "quartet_changes_pct": [
+            -1.10986718103239,
+            0.552304075880357
+          ],
+          "quartet_geometric_change_pct": -0.28224478400535774,
+          "quartet_bootstrap_95_interval_pct": [
+            -1.10986718103239,
+            0.552304075880357
+          ],
+          "median_change_pct": -0.2178920759153491,
+          "instruction_change_pct": -0.007409033475613835,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.7221465,
+              "median_instructions": 230576634.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.720573,
+              "median_instructions": 230559550.5
+            }
+          }
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.5012005904558104,
+            0.4039434346742192
+          ],
+          "quartet_geometric_change_pct": 0.4525602421410284,
+          "quartet_bootstrap_95_interval_pct": [
+            0.4039434346742192,
+            0.5012005904558104
+          ],
+          "median_change_pct": 0.48237713341150457,
+          "instruction_change_pct": -0.0028334513774930237,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.4549345,
+              "median_instructions": 137923665.5
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.457129,
+              "median_instructions": 137919757.5
+            }
+          }
+        }
+      },
+      "execution": {
+        "group_id_integer_ansitrue": {
+          "quartet_changes_pct": [
+            0.24730612593653675,
+            -0.2716770957290623
+          ],
+          "quartet_geometric_change_pct": -0.012522205974727365,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.2716770957290623,
+            0.24730612593653675
+          ],
+          "median_change_pct": 0.04725744606572935,
+          "instruction_change_pct": -0.0009136058774950051,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 14.703503000000001,
+              "median_instructions": 14700211908.5
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 14.7104515,
+              "median_instructions": 14700077606.5
+            }
+          }
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            -0.3668991441314523,
+            0.7504154043892731
+          ],
+          "quartet_geometric_change_pct": 0.19020061491127987,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.3668991441314523,
+            0.7504154043892731
+          ],
+          "median_change_pct": 0.41104736272121745,
+          "instruction_change_pct": 0.00018072762781873308,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 2.877284,
+              "median_instructions": 2587595519.5
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 2.8891109999999998,
+              "median_instructions": 2587600196.0
+            }
+          }
+        }
+      }
+    },
+    "same-before": {
+      "planning": {
+        "group_id_integer_ansitrue": {
+          "quartet_changes_pct": [
+            1.2392956994059214,
+            0.5115432119963538
+          ],
+          "quartet_geometric_change_pct": 0.8747631692035988,
+          "quartet_bootstrap_95_interval_pct": [
+            0.5115432119963538,
+            1.2392956994059214
+          ],
+          "median_change_pct": 0.9225464190981247,
+          "instruction_change_pct": 0.0047076849078564464,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.6597500000000001,
+              "median_instructions": 209858990.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.6658364999999999,
+              "median_instructions": 209868869.5
+            }
+          }
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            -0.30674107770662695,
+            0.14460590357305417
+          ],
+          "quartet_geometric_change_pct": -0.0813224366137941,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.30674107770662695,
+            0.14460590357305417
+          ],
+          "median_change_pct": -0.23819797482439453,
+          "instruction_change_pct": -0.001129655346099323,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 0.456553,
+              "median_instructions": 137962433.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 0.45546549999999997,
+              "median_instructions": 137960874.5
+            }
+          }
+        }
+      },
+      "execution": {
+        "group_id_integer_ansitrue": {
+          "quartet_changes_pct": [
+            -0.061746842305747854,
+            -0.3024995401005718
+          ],
+          "quartet_geometric_change_pct": -0.18219577574966414,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.3024995401005718,
+            -0.061746842305747854
+          ],
+          "median_change_pct": -0.14829957810443828,
+          "instruction_change_pct": 0.00015721847268501676,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 14.7414445,
+              "median_instructions": 14699608517.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 14.719583,
+              "median_instructions": 14699631627.5
+            }
+          }
+        },
+        "group_integer_ansitrue": {
+          "quartet_changes_pct": [
+            -0.15917804034144847,
+            -0.05313800648722194
+          ],
+          "quartet_geometric_change_pct": -0.10617209396331655,
+          "quartet_bootstrap_95_interval_pct": [
+            -0.15917804034144847,
+            -0.05313800648722194
+          ],
+          "median_change_pct": -0.11418274314458632,
+          "instruction_change_pct": -9.506826326166617e-06,
+          "groups": {
+            "A": {
+              "processes": 4,
+              "median_ms": 2.8962345,
+              "median_instructions": 2587614325.0
+            },
+            "B": {
+              "processes": 4,
+              "median_ms": 2.8929275,
+              "median_instructions": 2587614079.0
+            }
+          }
+        }
+      }
+    }
+  },
+  "performance_findings": [
+    "GROUPING_ID planning adds 8.988 percent, conditional interval [8.612,9.366], and 9.873 percent instructions. Process-median centers move from 0.660963 to 0.719737 ms. This local planning cost remains.",
+    "GROUPING_ID execution changes by 0.252 percent, interval [0.030,0.473], with 0.005 percent additional instructions. Its same-parent-binary control changes by -0.182 percent, interval [-0.302,-0.062]; the unchanged projection control rises 0.682 percent. These timing shifts do not establish a stable causal execution regression or universal equivalence.",
+    "Ordinary integer grouping and projection planning instruction changes are below 0.04 percent in magnitude; execution instruction changes are at most 0.001 percent.",
+    "All 160 processes and 41 samples per process retained, full counter coverage, zero migrations, unchanged governor and ASLR. No concurrent build or source investigation during measurement.",
+    "This comparison uses an already-correct nonduplicate integer ROLLUP with 513 output rows. It does not quantify full-width CASE performance or remove earlier floating normalization/widening costs."
+  ],
+  "builds": {
+    "before": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--offline",
+        "--locked",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/override.toml",
+        "--example",
+        "decimal_bench",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json",
+        "-j",
+        "3"
+      ],
+      "binary_sha256": "eaf20f38480fe9d48e7358a06bcf6391208a9755da3dda8c9cae237bd87da1ed",
+      "source_hashes": {
+        "math.rs": "558d54ee499f958d6d4bebfd9d2cc8d3e9e2364513c079c76d07223f9db773a9",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+        "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+        "Cargo.lock": "30d9595fbefefaa1a6d7756891a348f0dfd1f485cbf1d1b727ddd367f8654b47",
+        "decimal_bench.rs": "2712ce34ddc459b3884f747dc984f50fe6822d383d92bb3fceae40b2279d9598",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "d9d11fa1fbbf7ea7ddfe67be7a8fceeca6bde90a25973123995e99fe761a05f9",
+        "decimal-null.rs": "2d07ef1c9d0284d0a28605b97570699fa115f6278cc2673c2c994d55b20a7fd0",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "7d0af52df3ef4b5863a3ddd414332850376daf9a5273c64328de512c94ee286b",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "8ee0e2ed2b8c481eaf7c3c72be1241481493541e9a14320e64cd33ad4502a1e6",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180"
+      }
+    },
+    "after": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--offline",
+        "--locked",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/float-type-planning-f438591/override.toml",
+        "--example",
+        "decimal_bench",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json",
+        "-j",
+        "3"
+      ],
+      "binary_sha256": "3aacefd86ec2042c4f79f030de352a83218954dd69917979ba90a4c5672a020b",
+      "source_hashes": {
+        "math.rs": "558d54ee499f958d6d4bebfd9d2cc8d3e9e2364513c079c76d07223f9db773a9",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+        "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+        "Cargo.lock": "30d9595fbefefaa1a6d7756891a348f0dfd1f485cbf1d1b727ddd367f8654b47",
+        "decimal_bench.rs": "2712ce34ddc459b3884f747dc984f50fe6822d383d92bb3fceae40b2279d9598",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "d9d11fa1fbbf7ea7ddfe67be7a8fceeca6bde90a25973123995e99fe761a05f9",
+        "decimal-null.rs": "2d07ef1c9d0284d0a28605b97570699fa115f6278cc2673c2c994d55b20a7fd0",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "7d0af52df3ef4b5863a3ddd414332850376daf9a5273c64328de512c94ee286b",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "f292de0b5133872d2690dc927226fcc5c7ff7cfe043994b33f5fe7dd58104314",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180"
+      }
+    }
+  },
+  "patch": {
+    "file": "sail-grouping-id.patch",
+    "sha256": "66c927ac37dd98ce8a71d52ab98e7772e3f486b20a7b65d88079fa0bfc7137a2",
+    "verification": {
+      "commands": [
+        [
+          "git",
+          "apply",
+          "--check",
+          "--whitespace=error",
+          "/home/hanbo/.cache/delta-reader-spark-planning/grouping-id-19705f2/sail-grouping-id.patch"
+        ],
+        [
+          "git",
+          "apply",
+          "/home/hanbo/.cache/delta-reader-spark-planning/grouping-id-19705f2/sail-grouping-id.patch"
+        ]
+      ],
+      "matches_recorded_candidate": true,
+      "after_sha256": "f292de0b5133872d2690dc927226fcc5c7ff7cfe043994b33f5fe7dd58104314"
+    }
+  },
+  "raw_archive": {
+    "file": "grouping-id-runs.json.gz",
+    "sha256": "5755c152fcbbfbd42018115f9a83ad720e1dc2c65bc90fb0ea321bbf3e455baa",
+    "bytes": 1844503
+  },
+  "preservation": {
+    "sources": {
+      "math.rs": "c4befca6320e36532f3e87091622e0b91ecfa59e841646f98af91f704c84846f",
+      "lateral.rs": "3a46aea3b3c2af3e500dbfac0cc6999da1cf60d4a99bed9c6b02b789a5bf1020",
+      "cast.rs": "b09ae115b792491460b3ba5fcd60faea4bc1bfd59f60690618063f5cb0d855b3",
+      "common.rs": "41cef0bc27bc314a5ab03ca682acd76448c1780808f5b943722ba85e04af8fc5",
+      "function-Cargo.toml": "0e70f011d3aaabce73b5df5f12bb9e547936a6769cff09099fe5e37641b878a7",
+      "scalar-mod.rs": "68c06852a9272ae5c480298c0f4e2c725753bf028a5da6e629fad49a93231925",
+      "Cargo.lock": "e0970eb4c47224ccf8d0e9be9d2a57b25db09316fed780d5533598f519ab0584",
+      "decimal_bench.rs": "61f32e9a0cf89b4f06b8f579fb3af8a6003f35088b9cdcbe8abd548ef6cb4e3f",
+      "string-cast.rs": null,
+      "float-cast.rs": null,
+      "lib.rs": "abf6ed0652f1b3ee7b66bf77313fa56f1fd292a2f48168550c1022335c654a8d",
+      "main.rs": "8609b17aab37b9a84cde88767cacecc267d170048574636d6516300eea47d359",
+      "decimal_probe.rs": "f43728209ba28c00296d5f4789d4a66db06798c398f34f3558ae3944d0322d8f",
+      "decimal-null.rs": null,
+      "function-mod.rs": "2ce9c566265102724d44f5e2f2822d5d82c03e71e1eec907d50e425becbedae2",
+      "function-scalar-mod.rs": "b5546d8cd9f41cb1a5bddb3d9102f9618abe7e1ef65746d3946af86b4d973e26",
+      "delta_lifecycle.rs": "b7b7d860da8f0bf0e9068f2616c74f1ae744d9677a08194b3a5eedcdfe99927d",
+      "resolver-subquery.rs": "aff16f461317fa52a382a2d61d804d45bea4341d7581a536f22bec480879bf5d",
+      "analyzer-expression.rs": "c5566a6b118560afeca8020acea0095507000a1956051a0f4c1450c291e66eef",
+      "analyzer-parser.rs": "dd81c91ec888151ebafc7d979b50b33180f825211b4568e2de9ba50738271f42",
+      "math-mod.rs": "45b56693f3dde83b0ed3b535b3d81a26a63917db92106f4ecde8cfeee2ab2236",
+      "decimal-utils.rs": "847f4c18277429a79ae9dcf2da2f5cdecac066f71fa67909cae9f0c99a2189db",
+      "decimal-round.rs": null,
+      "conditional.rs": "cf09fc67b0e567668b037a6ee19ab1f166134e0fa067859269983c2e3f739fb0",
+      "small-int-divide.rs": null,
+      "resolver-predicate.rs": "ac785ea9d466f3b50f920aeac31b0be0b243f99bc7e63050e796c38caec8e1b8",
+      "function-predicate.rs": "499f472fda6be201451cef2dab3380d7b602a578fa0ce49c91364a26df0df180",
+      "arrow-mod": "a2b54e3369b6a8bf4bfd46f886720050b94a978c61d0004b33d276932fb0936f",
+      "arrow-decimal": "691d21c85206190f0dd49f5f9a5ef31de7065917780d4c9c3d156bc11a8d5549",
+      "join-selection": "77f99aa2b07b8d20e2de1c0114bf0eff6b1c7495e1923b8308a123812f044219",
+      "unwrap-cast": "0a1b250391180380b5722c2e9e31757c8850c3a392c87912d50e313143389012",
+      "expr-simplifier": "d5a4d4a8ee6e146e616e312e447d30429949b4501b9f45e7979bba14ef57937b",
+      "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+      "decorrelate": "c18f2fd4e6e3c8d20fc3e6070a72c43aa1dc0b517cbf17cb4731734be2651735",
+      "nested-loop": "59b7efeb63dedf071bc8b9f45a39d480c8f8cca62a4702a3f3f670b8a2444967",
+      "physical-test-lock": null,
+      "parser-keywords": null,
+      "native-in-list": "310aaf3b97f83bc70bcbf6bffbed44b4fc500027a4d8202aa487f78fedae6d24",
+      "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+      "native-primitive-filter": "dea083ca4f3208434559a353ac70e73e12cc3f617a8b3b2bf66761b92097353c",
+      "native-strategy": "bc43719e31a52563dd07c5b0dac98a620491d87d6fe2aaf7a88aa86f18b441ac",
+      "native-array-filter": "12259bb4c45fd7f57696efc4c6227fab5a69cbabe9f89e2b6a7a03e2e9589040",
+      "native-case": "470894816b7dfce4f995b0b3537349ea8b2962ecc199a798575ce2090253dc62",
+      "expr-common": "f514c989af51ca89d3fb6d3b14971807e9deffaa4227f8a715aee49e6c9c0c3a",
+      "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+      "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+      "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+      "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+      "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+      "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+      "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+      "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+      "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+      "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+      "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+      "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+      "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+      "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+      "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+      "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+      "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+      "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+      "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+      "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+      "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+      "resolver-join.rs": "5cc7e68aa00f578ea1ffcfe2f0ba5d7dbec534cfd1c036469517c10f94a6640b",
+      "resolver-attribute.rs": "9b4db499ff87b2318835105fcd1cca143da0c7c7cad258c913988b094b1d1d41",
+      "resolver-project.rs": "ad0e4731d5c05d158eea972daf6ec334f740184480bf9edf91de01a2e04afee5",
+      "resolver-function.rs": "543b5ecb1d37a8f6d4b51300237157c6c117a4fffde03adbbaf72c33cdb3516b",
+      "resolver-wildcard.rs": "9bb9065f8b1a4e9bec92ef9c84a432123c0981167a85a592de69e8e6adc9fa08",
+      "resolver-schema.rs": "2ae8751f6eaec1b2e3cd5497ea61a67067aa320737f46974602a9088e5509a1d",
+      "scalar-struct.rs": "e1fe639fdb7927e0bbdc44dcc76dd748f26dc9cb83526ea4d5f247549042fd38",
+      "resolver-aggregate.rs": "c9ee3a9dbe00855b36fc7ab1f079dec5808287c33cee6966e1aac48e54d07338",
+      "lifecycle-support-0": null,
+      "lifecycle-support-1": null
+    },
+    "executables": {
+      "bench": "41142f9ec9341118f514984c0f690ea9a611aac6b180a26fc0c30329711257bb",
+      "probe": "340658fe8d3f6fcefae60fe38affd1b15d0bc89e5b8888ea2188d7e43fa81155",
+      "runner": "622a12a937afbf5c2a4f26a34e0606ef89a8c5d4dcc3dcbced6f4b6526a1ce5e"
+    }
+  },
+  "limitations": [
+    "10 original observations exceed the native 64-bit capacity for semantic bits plus duplicate ordinals. This patch does not expand that capacity or deduplicate result rows.",
+    "6 original observations retain correct grand-total groups on empty input where Spark 4.2 returns no rows. These remain explicit Spark differences under the user-approved SQL semantic policy.",
+    "4 combination observations remain: repeated columns within a single ROLLUP produce a duplicate-field planning error, and ROLLUP nested inside GROUPING SETS is rejected by the parser.",
+    "The release-profile integration tests do not repair the separate native shift-by-64 panic under overflow checks. A focused Rust reproduction is recorded for a subsequent one-line native fix.",
+    "This slice does not remove floating grouping, dynamic integer widening or floating USING normalization costs. The optional type-inference shortcut remains unapplied.",
+    "Spark observation comparison checks values, types and error stages. Rust tests check selected names/types; real-Delta captures compare full schemas and captured rows."
+  ]
+}

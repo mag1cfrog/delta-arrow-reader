@@ -4623,6 +4623,51 @@ attempts and reproduction scripts. Its `check-archive.py` verifies the saved
 results independently. All 75 source/lock records, three executable slots and
 temporary Delta input files were restored. The default vendor remains unchanged.
 
+## Public GROUPING_ID values
+
+`sail-grouping-id.patch` follows the optional runtime at `19705f2`. DataFusion's
+internal ID also encodes duplicate grouping-set ordinals. The public result now
+masks those ordinals out while retaining duplicate rows. A native CASE converts
+64-bit unsigned patterns to Spark's signed BIGINT without overflowing a cast.
+The shared grouping-function metadata also removes duplicate keys across mixed
+grouping sets, preserving their first-appearance order for projection, HAVING
+and ORDER BY resolution. Execution still uses native DataFusion expressions.
+
+The 72-query corpus improves from 28/144 to 128/144 observations. The signed-bit
+supplement passes 2/2, up from 0/2. Six combination queries added during review
+improve from 2/12 to 8/12. Ten original observations exceed DataFusion's 64-bit
+capacity for semantic bits plus duplicate ordinals. Six retain empty-input
+grand-total rows where Spark 4.2 returns none. This follows the accepted SQL
+semantic policy: an [empty grouping set](https://www.postgresql.org/docs/18/queries-table-expressions.html#QUERIES-GROUPING-SETS)
+still produces an aggregate group. These six remain recorded as Spark
+differences. The combination failures are repeated columns within one ROLLUP
+and ROLLUP nested inside GROUPING SETS; their planning/parser boundaries remain.
+
+The earlier floating-group corpus improves from 132/160 to 136/160. All other
+previous agreements remain, including 5753/6068 older observations. Five existing
+cast failures report different offending values, with unchanged error stages.
+All 33 planner tests and 28 runner tests pass, including four lifecycle tests.
+The 116 real-Delta captures match the parent, including schemas and errors.
+All 74 generic checks are unchanged; among 150 benchmark checks, only the two
+new GROUPING_ID physical plans change.
+
+The fixed 160-process comparison retains all samples and controls, with full
+counter coverage and zero migrations. GROUPING_ID planning adds 8.988%
+(interval 8.612-9.366%) and 9.873% instructions, about 0.059 ms in this query.
+That planning cost remains. Execution instructions rise 0.005%; timing rises
+0.252%, while the unchanged projection control rises 0.682% and a same-parent
+control moves -0.182%. These observations do not establish a stable causal
+execution regression. Ordinary grouping and projection instruction counts are
+nearly unchanged. Earlier floating normalization and widening costs remain.
+
+`grouping-id-results.json` and `grouping-id-runs.json.gz` retain the protocols,
+initial candidate, captures, measurements and reproduction scripts. The archive
+checker verifies the saved evidence without the experiment cache. All 75 shared
+source/lock records, three executables and temporary Delta input files were
+restored. The separate native shift-by-64 panic under overflow checks is still
+follow-up work; these integration tests use the release profile. Default vendor
+sources and the deferred type-inference shortcut remain unchanged.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
