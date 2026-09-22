@@ -4278,6 +4278,27 @@ Each query's summed matches equal its canonical SQL result. All 186 existing res
 
 Instrumentation changes generated code and execution cost, and it does not count tag scans or empty-bucket checks. These results therefore cannot prove identical work in the earlier uninstrumented executable or explain its branch-prediction variation. Hardware branch histories from that executable are the next check. The [raw archive](float-type-equality-flow-runs.json.gz) keeps all stderr records, counters, query captures, source and driver patches, validation and build metadata. Parsed equality arrays can be regenerated from the retained stderr without storing a second copy. Shared files are restored and hash-checked, no runs are discarded, and no performance effect is estimated. The optional type-inference patch remains unadopted.
 
+## Hardware branch histories in the native lookup
+
+The [hardware branch-history diagnostic](float-type-branch-record-results.json) points mainly to the check for candidate hash tags. Of 2,216 recorded hot-loop entries marked as mispredicted, 1,768 (79.78%) originate at that branch. Full-key equality accounts for 154 (6.95%). The earlier sampled instruction hotspot after equality therefore does not identify the dominant recorded mispredicted branch.
+
+This uses the byte-identical executable from the earlier branch-sampling study, without the later equality counters. The only profiling change adds `perf record --branch-filter any,u,save_type`. The fixed four groups keep the same two seed inputs, preparation rotations, execution orders, 32 warmups and 261 prepared plans. All address and hash trace sequences match within their groups.
+
+| Branch offset | Meaning when taken | Recorded mispredicted entries |
+| --- | --- | ---: |
+| `+0xa9` | No candidate hash tags in the current group | 1,768 |
+| `+0x170` | Continue the inner Boolean packing loop | 265 |
+| `+0xca` | Full-key equality succeeds | 154 |
+| `+0x18d` | Continue the outer Boolean packing loop | 16 |
+| `+0xea` | Empty tag terminates an unsuccessful lookup | 11 |
+| `+0x1a9` | Return from the lookup and packing function | 2 |
+
+The collection retains 11,080 samples and all 177,280 branch-history entries. Every sample matches the ordinary decoder's process, CPU, timestamp, period and instruction address, with no reported loss or samples outside execution bounds. All histories have 16 entries. Of those entries, 177,097 are marked non-speculative and 183 speculative on the correct path; none are marked wrong-path. Eight smoke processes pass before collection, with no failed or discarded group.
+
+The [kernel reference](https://github.com/gregkh/linux/blob/v6.19.14/arch/x86/events/amd/lbr.c) maps hardware prediction flags and adjusts source addresses for fused instructions. These finite histories can overlap and are sampled on branch misses. Their counts are neither unique retired branch counts nor population misprediction rates. They narrow branch attribution but do not explain why apparently matching table states vary between processes. Address bounds and four hash fingerprints also do not prove identical contents at every bucket position.
+
+The [raw archive](float-type-branch-record-runs.json.gz) retains perf files, decoded branch text, captures, scripts, checks and disassembly. Derived branch arrays can be regenerated with the frozen decoder. No Rust rebuild, runtime change or new Spark corpus run is involved. Shared inputs and global settings remain unchanged. The original release interval remains unresolved, and the optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.

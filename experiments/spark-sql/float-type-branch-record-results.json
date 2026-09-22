@@ -1,0 +1,2049 @@
+{
+  "slice": "Attribute sampled hardware branch misprediction records",
+  "base_commit": "0ad9d89",
+  "created_utc": "2026-09-22T04:39:52.913909+00:00",
+  "decision": {
+    "finding": "Of 2216 recorded hot-loop misprediction entries, 1768 (79.78%) originate at the no-candidate-tag branch, and 154 (6.95%) at the full-key equality branch. This distinguishes actual branch addresses from the earlier sampled event IP hotspot.",
+    "scope": "Finite, potentially overlapping branch histories sampled on branch misses. These are not unique retired branch counts, population misprediction rates, or evidence that the optional type-inference patch increases execution cost.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 4,
+    "processes": 16,
+    "prepared_plan_executions": 4176,
+    "constructed_table_traces": 4720,
+    "collection_query_captures": 32,
+    "branch_miss_samples": 11080,
+    "recorded_branch_entries": 177280,
+    "prediction_flags": {
+      "M": 2613,
+      "P": 174667
+    },
+    "speculation_flags": {
+      "NON_SPEC_CORRECT_PATH": 177097,
+      "SPEC_CORRECT_PATH": 183
+    },
+    "wrong_path_entries": 0,
+    "lost_record_lines": 0,
+    "samples_outside_observer_bounds": 0,
+    "smoke_processes": 8,
+    "smoke_executions": 24,
+    "smoke_samples": 53,
+    "smoke_branch_entries": 848,
+    "failed_or_discarded_groups": 0,
+    "rust_builds": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "0ad9d89",
+    "question": "Which actual branch addresses carry hardware misprediction flags in sampled branch histories from the earlier executable without equality counters?",
+    "implementation": "Reuse the byte-identical AA executable from the preceding branch-sampling study. Add only perf record --branch-filter any,u,save_type. Keep branch-misses:u, period 10007, 64 mmap pages, CLOCK_MONOTONIC and the existing phase gates.",
+    "design": "Exactly four groups and 16 fresh processes with the unchanged native seed inputs 0 and 4, preparation rotations, execution orders, 32 warmups and 261 prepared plans. All state, release-order and address settings stay as in the prior branch-sampling collection.",
+    "validation": "Run the existing eight-process profiling smoke validation first. Decode the branch stacks from those same files, checking sample identity against the ordinary decoder, CPU/PID/time bounds, stack depth, legal flags, and at least one decoded hardware misprediction. Freeze the successful decoder before collection. Do not recollect successful smoke data for decoder-only changes.",
+    "analysis": "Retain all samples and every branch entry. Summarize recorded histories by branch source offset, target, prediction flag and speculation class, with the previous exact ELF symbol range as reference. Count recorded history entries, not unique retired branches; histories can overlap and the sample trigger is biased toward misses. No exact population misprediction rate or timing effect is estimated.",
+    "stopping_rule": "One fixed four-group collection only after capability and smoke checks pass. Retain every failed attempt and correction. No discarded runs, alternative inputs or outcome-based extension. No other work during profiling. Shared inputs and all global settings remain unchanged.",
+    "limits": [
+      "Branch histories have finite depth and can overlap between samples. They do not record every branch of every lookup.",
+      "The sampled event IP can still skid; attribution uses the branch-history source/target and prediction flags instead.",
+      "Speculative wrong-path entries are retained and reported separately.",
+      "The binary retains earlier cold diagnostics and controlled addresses; it is not the original release executable. The optional type-inference patch remains unadopted."
+    ]
+  },
+  "trace_controls": [
+    {
+      "directory": "group-00",
+      "seed_index": 0,
+      "processes": 4,
+      "traces_per_process": 295,
+      "distinct_complete_hash_sequences": 1,
+      "distinct_complete_address_sequences": 1
+    },
+    {
+      "directory": "group-01",
+      "seed_index": 4,
+      "processes": 4,
+      "traces_per_process": 295,
+      "distinct_complete_hash_sequences": 1,
+      "distinct_complete_address_sequences": 1
+    },
+    {
+      "directory": "group-02",
+      "seed_index": 4,
+      "processes": 4,
+      "traces_per_process": 295,
+      "distinct_complete_hash_sequences": 1,
+      "distinct_complete_address_sequences": 1
+    },
+    {
+      "directory": "group-03",
+      "seed_index": 0,
+      "processes": 4,
+      "traces_per_process": 295,
+      "distinct_complete_hash_sequences": 1,
+      "distinct_complete_address_sequences": 1
+    }
+  ],
+  "hotspot": {
+    "elf_address": "0x63f8960",
+    "elf_size_bytes": 462,
+    "name": "Float64StaticFilter::contains lookup inside MutableBuffer::collect_bool",
+    "sampled_event_ips": 10778,
+    "prediction_flags": {
+      "M": 2216,
+      "P": 170772
+    },
+    "mispredicted_entries": [
+      {
+        "from_offset": "0xa9",
+        "to_offset": "0xe0",
+        "prediction": "M",
+        "speculation": "NON_SPEC_CORRECT_PATH",
+        "recorded_entries": 1768,
+        "branch_meaning": "No candidate hash tags in the current group",
+        "share_of_recorded_hot_mispredictions_pct": 79.78339350180505
+      },
+      {
+        "from_offset": "0x170",
+        "to_offset": "0x100",
+        "prediction": "M",
+        "speculation": "NON_SPEC_CORRECT_PATH",
+        "recorded_entries": 265,
+        "branch_meaning": "Continue the inner Boolean packing loop",
+        "share_of_recorded_hot_mispredictions_pct": 11.958483754512635
+      },
+      {
+        "from_offset": "0xca",
+        "to_offset": "0x163",
+        "prediction": "M",
+        "speculation": "NON_SPEC_CORRECT_PATH",
+        "recorded_entries": 154,
+        "branch_meaning": "Full-key equality succeeds",
+        "share_of_recorded_hot_mispredictions_pct": 6.949458483754513
+      },
+      {
+        "from_offset": "0x18d",
+        "to_offset": "0x50",
+        "prediction": "M",
+        "speculation": "NON_SPEC_CORRECT_PATH",
+        "recorded_entries": 16,
+        "branch_meaning": "Continue the outer Boolean packing loop",
+        "share_of_recorded_hot_mispredictions_pct": 0.7220216606498195
+      },
+      {
+        "from_offset": "0xea",
+        "to_offset": "0x160",
+        "prediction": "M",
+        "speculation": "NON_SPEC_CORRECT_PATH",
+        "recorded_entries": 11,
+        "branch_meaning": "Empty tag terminates an unsuccessful lookup",
+        "share_of_recorded_hot_mispredictions_pct": 0.4963898916967509
+      },
+      {
+        "from_offset": "0x1a9",
+        "to_offset": "0x36cc97",
+        "prediction": "M",
+        "speculation": "NON_SPEC_CORRECT_PATH",
+        "recorded_entries": 2,
+        "branch_meaning": "Return from the lookup and packing function",
+        "share_of_recorded_hot_mispredictions_pct": 0.09025270758122744
+      }
+    ],
+    "per_process": [
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "slot": 0,
+        "sample_count": 627,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-00/slot-0/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 627
+        },
+        "prediction_flags": {
+          "M": 109,
+          "P": 9923
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3282
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3171
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2926
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 119
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 77
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 62
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 61
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 58
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 10
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 6
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 5
+          },
+          {
+            "from_offset": "0xdb",
+            "to_offset": "0xab",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "slot": 1,
+        "sample_count": 983,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-00/slot-1/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 983
+        },
+        "prediction_flags": {
+          "P": 15408,
+          "M": 320
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 5162
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4892
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4538
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 238
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 206
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 91
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 90
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 44
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 39
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 21
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 5
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4
+          }
+        ]
+      },
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "slot": 2,
+        "sample_count": 638,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-00/slot-2/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 638
+        },
+        "prediction_flags": {
+          "P": 10096,
+          "M": 112
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3366
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3168
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2953
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 142
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 76
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 72
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 60
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 58
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 9
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 8
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 8
+          },
+          {
+            "from_offset": "0xdb",
+            "to_offset": "0xab",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-00",
+        "seed_index": 0,
+        "slot": 3,
+        "sample_count": 637,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-00/slot-3/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 637
+        },
+        "prediction_flags": {
+          "P": 10058,
+          "M": 134
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3374
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3231
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2991
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 119
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 97
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 52
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 50
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 37
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 11
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4
+          },
+          {
+            "from_offset": "0xdb",
+            "to_offset": "0xab",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "slot": 0,
+        "sample_count": 638,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-01/slot-0/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 638
+        },
+        "prediction_flags": {
+          "P": 10080,
+          "M": 128
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3331
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3199
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2963
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 128
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 87
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 64
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 60
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 46
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 9
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 5
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 5
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "slot": 1,
+        "sample_count": 976,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-01/slot-1/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 976
+        },
+        "prediction_flags": {
+          "M": 332,
+          "P": 15284
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 5157
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4873
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4474
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 280
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 241
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 107
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 99
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 62
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 45
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 25
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2
+          },
+          {
+            "from_offset": "0xdb",
+            "to_offset": "0xab",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2
+          }
+        ]
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "slot": 2,
+        "sample_count": 618,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-01/slot-2/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 618
+        },
+        "prediction_flags": {
+          "P": 9764,
+          "M": 124
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3222
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3081
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2863
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 135
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 72
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 66
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 57
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 56
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 12
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 6
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 6
+          },
+          {
+            "from_offset": "0xdb",
+            "to_offset": "0xab",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-01",
+        "seed_index": 4,
+        "slot": 3,
+        "sample_count": 636,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-01/slot-3/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 636
+        },
+        "prediction_flags": {
+          "P": 10047,
+          "M": 129
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3374
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3247
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2974
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 142
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 90
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 69
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 66
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 57
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 13
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 12
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2
+          }
+        ]
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "slot": 0,
+        "sample_count": 603,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-02/slot-0/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 603
+        },
+        "prediction_flags": {
+          "P": 9520,
+          "M": 128
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3144
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3010
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2780
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 134
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 81
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 66
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 62
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 56
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 10
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 10
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "slot": 1,
+        "sample_count": 635,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-02/slot-1/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 635
+        },
+        "prediction_flags": {
+          "P": 10025,
+          "M": 135
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3367
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3188
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2988
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 109
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 82
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 65
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 64
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 39
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 11
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 9
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "slot": 2,
+        "sample_count": 974,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-02/slot-2/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 974
+        },
+        "prediction_flags": {
+          "P": 15275,
+          "M": 309
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 5111
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4855
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4482
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 262
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 230
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 99
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 98
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 47
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 34
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 16
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 7
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2
+          }
+        ]
+      },
+      {
+        "directory": "group-02",
+        "seed_index": 4,
+        "slot": 3,
+        "sample_count": 635,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-02/slot-3/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 635
+        },
+        "prediction_flags": {
+          "P": 10033,
+          "M": 127
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3348
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3198
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2957
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 134
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 87
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 58
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 57
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 57
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 9
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 7
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2
+          }
+        ]
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "slot": 0,
+        "sample_count": 637,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-03/slot-0/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 637
+        },
+        "prediction_flags": {
+          "P": 10067,
+          "M": 125
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3361
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3197
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2971
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 124
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 82
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 61
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 60
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 42
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 11
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 9
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4
+          },
+          {
+            "from_offset": "0xdb",
+            "to_offset": "0xab",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4
+          }
+        ]
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "slot": 1,
+        "sample_count": 640,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-03/slot-1/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 640
+        },
+        "prediction_flags": {
+          "P": 10108,
+          "M": 132
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3395
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3206
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2987
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 118
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 77
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 65
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 64
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 52
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 18
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 6
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "slot": 2,
+        "sample_count": 628,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-03/slot-2/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 628
+        },
+        "prediction_flags": {
+          "P": 9911,
+          "M": 137
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3314
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3152
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2915
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 130
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 93
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 64
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 60
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 49
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 9
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 8
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 4
+          },
+          {
+            "from_offset": "0xdb",
+            "to_offset": "0xab",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      },
+      {
+        "directory": "group-03",
+        "seed_index": 0,
+        "slot": 3,
+        "sample_count": 575,
+        "command": [
+          "perf",
+          "script",
+          "--no-demangle",
+          "--show-lost-events",
+          "--ns",
+          "-i",
+          "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89/collection/group-03/slot-3/branch-misses.data",
+          "-F",
+          "pid,tid,cpu,time,period,event,ip,brstack"
+        ],
+        "hot_runtime_address": "0x55555b94c960",
+        "history_depth_counts": {
+          "16": 575
+        },
+        "prediction_flags": {
+          "P": 9068,
+          "M": 132
+        },
+        "hot_offset_counts": [
+          {
+            "from_offset": "0x151",
+            "to_offset": "0x90",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2988
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2874
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 2639
+          },
+          {
+            "from_offset": "0xea",
+            "to_offset": "0x160",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 143
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 96
+          },
+          {
+            "from_offset": "0xa9",
+            "to_offset": "0xe0",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 59
+          },
+          {
+            "from_offset": "0x85",
+            "to_offset": "0x100",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 51
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 48
+          },
+          {
+            "from_offset": "0x170",
+            "to_offset": "0x100",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 12
+          },
+          {
+            "from_offset": "0x1a9",
+            "to_offset": "0x36cc97",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 8
+          },
+          {
+            "from_offset": "0xca",
+            "to_offset": "0x163",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3
+          },
+          {
+            "from_offset": "0x18d",
+            "to_offset": "0x50",
+            "prediction": "M",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 3
+          },
+          {
+            "from_offset": "0xdb",
+            "to_offset": "0xab",
+            "prediction": "P",
+            "speculation": "NON_SPEC_CORRECT_PATH",
+            "recorded_entries": 1
+          }
+        ]
+      }
+    ]
+  },
+  "source_audit": {
+    "kernel": "6.19.14-200.fc43.x86_64",
+    "perf": "7.1.4-100.fc43.x86_64",
+    "kernel_source_reference": "https://github.com/gregkh/linux/blob/v6.19.14/arch/x86/events/amd/lbr.c",
+    "kernel_source_scope": "Upstream version reference, not an assertion that all Fedora patches are identical. The code maps hardware mispredict bits to perf branch flags and adjusts branch-source addresses for instruction fusion.",
+    "local_manual": "/usr/share/man/man1/perf-script.1.gz",
+    "manual_sha256": "7cdda7437ba30f483920fdb4de1eec750163b8198c8d842b2ef38438f5d6f5b5",
+    "branch_format": "FROM/TO/EVENT/INTX/ABORT/CYCLES/TYPE/SPEC; M and P mean mispredicted and predicted, N is not-taken, and - is unavailable.",
+    "reported_history_depth": 16,
+    "runtime_rust_sources_changed": false
+  },
+  "restoration": {
+    "shared_inputs_changed": false,
+    "checked_inventory_counts": {
+      "sources": 52,
+      "executables": 3
+    },
+    "binary": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023/after-bench",
+      "sha256": "967585cc99118a258f7189d928790d5fd846d9a2f30e5766bb08ccccc8a1897c"
+    },
+    "global_settings_unchanged": true
+  },
+  "references": {
+    "float-type-equality-flow-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-equality-flow-results.json",
+      "sha256": "411535b1be63209cc2dfa1f4cfc43cd78cdfd398575d8bde4827cfdb60b1a85c"
+    },
+    "float-type-branch-sample-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-branch-sample-results.json",
+      "sha256": "3b14c61dc31f47869093d01faf6ac989515e0dc0ca0f8f40a64b6773e586cce8"
+    },
+    "float-type-branch-sample-runs.json.gz": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-branch-sample-runs.json.gz",
+      "sha256": "3f646dc850740374d4b81d4cd52d5bdd11f0c7f5239348117ea3c819e309e8ce"
+    },
+    "float-type-session-state-runs.json.gz": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-session-state-runs.json.gz",
+      "sha256": "d05f4d037a9931bff14fc4f7ec8cbec82b86c0c12a3af9135bcd4e87ce42a986"
+    }
+  },
+  "raw_data": {
+    "file": "float-type-branch-record-runs.json.gz",
+    "sha256": "9f812559e4105deb3efdcc73f218f08ccbfc9617ac47ed9432f88de2c2955a6d",
+    "uncompressed_sha256": "6756d630010fc8bb7e328db9b54488ef4f5b1f961170e029c5bda0756c6d7aaa",
+    "compressed_bytes": 1639424,
+    "uncompressed_bytes": 41012255
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-branch-record-0ad9d89",
+    "commands": [
+      "python3 verify.py",
+      "python3 decode_branches.py verification",
+      "python3 collect.py",
+      "python3 decode.py collection",
+      "python3 decode_branches.py collection",
+      "python3 record.py"
+    ],
+    "setup": "Reuse the exact referenced executable and prior scripts. Add perf --branch-filter any,u,save_type. Freeze the branch decoder after the existing smoke data passes. Keep every prediction and speculation flag and compare sample identities to the ordinary decoder. The archive retains raw perf bytes, raw branch text, all captures, frozen scripts, disassembly and source identities."
+  }
+}
