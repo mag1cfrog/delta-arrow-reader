@@ -1,0 +1,2253 @@
+{
+  "slice": "Same-executable timing controls with complete IN-table address traces",
+  "base_commit": "015493d",
+  "created_utc": "2026-09-22T03:42:50.205473+00:00",
+  "decision": {
+    "finding": "All 16 groups have matching complete address and hash sequences, but the first schedule stratum fails the predetermined timing interval width. Both strata use the same executable and fresh per-query planning-state clones.",
+    "implication": "Stabilizing the observed IN-table addresses is insufficient for these timing controls. The frozen result remains a failed control; no groups are excluded or replaced.",
+    "counter_followup": "Post-collection inspection retains all groups. Larger time differences accompany cycle and branch-miss differences, while instruction counts are nearly unchanged. This motivates locating the mispredicted branches; it does not establish their cause.",
+    "adopt_float_type_patch": false,
+    "accepted_runtime_changed": false,
+    "candidate_performance_effect_estimated": false
+  },
+  "summary": {
+    "groups": 16,
+    "processes": 64,
+    "prepared_plan_executions": 16704,
+    "constructed_table_traces": 18880,
+    "field_release_events": 56640,
+    "new_collection_query_captures": 128,
+    "new_smoke_processes": 8,
+    "new_smoke_executions": 24,
+    "new_smoke_query_captures": 16,
+    "prior_exact_captures_referenced_not_rerun": 372,
+    "prior_statement_state_queries_referenced_not_rerun": 10,
+    "failed_smoke_processes_before_timed_phase": 1,
+    "failed_or_discarded_collection_groups": 0,
+    "rust_builds": 0,
+    "new_spark_corpus_runs": 0,
+    "global_settings_changed": false
+  },
+  "method": {
+    "base_commit": "015493d",
+    "question": "Does the existing same-executable timing control pass when retaining the fresh planning-state path in the last diagnostic build, and do observed table addresses remain stable?",
+    "implementation": "No Rust changes or build. Reuse the exact planning-state executable, TaskContext reuse, fresh per-query SessionState clones, sorted resolver field release, native allocator settings and child-only fixed addresses. Both schedule labels refer to the same file and SHA256.",
+    "design": "Reuse the existing 16-group, 64-process fully crossed control schedule and unchanged native seed indices 0,2,4,6,8,10,12,14. Four temporal blocks, two groups per label per block. 32 warmups and 261 prepared plans per process. Equal launch paths and isolated gated phases.",
+    "analysis": "For each of the two schedule strata, bootstrap whole four-process groups within the four temporal blocks, 10000 resamples, seed 88. Report the median group percentage change from process medians, process means, and instructions. Both timing intervals in both strata must fall entirely within +/-1% and include zero. Compare all 295 address/hash trace positions without filtering any runs.",
+    "correctness": "Reference the prior 372 result/plan captures and 10 statement-state queries by binary and archive hashes; do not count them as new checks. Run the unchanged helper checks and eight new smoke processes for this driver setup, verifying selected-query results and traces.",
+    "stopping_rule": "Exactly one fixed 16-group collection. Retain every attempt and failure. No conditional candidate comparison, no seed replacement, no outcome-based extension, no exclusion of unstable addresses. No builds, tests, source inspection or unrelated work during measurement. Freeze scripts and inputs before collection.",
+    "limits": [
+      "This rebuilt diagnostic includes retained state, cold tracing and sorted field destruction; it is not the original release executable.",
+      "Stable occupied-element address bounds do not establish that all allocations or hardware state are identical.",
+      "Even passing self-controls would not establish an execution-time benefit, remove the original release interval, or adopt the optional type-inference patch.",
+      "Fresh-state and retained execution-context settings are fixed; this does not measure a state-reuse speedup."
+    ]
+  },
+  "analysis": {
+    "groups": {
+      "same-before": {
+        "four_process_groups": 8,
+        "metrics": {
+          "median_ms": {
+            "median_group_change_pct": 0.009042628653760376,
+            "stratified_whole_group_bootstrap_95_interval": [
+              -1.2519387671450444,
+              0.13893299021355277
+            ],
+            "within_one_percent": false,
+            "contains_zero": true,
+            "block_medians_pct": [
+              1.7765540423430148,
+              -2.66419897500621,
+              0.1937055605978677,
+              -1.6786421638117832
+            ],
+            "group_changes_pct": [
+              3.520357212548353,
+              0.0327508721376768,
+              -0.014665614830156048,
+              -5.313732335182264,
+              0.2925315952572616,
+              0.09487952593847382,
+              -2.5366284064277655,
+              -0.8206559211958009
+            ]
+          },
+          "mean_ms": {
+            "median_group_change_pct": -0.017294873515744102,
+            "stratified_whole_group_bootstrap_95_interval": [
+              -1.2287972159222615,
+              0.0622812466089806
+            ],
+            "within_one_percent": false,
+            "contains_zero": true,
+            "block_medians_pct": [
+              1.6615994269468581,
+              -2.5999923431717527,
+              0.2059619149092473,
+              -1.6398092855166746
+            ],
+            "group_changes_pct": [
+              3.2212928971210086,
+              0.10190595677270764,
+              -0.13649570380419584,
+              -5.06348898253931,
+              0.26105819702215705,
+              0.15086563279633758,
+              -2.5595003886172307,
+              -0.7201181824161185
+            ]
+          },
+          "instructions": {
+            "median_group_change_pct": 3.158333772290689e-06,
+            "stratified_whole_group_bootstrap_95_interval": [
+              -5.55565909943212e-07,
+              7.335059259983012e-06
+            ],
+            "within_one_percent": true,
+            "contains_zero": true,
+            "block_medians_pct": [
+              -2.188804693048496e-07,
+              1.0044945031317809e-05,
+              9.167191727943447e-07,
+              6.097083116163304e-06
+            ],
+            "group_changes_pct": [
+              -5.885786746873123e-06,
+              5.448025808263424e-06,
+              4.0002385848225686e-07,
+              1.968986620415336e-05,
+              3.34459402395737e-06,
+              -1.5111556783686808e-06,
+              2.972073520624008e-06,
+              9.2220927117026e-06
+            ]
+          }
+        }
+      },
+      "same-after": {
+        "four_process_groups": 8,
+        "metrics": {
+          "median_ms": {
+            "median_group_change_pct": -0.05431925114204317,
+            "stratified_whole_group_bootstrap_95_interval": [
+              -0.059656594723378475,
+              0.18175102926729636
+            ],
+            "within_one_percent": true,
+            "contains_zero": true,
+            "block_medians_pct": [
+              0.4569090703243406,
+              -0.3838015541130724,
+              0.3913643512585385,
+              -0.11604077409198554
+            ],
+            "group_changes_pct": [
+              0.9117532124221173,
+              0.0020649282265639,
+              -0.3863299277346077,
+              -0.381273180491537,
+              0.47420548904524296,
+              0.3085232134718341,
+              -0.11070343051065024,
+              -0.12137811767332085
+            ]
+          },
+          "mean_ms": {
+            "median_group_change_pct": -0.054803897222543974,
+            "stratified_whole_group_bootstrap_95_interval": [
+              -0.13819145695841972,
+              0.24063975191591092
+            ],
+            "within_one_percent": true,
+            "contains_zero": true,
+            "block_medians_pct": [
+              0.3549446630709163,
+              -0.35643778373648516,
+              0.47020357804319346,
+              -0.1607057522245936
+            ],
+            "group_changes_pct": [
+              0.7421789280982027,
+              -0.032289601956370095,
+              -0.38651714327073705,
+              -0.32635842420223327,
+              0.38180945976584724,
+              0.5585976963205397,
+              -0.24409331196046935,
+              -0.07731819248871785
+            ]
+          },
+          "instructions": {
+            "median_group_change_pct": 8.353832181562382e-07,
+            "stratified_whole_group_bootstrap_95_interval": [
+              -6.136278651869276e-07,
+              2.568356449739184e-06
+            ],
+            "within_one_percent": true,
+            "contains_zero": true,
+            "block_medians_pct": [
+              2.1018735196776106e-06,
+              -4.318536789282845e-06,
+              3.2394982640848724e-06,
+              2.450622371696909e-07
+            ],
+            "group_changes_pct": [
+              3.5369620343672636e-06,
+              6.667850049879576e-07,
+              1.0039814313245188e-06,
+              -9.64105500989021e-06,
+              -1.1762933960213218e-07,
+              6.596625867771877e-06,
+              -1.109626390771723e-06,
+              1.5997508651111048e-06
+            ]
+          }
+        }
+      }
+    },
+    "controls_passed": false,
+    "group_metrics": [
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 0,
+        "directory": "group-00",
+        "metrics": {
+          "median_ms": 3.520357212548353,
+          "mean_ms": 3.2212928971210086,
+          "instructions": -5.885786746873123e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 0,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 2,
+        "shared_seed_setting": "4dc23c34a4e22743",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 1,
+        "directory": "group-01",
+        "metrics": {
+          "median_ms": 0.0327508721376768,
+          "mean_ms": 0.10190595677270764,
+          "instructions": 5.448025808263424e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 0,
+        "shared_seed_setting": "99b71b5754a0a7a4",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 2,
+        "directory": "group-02",
+        "metrics": {
+          "median_ms": 0.9117532124221173,
+          "mean_ms": 0.7421789280982027,
+          "instructions": 3.5369620343672636e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 0,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 2,
+        "shared_seed_setting": "4dc23c34a4e22743",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 3,
+        "directory": "group-03",
+        "metrics": {
+          "median_ms": 0.0020649282265639,
+          "mean_ms": -0.032289601956370095,
+          "instructions": 6.667850049879576e-07
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 4,
+        "directory": "group-04",
+        "metrics": {
+          "median_ms": -0.3863299277346077,
+          "mean_ms": -0.38651714327073705,
+          "instructions": 1.0039814313245188e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 6,
+        "shared_seed_setting": "c78c1ffffdd6e242",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 5,
+        "directory": "group-05",
+        "metrics": {
+          "median_ms": -0.381273180491537,
+          "mean_ms": -0.32635842420223327,
+          "instructions": -9.64105500989021e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 4,
+        "shared_seed_setting": "1c1478894fd7d562",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 6,
+        "directory": "group-06",
+        "metrics": {
+          "median_ms": -0.014665614830156048,
+          "mean_ms": -0.13649570380419584,
+          "instructions": 4.0002385848225686e-07
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 1,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 6,
+        "shared_seed_setting": "c78c1ffffdd6e242",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 7,
+        "directory": "group-07",
+        "metrics": {
+          "median_ms": -5.313732335182264,
+          "mean_ms": -5.06348898253931,
+          "instructions": 1.968986620415336e-05
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 8,
+        "shared_seed_setting": "88edaa1d04feec96",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 8,
+        "directory": "group-08",
+        "metrics": {
+          "median_ms": 0.2925315952572616,
+          "mean_ms": 0.26105819702215705,
+          "instructions": 3.34459402395737e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-before",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 10,
+        "shared_seed_setting": "63bf89d45269aff5",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 9,
+        "directory": "group-09",
+        "metrics": {
+          "median_ms": 0.09487952593847382,
+          "mean_ms": 0.15086563279633758,
+          "instructions": -1.5111556783686808e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 8,
+        "shared_seed_setting": "88edaa1d04feec96",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 10,
+        "directory": "group-10",
+        "metrics": {
+          "median_ms": 0.47420548904524296,
+          "mean_ms": 0.38180945976584724,
+          "instructions": -1.1762933960213218e-07
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 2,
+        "scenario": "same-after",
+        "preparation_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 10,
+        "shared_seed_setting": "63bf89d45269aff5",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 11,
+        "directory": "group-11",
+        "metrics": {
+          "median_ms": 0.3085232134718341,
+          "mean_ms": 0.5585976963205397,
+          "instructions": 6.596625867771877e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 12,
+        "shared_seed_setting": "1bc957e59536982e",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 12,
+        "directory": "group-12",
+        "metrics": {
+          "median_ms": -0.11070343051065024,
+          "mean_ms": -0.24409331196046935,
+          "instructions": -1.109626390771723e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-after",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 14,
+        "shared_seed_setting": "0cd079710b3053c5",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 13,
+        "directory": "group-13",
+        "metrics": {
+          "median_ms": -0.12137811767332085,
+          "mean_ms": -0.07731819248871785,
+          "instructions": 1.5997508651111048e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          2,
+          3,
+          0,
+          1
+        ],
+        "execution_order": [
+          2,
+          0,
+          1,
+          3
+        ],
+        "seed_index": 12,
+        "shared_seed_setting": "1bc957e59536982e",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 14,
+        "directory": "group-14",
+        "metrics": {
+          "median_ms": -2.5366284064277655,
+          "mean_ms": -2.5595003886172307,
+          "instructions": 2.972073520624008e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      },
+      {
+        "block": 3,
+        "scenario": "same-before",
+        "preparation_order": [
+          3,
+          0,
+          1,
+          2
+        ],
+        "execution_order": [
+          0,
+          2,
+          3,
+          1
+        ],
+        "seed_index": 14,
+        "shared_seed_setting": "0cd079710b3053c5",
+        "address_mode": "fixed",
+        "release_order": "sorted",
+        "state_mode": "fresh",
+        "context_mode": "reuse",
+        "warmups": 32,
+        "samples": 261,
+        "index": 15,
+        "directory": "group-15",
+        "metrics": {
+          "median_ms": -0.8206559211958009,
+          "mean_ms": -0.7201181824161185,
+          "instructions": 9.2220927117026e-06
+        },
+        "traces_per_process": 295,
+        "traces": {
+          "hash": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          },
+          "address": {
+            "distinct_complete_sequences": 1,
+            "matching_positions": 295,
+            "mismatch_indices": [],
+            "prepared_plan_mismatch_indices": []
+          }
+        }
+      }
+    ],
+    "same_executable": true,
+    "candidate_comparison_performed": false,
+    "processes": 64,
+    "table_traces": 18880,
+    "prepared_plan_executions": 16704,
+    "groups_with_matching_complete_addresses": 16,
+    "groups_with_matching_complete_hashes": 16
+  },
+  "counter_followup": {
+    "scope": "Post-collection descriptive analysis of all 16 groups. The frozen timing criteria and all runs remain unchanged.",
+    "caution": "User cycles divided by task-clock is an aggregate proxy, not a direct APERF/MPERF clock measurement. Correlated cycle and branch-miss changes do not establish the source or cause of mispredictions.",
+    "groups": [
+      {
+        "index": 0,
+        "scenario": "same-before",
+        "seed_index": 0,
+        "mean_based_change_pct": 3.2212928971210086,
+        "counter_changes_pct": {
+          "cycles": 3.2901097330478635,
+          "instructions": -5.885786746873123e-06,
+          "branches": -6.765523496987669e-06,
+          "branch_misses": 34.63765788761888,
+          "cycles_per_instruction": 3.2901159224402843,
+          "user_cycles_per_task_ns": 0.029888811279610294
+        },
+        "runs": [
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.1967551264367815,
+            "median_ms": 2.186551,
+            "cycles": 2722591164.0,
+            "instructions": 12751056747.0,
+            "branches": 1781089100.0,
+            "branch_misses": 6193484.0,
+            "task_clock_ms": 573.201584,
+            "cycles_per_instruction": 0.21351886498666525,
+            "user_cycles_per_task_ns": 4.749796999863141,
+            "runqueue_wait_ms": 0.272261,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.180318685823755,
+            "median_ms": 2.169399,
+            "cycles": 2702282943.0,
+            "instructions": 12751056467.0,
+            "branches": 1781089053.0,
+            "branch_misses": 5707465.0,
+            "task_clock_ms": 568.921087,
+            "cycles_per_instruction": 0.21192619999711904,
+            "user_cycles_per_task_ns": 4.7498379032661875,
+            "runqueue_wait_ms": 0.254297,
+            "involuntary_switches": 3
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.3153390574712645,
+            "median_ms": 2.316943,
+            "cycles": 2873864069.0,
+            "instructions": 12751055350.0,
+            "branches": 1781088882.0,
+            "branch_misses": 9647544.0,
+            "task_clock_ms": 604.359363,
+            "cycles_per_instruction": 0.22538244797125753,
+            "user_cycles_per_task_ns": 4.755223870007289,
+            "runqueue_wait_ms": 0.059871,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.202733122605364,
+            "median_ms": 2.1923519999999996,
+            "cycles": 2729494349.0,
+            "instructions": 12751056363.0,
+            "branches": 1781089030.0,
+            "branch_misses": 6375615.0,
+            "task_clock_ms": 574.963219,
+            "cycles_per_instruction": 0.21406025283679472,
+            "user_cycles_per_task_ns": 4.7472503610704875,
+            "runqueue_wait_ms": 0.062659,
+            "involuntary_switches": 5
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "scenario": "same-before",
+        "seed_index": 2,
+        "mean_based_change_pct": 0.10190595677270764,
+        "counter_changes_pct": {
+          "cycles": -0.03742246934453908,
+          "instructions": 5.448025808263424e-06,
+          "branches": 8.059021228135066e-06,
+          "branch_misses": 0.20413120582276623,
+          "cycles_per_instruction": -0.03742791206693408,
+          "user_cycles_per_task_ns": -0.11640858454858849
+        },
+        "runs": [
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.197053624521073,
+            "median_ms": 2.187883,
+            "cycles": 2723117093.0,
+            "instructions": 12747736228.0,
+            "branches": 1780613105.0,
+            "branch_misses": 6230480.0,
+            "task_clock_ms": 573.48336,
+            "cycles_per_instruction": 0.21361573884928364,
+            "user_cycles_per_task_ns": 4.748380306971766,
+            "runqueue_wait_ms": 0.053411,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.2046408122605365,
+            "median_ms": 2.1916610000000003,
+            "cycles": 2729822915.0,
+            "instructions": 12747737750.0,
+            "branches": 1780613425.0,
+            "branch_misses": 6256935.0,
+            "task_clock_ms": 575.406165,
+            "cycles_per_instruction": 0.21414175350446005,
+            "user_cycles_per_task_ns": 4.744166957265743,
+            "runqueue_wait_ms": 0.115104,
+            "involuntary_switches": 8
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.1977316475095785,
+            "median_ms": 2.185228,
+            "cycles": 2719084286.0,
+            "instructions": 12747737539.0,
+            "branches": 1780613366.0,
+            "branch_misses": 6262985.0,
+            "task_clock_ms": 573.457643,
+            "cycles_per_instruction": 0.21329936215593748,
+            "user_cycles_per_task_ns": 4.741560809574911,
+            "runqueue_wait_ms": 0.2624,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.200837122605364,
+            "median_ms": 2.187573,
+            "cycles": 2727829987.0,
+            "instructions": 12747737672.0,
+            "branches": 1780613399.0,
+            "branch_misses": 6263935.0,
+            "task_clock_ms": 574.473198,
+            "cycles_per_instruction": 0.2139854189964696,
+            "user_cycles_per_task_ns": 4.748402530347464,
+            "runqueue_wait_ms": 0.046646,
+            "involuntary_switches": 4
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "scenario": "same-after",
+        "seed_index": 0,
+        "mean_based_change_pct": 0.7421789280982027,
+        "counter_changes_pct": {
+          "cycles": 0.8427683620447546,
+          "instructions": 3.5369620343672636e-06,
+          "branches": 6.119851736485771e-06,
+          "branch_misses": 7.345913075213528,
+          "cycles_per_instruction": 0.8427647696249707,
+          "user_cycles_per_task_ns": 0.07688848294171713
+        },
+        "runs": [
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.1989304942528736,
+            "median_ms": 2.184156,
+            "cycles": 2722959630.0,
+            "instructions": 12751055217.0,
+            "branches": 1781088799.0,
+            "branch_misses": 6232676.0,
+            "task_clock_ms": 573.976077,
+            "cycles_per_instruction": 0.21354778750935746,
+            "user_cycles_per_task_ns": 4.744029828267564,
+            "runqueue_wait_ms": 0.050715,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.1794247318007662,
+            "median_ms": 2.166144,
+            "cycles": 2696138435.0,
+            "instructions": 12751056309.0,
+            "branches": 1781089007.0,
+            "branch_misses": 5703022.0,
+            "task_clock_ms": 568.671548,
+            "cycles_per_instruction": 0.21144432034991495,
+            "user_cycles_per_task_ns": 4.741117160656682,
+            "runqueue_wait_ms": 0.279184,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.2080205134099615,
+            "median_ms": 2.198644,
+            "cycles": 2736325251.0,
+            "instructions": 12751056589.0,
+            "branches": 1781089084.0,
+            "branch_misses": 6394611.0,
+            "task_clock_ms": 576.364003,
+            "cycles_per_instruction": 0.21459596166803585,
+            "user_cycles_per_task_ns": 4.747564450169175,
+            "runqueue_wait_ms": 0.046458,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.2028299425287354,
+            "median_ms": 2.19132,
+            "cycles": 2728443258.0,
+            "instructions": 12751055839.0,
+            "branches": 1781088940.0,
+            "branch_misses": 6417873.0,
+            "task_clock_ms": 575.02947,
+            "cycles_per_instruction": 0.21397782994996106,
+            "user_cycles_per_task_ns": 4.744875524379646,
+            "runqueue_wait_ms": 0.032852,
+            "involuntary_switches": 3
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "scenario": "same-after",
+        "seed_index": 2,
+        "mean_based_change_pct": -0.032289601956370095,
+        "counter_changes_pct": {
+          "cycles": 0.0311693191471063,
+          "instructions": 6.667850049879576e-07,
+          "branches": 1.1232085039836193e-06,
+          "branch_misses": 4.829119535890025,
+          "cycles_per_instruction": 0.031168704325135188,
+          "user_cycles_per_task_ns": 0.046567425994048506
+        },
+        "runs": [
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.182694256704981,
+            "median_ms": 2.170261,
+            "cycles": 2700222855.0,
+            "instructions": 12747736562.0,
+            "branches": 1780613177.0,
+            "branch_misses": 5505858.0,
+            "task_clock_ms": 569.539644,
+            "cycles_per_instruction": 0.21181978791820597,
+            "user_cycles_per_task_ns": 4.741062160371754,
+            "runqueue_wait_ms": 0.254989,
+            "involuntary_switches": 3
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.2038474329501914,
+            "median_ms": 2.1894660000000004,
+            "cycles": 2730696723.0,
+            "instructions": 12747736697.0,
+            "branches": 1780613209.0,
+            "branch_misses": 6154942.0,
+            "task_clock_ms": 575.262196,
+            "cycles_per_instruction": 0.21421031732186868,
+            "user_cycles_per_task_ns": 4.746873237955654,
+            "runqueue_wait_ms": 0.060775,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.176751593869732,
+            "median_ms": 2.1691290000000003,
+            "cycles": 2694718318.0,
+            "instructions": 12747737875.0,
+            "branches": 1780613438.0,
+            "branch_misses": 5509413.0,
+            "task_clock_ms": 568.172572,
+            "cycles_per_instruction": 0.21138796109737235,
+            "user_cycles_per_task_ns": 4.742781420290031,
+            "runqueue_wait_ms": 0.059381,
+            "involuntary_switches": 7
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.199319704980843,
+            "median_ms": 2.188244,
+            "cycles": 2723501648.0,
+            "instructions": 12747737840.0,
+            "branches": 1780613430.0,
+            "branch_misses": 5621160.0,
+            "task_clock_ms": 574.072706,
+            "cycles_per_instruction": 0.21364587836550614,
+            "user_cycles_per_task_ns": 4.74417546686151,
+            "runqueue_wait_ms": 0.053989,
+            "involuntary_switches": 5
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "scenario": "same-after",
+        "seed_index": 4,
+        "mean_based_change_pct": -0.38651714327073705,
+        "counter_changes_pct": {
+          "cycles": -0.31419612933291097,
+          "instructions": 1.0039814313245188e-06,
+          "branches": 7.580736927081944e-07,
+          "branch_misses": -0.523252607682978,
+          "cycles_per_instruction": -0.3141970897377999,
+          "user_cycles_per_task_ns": 0.05901988961625193
+        },
+        "runs": [
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.1717595249042145,
+            "median_ms": 2.1633780000000002,
+            "cycles": 2687428502.0,
+            "instructions": 12749240985.0,
+            "branches": 1780829745.0,
+            "branch_misses": 5481615.0,
+            "task_clock_ms": 566.89654,
+            "cycles_per_instruction": 0.2107912545665949,
+            "user_cycles_per_task_ns": 4.740597820547643,
+            "runqueue_wait_ms": 0.053541,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.183168946360153,
+            "median_ms": 2.1712730000000002,
+            "cycles": 2701765393.0,
+            "instructions": 12749238967.0,
+            "branches": 1780829324.0,
+            "branch_misses": 5503643.0,
+            "task_clock_ms": 569.681723,
+            "cycles_per_instruction": 0.21191581709255133,
+            "user_cycles_per_task_ns": 4.742587455276321,
+            "runqueue_wait_ms": 0.244318,
+            "involuntary_switches": 3
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.1813839310344827,
+            "median_ms": 2.1692489999999998,
+            "cycles": 2696617360.0,
+            "instructions": 12749238810.0,
+            "branches": 1780829294.0,
+            "branch_misses": 5529799.0,
+            "task_clock_ms": 569.39796,
+            "cycles_per_instruction": 0.211512028301241,
+            "user_cycles_per_task_ns": 4.735909766870257,
+            "runqueue_wait_ms": 0.069509,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.190442398467433,
+            "median_ms": 2.182213,
+            "cycles": 2709562543.0,
+            "instructions": 12749240886.0,
+            "branches": 1780829748.0,
+            "branch_misses": 5513242.0,
+            "task_clock_ms": 571.434911,
+            "cycles_per_instruction": 0.21252736278403705,
+            "user_cycles_per_task_ns": 4.741681844846193,
+            "runqueue_wait_ms": 0.398145,
+            "involuntary_switches": 26
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "scenario": "same-after",
+        "seed_index": 6,
+        "mean_based_change_pct": -0.32635842420223327,
+        "counter_changes_pct": {
+          "cycles": -0.3478280530818889,
+          "instructions": -9.64105500989021e-06,
+          "branches": -1.3950105759441556e-05,
+          "branch_misses": -6.504305732850845,
+          "cycles_per_instruction": -0.34781844796530903,
+          "user_cycles_per_task_ns": -0.02660808455786645
+        },
+        "runs": [
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.18498522605364,
+            "median_ms": 2.172625,
+            "cycles": 2706718312.0,
+            "instructions": 12752752425.0,
+            "branches": 1781348240.0,
+            "branch_misses": 5746179.0,
+            "task_clock_ms": 570.314319,
+            "cycles_per_instruction": 0.21224581343662366,
+            "user_cycles_per_task_ns": 4.746011491954141,
+            "runqueue_wait_ms": 0.072016,
+            "involuntary_switches": 7
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.2062291187739462,
+            "median_ms": 2.197161,
+            "cycles": 2732526256.0,
+            "instructions": 12752753647.0,
+            "branches": 1781348487.0,
+            "branch_misses": 6387740.0,
+            "task_clock_ms": 575.816207,
+            "cycles_per_instruction": 0.21426950850280155,
+            "user_cycles_per_task_ns": 4.745483407347026,
+            "runqueue_wait_ms": 0.137227,
+            "involuntary_switches": 11
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.201312429118774,
+            "median_ms": 2.193654,
+            "cycles": 2726632898.0,
+            "instructions": 12752753762.0,
+            "branches": 1781348517.0,
+            "branch_misses": 6393824.0,
+            "task_clock_ms": 574.38431,
+            "cycles_per_instruction": 0.21380738222396173,
+            "user_cycles_per_task_ns": 4.747053236882463,
+            "runqueue_wait_ms": 0.273261,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.208171938697318,
+            "median_ms": 2.2014489999999998,
+            "cycles": 2733452355.0,
+            "instructions": 12752752525.0,
+            "branches": 1781348267.0,
+            "branch_misses": 6204033.0,
+            "task_clock_ms": 576.191551,
+            "cycles_per_instruction": 0.2143421468927156,
+            "user_cycles_per_task_ns": 4.743999370098365,
+            "runqueue_wait_ms": 0.27722,
+            "involuntary_switches": 16
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "scenario": "same-before",
+        "seed_index": 4,
+        "mean_based_change_pct": -0.13649570380419584,
+        "counter_changes_pct": {
+          "cycles": -0.11681279667163924,
+          "instructions": 4.0002385848225686e-07,
+          "branches": 1.291532969460718e-06,
+          "branch_misses": 1.6314967688189297,
+          "cycles_per_instruction": -0.1168132003970701,
+          "user_cycles_per_task_ns": 0.034665276645662324
+        },
+        "runs": [
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.194076471264368,
+            "median_ms": 2.1854489999999998,
+            "cycles": 2719291516.0,
+            "instructions": 12749239276.0,
+            "branches": 1780829423.0,
+            "branch_misses": 6240412.0,
+            "task_clock_ms": 572.728657,
+            "cycles_per_instruction": 0.2132904918585199,
+            "user_cycles_per_task_ns": 4.747957837912064,
+            "runqueue_wait_ms": 0.034425,
+            "involuntary_switches": 3
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.196776325670498,
+            "median_ms": 2.184678,
+            "cycles": 2719452535.0,
+            "instructions": 12749240231.0,
+            "branches": 1780829597.0,
+            "branch_misses": 6276452.0,
+            "task_clock_ms": 573.214268,
+            "cycles_per_instruction": 0.21330310557546822,
+            "user_cycles_per_task_ns": 4.744216407048682,
+            "runqueue_wait_ms": 0.256531,
+            "involuntary_switches": 3
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.1972309846743294,
+            "median_ms": 2.18613,
+            "cycles": 2720605913.0,
+            "instructions": 12749240427.0,
+            "branches": 1780829638.0,
+            "branch_misses": 6020504.0,
+            "task_clock_ms": 573.533478,
+            "cycles_per_instruction": 0.21339356870534607,
+            "user_cycles_per_task_ns": 4.743586934954824,
+            "runqueue_wait_ms": 0.0692,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.199623329501916,
+            "median_ms": 2.184638,
+            "cycles": 2724498717.0,
+            "instructions": 12749238978.0,
+            "branches": 1780829336.0,
+            "branch_misses": 6295426.0,
+            "task_clock_ms": 574.147027,
+            "cycles_per_instruction": 0.21369892914403568,
+            "user_cycles_per_task_ns": 4.74529796180587,
+            "runqueue_wait_ms": 0.074648,
+            "involuntary_switches": 8
+          }
+        ]
+      },
+      {
+        "index": 7,
+        "scenario": "same-before",
+        "seed_index": 6,
+        "mean_based_change_pct": -5.06348898253931,
+        "counter_changes_pct": {
+          "cycles": -5.222798577749554,
+          "instructions": 1.968986620415336e-05,
+          "branches": 2.8377379601707275e-05,
+          "branch_misses": -36.1248387841888,
+          "cycles_per_instruction": -5.222817189815354,
+          "user_cycles_per_task_ns": -0.1852136445308905
+        },
+        "runs": [
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.2138876781609196,
+            "median_ms": 2.204855,
+            "cycles": 2744680638.0,
+            "instructions": 12752753696.0,
+            "branches": 1781348502.0,
+            "branch_misses": 6396859.0,
+            "task_clock_ms": 577.862753,
+            "cycles_per_instruction": 0.21522258669991332,
+            "user_cycles_per_task_ns": 4.749710244778487,
+            "runqueue_wait_ms": 0.066384,
+            "involuntary_switches": 7
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.3251102298850577,
+            "median_ms": 2.322474,
+            "cycles": 2887599903.0,
+            "instructions": 12752752487.0,
+            "branches": 1781348318.0,
+            "branch_misses": 9972762.0,
+            "task_clock_ms": 606.695333,
+            "cycles_per_instruction": 0.22642954185330452,
+            "user_cycles_per_task_ns": 4.759555160448218,
+            "runqueue_wait_ms": 0.283251,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.319254275862069,
+            "median_ms": 2.3181059999999998,
+            "cycles": 2881159633.0,
+            "instructions": 12752753483.0,
+            "branches": 1781348501.0,
+            "branch_misses": 9967900.0,
+            "task_clock_ms": 605.386398,
+            "cycles_per_instruction": 0.2259245140150099,
+            "user_cycles_per_task_ns": 4.75920774321725,
+            "runqueue_wait_ms": 0.04202,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.1953099425287355,
+            "median_ms": 2.1891369999999997,
+            "cycles": 2722788207.0,
+            "instructions": 12752757296.0,
+            "branches": 1781349328.0,
+            "branch_misses": 6340271.0,
+            "task_clock_ms": 573.046944,
+            "cycles_per_instruction": 0.2135058437796839,
+            "user_cycles_per_task_ns": 4.751422611198848,
+            "runqueue_wait_ms": 0.044464,
+            "involuntary_switches": 5
+          }
+        ]
+      },
+      {
+        "index": 8,
+        "scenario": "same-before",
+        "seed_index": 8,
+        "mean_based_change_pct": 0.26105819702215705,
+        "counter_changes_pct": {
+          "cycles": 0.31554242436577784,
+          "instructions": 3.34459402395737e-06,
+          "branches": 4.182529367291465e-06,
+          "branch_misses": -0.3851519586055896,
+          "cycles_per_instruction": 0.31553904554475487,
+          "user_cycles_per_task_ns": 0.03501316928811171
+        },
+        "runs": [
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.2107340459770115,
+            "median_ms": 2.199075,
+            "cycles": 2737253152.0,
+            "instructions": 12751919952.0,
+            "branches": 1781218506.0,
+            "branch_misses": 6359709.0,
+            "task_clock_ms": 576.849144,
+            "cycles_per_instruction": 0.21465419813670425,
+            "user_cycles_per_task_ns": 4.74518022687748,
+            "runqueue_wait_ms": 0.262463,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.2002610881226055,
+            "median_ms": 2.19122,
+            "cycles": 2727038705.0,
+            "instructions": 12751922720.0,
+            "branches": 1781219117.0,
+            "branch_misses": 6377082.0,
+            "task_clock_ms": 574.333074,
+            "cycles_per_instruction": 0.2138531392385979,
+            "user_cycles_per_task_ns": 4.748183290241787,
+            "runqueue_wait_ms": 0.041658,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.206418590038314,
+            "median_ms": 2.1984830000000004,
+            "cycles": 2735614343.0,
+            "instructions": 12751921538.0,
+            "branches": 1781218830.0,
+            "branch_misses": 6331661.0,
+            "task_clock_ms": 575.957942,
+            "cycles_per_instruction": 0.2145256567685133,
+            "user_cycles_per_task_ns": 4.7496772654972785,
+            "runqueue_wait_ms": 0.044422,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.216091808429119,
+            "median_ms": 2.204655,
+            "cycles": 2745919673.0,
+            "instructions": 12751921987.0,
+            "branches": 1781218942.0,
+            "branch_misses": 6356074.0,
+            "task_clock_ms": 578.452451,
+            "cycles_per_instruction": 0.2153337885692321,
+            "user_cycles_per_task_ns": 4.747010179061373,
+            "runqueue_wait_ms": 0.064493,
+            "involuntary_switches": 6
+          }
+        ]
+      },
+      {
+        "index": 9,
+        "scenario": "same-before",
+        "seed_index": 10,
+        "mean_based_change_pct": 0.15086563279633758,
+        "counter_changes_pct": {
+          "cycles": 0.1328420945601927,
+          "instructions": -1.5111556783686808e-06,
+          "branches": -1.877498689850654e-06,
+          "branch_misses": 0.910880748910281,
+          "cycles_per_instruction": 0.13284363409302724,
+          "user_cycles_per_task_ns": -0.000988026447112933
+        },
+        "runs": [
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.2128672720306515,
+            "median_ms": 2.2062079999999997,
+            "cycles": 2741067854.0,
+            "instructions": 12771682364.0,
+            "branches": 1784288913.0,
+            "branch_misses": 6382953.0,
+            "task_clock_ms": 577.604973,
+            "cycles_per_instruction": 0.2146207348317984,
+            "user_cycles_per_task_ns": 4.74557523243485,
+            "runqueue_wait_ms": 0.065734,
+            "involuntary_switches": 8
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.2073632298850576,
+            "median_ms": 2.200447,
+            "cycles": 2732575383.0,
+            "instructions": 12771683235.0,
+            "branches": 1784289096.0,
+            "branch_misses": 6405671.0,
+            "task_clock_ms": 575.981716,
+            "cycles_per_instruction": 0.21395577487480646,
+            "user_cycles_per_task_ns": 4.74420507994042,
+            "runqueue_wait_ms": 0.255469,
+            "involuntary_switches": 3
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.2184552298850573,
+            "median_ms": 2.20721,
+            "cycles": 2745958495.0,
+            "instructions": 12771680762.0,
+            "branches": 1784288570.0,
+            "branch_misses": 6387427.0,
+            "task_clock_ms": 579.079226,
+            "cycles_per_instruction": 0.21500369028719699,
+            "user_cycles_per_task_ns": 4.741939223010566,
+            "runqueue_wait_ms": 0.05849,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.2062842068965516,
+            "median_ms": 2.197271,
+            "cycles": 2730197880.0,
+            "instructions": 12771682019.0,
+            "branches": 1784288820.0,
+            "branch_misses": 6294667.0,
+            "task_clock_ms": 575.910584,
+            "cycles_per_instruction": 0.2137696409868627,
+            "user_cycles_per_task_ns": 4.740662797056705,
+            "runqueue_wait_ms": 0.055012,
+            "involuntary_switches": 6
+          }
+        ]
+      },
+      {
+        "index": 10,
+        "scenario": "same-after",
+        "seed_index": 8,
+        "mean_based_change_pct": 0.38180945976584724,
+        "counter_changes_pct": {
+          "cycles": 0.41682488942245133,
+          "instructions": -1.1762933960213218e-07,
+          "branches": 2.2456536630244273e-07,
+          "branch_misses": 5.534056781040686,
+          "cycles_per_instruction": 0.4168250124931827,
+          "user_cycles_per_task_ns": 0.014277019048947182
+        },
+        "runs": [
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.1758539425287355,
+            "median_ms": 2.169058,
+            "cycles": 2694561918.0,
+            "instructions": 12751921196.0,
+            "branches": 1781218740.0,
+            "branch_misses": 5720462.0,
+            "task_clock_ms": 567.756392,
+            "cycles_per_instruction": 0.2113063495754056,
+            "user_cycles_per_task_ns": 4.745982530479375,
+            "runqueue_wait_ms": 0.264133,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.191844900383142,
+            "median_ms": 2.179057,
+            "cycles": 2714491997.0,
+            "instructions": 12751920100.0,
+            "branches": 1781218514.0,
+            "branch_misses": 5593878.0,
+            "task_clock_ms": 572.109765,
+            "cycles_per_instruction": 0.21286927581988221,
+            "user_cycles_per_task_ns": 4.744704885434004,
+            "runqueue_wait_ms": 0.065522,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.2005851264367817,
+            "median_ms": 2.195248,
+            "cycles": 2727492961.0,
+            "instructions": 12751920018.0,
+            "branches": 1781218510.0,
+            "branch_misses": 6352011.0,
+            "task_clock_ms": 574.418746,
+            "cycles_per_instruction": 0.21388880710904723,
+            "user_cycles_per_task_ns": 4.74826592967772,
+            "runqueue_wait_ms": 0.046967,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.1837900038314175,
+            "median_ms": 2.173486,
+            "cycles": 2704107237.0,
+            "instructions": 12751921248.0,
+            "branches": 1781218752.0,
+            "branch_misses": 5588471.0,
+            "task_clock_ms": 570.0326,
+            "cycles_per_instruction": 0.21205488838978753,
+            "user_cycles_per_task_ns": 4.7437764734859025,
+            "runqueue_wait_ms": 0.054232,
+            "involuntary_switches": 5
+          }
+        ]
+      },
+      {
+        "index": 11,
+        "scenario": "same-after",
+        "seed_index": 10,
+        "mean_based_change_pct": 0.5585976963205397,
+        "counter_changes_pct": {
+          "cycles": 0.6097624018758019,
+          "instructions": 6.596625867771877e-06,
+          "branches": 9.779807808030228e-06,
+          "branch_misses": 2.05769985187354,
+          "cycles_per_instruction": 0.6097557665924791,
+          "user_cycles_per_task_ns": 0.03421919901485104
+        },
+        "runs": [
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.3058520153256703,
+            "median_ms": 2.311964,
+            "cycles": 2861539283.0,
+            "instructions": 12771680760.0,
+            "branches": 1784288633.0,
+            "branch_misses": 9417801.0,
+            "task_clock_ms": 601.896423,
+            "cycles_per_instruction": 0.22405346146469135,
+            "user_cycles_per_task_ns": 4.754205497247157,
+            "runqueue_wait_ms": 0.048422,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.3110994865900385,
+            "median_ms": 2.31541,
+            "cycles": 2868995319.0,
+            "instructions": 12771681886.0,
+            "branches": 1784288846.0,
+            "branch_misses": 9411249.0,
+            "task_clock_ms": 603.263107,
+            "cycles_per_instruction": 0.22463723608281547,
+            "user_cycles_per_task_ns": 4.75579442155411,
+            "runqueue_wait_ms": 0.03814,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.317731563218391,
+            "median_ms": 2.3195680000000003,
+            "cycles": 2877853384.0,
+            "instructions": 12771681456.0,
+            "branches": 1784288790.0,
+            "branch_misses": 9392674.0,
+            "task_clock_ms": 604.975498,
+            "cycles_per_instruction": 0.22533081442052527,
+            "user_cycles_per_task_ns": 4.756975106452989,
+            "runqueue_wait_ms": 0.06986,
+            "involuntary_switches": 7
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.297266122605364,
+            "median_ms": 2.308758,
+            "cycles": 2850479676.0,
+            "instructions": 12771680897.0,
+            "branches": 1784288654.0,
+            "branch_misses": 9006995.0,
+            "task_clock_ms": 599.43089,
+            "cycles_per_instruction": 0.22318751141594545,
+            "user_cycles_per_task_ns": 4.755309950743446,
+            "runqueue_wait_ms": 0.277963,
+            "involuntary_switches": 5
+          }
+        ]
+      },
+      {
+        "index": 12,
+        "scenario": "same-after",
+        "seed_index": 12,
+        "mean_based_change_pct": -0.24409331196046935,
+        "counter_changes_pct": {
+          "cycles": -0.21869485366518004,
+          "instructions": -1.109626390771723e-06,
+          "branches": -2.217555872263688e-06,
+          "branch_misses": -1.1944369865889426,
+          "cycles_per_instruction": -0.21869372905186646,
+          "user_cycles_per_task_ns": 0.060364358380970984
+        },
+        "runs": [
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.206190478927203,
+            "median_ms": 2.201769,
+            "cycles": 2734754628.0,
+            "instructions": 12752040088.0,
+            "branches": 1781240374.0,
+            "branch_misses": 6313587.0,
+            "task_clock_ms": 575.566269,
+            "cycles_per_instruction": 0.21445624457952223,
+            "user_cycles_per_task_ns": 4.751415736629973,
+            "runqueue_wait_ms": 0.376758,
+            "involuntary_switches": 10
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.201717417624521,
+            "median_ms": 2.1925019999999997,
+            "cycles": 2729613119.0,
+            "instructions": 12752039375.0,
+            "branches": 1781240245.0,
+            "branch_misses": 6375553.0,
+            "task_clock_ms": 574.545103,
+            "cycles_per_instruction": 0.21405306545330519,
+            "user_cycles_per_task_ns": 4.75091181657848,
+            "runqueue_wait_ms": 0.211207,
+            "involuntary_switches": 9
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.201206417624521,
+            "median_ms": 2.1924219999999996,
+            "cycles": 2727547528.0,
+            "instructions": 12752039213.0,
+            "branches": 1781240207.0,
+            "branch_misses": 6427577.0,
+            "task_clock_ms": 574.561946,
+            "cycles_per_instruction": 0.2138910869423469,
+            "user_cycles_per_task_ns": 4.747177474924523,
+            "runqueue_wait_ms": 0.070103,
+            "involuntary_switches": 7
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.217487214559387,
+            "median_ms": 2.206719,
+            "cycles": 2748796702.0,
+            "instructions": 12752040533.0,
+            "branches": 1781240491.0,
+            "branch_misses": 6414959.0,
+            "task_clock_ms": 578.765015,
+            "cycles_per_instruction": 0.21555740000093365,
+            "user_cycles_per_task_ns": 4.749417519647417,
+            "runqueue_wait_ms": 0.119685,
+            "involuntary_switches": 9
+          }
+        ]
+      },
+      {
+        "index": 13,
+        "scenario": "same-after",
+        "seed_index": 14,
+        "mean_based_change_pct": -0.07731819248871785,
+        "counter_changes_pct": {
+          "cycles": 0.03801127943610094,
+          "instructions": 1.5997508651111048e-06,
+          "branches": 2.638642926378054e-06,
+          "branch_misses": -2.5141390174782674,
+          "cycles_per_instruction": 0.03800970350722466,
+          "user_cycles_per_task_ns": 0.07762488770393094
+        },
+        "runs": [
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.1758463984674328,
+            "median_ms": 2.168358,
+            "cycles": 2698005969.0,
+            "instructions": 12751986609.0,
+            "branches": 1781218856.0,
+            "branch_misses": 5533756.0,
+            "task_clock_ms": 567.96821,
+            "cycles_per_instruction": 0.21157534521686386,
+            "user_cycles_per_task_ns": 4.750276373742819,
+            "runqueue_wait_ms": 0.046427,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.188929325670498,
+            "median_ms": 2.1835449999999996,
+            "cycles": 2710011942.0,
+            "instructions": 12751986230.0,
+            "branches": 1781218775.0,
+            "branch_misses": 5938953.0,
+            "task_clock_ms": 571.166395,
+            "cycles_per_instruction": 0.21251684977705626,
+            "user_cycles_per_task_ns": 4.744697807370128,
+            "runqueue_wait_ms": 0.270506,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.1737312068965515,
+            "median_ms": 2.16485,
+            "cycles": 2692442357.0,
+            "instructions": 12751985053.0,
+            "branches": 1781218532.0,
+            "branch_misses": 5526483.0,
+            "task_clock_ms": 567.189561,
+            "cycles_per_instruction": 0.2111390772346132,
+            "user_cycles_per_task_ns": 4.746988559262289,
+            "runqueue_wait_ms": 0.264957,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.1834410038314176,
+            "median_ms": 2.174759,
+            "cycles": 2706501872.0,
+            "instructions": 12751985082.0,
+            "branches": 1781218545.0,
+            "branch_misses": 5643423.0,
+            "task_clock_ms": 569.936503,
+            "cycles_per_instruction": 0.2122416121565535,
+            "user_cycles_per_task_ns": 4.748777903772905,
+            "runqueue_wait_ms": 0.053862,
+            "involuntary_switches": 6
+          }
+        ]
+      },
+      {
+        "index": 14,
+        "scenario": "same-before",
+        "seed_index": 12,
+        "mean_based_change_pct": -2.5595003886172307,
+        "counter_changes_pct": {
+          "cycles": -2.6937626930868874,
+          "instructions": 2.972073520624008e-06,
+          "branches": 2.4982591106947893e-06,
+          "branch_misses": -18.756531055836934,
+          "cycles_per_instruction": -2.6937655905136415,
+          "user_cycles_per_task_ns": -0.10574169251739152
+        },
+        "runs": [
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.28348069348659,
+            "median_ms": 2.309289,
+            "cycles": 2829861362.0,
+            "instructions": 12752040269.0,
+            "branches": 1781240450.0,
+            "branch_misses": 8868007.0,
+            "task_clock_ms": 595.85778,
+            "cycles_per_instruction": 0.22191439975917787,
+            "user_cycles_per_task_ns": 4.7492228128665195,
+            "runqueue_wait_ms": 0.263184,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.2370715478927203,
+            "median_ms": 2.21299,
+            "cycles": 2770855533.0,
+            "instructions": 12752040115.0,
+            "branches": 1781240385.0,
+            "branch_misses": 6979994.0,
+            "task_clock_ms": 583.73616,
+            "cycles_per_instruction": 0.21728723467084232,
+            "user_cycles_per_task_ns": 4.746760133893368,
+            "runqueue_wait_ms": 0.256051,
+            "involuntary_switches": 3
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.3198442567049806,
+            "median_ms": 2.3177749999999997,
+            "cycles": 2876686771.0,
+            "instructions": 12752039568.0,
+            "branches": 1781240321.0,
+            "branch_misses": 9736601.0,
+            "task_clock_ms": 605.528145,
+            "cycles_per_instruction": 0.2255864056616296,
+            "user_cycles_per_task_ns": 4.7507069568170115,
+            "runqueue_wait_ms": 0.063868,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.3194507586206896,
+            "median_ms": 2.322203,
+            "cycles": 2879076734.0,
+            "instructions": 12752040058.0,
+            "branches": 1781240425.0,
+            "branch_misses": 9770199.0,
+            "task_clock_ms": 605.442324,
+            "cycles_per_instruction": 0.22577381508410566,
+            "user_cycles_per_task_ns": 4.7553278320198835,
+            "runqueue_wait_ms": 0.049153,
+            "involuntary_switches": 5
+          }
+        ]
+      },
+      {
+        "index": 15,
+        "scenario": "same-before",
+        "seed_index": 14,
+        "mean_based_change_pct": -0.7201181824161185,
+        "counter_changes_pct": {
+          "cycles": -0.715544629208531,
+          "instructions": 9.2220927117026e-06,
+          "branches": 1.6617834974752554e-05,
+          "branch_misses": -7.226823430426044,
+          "cycles_per_instruction": -0.7155537850099924,
+          "user_cycles_per_task_ns": -0.015670465755057705
+        },
+        "runs": [
+          {
+            "slot": 3,
+            "label": "B",
+            "mean_ms": 2.178282559386973,
+            "median_ms": 2.170421,
+            "cycles": 2696877705.0,
+            "instructions": 12751985558.0,
+            "branches": 1781218655.0,
+            "branch_misses": 5561189.0,
+            "task_clock_ms": 568.606575,
+            "cycles_per_instruction": 0.21148688513908367,
+            "user_cycles_per_task_ns": 4.742959057411532,
+            "runqueue_wait_ms": 0.043912,
+            "involuntary_switches": 5
+          },
+          {
+            "slot": 0,
+            "label": "A",
+            "mean_ms": 2.1825348122605366,
+            "median_ms": 2.174128,
+            "cycles": 2702941492.0,
+            "instructions": 12751986094.0,
+            "branches": 1781218747.0,
+            "branch_misses": 5573012.0,
+            "task_clock_ms": 569.696963,
+            "cycles_per_instruction": 0.211962393314699,
+            "user_cycles_per_task_ns": 4.744525015135108,
+            "runqueue_wait_ms": 0.063509,
+            "involuntary_switches": 6
+          },
+          {
+            "slot": 1,
+            "label": "A",
+            "mean_ms": 2.207107582375479,
+            "median_ms": 2.200056,
+            "cycles": 2732712332.0,
+            "instructions": 12751986497.0,
+            "branches": 1781218843.0,
+            "branch_misses": 6416834.0,
+            "task_clock_ms": 575.909492,
+            "cycles_per_instruction": 0.21429699071928057,
+            "user_cycles_per_task_ns": 4.7450378400778295,
+            "runqueue_wait_ms": 0.261211,
+            "involuntary_switches": 4
+          },
+          {
+            "slot": 2,
+            "label": "B",
+            "mean_ms": 2.179749222222222,
+            "median_ms": 2.167866,
+            "cycles": 2699881590.0,
+            "instructions": 12751989385.0,
+            "branches": 1781219527.0,
+            "branch_misses": 5562172.0,
+            "task_clock_ms": 568.981068,
+            "cycles_per_instruction": 0.2117223837384805,
+            "user_cycles_per_task_ns": 4.745116739103874,
+            "runqueue_wait_ms": 0.051727,
+            "involuntary_switches": 5
+          }
+        ]
+      }
+    ]
+  },
+  "restoration": {
+    "shared_inputs_changed": false,
+    "checked_inventory_counts": {
+      "sources": 52,
+      "executables": 3
+    },
+    "binary_sha256": "967585cc99118a258f7189d928790d5fd846d9a2f30e5766bb08ccccc8a1897c",
+    "global_settings_unchanged": true
+  },
+  "source": {
+    "binary": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023/after-bench",
+      "sha256": "967585cc99118a258f7189d928790d5fd846d9a2f30e5766bb08ccccc8a1897c"
+    },
+    "unchanged_driver_sources": {
+      "run_group.py": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023/run_group.py",
+        "sha256": "467b31b33ae8054791b1dbe4ff64f89ab320fdc956951377bd807565a063ff05",
+        "unchanged": true
+      },
+      "phase_observer.py": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023/phase_observer.py",
+        "sha256": "fb40627f1b1fca4e88a00b6a8dd7beaaf504f8d2854f3dd385f98f26a6f53819",
+        "unchanged": true
+      },
+      "trace_parser.py": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023/trace_parser.py",
+        "sha256": "b210f642680f59d4ea4f453e7509a05cc0103415f5d11596df6f9f782fa70ae3",
+        "unchanged": true
+      },
+      "schedule_helper": {
+        "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/prepared_phase_schedule.py",
+        "sha256": "aff18f43111b6a396fd042fc193722b790cfefc1765541bb23f74a4306cc11eb"
+      }
+    },
+    "prior_verification": {
+      "path": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-session-state-72b7023/verification.json",
+      "sha256": "5b54a918d91989a194f9ff78c8b63a1952ba5454263e3f0d33602c1286dedafa",
+      "existing_exact_captures": 372,
+      "existing_statement_state_queries": 10,
+      "rerun": false
+    }
+  },
+  "references": {
+    "float-type-session-state-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-session-state-results.json",
+      "sha256": "9062f41069db7829ddd8b862031cc85d2873d93e193e99c4ded6e030cc944de8"
+    },
+    "float-type-session-state-runs.json.gz": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-session-state-runs.json.gz",
+      "sha256": "d05f4d037a9931bff14fc4f7ec8cbec82b86c0c12a3af9135bcd4e87ce42a986"
+    },
+    "float-type-planning-results.json": {
+      "path": "/home/hanbo/repo/delta-arrow-reader/experiments/spark-sql/float-type-planning-results.json",
+      "sha256": "7ce00afc41756d310539b2f6fdcb131d7ebab0d434bc8fface7aa895462692e6"
+    }
+  },
+  "raw_data": {
+    "file": "float-type-state-control-runs.json.gz",
+    "sha256": "b3c548cf6d5762409614597d39c577289089b64a1b4f3357f75bfbe2158195ea",
+    "uncompressed_sha256": "640f6106152208f256246c7aebfdc7117eaa6651cbfc98f15027637256bdfce1",
+    "compressed_bytes": 2654920,
+    "uncompressed_bytes": 11977978
+  },
+  "reproduction": {
+    "directory": "/home/hanbo/.cache/delta-reader-spark-planning/float-type-state-control-015493d",
+    "commands": [
+      "python3 verify.py",
+      "python3 collect.py",
+      "python3 analyze.py",
+      "python3 counter_analysis.py",
+      "python3 record.py"
+    ],
+    "setup": "Reuse the referenced byte-identical planning-state binary and frozen driver files in a fresh output directory. The native seed assignment and fully crossed schedule come unchanged from the earlier address-layout controls. Complete smoke checks before freezing and collecting. Reanalysis can use the retained collection groups and scripts without any executable rebuild. The post-collection counter analysis is descriptive and does not modify the original criteria."
+  }
+}

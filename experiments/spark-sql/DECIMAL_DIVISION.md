@@ -4226,6 +4226,23 @@ All 372 repeated result and plan captures pass. Two additional check processes p
 
 The first build attempt stopped before Rust compilation because old temporary build inputs were missing. Seven required files were restored from commit `a2cdf89`, with byte-for-byte matches to the current repository. The [raw record](float-type-session-state-runs.json.gz) retains that failure and repair, the successful build, semantic checks, patches and all 4,720 table traces from 16 collection processes. No collection groups were discarded. Shared experiment inputs are restored and hash-checked against the repaired baseline. No timing effect is estimated, and the optional type-inference patch remains unadopted.
 
+## Timing controls with matching IN-table addresses
+
+The [same-executable controls](float-type-state-control-results.json) still fail the existing timing criterion, despite matching complete address and hash sequences in all 16 groups. Stable occupied-element address bounds are insufficient to make these measurements stable.
+
+This collection reuses the preceding planning-state executable without a Rust rebuild. Every process keeps fresh per-query planning-state clones, retained execution-context reuse, sorted resolver release and child-only fixed addresses. The unchanged earlier control schedule supplies eight native seed inputs and fully crossed preparation/execution positions. Its two control labels both point to the same executable; they are separate schedule strata, not different code versions.
+
+Each interval uses the existing bootstrap of whole four-process groups within four temporal blocks. The statistic is the median group change, calculated separately from process medians and process means. Passing requires both timing intervals in both strata to include zero and stay within +/-1%.
+
+| Schedule stratum | From process medians, 95% interval | From process means, 95% interval | Pass |
+| --- | ---: | ---: | --- |
+| First (`same-before`) | +0.009% [-1.252%, +0.139%] | -0.017% [-1.229%, +0.062%] | No |
+| Second (`same-after`) | -0.054% [-0.060%, +0.182%] | -0.055% [-0.138%, +0.241%] | Yes |
+
+A descriptive follow-up retains all groups and examines their existing counters. In groups 0, 7 and 14, mean-based time changes of +3.22%, -5.06% and -2.56% accompany cycle changes of +3.29%, -5.22% and -2.69%, and branch-miss changes of +34.64%, -36.12% and -18.76%. Instruction counts are nearly unchanged. User cycles divided by task-clock changes much less, but that ratio is a proxy, not a direct frequency measurement. These observations motivate locating the mispredicted branches; they do not identify the source of the variation or justify excluding any group.
+
+All 64 collection processes pass result and isolation checks, retaining 18,880 table traces and 16,704 prepared executions. Eight new smoke processes also pass. Their first attempt used an invalid zero-warmup setting and failed before a timed phase; the corrected attempt uses one warmup. The [raw archive](float-type-state-control-runs.json.gz) retains that failure, both attempts' scripts, frozen criteria, all samples and counters, and the separately marked descriptive analysis. The preceding 372 correctness captures and 10 statement-state queries are referenced by hash, not rerun or counted as new coverage. Shared inputs and global settings remain unchanged. The original positive release interval remains unresolved, and the optional type-inference patch remains unadopted.
+
 ## Reproduce
 
 Use the Rust and Spark environments from the [experiment README](README.md). Set `SPARK_TEST_PYTHON` to the full PySpark 4.2.0 environment, and set `JAVA_HOME` if needed. Run from the repository root. Reuse one Cargo target directory within each checkout; give separate checkouts separate target directories.
