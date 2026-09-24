@@ -11,8 +11,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use arrow::{
-    array::{ArrayRef, Date32Array},
-    compute::cast,
+    array::ArrayRef,
     datatypes::{DataType as ArrowDataType, Field, Schema, TimeUnit},
 };
 use delta_kernel::engine::arrow_conversion::{TryFromKernel, scalar::extract_primitive_scalar};
@@ -32,7 +31,7 @@ use delta_kernel::{
     schema::DataType,
 };
 
-use super::schema_alignment::{ParquetSchemaAlignment, leaf_cast_plan};
+use super::schema_alignment::{ParquetSchemaAlignment, cast_leaf_array, leaf_cast_plan};
 use crate::delta::kernel::DeltaKernelPredicate;
 
 #[cfg(test)]
@@ -191,18 +190,7 @@ impl RowGroupStats<'_> {
             // malformed source bound merely because it fits the destination.
             extract_primitive_scalar(values.as_ref(), 0).ok()?;
         }
-        if matches!(
-            (source, target),
-            (
-                ArrowDataType::Date32,
-                ArrowDataType::Timestamp(TimeUnit::Microsecond, _)
-            )
-        ) {
-            // Arrow's date-to-timestamp cast uses unchecked multiplication.
-            i64::from(values.as_any().downcast_ref::<Date32Array>()?.value(0))
-                .checked_mul(86_400_000_000)?;
-        }
-        let values = cast(values.as_ref(), target).ok()?;
+        let values = cast_leaf_array(values.as_ref(), target).ok()?;
         values.is_valid(0).then_some(values)
     }
 
@@ -348,10 +336,10 @@ fn compatible_statistics_type(source: &ArrowDataType, target: &ArrowDataType) ->
 
 fn temporal_cast_can_introduce_nulls(source: &ArrowDataType, target: &ArrowDataType) -> bool {
     use ArrowDataType::{Date32, Timestamp};
-    use TimeUnit::{Microsecond, Millisecond, Second};
+    use TimeUnit::{Microsecond, Millisecond, Nanosecond, Second};
     matches!(
         (source, target),
-        (Date32, Timestamp(Microsecond, _))
+        (Date32, Timestamp(Microsecond | Nanosecond, _))
         | (Timestamp(Second | Millisecond, _), Timestamp(Microsecond, _))
         // Localizing a naive microsecond timestamp also needs a representable
         // calendar date. Nanoseconds already fit in that calendar range.

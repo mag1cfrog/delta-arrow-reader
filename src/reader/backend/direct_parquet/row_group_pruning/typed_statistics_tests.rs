@@ -833,6 +833,21 @@ fn typed_statistics_null_counts_respect_conversion_and_missing_bounds() -> TestR
             false,
         ),
         (
+            "message m { OPTIONAL INT32 v (DATE); }",
+            ArrowType::Timestamp(TimeUnit::Nanosecond, None),
+            false,
+        ),
+        (
+            "message m { OPTIONAL INT32 v (DATE); }",
+            ArrowType::Timestamp(TimeUnit::Second, None),
+            true,
+        ),
+        (
+            "message m { OPTIONAL INT32 v (DATE); }",
+            ArrowType::Timestamp(TimeUnit::Millisecond, None),
+            true,
+        ),
+        (
             "message m { OPTIONAL INT64 v (TIMESTAMP(NANOS,false)); }",
             ArrowType::Timestamp(TimeUnit::Microsecond, None),
             true,
@@ -1006,9 +1021,17 @@ fn metadata_action(data_type: &str, mapped: bool, from: Option<&str>) -> Value {
 }
 
 async fn public_table(case: &Case, mapped: bool) -> TestResult<(TestDir, DeltaTable, ArrayRef)> {
+    let converted = cast(case.source.as_ref(), &case.target)?;
+    public_table_with_converted_values(case, mapped, converted).await
+}
+
+async fn public_table_with_converted_values(
+    case: &Case,
+    mapped: bool,
+    converted: ArrayRef,
+) -> TestResult<(TestDir, DeltaTable, ArrayRef)> {
     let root = TestDir::new("typed-statistics")?;
     fs::create_dir_all(root.path().join("_delta_log"))?;
-    let converted = cast(case.source.as_ref(), &case.target)?;
     let mut adds = Vec::new();
     for (index, values) in [Arc::clone(&case.source), Arc::clone(&converted)]
         .into_iter()
@@ -1746,6 +1769,165 @@ fn typed_statistics_name_fallback_and_null_fills_use_the_alignment() -> TestResu
             )?,
             Some(expected)
         );
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn typed_statistics_date32_overflow_matches_checked_values_in_public_scans() -> TestResult {
+    let limit = i32::try_from(i64::MAX / 86_400_000_000)?;
+    let days = vec![
+        Some(-1),
+        Some(120_000_000),
+        Some(0),
+        Some(limit - 1),
+        Some(limit),
+        Some(limit + 1),
+        Some(-limit - 1),
+        Some(-limit),
+        Some(-limit + 1),
+        Some(i32::MIN),
+        Some(i32::MIN + 1),
+        Some(i32::MAX),
+        None,
+        None,
+        None,
+        Some(-719_162),
+        Some(0),
+        Some(2_932_896),
+    ];
+    let converted = Arc::new(TimestampMicrosecondArray::from_iter(days.iter().map(
+        |day| day.and_then(|day| i64::try_from(i128::from(day) * 86_400_000_000).ok()),
+    ))) as ArrayRef;
+    let case = Case {
+        name: "checked Date32 overflow".into(),
+        source: Arc::new(Date32Array::from(days)),
+        target: ArrowType::Timestamp(TimeUnit::Microsecond, None),
+    };
+    for mapped in [false, true] {
+        let (_root, table, values) =
+            public_table_with_converted_values(&case, mapped, Arc::clone(&converted)).await?;
+        let full = table
+            .scan()
+            .with_target_partitions(1)?
+            .build()
+            .await?
+            .into_stream()
+            .try_collect::<Vec<_>>()
+            .await?;
+        assert_eq!(
+            ids(&full),
+            (0..values.len()).map(|i| i as i32).collect::<Vec<_>>()
+        );
+        for batch in &full {
+            let row_ids = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .unwrap();
+            for i in 0..batch.num_rows() {
+                assert_eq!(
+                    extract_primitive_scalar(batch.column(1).as_ref(), i)?,
+                    extract_primitive_scalar(values.as_ref(), row_ids.value(i) as usize)?,
+                    "mapped={mapped}, row={}",
+                    row_ids.value(i)
+                );
+            }
+        }
+        let mut predicates = Vec::new();
+        for value in [-2_000_000_000_000, 0, 2_000_000_000_000] {
+            for op in COMPARISONS {
+                let mask = matching_rows(
+                    &values,
+                    Arc::new(TimestampMicrosecondArray::from(vec![value])),
+                    op,
+                )?;
+                predicates.push((
+                    DeltaPredicate::Compare {
+                        column: "v".into(),
+                        op,
+                        value: DeltaScalar::TimestampMicrosecond {
+                            value,
+                            timezone: None,
+                        },
+                    },
+                    mask,
+                ));
+            }
+        }
+        predicates.push((
+            DeltaPredicate::IsNull { column: "v".into() },
+            arrow::compute::is_null(values.as_ref())?,
+        ));
+        predicates.push((
+            DeltaPredicate::IsNotNull { column: "v".into() },
+            arrow::compute::is_not_null(values.as_ref())?,
+        ));
+        for (predicate, mask) in predicates {
+            let expected = expected_ids(&mask);
+            let out = table
+                .scan()
+                .with_target_partitions(1)?
+                .with_projection(["id"])
+                .with_predicate(predicate.clone())
+                .build()
+                .await?
+                .into_stream()
+                .try_collect::<Vec<_>>()
+                .await?;
+            assert_eq!(ids(&out), expected, "mapped={mapped}, {predicate:?}");
+            #[cfg(feature = "datafusion")]
+            {
+                use crate::datafusion::{DeltaTableProvider, ScanOptions};
+                use datafusion::{
+                    common::ScalarValue,
+                    prelude::{SessionConfig, SessionContext, col, lit},
+                };
+                let expression = match &predicate {
+                    DeltaPredicate::Compare {
+                        op,
+                        value: DeltaScalar::TimestampMicrosecond { value, .. },
+                        ..
+                    } => {
+                        let literal = lit(ScalarValue::TimestampMicrosecond(Some(*value), None));
+                        match op {
+                            DeltaComparison::Eq => col("v").eq(literal),
+                            DeltaComparison::NotEq => col("v").not_eq(literal),
+                            DeltaComparison::Lt => col("v").lt(literal),
+                            DeltaComparison::LtEq => col("v").lt_eq(literal),
+                            DeltaComparison::Gt => col("v").gt(literal),
+                            DeltaComparison::GtEq => col("v").gt_eq(literal),
+                        }
+                    }
+                    DeltaPredicate::IsNull { .. } => col("v").is_null(),
+                    DeltaPredicate::IsNotNull { .. } => col("v").is_not_null(),
+                    _ => unreachable!("this test only uses timestamp comparisons and null checks"),
+                };
+                for use_arrow_view_types in [false, true] {
+                    let provider = Arc::new(DeltaTableProvider::try_new(
+                        table.clone(),
+                        ScanOptions {
+                            use_arrow_view_types,
+                            ..Default::default()
+                        },
+                    )?);
+                    let ctx = SessionContext::new_with_config(
+                        SessionConfig::new().with_target_partitions(1),
+                    );
+                    let out = ctx
+                        .read_table(provider)?
+                        .filter(expression.clone())?
+                        .select_columns(&["id"])?
+                        .collect()
+                        .await?;
+                    assert_eq!(
+                        ids(&out),
+                        expected,
+                        "mapped={mapped}, views={use_arrow_view_types}, {predicate:?}"
+                    );
+                }
+            }
+        }
     }
     Ok(())
 }
