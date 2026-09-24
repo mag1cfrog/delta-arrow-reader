@@ -1,0 +1,1798 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/144",
+  "created_utc": "2026-09-24T23:22:17.632695+00:00",
+  "integration_base": "dc19d521728d7e8bf2da20bebe66d9dc0538cd73",
+  "runtime_change": "Reuse the constant scale resolver for ROUND and BROUND, normalize ROUND string values, validate foldable INT scales and skip ordinary NULL-scale inputs",
+  "candidate_is_optional": true,
+  "focused": {
+    "before": {
+      "agreement": 124,
+      "total": 388
+    },
+    "after": {
+      "agreement": 387,
+      "total": 388
+    }
+  },
+  "legacy": {
+    "before_value_type_stage_agreements": 214,
+    "after_value_type_stage_agreements": 223,
+    "after_value_type_cause_agreements": 223,
+    "total": 234
+  },
+  "adjacent": {
+    "adjacent": {
+      "before": {
+        "agreement": 10,
+        "total": 26
+      },
+      "after": {
+        "agreement": 25,
+        "total": 26
+      }
+    },
+    "subquery": {
+      "before": {
+        "agreement": 5,
+        "total": 6
+      },
+      "after": {
+        "agreement": 5,
+        "total": 6
+      }
+    }
+  },
+  "ownership": {
+    "argument_owner": 144,
+    "legacy_remaining": {
+      "control_integer_true": 212,
+      "control_integer_false": 212,
+      "control_long_true": 212,
+      "control_long_false": 212,
+      "control_float_true": 213,
+      "control_float_false": 213,
+      "extreme_dp-2147483648_true": 214,
+      "extreme_dp-2147483648_false": 214,
+      "extreme_dp-2147483647_true": 214,
+      "extreme_dp-2147483647_false": 214,
+      "long_scale_overflow_false": 214
+    },
+    "legacy_changed": [
+      "scale_string_true",
+      "scale_string_false",
+      "scale_bad_string_false",
+      "scale_decimal_true",
+      "scale_decimal_false",
+      "round_null_bad_cast_true",
+      "control_string_true",
+      "control_string_false",
+      "long_scale_overflow_false",
+      "long_scale_underflow_false"
+    ],
+    "other_remaining": {
+      "evaluation_bad_double_live_false": 148,
+      "bare_bad_double_cast_false": 148,
+      "outer_cast_bad_subquery_true": 148
+    },
+    "note": "The two bad-DOUBLE observations share one bare-CAST cause. The composed non-ANSI long-scale overflow now reaches the separately owned Decimal kernel after correct argument wrapping; the full query remains incompatible."
+  },
+  "schema_observations": {
+    "logical_nullable_difference": 77,
+    "physical_nullable_difference": 126
+  },
+  "bround_controls": {
+    "float": {
+      "target": {
+        "total": 80,
+        "agreement": 80
+      },
+      "control": {
+        "total": 8,
+        "agreement": 8
+      },
+      "boundary": {
+        "total": 10,
+        "agreement": 10
+      }
+    },
+    "float_boundaries": {
+      "target": {
+        "total": 246,
+        "agreement": 246
+      },
+      "control": {
+        "total": 8,
+        "agreement": 8
+      },
+      "boundary": {
+        "total": 0,
+        "agreement": 0
+      }
+    },
+    "decimal": {
+      "agreement": 506,
+      "total": 506
+    }
+  },
+  "regression": {
+    "groups": 37,
+    "observations": 6784,
+    "spark_agreements": 6412,
+    "changed_outcomes": 10,
+    "integer_agreements": 616,
+    "exact_integer_errors": {
+      "focused_error_payloads_equal": 131,
+      "changed_error_payloads": 0
+    }
+  },
+  "delta": {
+    "previous_comparison": {
+      "match": 116
+    },
+    "spark_comparison": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    }
+  },
+  "tests": {
+    "function": 309,
+    "planner": 39,
+    "runner": 28,
+    "python": 14,
+    "delta_adapters": 18
+  },
+  "performance": {
+    "owner": "https://github.com/mag1cfrog/delta-arrow-reader/issues/158",
+    "status": "Bounded compatibility check; final ROUND and allocator-sensitive acceptance stays open",
+    "same_binary_calibration": false,
+    "validation": "Full output digests for equivalent queries; new scale forms match integer-scale controls and implicit string values match explicit DOUBLE-cast controls. Old planning errors are not timing baselines.",
+    "measurements": {
+      "protocol": {
+        "order": [
+          "before",
+          "after",
+          "after",
+          "before",
+          "after",
+          "before",
+          "before",
+          "after"
+        ],
+        "cpu": 2,
+        "platform": "Linux-6.19.14-200.fc43.x86_64-x86_64-with-glibc2.42",
+        "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.50\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+        "rows": 1048576,
+        "batch_size": 8192,
+        "warmups": 8,
+        "samples": 41,
+        "scope": "Focused compatibility-PR cost check, not final performance acceptance.",
+        "binaries": {
+          "before": "7a6db4caa0fc450968e757a420c906b38a864262e3fc4031b6c1ef03f22d7b2b",
+          "after": "50c0bc13f459018fe947558dea122c198febd2d6992732338a4c0563af017ecf"
+        }
+      },
+      "records": [
+        {
+          "variant": "before",
+          "path": "timing-0-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/timing-0-before.json",
+            "bround"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-1-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/timing-1-after.json",
+            "bround"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-2-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/timing-2-after.json",
+            "bround"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-3-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/timing-3-before.json",
+            "bround"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-4-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/timing-4-after.json",
+            "bround"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-5-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/timing-5-before.json",
+            "bround"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-6-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/timing-6-before.json",
+            "bround"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-7-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/round-arguments-dc19d52/timing-7-after.json",
+            "bround"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "id": "decimal_bround_control_nullsfalse",
+          "before": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "42f57bdb6cd876b5",
+            "planning": {
+              "process_medians_ms": [
+                0.297332,
+                0.307461,
+                0.30153,
+                0.307942
+              ],
+              "median_ms": 0.30449550000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                11.223516,
+                11.102081,
+                11.122308,
+                11.050245
+              ],
+              "median_ms": 11.112194500000001
+            }
+          },
+          "after": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "42f57bdb6cd876b5",
+            "planning": {
+              "process_medians_ms": [
+                0.297934,
+                0.300558,
+                0.300097,
+                0.303544
+              ],
+              "median_ms": 0.30032749999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                11.177982,
+                11.133039,
+                11.057037,
+                11.102231
+              ],
+              "median_ms": 11.117635
+            }
+          },
+          "ratios": {
+            "planning": 0.9863117845748129,
+            "execution": 1.0004895972618189
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "double_bround_control_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "42f57bdb6cd876b5",
+            "planning": {
+              "process_medians_ms": [
+                0.328841,
+                0.329542,
+                0.33386,
+                0.336916
+              ],
+              "median_ms": 0.331701
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.740525,
+                4.687917,
+                4.6731,
+                5.257265
+              ],
+              "median_ms": 4.714221
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "42f57bdb6cd876b5",
+            "planning": {
+              "process_medians_ms": [
+                0.327459,
+                0.333329,
+                0.331546,
+                0.329542
+              ],
+              "median_ms": 0.330544
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.755663,
+                4.793664,
+                5.230645,
+                4.726178
+              ],
+              "median_ms": 4.7746635
+            }
+          },
+          "ratios": {
+            "planning": 0.9965119188666901,
+            "execution": 1.0128213123652878
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "float_column_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0"
+            ],
+            "values_digest": "a1c32bb5e24ee299",
+            "planning": {
+              "process_medians_ms": [
+                0.326416,
+                0.327798,
+                0.328981,
+                0.332828
+              ],
+              "median_ms": 0.3283895
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.166273,
+                6.140596,
+                6.077638,
+                6.069925
+              ],
+              "median_ms": 6.109117
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0"
+            ],
+            "values_digest": "a1c32bb5e24ee299",
+            "planning": {
+              "process_medians_ms": [
+                0.321758,
+                0.327207,
+                0.327178,
+                0.328641
+              ],
+              "median_ms": 0.3271925
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.151456,
+                6.11615,
+                6.082878,
+                6.086344
+              ],
+              "median_ms": 6.101247000000001
+            }
+          },
+          "ratios": {
+            "planning": 0.9963549382669056,
+            "execution": 0.9987117614542331
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "round_control_nullsfalse",
+          "before": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "8ed082da2eaf1f62",
+            "planning": {
+              "process_medians_ms": [
+                0.319163,
+                0.326045,
+                0.324784,
+                0.324704
+              ],
+              "median_ms": 0.32474400000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.953132,
+                7.888822,
+                7.864307,
+                7.899873
+              ],
+              "median_ms": 7.8943475
+            }
+          },
+          "after": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "8ed082da2eaf1f62",
+            "planning": {
+              "process_medians_ms": [
+                0.32291,
+                0.324572,
+                0.321547,
+                0.326166
+              ],
+              "median_ms": 0.323741
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.931942,
+                7.914461,
+                7.961968,
+                7.852646
+              ],
+              "median_ms": 7.9232015
+            }
+          },
+          "ratios": {
+            "planning": 0.9969114132978592,
+            "execution": 1.0036550202534156
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "round_string_scale_nullsfalse",
+          "before": {
+            "planning_error": "error in DataFusion: Error during planning: Internal error: Function 'round' failed to match any signature, errors: Error during planning: Function 'round' requires Int32, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Float32, but received Decimal(18, 4) (DataType: Decimal128(18, 4)).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Int32, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2.\nThis issue was likely caused by a bug in DataFusion's code. Please help us to resolve this by filing a bug report in our issue tracker: https://github.com/apache/datafusion/issues. No function matches the given name and argument types 'round(Decimal128(18, 4), Utf8)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tround(Decimal, Int32)\n\tround(Decimal)\n\tround(Float32, Int32)\n\tround(Float32)\n\tround(Float64, Int32)\n\tround(Float64)"
+          },
+          "after": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "8ed082da2eaf1f62",
+            "planning": {
+              "process_medians_ms": [
+                0.32312,
+                0.331686,
+                0.324122,
+                0.325374
+              ],
+              "median_ms": 0.32474800000000004
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.014345,
+                7.892239,
+                7.883943,
+                7.870729
+              ],
+              "median_ms": 7.888091
+            }
+          },
+          "ratios": {},
+          "equivalent_outputs": false
+        },
+        {
+          "id": "round_decimal_scale_nullsfalse",
+          "before": {
+            "planning_error": "error in DataFusion: Error during planning: Internal error: Function 'round' failed to match any signature, errors: Error during planning: Function 'round' requires Int32, but received Decimal(2, 1) (DataType: Decimal128(2, 1)).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Float32, but received Decimal(18, 4) (DataType: Decimal128(18, 4)).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Int32, but received Decimal(2, 1) (DataType: Decimal128(2, 1)).,Error during planning: Function 'round' expects 1 arguments but received 2.\nThis issue was likely caused by a bug in DataFusion's code. Please help us to resolve this by filing a bug report in our issue tracker: https://github.com/apache/datafusion/issues. No function matches the given name and argument types 'round(Decimal128(18, 4), Decimal128(2, 1))'. You might need to add explicit type casts.\n\tCandidate functions:\n\tround(Decimal, Int32)\n\tround(Decimal)\n\tround(Float32, Int32)\n\tround(Float32)\n\tround(Float64, Int32)\n\tround(Float64)"
+          },
+          "after": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "8ed082da2eaf1f62",
+            "planning": {
+              "process_medians_ms": [
+                0.324052,
+                0.329903,
+                0.325405,
+                0.329142
+              ],
+              "median_ms": 0.3272735
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.940939,
+                7.939196,
+                7.891427,
+                7.88174
+              ],
+              "median_ms": 7.9153115
+            }
+          },
+          "ratios": {},
+          "equivalent_outputs": false
+        },
+        {
+          "id": "round_null_scale_nullsfalse",
+          "before": {
+            "type": "Decimal128(15, 0)",
+            "first_values": [
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "values_digest": "234f0e66e4c4c873",
+            "planning": {
+              "process_medians_ms": [
+                0.337387,
+                0.340272,
+                0.342566,
+                0.345272
+              ],
+              "median_ms": 0.34141900000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.250636,
+                0.24752,
+                0.251968,
+                0.24758
+              ],
+              "median_ms": 0.249108
+            }
+          },
+          "after": {
+            "type": "Decimal128(15, 0)",
+            "first_values": [
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "values_digest": "234f0e66e4c4c873",
+            "planning": {
+              "process_medians_ms": [
+                0.285029,
+                0.287163,
+                0.286632,
+                0.287874
+              ],
+              "median_ms": 0.2868975
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.198358,
+                0.198358,
+                0.19932,
+                0.197857
+              ],
+              "median_ms": 0.198358
+            }
+          },
+          "ratios": {
+            "planning": 0.8403091216364643,
+            "execution": 0.7962731024294684
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "round_string_value_nullsfalse",
+          "before": {
+            "planning_error": "error in DataFusion: Error during planning: Internal error: Function 'round' failed to match any signature, errors: Error during planning: Function 'round' requires Decimal, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Float32, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Float64, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2.\nThis issue was likely caused by a bug in DataFusion's code. Please help us to resolve this by filing a bug report in our issue tracker: https://github.com/apache/datafusion/issues. No function matches the given name and argument types 'round(Utf8, Int32)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tround(Decimal, Int32)\n\tround(Decimal)\n\tround(Float32, Int32)\n\tround(Float32)\n\tround(Float64, Int32)\n\tround(Float64)"
+          },
+          "after": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "8ed082da2eaf1f62",
+            "planning": {
+              "process_medians_ms": [
+                0.369235,
+                0.373914,
+                0.3711,
+                0.369547
+              ],
+              "median_ms": 0.3703235
+            },
+            "execution": {
+              "process_medians_ms": [
+                70.981539,
+                71.854,
+                70.505695,
+                70.490818
+              ],
+              "median_ms": 70.743617
+            }
+          },
+          "ratios": {},
+          "equivalent_outputs": false
+        },
+        {
+          "id": "round_string_explicit_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "8ed082da2eaf1f62",
+            "planning": {
+              "process_medians_ms": [
+                0.384845,
+                0.386247,
+                0.388612,
+                0.678219
+              ],
+              "median_ms": 0.3874295
+            },
+            "execution": {
+              "process_medians_ms": [
+                72.335254,
+                72.628819,
+                71.206276,
+                71.481137
+              ],
+              "median_ms": 71.9081955
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "8ed082da2eaf1f62",
+            "planning": {
+              "process_medians_ms": [
+                0.384144,
+                0.397699,
+                0.383783,
+                0.386178
+              ],
+              "median_ms": 0.385161
+            },
+            "execution": {
+              "process_medians_ms": [
+                71.306072,
+                73.674401,
+                69.941287,
+                70.821763
+              ],
+              "median_ms": 71.0639175
+            }
+          },
+          "ratios": {
+            "planning": 0.9941447411722649,
+            "execution": 0.9882589460891144
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "decimal_bround_control_nullstrue",
+          "before": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "b017850d733a3475",
+            "planning": {
+              "process_medians_ms": [
+                0.302512,
+                0.306549,
+                0.30677,
+                0.307672
+              ],
+              "median_ms": 0.3066595
+            },
+            "execution": {
+              "process_medians_ms": [
+                10.416318,
+                10.370031,
+                10.323324,
+                10.324175
+              ],
+              "median_ms": 10.347103
+            }
+          },
+          "after": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "b017850d733a3475",
+            "planning": {
+              "process_medians_ms": [
+                0.298114,
+                0.309014,
+                0.305798,
+                0.304055
+              ],
+              "median_ms": 0.3049265
+            },
+            "execution": {
+              "process_medians_ms": [
+                10.410637,
+                10.764002,
+                10.321592,
+                10.322944
+              ],
+              "median_ms": 10.3667905
+            }
+          },
+          "ratios": {
+            "planning": 0.9943487809769468,
+            "execution": 1.0019027064870234
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "double_bround_control_nullstrue",
+          "before": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "b017850d733a3475",
+            "planning": {
+              "process_medians_ms": [
+                0.330033,
+                0.33423,
+                0.334492,
+                0.338459
+              ],
+              "median_ms": 0.334361
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.745204,
+                4.71612,
+                5.330571,
+                4.771823
+              ],
+              "median_ms": 4.7585135
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "b017850d733a3475",
+            "planning": {
+              "process_medians_ms": [
+                0.328751,
+                0.335073,
+                0.333309,
+                0.332477
+              ],
+              "median_ms": 0.332893
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.75405,
+                5.014384,
+                5.450283,
+                4.771102
+              ],
+              "median_ms": 4.892742999999999
+            }
+          },
+          "ratios": {
+            "planning": 0.9956095358011251,
+            "execution": 1.0282082839525408
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "float_column_nullstrue",
+          "before": {
+            "type": "Float32",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "",
+              "0.0",
+              "0.0"
+            ],
+            "values_digest": "492c3ff45198ad77",
+            "planning": {
+              "process_medians_ms": [
+                0.328771,
+                0.328,
+                0.330674,
+                0.33391
+              ],
+              "median_ms": 0.32972250000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.123874,
+                6.589018,
+                6.054446,
+                6.058683
+              ],
+              "median_ms": 6.0912785
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.0",
+              "",
+              "0.0",
+              "0.0"
+            ],
+            "values_digest": "492c3ff45198ad77",
+            "planning": {
+              "process_medians_ms": [
+                0.323611,
+                0.330423,
+                0.329321,
+                0.327638
+              ],
+              "median_ms": 0.3284795
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.941145,
+                6.156715,
+                5.896342,
+                5.897574
+              ],
+              "median_ms": 5.9193595
+            }
+          },
+          "ratios": {
+            "planning": 0.9962301632433332,
+            "execution": 0.9717762042894608
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "round_control_nullstrue",
+          "before": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "ad0535afea82b909",
+            "planning": {
+              "process_medians_ms": [
+                0.326797,
+                0.32834,
+                0.329101,
+                0.330193
+              ],
+              "median_ms": 0.32872049999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.549472,
+                7.468061,
+                7.402149,
+                7.524225
+              ],
+              "median_ms": 7.496143
+            }
+          },
+          "after": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "ad0535afea82b909",
+            "planning": {
+              "process_medians_ms": [
+                0.32306,
+                0.332167,
+                0.333329,
+                0.328811
+              ],
+              "median_ms": 0.33048900000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.4031,
+                7.645932,
+                7.463312,
+                7.442694
+              ],
+              "median_ms": 7.453003000000001
+            }
+          },
+          "ratios": {
+            "planning": 1.0053799504442225,
+            "execution": 0.994245040416118
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "round_string_scale_nullstrue",
+          "before": {
+            "planning_error": "error in DataFusion: Error during planning: Internal error: Function 'round' failed to match any signature, errors: Error during planning: Function 'round' requires Int32, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Float32, but received Decimal(18, 4) (DataType: Decimal128(18, 4)).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Int32, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2.\nThis issue was likely caused by a bug in DataFusion's code. Please help us to resolve this by filing a bug report in our issue tracker: https://github.com/apache/datafusion/issues. No function matches the given name and argument types 'round(Decimal128(18, 4), Utf8)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tround(Decimal, Int32)\n\tround(Decimal)\n\tround(Float32, Int32)\n\tround(Float32)\n\tround(Float64, Int32)\n\tround(Float64)"
+          },
+          "after": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "ad0535afea82b909",
+            "planning": {
+              "process_medians_ms": [
+                0.325835,
+                0.349339,
+                0.330704,
+                0.331015
+              ],
+              "median_ms": 0.3308595
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.450428,
+                7.688741,
+                7.461008,
+                7.455347
+              ],
+              "median_ms": 7.4581775
+            }
+          },
+          "ratios": {},
+          "equivalent_outputs": false
+        },
+        {
+          "id": "round_decimal_scale_nullstrue",
+          "before": {
+            "planning_error": "error in DataFusion: Error during planning: Internal error: Function 'round' failed to match any signature, errors: Error during planning: Function 'round' requires Int32, but received Decimal(2, 1) (DataType: Decimal128(2, 1)).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Float32, but received Decimal(18, 4) (DataType: Decimal128(18, 4)).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Int32, but received Decimal(2, 1) (DataType: Decimal128(2, 1)).,Error during planning: Function 'round' expects 1 arguments but received 2.\nThis issue was likely caused by a bug in DataFusion's code. Please help us to resolve this by filing a bug report in our issue tracker: https://github.com/apache/datafusion/issues. No function matches the given name and argument types 'round(Decimal128(18, 4), Decimal128(2, 1))'. You might need to add explicit type casts.\n\tCandidate functions:\n\tround(Decimal, Int32)\n\tround(Decimal)\n\tround(Float32, Int32)\n\tround(Float32)\n\tround(Float64, Int32)\n\tround(Float64)"
+          },
+          "after": {
+            "type": "Decimal128(16, 1)",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "ad0535afea82b909",
+            "planning": {
+              "process_medians_ms": [
+                0.325104,
+                0.344741,
+                0.329482,
+                0.341845
+              ],
+              "median_ms": 0.3356635
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.396509,
+                7.698579,
+                7.495643,
+                7.457612
+              ],
+              "median_ms": 7.4766275
+            }
+          },
+          "ratios": {},
+          "equivalent_outputs": false
+        },
+        {
+          "id": "round_null_scale_nullstrue",
+          "before": {
+            "type": "Decimal128(15, 0)",
+            "first_values": [
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "values_digest": "234f0e66e4c4c873",
+            "planning": {
+              "process_medians_ms": [
+                0.34444,
+                0.343889,
+                0.347485,
+                0.347496
+              ],
+              "median_ms": 0.3459625
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.251797,
+                0.250936,
+                0.254091,
+                0.250385
+              ],
+              "median_ms": 0.2513665
+            }
+          },
+          "after": {
+            "type": "Decimal128(15, 0)",
+            "first_values": [
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "values_digest": "234f0e66e4c4c873",
+            "planning": {
+              "process_medians_ms": [
+                0.282825,
+                0.295949,
+                0.288345,
+                0.295719
+              ],
+              "median_ms": 0.292032
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.196936,
+                0.202546,
+                0.197747,
+                0.19904
+              ],
+              "median_ms": 0.1983935
+            }
+          },
+          "ratios": {
+            "planning": 0.8441146077970879,
+            "execution": 0.7892599053573169
+          },
+          "equivalent_outputs": true
+        },
+        {
+          "id": "round_string_value_nullstrue",
+          "before": {
+            "planning_error": "error in DataFusion: Error during planning: Internal error: Function 'round' failed to match any signature, errors: Error during planning: Function 'round' requires Decimal, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Float32, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2,Error during planning: Function 'round' requires Float64, but received String (DataType: Utf8).,Error during planning: Function 'round' expects 1 arguments but received 2.\nThis issue was likely caused by a bug in DataFusion's code. Please help us to resolve this by filing a bug report in our issue tracker: https://github.com/apache/datafusion/issues. No function matches the given name and argument types 'round(Utf8, Int32)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tround(Decimal, Int32)\n\tround(Decimal)\n\tround(Float32, Int32)\n\tround(Float32)\n\tround(Float64, Int32)\n\tround(Float64)"
+          },
+          "after": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "ad0535afea82b909",
+            "planning": {
+              "process_medians_ms": [
+                0.377461,
+                0.373544,
+                0.374115,
+                0.373093
+              ],
+              "median_ms": 0.3738295
+            },
+            "execution": {
+              "process_medians_ms": [
+                67.486628,
+                67.354132,
+                66.686101,
+                66.027439
+              ],
+              "median_ms": 67.0201165
+            }
+          },
+          "ratios": {},
+          "equivalent_outputs": false
+        },
+        {
+          "id": "round_string_explicit_nullstrue",
+          "before": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "ad0535afea82b909",
+            "planning": {
+              "process_medians_ms": [
+                0.383552,
+                0.388662,
+                0.393121,
+                0.391307
+              ],
+              "median_ms": 0.3899845
+            },
+            "execution": {
+              "process_medians_ms": [
+                68.572816,
+                68.39198,
+                67.326661,
+                67.393355
+              ],
+              "median_ms": 67.8926675
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "first_values": [
+              "0.0",
+              "0.0",
+              "0.0",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "0.1",
+              "",
+              "0.1",
+              "0.1"
+            ],
+            "values_digest": "ad0535afea82b909",
+            "planning": {
+              "process_medians_ms": [
+                0.383523,
+                0.38811,
+                0.386418,
+                0.384535
+              ],
+              "median_ms": 0.3854765
+            },
+            "execution": {
+              "process_medians_ms": [
+                67.536791,
+                67.425595,
+                65.964431,
+                65.555411
+              ],
+              "median_ms": 66.695013
+            }
+          },
+          "ratios": {
+            "planning": 0.9884405662276321,
+            "execution": 0.9823595898629259
+          },
+          "equivalent_outputs": true
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "build": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/filter-validity-runtime-8a1a42c/override.toml",
+        "-j",
+        "3",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json"
+      ],
+      "sources": {
+        "math.rs": "35710a8ecd44b66d5a82ac716575e2340d9c29258a1f5b205fed3ee54556e1f8",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+        "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+        "Cargo.lock": "61b47cf3f9305fccb45d58be3a9516874243ce85e6427c5b4e462d2bc704e4cf",
+        "decimal_bench.rs": "8292aed9e59abdf8453139ec63a3984c265be1af777bd1611ecd00a8072ff208",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "67b5dfdc2968f8524ebee27d9083e61694058a7aec38cd80af275d7228f5ae2c",
+        "decimal-null.rs": "0b291b045167e7fb521e196124c0d6c21c27ed5ce5b5dea2f1fe1e15fb41f4d9",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "8dccb419fb3386a46566f40d39365b78cdc7ff9f886d652147c99f3408ba4497",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "native-aggregates.rs": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+        "resolver-sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "native-binary": "66ba58d025ab8127b8232b85028a0c93d96e224f2c92e9a11b8e7ff0a5c8f088",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180",
+        "checked.rs": "6a6d15a2255937a3d4a48b1a2d7b59040bc57588bf1b1f32e593f8e5edbacb19",
+        "native-scalar-function.rs": "c3853b994aa861c5d7f0b30fd777d878c0b7300b2848de6b913f437289366c21",
+        "udf.rs": "b7f05300615df5c0f87495f5dbcee8974b6e36f027b070d05f79c147044ef0ed",
+        "expression-mod.rs": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+        "overflow-bench.rs": "971ad5fe8fb00a9640585c66de320ba4fa1125b82ca9f2fa5a13cd4029b60256",
+        "native-column.rs": "75d22bef42f5dcd487ac06d1c0e0505407d9480d95b0423278e8ca693a3c9660",
+        "arrow-arithmetic.rs": "008110fe975edfc942333d2e3bcb94af5f2de9b1e456d7d5cf696a4da7b4fc50",
+        "arrow-arity.rs": "5be993560d41ad908accd1324b1529614accd0af859dd0d886c109052270e360",
+        "scatter-utils.rs": "aec739c4df4c1a01a1f09a16efddabd69e5f283e4490c3a2570504f10cfcbcf8",
+        "filter.rs": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d",
+        "bround.rs": "a61cbf4c2e43ef954cadfc2b34de95b0c7fa7fd4d09e50cf263f0be3b9ba6f87"
+      },
+      "binaries": {
+        "probe": "16e31f6515fe385e6ebc66c90e1091abdcbdd58f0b1265758f06f37e444f0a8a",
+        "runner": "849f67583d4bd87cff6af181caa0df1a6dae77b0d040764ed7d9a4fe1b50e4af"
+      },
+      "baseline_archives": {
+        "decimal": "efc7950580211733038b6f0d50cdd6553657ae272d9242aea1d737079c357b2a",
+        "float_type": "b15ed6079960f83ae39ac60debf2b60ec885c9263c43d355f0c8a96b284cbee4",
+        "float_boundaries": "da65ffe24567793625612e18061643e3d233eaa1937031536a439aa94ed744a0"
+      },
+      "integration_base": "dc19d521728d7e8bf2da20bebe66d9dc0538cd73",
+      "changed_runtime_sources": [
+        "math.rs"
+      ]
+    },
+    "libraries": {
+      "checked": 414,
+      "changed": [
+        "sail_plan"
+      ],
+      "before_only": [],
+      "after_only": []
+    },
+    "baseline_binaries": {
+      "probe": "d6ed3b5ff760a36542dbae98d2446e93be67cf09ad136d421595e5e794bd81d5",
+      "runner": "748d32c0516197822343a9350cca4bdbc8d7d9d4d79f8c697753fb519c4b42eb"
+    },
+    "first_attempt": {
+      "build": {
+        "command": [
+          "cargo",
+          "build",
+          "--release",
+          "--locked",
+          "--offline",
+          "--config",
+          "/home/hanbo/.cache/delta-reader-spark-planning/filter-validity-runtime-8a1a42c/override.toml",
+          "-j",
+          "3",
+          "--example",
+          "decimal_probe",
+          "--bin",
+          "delta-reader-sail-extraction-probe",
+          "--message-format=json"
+        ],
+        "sources": {
+          "math.rs": "637a02d385278f2a8c63955224bea16f379cc4b509001c3782f937cc12667b87",
+          "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+          "cast.rs": "5e283b22d4d5e5b7d7497f244254bffd0e14bf9c5f9b7c36e627914c78616a3a",
+          "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+          "function-Cargo.toml": "dbc6b268710fe929ca6b762ff3f278b5e5c50550e0be6e0dd23e5b034ed2429b",
+          "scalar-mod.rs": "3f6032f1e6cdccd214838ea932f2a1217197dc46dcf50bd60a81e6507910df9c",
+          "Cargo.lock": "61b47cf3f9305fccb45d58be3a9516874243ce85e6427c5b4e462d2bc704e4cf",
+          "decimal_bench.rs": "8292aed9e59abdf8453139ec63a3984c265be1af777bd1611ecd00a8072ff208",
+          "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+          "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+          "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+          "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+          "decimal_probe.rs": "67b5dfdc2968f8524ebee27d9083e61694058a7aec38cd80af275d7228f5ae2c",
+          "decimal-null.rs": "0b291b045167e7fb521e196124c0d6c21c27ed5ce5b5dea2f1fe1e15fb41f4d9",
+          "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+          "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+          "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+          "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+          "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+          "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+          "math-mod.rs": "8dccb419fb3386a46566f40d39365b78cdc7ff9f886d652147c99f3408ba4497",
+          "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+          "decimal-round.rs": "98ee7b3197a196c362b97dcbd8b980e9dc5b0013fc51dbc7a0c82c1365c5c648",
+          "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+          "small-int-divide.rs": "c4763486245753b2075748232752a25b14364dde9f9fe6e89d9062695388ae65",
+          "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+          "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+          "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+          "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+          "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+          "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+          "expr-simplifier": "0fb3bb310afc2a6668741ab3c8933eb564f5bb0ea7cf884197ab4f4f11a73dde",
+          "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+          "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+          "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+          "physical-test-lock": null,
+          "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+          "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+          "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+          "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+          "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+          "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+          "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+          "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+          "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+          "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+          "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+          "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+          "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+          "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+          "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+          "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+          "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+          "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+          "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+          "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+          "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+          "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+          "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+          "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+          "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+          "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+          "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+          "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+          "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+          "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+          "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+          "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+          "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+          "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+          "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+          "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+          "resolver-aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+          "native-aggregates.rs": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+          "resolver-sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+          "native-binary": "66ba58d025ab8127b8232b85028a0c93d96e224f2c92e9a11b8e7ff0a5c8f088",
+          "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+          "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180",
+          "checked.rs": "6a6d15a2255937a3d4a48b1a2d7b59040bc57588bf1b1f32e593f8e5edbacb19",
+          "native-scalar-function.rs": "c3853b994aa861c5d7f0b30fd777d878c0b7300b2848de6b913f437289366c21",
+          "udf.rs": "b7f05300615df5c0f87495f5dbcee8974b6e36f027b070d05f79c147044ef0ed",
+          "expression-mod.rs": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+          "overflow-bench.rs": "971ad5fe8fb00a9640585c66de320ba4fa1125b82ca9f2fa5a13cd4029b60256",
+          "native-column.rs": "75d22bef42f5dcd487ac06d1c0e0505407d9480d95b0423278e8ca693a3c9660",
+          "arrow-arithmetic.rs": "008110fe975edfc942333d2e3bcb94af5f2de9b1e456d7d5cf696a4da7b4fc50",
+          "arrow-arity.rs": "5be993560d41ad908accd1324b1529614accd0af859dd0d886c109052270e360",
+          "scatter-utils.rs": "aec739c4df4c1a01a1f09a16efddabd69e5f283e4490c3a2570504f10cfcbcf8",
+          "filter.rs": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d",
+          "bround.rs": "a61cbf4c2e43ef954cadfc2b34de95b0c7fa7fd4d09e50cf263f0be3b9ba6f87"
+        },
+        "binaries": {
+          "probe": "7ff5c40cd4b523ab075df28257d43fe9d967d06488077939ecd29ce0a05c3e57",
+          "runner": "c7b7d6ba8c93426280afe30fe2da80144e49cef9aa729bc76724725cea865091"
+        },
+        "baseline_archives": {
+          "decimal": "efc7950580211733038b6f0d50cdd6553657ae272d9242aea1d737079c357b2a",
+          "float_type": "b15ed6079960f83ae39ac60debf2b60ec885c9263c43d355f0c8a96b284cbee4",
+          "float_boundaries": "da65ffe24567793625612e18061643e3d233eaa1937031536a439aa94ed744a0"
+        },
+        "integration_base": "dc19d521728d7e8bf2da20bebe66d9dc0538cd73",
+        "changed_runtime_sources": [
+          "math.rs"
+        ]
+      },
+      "original_check": {
+        "agreement": 378,
+        "total": 388
+      }
+    }
+  },
+  "repository_files": {
+    "sail-round-arguments.patch": "47235e01309a77230eea90f5a31f7a90785a94f79adc3243474e68751f65522b",
+    "round-arguments.jsonl": "d485408ebd7f927642c8c5a9029ce1993ed976e6b0b317c29a2e5121037daf2a",
+    "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
+    "test_round_arguments.py": "00e467dea34b8ce51437de0b31b5f111975b64298faff8cf63f74d5b01e6d479",
+    "decimal-round-types.jsonl": "1c2b7aaef9032fc1fb134dc5e013d35e43ef07da821c4a4c431c00b4919f59a0",
+    "examples/decimal_probe.rs": "7f8d142623db9e1b30b400c2afdf507a48329eeee2180775141b448e28f0f9d0",
+    "inputs.json": "c9f64793df9198d5fdfb1f66e2393ac4f004f9a75e76148d4727401b31461ee3",
+    "queries.jsonl": "1b2a601c39379ad23488e07acf7496f8a69d81dea29df3e77dbc7483bacb3603",
+    "spark-oracle.json": "220ad53f828e307a75f1fc5b075477b3c2b1cefc5847e0161916c225e3e408ed",
+    "extracted-baseline.json": "90cc1a65c635d911f96f0ba60b7aacdf3efac3dfadf4a21d21c709a8c0053ec5"
+  },
+  "baseline_archives": {
+    "decimal": {
+      "path": "decimal-bround-runs.json.gz",
+      "sha256": "efc7950580211733038b6f0d50cdd6553657ae272d9242aea1d737079c357b2a"
+    },
+    "float_type": {
+      "path": "float-bround-runs.json.gz",
+      "sha256": "b15ed6079960f83ae39ac60debf2b60ec885c9263c43d355f0c8a96b284cbee4"
+    },
+    "float_boundaries": {
+      "path": "float-bround-boundaries-runs.json.gz",
+      "sha256": "da65ffe24567793625612e18061643e3d233eaa1937031536a439aa94ed744a0"
+    }
+  },
+  "archive": {
+    "path": "round-arguments-runs.json.gz",
+    "sha256": "973e2d14ec1336d1a35c3a28463ac07aa955357ebeb73656fbe3e3aa9722482c",
+    "files": 200,
+    "compressed_bytes": 844977
+  }
+}

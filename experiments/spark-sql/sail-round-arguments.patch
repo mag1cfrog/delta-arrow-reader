@@ -1,0 +1,346 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -14,7 +14,7 @@
+ };
+ use datafusion_spark::function::math::expr_fn as math_fn;
+ use half::f16;
+-use sail_common_datafusion::literal::{LiteralEvaluator, LiteralValue};
++use sail_common_datafusion::literal::LiteralEvaluator;
+ use sail_common_datafusion::utils::items::ItemTaker;
+ use sail_function::error::generic_exec_err;
+ use sail_function::scalar::datetime::negate_duration::NegateDuration;
+@@ -47,7 +47,7 @@
+ use super::conditional::SparkNullIfZero;
+ use super::small_int_divide::SparkSmallIntDivide;
+ use crate::error::{PlanError, PlanResult};
+-use crate::function::common::{ScalarFunction, ScalarFunctionInput};
++use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
+ 
+ fn add_day_time_interval_to_string(
+     string: Expr,
+@@ -1591,6 +1591,76 @@
+     ))
+ }
+ 
++fn spark_round_scale(
++    name: &str,
++    target: Expr,
++    function_context: &FunctionContextInput,
++) -> PlanResult<ScalarValue> {
++    let target_type = target.get_type(function_context.schema)?;
++    if !(target_type.is_numeric() || target_type.is_null() || target_type.is_string()) {
++        return Err(PlanError::invalid(format!(
++            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] {name} scale requires INT",
++        )));
++    }
++    if target.is_volatile() || !target.column_refs().is_empty() {
++        return Err(PlanError::invalid(format!(
++            "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] {name} scale must be constant",
++        )));
++    }
++    let value = match target {
++        Expr::Literal(value, _) => value,
++        expression => {
++            let context = SimplifyContextBuilder::default()
++                .with_schema(function_context.schema.clone())
++                .build();
++            let coerced =
++                ExprSimplifier::new(context).coerce(expression, function_context.schema)?;
++            LiteralEvaluator::new().evaluate(&coerced)?
++        }
++    };
++    let ansi = function_context.plan_config.ansi_mode;
++    let target = if value.is_null() {
++        ScalarValue::Int32(None)
++    } else {
++        match &value {
++            ScalarValue::Int64(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
++            ScalarValue::Float32(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
++            ScalarValue::Float64(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
++            ScalarValue::Decimal128(Some(v), _, s) if !ansi && *s >= 0 => {
++                ScalarValue::Int32(Some((v / 10_i128.pow(*s as u32)) as i32))
++            }
++            ScalarValue::Utf8(Some(value))
++            | ScalarValue::LargeUtf8(Some(value))
++            | ScalarValue::Utf8View(Some(value))
++                if ansi =>
++            {
++                // Spark's UTF8String.toIntExact trims ASCII whitespace/control bytes.
++                let value = value.trim_matches(|c| c <= ' ' || c == '\u{7f}');
++                ScalarValue::Int32(Some(value.parse::<i32>().map_err(|e| {
++                    PlanError::invalid(format!("[CAST_INVALID_INPUT] {name} scale: {e}"))
++                })?))
++            }
++            _ if target_type.is_string() && !ansi => {
++                use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInt32;
++                LiteralEvaluator::new().evaluate(
++                    &ScalarUDF::from(SparkCastStringToInt32::new()).call(vec![lit(value)]),
++                )?
++            }
++            _ => value.cast_to(&DataType::Int32).map_err(|e| {
++                PlanError::invalid(format!(
++                    "[{}] {name} scale: {e}",
++                    if target_type.is_string() {
++                        "CAST_INVALID_INPUT"
++                    } else {
++                        "CAST_OVERFLOW"
++                    },
++                ))
++            })?,
++        }
++    };
++    Ok(target)
++}
++
+ fn spark_bround(input: ScalarFunctionInput, udf: &ScalarUDF) -> PlanResult<Expr> {
+     let ScalarFunctionInput {
+         mut arguments,
+@@ -1605,56 +1675,7 @@
+         return Ok(udf.call(arguments));
+     }
+     let target = arguments.get(1).cloned().unwrap_or_else(|| lit(0_i32));
+-    let target_type = target.get_type(function_context.schema)?;
+-    if !(target_type.is_numeric() || target_type.is_null() || target_type.is_string()) {
+-        return Err(PlanError::invalid(
+-            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] BROUND scale requires INT",
+-        ));
+-    }
+-    if target.is_volatile() || !target.column_refs().is_empty() {
+-        return Err(PlanError::invalid(
+-            "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] BROUND scale must be constant",
+-        ));
+-    }
+-    let value = match target {
+-        Expr::Literal(value, _) => value,
+-        expression => {
+-            let context = SimplifyContextBuilder::default()
+-                .with_schema(function_context.schema.clone())
+-                .build();
+-            let coerced = ExprSimplifier::new(context).coerce(expression, function_context.schema)?;
+-            LiteralEvaluator::new().evaluate(&coerced)?
+-        }
+-    };
+-    let ansi = function_context.plan_config.ansi_mode;
+-    let target = if value.is_null() {
+-        ScalarValue::Int32(None)
+-    } else {
+-        match &value {
+-            ScalarValue::Int64(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
+-            ScalarValue::Float32(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
+-            ScalarValue::Float64(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
+-            ScalarValue::Decimal128(Some(v), _, s) if !ansi && *s >= 0 => {
+-                ScalarValue::Int32(Some((v / 10_i128.pow(*s as u32)) as i32))
+-            }
+-            _ if target_type.is_string() && !ansi => {
+-                use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInt32;
+-                LiteralEvaluator::new().evaluate(
+-                    &ScalarUDF::from(SparkCastStringToInt32::new()).call(vec![lit(value)]),
+-                )?
+-            }
+-            _ => value.cast_to(&DataType::Int32).map_err(|e| {
+-                PlanError::invalid(format!(
+-                    "[{}] BROUND scale: {e}",
+-                    if target_type.is_string() {
+-                        "CAST_INVALID_INPUT"
+-                    } else {
+-                        "CAST_OVERFLOW"
+-                    },
+-                ))
+-            })?,
+-        }
+-    };
++    let target = spark_round_scale("BROUND", target, &function_context)?;
+     let null_scale = target.is_null();
+     let call = udf.call(vec![arguments.remove(0), lit(target)]);
+     if null_scale {
+@@ -1672,44 +1693,53 @@
+         function_context,
+     } = input;
+     if !(1..=2).contains(&arguments.len()) {
+-        return Ok(expr_fn::round(arguments));
+-    }
+-    let DataType::Decimal128(precision, scale) = arguments[0].get_type(function_context.schema)?
+-    else {
+-        return Ok(expr_fn::round(arguments));
++        return Err(PlanError::invalid(
++            "[WRONG_NUM_ARGS.WITHOUT_SUGGESTION] ROUND requires one or two arguments",
++        ));
++    }
++    let mut value = arguments.remove(0);
++    let value_type = value.get_type(function_context.schema)?;
++    if !(value_type.is_numeric() || value_type.is_null() || value_type.is_string()) {
++        return Err(PlanError::invalid(
++            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] ROUND input requires a numeric value",
++        ));
++    }
++    let target = arguments.pop().unwrap_or_else(|| lit(0_i32));
++    if target.contains_scalar_subquery() {
++        return Err(PlanError::invalid(
++            "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] ROUND scale must be constant",
++        ));
++    }
++    let target = spark_round_scale("ROUND", target, &function_context)?;
++    let ScalarValue::Int32(scale) = target else {
++        return Err(PlanError::internal("ROUND scale was not resolved to INT"));
+     };
+-    let target = arguments.get(1).cloned().unwrap_or_else(|| lit(0_i32));
+-    let target_type = target.get_type(function_context.schema)?;
+-    // Leave other coercions on the existing ROUND path.
+-    if !target_type.is_integer() && !target_type.is_null() {
+-        return Ok(expr_fn::round(arguments));
+-    }
+-    if target.is_volatile() {
+-        return Err(PlanError::invalid("ROUND scale must be a constant integer"));
+-    }
+-    let target = match target {
+-        Expr::Literal(value, _) => value,
+-        expr => {
+-            let context = SimplifyContextBuilder::default()
+-                .with_schema(function_context.schema.clone())
+-                .build();
+-            let coerced = ExprSimplifier::new(context).coerce(expr, function_context.schema)?;
+-            LiteralEvaluator::new().evaluate(&coerced).map_err(|e| {
+-                PlanError::invalid(format!("ROUND scale must be a constant integer: {e}"))
+-            })?
+-        }
++    // ponytail: retain subquery inputs until eager subqueries can be separated
++    // from outer CAST evaluation; the evaluation-order leaf owns that limit.
++    let has_subquery = value.contains_scalar_subquery();
++    if value_type.is_string() {
++        value = if function_context.plan_config.ansi_mode {
++            cast(value, DataType::Float64)
++        } else {
++            try_cast(value, DataType::Float64)
++        };
++    }
++    let call = if let DataType::Decimal128(precision, input_scale) = value_type {
++        ScalarUDF::from(SparkDecimalRound::new(
++            precision,
++            input_scale,
++            scale.unwrap_or(0),
++        ))
++        .call(vec![value, lit(target)])
++    } else {
++        expr_fn::round(vec![value, lit(target)])
+     };
+-    let target = if target.is_null() {
+-        None
+-    } else {
+-        Some(LiteralValue(&target).try_to_i32()?)
+-    };
+-    let udf = ScalarUDF::from(SparkDecimalRound::new(
+-        precision,
+-        scale,
+-        target.unwrap_or(0),
+-    ));
+-    Ok(udf.call(vec![arguments.remove(0), lit(ScalarValue::Int32(target))]))
++    if scale.is_none() && !has_subquery {
++        return Ok(lit(ScalarValue::try_from(
++            &call.get_type(function_context.schema)?,
++        )?));
++    }
++    Ok(call)
+ }
+ 
+ pub(super) fn list_built_in_math_functions() -> Vec<(&'static str, ScalarFunction)> {
+@@ -2098,3 +2128,99 @@
+         }
+     }
+ }
++
++#[cfg(test)]
++#[tokio::test]
++async fn round_arguments_preserve_coercion_and_null_scale() -> PlanResult<()> {
++    use crate::{config::PlanConfig, resolver::PlanResolver};
++    use datafusion::arrow::{array::Array, util::display::array_value_to_string};
++    use datafusion::prelude::SessionContext;
++    for ansi in [true, false] {
++        let ctx = SessionContext::new();
++        let config = PlanConfig {
++            ansi_mode: ansi,
++            ..Default::default()
++        };
++        let resolver = PlanResolver::new(&ctx, Arc::new(config));
++        for (expression, expected_type, expected) in [
++            (
++                "ROUND(CAST(1.255 AS DECIMAL(10,3)), ' 2 ')",
++                DataType::Decimal128(10, 2),
++                Some("1.26"),
++            ),
++            (
++                "ROUND(CAST(1.255 AS DECIMAL(10,3)), 2.9)",
++                DataType::Decimal128(10, 2),
++                Some("1.26"),
++            ),
++            ("ROUND('1.25', 1)", DataType::Float64, Some("1.3")),
++            (
++                "ROUND(CAST('bad' AS DECIMAL(10,3)), NULL)",
++                DataType::Decimal128(8, 0),
++                None,
++            ),
++            (
++                "BROUND(CAST(2.345 AS DECIMAL(6,3)), ' 2 ')",
++                DataType::Decimal128(6, 2),
++                Some("2.34"),
++            ),
++        ] {
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&format!(
++                "SELECT {expression} AS r"
++            ))?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let plan = resolver.resolve_named_plan(spec).await?;
++            let batches = ctx.execute_logical_plan(plan.plan).await?.collect().await?;
++            assert_eq!(batches.iter().map(|b| b.num_rows()).sum::<usize>(), 1);
++            let column = batches[0].column(0);
++            assert_eq!(column.data_type(), &expected_type);
++            let actual = if column.is_null(0) {
++                None
++            } else {
++                Some(array_value_to_string(column, 0)?)
++            };
++            assert_eq!(actual.as_deref(), expected, "{expression}, ANSI {ansi}");
++        }
++        for (scale, error) in [
++            ("'bad'", "CAST_INVALID_INPUT"),
++            ("2147483648L", "CAST_OVERFLOW"),
++        ] {
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&format!(
++                "SELECT ROUND(CAST(0 AS DECIMAL(10,3)), {scale}) AS r"
++            ))?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let plan = resolver.resolve_named_plan(spec).await;
++            if ansi {
++                assert!(plan.err().unwrap().to_string().contains(error));
++            } else {
++                let batches = ctx
++                    .execute_logical_plan(plan?.plan)
++                    .await?
++                    .collect()
++                    .await?;
++                let column = batches[0].column(0);
++                assert_eq!(column.data_type(), &DataType::Decimal128(8, 0));
++                assert_eq!(column.is_null(0), scale == "'bad'");
++            }
++        }
++        for (scale, condition) in [
++            ("true", "UNEXPECTED_INPUT_TYPE"),
++            ("(SELECT 2)", "NON_FOLDABLE_INPUT"),
++        ] {
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&format!(
++                "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), {scale}) AS r"
++            ))?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            assert!(
++                resolver
++                    .resolve_named_plan(spec)
++                    .await
++                    .err()
++                    .unwrap()
++                    .to_string()
++                    .contains(condition)
++            );
++        }
++    }
++    Ok(())
++}
