@@ -22,6 +22,7 @@ exclude = [
     "benches/row_filter.rs",
     "benches/scan_scheduling.rs",
     "benches/scan_scheduling.py",
+    "benches/test_scan_scheduling.py",
     "tests/benchmark_harness.rs",
     "tests/incremental_refresh_benchmark_harness.rs",
     "tests/page_index_benchmark_harness.rs",

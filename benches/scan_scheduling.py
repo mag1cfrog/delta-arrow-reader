@@ -4,7 +4,9 @@ Build the Rust target with cargo bench --locked --bench scan_scheduling --no-run
 Pass its executable as --binary baseline=PATH and choose an empty --output-dir.
 The runner saves executable copies, fixture hashes, environment metadata, warmups,
 every measured result, and summaries. A later --binary candidate=PATH runs both
-versions in counterbalanced order on the same fixtures.
+versions in counterbalanced order on the same fixtures. With multiple binaries,
+use --fixture-binary candidate to select the version that can generate every
+selected fixture. With one binary, that version also generates the fixtures.
 
 Execution timings exclude process startup, fixture generation, table loading, and
 scan planning. CPU seconds cover the whole child. Peak RSS includes the HTTP server
@@ -141,6 +143,8 @@ def summarize(samples, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", action="append", required=True, metavar="LABEL=PATH")
+    parser.add_argument("--fixture-binary", metavar="LABEL",
+                        help="fixture generator from --binary labels; required with multiple binaries")
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--repetitions", type=int, default=8)
     parser.add_argument("--probe-repetitions", type=int, default=3)
@@ -165,6 +169,13 @@ def main():
         if not source.is_file() or not os.access(source, os.X_OK):
             parser.error(f"not an executable: {source}")
         binaries[label] = source
+    fixture_binary = args.fixture_binary
+    if fixture_binary is None:
+        if len(binaries) != 1:
+            parser.error("multiple binaries require --fixture-binary LABEL")
+        fixture_binary = next(iter(binaries))
+    if fixture_binary not in binaries:
+        parser.error("--fixture-binary must name a supplied --binary label")
     root = args.output_dir.resolve()
     root.mkdir(parents=True, exist_ok=False)
     (root / "bin").mkdir()
@@ -173,7 +184,7 @@ def main():
         binaries[label] = Path(shutil.copy2(source, root / "bin" / label))
     repo = Path(__file__).resolve().parent.parent
     for relative in ("Cargo.toml", "Cargo.lock", "benches/scan_scheduling.rs", "benches/scan_scheduling.py",
-                     "benches/run_order.py", "benches/range_planning/controlled_http.rs",
+                     "benches/test_scan_scheduling.py", "benches/run_order.py", "benches/range_planning/controlled_http.rs",
                      "tests/scan_scheduling_benchmark_harness.rs"):
         destination = root / "source" / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -190,6 +201,7 @@ def main():
         "cpu_affinity": sorted(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
         "load_average_before": os.getloadavg(), "worker_threads": 4,
         "binaries": {name: {"path": str(path), "sha256": file_hash(path)} for name, path in binaries.items()},
+        "fixture_binary": fixture_binary,
         "fixtures": {}, "repetitions": args.repetitions, "probe_repetitions": args.probe_repetitions,
         "timeout_seconds": args.timeout_seconds, "probe_timeout_seconds": args.probe_timeout_seconds,
         "ordering_seed": 122,
@@ -197,7 +209,7 @@ def main():
     }
     for shape in sorted({case.shape for case in selected}):
         fixture = root / "fixtures" / shape
-        prepared = subprocess.run([str(next(iter(binaries.values()))), "prepare", str(fixture), shape],
+        prepared = subprocess.run([str(binaries[fixture_binary]), "prepare", str(fixture), shape],
                                   check=True, capture_output=True, text=True)
         metadata["fixtures"][shape] = dict(json.loads(prepared.stdout), sha256=tree_hash(fixture))
     (root / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
