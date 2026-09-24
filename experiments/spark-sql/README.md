@@ -8,6 +8,8 @@ The [ANSI integer overflow fix](INTEGER_OVERFLOW.md) establishes the optional co
 
 The [Decimal BROUND fix](DECIMAL_BROUND.md) adds exact HALF_EVEN Decimal128 rounding and result types on the selected optional runtime. Its focused Spark comparison, existing regressions and bounded cost check remain separate from the default checkpoint below.
 
+The [FLOAT BROUND type fix](FLOAT_BROUND.md) makes the declared result type agree with the existing Float32 output. Its numerical boundary differences and performance follow-ups retain separate owners.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
