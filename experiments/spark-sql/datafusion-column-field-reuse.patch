@@ -1,0 +1,12 @@
+diff --git a/src/expressions/column.rs b/src/expressions/column.rs
+--- a/src/expressions/column.rs
++++ b/src/expressions/column.rs
+@@ -125,7 +125,7 @@
+ 
+     fn return_field(&self, input_schema: &Schema) -> Result<FieldRef> {
+         self.bounds_check(input_schema)?;
+-        Ok(input_schema.field(self.index).clone().into())
++        Ok(Arc::clone(&input_schema.fields()[self.index]))
+     }
+ 
+     fn children(&self) -> Vec<&Arc<dyn PhysicalExpr>> {
