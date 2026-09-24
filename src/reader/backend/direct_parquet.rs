@@ -6,11 +6,14 @@ mod range_planning;
 mod row_group_pruning;
 mod schema_alignment;
 
+#[cfg(test)]
+mod int96_tests;
+
 use std::{ops::Range, sync::Arc};
 
 use arrow::{
     array::Int64Array,
-    datatypes::{DataType, Field, Schema, SchemaRef},
+    datatypes::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit},
     record_batch::RecordBatch,
 };
 use delta_kernel::expressions::ColumnName;
@@ -24,6 +27,8 @@ use parquet::arrow::{
         ParquetRecordBatchStreamBuilder,
     },
 };
+use parquet::basic::Type as PhysicalType;
+use parquet::errors::{ParquetError, Result as ParquetResult};
 use parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
 use parquet::schema::types::SchemaDescriptor;
 use snafu::{IntoError, ResultExt};
@@ -193,7 +198,6 @@ impl DirectParquetReader {
         let builder = self
             .create_stream_builder(
                 &object,
-                task.parquet_byte_range.as_ref(),
                 target_schema,
                 options.include_original_row_index,
                 options.row_filter.is_some(),
@@ -238,23 +242,20 @@ impl DirectParquetReader {
         })
     }
 
-    /// Creates a stream builder for the resolved Parquet object.
+    /// Loads file metadata once and sets the decode schema before creating the builder.
     ///
-    /// This chooses the metadata-loading path for a ranged or whole-file read. It also rewrites
-    /// the Arrow schema before creating the builder when `target_schema` uses view types.
+    /// Whole-file, ranged, cached, and view-type reads share this setup so INT96 values
+    /// always decode at microsecond precision, before schema alignment or filtering.
     async fn create_stream_builder(
         &self,
         object: &ParquetFileObject,
-        parquet_byte_range: Option<&Range<u64>>,
         target_schema: &SchemaRef,
         include_original_row_index: bool,
         has_row_filter: bool,
     ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
-        let file_size = object.file_size;
-        let path = &object.path;
-        let reader = ParquetObjectReader::new(Arc::clone(&object.store), path.clone())
-            .with_file_size(file_size);
-        let reader = match self.execution_options.parquet_metadata_size_hint_bytes() {
+        let reader = ParquetObjectReader::new(Arc::clone(&object.store), object.path.clone())
+            .with_file_size(object.file_size);
+        let mut reader = match self.execution_options.parquet_metadata_size_hint_bytes() {
             Some(hint) => reader.with_footer_size_hint(hint),
             None => reader,
         };
@@ -263,78 +264,21 @@ impl DirectParquetReader {
             .context(DataFileReadSnafu {
                 reason: "parquet_row_index_setup_failed",
             })?;
-        if parquet_byte_range.is_some() || self.metadata_cache.is_some() {
-            self.create_stream_builder_from_metadata(
-                path,
-                file_size,
-                reader,
-                reader_options,
-                target_schema,
-            )
-            .await
-        } else if schema_uses_view_types(target_schema) {
-            Self::create_view_type_stream_builder(reader, reader_options).await
-        } else {
-            ParquetRecordBatchStreamBuilder::new_with_options(reader, reader_options)
-                .await
-                .boxed()
-                .context(DataFileReadSnafu {
-                    reason: "parquet_read_setup_failed",
-                })
-        }
-    }
-
-    /// Creates a stream builder from explicitly loaded Parquet metadata.
-    ///
-    /// Ranged tasks and prepared whole-file reads use this path so their metadata can be shared.
-    /// The metadata schema is rewritten first when `target_schema` uses view types.
-    async fn create_stream_builder_from_metadata(
-        &self,
-        path: &Path,
-        file_size: u64,
-        mut reader: ParquetObjectReader,
-        reader_options: ArrowReaderOptions,
-        target_schema: &SchemaRef,
-    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
         let metadata = self
-            .load_parquet_metadata(path, file_size, &mut reader, &reader_options)
+            .load_parquet_metadata(&object.path, object.file_size, &mut reader, &reader_options)
             .await?;
-        let metadata = ArrowReaderMetadata::try_new(metadata, reader_options.clone())
-            .boxed()
-            .context(DataFileReadSnafu {
-                reason: "parquet_read_setup_failed",
-            })?;
-        let metadata = if schema_uses_view_types(target_schema) {
-            metadata_with_view_types(metadata, reader_options)?
-        } else {
-            metadata
-        };
+        let metadata = metadata_with_decode_schema(
+            metadata,
+            reader_options,
+            schema_uses_view_types(target_schema),
+        )
+        .boxed()
+        .context(DataFileReadSnafu {
+            reason: "parquet_read_setup_failed",
+        })?;
 
         Ok(ParquetRecordBatchStreamBuilder::new_with_metadata(
             reader, metadata,
-        ))
-    }
-
-    /// Creates a stream builder whose Arrow schema uses view types.
-    ///
-    /// The metadata schema must be rewritten before the builder is created. Rewriting it later
-    /// would leave the stream configured with the original Arrow types.
-    async fn create_view_type_stream_builder(
-        reader: ParquetObjectReader,
-        reader_options: ArrowReaderOptions,
-    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
-        let mut metadata_reader = reader.clone();
-        let metadata =
-            ArrowReaderMetadata::load_async(&mut metadata_reader, reader_options.clone())
-                .await
-                .boxed()
-                .context(DataFileReadSnafu {
-                    reason: "parquet_read_setup_failed",
-                })?;
-
-        Ok(ParquetRecordBatchStreamBuilder::new_with_metadata(
-            reader,
-            metadata_with_view_types(metadata, reader_options)?,
         ))
     }
 
@@ -585,28 +529,102 @@ fn predicate_root_index(
         })
 }
 
-fn metadata_with_view_types(
-    metadata: ArrowReaderMetadata,
+fn metadata_with_decode_schema(
+    metadata: Arc<ParquetMetaData>,
     reader_options: ArrowReaderOptions,
-) -> Result<ArrowReaderMetadata, DeltaReaderError> {
-    let file_schema = Schema::new_with_metadata(
-        metadata
-            .schema()
-            .fields()
+    use_view_types: bool,
+) -> ParquetResult<ArrowReaderMetadata> {
+    let parquet_schema = metadata.file_metadata().schema_descr();
+    let has_int96 = parquet_schema
+        .columns()
+        .iter()
+        .any(|column| column.physical_type() == PhysicalType::INT96);
+    if !has_int96 && !use_view_types {
+        return ArrowReaderMetadata::try_new(metadata, reader_options);
+    }
+
+    // Hints describe the complete file schema, not the projected Delta schema.
+    // Infer it without generated columns. A physical field can itself carry a
+    // RowNumber extension, so its metadata cannot identify a generated column.
+    let file_metadata = ArrowReaderMetadata::try_new(
+        Arc::clone(&metadata),
+        reader_options.clone().with_virtual_columns(Vec::new())?,
+    )?;
+    let mut fields = file_metadata
+        .schema()
+        .fields()
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    if has_int96 {
+        let mut physical_types = parquet_schema.columns().iter().map(|c| c.physical_type());
+        fields = fields
             .iter()
-            .filter(|field| field.name() != ORIGINAL_ROW_INDEX_COLUMN)
-            .cloned()
-            .collect::<Vec<_>>(),
-        metadata.schema().metadata().clone(),
-    );
-    ArrowReaderMetadata::try_new(
-        Arc::clone(metadata.metadata()),
-        reader_options.with_schema(schema_with_view_types(&file_schema)),
-    )
-    .boxed()
-    .context(DataFileReadSnafu {
-        reason: "parquet_read_setup_failed",
-    })
+            .map(|field| field_with_int96_microseconds(field, &mut physical_types))
+            .collect::<ParquetResult<_>>()?;
+        if physical_types.next().is_some() {
+            return Err(ParquetError::ArrowError(
+                "Arrow schema has fewer leaves than the Parquet schema".into(),
+            ));
+        }
+    }
+    let file_schema = Schema::new_with_metadata(fields, file_metadata.schema().metadata().clone());
+    let schema = if use_view_types {
+        schema_with_view_types(&file_schema)
+    } else {
+        Arc::new(file_schema)
+    };
+    // Apply the requested virtual columns only after the physical decode schema is ready.
+    ArrowReaderMetadata::try_new(metadata, reader_options.with_schema(schema))
+}
+
+/// In a full file schema, Arrow leaves and Parquet columns have the same depth-first order.
+/// Walking leaves avoids matching names across Parquet's extra LIST/MAP wrapper levels.
+fn field_with_int96_microseconds(
+    field: &FieldRef,
+    physical_types: &mut impl Iterator<Item = PhysicalType>,
+) -> ParquetResult<FieldRef> {
+    let data_type = match field.data_type() {
+        DataType::Struct(fields) => DataType::Struct(
+            fields
+                .iter()
+                .map(|field| field_with_int96_microseconds(field, physical_types))
+                .collect::<ParquetResult<_>>()?,
+        ),
+        DataType::List(inner) => {
+            DataType::List(field_with_int96_microseconds(inner, physical_types)?)
+        }
+        DataType::LargeList(inner) => {
+            DataType::LargeList(field_with_int96_microseconds(inner, physical_types)?)
+        }
+        DataType::FixedSizeList(inner, size) => {
+            DataType::FixedSizeList(field_with_int96_microseconds(inner, physical_types)?, *size)
+        }
+        DataType::ListView(inner) => {
+            DataType::ListView(field_with_int96_microseconds(inner, physical_types)?)
+        }
+        DataType::LargeListView(inner) => {
+            DataType::LargeListView(field_with_int96_microseconds(inner, physical_types)?)
+        }
+        DataType::Map(inner, ordered) => DataType::Map(
+            field_with_int96_microseconds(inner, physical_types)?,
+            *ordered,
+        ),
+        data_type => {
+            let physical_type = physical_types.next().ok_or_else(|| {
+                ParquetError::ArrowError(
+                    "Arrow schema has more leaves than the Parquet schema".into(),
+                )
+            })?;
+            match (physical_type, data_type) {
+                (PhysicalType::INT96, DataType::Timestamp(_, timezone)) => {
+                    DataType::Timestamp(TimeUnit::Microsecond, timezone.clone())
+                }
+                _ => return Ok(Arc::clone(field)),
+            }
+        }
+    };
+    Ok(Arc::new(field.as_ref().clone().with_data_type(data_type)))
 }
 
 pub(crate) fn direct_parquet_file_executor(

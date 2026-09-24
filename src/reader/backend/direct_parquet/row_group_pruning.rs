@@ -340,14 +340,17 @@ fn compatible_statistics_type(source: &ArrowDataType, target: &ArrowDataType) ->
 fn temporal_cast_can_introduce_nulls(source: &ArrowDataType, target: &ArrowDataType) -> bool {
     use ArrowDataType::{Date32, Timestamp};
     use TimeUnit::{Microsecond, Millisecond, Nanosecond, Second};
-    matches!(
-        (source, target),
+    match (source, target) {
         (Date32, Timestamp(Microsecond | Nanosecond, _))
-        | (Timestamp(Second | Millisecond, _), Timestamp(Microsecond, _))
-        // Localizing a naive microsecond timestamp also needs a representable
-        // calendar date. Nanoseconds already fit in that calendar range.
-        | (Timestamp(Microsecond, None), Timestamp(Microsecond, Some(_)))
-    )
+        | (Timestamp(Second | Millisecond, _), Timestamp(Microsecond, _)) => true,
+        // cast_leaf_array attaches Delta's UTC metadata without changing values.
+        // Other timezones still need calendar localization; nanoseconds already
+        // fit in that calendar range.
+        (Timestamp(Microsecond, None), Timestamp(Microsecond, Some(timezone))) => {
+            timezone.as_ref() != "UTC"
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]
