@@ -1,7 +1,9 @@
 //! Compatibility reader for Statistics.nan_count (Parquet Thrift field 9).
 //!
-//! parquet-rs 58 discards this field. Read it from the same validated footer,
+//! parquet-rs 58 discards this field. Read it from the same footer bytes,
 //! indexed by row-group ordinal and physical leaf ordinal, never by field name.
+//! Native metadata decoding does not validate unknown fields for us. All wire
+//! integers, field IDs, and lengths below are checked before they are trusted.
 //! Unknown or malformed counts cannot establish that a column is NaN-free.
 //!
 //! ponytail: Replace this module and footer capture with Statistics::nan_count_opt()
@@ -11,10 +13,7 @@
 use std::collections::HashMap;
 
 use parquet::{basic::Type, file::metadata::ParquetMetaData};
-use thrift::{
-    ProtocolErrorKind, new_protocol_error,
-    protocol::{TCompactInputProtocol, TInputProtocol, TType},
-};
+use thrift::{ProtocolErrorKind, new_protocol_error, protocol::TType};
 
 #[cfg(test)]
 pub(super) mod tests;
@@ -44,7 +43,7 @@ impl NanCounts {
     }
 
     fn read(footer: &[u8], metadata: &ParquetMetaData) -> thrift::Result<Self> {
-        let mut protocol = TCompactInputProtocol::new(footer);
+        let mut protocol = footer;
         let mut counts = HashMap::new();
         // FileMetaData.row_groups -> RowGroup.columns -> ColumnChunk.meta_data
         // -> ColumnMetaData.statistics -> Statistics.nan_count.
@@ -78,11 +77,14 @@ impl NanCounts {
                 Ok(())
             })
         })?;
+        if !protocol.is_empty() {
+            return Err(invalid_metadata());
+        }
         Ok(Self(counts))
     }
 }
 
-type Protocol<'a> = TCompactInputProtocol<&'a [u8]>;
+type Protocol<'a> = &'a [u8];
 
 fn invalid_metadata() -> thrift::Error {
     new_protocol_error(ProtocolErrorKind::InvalidData, "invalid NaN-count metadata")
@@ -93,7 +95,7 @@ fn invalid_metadata() -> thrift::Error {
 fn read_varint(p: &mut Protocol<'_>) -> thrift::Result<u64> {
     let mut value = 0_u64;
     for shift in (0..70).step_by(7) {
-        let byte = p.read_byte()?;
+        let byte = read_byte(p)?;
         if shift == 63 && byte > 1 {
             return Err(invalid_metadata());
         }
@@ -110,6 +112,54 @@ fn read_i64(p: &mut Protocol<'_>) -> thrift::Result<i64> {
     Ok((value >> 1) as i64 ^ -((value & 1) as i64))
 }
 
+// A slice cursor makes bounds checks explicit and skips binary data without
+// allocations. Only the compact types used by Parquet metadata are supported.
+fn read_byte(p: &mut Protocol<'_>) -> thrift::Result<u8> {
+    let (&byte, rest) = p.split_first().ok_or_else(invalid_metadata)?;
+    *p = rest;
+    Ok(byte)
+}
+
+fn skip_bytes(p: &mut Protocol<'_>, length: usize) -> thrift::Result<()> {
+    *p = p.get(length..).ok_or_else(invalid_metadata)?;
+    Ok(())
+}
+
+fn read_type(kind: u8) -> thrift::Result<TType> {
+    Ok(match kind {
+        0 => TType::Stop,
+        1 | 2 => TType::Bool,
+        3 => TType::I08,
+        4 => TType::I16,
+        5 => TType::I32,
+        6 => TType::I64,
+        7 => TType::Double,
+        8 => TType::String,
+        9 => TType::List,
+        12 => TType::Struct,
+        // parquet-rs 58 does not accept set/map fields either.
+        _ => return Err(invalid_metadata()),
+    })
+}
+
+fn read_field_header(p: &mut Protocol<'_>, last_id: &mut i16) -> thrift::Result<TType> {
+    let header = read_byte(p)?;
+    if header == 0 {
+        return Ok(TType::Stop);
+    }
+    let kind = read_type(header & 0x0f)?;
+    if kind == TType::Stop {
+        return Err(invalid_metadata());
+    }
+    let delta = i16::from(header >> 4);
+    *last_id = if delta == 0 {
+        i16::try_from(read_i64(p)?).map_err(|_| invalid_metadata())?
+    } else {
+        last_id.checked_add(delta).ok_or_else(invalid_metadata)?
+    };
+    Ok(kind)
+}
+
 /// Visit one optional field in a struct, checking its type and uniqueness.
 fn read_field<T>(
     p: &mut Protocol<'_>,
@@ -117,25 +167,52 @@ fn read_field<T>(
     field_type: TType,
     mut read: impl FnMut(&mut Protocol<'_>) -> thrift::Result<T>,
 ) -> thrift::Result<Option<T>> {
-    p.read_struct_begin()?;
+    let mut last_id = 0;
     let mut value = None;
     loop {
-        let field = p.read_field_begin()?;
-        if field.field_type == TType::Stop {
+        let kind = read_field_header(p, &mut last_id)?;
+        if kind == TType::Stop {
             break;
         }
-        if field.id == Some(id) {
-            if field.field_type != field_type || value.is_some() {
+        if last_id == id {
+            if kind != field_type || value.is_some() {
                 return Err(invalid_metadata());
             }
             value = Some(read(p)?);
-        } else {
-            skip_value(p, field.field_type, 64)?;
+        } else if kind != TType::Bool {
+            // Struct boolean values are already part of the field header.
+            skip_value(p, kind, 64)?;
         }
-        p.read_field_end()?;
     }
-    p.read_struct_end()?;
     Ok(value)
+}
+
+fn read_list(p: &mut Protocol<'_>) -> thrift::Result<(TType, usize)> {
+    let header = read_byte(p)?;
+    // Some Parquet writers use zero rather than a type for an empty list.
+    if header == 0 {
+        return Ok((TType::I08, 0));
+    }
+    let kind = read_type(header & 0x0f)?;
+    if kind == TType::Stop {
+        return Err(invalid_metadata());
+    }
+    let size = if header >> 4 == 15 {
+        i32::try_from(read_varint(p)?).map_err(|_| invalid_metadata())? as usize
+    } else {
+        usize::from(header >> 4)
+    };
+    // Each element needs at least one byte, including bools and empty structs.
+    if size > p.len() {
+        return Err(invalid_metadata());
+    }
+    // parquet-rs 58 skips boolean collections without consuming their values.
+    // They are not used by the footer schema. Reject this extension so the two
+    // readers cannot associate counts using different interpretations of a footer.
+    if kind == TType::Bool && size != 0 {
+        return Err(invalid_metadata());
+    }
+    Ok((kind, size))
 }
 
 fn read_struct_list(
@@ -143,87 +220,56 @@ fn read_struct_list(
     expected: usize,
     mut read: impl FnMut(&mut Protocol<'_>, usize) -> thrift::Result<()>,
 ) -> thrift::Result<()> {
-    let list = p.read_list_begin()?;
-    if list.element_type != TType::Struct || usize::try_from(list.size).ok() != Some(expected) {
+    let (kind, size) = read_list(p)?;
+    if kind != TType::Struct || size != expected {
         return Err(invalid_metadata());
     }
     for index in 0..expected {
         read(p, index)?;
     }
-    p.read_list_end()
+    Ok(())
 }
 
-/// Thrift's default skip decodes binary fields as UTF-8 strings. Parquet bounds
-/// and Arrow schemas are arbitrary bytes, so skip them without decoding or
-/// allocating from untrusted lengths. Every loop consumes input or returns an
-/// error, and recursive unknown fields have a fixed depth limit.
+/// Skip unknown values without allocation. Every loop consumes input or returns
+/// an error, and recursive unknown fields have a fixed depth limit.
 fn skip_value(p: &mut Protocol<'_>, kind: TType, depth: usize) -> thrift::Result<()> {
     if depth == 0 {
         return Err(invalid_metadata());
     }
     match kind {
+        TType::I08 => skip_bytes(p, 1),
+        TType::I16 => i16::try_from(read_i64(p)?)
+            .map(|_| ())
+            .map_err(|_| invalid_metadata()),
+        TType::I32 => i32::try_from(read_i64(p)?)
+            .map(|_| ())
+            .map_err(|_| invalid_metadata()),
+        TType::I64 => read_i64(p).map(|_| ()),
+        TType::Double => skip_bytes(p, 8),
         TType::String => {
-            // Compact binary lengths are unsigned varints (unlike read_i32).
-            let mut length = 0_u32;
-            for shift in (0..35).step_by(7) {
-                let byte = p.read_byte()?;
-                if shift == 28 && byte > 0x0f {
-                    return Err(invalid_metadata());
-                }
-                length |= u32::from(byte & 0x7f) << shift;
-                if byte & 0x80 == 0 {
-                    for _ in 0..length {
-                        p.read_byte()?;
-                    }
-                    return Ok(());
-                }
-            }
-            Err(invalid_metadata())
+            let length = u32::try_from(read_varint(p)?).map_err(|_| invalid_metadata())?;
+            skip_bytes(p, length as usize)
         }
         TType::Struct => {
-            p.read_struct_begin()?;
+            let mut last_id = 0;
             loop {
-                let field = p.read_field_begin()?;
-                if field.field_type == TType::Stop {
+                let kind = read_field_header(p, &mut last_id)?;
+                if kind == TType::Stop {
                     break;
                 }
-                skip_value(p, field.field_type, depth - 1)?;
-                p.read_field_end()?;
-            }
-            p.read_struct_end()
-        }
-        TType::List | TType::Set => {
-            let (element_type, size) = if kind == TType::List {
-                let list = p.read_list_begin()?;
-                (list.element_type, list.size)
-            } else {
-                let set = p.read_set_begin()?;
-                (set.element_type, set.size)
-            };
-            let size = usize::try_from(size).map_err(|_| invalid_metadata())?;
-            for _ in 0..size {
-                skip_value(p, element_type, depth - 1)?;
-            }
-            if kind == TType::List {
-                p.read_list_end()
-            } else {
-                p.read_set_end()
-            }
-        }
-        TType::Map => {
-            let map = p.read_map_begin()?;
-            let size = usize::try_from(map.size).map_err(|_| invalid_metadata())?;
-            if size > 0 {
-                let key = map.key_type.ok_or_else(invalid_metadata)?;
-                let value = map.value_type.ok_or_else(invalid_metadata)?;
-                for _ in 0..size {
-                    skip_value(p, key, depth - 1)?;
-                    skip_value(p, value, depth - 1)?;
+                if kind != TType::Bool {
+                    skip_value(p, kind, depth - 1)?;
                 }
             }
-            p.read_map_end()
+            Ok(())
         }
-        // All remaining valid types are fixed-width or bounded varints.
-        _ => p.skip(kind),
+        TType::List => {
+            let (kind, size) = read_list(p)?;
+            for _ in 0..size {
+                skip_value(p, kind, depth - 1)?;
+            }
+            Ok(())
+        }
+        _ => Err(invalid_metadata()),
     }
 }

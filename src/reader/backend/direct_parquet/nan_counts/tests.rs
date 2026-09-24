@@ -30,7 +30,7 @@ enum Value {
     I16(i16),
     I32(i32),
     I64(i64),
-    RawI64(Vec<u8>),
+    Raw(TType, Vec<u8>),
     Double(f64),
     Bytes(Vec<u8>),
     Struct(Vec<(i16, Self)>),
@@ -77,7 +77,8 @@ impl Value {
             Self::Bool(_) => TType::Bool,
             Self::I16(_) => TType::I16,
             Self::I32(_) => TType::I32,
-            Self::I64(_) | Self::RawI64(_) => TType::I64,
+            Self::I64(_) => TType::I64,
+            Self::Raw(kind, _) => *kind,
             Self::Double(_) => TType::Double,
             Self::Bytes(_) => TType::String,
             Self::Struct(_) => TType::Struct,
@@ -91,7 +92,7 @@ impl Value {
             Self::I16(v) => p.write_i16(*v),
             Self::I32(v) => p.write_i32(*v),
             Self::I64(v) => p.write_i64(*v),
-            Self::RawI64(bytes) => {
+            Self::Raw(_, bytes) => {
                 for byte in bytes {
                     p.write_byte(*byte)?;
                 }
@@ -169,7 +170,9 @@ pub(crate) fn with_nan_counts(bytes: &Bytes, counts: &[Vec<CountField>]) -> Byte
                 match count {
                     CountField::Missing => {}
                     CountField::Count(count) => stats.push((9, Value::I64(*count))),
-                    CountField::Encoded(bytes) => stats.push((9, Value::RawI64(bytes.clone()))),
+                    CountField::Encoded(bytes) => {
+                        stats.push((9, Value::Raw(TType::I64, bytes.clone())))
+                    }
                     CountField::WrongType => stats.push((9, Value::Bytes(vec![0xff]))),
                     CountField::Duplicate(a, b) => {
                         stats.push((9, Value::I64(*a)));
@@ -190,11 +193,7 @@ fn rewrite(bytes: &Bytes, edit: impl FnOnce(&mut Value)) -> Bytes {
     metadata
         .write(&mut TCompactOutputProtocol::new(&mut encoded))
         .unwrap();
-    let mut bytes = bytes[..bytes.len() - FOOTER_SIZE - raw_footer.len()].to_vec();
-    bytes.extend_from_slice(&encoded);
-    bytes.extend_from_slice(&(encoded.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(b"PAR1");
-    Bytes::from(bytes)
+    replace_footer(bytes, &encoded)
 }
 
 fn metadata(bytes: &Bytes) -> ParquetMetaData {
@@ -546,16 +545,19 @@ fn nan_counts_reject_overflowing_wire_integers() {
 
 #[tokio::test]
 async fn overflowing_count_preserves_public_scan_rows() -> Result<(), Box<dyn std::error::Error>> {
+    let mut counts = sample_counts();
+    counts[0][2] = CountField::Encoded(overflowing_count());
+    assert_public_scan_preserves_nan(with_nan_counts(&sample(), &counts)).await
+}
+
+async fn assert_public_scan_preserves_nan(bytes: Bytes) -> Result<(), Box<dyn std::error::Error>> {
     use super::super::tests::TestDir;
     use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTableBuilder};
     use arrow::{array::Float64Array, compute::kernels::cmp};
     use futures_util::TryStreamExt;
     use serde_json::json;
     use std::fs;
-    let mut counts = sample_counts();
-    counts[0][2] = CountField::Encoded(overflowing_count());
-    let bytes = with_nan_counts(&sample(), &counts);
-    let root = TestDir::new("review-overflow-public")?;
+    let root = TestDir::new("invalid-nan-metadata")?;
     fs::create_dir_all(root.path().join("_delta_log"))?;
     fs::write(root.path().join("part.parquet"), &bytes)?;
     let schema = json!({"type":"struct","fields":[
@@ -564,7 +566,7 @@ async fn overflowing_count_preserves_public_scan_rows() -> Result<(), Box<dyn st
         {"name":"d","type":"double","nullable":true,"metadata":{}}
     ]});
     let protocol = json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}});
-    let meta = json!({"metaData":{"id":"review-overflow","format":{"provider":"parquet","options":{}},"schemaString":schema.to_string(),"partitionColumns":[],"configuration":{}}});
+    let meta = json!({"metaData":{"id":"invalid-nan-metadata","format":{"provider":"parquet","options":{}},"schemaString":schema.to_string(),"partitionColumns":[],"configuration":{}}});
     let add = json!({"add":{"path":"part.parquet","partitionValues":{},"size":bytes.len(),"modificationTime":0,"dataChange":true}});
     fs::write(
         root.path().join("_delta_log/00000000000000000000.json"),
@@ -606,7 +608,7 @@ async fn overflowing_count_preserves_public_scan_rows() -> Result<(), Box<dyn st
     let actual: usize = result.iter().map(|batch| batch.num_rows()).sum();
     assert_eq!(
         actual, expected,
-        "overflowing optional metadata silently discarded the NaN match"
+        "invalid optional metadata must preserve the NaN match"
     );
     Ok(())
 }
@@ -623,21 +625,284 @@ fn checked_counts_preserve_the_full_i64_domain_and_reject_truncation() {
         TCompactOutputProtocol::new(&mut bytes)
             .write_i64(value)
             .unwrap();
-        assert_eq!(
-            super::read_i64(&mut TCompactInputProtocol::new(bytes.as_slice())).unwrap(),
-            value
-        );
+        assert_eq!(super::read_i64(&mut bytes.as_slice()).unwrap(), value);
         for end in 0..bytes.len() {
-            assert!(super::read_i64(&mut TCompactInputProtocol::new(&bytes[..end])).is_err());
+            assert!(super::read_i64(&mut &bytes[..end]).is_err());
         }
     }
     // Overlong but representable zero remains zero; only overflow is rejected.
     for length in 1..=10 {
         let mut bytes = vec![0x80; length - 1];
         bytes.push(0);
+        assert_eq!(super::read_i64(&mut bytes.as_slice()).unwrap(), 0);
+    }
+}
+
+fn replace_footer(bytes: &Bytes, raw: &[u8]) -> Bytes {
+    let old = footer(bytes);
+    let mut result = bytes[..bytes.len() - FOOTER_SIZE - old.len()].to_vec();
+    result.extend_from_slice(raw);
+    result.extend_from_slice(&(raw.len() as u32).to_le_bytes());
+    result.extend_from_slice(b"PAR1");
+    Bytes::from(result)
+}
+
+fn with_overflowing_field_id() -> Bytes {
+    let bytes = with_nan_counts(&sample(), &sample_counts());
+    let bytes = rewrite(&bytes, |m| {
+        m.fields()
+            .push((i16::MAX, Value::List(TType::Bool, vec![Value::Bool(true)])));
+    });
+    let mut raw = footer(&bytes).to_vec();
+    assert_eq!(raw.pop(), Some(0));
+    // parquet-rs 58 skips no bytes for the unknown boolean list, then reads its
+    // true byte as a field header. A decoder that consumes the boolean reaches
+    // this delta-one field after ID 32767, so native success is not sufficient.
+    raw.extend_from_slice(&[0x16, 0x00, 0x00]);
+    replace_footer(&bytes, &raw)
+}
+
+#[tokio::test]
+async fn native_metadata_success_does_not_allow_field_id_overflow()
+-> Result<(), Box<dyn std::error::Error>> {
+    let bytes = with_overflowing_field_id();
+    let native = metadata(&bytes);
+    assert!(NanCounts::decode(footer(&bytes), &native).0.is_empty());
+    assert_public_scan_preserves_nan(bytes).await
+}
+
+#[test]
+fn field_headers_check_delta_and_explicit_id_boundaries() {
+    for prior in [i16::MIN, -1, 0, 1, i16::MAX - 15, i16::MAX - 1, i16::MAX] {
+        for delta in 1..=15_u8 {
+            let bytes = [(delta << 4) | 6];
+            let mut last = prior;
+            let result = super::read_field_header(&mut bytes.as_slice(), &mut last);
+            // Widened arithmetic is independent of the reader's i16 arithmetic.
+            let expected = i32::from(prior) + i32::from(delta);
+            if expected > i32::from(i16::MAX) {
+                assert!(result.is_err(), "prior={prior}, delta={delta}");
+            } else {
+                assert_eq!(result.unwrap(), TType::I64);
+                assert_eq!(i32::from(last), expected);
+            }
+        }
+    }
+    for id in [i64::MIN, -32769, -32768, -1, 0, 1, 32767, 32768, i64::MAX] {
+        let mut bytes = vec![6]; // Explicit field ID, I64 type.
+        TCompactOutputProtocol::new(&mut bytes)
+            .write_i64(id)
+            .unwrap();
+        let mut last = i16::MAX;
+        let result = super::read_field_header(&mut bytes.as_slice(), &mut last);
+        if (-32768..=32767).contains(&id) {
+            assert_eq!(result.unwrap(), TType::I64);
+            assert_eq!(i64::from(last), id);
+        } else {
+            assert!(result.is_err(), "id={id}");
+        }
+    }
+}
+
+#[test]
+fn nan_counts_reject_overflow_in_unknown_nested_structs() {
+    let bytes = with_nan_counts(&sample(), &sample_counts());
+    let native = metadata(&bytes);
+    let mut nested = vec![6]; // I64 field with explicit ID 32767, value zero.
+    let mut encoder = TCompactOutputProtocol::new(&mut nested);
+    encoder.write_i16(i16::MAX).unwrap();
+    encoder.write_i64(0).unwrap();
+    nested.extend_from_slice(&[0x16, 0, 0]); // Next field's ID would be 32768.
+    for before in [false, true] {
+        let bytes = rewrite(&bytes, |m| {
+            let index = if before { 0 } else { m.fields().len() };
+            m.fields()
+                .insert(index, (100, Value::Raw(TType::Struct, nested.clone())));
+        });
+        // Also exercise the skip path, both before and after counts are collected.
+        assert!(NanCounts::decode(footer(&bytes), &native).0.is_empty());
+    }
+}
+
+#[test]
+fn unknown_compact_values_preserve_counts() {
+    let bytes = with_nan_counts(&sample(), &sample_counts());
+    let native = metadata(&bytes);
+    let values = [
+        Value::Bool(false),
+        Value::Bool(true),
+        Value::I16(i16::MIN),
+        Value::I32(i32::MAX),
+        Value::I64(i64::MIN),
+        Value::Double(f64::NAN),
+        Value::Raw(TType::I08, vec![0xff]),
+        Value::Bytes(vec![0xff; 256]),
+        Value::List(TType::Bool, Vec::new()),
+        Value::List(TType::I64, (0..16).map(Value::I64).collect()),
+        Value::Raw(TType::List, vec![0]), // Legacy empty-list header.
+        Value::Struct(vec![(1, Value::Bool(false)), (16, Value::I64(10))]),
+    ];
+    for value in values {
+        let bytes = rewrite(&bytes, |m| {
+            m.fields().insert(0, (100, value));
+        });
+        let counts = NanCounts::decode(footer(&bytes), &native);
+        for row in 0..2 {
+            assert_eq!(counts.get(row, 1), Some(row as u64));
+            assert_eq!(counts.get(row, 2), Some(1 - row as u64));
+        }
+    }
+}
+
+#[test]
+fn nan_counts_reject_invalid_unknown_fields_and_trailing_bytes() {
+    let bytes = with_nan_counts(&sample(), &sample_counts());
+    let native = metadata(&bytes);
+    let mut wide_i16 = Vec::new();
+    TCompactOutputProtocol::new(&mut wide_i16)
+        .write_i32(32768)
+        .unwrap();
+    let mut wide_i32 = Vec::new();
+    TCompactOutputProtocol::new(&mut wide_i32)
+        .write_i64(i64::from(i32::MAX) + 1)
+        .unwrap();
+    let mut deep_struct = vec![0x1c; 65];
+    deep_struct.extend(vec![0; 66]);
+    for value in [
+        Value::Raw(TType::I16, wide_i16),
+        Value::Raw(TType::I32, wide_i32),
+        Value::Raw(TType::I64, overflowing_count()),
+        Value::Raw(TType::String, vec![0xff, 0xff, 0xff, 0xff, 0x10]),
+        Value::Raw(TType::List, vec![0xf6, 0xff, 0xff, 0xff, 0xff, 0x10]),
+        Value::Raw(TType::List, vec![0x11, 3]), // Invalid collection boolean.
+        Value::Raw(TType::List, vec![0x10]),    // Nonempty list of STOP.
+        Value::Raw(TType::Struct, vec![0x10]),  // STOP with a field-ID delta.
+        Value::Raw(TType::Struct, deep_struct),
+    ] {
+        let bytes = rewrite(&bytes, |m| {
+            m.fields().push((100, value));
+        });
+        assert!(NanCounts::decode(footer(&bytes), &native).0.is_empty());
+    }
+    let mut raw = footer(&bytes).to_vec();
+    raw.push(0);
+    assert!(NanCounts::decode(&raw, &native).0.is_empty());
+}
+
+#[test]
+fn nan_counts_follow_ids_after_nested_leaves_and_name_conflicts()
+-> Result<(), Box<dyn std::error::Error>> {
+    use super::super::{
+        row_group_pruning::pruned_row_groups, schema_alignment::build_schema_alignment,
+    };
+    use crate::{
+        DeltaComparison, DeltaPredicate, DeltaScalar, delta::kernel::kernel_pruning_predicate,
+    };
+    use arrow::{
+        array::{Array, ArrayRef, Float64Array, StructArray},
+        datatypes::{DataType, Field, Schema},
+        record_batch::RecordBatch,
+    };
+    use parquet::arrow::{
+        ArrowWriter, PARQUET_FIELD_ID_META_KEY, arrow_reader::ParquetRecordBatchReaderBuilder,
+    };
+    use std::sync::Arc;
+    let field = |name: &str, id: i32| {
+        Field::new(name, DataType::Float64, true)
+            .with_metadata([(PARQUET_FIELD_ID_META_KEY.to_owned(), id.to_string())].into())
+    };
+    let nested = StructArray::from(vec![
+        (
+            Arc::new(field("a", 10)),
+            Arc::new(Float64Array::from(vec![0.0, 0.0])) as ArrayRef,
+        ),
+        (
+            Arc::new(field("b", 11)),
+            Arc::new(Float64Array::from(vec![0.0, 0.0])) as ArrayRef,
+        ),
+    ]);
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("nested", nested.data_type().clone(), true),
+        field("with_nan", 1),
+        field("finite", 2),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(nested),
+            Arc::new(Float64Array::from(vec![1.5, f64::NAN])),
+            Arc::new(Float64Array::from(vec![1.5, 1.5])),
+        ],
+    )?;
+    let mut bytes = Vec::new();
+    let mut writer = ArrowWriter::try_new(&mut bytes, schema, None)?;
+    writer.write(&batch)?;
+    writer.close()?;
+    let bytes = with_nan_counts(
+        &Bytes::from(bytes),
+        &[vec![
+            CountField::Count(0),
+            CountField::Count(0),
+            CountField::Count(1),
+            CountField::Count(0),
+        ]],
+    );
+    let builder = ParquetRecordBatchReaderBuilder::try_new(bytes.clone())?;
+    let metadata = builder.metadata();
+    let counts = NanCounts::decode(footer(&bytes), metadata);
+    // Logical names deliberately conflict with the other physical column.
+    let target = Arc::new(Schema::new(vec![field("with_nan", 2), field("finite", 1)]));
+    let alignment = build_schema_alignment(builder.parquet_schema(), builder.schema(), target)?;
+    for (column, expected) in [("with_nan", vec![]), ("finite", vec![0])] {
+        let predicate = kernel_pruning_predicate(&DeltaPredicate::Compare {
+            column: column.into(),
+            op: DeltaComparison::Gt,
+            value: DeltaScalar::Float64(100.0),
+        });
         assert_eq!(
-            super::read_i64(&mut TCompactInputProtocol::new(bytes.as_slice())).unwrap(),
-            0
+            pruned_row_groups(
+                metadata,
+                &counts,
+                builder.schema(),
+                &alignment,
+                bytes.len() as u64,
+                None,
+                predicate.as_ref()
+            )?,
+            Some(expected)
         );
     }
+    Ok(())
+}
+
+#[test]
+fn malformed_footer_mutations_do_not_panic() {
+    let bytes = with_nan_counts(&sample(), &sample_counts());
+    let native = metadata(&bytes);
+    let raw = footer(&bytes);
+    let mut mutated = raw.to_vec();
+    for index in 0..raw.len() {
+        for value in [0, 0x7f, 0x80, 0xff] {
+            mutated[index] = value;
+            // A mutation may still encode valid metadata. Regardless of whether
+            // counts survive, malformed input must terminate without a panic.
+            let _ = NanCounts::decode(&mutated, &native);
+        }
+        mutated[index] = raw[index];
+    }
+}
+
+#[test]
+fn nan_counts_reject_boolean_collections_that_native_skips_differently() {
+    let bytes = with_nan_counts(&sample(), &sample_counts());
+    let bytes = rewrite(&bytes, |m| {
+        m.fields()
+            .push((100, Value::List(TType::Bool, vec![Value::Bool(true)])));
+        m.fields().push((101, Value::I64(0)));
+    });
+    // This footer is well-formed, but parquet-rs 58 leaves the collection's true
+    // byte unconsumed and treats it as a struct field. Do not trust two different
+    // interpretations of the same footer just because both decoders succeed.
+    let native = metadata(&bytes);
+    assert!(NanCounts::decode(footer(&bytes), &native).0.is_empty());
 }
