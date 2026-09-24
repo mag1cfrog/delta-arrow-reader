@@ -545,7 +545,10 @@ fn incompatible_parquet_type(
     ))
 }
 
-fn leaf_cast_plan(target_type: &DataType, file_type: &DataType) -> Result<Option<DataType>, ()> {
+pub(super) fn leaf_cast_plan(
+    target_type: &DataType,
+    file_type: &DataType,
+) -> Result<Option<DataType>, ()> {
     use DataType::{Date32, Decimal128, Float32, Float64, Int8, Int16, Int32, Int64, Timestamp};
 
     if file_type.equals_datatype(target_type) {

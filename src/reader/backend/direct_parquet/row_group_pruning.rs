@@ -10,10 +10,16 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Range;
 
-use chrono::{DateTime, Days};
+use arrow::{
+    array::{ArrayRef, Date32Array},
+    compute::cast,
+    datatypes::{DataType as ArrowDataType, Schema, TimeUnit},
+};
+use delta_kernel::engine::arrow_conversion::{TryFromKernel, scalar::extract_primitive_scalar};
 use delta_kernel::kernel_predicates::{
     DataSkippingPredicateEvaluator, KernelPredicateEvaluator, KernelPredicateEvaluatorDefaults,
 };
+use parquet::arrow::arrow_reader::statistics::StatisticsConverter;
 use parquet::file::statistics::Statistics;
 use parquet::schema::types::ColumnDescPtr;
 use parquet::{
@@ -22,11 +28,16 @@ use parquet::{
 };
 
 use delta_kernel::{
-    expressions::{ColumnName, DecimalData, Scalar},
-    schema::{DataType, PrimitiveType},
+    expressions::{ColumnName, Scalar},
+    schema::DataType,
 };
 
+use super::schema_alignment::leaf_cast_plan;
 use crate::delta::kernel::DeltaKernelPredicate;
+
+#[cfg(test)]
+#[path = "row_group_pruning/typed_statistics_tests.rs"]
+mod typed_statistics_tests;
 
 /// Computes the row groups selected by a byte range and footer statistics.
 ///
@@ -44,6 +55,8 @@ use crate::delta::kernel::DeltaKernelPredicate;
 #[allow(dead_code)]
 pub(crate) fn pruned_row_groups(
     metadata: &ParquetMetaData,
+    file_schema: &Schema,
+    target_schema: &Schema,
     file_size: u64,
     byte_range: Option<&Range<u64>>,
     predicate: Option<&DeltaKernelPredicate>,
@@ -83,7 +96,8 @@ pub(crate) fn pruned_row_groups(
             }
         };
         let may_match = predicate.is_none_or(|predicate| {
-            RowGroupStats::new(row_group).may_contain_matching_rows(predicate.as_ref())
+            RowGroupStats::new(row_group, file_schema, target_schema)
+                .may_contain_matching_rows(predicate.as_ref())
         });
         if in_range && may_match {
             selected.push(ordinal);
@@ -94,13 +108,21 @@ pub(crate) fn pruned_row_groups(
 
 struct RowGroupStats<'a> {
     row_group: &'a RowGroupMetaData,
+    file_schema: &'a Schema,
+    target_schema: &'a Schema,
     field_indices: HashMap<ColumnName, usize>,
 }
 
 impl<'a> RowGroupStats<'a> {
-    fn new(row_group: &'a RowGroupMetaData) -> Self {
+    fn new(
+        row_group: &'a RowGroupMetaData,
+        file_schema: &'a Schema,
+        target_schema: &'a Schema,
+    ) -> Self {
         Self {
             row_group,
+            file_schema,
+            target_schema,
             field_indices: row_group_field_indices(row_group.schema_descr().columns()),
         }
     }
@@ -116,17 +138,104 @@ impl<'a> RowGroupStats<'a> {
     }
 
     fn min_stat(&self, column: &ColumnName, data_type: &DataType) -> Option<Scalar> {
-        stat_min_scalar(data_type, self.stats(column)??)
+        let target = ArrowDataType::try_from_kernel(data_type).ok()?;
+        extract_primitive_scalar(self.bound(column, &target, true)?.as_ref(), 0).ok()
     }
 
     fn max_stat(&self, column: &ColumnName, data_type: &DataType) -> Option<Scalar> {
-        stat_max_scalar(data_type, self.stats(column)??)
+        let target = ArrowDataType::try_from_kernel(data_type).ok()?;
+        extract_primitive_scalar(self.bound(column, &target, false)?.as_ref(), 0).ok()
+    }
+
+    /// Decode in the file's type, then apply the same cast as the data reader.
+    /// Passing the table type to StatisticsConverter would relabel raw decimal
+    /// scales/timestamp units instead of converting their values.
+    fn bound(
+        &self,
+        column: &ColumnName,
+        target: &ArrowDataType,
+        minimum: bool,
+    ) -> Option<ArrayRef> {
+        let index = *self.field_indices.get(column)?;
+        let descriptor = self.row_group.schema_descr().column(index);
+        let statistics = self.stats(column)??;
+        if statistics.physical_type() != descriptor.physical_type() {
+            return None;
+        }
+        let converter = StatisticsConverter::try_new(
+            descriptor.name(),
+            self.file_schema,
+            self.row_group.schema_descr(),
+        )
+        .ok()?;
+        let source = converter.arrow_field().data_type();
+        if !compatible_statistics_type(source, target) {
+            return None;
+        }
+        let bytes = if minimum {
+            statistics.min_bytes_opt()?
+        } else {
+            statistics.max_bytes_opt()?
+        };
+        // parquet-rs sign-extends decimal bytes into a fixed-size integer. Reject
+        // invalid widths before invoking that decoder (which assumes valid input).
+        if matches!(source, ArrowDataType::Decimal128(_, _))
+            && (bytes.is_empty() || bytes.len() > 16)
+        {
+            return None;
+        }
+        let values = if minimum {
+            converter.row_group_mins([self.row_group]).ok()?
+        } else {
+            converter.row_group_maxes([self.row_group]).ok()?
+        };
+        if values.is_null(0) {
+            return None;
+        }
+        if matches!(source, ArrowDataType::Decimal128(_, _)) {
+            // Validate the source precision too; widening must not legitimize a
+            // malformed source bound merely because it fits the destination.
+            extract_primitive_scalar(values.as_ref(), 0).ok()?;
+        }
+        if matches!(
+            (source, target),
+            (
+                ArrowDataType::Date32,
+                ArrowDataType::Timestamp(TimeUnit::Microsecond, _)
+            )
+        ) {
+            // Arrow's date-to-timestamp cast uses unchecked multiplication.
+            i64::from(values.as_any().downcast_ref::<Date32Array>()?.value(0))
+                .checked_mul(86_400_000_000)?;
+        }
+        let values = cast(values.as_ref(), target).ok()?;
+        values.is_valid(0).then_some(values)
     }
 
     fn null_count_stat(&self, column: &ColumnName) -> Option<i64> {
-        self.stats(column)??
-            .null_count_opt()
-            .map(|value| value as i64)
+        let count = i64::try_from(self.stats(column)??.null_count_opt()?).ok()?;
+        let index = *self.field_indices.get(column)?;
+        let descriptor = self.row_group.schema_descr().column(index);
+        let source = self
+            .file_schema
+            .field_with_name(descriptor.name())
+            .ok()?
+            .data_type();
+        let target = self
+            .target_schema
+            .field_with_name(descriptor.name())
+            .ok()?
+            .data_type();
+        if !compatible_statistics_type(source, target) {
+            return None;
+        }
+        if count != self.row_count_stat() && temporal_cast_can_introduce_nulls(source, target) {
+            // Temporal casts can overflow to NULL. File null counts describe
+            // logical values only if both bounds survive the monotonic cast.
+            self.bound(column, target, true)?;
+            self.bound(column, target, false)?;
+        }
+        Some(count)
     }
 
     fn row_count_stat(&self) -> i64 {
@@ -214,134 +323,38 @@ fn row_group_field_indices(columns: &[ColumnDescPtr]) -> HashMap<ColumnName, usi
         .iter()
         .enumerate()
         .filter_map(|(index, column)| {
-            let name = column.path().parts().first()?.as_str();
+            // Public predicates address top-level columns. A nested leaf's
+            // min/max or null count cannot describe its parent container.
+            let [name] = column.path().parts() else {
+                return None;
+            };
+            let name = name.as_str();
             Some((ColumnName::new([name]), index))
         })
         .collect()
 }
 
-fn stat_min_scalar(data_type: &DataType, stats: &Statistics) -> Option<Scalar> {
-    use PrimitiveType::*;
-
-    match (data_type.as_primitive_opt()?, stats) {
-        (String, Statistics::ByteArray(values)) => values.min_opt()?.as_utf8().ok().map(Into::into),
-        (String, Statistics::FixedLenByteArray(values)) => {
-            values.min_opt()?.as_utf8().ok().map(Into::into)
-        }
-        (Long, Statistics::Int64(values)) => values.min_opt().map(Into::into),
-        (Long, Statistics::Int32(values)) => values.min_opt().map(|value| (*value as i64).into()),
-        (Integer, Statistics::Int32(values)) => values.min_opt().map(Into::into),
-        (Short, Statistics::Int32(values)) => values.min_opt().map(|value| (*value as i16).into()),
-        (Byte, Statistics::Int32(values)) => values.min_opt().map(|value| (*value as i8).into()),
-        (Float, Statistics::Float(values)) => values.min_opt().map(Into::into),
-        (Double, Statistics::Double(values)) => values.min_opt().map(Into::into),
-        (Double, Statistics::Float(values)) => values.min_opt().map(|value| (*value as f64).into()),
-        (Boolean, Statistics::Boolean(values)) => values.min_opt().map(Into::into),
-        (Binary, Statistics::ByteArray(values)) => {
-            values.min_opt().map(|value| value.data().into())
-        }
-        (Binary, Statistics::FixedLenByteArray(values)) => {
-            values.min_opt().map(|value| value.data().into())
-        }
-        (Date, Statistics::Int32(values)) => values.min_opt().map(|value| Scalar::Date(*value)),
-        (Timestamp, Statistics::Int64(values)) => {
-            values.min_opt().map(|value| Scalar::Timestamp(*value))
-        }
-        (TimestampNtz, Statistics::Int64(values)) => {
-            values.min_opt().map(|value| Scalar::TimestampNtz(*value))
-        }
-        (TimestampNtz, Statistics::Int32(values)) => timestamp_ntz_from_days(values.min_opt()),
-        (Decimal(decimal_type), Statistics::Int32(values)) => values
-            .min_opt()
-            .and_then(|value| DecimalData::try_new(*value, *decimal_type).ok())
-            .map(Into::into),
-        (Decimal(decimal_type), Statistics::Int64(values)) => values
-            .min_opt()
-            .and_then(|value| DecimalData::try_new(*value, *decimal_type).ok())
-            .map(Into::into),
-        (Decimal(decimal_type), Statistics::FixedLenByteArray(values)) => values
-            .min_opt()
-            .and_then(|value| decimal_scalar_from_bytes(value.data(), *decimal_type)),
-        _ => None,
-    }
+// View arrays differ only in representation. Other conversions must follow
+// the same supported widening rules as physical data decoding.
+fn compatible_statistics_type(source: &ArrowDataType, target: &ArrowDataType) -> bool {
+    matches!(
+        (source, target),
+        (ArrowDataType::Utf8View, ArrowDataType::Utf8)
+            | (ArrowDataType::BinaryView, ArrowDataType::Binary)
+    ) || leaf_cast_plan(target, source).is_ok()
 }
 
-fn stat_max_scalar(data_type: &DataType, stats: &Statistics) -> Option<Scalar> {
-    use PrimitiveType::*;
-
-    match (data_type.as_primitive_opt()?, stats) {
-        (String, Statistics::ByteArray(values)) => values.max_opt()?.as_utf8().ok().map(Into::into),
-        (String, Statistics::FixedLenByteArray(values)) => {
-            values.max_opt()?.as_utf8().ok().map(Into::into)
-        }
-        (Long, Statistics::Int64(values)) => values.max_opt().map(Into::into),
-        (Long, Statistics::Int32(values)) => values.max_opt().map(|value| (*value as i64).into()),
-        (Integer, Statistics::Int32(values)) => values.max_opt().map(Into::into),
-        (Short, Statistics::Int32(values)) => values.max_opt().map(|value| (*value as i16).into()),
-        (Byte, Statistics::Int32(values)) => values.max_opt().map(|value| (*value as i8).into()),
-        (Float, Statistics::Float(values)) => values.max_opt().map(Into::into),
-        (Double, Statistics::Double(values)) => values.max_opt().map(Into::into),
-        (Double, Statistics::Float(values)) => values.max_opt().map(|value| (*value as f64).into()),
-        (Boolean, Statistics::Boolean(values)) => values.max_opt().map(Into::into),
-        (Binary, Statistics::ByteArray(values)) => {
-            values.max_opt().map(|value| value.data().into())
-        }
-        (Binary, Statistics::FixedLenByteArray(values)) => {
-            values.max_opt().map(|value| value.data().into())
-        }
-        (Date, Statistics::Int32(values)) => values.max_opt().map(|value| Scalar::Date(*value)),
-        (Timestamp, Statistics::Int64(values)) => {
-            values.max_opt().map(|value| Scalar::Timestamp(*value))
-        }
-        (TimestampNtz, Statistics::Int64(values)) => {
-            values.max_opt().map(|value| Scalar::TimestampNtz(*value))
-        }
-        (TimestampNtz, Statistics::Int32(values)) => timestamp_ntz_from_days(values.max_opt()),
-        (Decimal(decimal_type), Statistics::Int32(values)) => values
-            .max_opt()
-            .and_then(|value| DecimalData::try_new(*value, *decimal_type).ok())
-            .map(Into::into),
-        (Decimal(decimal_type), Statistics::Int64(values)) => values
-            .max_opt()
-            .and_then(|value| DecimalData::try_new(*value, *decimal_type).ok())
-            .map(Into::into),
-        (Decimal(decimal_type), Statistics::FixedLenByteArray(values)) => values
-            .max_opt()
-            .and_then(|value| decimal_scalar_from_bytes(value.data(), *decimal_type)),
-        _ => None,
-    }
-}
-
-fn timestamp_ntz_from_days(days: Option<&i32>) -> Option<Scalar> {
-    let days = u64::try_from(*days?).ok()?;
-    let timestamp = DateTime::UNIX_EPOCH.checked_add_days(Days::new(days))?;
-    let duration = timestamp.signed_duration_since(DateTime::UNIX_EPOCH);
-    Some(Scalar::TimestampNtz(duration.num_microseconds()?))
-}
-
-fn decimal_scalar_from_bytes(
-    bytes: &[u8],
-    data_type: delta_kernel::schema::DecimalType,
-) -> Option<Scalar> {
-    if bytes.len() > 16 {
-        return None;
-    }
-
-    // Parquet fixed-length decimal stats are stored as big-endian two's
-    // complement bytes. Convert to little-endian i128 bytes and preserve the
-    // sign when the encoded value is narrower than 16 bytes.
-    let pad = if bytes.first().is_some_and(|byte| byte & 0x80 != 0) {
-        0xff
-    } else {
-        0x00
-    };
-    let mut bytes = Vec::from(bytes);
-    bytes.reverse();
-    bytes.resize(16, pad);
-    let bytes: [u8; 16] = bytes.try_into().ok()?;
-    DecimalData::try_new(i128::from_le_bytes(bytes), data_type)
-        .ok()
-        .map(Into::into)
+fn temporal_cast_can_introduce_nulls(source: &ArrowDataType, target: &ArrowDataType) -> bool {
+    use ArrowDataType::{Date32, Timestamp};
+    use TimeUnit::{Microsecond, Millisecond, Second};
+    matches!(
+        (source, target),
+        (Date32, Timestamp(Microsecond, _))
+        | (Timestamp(Second | Millisecond, _), Timestamp(Microsecond, _))
+        // Localizing a naive microsecond timestamp also needs a representable
+        // calendar date. Nanoseconds already fit in that calendar range.
+        | (Timestamp(Microsecond, None), Timestamp(Microsecond, Some(_)))
+    )
 }
 
 #[cfg(test)]
@@ -355,6 +368,19 @@ mod tests {
     };
 
     use super::*;
+
+    fn pruned_row_groups(
+        metadata: &ParquetMetaData,
+        file_size: u64,
+        byte_range: Option<&Range<u64>>,
+        predicate: Option<&DeltaKernelPredicate>,
+    ) -> ParquetResult<Option<Vec<usize>>> {
+        let schema = parquet::arrow::parquet_to_arrow_schema(
+            metadata.file_metadata().schema_descr(),
+            metadata.file_metadata().key_value_metadata(),
+        )?;
+        super::pruned_row_groups(metadata, &schema, &schema, file_size, byte_range, predicate)
+    }
 
     fn metadata_with_row_group_offsets(
         offsets: &[(i64, Option<i64>)],
@@ -466,34 +492,6 @@ mod tests {
             let range = start..end;
             assert!(pruned_row_groups(&metadata, 100, Some(&range), None).is_err());
         }
-
-        Ok(())
-    }
-
-    #[test]
-    fn decimal_scalar_from_fixed_len_bytes_sign_extends_negative_values()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let decimal_type = delta_kernel::schema::DecimalType::try_new(10, 2)?;
-        let negative_one = match decimal_scalar_from_bytes(&[0xff], decimal_type) {
-            Some(Scalar::Decimal(value)) => value,
-            other => return Err(format!("expected decimal scalar, got {other:?}").into()),
-        };
-
-        assert_eq!(negative_one.bits(), -1);
-
-        Ok(())
-    }
-
-    #[test]
-    fn decimal_scalar_from_fixed_len_bytes_preserves_positive_values()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let decimal_type = delta_kernel::schema::DecimalType::try_new(10, 2)?;
-        let positive_one = match decimal_scalar_from_bytes(&[0x01], decimal_type) {
-            Some(Scalar::Decimal(value)) => value,
-            other => return Err(format!("expected decimal scalar, got {other:?}").into()),
-        };
-
-        assert_eq!(positive_one.bits(), 1);
 
         Ok(())
     }
