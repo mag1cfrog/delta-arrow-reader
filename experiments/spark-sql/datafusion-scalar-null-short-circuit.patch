@@ -1,0 +1,244 @@
+diff --git a/src/scalar_function.rs b/src/scalar_function.rs
+index 418d005..52cfa95 100644
+--- a/src/scalar_function.rs
++++ b/src/scalar_function.rs
+@@ -34,7 +34,7 @@ use std::hash::{Hash, Hasher};
+ use std::sync::Arc;
+ 
+ use crate::PhysicalExpr;
+-use crate::expressions::Literal;
++use crate::expressions::{Column, Literal};
+ 
+ use arrow::array::{Array, RecordBatch};
+ use arrow::datatypes::{DataType, FieldRef, Schema};
+@@ -55,6 +55,8 @@ pub struct ScalarFunctionExpr {
+     args: Vec<Arc<dyn PhysicalExpr>>,
+     return_field: FieldRef,
+     config_options: Arc<ConfigOptions>,
++    // Fixed by the UDF instance at planning time, avoiding a per-batch trait call.
++    short_circuit_null: bool,
+ }
+ 
+ impl Debug for ScalarFunctionExpr {
+@@ -69,6 +71,53 @@ impl Debug for ScalarFunctionExpr {
+ }
+ 
+ impl ScalarFunctionExpr {
++    // Invoked after argument evaluation, including selection for functions with
++    // a NULL-first-argument short circuit. Keep the normal result validation.
++    fn invoke_evaluated(
++        &self,
++        batch: &RecordBatch,
++        args: Vec<ColumnarValue>,
++    ) -> Result<ColumnarValue> {
++        let arg_fields = self
++            .args
++            .iter()
++            .map(|e| e.return_field(batch.schema_ref()))
++            .collect::<Result<Vec<_>>>()?;
++
++        let input_empty = args.is_empty();
++        let input_all_scalar = args
++            .iter()
++            .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
++
++        // evaluate the function
++        let output = self.fun.invoke_with_args(ScalarFunctionArgs {
++            args,
++            arg_fields,
++            number_rows: batch.num_rows(),
++            return_field: Arc::clone(&self.return_field),
++            config_options: Arc::clone(&self.config_options),
++        })?;
++
++        if let ColumnarValue::Array(array) = &output
++            && array.len() != batch.num_rows()
++        {
++            // If the arguments are a non-empty slice of scalar values, we can assume that
++            // returning a one-element array is equivalent to returning a scalar.
++            let preserve_scalar = array.len() == 1 && !input_empty && input_all_scalar;
++            return if preserve_scalar {
++                ScalarValue::try_from_array(array, 0).map(ColumnarValue::Scalar)
++            } else {
++                internal_err!(
++                    "UDF {} returned a different number of rows than expected. Expected: {}, Got: {}",
++                    self.name,
++                    batch.num_rows(),
++                    array.len()
++                )
++            };
++        }
++        Ok(output)
++    }
++
+     /// Create a new Scalar function
+     pub fn new(
+         name: &str,
+@@ -78,6 +127,11 @@ impl ScalarFunctionExpr {
+         config_options: Arc<ConfigOptions>,
+     ) -> Self {
+         Self {
++            short_circuit_null: fun.inner().short_circuits_on_null_first_arg()
++                && args.iter().skip(1).any(|arg| {
++                    arg.downcast_ref::<Column>().is_none()
++                        && arg.downcast_ref::<Literal>().is_none()
++                }),
+             fun,
+             name: name.to_owned(),
+             args,
+@@ -112,6 +166,11 @@ impl ScalarFunctionExpr {
+         };
+         let return_field = fun.return_field_from_args(ret_args)?;
+         Ok(Self {
++            short_circuit_null: fun.inner().short_circuits_on_null_first_arg()
++                && args.iter().skip(1).any(|arg| {
++                    arg.downcast_ref::<Column>().is_none()
++                        && arg.downcast_ref::<Literal>().is_none()
++                }),
+             fun,
+             name,
+             args,
+@@ -191,6 +250,7 @@ impl PartialEq for ScalarFunctionExpr {
+             args,
+             return_field,
+             config_options,
++            short_circuit_null: _, // derived from fun
+         } = self;
+         fun.eq(&o.fun)
+             && name.eq(&o.name)
+@@ -209,7 +269,8 @@ impl Hash for ScalarFunctionExpr {
+             name,
+             args,
+             return_field,
+-            config_options: _, // expensive to hash, and often equal
++            config_options: _,     // expensive to hash, and often equal
++            short_circuit_null: _, // derived from fun
+         } = self;
+         fun.hash(state);
+         name.hash(state);
+@@ -234,50 +295,53 @@ impl PhysicalExpr for ScalarFunctionExpr {
+     }
+ 
+     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
++        if self.short_circuit_null {
++            use arrow::array::{Array, BooleanArray, new_null_array};
++            use arrow::compute::{filter, filter_record_batch};
++            use datafusion_physical_expr_common::utils::scatter;
++            let Some(first) = self.args.first() else {
++                return internal_err!("NULL short circuit requires a first argument");
++            };
++            let first = first.evaluate(batch)?;
++            match &first {
++                ColumnarValue::Scalar(value) if value.is_null() => {
++                    return Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(
++                        self.return_type(),
++                    )?));
++                }
++                ColumnarValue::Array(array) if array.is_empty() || array.null_count() > 0 => {
++                    if array.null_count() == array.len() {
++                        return Ok(ColumnarValue::Array(new_null_array(
++                            self.return_type(),
++                            array.len(),
++                        )));
++                    }
++                    let mask = BooleanArray::new(array.nulls().unwrap().inner().clone(), None);
++                    let selected = filter_record_batch(batch, &mask)?;
++                    let mut args = vec![ColumnarValue::Array(filter(array.as_ref(), &mask)?)];
++                    for expr in &self.args[1..] {
++                        args.push(expr.evaluate(&selected)?);
++                    }
++                    let result = self
++                        .invoke_evaluated(&selected, args)?
++                        .into_array(selected.num_rows())?;
++                    return Ok(ColumnarValue::Array(scatter(&mask, result.as_ref())?));
++                }
++                _ => {}
++            }
++            let mut args = Vec::with_capacity(self.args.len());
++            args.push(first);
++            for expr in &self.args[1..] {
++                args.push(expr.evaluate(batch)?);
++            }
++            return self.invoke_evaluated(batch, args);
++        }
+         let args = self
+             .args
+             .iter()
+             .map(|e| e.evaluate(batch))
+             .collect::<Result<Vec<_>>>()?;
+-
+-        let arg_fields = self
+-            .args
+-            .iter()
+-            .map(|e| e.return_field(batch.schema_ref()))
+-            .collect::<Result<Vec<_>>>()?;
+-
+-        let input_empty = args.is_empty();
+-        let input_all_scalar = args
+-            .iter()
+-            .all(|arg| matches!(arg, ColumnarValue::Scalar(_)));
+-
+-        // evaluate the function
+-        let output = self.fun.invoke_with_args(ScalarFunctionArgs {
+-            args,
+-            arg_fields,
+-            number_rows: batch.num_rows(),
+-            return_field: Arc::clone(&self.return_field),
+-            config_options: Arc::clone(&self.config_options),
+-        })?;
+-
+-        if let ColumnarValue::Array(array) = &output
+-            && array.len() != batch.num_rows()
+-        {
+-            // If the arguments are a non-empty slice of scalar values, we can assume that
+-            // returning a one-element array is equivalent to returning a scalar.
+-            let preserve_scalar = array.len() == 1 && !input_empty && input_all_scalar;
+-            return if preserve_scalar {
+-                ScalarValue::try_from_array(array, 0).map(ColumnarValue::Scalar)
+-            } else {
+-                internal_err!(
+-                    "UDF {} returned a different number of rows than expected. Expected: {}, Got: {}",
+-                    self.name,
+-                    batch.num_rows(),
+-                    array.len()
+-                )
+-            };
+-        }
+-        Ok(output)
++        self.invoke_evaluated(batch, args)
+     }
+ 
+     fn return_field(&self, _input_schema: &Schema) -> Result<FieldRef> {
+@@ -345,8 +409,7 @@ impl PhysicalExpr for ScalarFunctionExpr {
+     }
+ 
+     fn placement(&self) -> ExpressionPlacement {
+-        let arg_placements: Vec<_> =
+-            self.args.iter().map(|arg| arg.placement()).collect();
++        let arg_placements: Vec<_> = self.args.iter().map(|arg| arg.placement()).collect();
+         self.fun.placement(&arg_placements)
+     }
+ }
+@@ -387,11 +450,7 @@ mod tests {
+     fn test_scalar_function_volatile_node() {
+         // Create a volatile UDF
+         let volatile_udf = Arc::new(ScalarUDF::from(MockScalarUDF {
+-            signature: Signature::uniform(
+-                1,
+-                vec![DataType::Float32],
+-                Volatility::Volatile,
+-            ),
++            signature: Signature::uniform(1, vec![DataType::Float32], Volatility::Volatile),
+         }));
+ 
+         // Create a non-volatile UDF
+@@ -418,8 +477,7 @@ mod tests {
+ 
+         // Test non-volatile function
+         let stable_expr =
+-            ScalarFunctionExpr::try_new(stable_udf, args, &schema, config_options)
+-                .unwrap();
++            ScalarFunctionExpr::try_new(stable_udf, args, &schema, config_options).unwrap();
+ 
+         assert!(!stable_expr.is_volatile_node());
+         let stable_arc: Arc<dyn PhysicalExpr> = Arc::new(stable_expr);
