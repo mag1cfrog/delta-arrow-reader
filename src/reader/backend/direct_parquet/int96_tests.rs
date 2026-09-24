@@ -34,7 +34,8 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 // Independent epoch-nanosecond inputs, never obtained by decoding or casting the fixture.
 // 9999-12-31, 1600-01-01, a modern date, the epoch, pre-epoch sub-microseconds,
-// and both sides of the signed nanosecond limits. The last group is entirely NULL.
+// both sides of the signed nanosecond limits, and the full signed microsecond
+// range with sub-microsecond remainders. The last group is entirely NULL.
 const EPOCH_NANOS: &[Option<i128>] = &[
     Some(253_402_214_400_000_000_000),
     Some(-11_676_096_000_000_000_000),
@@ -50,6 +51,12 @@ const EPOCH_NANOS: &[Option<i128>] = &[
     Some(i64::MIN as i128 - 1),
     Some(253_402_300_799_999_999_000),
     Some(-11_676_095_999_876_543_000),
+    Some(i64::MIN as i128 * 1_000),
+    Some((i64::MIN as i128 + 1) * 1_000 + 999),
+    Some((i64::MAX as i128 - 1) * 1_000 + 1),
+    Some(i64::MAX as i128 * 1_000 + 999),
+    None,
+    None,
     None,
     None,
     None,
@@ -64,10 +71,10 @@ fn expected_micros() -> Vec<Option<i64>> {
 }
 
 fn int96(epoch_nanos: i128) -> Int96 {
-    let day = u32::try_from(epoch_nanos.div_euclid(86_400_000_000_000) + 2_440_588).unwrap();
+    let day = i32::try_from(epoch_nanos.div_euclid(86_400_000_000_000) + 2_440_588).unwrap();
     let nanos = u64::try_from(epoch_nanos.rem_euclid(86_400_000_000_000)).unwrap();
     let mut value = Int96::new();
-    value.set_data(nanos as u32, (nanos >> 32) as u32, day);
+    value.set_data(nanos as u32, (nanos >> 32) as u32, day as u32);
     value
 }
 
@@ -375,7 +382,15 @@ async fn int96_public_streaming_preserves_values_and_filtered_projection() -> Te
                 expected_micros(),
                 "mapped={mapped} ntz={ntz}"
             );
-            for value in [253_402_214_400_000_000, -11_676_096_000_000_000, -1, 0, 1] {
+            for value in [
+                i64::MIN,
+                -11_676_096_000_000_000,
+                -1,
+                0,
+                1,
+                253_402_214_400_000_000,
+                i64::MAX,
+            ] {
                 let predicate = DeltaPredicate::Compare {
                     column: column.into(),
                     op: DeltaComparison::Eq,
@@ -437,18 +452,24 @@ async fn int96_datafusion_preserves_values_with_both_view_settings() -> TestResu
                 );
                 let batches = context.read_table(provider.clone())?.collect().await?;
                 assert_eq!(timestamp_values(&batches, column), expected_micros());
-                let value = 253_402_214_400_000_000;
-                let predicate = col(column).eq(lit(ScalarValue::TimestampMicrosecond(
-                    Some(value),
-                    if ntz { None } else { Some("UTC".into()) },
-                )));
-                let batches = context
-                    .read_table(provider)?
-                    .filter(predicate)?
-                    .select_columns(&["id"])?
-                    .collect()
-                    .await?;
-                assert_eq!(row_ids(&batches), vec![0]);
+                for value in [i64::MIN, 253_402_214_400_000_000, i64::MAX] {
+                    let predicate = col(column).eq(lit(ScalarValue::TimestampMicrosecond(
+                        Some(value),
+                        if ntz { None } else { Some("UTC".into()) },
+                    )));
+                    let batches = context
+                        .read_table(provider.clone())?
+                        .filter(predicate)?
+                        .select_columns(&["id"])?
+                        .collect()
+                        .await?;
+                    let expected = expected_micros()
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(id, v)| (*v == Some(value)).then_some(id as i32))
+                        .collect::<Vec<_>>();
+                    assert_eq!(row_ids(&batches), expected);
+                }
             }
         }
     }
@@ -563,9 +584,10 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
         Arc::new(WriterProperties::default()),
     )?;
     let mut group = writer.next_row_group()?;
-    let timestamps = EPOCH_NANOS[..3]
+    let expected = [Some(i64::MIN), Some(i64::MAX), Some(1_704_067_200_123_456)];
+    let timestamps = expected
         .iter()
-        .map(|n| int96(n.unwrap()))
+        .map(|n| int96(i128::from(n.unwrap()) * 1_000))
         .collect::<Vec<_>>();
     write_column::<Int96Type>(&mut group, &timestamps, Some(&[2, 0, 1, 2, 2]), None)?;
     write_column::<Int64Type>(&mut group, &[123_456_789; 3], Some(&[2, 0, 1, 2, 2]), None)?;
@@ -592,8 +614,13 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
     writer.close()?;
     let root = TestDir::new("int96-nested")?;
     fs::write(root.path().join("part.parquet"), &bytes)?;
-    let micro = DataType::Timestamp(TimeUnit::Microsecond, None);
-    for views in [false, true] {
+    for (views, timezone) in [
+        (false, None),
+        (true, None),
+        (false, Some("UTC")),
+        (true, Some("UTC")),
+    ] {
+        let micro = DataType::Timestamp(TimeUnit::Microsecond, timezone.map(Into::into));
         let schema = Arc::new(Schema::new(vec![
             Field::new(
                 "s",
@@ -608,7 +635,11 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
             ),
             Field::new(
                 "items",
-                DataType::List(Arc::new(Field::new("element", micro.clone(), true))),
+                DataType::List(Arc::new(Field::new(
+                    "element",
+                    DataType::Timestamp(TimeUnit::Microsecond, None),
+                    true,
+                ))),
                 true,
             ),
             Field::new(
@@ -656,7 +687,6 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
             batches.push(batch);
         }
         let batch = arrow::compute::concat_batches(&schema, &batches)?;
-        let expected = expected_micros();
         let structure = batch
             .column(0)
             .as_any()

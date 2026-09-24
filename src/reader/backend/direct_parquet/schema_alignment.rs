@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use arrow::{
-    array::{Array, ArrayRef, ListArray, MapArray, StructArray, new_null_array},
+    array::{Array, ArrayRef, ListArray, MapArray, StructArray, make_array, new_null_array},
     compute::cast,
     datatypes::{DataType, Field, Fields, SchemaRef, TimeUnit},
     record_batch::RecordBatch,
@@ -624,11 +624,26 @@ fn parquet_field_id(parquet_field: &TypePtr) -> Option<i32> {
     basic_info.has_id().then(|| basic_info.id())
 }
 
-/// Cast leaf data and footer bounds with identical overflow-to-NULL semantics.
+/// Cast leaf data and footer bounds with identical UTC and overflow-to-NULL semantics.
 pub(super) fn cast_leaf_array(
     array: &dyn Array,
     target_type: &DataType,
 ) -> Result<ArrayRef, arrow::error::ArrowError> {
+    if let (DataType::Timestamp(_, None), DataType::Timestamp(unit, Some(timezone))) =
+        (array.data_type(), target_type)
+        && timezone.as_ref() == "UTC"
+    {
+        // Delta's UTC timezone adds no offset. Convert units with Arrow's checked
+        // cast, then attach UTC metadata without calendar localization, which
+        // would turn valid i64 timestamps outside Chrono's date range into NULL.
+        let values = cast(array, &DataType::Timestamp(*unit, None))?;
+        let data = values
+            .to_data()
+            .into_builder()
+            .data_type(target_type.clone())
+            .build()?;
+        return Ok(make_array(data));
+    }
     if array.data_type() == &DataType::Date32
         && matches!(
             target_type,
@@ -950,6 +965,138 @@ mod tests {
             let actual = cast(batch.column(0).as_ref(), &DataType::Int64)?;
             assert_eq!(actual.as_ref(), &expected as &dyn Array, "{unit:?}");
         }
+        Ok(())
+    }
+
+    #[test]
+    fn utc_timestamp_casts_preserve_integers_and_check_unit_overflow()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use arrow::compute::cast;
+
+        let units = [
+            (TimeUnit::Second, 1_i128),
+            (TimeUnit::Millisecond, 1_000),
+            (TimeUnit::Microsecond, 1_000_000),
+            (TimeUnit::Nanosecond, 1_000_000_000),
+        ];
+        let calendar_min = chrono::DateTime::<chrono::Utc>::MIN_UTC.timestamp_micros();
+        let calendar_max = chrono::DateTime::<chrono::Utc>::MAX_UTC.timestamp_micros();
+        for (source_unit, source_scale) in units {
+            for (target_unit, target_scale) in units {
+                let mut integers = vec![
+                    None,
+                    Some(i64::MIN),
+                    Some(i64::MIN + 1),
+                    Some(calendar_min - 1),
+                    Some(calendar_min),
+                    Some(-1_001),
+                    Some(-999),
+                    Some(-1),
+                    Some(0),
+                    Some(1),
+                    Some(999),
+                    Some(1_001),
+                    Some(calendar_max),
+                    Some(calendar_max + 1),
+                    Some(i64::MAX - 1),
+                    Some(i64::MAX),
+                    None,
+                ];
+                if target_scale > source_scale {
+                    let multiplier = target_scale / source_scale;
+                    for limit in [i64::MIN, i64::MAX] {
+                        let boundary = (i128::from(limit) / multiplier) as i64;
+                        integers.extend([-1, 0, 1].map(|offset| Some(boundary + offset)));
+                    }
+                }
+                // Independent integer arithmetic: rescaling truncates toward zero
+                // and only a result outside i64 may introduce a NULL.
+                let expected = Int64Array::from_iter(integers.iter().map(|value| {
+                    value.and_then(|value| {
+                        i64::try_from(i128::from(value) * target_scale / source_scale).ok()
+                    })
+                }));
+                let integers = Int64Array::from(integers);
+                for source_timezone in [None, Some("UTC"), Some("+08:00")] {
+                    let source_type =
+                        DataType::Timestamp(source_unit, source_timezone.map(Into::into));
+                    let source = cast(&integers, &source_type)?;
+                    for target_timezone in [None, Some("UTC")] {
+                        let target =
+                            DataType::Timestamp(target_unit, target_timezone.map(Into::into));
+                        for (offset, len) in [
+                            (0, source.len()),
+                            (1, source.len() - 2),
+                            (0, 1), // All NULL.
+                            (1, 0), // Empty slice.
+                        ] {
+                            let source = source.slice(offset, len);
+                            let actual = super::cast_leaf_array(source.as_ref(), &target)?;
+                            assert_eq!(actual.data_type(), &target);
+                            let actual = cast(actual.as_ref(), &DataType::Int64)?;
+                            assert_eq!(
+                                actual.as_ref(),
+                                &expected.slice(offset, len) as &dyn Array,
+                                "{source_type:?} -> {target:?}, offset={offset}, len={len}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn utc_timestamp_fix_preserves_non_utc_localization() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use arrow::compute::cast;
+
+        let gap = "2024-03-10T02:30:00"
+            .parse::<chrono::NaiveDateTime>()?
+            .and_utc()
+            .timestamp_micros();
+        let fold = "2024-11-03T01:30:00"
+            .parse::<chrono::NaiveDateTime>()?
+            .and_utc()
+            .timestamp_micros();
+        let source = TimestampMicrosecondArray::from(vec![
+            Some(0),
+            Some(gap),
+            Some(fold),
+            Some(i64::MIN),
+            Some(i64::MAX),
+            None,
+        ]);
+        for timezone in ["+08:00", "America/New_York"] {
+            let target = DataType::Timestamp(TimeUnit::Microsecond, Some(timezone.into()));
+            let expected = cast(&source, &target)?;
+            let actual = super::cast_leaf_array(&source, &target)?;
+            assert_eq!(actual.as_ref(), expected.as_ref());
+            let values = actual
+                .as_any()
+                .downcast_ref::<TimestampMicrosecondArray>()
+                .ok_or("expected timestamps")?;
+            assert_eq!(
+                values.value(0),
+                if timezone == "+08:00" {
+                    -28_800_000_000
+                } else {
+                    18_000_000_000
+                }
+            );
+            if timezone == "America/New_York" {
+                assert!(values.is_null(1)); // Nonexistent local time.
+                assert!(values.is_null(2)); // Ambiguous local time.
+            }
+        }
+        assert!(
+            super::cast_leaf_array(
+                &source,
+                &DataType::Timestamp(TimeUnit::Microsecond, Some("invalid/timezone".into())),
+            )
+            .is_err()
+        );
         Ok(())
     }
 

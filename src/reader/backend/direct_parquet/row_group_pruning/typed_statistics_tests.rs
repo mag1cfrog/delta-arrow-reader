@@ -1,6 +1,7 @@
 //! Typed footer regression matrix for issue #118.
 //!
-//! The oracle casts actual Arrow values, then evaluates comparisons on those values.
+//! Independent Arrow casts or integer oracles provide the expected logical values.
+//! Comparisons are evaluated on those values.
 //! It does not call the statistics conversion under test. Singleton row groups must
 //! be pruned exactly; multi-row groups must retain every matching row. This catches
 //! both wrong results and a fix that simply disables pruning for widened types.
@@ -17,7 +18,7 @@ use std::{error::Error, fs, sync::Arc};
 use arrow::{
     array::*,
     compute::{cast, kernels::cmp},
-    datatypes::{DataType as ArrowType, Field, Schema, TimeUnit},
+    datatypes::{DataType as ArrowType, Field, Int32Type, Schema, TimeUnit},
     record_batch::RecordBatch,
 };
 use bytes::Bytes;
@@ -865,6 +866,21 @@ fn typed_statistics_null_counts_respect_conversion_and_missing_bounds() -> TestR
         (
             "message m { OPTIONAL INT64 v (TIMESTAMP(MICROS,false)); }",
             ArrowType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            true,
+        ),
+        (
+            "message m { OPTIONAL INT64 v (TIMESTAMP(MICROS,false)); }",
+            ArrowType::Timestamp(TimeUnit::Microsecond, Some("+08:00".into())),
+            false,
+        ),
+        (
+            "message m { OPTIONAL INT64 v (TIMESTAMP(NANOS,false)); }",
+            ArrowType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
+            true,
+        ),
+        (
+            "message m { OPTIONAL INT64 v (TIMESTAMP(MILLIS,false)); }",
+            ArrowType::Timestamp(TimeUnit::Microsecond, Some("UTC".into())),
             false,
         ),
     ] {
@@ -1335,76 +1351,278 @@ async fn typed_statistics_datafusion_matches_arrow_with_both_view_settings() -> 
     Ok(())
 }
 
+fn full_range_utc_case() -> (Case, ArrayRef) {
+    let values = TimestampMicrosecondArray::from(vec![
+        Some(i64::MIN),
+        Some(i64::MIN + 1),
+        Some(i64::MIN + 2),
+        Some(-1),
+        Some(0),
+        Some(1),
+        Some(i64::MAX - 2),
+        Some(i64::MAX - 1),
+        Some(i64::MAX),
+        Some(i64::MIN),
+        Some(0),
+        Some(i64::MAX),
+        None,
+        None,
+        None,
+    ]);
+    // UTC has zero offset: the expected values are the original integers,
+    // independent of Arrow's calendar-based timezone cast.
+    let expected = Arc::new(values.clone().with_timezone("UTC")) as ArrayRef;
+    (
+        Case {
+            name: "UTC attachment preserves every representable microsecond".into(),
+            source: Arc::new(values),
+            target: expected.data_type().clone(),
+        },
+        expected,
+    )
+}
+
+#[test]
+fn typed_statistics_utc_attachment_preserves_full_i64_bounds() -> TestResult {
+    let (case, expected) = full_range_utc_case();
+    for group_size in [1, 3] {
+        for statistics in [EnabledStatistics::Chunk, EnabledStatistics::None] {
+            let (bytes, metadata) = parquet_file(&case, group_size, statistics)?;
+            for row in 0..expected.len() {
+                if expected.is_null(row) {
+                    continue;
+                }
+                let literal = extract_primitive_scalar(expected.as_ref(), row)?;
+                for op in COMPARISONS {
+                    let selected = pruned_row_groups(
+                        &metadata,
+                        &case.target_schema(),
+                        bytes.len() as u64,
+                        None,
+                        Some(&predicate(op, literal.clone())),
+                    )?
+                    .unwrap();
+                    let matches = matching_rows(&expected, expected.slice(row, 1), op)?;
+                    for row in 0..expected.len() {
+                        if matches.is_valid(row) && matches.value(row) {
+                            assert!(selected.contains(&(row / group_size)));
+                        } else if group_size == 1
+                            && statistics == EnabledStatistics::Chunk
+                            && expected.is_valid(row)
+                        {
+                            assert!(
+                                !selected.contains(&row),
+                                "must prune nonmatch: {op:?} {literal:?}, row={row}"
+                            );
+                        }
+                    }
+                    if statistics == EnabledStatistics::None {
+                        assert_eq!(selected.len(), metadata.num_row_groups());
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn typed_statistics_timestamp_cast_overflow_does_not_reuse_file_null_counts() -> TestResult {
-    let case = Case {
-        name: "overflow creates logical nulls".into(),
-        source: Arc::new(TimestampMillisecondArray::from(vec![
-            Some(i64::MIN),
-            Some(i64::MIN + 1),
-            Some(i64::MIN + 2),
-            Some(-1),
-            Some(0),
-            Some(1),
-            Some(i64::MAX - 2),
-            Some(i64::MAX - 1),
-            Some(i64::MAX),
-            None,
-        ])),
-        target: ArrowType::Timestamp(TimeUnit::Microsecond, None),
-    };
-    let (_root, table, values) = public_table(&case, false).await?;
-    for (predicate, expected) in [
-        (
-            DeltaPredicate::IsNull { column: "v".into() },
-            arrow::compute::is_null(values.as_ref())?,
-        ),
-        (
-            DeltaPredicate::IsNotNull { column: "v".into() },
-            arrow::compute::is_not_null(values.as_ref())?,
-        ),
-    ] {
-        let output = table
+async fn typed_statistics_utc_attachment_preserves_public_scan_results() -> TestResult {
+    let (case, expected) = full_range_utc_case();
+    for mapped in [false, true] {
+        let (_root, table, expected) =
+            public_table_with_converted_values(&case, mapped, Arc::clone(&expected)).await?;
+        let full = table
             .scan()
             .with_target_partitions(1)?
-            .with_projection(["id"])
-            .with_predicate(predicate.clone())
             .build()
             .await?
             .into_stream()
             .try_collect::<Vec<_>>()
             .await?;
-        assert_eq!(ids(&output), expected_ids(&expected), "{predicate:?}");
-        #[cfg(feature = "datafusion")]
-        {
-            use crate::datafusion::{DeltaTableProvider, ScanOptions};
-            use datafusion::prelude::{SessionConfig, SessionContext, col};
-            for use_arrow_view_types in [false, true] {
-                let context =
-                    SessionContext::new_with_config(SessionConfig::new().with_target_partitions(1));
-                let provider = Arc::new(DeltaTableProvider::try_new(
-                    table.clone(),
-                    ScanOptions {
-                        use_arrow_view_types,
-                        ..Default::default()
-                    },
-                )?);
-                let expression = if matches!(predicate, DeltaPredicate::IsNull { .. }) {
-                    col("v").is_null()
-                } else {
-                    col("v").is_not_null()
-                };
-                let output = context
-                    .read_table(provider)?
-                    .filter(expression)?
-                    .select_columns(&["id"])?
-                    .collect()
-                    .await?;
+        assert_eq!(ids(&full), (0..expected.len() as i32).collect::<Vec<_>>());
+        for batch in full {
+            let values = batch.column_by_name("v").unwrap();
+            let row_ids = batch
+                .column_by_name("id")
+                .unwrap()
+                .as_primitive::<Int32Type>();
+            for (row, id) in row_ids.values().iter().enumerate() {
                 assert_eq!(
-                    ids(&output),
-                    expected_ids(&expected),
-                    "DataFusion views={use_arrow_view_types}, {predicate:?}"
+                    values.slice(row, 1).as_ref(),
+                    expected.slice(*id as usize, 1).as_ref()
                 );
+            }
+        }
+        let mut predicates = vec![
+            (
+                DeltaPredicate::IsNull { column: "v".into() },
+                arrow::compute::is_null(expected.as_ref())?,
+            ),
+            (
+                DeltaPredicate::IsNotNull { column: "v".into() },
+                arrow::compute::is_not_null(expected.as_ref())?,
+            ),
+        ];
+        for value in [i64::MIN, 0, i64::MAX] {
+            let literal =
+                Arc::new(TimestampMicrosecondArray::from(vec![value]).with_timezone("UTC"))
+                    as ArrayRef;
+            for op in COMPARISONS {
+                predicates.push((
+                    DeltaPredicate::Compare {
+                        column: "v".into(),
+                        op,
+                        value: public_scalar(KernelScalar::Timestamp(value)),
+                    },
+                    matching_rows(&expected, Arc::clone(&literal), op)?,
+                ));
+            }
+        }
+        for (predicate, matches) in predicates {
+            let output = table
+                .scan()
+                .with_target_partitions(1)?
+                .with_projection(["id"])
+                .with_predicate(predicate.clone())
+                .build()
+                .await?
+                .into_stream()
+                .try_collect::<Vec<_>>()
+                .await?;
+            assert_eq!(ids(&output), expected_ids(&matches), "{predicate:?}");
+            #[cfg(feature = "datafusion")]
+            {
+                use crate::datafusion::{DeltaTableProvider, ScanOptions};
+                use datafusion::{
+                    common::ScalarValue,
+                    prelude::{SessionConfig, SessionContext, col, lit},
+                };
+                for use_arrow_view_types in [false, true] {
+                    let provider = Arc::new(DeltaTableProvider::try_new(
+                        table.clone(),
+                        ScanOptions {
+                            use_arrow_view_types,
+                            ..Default::default()
+                        },
+                    )?);
+                    let context = SessionContext::new_with_config(
+                        SessionConfig::new().with_target_partitions(1),
+                    );
+                    let expression = match &predicate {
+                        DeltaPredicate::IsNull { .. } => col("v").is_null(),
+                        DeltaPredicate::IsNotNull { .. } => col("v").is_not_null(),
+                        DeltaPredicate::Compare {
+                            op,
+                            value: DeltaScalar::TimestampMicrosecond { value, .. },
+                            ..
+                        } => {
+                            let literal = lit(ScalarValue::TimestampMicrosecond(
+                                Some(*value),
+                                Some("UTC".into()),
+                            ));
+                            match op {
+                                DeltaComparison::Eq => col("v").eq(literal),
+                                DeltaComparison::NotEq => col("v").not_eq(literal),
+                                DeltaComparison::Lt => col("v").lt(literal),
+                                DeltaComparison::LtEq => col("v").lt_eq(literal),
+                                DeltaComparison::Gt => col("v").gt(literal),
+                                DeltaComparison::GtEq => col("v").gt_eq(literal),
+                            }
+                        }
+                        _ => unreachable!("only timestamp comparisons and null checks"),
+                    };
+                    let output = context
+                        .read_table(provider)?
+                        .filter(expression)?
+                        .select_columns(&["id"])?
+                        .collect()
+                        .await?;
+                    assert_eq!(
+                        ids(&output),
+                        expected_ids(&matches),
+                        "views={use_arrow_view_types}, {predicate:?}"
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn typed_statistics_timestamp_cast_overflow_does_not_reuse_file_null_counts() -> TestResult {
+    for timezone in [None, Some("UTC".into())] {
+        let case = Case {
+            name: "overflow creates logical nulls".into(),
+            source: Arc::new(TimestampMillisecondArray::from(vec![
+                Some(i64::MIN),
+                Some(i64::MIN + 1),
+                Some(i64::MIN + 2),
+                Some(-1),
+                Some(0),
+                Some(1),
+                Some(i64::MAX - 2),
+                Some(i64::MAX - 1),
+                Some(i64::MAX),
+                None,
+            ])),
+            target: ArrowType::Timestamp(TimeUnit::Microsecond, timezone),
+        };
+        let (_root, table, values) = public_table(&case, false).await?;
+        for (predicate, expected) in [
+            (
+                DeltaPredicate::IsNull { column: "v".into() },
+                arrow::compute::is_null(values.as_ref())?,
+            ),
+            (
+                DeltaPredicate::IsNotNull { column: "v".into() },
+                arrow::compute::is_not_null(values.as_ref())?,
+            ),
+        ] {
+            let output = table
+                .scan()
+                .with_target_partitions(1)?
+                .with_projection(["id"])
+                .with_predicate(predicate.clone())
+                .build()
+                .await?
+                .into_stream()
+                .try_collect::<Vec<_>>()
+                .await?;
+            assert_eq!(ids(&output), expected_ids(&expected), "{predicate:?}");
+            #[cfg(feature = "datafusion")]
+            {
+                use crate::datafusion::{DeltaTableProvider, ScanOptions};
+                use datafusion::prelude::{SessionConfig, SessionContext, col};
+                for use_arrow_view_types in [false, true] {
+                    let context = SessionContext::new_with_config(
+                        SessionConfig::new().with_target_partitions(1),
+                    );
+                    let provider = Arc::new(DeltaTableProvider::try_new(
+                        table.clone(),
+                        ScanOptions {
+                            use_arrow_view_types,
+                            ..Default::default()
+                        },
+                    )?);
+                    let expression = if matches!(predicate, DeltaPredicate::IsNull { .. }) {
+                        col("v").is_null()
+                    } else {
+                        col("v").is_not_null()
+                    };
+                    let output = context
+                        .read_table(provider)?
+                        .filter(expression)?
+                        .select_columns(&["id"])?
+                        .collect()
+                        .await?;
+                    assert_eq!(
+                        ids(&output),
+                        expected_ids(&expected),
+                        "DataFusion views={use_arrow_view_types}, {predicate:?}"
+                    );
+                }
             }
         }
     }
