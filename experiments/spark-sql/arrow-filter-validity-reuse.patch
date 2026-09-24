@@ -1,0 +1,10 @@
+--- a/src/filter.rs
++++ b/src/filter.rs
+@@ -564,5 +564,6 @@
+ ) -> Option<(usize, Buffer)> {
+     let nulls = nulls?;
+-    if nulls.null_count() == 0 {
++    // Selecting this exact validity bitmap cannot retain a null row.
++    if nulls.null_count() == 0 || nulls.inner().ptr_eq(predicate.filter.values()) {
+         return None;
+     }
