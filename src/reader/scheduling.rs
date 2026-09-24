@@ -605,6 +605,10 @@ impl PartitionStream {
         let PartitionStreamState::NotStarted(start) = &mut self.state else {
             return;
         };
+        if self.cancellation.is_cancelled() {
+            self.state = PartitionStreamState::Done;
+            return;
+        }
         let Some(start) = start.take() else {
             self.state = PartitionStreamState::Done;
             return;
@@ -1178,6 +1182,121 @@ mod tests {
         assert!(stream.next().await.is_none());
         assert_eq!(limiter.active_file_reads(), 0);
         assert!(!cancellation.is_cancelled());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ordered_completion_after_error_does_not_start_waiting_partitions()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for failed_partition in [0, 1] {
+            for setup_error in [false, true] {
+                let scan_cap = failed_partition + 1;
+                let options = options(scan_cap, 1)?;
+                let limiter = ScanReadLimiter::new(options, 3, 3);
+                let cancellation = ScanCancellation::new();
+                let metrics = metrics();
+                let executor: FileExecutor<usize, FileBatchStream> =
+                    Arc::new(move |task, permit, _| {
+                        async move {
+                            if task != failed_partition {
+                                return Ok(pending_file_stream(permit));
+                            }
+                            let error = InvalidConfigurationSnafu {
+                                reason: "controlled_partition_failure",
+                            }
+                            .build();
+                            if setup_error {
+                                return Err(error);
+                            }
+                            Ok(Box::pin(stream::once(async move {
+                                let _permit = permit;
+                                Err(error)
+                            })) as FileBatchStream)
+                        }
+                        .boxed()
+                    });
+                let partitions = (0..3)
+                    .map(|index| {
+                        Ok(PartitionStream::new(
+                            vec![index],
+                            limiter.partition(index)?,
+                            options,
+                            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                            Arc::clone(&executor),
+                            metrics.clone(),
+                            cancellation.clone(),
+                        ))
+                    })
+                    .collect::<Result<VecDeque<_>, crate::DeltaReaderError>>()?;
+                let mut stream = OrderedPartitionStream::new(partitions, scan_cap);
+                stream.admit_partitions();
+                // Queue a completion before polling the merger, forcing it to
+                // return capacity before delivering the producer's error.
+                timeout(Duration::from_secs(5), async {
+                    while stream.completions.as_ref().is_none_or(|rx| rx.is_empty()) {
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await?;
+                assert!(cancellation.is_cancelled());
+                // Starting an already-running partition must preserve its queued error.
+                stream.partitions[failed_partition].start();
+                let error = timeout(Duration::from_secs(5), stream.next())
+                    .await?
+                    .ok_or("missing producer error")?
+                    .expect_err("producer must fail");
+                assert_eq!(error.code(), "invalid_configuration");
+                assert!(stream.partitions.iter().skip(1).all(|partition| matches!(
+                    partition.state,
+                    PartitionStreamState::NotStarted(_) | PartitionStreamState::Done
+                )));
+                // EOF joins any spawned producers, so the counter cannot pass
+                // merely because an unnecessary task has not run yet.
+                assert!(
+                    timeout(Duration::from_secs(5), stream.next())
+                        .await?
+                        .is_none()
+                );
+                assert_eq!(metrics.snapshot().scan_partitions_started, scan_cap as u64);
+                assert_eq!(metrics.snapshot().file_tasks_started, scan_cap as u64);
+                assert_eq!(limiter.active_file_reads(), 0);
+                assert_eq!(stream.available_file_reads, scan_cap);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancelled_partition_finishes_without_starting_a_producer()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for explicit_start in [false, true] {
+            let options = options(1, 1)?;
+            let limiter = ScanReadLimiter::new(options, 1, 1);
+            let metrics = metrics();
+            let cancellation = ScanCancellation::new();
+            let mut stream = PartitionStream::new(
+                vec![0],
+                limiter.partition(0)?,
+                options,
+                Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                Arc::new(|_, permit, _| async move { Ok(pending_file_stream(permit)) }.boxed()),
+                metrics.clone(),
+                cancellation.clone(),
+            );
+            cancellation.cancel();
+            if explicit_start {
+                stream.start();
+            }
+            assert!(
+                timeout(Duration::from_secs(5), stream.next())
+                    .await?
+                    .is_none()
+            );
+            assert!(stream.next().await.is_none());
+            assert_eq!(metrics.snapshot().scan_partitions_started, 0);
+            assert_eq!(metrics.snapshot().file_tasks_started, 0);
+            assert_eq!(limiter.active_file_reads(), 0);
+        }
         Ok(())
     }
 
