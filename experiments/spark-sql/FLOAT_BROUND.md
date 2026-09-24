@@ -54,7 +54,7 @@ corpus and archive, and the full comparison deliberately exits nonzero.
 
 The archived harness reuses the existing Decimal BROUND benchmark and adds
 `BROUND(CAST(a AS FLOAT), 0)`. It uses 1,048,576 rows, 8,192-row batches, one
-partition, CPU 2, two warmups and nine samples per process. Four processes per
+partition, CPU 2, eight warmups and 41 samples per process. Four processes per
 variant run in the fixed order before/after/after/before/after/before/before/after,
 without concurrent compilation or Spark. Full output digests agree for the
 unchanged controls. Every FLOAT result is checked outside timing against integer
