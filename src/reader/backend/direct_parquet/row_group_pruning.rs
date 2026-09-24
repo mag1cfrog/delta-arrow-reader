@@ -161,6 +161,11 @@ impl RowGroupStats<'_> {
             self.row_group.schema_descr(),
         )
         .ok()?;
+        // The converter matches by name, which can select a different field ID
+        // when file columns share a name. Trust only the data reader's match.
+        if converter.parquet_column_index() != Some(index) {
+            return None;
+        }
         let source = converter.arrow_field().data_type();
         if !compatible_statistics_type(source, target) {
             return None;
@@ -198,11 +203,21 @@ impl RowGroupStats<'_> {
         let count = i64::try_from(self.stats(column)?.null_count_opt()?).ok()?;
         let &(index, target_field) = self.field_indices.get(column)?;
         let descriptor = self.row_group.schema_descr().column(index);
-        let source = self
-            .file_schema
-            .field_with_name(descriptor.name())
-            .ok()?
-            .data_type();
+        if self.stats(column)?.physical_type() != descriptor.physical_type() {
+            return None;
+        }
+        let converter = StatisticsConverter::try_new(
+            descriptor.name(),
+            self.file_schema,
+            self.row_group.schema_descr(),
+        )
+        .ok()?;
+        // The converter matches by name, which can select a different field ID
+        // when file columns share a name. Trust only the data reader's match.
+        if converter.parquet_column_index() != Some(index) {
+            return None;
+        }
+        let source = converter.arrow_field().data_type();
         let target = target_field.data_type();
         if !compatible_statistics_type(source, target) {
             return None;

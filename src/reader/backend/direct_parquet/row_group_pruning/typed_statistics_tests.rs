@@ -1506,8 +1506,8 @@ async fn typed_statistics_field_id_mapping_matches_data_and_prunes() -> TestResu
     let mut failures = Vec::new();
     for mode in ["name", "id"] {
         for reversed in [false, true] {
-            for collision in [false, true] {
-                let label = format!("mode={mode}, reversed={reversed}, collision={collision}");
+            for collision in [None, Some("phys_v"), Some("old_v")] {
+                let label = format!("mode={mode}, reversed={reversed}, collision={collision:?}");
                 let root = TestDir::new("typed-statistics-field-ids")?;
                 fs::create_dir_all(root.path().join("_delta_log"))?;
                 // An unprojected struct makes root indices differ from leaf indices.
@@ -1531,8 +1531,8 @@ async fn typed_statistics_field_id_mapping_matches_data_and_prunes() -> TestResu
                     Arc::new(Int32Array::from(vec![0, 1, 2, 3, 4])) as ArrayRef,
                     Arc::clone(&source),
                 ];
-                if collision {
-                    fields.push(field("phys_v", ArrowType::Int32, 3));
+                if let Some(name) = collision {
+                    fields.push(field(name, ArrowType::Int32, 3));
                     columns.push(Arc::new(Int32Array::from(vec![
                         Some(0),
                         Some(300),
@@ -1588,7 +1588,12 @@ async fn typed_statistics_field_id_mapping_matches_data_and_prunes() -> TestResu
                         Some(&predicate),
                     )?
                     .unwrap();
-                    if selected != expected {
+                    // The converter can only select the first file column with a
+                    // given name. An ambiguous match may keep extra groups, but
+                    // must never discard a group containing matching values.
+                    let ambiguous = reversed && collision == Some("old_v");
+                    let missing = expected.iter().any(|group| !selected.contains(group));
+                    if missing || (!ambiguous && selected != expected) {
                         failures.push(format!(
                             "{label}: groups={selected:?}, expected={expected:?}"
                         ));
@@ -1723,6 +1728,61 @@ async fn typed_statistics_field_id_mapping_matches_data_and_prunes() -> TestResu
         failures.is_empty(),
         "field matching failures:\n{}",
         failures.join("\n")
+    );
+    Ok(())
+}
+
+#[test]
+fn typed_statistics_duplicate_names_do_not_hide_cast_nulls() -> TestResult {
+    // Both columns have zero physical nulls. The second column's milliseconds
+    // overflow when widened to microseconds, so IS NULL must retain its group.
+    // Looking up the first column's type would incorrectly make the cast look
+    // like an identity conversion and trust the physical null count.
+    let schema = Arc::new(SchemaDescriptor::new(Arc::new(parse_message_type(
+        "message m {
+            OPTIONAL INT64 old_v (TIMESTAMP(MICROS,false)) = 1;
+            OPTIONAL INT64 old_v (TIMESTAMP(MILLIS,false)) = 2;
+        }",
+    )?)));
+    let columns = [0, i64::MAX]
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| {
+            ColumnChunkMetaData::builder(schema.column(index))
+                .set_num_values(1)
+                .set_statistics(Statistics::int64(
+                    Some(value),
+                    Some(value),
+                    None,
+                    Some(0),
+                    false,
+                ))
+                .build()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let group = RowGroupMetaData::builder(Arc::clone(&schema))
+        .set_num_rows(1)
+        .set_column_metadata(columns)
+        .build()?;
+    let metadata = ParquetMetaData::new(
+        FileMetaData::new(1, 1, None, None, schema, None),
+        vec![group],
+    );
+    let field = Field::new("v", ArrowType::Timestamp(TimeUnit::Microsecond, None), true)
+        .with_metadata(
+            [(
+                parquet::arrow::PARQUET_FIELD_ID_META_KEY.to_owned(),
+                "2".to_owned(),
+            )]
+            .into(),
+        );
+    let target = Arc::new(Schema::new(vec![field]));
+    let predicate = DeltaKernelPredicate::from_test_predicate(Predicate::is_null(
+        Expression::Column(ColumnName::new(["v"])),
+    ));
+    assert_eq!(
+        pruned_row_groups(&metadata, &target, 1, None, Some(&predicate))?,
+        Some(vec![0])
     );
     Ok(())
 }
