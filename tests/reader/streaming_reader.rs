@@ -1021,6 +1021,87 @@ fn stream_is_pull_driven_reports_one_error_and_retains_drop_metrics() -> TestRes
     })
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn small_scan_read_caps_preserve_parquet_results_order_and_limits() -> TestResult {
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    let fixture = TestTable::empty("scan-read-limits")?;
+    let mut actions = vec![protocol(1), metadata()];
+    for file in 0..16 {
+        let name = format!("part-{file:02}.parquet");
+        let rows = (file * 4..file * 4 + 4).collect::<Vec<_>>();
+        let size = fixture.write_parquet(&name, &rows, &[Some("a"); 4], &[0.0; 4])?;
+        actions.push(add(&name, size, file * 4, file * 4 + 3));
+    }
+    fixture.write_log(0, &actions)?;
+    let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
+
+    for backend in [
+        ParquetReaderBackend::Direct,
+        ParquetReaderBackend::DeltaKernel,
+    ] {
+        for filtered in [false, true] {
+            let builder = || {
+                let mut scan = table
+                    .scan()
+                    .with_projection(["id"])
+                    .with_target_partitions(4)?;
+                if filtered {
+                    scan = scan.with_predicate(DeltaPredicate::Compare {
+                        column: "id".into(),
+                        op: DeltaComparison::GtEq,
+                        value: DeltaScalar::Int32(28),
+                    });
+                }
+                Ok::<_, delta_arrow_reader::DeltaReaderError>(scan)
+            };
+            // Separate unlimited run supplies the existing partition/file order.
+            let reference = builder()?
+                .with_execution_options(
+                    DeltaScanExecutionOptions::new().with_parquet_backend(backend),
+                )
+                .build()
+                .await?;
+            let (reference, _) =
+                timeout(Duration::from_secs(10), collect_scan(reference)).await??;
+            let expected = ids(&reference);
+            let mut sorted = expected.clone();
+            sorted.sort_unstable();
+            assert_eq!(
+                sorted,
+                ((if filtered { 28 } else { 0 })..64).collect::<Vec<_>>()
+            );
+            for cap in [1, 4, 8] {
+                for prefetch in [0, 2] {
+                    for limit in [None, Some(0), Some(1), Some(33), Some(200)] {
+                        let options = DeltaScanExecutionOptions::new()
+                            .with_parquet_backend(backend)
+                            .with_max_concurrent_file_reads_per_scan(Some(cap))?
+                            .with_prefetch_files_per_partition(prefetch);
+                        let mut scan = builder()?.with_execution_options(options);
+                        if let Some(limit) = limit {
+                            scan = scan.with_limit(limit);
+                        }
+                        let scan = scan.build().await?;
+                        let (batches, metrics) =
+                            timeout(Duration::from_secs(10), collect_scan(scan)).await??;
+                        assert_eq!(
+                            ids(&batches),
+                            expected[..limit.unwrap_or(usize::MAX).min(expected.len())],
+                            "{backend:?} filtered={filtered} cap={cap} prefetch={prefetch} limit={limit:?}"
+                        );
+                        if limit == Some(0) {
+                            assert_eq!(metrics.snapshot().file_tasks_started, 0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn eager_metadata_preserves_direct_and_delta_kernel_results_without_the_log() -> TestResult {
     runtime()?.block_on(async {

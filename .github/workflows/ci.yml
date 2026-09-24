@@ -143,6 +143,8 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
       - if: matrix.task == 'Lints and Docs'
+        run: python3 -m unittest discover -s benches -p test_scan_scheduling.py
+      - if: matrix.task == 'Lints and Docs'
         run: cargo fmt --all -- --check
       - if: matrix.task == 'Lints and Docs'
         run: cargo clippy --locked --all-targets --all-features -- -D warnings

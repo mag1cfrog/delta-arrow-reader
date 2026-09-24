@@ -87,13 +87,27 @@ pub(crate) struct FileScheduler<Task, Output> {
 }
 
 type BatchResult = Result<RecordBatch, DeltaReaderError>;
-type PartitionStarter = Box<dyn FnOnce(mpsc::Sender<BatchResult>) -> JoinHandle<()> + Send>;
+type PartitionStarter = Box<
+    dyn FnOnce(mpsc::Sender<BatchResult>, Option<PartitionCompletion>) -> JoinHandle<()> + Send,
+>;
 type PendingFileStreams = FuturesOrdered<ScheduledFileFuture<FileBatchStream>>;
 type ReadyFileStreams = VecDeque<Result<FileBatchStream, DeltaReaderError>>;
 
 struct PendingPartition {
     output_buffer_batches: usize,
     start: PartitionStarter,
+    completion: Option<PartitionCompletion>,
+}
+
+struct PartitionCompletion {
+    index: usize,
+    sender: mpsc::UnboundedSender<usize>,
+}
+
+impl Drop for PartitionCompletion {
+    fn drop(&mut self) {
+        let _ = self.sender.send(self.index);
+    }
 }
 
 enum PartitionStreamState {
@@ -109,6 +123,135 @@ enum PartitionStreamState {
 pub(crate) struct PartitionStream {
     state: PartitionStreamState,
     cancellation: ScanCancellation,
+    file_read_permits: Arc<Semaphore>,
+    max_file_reads: usize,
+    reserved_file_reads: usize,
+}
+
+/// Merges partitions in order, reserving enough capacity for each admitted
+/// partition to progress without permits held by a later, backpressured one.
+#[derive(Default)]
+pub(crate) struct OrderedPartitionStream {
+    partitions: VecDeque<PartitionStream>,
+    admitted: usize,
+    available_file_reads: usize,
+    consumed: usize,
+    completions: Option<mpsc::UnboundedReceiver<usize>>,
+}
+
+impl OrderedPartitionStream {
+    /// Takes unstarted partitions whose scan limiter has no other consumers.
+    pub(crate) fn new(mut partitions: VecDeque<PartitionStream>, scan_capacity: usize) -> Self {
+        debug_assert!(scan_capacity > 0 || partitions.is_empty());
+        let demand = partitions
+            .iter()
+            .fold(0_usize, |sum, p| sum.saturating_add(p.max_file_reads));
+        // No completion notifications are needed when every partition already fits.
+        // Otherwise one small message per partition returns its reservation even
+        // while its last output batches are still waiting for ordered consumption.
+        let completions = (demand > scan_capacity).then(mpsc::unbounded_channel);
+        for (index, partition) in partitions.iter_mut().enumerate() {
+            debug_assert!(matches!(
+                partition.state,
+                PartitionStreamState::NotStarted(_)
+            ));
+            // The ordered merger assigns the per-partition permits before starting
+            // any producers. Independently consumed partitions retain their usual cap.
+            partition
+                .file_read_permits
+                .forget_permits(Semaphore::MAX_PERMITS);
+            if let (Some((sender, _)), PartitionStreamState::NotStarted(Some(pending))) =
+                (&completions, &mut partition.state)
+            {
+                pending.completion = Some(PartitionCompletion {
+                    index,
+                    sender: sender.clone(),
+                });
+            }
+        }
+        Self {
+            partitions,
+            admitted: 0,
+            available_file_reads: scan_capacity,
+            consumed: 0,
+            completions: completions.map(|(_, receiver)| receiver),
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.partitions.clear();
+        self.admitted = 0;
+        self.available_file_reads = 0;
+        self.completions = None;
+    }
+
+    fn reclaim_completed(&mut self, context: &mut Context<'_>) {
+        let Some(completions) = self.completions.as_mut() else {
+            return;
+        };
+        while let Poll::Ready(Some(index)) = completions.poll_recv(context) {
+            let Some(partition) = index
+                .checked_sub(self.consumed)
+                .and_then(|index| self.partitions.get_mut(index))
+            else {
+                // EOF may have returned this reservation before its notification.
+                continue;
+            };
+            self.available_file_reads += partition.reserved_file_reads;
+            partition.reserved_file_reads = 0;
+            partition.max_file_reads = 0;
+        }
+        self.admit_partitions();
+    }
+
+    fn admit_partitions(&mut self) {
+        // Only the last admitted partition can have a partial reservation. Top it
+        // up before starting more partitions, using even a remainder smaller than
+        // the configured per-partition cap (e.g. 8 slots become 3 + 3 + 2).
+        let mut index = self.admitted.saturating_sub(1);
+        while self.available_file_reads > 0 {
+            let Some(partition) = self.partitions.get_mut(index) else {
+                break;
+            };
+            let additional = (partition.max_file_reads - partition.reserved_file_reads)
+                .min(self.available_file_reads);
+            partition.file_read_permits.add_permits(additional);
+            partition.reserved_file_reads += additional;
+            self.available_file_reads -= additional;
+            partition.start();
+            index += 1;
+            self.admitted = index;
+        }
+    }
+}
+
+impl Stream for OrderedPartitionStream {
+    type Item = BatchResult;
+
+    fn poll_next(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.admitted == 0 {
+            self.admit_partitions();
+        }
+        loop {
+            self.reclaim_completed(context);
+            let Some(partition) = self.partitions.front_mut() else {
+                return Poll::Ready(None);
+            };
+            match Pin::new(&mut *partition).poll_next(context) {
+                Poll::Ready(None) => {
+                    // PartitionStream joins its producer before reporting EOF, so
+                    // all of this reservation's file permits have been released.
+                    let released = partition.reserved_file_reads;
+                    self.partitions.pop_front();
+                    self.consumed += 1;
+                    self.admitted -= 1;
+                    self.available_file_reads += released;
+                    self.admit_partitions();
+                }
+                result => return result,
+            }
+        }
+    }
 }
 
 pub(crate) struct DeltaScanScheduler {
@@ -165,8 +308,9 @@ impl DeltaScanScheduler {
         &self,
         admission: FileAdmissionPolicy<DeltaScanFileTask>,
         executor: FileExecutor<DeltaScanFileTask, FileBatchStream>,
-    ) -> VecDeque<PartitionStream> {
-        self.plan
+    ) -> OrderedPartitionStream {
+        let partitions = self
+            .plan
             .partitions
             .iter()
             .enumerate()
@@ -184,7 +328,8 @@ impl DeltaScanScheduler {
                     self.cancellation.clone(),
                 )
             })
-            .collect()
+            .collect();
+        OrderedPartitionStream::new(partitions, self.limiter.scan_capacity)
     }
 }
 
@@ -405,6 +550,12 @@ impl PartitionStream {
             ParquetReaderBackend::Direct => options.prefetch_files_per_partition(),
             ParquetReaderBackend::DeltaKernel => 0,
         };
+        let file_read_permits =
+            Arc::clone(&partition_limiter.limiter.partition_permits[partition_limiter.partition]);
+        let max_file_reads = file_tasks
+            .len()
+            .min(partition_limiter.limiter.partition_capacity)
+            .min(prefetch_files.saturating_add(1));
         let measured_metrics = metrics.clone();
         let measured_executor = Arc::new(move |task, permit, cancellation| {
             measured_metrics.record_file_task_started();
@@ -418,7 +569,7 @@ impl PartitionStream {
             cancellation.clone(),
         );
         let run_cancellation = cancellation.clone();
-        let start = Box::new(move |output| {
+        let start = Box::new(move |output, completion| {
             let span = tracing::debug_span!(
                 target: "delta_arrow_reader::profile",
                 parent: None,
@@ -426,8 +577,14 @@ impl PartitionStream {
             );
             span.follows_from(tracing::Span::current().id());
             tokio::spawn(
-                run_partition(output, scheduler, metrics, run_cancellation, prefetch_files)
-                    .instrument(span),
+                async move {
+                    // Declared before the producer future so its resources are
+                    // dropped before the reservation is returned, including unwind.
+                    let _completion = completion;
+                    run_partition(output, scheduler, metrics, run_cancellation, prefetch_files)
+                        .await;
+                }
+                .instrument(span),
             )
         });
 
@@ -435,8 +592,12 @@ impl PartitionStream {
             state: PartitionStreamState::NotStarted(Some(PendingPartition {
                 output_buffer_batches,
                 start,
+                completion: None,
             })),
             cancellation,
+            file_read_permits,
+            max_file_reads,
+            reserved_file_reads: 0,
         }
     }
 
@@ -444,6 +605,10 @@ impl PartitionStream {
         let PartitionStreamState::NotStarted(start) = &mut self.state else {
             return;
         };
+        if self.cancellation.is_cancelled() {
+            self.state = PartitionStreamState::Done;
+            return;
+        }
         let Some(start) = start.take() else {
             self.state = PartitionStreamState::Done;
             return;
@@ -451,7 +616,7 @@ impl PartitionStream {
         let (output, receiver) = mpsc::channel(start.output_buffer_batches);
         self.state = PartitionStreamState::Running {
             receiver,
-            task: (start.start)(output),
+            task: (start.start)(output, start.completion),
         };
     }
 }
@@ -747,9 +912,397 @@ mod tests {
 
     use super::{
         BatchResult, FileAdmissionDecision, FileBatchStream, FileExecutor, FileReadPermit,
-        FileScheduler, PartitionStream, PartitionStreamState, ScanCancellation, ScanReadLimiter,
-        send_first_error,
+        FileScheduler, OrderedPartitionStream, PartitionStream, PartitionStreamState,
+        ScanCancellation, ScanReadLimiter, send_first_error,
     };
+
+    #[tokio::test]
+    async fn ordered_admission_uses_effective_demand_and_every_available_slot()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for (backend, prefetch, file_count, scan_cap, partition_cap, expected) in [
+            (ParquetReaderBackend::Direct, 2, 4, 8, 3, vec![3, 3, 2, 0]),
+            (ParquetReaderBackend::Direct, 0, 4, 2, 3, vec![1, 1, 0, 0]),
+            (
+                ParquetReaderBackend::DeltaKernel,
+                usize::MAX,
+                4,
+                2,
+                3,
+                vec![1, 1, 0, 0],
+            ),
+            (
+                ParquetReaderBackend::Direct,
+                usize::MAX,
+                4,
+                5,
+                2,
+                vec![2, 2, 1, 0],
+            ),
+            (ParquetReaderBackend::Direct, 2, 1, 4, 3, vec![1, 1, 1, 1]),
+        ] {
+            let options = options(scan_cap, partition_cap)?
+                .with_parquet_backend(backend)
+                .with_prefetch_files_per_partition(prefetch);
+            let limiter = ScanReadLimiter::new(options, 4, 4);
+            let cancellation = ScanCancellation::new();
+            let executor: FileExecutor<usize, FileBatchStream> = Arc::new(|_, permit, _| {
+                // Hold every admitted setup future open so lazy decoding cannot
+                // hide whether the full reservation is usable concurrently.
+                async move {
+                    let _permit = permit;
+                    pending::<Result<FileBatchStream, crate::DeltaReaderError>>().await
+                }
+                .boxed()
+            });
+            let partitions = (0..4)
+                .map(|index| {
+                    Ok(PartitionStream::new(
+                        (0..file_count).collect(),
+                        limiter.partition(index)?,
+                        options,
+                        Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                        Arc::clone(&executor),
+                        metrics(),
+                        cancellation.clone(),
+                    ))
+                })
+                .collect::<Result<VecDeque<_>, crate::DeltaReaderError>>()?;
+            let mut stream = OrderedPartitionStream::new(partitions, scan_cap);
+            assert_eq!(limiter.active_file_reads(), 0);
+            stream.admit_partitions();
+            assert_eq!(stream.available_file_reads, 0);
+            assert_eq!(
+                stream
+                    .partitions
+                    .iter()
+                    .map(|p| p.reserved_file_reads)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            timeout(Duration::from_secs(5), async {
+                while limiter.active_file_reads() < scan_cap {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await.unwrap_or_else(|_| panic!("{backend:?} prefetch={prefetch} files={file_count} cap={scan_cap} partition_cap={partition_cap}: only {} active reads", limiter.active_file_reads()));
+            for (partition, expected) in stream.partitions.iter().zip(expected) {
+                assert_eq!(partition.file_read_permits.available_permits(), 0);
+                assert_eq!(
+                    matches!(partition.state, PartitionStreamState::Running { .. }),
+                    expected > 0
+                );
+            }
+            stream.clear();
+            timeout(Duration::from_secs(5), async {
+                while limiter.active_file_reads() > 0 {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ordered_admission_recycles_capacity_after_joining_the_front_partition()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let options = options(8, 3)?.with_prefetch_files_per_partition(2);
+        let limiter = ScanReadLimiter::new(options, 4, 4);
+        let cancellation = ScanCancellation::new();
+        let metrics = metrics();
+        let executor: FileExecutor<usize, FileBatchStream> = Arc::new(|task, permit, _| {
+            async move {
+                Ok(if task < 3 {
+                    file_stream(
+                        permit,
+                        vec![batch(vec![task as i32]).expect("valid test batch")],
+                    )
+                } else {
+                    pending_file_stream(permit)
+                })
+            }
+            .boxed()
+        });
+        let partitions = (0..4)
+            .map(|index| {
+                Ok(PartitionStream::new(
+                    (index * 3..index * 3 + 3).collect(),
+                    limiter.partition(index)?,
+                    options,
+                    Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                    Arc::clone(&executor),
+                    metrics.clone(),
+                    cancellation.clone(),
+                ))
+            })
+            .collect::<Result<VecDeque<_>, crate::DeltaReaderError>>()?;
+        let mut stream = OrderedPartitionStream::new(partitions, 8);
+        stream.admit_partitions();
+        assert_eq!(stream.partitions[2].reserved_file_reads, 2);
+        for id in 0..3 {
+            let batch = timeout(Duration::from_secs(5), stream.next())
+                .await?
+                .ok_or("missing front-partition batch")??;
+            assert_eq!(batch_ids(&batch)?, vec![id]);
+        }
+        timeout(Duration::from_secs(5), async {
+            while stream.partitions.len() == 4 {
+                assert!(stream.next().now_or_never().is_none());
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        assert_eq!(metrics.snapshot().scan_partitions_completed, 1);
+        assert_eq!(
+            stream
+                .partitions
+                .iter()
+                .map(|p| p.reserved_file_reads)
+                .collect::<Vec<_>>(),
+            [3, 3, 2]
+        );
+        assert_eq!(stream.available_file_reads, 0);
+        drop(stream);
+        timeout(Duration::from_secs(5), async {
+            while limiter.active_file_reads() > 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn completed_later_partitions_return_capacity_while_the_front_is_pending()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let options = options(2, 1)?;
+        let limiter = ScanReadLimiter::new(options, 4, 4);
+        let cancellation = ScanCancellation::new();
+        let metrics = metrics();
+        let last_started = Arc::new(Notify::new());
+        let executor: FileExecutor<usize, FileBatchStream> = {
+            let last_started = Arc::clone(&last_started);
+            Arc::new(move |task, permit, _| {
+                let last_started = Arc::clone(&last_started);
+                async move {
+                    if task == 3 {
+                        last_started.notify_one();
+                    }
+                    Ok(if task == 0 {
+                        pending_file_stream(permit)
+                    } else {
+                        file_stream(permit, vec![batch(vec![task as i32]).expect("valid batch")])
+                    })
+                }
+                .boxed()
+            })
+        };
+        let partitions = (0..4)
+            .map(|index| {
+                Ok(PartitionStream::new(
+                    vec![index],
+                    limiter.partition(index)?,
+                    options,
+                    Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                    Arc::clone(&executor),
+                    metrics.clone(),
+                    cancellation.clone(),
+                ))
+            })
+            .collect::<Result<VecDeque<_>, crate::DeltaReaderError>>()?;
+        let mut stream = OrderedPartitionStream::new(partitions, 2);
+        timeout(Duration::from_secs(5), async {
+            // No polling loop or timer wakes the merger: completion notifications
+            // must wake it and admit the next short file while the front is stalled.
+            tokio::select! {
+                _ = stream.next() => panic!("front partition must still be pending"),
+                () = last_started.notified() => {}
+            }
+        })
+        .await?;
+        assert_eq!(metrics.snapshot().file_tasks_completed, 3);
+        assert_eq!(limiter.active_file_reads(), 1);
+        drop(stream);
+        timeout(Duration::from_secs(5), async {
+            while limiter.active_file_reads() != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ordered_admission_handles_empty_partitions_skipped_and_empty_files()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let options = options(1, 3)?.with_prefetch_files_per_partition(usize::MAX);
+        let limiter = ScanReadLimiter::new(options, 5, 5);
+        let cancellation = ScanCancellation::new();
+        let executor: FileExecutor<i32, FileBatchStream> = Arc::new(|task, permit, _| {
+            async move {
+                Ok(file_stream(
+                    permit,
+                    if task == 0 {
+                        vec![]
+                    } else {
+                        vec![batch(vec![task]).expect("valid test batch")]
+                    },
+                ))
+            }
+            .boxed()
+        });
+        let partitions = [vec![], vec![-1, 0, 1], vec![], vec![0, 2], vec![]]
+            .into_iter()
+            .enumerate()
+            .map(|(index, tasks)| {
+                Ok(PartitionStream::new(
+                    tasks,
+                    limiter.partition(index)?,
+                    options,
+                    Arc::new(|task| {
+                        Ok(if *task < 0 {
+                            FileAdmissionDecision::Skip
+                        } else {
+                            FileAdmissionDecision::Admit
+                        })
+                    }),
+                    Arc::clone(&executor),
+                    metrics(),
+                    cancellation.clone(),
+                ))
+            })
+            .collect::<Result<VecDeque<_>, crate::DeltaReaderError>>()?;
+        let mut stream = OrderedPartitionStream::new(partitions, 1);
+        let batches = timeout(Duration::from_secs(5), stream.by_ref().collect::<Vec<_>>()).await?;
+        let ids = batches
+            .into_iter()
+            .map(|b| Ok(batch_ids(&b?)?))
+            .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+        assert_eq!(ids, [vec![1], vec![2]]);
+        assert!(stream.next().await.is_none());
+        assert_eq!(limiter.active_file_reads(), 0);
+        assert!(!cancellation.is_cancelled());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn ordered_completion_after_error_does_not_start_waiting_partitions()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for failed_partition in [0, 1] {
+            for setup_error in [false, true] {
+                let scan_cap = failed_partition + 1;
+                let options = options(scan_cap, 1)?;
+                let limiter = ScanReadLimiter::new(options, 3, 3);
+                let cancellation = ScanCancellation::new();
+                let metrics = metrics();
+                let admitted_files = Arc::new(Barrier::new(scan_cap));
+                let executor: FileExecutor<usize, FileBatchStream> =
+                    Arc::new(move |task, permit, _| {
+                        let admitted_files = Arc::clone(&admitted_files);
+                        async move {
+                            // Make task counts independent of which producer runs first.
+                            admitted_files.wait().await;
+                            if task != failed_partition {
+                                return Ok(pending_file_stream(permit));
+                            }
+                            let error = InvalidConfigurationSnafu {
+                                reason: "controlled_partition_failure",
+                            }
+                            .build();
+                            if setup_error {
+                                return Err(error);
+                            }
+                            Ok(Box::pin(stream::once(async move {
+                                let _permit = permit;
+                                Err(error)
+                            })) as FileBatchStream)
+                        }
+                        .boxed()
+                    });
+                let partitions = (0..3)
+                    .map(|index| {
+                        Ok(PartitionStream::new(
+                            vec![index],
+                            limiter.partition(index)?,
+                            options,
+                            Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                            Arc::clone(&executor),
+                            metrics.clone(),
+                            cancellation.clone(),
+                        ))
+                    })
+                    .collect::<Result<VecDeque<_>, crate::DeltaReaderError>>()?;
+                let mut stream = OrderedPartitionStream::new(partitions, scan_cap);
+                stream.admit_partitions();
+                // Queue a completion before polling the merger, forcing it to
+                // return capacity before delivering the producer's error.
+                timeout(Duration::from_secs(5), async {
+                    while stream.completions.as_ref().is_none_or(|rx| rx.is_empty()) {
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await?;
+                assert!(cancellation.is_cancelled());
+                // Starting an already-running partition must preserve its queued error.
+                stream.partitions[failed_partition].start();
+                let error = timeout(Duration::from_secs(5), stream.next())
+                    .await?
+                    .ok_or("missing producer error")?
+                    .expect_err("producer must fail");
+                assert_eq!(error.code(), "invalid_configuration");
+                assert!(stream.partitions.iter().skip(1).all(|partition| matches!(
+                    partition.state,
+                    PartitionStreamState::NotStarted(_) | PartitionStreamState::Done
+                )));
+                // EOF joins any spawned producers, so the counter cannot pass
+                // merely because an unnecessary task has not run yet.
+                assert!(
+                    timeout(Duration::from_secs(5), stream.next())
+                        .await?
+                        .is_none()
+                );
+                assert_eq!(metrics.snapshot().scan_partitions_started, scan_cap as u64);
+                assert_eq!(metrics.snapshot().file_tasks_started, scan_cap as u64);
+                assert_eq!(limiter.active_file_reads(), 0);
+                assert_eq!(stream.available_file_reads, scan_cap);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancelled_partition_finishes_without_starting_a_producer()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for explicit_start in [false, true] {
+            let options = options(1, 1)?;
+            let limiter = ScanReadLimiter::new(options, 1, 1);
+            let metrics = metrics();
+            let cancellation = ScanCancellation::new();
+            let mut stream = PartitionStream::new(
+                vec![0],
+                limiter.partition(0)?,
+                options,
+                Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                Arc::new(|_, permit, _| async move { Ok(pending_file_stream(permit)) }.boxed()),
+                metrics.clone(),
+                cancellation.clone(),
+            );
+            cancellation.cancel();
+            if explicit_start {
+                stream.start();
+            }
+            assert!(
+                timeout(Duration::from_secs(5), stream.next())
+                    .await?
+                    .is_none()
+            );
+            assert!(stream.next().await.is_none());
+            assert_eq!(metrics.snapshot().scan_partitions_started, 0);
+            assert_eq!(metrics.snapshot().file_tasks_started, 0);
+            assert_eq!(limiter.active_file_reads(), 0);
+        }
+        Ok(())
+    }
 
     fn options(
         scan_capacity: usize,
@@ -1690,6 +2243,9 @@ mod tests {
         let mut stream = PartitionStream {
             state: PartitionStreamState::Running { receiver, task },
             cancellation,
+            file_read_permits: Arc::new(tokio::sync::Semaphore::new(0)),
+            max_file_reads: 0,
+            reserved_file_reads: 0,
         };
 
         let error = timeout(Duration::from_secs(5), stream.next())
