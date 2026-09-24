@@ -6,7 +6,7 @@ use arrow::{
     array::{Array, ArrayRef, ListArray, MapArray, StructArray, make_array, new_null_array},
     compute::cast,
     datatypes::{DataType, Field, Fields, SchemaRef, TimeUnit},
-    record_batch::RecordBatch,
+    record_batch::{RecordBatch, RecordBatchOptions},
 };
 use parquet::{
     arrow::PARQUET_FIELD_ID_META_KEY,
@@ -109,8 +109,13 @@ impl ParquetSchemaAlignment {
             })
             .collect::<Result<Vec<ArrayRef>, _>>()?;
 
-        RecordBatch::try_new(Arc::clone(&self.target_schema), columns)
-            .map_err(delta_kernel::Error::from)
+        // Empty projections still carry rows, including before deletion-vector masking.
+        RecordBatch::try_new_with_options(
+            Arc::clone(&self.target_schema),
+            columns,
+            &RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
+        )
+        .map_err(delta_kernel::Error::from)
     }
 }
 
@@ -913,6 +918,25 @@ mod tests {
             .transpose()?
             .ok_or("expected one projected Parquet batch")?;
         Ok(schema_alignment.reshape_batch_to_target_schema(projected)?)
+    }
+
+    #[test]
+    fn empty_projection_reshape_preserves_rows_and_target_metadata()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let target = Arc::new(Schema::empty().with_metadata(HashMap::from([(
+            "schema-key".to_owned(),
+            "target-value".to_owned(),
+        )])));
+        let batch = project_parquet_batch_to_target_schema(
+            "reshape-empty-projection",
+            Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)])),
+            vec![Arc::new(Int32Array::from(vec![1, 2, 3]))],
+            Arc::clone(&target),
+        )?;
+        assert_eq!(batch.schema(), target);
+        assert_eq!(batch.num_columns(), 0);
+        assert_eq!(batch.num_rows(), 3);
+        Ok(())
     }
 
     #[test]

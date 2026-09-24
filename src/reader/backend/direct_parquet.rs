@@ -2233,6 +2233,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn empty_projection_preserves_original_indexes_across_ranges_and_batches()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+        let root = TestDir::new("empty-projection-original-indexes")?;
+        let bytes = parquet_bytes_with_properties(
+            Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)])),
+            vec![Arc::new(Int32Array::from_iter_values(0..9))],
+            WriterProperties::builder()
+                .set_max_row_group_row_count(Some(3))
+                .build(),
+        )?;
+        let file_size = u64::try_from(bytes.len())?;
+        fs::write(root.path().join("part.parquet"), &bytes)?;
+        let builder = ParquetRecordBatchReaderBuilder::try_new(bytes::Bytes::from(bytes))?;
+        assert_eq!(builder.metadata().num_row_groups(), 3);
+        let mut offsets = vec![];
+        for group in builder.metadata().row_groups() {
+            let column = group.column(0);
+            offsets.push(u64::try_from(
+                column
+                    .dictionary_page_offset()
+                    .unwrap_or_else(|| column.data_page_offset()),
+            )?);
+        }
+        let empty_schema = Arc::new(Schema::empty());
+        for threshold in [None, Some(usize::MAX)] {
+            let reader = reader(
+                &root,
+                DeltaScanExecutionOptions::new()
+                    .with_parquet_full_file_read_threshold_bytes(threshold)?,
+                metrics(),
+            )?;
+            for (range, expected) in [
+                (None, (0..9).collect::<Vec<_>>()),
+                (Some(0..offsets[0]), vec![]),
+                (Some(offsets[0]..offsets[1]), vec![0, 1, 2]),
+                (Some(offsets[1]..offsets[2]), vec![3, 4, 5]),
+                (Some(offsets[2]..file_size), vec![6, 7, 8]),
+            ] {
+                for batch_size in [1, 2, 10] {
+                    let mut task = task("part.parquet", Some(file_size))?;
+                    task.parquet_byte_range = range.clone();
+                    let mut stream = reader
+                        .open_physical_parquet_stream(
+                            &task,
+                            &empty_schema,
+                            PhysicalParquetStreamOptions {
+                                include_original_row_index: true,
+                                output_batch_size_rows: Some(batch_size),
+                                ..Default::default()
+                            },
+                        )
+                        .await?;
+                    let mut original_indexes = vec![];
+                    while let Some((batch, indexes)) =
+                        stream.next_batch_with_original_row_indexes().await?
+                    {
+                        let indexes = indexes.ok_or("expected original row indexes")?;
+                        assert_eq!(batch.schema(), empty_schema);
+                        assert_eq!(batch.num_columns(), 0);
+                        assert_eq!(batch.num_rows(), indexes.len());
+                        assert!(batch.num_rows() <= batch_size);
+                        assert_eq!(indexes.null_count(), 0);
+                        original_indexes.extend_from_slice(indexes.values());
+                    }
+                    assert_eq!(
+                        original_indexes, expected,
+                        "range={range:?}, batch_size={batch_size}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn footer_hint_controls_metadata_request_count_and_bytes()
     -> Result<(), Box<dyn std::error::Error>> {
         let root = TestDir::new("direct-footer-hint")?;
