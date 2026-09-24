@@ -20,6 +20,8 @@ The [checked buffer length follow-up](CHECKED_BUFFER_LENGTH.md) removes per-row 
 
 The [shared argument collection follow-up](ARGUMENT_VALUE_COLLECTION.md) removes spare value-vector capacity without allocating before a failing first argument. It retains the allocation improvement; query/planning acceptance remains open.
 
+The [scatter NULL bitmap follow-up](SCATTER_NULL_COUNT.md) removes a duplicate bitmap traversal and preserves shared type callers. Its full-query latency comparison remains inconclusive.
+
 `inputs.json` pins Apache Spark 4.2.0 and Sail 0.7.1, session settings, table schemas and data. Both engines receive the same explicit schemas, including nested nullability. The runner verifies those schemas and captures input rows for comparison. This avoids differences caused by each engine inferring its own schema from SQL VALUES.
 
 `queries.jsonl` contains 116 stable query IDs. The existing `seed_*` fields retain earlier expectations. Ordered queries compare sequences; unordered queries compare row multisets with duplicates preserved. Partition-dependent cases compare input IDs and check nonnegative partition IDs, partition-local ordering and unique/nonnegative monotonic IDs. SORT BY and monotonic-ID queries expose partition IDs for those checks. The `known_boundary` marker records earlier findings and does not suppress oracle differences.
