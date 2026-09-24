@@ -47,23 +47,50 @@ use crate::{
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
+fn file_schema(metadata: &ParquetMetaData) -> TestResult<Arc<Schema>> {
+    Ok(Arc::new(parquet::arrow::parquet_to_arrow_schema(
+        metadata.file_metadata().schema_descr(),
+        metadata.file_metadata().key_value_metadata(),
+    )?))
+}
+
 fn pruned_row_groups(
     metadata: &ParquetMetaData,
+    target_schema: &Arc<Schema>,
     file_size: u64,
     byte_range: Option<&std::ops::Range<u64>>,
     predicate: Option<&DeltaKernelPredicate>,
-) -> parquet::errors::Result<Option<Vec<usize>>> {
-    let schema = parquet::arrow::parquet_to_arrow_schema(
+) -> TestResult<Option<Vec<usize>>> {
+    let file_schema = file_schema(metadata)?;
+    let alignment = super::super::schema_alignment::build_schema_alignment(
         metadata.file_metadata().schema_descr(),
-        metadata.file_metadata().key_value_metadata(),
+        &file_schema,
+        Arc::clone(target_schema),
     )?;
-    super::pruned_row_groups(metadata, &schema, &schema, file_size, byte_range, predicate)
+    Ok(super::pruned_row_groups(
+        metadata,
+        &file_schema,
+        &alignment,
+        file_size,
+        byte_range,
+        predicate,
+    )?)
 }
 
 struct Case {
     name: String,
     source: ArrayRef,
     target: ArrowType,
+}
+
+impl Case {
+    fn target_schema(&self) -> Arc<Schema> {
+        Arc::new(Schema::new(vec![Field::new(
+            "v",
+            self.target.clone(),
+            true,
+        )]))
+    }
 }
 
 fn add_cases(cases: &mut Vec<Case>, source: ArrayRef, targets: &[ArrowType]) {
@@ -378,6 +405,7 @@ fn check_matrix(group_size: usize, statistics: EnabledStatistics) -> TestResult 
             for op in COMPARISONS {
                 let selected = pruned_row_groups(
                     &metadata,
+                    &case.target_schema(),
                     bytes.len() as u64,
                     None,
                     Some(&predicate(op, literal.clone())),
@@ -477,8 +505,14 @@ fn typed_statistics_composed_predicates_and_nulls_match_arrow() -> TestResult {
         ];
         for (name, expression, expected) in cases {
             let predicate = DeltaKernelPredicate::from_test_predicate(expression);
-            let actual =
-                pruned_row_groups(&metadata, bytes.len() as u64, None, Some(&predicate))?.unwrap();
+            let actual = pruned_row_groups(
+                &metadata,
+                &case.target_schema(),
+                bytes.len() as u64,
+                None,
+                Some(&predicate),
+            )?
+            .unwrap();
             let expected = (0..values.len())
                 .filter(|&i| expected.is_valid(i) && expected.value(i))
                 .collect::<Vec<_>>();
@@ -517,6 +551,7 @@ fn typed_statistics_byte_ranges_intersect_typed_pruning() -> TestResult {
             .unwrap_or_else(|| column.data_page_offset()) as u64;
         let actual = pruned_row_groups(
             &metadata,
+            &case.target_schema(),
             bytes.len() as u64,
             Some(&(offset..offset + 1)),
             Some(&predicate),
@@ -558,7 +593,16 @@ fn selected(
     op: DeltaComparison,
     literal: KernelScalar,
 ) -> TestResult<Vec<usize>> {
-    Ok(pruned_row_groups(metadata, 1, None, Some(&predicate(op, literal)))?.unwrap())
+    // Keep the file schema here to exercise unsupported literal types in the
+    // bounds adapter without asking the data reader to accept an invalid cast.
+    Ok(pruned_row_groups(
+        metadata,
+        &file_schema(metadata)?,
+        1,
+        None,
+        Some(&predicate(op, literal)),
+    )?
+    .unwrap())
 }
 
 #[test]
@@ -816,11 +860,7 @@ fn typed_statistics_null_counts_respect_conversion_and_missing_bounds() -> TestR
                 Statistics::int64(None, None, None, nulls, false)
             };
             let metadata = metadata_with_stats(schema, statistics)?;
-            let file_schema = parquet::arrow::parquet_to_arrow_schema(
-                metadata.file_metadata().schema_descr(),
-                None,
-            )?;
-            let target_schema = Schema::new(vec![Field::new("v", target.clone(), true)]);
+            let target_schema = Arc::new(Schema::new(vec![Field::new("v", target.clone(), true)]));
             for is_null in [false, true] {
                 let column = Expression::Column(ColumnName::new(["v"]));
                 let expression = if is_null {
@@ -829,15 +869,9 @@ fn typed_statistics_null_counts_respect_conversion_and_missing_bounds() -> TestR
                     Predicate::is_not_null(column)
                 };
                 let predicate = DeltaKernelPredicate::from_test_predicate(expression);
-                let selected = super::pruned_row_groups(
-                    &metadata,
-                    &file_schema,
-                    &target_schema,
-                    1,
-                    None,
-                    Some(&predicate),
-                )?
-                .unwrap();
+                let selected =
+                    pruned_row_groups(&metadata, &target_schema, 1, None, Some(&predicate))?
+                        .unwrap();
                 let should_prune = if is_null {
                     nulls == Some(0) && safe_without_bounds
                 } else {
@@ -866,7 +900,13 @@ fn typed_statistics_nested_leaf_bounds_do_not_describe_the_parent() -> TestResul
     ] {
         let predicate = DeltaKernelPredicate::from_test_predicate(expression);
         assert_eq!(
-            pruned_row_groups(&metadata, 1, None, Some(&predicate))?,
+            pruned_row_groups(
+                &metadata,
+                &file_schema(&metadata)?,
+                1,
+                None,
+                Some(&predicate)
+            )?,
             Some(vec![0])
         );
     }
@@ -1416,6 +1456,295 @@ async fn typed_statistics_original_report_examples_keep_the_old_and_new_file_row
             vec![0, 1],
             "{} must preserve the old file too",
             case.name
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn typed_statistics_field_id_mapping_matches_data_and_prunes() -> TestResult {
+    let field = |name: &str, data_type: ArrowType, id: i32| {
+        Field::new(name, data_type, true).with_metadata(
+            [(
+                parquet::arrow::PARQUET_FIELD_ID_META_KEY.to_owned(),
+                id.to_string(),
+            )]
+            .into(),
+        )
+    };
+    let source = Arc::new(Int32Array::from(vec![
+        Some(200),
+        None,
+        Some(0),
+        None,
+        Some(200),
+    ])) as ArrayRef;
+    let expected_values = cast(source.as_ref(), &ArrowType::Float64)?;
+    let mut failures = Vec::new();
+    for mode in ["name", "id"] {
+        for reversed in [false, true] {
+            for collision in [false, true] {
+                let label = format!("mode={mode}, reversed={reversed}, collision={collision}");
+                let root = TestDir::new("typed-statistics-field-ids")?;
+                fs::create_dir_all(root.path().join("_delta_log"))?;
+                // An unprojected struct makes root indices differ from leaf indices.
+                let nested = StructArray::from(vec![
+                    (
+                        Arc::new(Field::new("a", ArrowType::Int32, true)),
+                        Arc::new(Int32Array::from(vec![0; 5])) as ArrayRef,
+                    ),
+                    (
+                        Arc::new(Field::new("b", ArrowType::Int32, true)),
+                        Arc::new(Int32Array::from(vec![0; 5])) as ArrayRef,
+                    ),
+                ]);
+                let mut fields = vec![
+                    Field::new("unprojected", nested.data_type().clone(), true),
+                    field("phys_id", ArrowType::Int32, 1),
+                    field("old_v", ArrowType::Int32, 2),
+                ];
+                let mut columns = vec![
+                    Arc::new(nested) as ArrayRef,
+                    Arc::new(Int32Array::from(vec![0, 1, 2, 3, 4])) as ArrayRef,
+                    Arc::clone(&source),
+                ];
+                if collision {
+                    fields.push(field("phys_v", ArrowType::Int32, 3));
+                    columns.push(Arc::new(Int32Array::from(vec![
+                        Some(0),
+                        Some(300),
+                        None,
+                        Some(100),
+                        Some(0),
+                    ])));
+                }
+                if reversed {
+                    fields.reverse();
+                    columns.reverse();
+                }
+                let file_schema = Arc::new(Schema::new(fields));
+                let batch = RecordBatch::try_new(Arc::clone(&file_schema), columns)?;
+                let mut bytes = Vec::new();
+                let props = WriterProperties::builder()
+                    .set_max_row_group_row_count(Some(1))
+                    .build();
+                let mut writer =
+                    ArrowWriter::try_new(&mut bytes, Arc::clone(&file_schema), Some(props))?;
+                writer.write(&batch)?;
+                writer.close()?;
+                let bytes = Bytes::from(bytes);
+                let builder = ParquetRecordBatchReaderBuilder::try_new(bytes.clone())?;
+                let target_schema =
+                    Arc::new(Schema::new(vec![field("phys_v", ArrowType::Float64, 2)]));
+                let column = Expression::Column(ColumnName::new(["phys_v"]));
+                let pruning_predicates = [
+                    (
+                        Predicate::gt(
+                            column.clone(),
+                            Expression::Literal(KernelScalar::Double(150.0)),
+                        ),
+                        vec![0, 4],
+                    ),
+                    (
+                        Predicate::lt(
+                            column.clone(),
+                            Expression::Literal(KernelScalar::Double(150.0)),
+                        ),
+                        vec![2],
+                    ),
+                    (Predicate::is_null(column.clone()), vec![1, 3]),
+                    (Predicate::is_not_null(column), vec![0, 2, 4]),
+                ];
+                for (expression, expected) in pruning_predicates {
+                    let predicate = DeltaKernelPredicate::from_test_predicate(expression);
+                    let selected = pruned_row_groups(
+                        builder.metadata(),
+                        &target_schema,
+                        bytes.len() as u64,
+                        None,
+                        Some(&predicate),
+                    )?
+                    .unwrap();
+                    if selected != expected {
+                        failures.push(format!(
+                            "{label}: groups={selected:?}, expected={expected:?}"
+                        ));
+                    }
+                }
+                fs::write(root.path().join("part.parquet"), &bytes)?;
+                let mut metadata = metadata_action("double", true, Some("integer"));
+                metadata["metaData"]["configuration"]["delta.columnMapping.mode"] = json!(mode);
+                metadata["metaData"]["configuration"]["delta.columnMapping.maxColumnId"] =
+                    json!("3");
+                let protocol = json!({"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["columnMapping","typeWidening"],"writerFeatures":["columnMapping","typeWidening"]}});
+                let add = json!({"add":{"path":"part.parquet","partitionValues":{},"size":bytes.len(),"modificationTime":0,"dataChange":true}});
+                fs::write(
+                    root.path().join("_delta_log/00000000000000000000.json"),
+                    format!("{protocol}\n{metadata}\n{add}\n"),
+                )?;
+                let table = DeltaTableBuilder::new(root.path().to_string_lossy())
+                    .load_table()
+                    .await?;
+                let full = table
+                    .scan()
+                    .with_target_partitions(1)?
+                    .build()
+                    .await?
+                    .into_stream()
+                    .try_collect::<Vec<_>>()
+                    .await?;
+                assert_eq!(ids(&full), vec![0, 1, 2, 3, 4], "{label}");
+                for batch in &full {
+                    let row_ids = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .unwrap();
+                    for i in 0..batch.num_rows() {
+                        assert_eq!(
+                            extract_primitive_scalar(batch.column(1).as_ref(), i)?,
+                            extract_primitive_scalar(
+                                expected_values.as_ref(),
+                                row_ids.value(i) as usize
+                            )?,
+                            "{label}"
+                        );
+                    }
+                }
+                let mut predicates = COMPARISONS
+                    .into_iter()
+                    .map(|op| {
+                        Ok((
+                            DeltaPredicate::Compare {
+                                column: "v".into(),
+                                op,
+                                value: DeltaScalar::Float64(150.0),
+                            },
+                            matching_rows(
+                                &expected_values,
+                                Arc::new(Float64Array::from(vec![150.0])),
+                                op,
+                            )?,
+                        ))
+                    })
+                    .collect::<TestResult<Vec<_>>>()?;
+                predicates.push((
+                    DeltaPredicate::IsNull { column: "v".into() },
+                    arrow::compute::is_null(expected_values.as_ref())?,
+                ));
+                predicates.push((
+                    DeltaPredicate::IsNotNull { column: "v".into() },
+                    arrow::compute::is_not_null(expected_values.as_ref())?,
+                ));
+                for (predicate, expected) in predicates {
+                    let expected = expected_ids(&expected);
+                    let out = table
+                        .scan()
+                        .with_target_partitions(1)?
+                        .with_projection(["id"])
+                        .with_predicate(predicate.clone())
+                        .build()
+                        .await?
+                        .into_stream()
+                        .try_collect::<Vec<_>>()
+                        .await?;
+                    if ids(&out) != expected {
+                        failures.push(format!(
+                            "{label}: {predicate:?}: got={:?}, expected={expected:?}",
+                            ids(&out)
+                        ));
+                    }
+                    #[cfg(feature = "datafusion")]
+                    {
+                        use crate::datafusion::{DeltaTableProvider, ScanOptions};
+                        use datafusion::prelude::{SessionConfig, SessionContext, col, lit};
+                        for use_arrow_view_types in [false, true] {
+                            let expression = match &predicate {
+                                DeltaPredicate::Compare { op, .. } => match op {
+                                    DeltaComparison::Eq => col("v").eq(lit(150.0)),
+                                    DeltaComparison::NotEq => col("v").not_eq(lit(150.0)),
+                                    DeltaComparison::Lt => col("v").lt(lit(150.0)),
+                                    DeltaComparison::LtEq => col("v").lt_eq(lit(150.0)),
+                                    DeltaComparison::Gt => col("v").gt(lit(150.0)),
+                                    DeltaComparison::GtEq => col("v").gt_eq(lit(150.0)),
+                                },
+                                DeltaPredicate::IsNull { .. } => col("v").is_null(),
+                                _ => col("v").is_not_null(),
+                            };
+                            let provider = Arc::new(DeltaTableProvider::try_new(
+                                table.clone(),
+                                ScanOptions {
+                                    use_arrow_view_types,
+                                    ..Default::default()
+                                },
+                            )?);
+                            let ctx = SessionContext::new_with_config(
+                                SessionConfig::new().with_target_partitions(1),
+                            );
+                            let out = ctx
+                                .read_table(provider)?
+                                .filter(expression)?
+                                .select_columns(&["id"])?
+                                .collect()
+                                .await?;
+                            if ids(&out) != expected {
+                                failures.push(format!("{label}, views={use_arrow_view_types}: {predicate:?}: got={:?}, expected={expected:?}", ids(&out)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "field matching failures:\n{}",
+        failures.join("\n")
+    );
+    Ok(())
+}
+
+#[test]
+fn typed_statistics_name_fallback_and_null_fills_use_the_alignment() -> TestResult {
+    let case = Case {
+        name: "name fallback with a missing target field".into(),
+        source: Arc::new(Int32Array::from(vec![Some(-200), Some(0), Some(200), None])),
+        target: ArrowType::Float64,
+    };
+    let (bytes, metadata) = parquet_file(&case, 1, EnabledStatistics::Chunk)?;
+    // The file has no field IDs. The matched field must fall back to its name,
+    // while the leading missing field receives NULLs and has no file statistics.
+    let target_schema = Arc::new(Schema::new(vec![
+        Field::new("added", ArrowType::Float64, true),
+        Field::new("v", ArrowType::Float64, true).with_metadata(
+            [(
+                parquet::arrow::PARQUET_FIELD_ID_META_KEY.to_owned(),
+                "42".to_owned(),
+            )]
+            .into(),
+        ),
+    ]));
+    let v = Expression::Column(ColumnName::new(["v"]));
+    let added = Expression::Column(ColumnName::new(["added"]));
+    for (expression, expected) in [
+        (
+            Predicate::gt(v.clone(), Expression::Literal(KernelScalar::Double(150.0))),
+            vec![2],
+        ),
+        (Predicate::is_null(v), vec![3]),
+        (Predicate::is_null(added.clone()), vec![0, 1, 2, 3]),
+        (Predicate::is_not_null(added), vec![0, 1, 2, 3]),
+    ] {
+        let predicate = DeltaKernelPredicate::from_test_predicate(expression);
+        assert_eq!(
+            pruned_row_groups(
+                &metadata,
+                &target_schema,
+                bytes.len() as u64,
+                None,
+                Some(&predicate)
+            )?,
+            Some(expected)
         );
     }
     Ok(())

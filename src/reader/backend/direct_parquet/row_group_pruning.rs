@@ -13,7 +13,7 @@ use std::ops::Range;
 use arrow::{
     array::{ArrayRef, Date32Array},
     compute::cast,
-    datatypes::{DataType as ArrowDataType, Schema, TimeUnit},
+    datatypes::{DataType as ArrowDataType, Field, Schema, TimeUnit},
 };
 use delta_kernel::engine::arrow_conversion::{TryFromKernel, scalar::extract_primitive_scalar};
 use delta_kernel::kernel_predicates::{
@@ -21,7 +21,7 @@ use delta_kernel::kernel_predicates::{
 };
 use parquet::arrow::arrow_reader::statistics::StatisticsConverter;
 use parquet::file::statistics::Statistics;
-use parquet::schema::types::ColumnDescPtr;
+use parquet::schema::types::SchemaDescriptor;
 use parquet::{
     errors::{ParquetError, Result as ParquetResult},
     file::metadata::{ParquetMetaData, RowGroupMetaData},
@@ -32,7 +32,7 @@ use delta_kernel::{
     schema::DataType,
 };
 
-use super::schema_alignment::leaf_cast_plan;
+use super::schema_alignment::{ParquetSchemaAlignment, leaf_cast_plan};
 use crate::delta::kernel::DeltaKernelPredicate;
 
 #[cfg(test)]
@@ -53,10 +53,10 @@ mod typed_statistics_tests;
 /// `Some(Vec::new())` means every row group was proven impossible and the
 /// parquet reader should return no rows.
 #[allow(dead_code)]
-pub(crate) fn pruned_row_groups(
+pub(super) fn pruned_row_groups(
     metadata: &ParquetMetaData,
     file_schema: &Schema,
-    target_schema: &Schema,
+    schema_alignment: &ParquetSchemaAlignment,
     file_size: u64,
     byte_range: Option<&Range<u64>>,
     predicate: Option<&DeltaKernelPredicate>,
@@ -71,6 +71,11 @@ pub(crate) fn pruned_row_groups(
         ));
     }
 
+    let field_indices = if predicate.is_some() {
+        row_group_field_indices(metadata.file_metadata().schema_descr(), schema_alignment)
+    } else {
+        HashMap::new()
+    };
     let mut selected = Vec::new();
     for (ordinal, row_group) in metadata.row_groups().iter().enumerate() {
         let in_range = match byte_range {
@@ -96,8 +101,12 @@ pub(crate) fn pruned_row_groups(
             }
         };
         let may_match = predicate.is_none_or(|predicate| {
-            RowGroupStats::new(row_group, file_schema, target_schema)
-                .may_contain_matching_rows(predicate.as_ref())
+            RowGroupStats {
+                row_group,
+                file_schema,
+                field_indices: &field_indices,
+            }
+            .may_contain_matching_rows(predicate.as_ref())
         });
         if in_range && may_match {
             selected.push(ordinal);
@@ -109,32 +118,17 @@ pub(crate) fn pruned_row_groups(
 struct RowGroupStats<'a> {
     row_group: &'a RowGroupMetaData,
     file_schema: &'a Schema,
-    target_schema: &'a Schema,
-    field_indices: HashMap<ColumnName, usize>,
+    field_indices: &'a HashMap<ColumnName, (usize, &'a Field)>,
 }
 
-impl<'a> RowGroupStats<'a> {
-    fn new(
-        row_group: &'a RowGroupMetaData,
-        file_schema: &'a Schema,
-        target_schema: &'a Schema,
-    ) -> Self {
-        Self {
-            row_group,
-            file_schema,
-            target_schema,
-            field_indices: row_group_field_indices(row_group.schema_descr().columns()),
-        }
-    }
-
+impl RowGroupStats<'_> {
     fn may_contain_matching_rows(&self, predicate: &delta_kernel::PredicateRef) -> bool {
         self.eval_sql_where(predicate) != Some(false)
     }
 
-    fn stats(&self, column: &ColumnName) -> Option<Option<&Statistics>> {
-        self.field_indices
-            .get(column)
-            .map(|index| self.row_group.column(*index).statistics())
+    fn stats(&self, column: &ColumnName) -> Option<&Statistics> {
+        let (index, _) = self.field_indices.get(column)?;
+        self.row_group.column(*index).statistics()
     }
 
     fn min_stat(&self, column: &ColumnName, data_type: &DataType) -> Option<Scalar> {
@@ -156,9 +150,9 @@ impl<'a> RowGroupStats<'a> {
         target: &ArrowDataType,
         minimum: bool,
     ) -> Option<ArrayRef> {
-        let index = *self.field_indices.get(column)?;
+        let &(index, _) = self.field_indices.get(column)?;
         let descriptor = self.row_group.schema_descr().column(index);
-        let statistics = self.stats(column)??;
+        let statistics = self.stats(column)?;
         if statistics.physical_type() != descriptor.physical_type() {
             return None;
         }
@@ -213,19 +207,15 @@ impl<'a> RowGroupStats<'a> {
     }
 
     fn null_count_stat(&self, column: &ColumnName) -> Option<i64> {
-        let count = i64::try_from(self.stats(column)??.null_count_opt()?).ok()?;
-        let index = *self.field_indices.get(column)?;
+        let count = i64::try_from(self.stats(column)?.null_count_opt()?).ok()?;
+        let &(index, target_field) = self.field_indices.get(column)?;
         let descriptor = self.row_group.schema_descr().column(index);
         let source = self
             .file_schema
             .field_with_name(descriptor.name())
             .ok()?
             .data_type();
-        let target = self
-            .target_schema
-            .field_with_name(descriptor.name())
-            .ok()?
-            .data_type();
+        let target = target_field.data_type();
         if !compatible_statistics_type(source, target) {
             return None;
         }
@@ -318,18 +308,30 @@ impl DataSkippingPredicateEvaluator for RowGroupStats<'_> {
     }
 }
 
-fn row_group_field_indices(columns: &[ColumnDescPtr]) -> HashMap<ColumnName, usize> {
-    columns
-        .iter()
-        .enumerate()
-        .filter_map(|(index, column)| {
-            // Public predicates address top-level columns. A nested leaf's
-            // min/max or null count cannot describe its parent container.
-            let [name] = column.path().parts() else {
+fn row_group_field_indices<'a>(
+    schema: &SchemaDescriptor,
+    alignment: &'a ParquetSchemaAlignment,
+) -> HashMap<ColumnName, (usize, &'a Field)> {
+    alignment
+        .matched_root_fields()
+        .filter_map(|(target_field, root_index)| {
+            // A nested leaf's bounds or null count cannot describe its parent.
+            if target_field.data_type().is_nested() {
                 return None;
-            };
-            let name = name.as_str();
-            Some((ColumnName::new([name]), index))
+            }
+            let index = schema
+                .columns()
+                .iter()
+                .enumerate()
+                .find_map(|(index, column)| {
+                    (schema.get_column_root_idx(index) == root_index
+                        && column.path().parts().len() == 1)
+                        .then_some(index)
+                })?;
+            Some((
+                ColumnName::new([target_field.name()]),
+                (index, target_field),
+            ))
         })
         .collect()
 }
@@ -375,11 +377,19 @@ mod tests {
         byte_range: Option<&Range<u64>>,
         predicate: Option<&DeltaKernelPredicate>,
     ) -> ParquetResult<Option<Vec<usize>>> {
-        let schema = parquet::arrow::parquet_to_arrow_schema(
+        let schema = Arc::new(parquet::arrow::parquet_to_arrow_schema(
             metadata.file_metadata().schema_descr(),
             metadata.file_metadata().key_value_metadata(),
-        )?;
-        super::pruned_row_groups(metadata, &schema, &schema, file_size, byte_range, predicate)
+        )?);
+        let alignment = super::super::schema_alignment::build_schema_alignment(
+            metadata.file_metadata().schema_descr(),
+            &schema,
+            Arc::clone(&schema),
+        )
+        .map_err(|error| ParquetError::General(error.to_string()))?;
+        super::pruned_row_groups(
+            metadata, &schema, &alignment, file_size, byte_range, predicate,
+        )
     }
 
     fn metadata_with_row_group_offsets(

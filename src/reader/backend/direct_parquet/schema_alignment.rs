@@ -74,6 +74,20 @@ impl ParquetSchemaAlignment {
         self.projected_roots.iter().copied()
     }
 
+    /// Target fields and the file roots selected by the data reader, excluding null fills.
+    pub(super) fn matched_root_fields(&self) -> impl Iterator<Item = (&Field, usize)> {
+        self.target_schema
+            .fields()
+            .iter()
+            .zip(&self.target_column_plans)
+            .filter_map(|(field, plan)| match plan {
+                TargetColumnPlan::ProjectedStreamColumn { stream_index, .. } => {
+                    Some((field.as_ref(), self.projected_roots[*stream_index]))
+                }
+                TargetColumnPlan::Null => None,
+            })
+    }
+
     pub(super) fn reshape_batch_to_target_schema(
         &self,
         batch: RecordBatch,
