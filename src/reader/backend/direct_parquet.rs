@@ -2,6 +2,7 @@
 
 mod metadata_cache;
 mod metered_object_store;
+mod nan_counts;
 mod range_planning;
 mod row_group_pruning;
 mod schema_alignment;
@@ -23,8 +24,7 @@ use parquet::arrow::{
     ProjectionMask, RowNumber,
     arrow_reader::{ArrowPredicateFn, ArrowReaderMetadata, ArrowReaderOptions, RowFilter},
     async_reader::{
-        AsyncFileReader, ParquetObjectReader, ParquetRecordBatchStream,
-        ParquetRecordBatchStreamBuilder,
+        ParquetObjectReader, ParquetRecordBatchStream, ParquetRecordBatchStreamBuilder,
     },
 };
 use parquet::basic::Type as PhysicalType;
@@ -36,7 +36,9 @@ use snafu::{IntoError, ResultExt};
 pub(crate) use self::metadata_cache::ParquetMetadataCache;
 pub(crate) use self::metered_object_store::ParquetRangeReadEstimator;
 use self::{
+    metadata_cache::CachedParquetMetadata,
     metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
+    nan_counts::NanCounts,
     row_group_pruning::pruned_row_groups,
     schema_alignment::{ParquetSchemaAlignment, build_schema_alignment},
 };
@@ -154,14 +156,23 @@ impl DirectParquetReader {
         file_size: u64,
         reader: &mut ParquetObjectReader,
         options: &ArrowReaderOptions,
-    ) -> Result<Arc<ParquetMetaData>, DeltaReaderError> {
+    ) -> Result<Arc<CachedParquetMetadata>, DeltaReaderError> {
+        let load = || async move {
+            CachedParquetMetadata::load(
+                reader,
+                file_size,
+                self.execution_options.parquet_metadata_size_hint_bytes(),
+                options,
+            )
+            .await
+        };
         let metadata = match self.metadata_cache.as_deref() {
             Some(cache) => cache
                 .entry(path, file_size)
-                .get_or_try_init(|| reader.get_metadata(Some(options)))
+                .get_or_try_init(load)
                 .await
                 .map(Arc::clone),
-            None => reader.get_metadata(Some(options)).await,
+            None => load().await,
         };
         metadata.boxed().context(DataFileReadSnafu {
             reason: "parquet_read_setup_failed",
@@ -195,7 +206,7 @@ impl DirectParquetReader {
         options: PhysicalParquetStreamOptions<'_>,
     ) -> Result<PhysicalParquetStream, DeltaReaderError> {
         let object = self.parquet_object_for_task(task).await?;
-        let builder = self
+        let (builder, metadata) = self
             .create_stream_builder(
                 &object,
                 target_schema,
@@ -213,6 +224,7 @@ impl DirectParquetReader {
             ProjectionMask::roots(builder.parquet_schema(), schema_alignment.projected_roots());
         let mut builder = Self::apply_row_group_selection(
             builder,
+            &metadata.nan_counts,
             &schema_alignment,
             task.parquet_byte_range.as_ref(),
             object.file_size,
@@ -252,13 +264,15 @@ impl DirectParquetReader {
         target_schema: &SchemaRef,
         include_original_row_index: bool,
         has_row_filter: bool,
-    ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
-        let reader = ParquetObjectReader::new(Arc::clone(&object.store), object.path.clone())
+    ) -> Result<
+        (
+            ParquetRecordBatchStreamBuilder<ParquetObjectReader>,
+            Arc<CachedParquetMetadata>,
+        ),
+        DeltaReaderError,
+    > {
+        let mut reader = ParquetObjectReader::new(Arc::clone(&object.store), object.path.clone())
             .with_file_size(object.file_size);
-        let mut reader = match self.execution_options.parquet_metadata_size_hint_bytes() {
-            Some(hint) => reader.with_footer_size_hint(hint),
-            None => reader,
-        };
         let reader_options = arrow_reader_options(include_original_row_index, has_row_filter)
             .boxed()
             .context(DataFileReadSnafu {
@@ -267,8 +281,8 @@ impl DirectParquetReader {
         let metadata = self
             .load_parquet_metadata(&object.path, object.file_size, &mut reader, &reader_options)
             .await?;
-        let metadata = metadata_with_decode_schema(
-            metadata,
+        let arrow_metadata = metadata_with_decode_schema(
+            Arc::clone(&metadata.parquet),
             reader_options,
             schema_uses_view_types(target_schema),
         )
@@ -277,8 +291,9 @@ impl DirectParquetReader {
             reason: "parquet_read_setup_failed",
         })?;
 
-        Ok(ParquetRecordBatchStreamBuilder::new_with_metadata(
-            reader, metadata,
+        Ok((
+            ParquetRecordBatchStreamBuilder::new_with_metadata(reader, arrow_metadata),
+            metadata,
         ))
     }
 
@@ -288,6 +303,7 @@ impl DirectParquetReader {
     /// range always expands to complete Parquet row groups.
     fn apply_row_group_selection(
         builder: ParquetRecordBatchStreamBuilder<ParquetObjectReader>,
+        nan_counts: &NanCounts,
         schema_alignment: &ParquetSchemaAlignment,
         parquet_byte_range: Option<&Range<u64>>,
         file_size: u64,
@@ -295,6 +311,7 @@ impl DirectParquetReader {
     ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
         let row_groups = pruned_row_groups(
             builder.metadata(),
+            nan_counts,
             builder.schema(),
             schema_alignment,
             file_size,

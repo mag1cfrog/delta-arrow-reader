@@ -27,16 +27,23 @@ use parquet::{
 };
 
 use delta_kernel::{
-    expressions::{ColumnName, Scalar},
+    expressions::{ColumnName, JunctionPredicateOp, Scalar},
     schema::DataType,
 };
 
-use super::schema_alignment::{ParquetSchemaAlignment, cast_leaf_array, leaf_cast_plan};
+use super::{
+    nan_counts::NanCounts,
+    schema_alignment::{ParquetSchemaAlignment, cast_leaf_array, leaf_cast_plan},
+};
 use crate::delta::kernel::DeltaKernelPredicate;
 
 #[cfg(test)]
 #[path = "row_group_pruning/typed_statistics_tests.rs"]
 mod typed_statistics_tests;
+
+#[cfg(test)]
+#[path = "row_group_pruning/floating_statistics_tests.rs"]
+mod floating_statistics_tests;
 
 /// Computes the row groups selected by a byte range and footer statistics.
 ///
@@ -54,6 +61,7 @@ mod typed_statistics_tests;
 #[allow(dead_code)]
 pub(super) fn pruned_row_groups(
     metadata: &ParquetMetaData,
+    nan_counts: &NanCounts,
     file_schema: &Schema,
     schema_alignment: &ParquetSchemaAlignment,
     file_size: u64,
@@ -102,6 +110,8 @@ pub(super) fn pruned_row_groups(
         let may_match = predicate.is_none_or(|predicate| {
             RowGroupStats {
                 row_group,
+                row_group_index: ordinal,
+                nan_counts,
                 file_schema,
                 field_indices: &field_indices,
             }
@@ -116,6 +126,8 @@ pub(super) fn pruned_row_groups(
 
 struct RowGroupStats<'a> {
     row_group: &'a RowGroupMetaData,
+    row_group_index: usize,
+    nan_counts: &'a NanCounts,
     file_schema: &'a Schema,
     field_indices: &'a HashMap<ColumnName, (usize, &'a Field)>,
 }
@@ -128,6 +140,21 @@ impl RowGroupStats<'_> {
     fn stats(&self, column: &ColumnName) -> Option<&Statistics> {
         let (index, _) = self.field_indices.get(column)?;
         self.row_group.column(*index).statistics()
+    }
+
+    fn bounds_may_omit_nan(&self, column: &ColumnName) -> bool {
+        // Floating min/max exclude NaNs, which Arrow orders below or above all
+        // non-NaNs. Integer-to-float widening cannot introduce NaNs, so check
+        // the physical statistics rather than the requested scalar type.
+        // Only an explicit zero NaN count makes these bounds complete. The
+        // compatibility reader supplies counts until parquet-rs exposes them.
+        matches!(
+            self.stats(column),
+            Some(Statistics::Float(_) | Statistics::Double(_))
+        ) && self
+            .field_indices
+            .get(column)
+            .is_none_or(|(index, _)| self.nan_counts.get(self.row_group_index, *index) != Some(0))
     }
 
     fn statistics_converter(&self, column: &ColumnName) -> Option<StatisticsConverter<'_>> {
@@ -229,10 +256,16 @@ impl DataSkippingPredicateEvaluator for RowGroupStats<'_> {
     type ColumnStat = Scalar;
 
     fn get_min_stat(&self, col: &ColumnName, data_type: &DataType) -> Option<Scalar> {
+        if self.bounds_may_omit_nan(col) {
+            return None;
+        }
         self.min_stat(col, data_type)
     }
 
     fn get_max_stat(&self, col: &ColumnName, data_type: &DataType) -> Option<Scalar> {
+        if self.bounds_may_omit_nan(col) {
+            return None;
+        }
         self.max_stat(col, data_type)
     }
 
@@ -252,6 +285,38 @@ impl DataSkippingPredicateEvaluator for RowGroupStats<'_> {
         inverted: bool,
     ) -> Option<bool> {
         KernelPredicateEvaluatorDefaults::partial_cmp_scalars(ord, &col, val, inverted)
+    }
+
+    fn eval_pred_eq(&self, col: &ColumnName, val: &Scalar, inverted: bool) -> Option<bool> {
+        if inverted {
+            // != needs bounds on every non-null value, including possible NaNs.
+            let mut preds = [
+                self.partial_cmp_min_stat(col, val, Ordering::Equal, true),
+                self.partial_cmp_max_stat(col, val, Ordering::Equal, true),
+            ]
+            .into_iter();
+            return KernelPredicateEvaluatorDefaults::finish_eval_pred_junction(
+                JunctionPredicateOp::Or,
+                &mut preds,
+                false,
+            );
+        }
+
+        // NaNs cannot equal a non-NaN literal, so equality can still use the
+        // file's non-NaN bounds. A NaN literal/bound yields an unknown partial
+        // comparison. Keep Kernel's min <= literal AND max >= literal rule.
+        let data_type = val.data_type();
+        let mut preds = [
+            (self.min_stat(col, &data_type), Ordering::Greater),
+            (self.max_stat(col, &data_type), Ordering::Less),
+        ]
+        .into_iter()
+        .map(|(stat, ord)| stat.and_then(|stat| self.eval_partial_cmp(ord, stat, val, true)));
+        KernelPredicateEvaluatorDefaults::finish_eval_pred_junction(
+            JunctionPredicateOp::And,
+            &mut preds,
+            false,
+        )
     }
 
     fn eval_pred_scalar(&self, val: &Scalar, inverted: bool) -> Option<bool> {
@@ -382,7 +447,13 @@ mod tests {
         )
         .map_err(|error| ParquetError::General(error.to_string()))?;
         super::pruned_row_groups(
-            metadata, &schema, &alignment, file_size, byte_range, predicate,
+            metadata,
+            &NanCounts::default(),
+            &schema,
+            &alignment,
+            file_size,
+            byte_range,
+            predicate,
         )
     }
 
