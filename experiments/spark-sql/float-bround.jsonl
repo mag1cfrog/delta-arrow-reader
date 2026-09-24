@@ -1,0 +1,49 @@
+{"id": "default_literal_0", "sql": "SELECT BROUND(CAST(2.5 AS FLOAT)) AS r", "batch_size": 2, "category": "target"}
+{"id": "default_literal_1", "sql": "SELECT BROUND(CAST(3.5 AS FLOAT)) AS r", "batch_size": 2, "category": "target"}
+{"id": "default_literal_2", "sql": "SELECT BROUND(CAST(-2.5 AS FLOAT)) AS r", "batch_size": 2, "category": "target"}
+{"id": "default_literal_3", "sql": "SELECT BROUND(CAST(-3.5 AS FLOAT)) AS r", "batch_size": 2, "category": "target"}
+{"id": "default_literal_4", "sql": "SELECT BROUND(CAST(0 AS FLOAT)) AS r", "batch_size": 2, "category": "target"}
+{"id": "default_literal_5", "sql": "SELECT BROUND(CAST(2.4 AS FLOAT)) AS r", "batch_size": 2, "category": "target"}
+{"id": "default_literal_6", "sql": "SELECT BROUND(CAST(2.6 AS FLOAT)) AS r", "batch_size": 2, "category": "target"}
+{"id": "default_literal_7", "sql": "SELECT BROUND(CAST(NULL AS FLOAT)) AS r", "batch_size": 2, "category": "target"}
+{"id": "default_column", "sql": "SELECT BROUND(a) AS r FROM VALUES (CAST(2.5 AS FLOAT)),(CAST(3.5 AS FLOAT)),(CAST(-2.5 AS FLOAT)),(CAST(-3.5 AS FLOAT)),(CAST(0 AS FLOAT)),(CAST(2.4 AS FLOAT)),(CAST(2.6 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a)", "batch_size": 2, "category": "target"}
+{"id": "default_empty", "sql": "SELECT BROUND(a) AS r FROM VALUES (CAST(2.5 AS FLOAT)),(CAST(3.5 AS FLOAT)),(CAST(-2.5 AS FLOAT)),(CAST(-3.5 AS FLOAT)),(CAST(0 AS FLOAT)),(CAST(2.4 AS FLOAT)),(CAST(2.6 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a) WHERE false", "batch_size": 2, "category": "target"}
+{"id": "zero_literal_0", "sql": "SELECT BROUND(CAST(2.5 AS FLOAT), 0) AS r", "batch_size": 2, "category": "target"}
+{"id": "zero_literal_1", "sql": "SELECT BROUND(CAST(3.5 AS FLOAT), 0) AS r", "batch_size": 2, "category": "target"}
+{"id": "zero_literal_2", "sql": "SELECT BROUND(CAST(-2.5 AS FLOAT), 0) AS r", "batch_size": 2, "category": "target"}
+{"id": "zero_literal_3", "sql": "SELECT BROUND(CAST(-3.5 AS FLOAT), 0) AS r", "batch_size": 2, "category": "target"}
+{"id": "zero_literal_4", "sql": "SELECT BROUND(CAST(0 AS FLOAT), 0) AS r", "batch_size": 2, "category": "target"}
+{"id": "zero_literal_5", "sql": "SELECT BROUND(CAST(-2.4 AS FLOAT), 0) AS r", "batch_size": 2, "category": "target"}
+{"id": "zero_literal_6", "sql": "SELECT BROUND(CAST(-2.6 AS FLOAT), 0) AS r", "batch_size": 2, "category": "target"}
+{"id": "zero_literal_7", "sql": "SELECT BROUND(CAST(NULL AS FLOAT), 0) AS r", "batch_size": 2, "category": "target"}
+{"id": "zero_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS FLOAT)),(CAST(3.5 AS FLOAT)),(CAST(-2.5 AS FLOAT)),(CAST(-3.5 AS FLOAT)),(CAST(0 AS FLOAT)),(CAST(-2.4 AS FLOAT)),(CAST(-2.6 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a)", "batch_size": 2, "category": "target"}
+{"id": "zero_empty", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS FLOAT)),(CAST(3.5 AS FLOAT)),(CAST(-2.5 AS FLOAT)),(CAST(-3.5 AS FLOAT)),(CAST(0 AS FLOAT)),(CAST(-2.4 AS FLOAT)),(CAST(-2.6 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a) WHERE false", "batch_size": 2, "category": "target"}
+{"id": "positive_literal_0", "sql": "SELECT BROUND(CAST(1.25 AS FLOAT), 1) AS r", "batch_size": 2, "category": "target"}
+{"id": "positive_literal_1", "sql": "SELECT BROUND(CAST(1.75 AS FLOAT), 1) AS r", "batch_size": 2, "category": "target"}
+{"id": "positive_literal_2", "sql": "SELECT BROUND(CAST(-1.25 AS FLOAT), 1) AS r", "batch_size": 2, "category": "target"}
+{"id": "positive_literal_3", "sql": "SELECT BROUND(CAST(-1.75 AS FLOAT), 1) AS r", "batch_size": 2, "category": "target"}
+{"id": "positive_literal_4", "sql": "SELECT BROUND(CAST(1.24 AS FLOAT), 1) AS r", "batch_size": 2, "category": "target"}
+{"id": "positive_literal_5", "sql": "SELECT BROUND(CAST(1.26 AS FLOAT), 1) AS r", "batch_size": 2, "category": "target"}
+{"id": "positive_literal_6", "sql": "SELECT BROUND(CAST(NULL AS FLOAT), 1) AS r", "batch_size": 2, "category": "target"}
+{"id": "positive_column", "sql": "SELECT BROUND(a, 1) AS r FROM VALUES (CAST(1.25 AS FLOAT)),(CAST(1.75 AS FLOAT)),(CAST(-1.25 AS FLOAT)),(CAST(-1.75 AS FLOAT)),(CAST(1.24 AS FLOAT)),(CAST(1.26 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a)", "batch_size": 2, "category": "target"}
+{"id": "positive_empty", "sql": "SELECT BROUND(a, 1) AS r FROM VALUES (CAST(1.25 AS FLOAT)),(CAST(1.75 AS FLOAT)),(CAST(-1.25 AS FLOAT)),(CAST(-1.75 AS FLOAT)),(CAST(1.24 AS FLOAT)),(CAST(1.26 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a) WHERE false", "batch_size": 2, "category": "target"}
+{"id": "negative_literal_0", "sql": "SELECT BROUND(CAST(25 AS FLOAT), -1) AS r", "batch_size": 2, "category": "target"}
+{"id": "negative_literal_1", "sql": "SELECT BROUND(CAST(35 AS FLOAT), -1) AS r", "batch_size": 2, "category": "target"}
+{"id": "negative_literal_2", "sql": "SELECT BROUND(CAST(-25 AS FLOAT), -1) AS r", "batch_size": 2, "category": "target"}
+{"id": "negative_literal_3", "sql": "SELECT BROUND(CAST(-35 AS FLOAT), -1) AS r", "batch_size": 2, "category": "target"}
+{"id": "negative_literal_4", "sql": "SELECT BROUND(CAST(24 AS FLOAT), -1) AS r", "batch_size": 2, "category": "target"}
+{"id": "negative_literal_5", "sql": "SELECT BROUND(CAST(26 AS FLOAT), -1) AS r", "batch_size": 2, "category": "target"}
+{"id": "negative_literal_6", "sql": "SELECT BROUND(CAST(NULL AS FLOAT), -1) AS r", "batch_size": 2, "category": "target"}
+{"id": "negative_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST(25 AS FLOAT)),(CAST(35 AS FLOAT)),(CAST(-25 AS FLOAT)),(CAST(-35 AS FLOAT)),(CAST(24 AS FLOAT)),(CAST(26 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a)", "batch_size": 2, "category": "target"}
+{"id": "negative_empty", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST(25 AS FLOAT)),(CAST(35 AS FLOAT)),(CAST(-25 AS FLOAT)),(CAST(-35 AS FLOAT)),(CAST(24 AS FLOAT)),(CAST(26 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a) WHERE false", "batch_size": 2, "category": "target"}
+{"id": "null_scale_value", "sql": "SELECT BROUND(a, CAST(NULL AS INT)) AS r FROM VALUES (CAST(2.5 AS FLOAT)) t(a)", "batch_size": 2, "category": "target"}
+{"id": "null_scale_null", "sql": "SELECT BROUND(a, CAST(NULL AS INT)) AS r FROM VALUES (CAST(NULL AS FLOAT)) t(a)", "batch_size": 2, "category": "target"}
+{"id": "control_DOUBLE", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS DOUBLE)),(CAST(3.5 AS DOUBLE)),(CAST(NULL AS DOUBLE)) t(a)", "batch_size": 2, "category": "control"}
+{"id": "control_INT", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS INT)),(CAST(3.5 AS INT)),(CAST(NULL AS INT)) t(a)", "batch_size": 2, "category": "control"}
+{"id": "control_BIGINT", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS BIGINT)),(CAST(3.5 AS BIGINT)),(CAST(NULL AS BIGINT)) t(a)", "batch_size": 2, "category": "control"}
+{"id": "control_DECIMAL(6,3)", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS DECIMAL(6,3))),(CAST(3.5 AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "category": "control"}
+{"id": "negative_zero", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(-0.5 AS FLOAT)) t(a)", "batch_size": 2, "category": "boundary"}
+{"id": "high_scale", "sql": "SELECT BROUND(a, 39) AS r FROM VALUES (CAST(2.5 AS FLOAT)) t(a)", "batch_size": 2, "category": "boundary"}
+{"id": "low_scale", "sql": "SELECT BROUND(a, -46) AS r FROM VALUES (CAST(2.5 AS FLOAT)) t(a)", "batch_size": 2, "category": "boundary"}
+{"id": "nan", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('NaN' AS FLOAT)) t(a)", "batch_size": 2, "category": "boundary"}
+{"id": "infinity", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('Infinity' AS FLOAT)) t(a)", "batch_size": 2, "category": "boundary"}

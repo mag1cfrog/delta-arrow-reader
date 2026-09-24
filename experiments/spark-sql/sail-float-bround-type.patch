@@ -1,0 +1,121 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
+@@ -84,7 +84,8 @@
+                     round_decimal_base(i32::from(*precision), i32::from(*scale), target, true);
+                 DataType::Decimal128(precision, scale)
+             }
+-            DataType::Float64 | DataType::Float32 | DataType::Decimal256(_, _) => DataType::Float64,
++            DataType::Float32 => DataType::Float32,
++            DataType::Float64 | DataType::Decimal256(_, _) => DataType::Float64,
+             DataType::Int32 => DataType::Int32,
+             DataType::Int64 => DataType::Int64,
+             _ => {
+@@ -389,6 +390,107 @@
+     use super::*;
+ 
+     #[test]
++    fn float_bround_return_field_matches_scalar_and_array_results() -> Result<()> {
++        use datafusion::arrow::array::Float32Array;
++
++        let udf = SparkBRound::new();
++        let invoke = |input: ColumnarValue, scale: Option<ScalarValue>| {
++            let len = match &input {
++                ColumnarValue::Array(array) => array.len(),
++                _ => 1,
++            };
++            let mut args = vec![input];
++            if let Some(scale) = scale {
++                args.push(ColumnarValue::Scalar(scale));
++            }
++            let fields = args
++                .iter()
++                .map(|arg| Arc::new(Field::new("arg", arg.data_type(), true)))
++                .collect::<Vec<_>>();
++            let scalar_arguments = args
++                .iter()
++                .map(|arg| match arg {
++                    ColumnarValue::Scalar(value) => Some(value),
++                    _ => None,
++                })
++                .collect::<Vec<_>>();
++            let field = udf.return_field_from_args(ReturnFieldArgs {
++                arg_fields: &fields,
++                scalar_arguments: &scalar_arguments,
++            })?;
++            assert_eq!(field.data_type(), &DataType::Float32);
++            assert!(field.is_nullable());
++            let result = udf.invoke_with_args(ScalarFunctionArgs {
++                args,
++                arg_fields: fields,
++                number_rows: len,
++                return_field: field.clone(),
++                config_options: Arc::new(ConfigOptions::default()),
++            })?;
++            assert_eq!(result.data_type(), *field.data_type());
++            let result = result.into_array(len)?;
++            assert_eq!(result.len(), len);
++            Ok::<_, datafusion_common::DataFusionError>(
++                as_primitive_array::<Float32Type>(&result)
++                    .iter()
++                    .collect::<Vec<_>>(),
++            )
++        };
++        for (value, scale, expected) in [
++            (Some(2.5), None, Some(2.0)),
++            (Some(3.5), Some(0), Some(4.0)),
++            (Some(-2.5), Some(0), Some(-2.0)),
++            (Some(-3.5), None, Some(-4.0)),
++            (Some(1.25), Some(1), Some(1.2)),
++            (Some(-1.25), Some(1), Some(-1.2)),
++            (Some(25.0), Some(-1), Some(20.0)),
++            (Some(-35.0), Some(-1), Some(-40.0)),
++            (None, None, None),
++        ] {
++            assert_eq!(
++                invoke(
++                    ColumnarValue::Scalar(ScalarValue::Float32(value)),
++                    scale.map(|s| ScalarValue::Int32(Some(s)))
++                )?,
++                vec![expected],
++            );
++        }
++        let array = Float32Array::from(vec![
++            Some(99.0),
++            Some(2.5),
++            Some(3.5),
++            None,
++            Some(-2.5),
++            Some(-3.5),
++        ]);
++        for (offset, len, expected) in [
++            (
++                1,
++                5,
++                vec![Some(2.0), Some(4.0), None, Some(-2.0), Some(-4.0)],
++            ),
++            (3, 1, vec![None]),
++            (3, 0, vec![]),
++        ] {
++            assert_eq!(
++                invoke(
++                    ColumnarValue::Array(Arc::new(array.slice(offset, len))),
++                    None
++                )?,
++                expected
++            );
++        }
++        assert_eq!(
++            invoke(
++                ColumnarValue::Array(Arc::new(array)),
++                Some(ScalarValue::Int32(None))
++            )?,
++            vec![None; 6]
++        );
++        Ok(())
++    }
++
++    #[test]
+     fn decimal_bround_scalars_arrays_slices_and_nulls() -> Result<()> {
+         use datafusion::arrow::array::Decimal128Array;
+         use datafusion::arrow::buffer::NullBuffer;
