@@ -1,0 +1,26 @@
+--- a/src/arity.rs
++++ b/src/arity.rs
+@@ -379,12 +379,19 @@
+     O: ArrowPrimitiveType,
+     F: Fn(A::Item, B::Item) -> Result<O::Native, ArrowError>,
+ {
+-    let mut buffer = MutableBuffer::new(len * O::Native::get_byte_width());
++    let byte_len = len * O::Native::get_byte_width();
++    let mut buffer = MutableBuffer::new(byte_len);
++    let values = buffer.as_mut_ptr().cast::<O::Native>();
+     for idx in 0..len {
++        // SAFETY: the caller checked the input lengths. The buffer has capacity
++        // for all output values and the same alignment used by push_unchecked.
+         unsafe {
+-            buffer.push_unchecked(op(a.value_unchecked(idx), b.value_unchecked(idx))?);
+-        };
+-    }
++            values.add(idx).write(op(a.value_unchecked(idx), b.value_unchecked(idx))?);
++        }
++    }
++    // SAFETY: all values were initialized. On error or panic, the zero-length
++    // buffer frees its allocation without reading the partially written values.
++    unsafe { buffer.set_len(byte_len) };
+     Ok(PrimitiveArray::new(buffer.into(), None))
+ }
+ 

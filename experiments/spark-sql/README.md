@@ -16,6 +16,8 @@ The [argument capacity experiment](ARGUMENT_CAPACITY.md) reduces allocation byte
 
 The [NULL-only argument capacity follow-up](NULL_ARGUMENT_CAPACITY.md) removes one vector growth per affected batch. It retains the allocation improvement and a calibrated small-batch INT query gain, with broader timing flags still open.
 
+The [checked buffer length follow-up](CHECKED_BUFFER_LENGTH.md) removes per-row buffer bookkeeping from checked array kernels. One calibrated large-batch query improves 8.6%; rejected prototypes, shared-caller controls and the remaining planning flag are retained.
+
 `inputs.json` pins Apache Spark 4.2.0 and Sail 0.7.1, session settings, table schemas and data. Both engines receive the same explicit schemas, including nested nullability. The runner verifies those schemas and captures input rows for comparison. This avoids differences caused by each engine inferring its own schema from SQL VALUES.
 
 `queries.jsonl` contains 116 stable query IDs. The existing `seed_*` fields retain earlier expectations. Ordered queries compare sequences; unordered queries compare row multisets with duplicates preserved. Partition-dependent cases compare input IDs and check nonnegative partition IDs, partition-local ordering and unique/nonnegative monotonic IDs. SORT BY and monotonic-ID queries expose partition IDs for those checks. The `known_boundary` marker records earlier findings and does not suppress oracle differences.
