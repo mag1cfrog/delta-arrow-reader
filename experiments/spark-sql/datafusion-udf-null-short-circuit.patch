@@ -1,0 +1,29 @@
+diff --git a/src/udf.rs b/src/udf.rs
+index 6a3aa31..97fa0d6 100644
+--- a/src/udf.rs
++++ b/src/udf.rs
+@@ -858,6 +858,13 @@ pub trait ScalarUDFImpl: Debug + DynEq + DynHash + Send + Sync + Any {
+         false
+     }
+ 
++    /// Whether a NULL first argument returns NULL without evaluating subsequent
++    /// arguments. Implementations opting in must also describe those arguments
++    /// with `short_circuits` and `conditional_arguments` for logical optimizers.
++    fn short_circuits_on_null_first_arg(&self) -> bool {
++        false
++    }
++
+     /// Determines which of the arguments passed to this function are evaluated eagerly
+     /// and which may be evaluated lazily.
+     ///
+@@ -1143,6 +1150,10 @@ impl ScalarUDFImpl for AliasedScalarUDFImpl {
+         self.inner.short_circuits()
+     }
+ 
++    fn short_circuits_on_null_first_arg(&self) -> bool {
++        self.inner.short_circuits_on_null_first_arg()
++    }
++
+     fn evaluate_bounds(&self, input: &[&Interval]) -> Result<Interval> {
+         self.inner.evaluate_bounds(input)
+     }

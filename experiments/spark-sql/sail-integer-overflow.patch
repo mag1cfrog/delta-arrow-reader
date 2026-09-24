@@ -1,0 +1,546 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+index 1480b12..60bf007 100644
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -24,6 +24,7 @@ use sail_function::scalar::math::rand_poisson::RandPoisson;
+ use sail_function::scalar::math::randn::Randn;
+ use sail_function::scalar::math::random::Random;
+ use sail_function::scalar::math::spark_abs::SparkAbs;
++use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
+ use sail_function::scalar::math::spark_bin::SparkBin;
+ use sail_function::scalar::math::spark_bround::SparkBRound;
+ use sail_function::scalar::math::spark_ceil_floor::{SparkCeil, SparkFloor};
+@@ -99,6 +100,31 @@ fn coerce_spark_arithmetic_operands(
+     (left, right)
+ }
+ 
++// Keep the existing binary coercion and non-integer routes. ANSI is captured in
++// the expression, so multiple query configurations can share a SessionContext.
++fn spark_integer_arithmetic(
++    left: Expr,
++    right: Expr,
++    left_type: &DataType,
++    right_type: &DataType,
++    op: Operator,
++    ansi_mode: bool,
++) -> Expr {
++    if ansi_mode
++        && (left_type.is_signed_integer() || *left_type == DataType::Null)
++        && (right_type.is_signed_integer() || *right_type == DataType::Null)
++        && (left_type.is_signed_integer() || right_type.is_signed_integer())
++    {
++        ScalarUDF::from(SparkCheckedArithmetic::new(op)).call(vec![left, right])
++    } else {
++        Expr::BinaryExpr(datafusion_expr::BinaryExpr::new(
++            Box::new(left),
++            op,
++            Box::new(right),
++        ))
++    }
++}
++
+ /// Arguments:
+ ///   - left: A numeric, STRING, DATE, TIMESTAMP, or INTERVAL expression.
+ ///   - right: If left is a numeric right must be numeric expression, or an INTERVAL otherwise.
+@@ -166,7 +192,10 @@ fn spark_plus(input: ScalarFunctionInput) -> PlanResult<Expr> {
+                     left, right, &left_type, &right_type,
+                     function_context.plan_config.ansi_mode,
+                 );
+-                left + right
++                spark_integer_arithmetic(
++                    left, right, &left_type, &right_type, Operator::Plus,
++                    function_context.plan_config.ansi_mode,
++                )
+             }
+             (Err(_), _) | (_, Err(_)) => left + right,
+         })
+@@ -224,7 +253,10 @@ fn spark_minus(input: ScalarFunctionInput) -> PlanResult<Expr> {
+                     left, right, &left_type, &right_type,
+                     function_context.plan_config.ansi_mode,
+                 );
+-                left - right
++                spark_integer_arithmetic(
++                    left, right, &left_type, &right_type, Operator::Minus,
++                    function_context.plan_config.ansi_mode,
++                )
+             }
+             (Err(_), _) | (_, Err(_)) => left - right,
+         })
+@@ -281,7 +313,10 @@ fn spark_multiply(input: ScalarFunctionInput) -> PlanResult<Expr> {
+                     left, right, &left_type, &right_type,
+                     function_context.plan_config.ansi_mode,
+                 );
+-                left * right
++                spark_integer_arithmetic(
++                    left, right, &left_type, &right_type, Operator::Multiply,
++                    function_context.plan_config.ansi_mode,
++                )
+             }
+             (Err(_), _) | (_, Err(_)) => left * right,
+     })
+@@ -1724,3 +1759,264 @@ async fn arithmetic_coercion_preserves_literal_precision_and_ansi_float_width()
+     }
+     Ok(())
+ }
++#[cfg(test)]
++mod checked_integer_tests {
++    use crate::{config::PlanConfig, resolver::PlanResolver};
++    use arrow::array::{Array, ArrayRef, Int32Array, Int64Array, RecordBatch};
++    use arrow::datatypes::{DataType, Field, Schema};
++    use datafusion::common::ScalarValue;
++    use datafusion::datasource::MemTable;
++    use datafusion::prelude::SessionContext;
++    use std::sync::Arc;
++
++    async fn frame(
++        ctx: &SessionContext,
++        ansi: bool,
++        sql: &str,
++    ) -> datafusion::dataframe::DataFrame {
++        let config = PlanConfig {
++            ansi_mode: ansi,
++            ..Default::default()
++        };
++        let ast = sail_sql_analyzer::parser::parse_one_statement(sql).unwrap();
++        let spec = sail_sql_analyzer::statement::from_ast_statement(ast).unwrap();
++        let plan = PlanResolver::new(ctx, Arc::new(config))
++            .resolve_named_plan(spec)
++            .await
++            .unwrap();
++        ctx.execute_logical_plan(plan.plan).await.unwrap()
++    }
++
++    #[tokio::test]
++    async fn checked_integer_columns_and_query_isolation() {
++        let ctx = SessionContext::new_with_state(
++            datafusion::execution::SessionStateBuilder::new()
++                .with_default_features()
++                .with_analyzer_rule(Arc::new(crate::decimal_null::SparkDecimalNullPropagation))
++                .build(),
++        );
++        let host_ansi = ctx.state().config_options().execution.enable_ansi_mode;
++        let schema = Arc::new(Schema::new(vec![
++            Field::new("a", DataType::Int32, true),
++            Field::new("b", DataType::Int32, true),
++        ]));
++        let batch = RecordBatch::try_new(
++            schema.clone(),
++            vec![
++                Arc::new(Int32Array::from(vec![
++                    Some(i32::MAX),
++                    Some(i32::MIN),
++                    None,
++                    Some(0),
++                ])),
++                Arc::new(Int32Array::from(vec![
++                    Some(1),
++                    Some(-1),
++                    Some(i32::MAX),
++                    Some(1),
++                ])),
++            ],
++        )
++        .unwrap();
++        // Empty partitions/batches must not raise an overflow or change types.
++        let empty = RecordBatch::new_empty(schema.clone());
++        ctx.register_table(
++            "bounds",
++            Arc::new(MemTable::try_new(schema, vec![vec![empty], vec![batch]]).unwrap()),
++        )
++        .unwrap();
++        for (op, rhs, wrapped) in [("+", "b", i32::MIN), ("-", "-b", i32::MIN), ("*", "2", -2)] {
++            let sql = format!("SELECT a {op} {rhs} AS r FROM bounds");
++            for _ in 0..2 {
++                let ansi = frame(&ctx, true, &sql).await;
++                let legacy = frame(&ctx, false, &sql).await;
++                assert!(
++                    ansi.logical_plan()
++                        .display_indent()
++                        .to_string()
++                        .contains("spark_checked_")
++                );
++                assert!(
++                    !legacy
++                        .logical_plan()
++                        .display_indent()
++                        .to_string()
++                        .contains("spark_checked_")
++                );
++                let (error, result) = tokio::join!(ansi.collect(), legacy.collect());
++                assert!(
++                    error
++                        .unwrap_err()
++                        .to_string()
++                        .contains("[ARITHMETIC_OVERFLOW]")
++                );
++                let result = result.unwrap();
++                let values = result
++                    .iter()
++                    .flat_map(|b| {
++                        b.column(0)
++                            .as_any()
++                            .downcast_ref::<Int32Array>()
++                            .unwrap()
++                            .iter()
++                    })
++                    .collect::<Vec<_>>();
++                assert!(values.contains(&Some(wrapped)));
++                assert!(values.contains(&None));
++                assert_eq!(
++                    ctx.state().config_options().execution.enable_ansi_mode,
++                    host_ansi
++                );
++            }
++            for sql in [
++                format!("SELECT a {op} {rhs} AS r FROM bounds WHERE a = 0"),
++                format!("SELECT CASE WHEN a = 0 THEN a {op} {rhs} ELSE 0 END AS r FROM bounds"),
++                format!("SELECT a {op} {rhs} AS r FROM bounds WHERE false"),
++            ] {
++                frame(&ctx, true, &sql).await.collect().await.unwrap();
++            }
++        }
++        // NULL on the left suppresses a failing right child, without evaluating
++        // even a volatile left operand twice.
++        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
++        let counted = Arc::clone(&calls);
++        ctx.register_udf(datafusion_expr::create_udf(
++            "counted",
++            vec![DataType::Int32],
++            DataType::Int32,
++            datafusion_expr::Volatility::Volatile,
++            Arc::new(move |args| {
++                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
++                Ok(args[0].clone())
++            }),
++        ));
++        ctx.register_batch(
++            "guarded",
++            RecordBatch::try_from_iter(vec![
++                (
++                    "n",
++                    Arc::new(Int32Array::from(vec![None, Some(1)])) as ArrayRef,
++                ),
++                (
++                    "a",
++                    Arc::new(Int32Array::from(vec![i32::MAX, 0])) as ArrayRef,
++                ),
++            ])
++            .unwrap(),
++        )
++        .unwrap();
++        let output = frame(&ctx, true, "SELECT counted(n) + (a + 1) AS r FROM guarded")
++            .await
++            .collect()
++            .await
++            .unwrap();
++        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
++        let values = output[0]
++            .column(0)
++            .as_any()
++            .downcast_ref::<Int32Array>()
++            .unwrap();
++        assert!(values.is_null(0));
++        assert_eq!(values.value(1), 2);
++        let output = frame(
++            &ctx,
++            true,
++            "SELECT CAST(NULL AS INT) + (a + 1) AS r FROM guarded",
++        )
++        .await
++        .collect()
++        .await
++        .unwrap();
++        assert!(
++            output
++                .iter()
++                .all(|b| b.column(0).null_count() == b.num_rows())
++        );
++
++        // Logical projection collapse can replace a RHS column with a fallible
++        // expression. NULL propagation still differs for eagerly evaluated VALUES.
++        for (op, bound, step) in [
++            ("+", 2147483647i64, 1),
++            ("-", -2147483648, 1),
++            ("*", 1073741824, 2),
++        ] {
++            for (source, fails) in [("range(2)", false), ("(VALUES(0),(1)) t(id)", true)] {
++                let sql = format!(
++                    "SELECT n {op} r AS r FROM (SELECT CAST(NULL AS INT) AS n, CAST({bound} AS INT) {op} CAST(id+{step} AS INT) AS r FROM {source}) q"
++                );
++                let result = frame(&ctx, true, &sql).await.collect().await;
++                if fails {
++                    assert!(
++                        result
++                            .unwrap_err()
++                            .to_string()
++                            .contains("[ARITHMETIC_OVERFLOW]")
++                    );
++                } else {
++                    assert!(
++                        result
++                            .unwrap()
++                            .iter()
++                            .all(|b| b.column(0).null_count() == b.num_rows())
++                    );
++                }
++            }
++            let sql = format!("SELECT ({bound} {op} {step}) {op} CAST(NULL AS INT) AS r");
++            let result = frame(&ctx, true, &sql).await.collect().await.unwrap();
++            assert!(result[0].column(0).is_null(0));
++        }
++
++        // Real arrays at each signed width, with a masked overflowing payload.
++        for (ty, max) in [
++            (DataType::Int8, i8::MAX as i64),
++            (DataType::Int16, i16::MAX as i64),
++            (DataType::Int32, i32::MAX as i64),
++            (DataType::Int64, i64::MAX),
++        ] {
++            let a = Int64Array::new(vec![max, 1].into(), Some(vec![false, true].into()));
++            let a = arrow::compute::cast(&a, &ty).unwrap();
++            let b: ArrayRef = arrow::compute::cast(&Int64Array::from(vec![1, 1]), &ty).unwrap();
++            let schema = Arc::new(Schema::new(vec![
++                Field::new("a", ty.clone(), true),
++                Field::new("b", ty.clone(), false),
++            ]));
++            let batch = RecordBatch::try_new(schema.clone(), vec![a, b]).unwrap();
++            ctx.deregister_table("masked").unwrap();
++            ctx.register_table(
++                "masked",
++                Arc::new(
++                    MemTable::try_new(
++                        schema.clone(),
++                        vec![vec![RecordBatch::new_empty(schema), batch]],
++                    )
++                    .unwrap(),
++                ),
++            )
++            .unwrap();
++            for (op, value) in [("+", 2), ("-", 0), ("*", 1)] {
++                for sql in [
++                    format!("SELECT a {op} b AS r FROM masked"),
++                    format!(
++                        "SELECT a {op} CAST(1 AS {ty_name}) AS r FROM masked",
++                        ty_name = match ty {
++                            DataType::Int8 => "TINYINT",
++                            DataType::Int16 => "SMALLINT",
++                            DataType::Int32 => "INT",
++                            _ => "BIGINT",
++                        }
++                    ),
++                ] {
++                    let batches = frame(&ctx, true, &sql).await.collect().await.unwrap();
++                    let batch = batches.iter().find(|b| b.num_rows() > 0).unwrap();
++                    assert_eq!(batch.column(0).data_type(), &ty);
++                    assert!(batch.column(0).is_null(0));
++                    let scalar = ScalarValue::try_from_array(batch.column(0), 1)
++                        .unwrap()
++                        .cast_to(&DataType::Int64)
++                        .unwrap();
++                    assert_eq!(scalar, ScalarValue::Int64(Some(value)));
++                }
++            }
++        }
++    }
++}
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs
+index 2ff78bc..9b66e68 100644
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs
+@@ -7,6 +7,7 @@ pub mod spark_abs;
+ pub mod spark_bin;
+ pub mod spark_bround;
+ pub mod spark_ceil_floor;
++pub mod spark_checked_arithmetic;
+ pub mod spark_conv;
+ pub mod spark_decimal_round;
+ pub mod spark_div;
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_checked_arithmetic.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_checked_arithmetic.rs
+new file mode 100644
+index 0000000..891714c
+--- /dev/null
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_checked_arithmetic.rs
+@@ -0,0 +1,140 @@
++use std::sync::Arc;
++
++use datafusion::arrow::compute::kernels::numeric::{add, mul, sub};
++use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
++use datafusion::arrow::error::ArrowError;
++use datafusion::physical_expr_common::datum::apply;
++use datafusion_common::{DataFusionError, Result, exec_err, internal_err};
++use datafusion_expr::binary::BinaryTypeCoercer;
++use datafusion_expr::{
++    ColumnarValue, Expr, Operator, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature,
++    Volatility,
++};
++
++/// ANSI integer arithmetic. The planner selects this function per expression;
++/// legacy arithmetic keeps its native wrapping operator.
++#[derive(Debug, PartialEq, Eq, Hash)]
++pub struct SparkCheckedArithmetic {
++    op: Operator,
++    signature: Signature,
++}
++
++impl SparkCheckedArithmetic {
++    pub fn new(op: Operator) -> Self {
++        assert!(matches!(
++            op,
++            Operator::Plus | Operator::Minus | Operator::Multiply
++        ));
++        Self {
++            op,
++            signature: Signature::user_defined(Volatility::Immutable),
++        }
++    }
++}
++
++impl ScalarUDFImpl for SparkCheckedArithmetic {
++    fn name(&self) -> &str {
++        match self.op {
++            Operator::Plus => "spark_checked_add",
++            Operator::Minus => "spark_checked_subtract",
++            Operator::Multiply => "spark_checked_multiply",
++            _ => unreachable!("constructor validates the operator"),
++        }
++    }
++
++    fn signature(&self) -> &Signature {
++        &self.signature
++    }
++
++    fn short_circuits(&self) -> bool {
++        true
++    }
++
++    fn short_circuits_on_null_first_arg(&self) -> bool {
++        true
++    }
++
++    fn conditional_arguments<'a>(
++        &self,
++        args: &'a [Expr],
++    ) -> Option<(Vec<&'a Expr>, Vec<&'a Expr>)> {
++        args.split_first()
++            .map(|(first, rest)| (vec![first], rest.iter().collect()))
++    }
++
++    fn simplify(
++        &self,
++        args: Vec<Expr>,
++        info: &datafusion_expr::simplify::SimplifyContext,
++    ) -> Result<datafusion_expr::simplify::ExprSimplifyResult> {
++        use datafusion_expr::{lit, simplify::ExprSimplifyResult};
++        // Match native NULL propagation. Spark's earlier evaluation of local
++        // VALUES is preserved by the existing planning-time error precheck.
++        if args
++            .iter()
++            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
++        {
++            let types = args
++                .iter()
++                .map(|arg| info.get_data_type(arg))
++                .collect::<Result<Vec<_>>>()?;
++            return Ok(ExprSimplifyResult::Simplified(lit(
++                datafusion_common::ScalarValue::try_new_null(&self.return_type(&types)?)?,
++            )));
++        }
++        Ok(ExprSimplifyResult::Original(args))
++    }
++
++    fn coerce_types(&self, types: &[DataType]) -> Result<Vec<DataType>> {
++        let [left, right] = types else {
++            return internal_err!("{} requires two arguments", self.name());
++        };
++        let (left, right) = BinaryTypeCoercer::new(left, &self.op, right).get_input_types()?;
++        if left != right || !left.is_signed_integer() {
++            return internal_err!("{} requires signed integers", self.name());
++        }
++        Ok(vec![left, right])
++    }
++
++    fn return_type(&self, types: &[DataType]) -> Result<DataType> {
++        Ok(self.coerce_types(types)?.remove(0))
++    }
++
++    fn return_field_from_args(&self, args: ReturnFieldArgs) -> Result<FieldRef> {
++        let types = args
++            .arg_fields
++            .iter()
++            .map(|f| f.data_type().clone())
++            .collect::<Vec<_>>();
++        Ok(Arc::new(Field::new(
++            self.name(),
++            self.return_type(&types)?,
++            args.arg_fields.iter().any(|f| f.is_nullable()),
++        )))
++    }
++
++    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
++        let [left, right] = args.args.as_slice() else {
++            return internal_err!("{} requires two arguments", self.name());
++        };
++        let kernel = match self.op {
++            Operator::Plus => add,
++            Operator::Minus => sub,
++            Operator::Multiply => mul,
++            _ => unreachable!("constructor validates the operator"),
++        };
++        match apply(left, right, kernel) {
++            Err(DataFusionError::ArrowError(error, _))
++                if matches!(error.as_ref(), ArrowError::ArithmeticOverflow(_)) =>
++            {
++                let condition = if matches!(left.data_type(), DataType::Int8 | DataType::Int16) {
++                    "BINARY_ARITHMETIC_OVERFLOW"
++                } else {
++                    "ARITHMETIC_OVERFLOW"
++                };
++                exec_err!("[{condition}] {}: {error}", self.name())
++            }
++            result => result,
++        }
++    }
++}
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/mod.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/mod.rs
+index 7d72c0e..279094f 100644
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/mod.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/mod.rs
+@@ -405,7 +405,7 @@ mod tests {
+     #[tokio::test]
+     async fn test_resolve_expression_with_name() -> PlanResult<()> {
+         let ctx = create_session()?;
+-        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig::default()));
++        let resolver = PlanResolver::new(&ctx, Arc::new(PlanConfig { ansi_mode: false, ..Default::default() }));
+ 
+         async fn resolve(resolver: &PlanResolver<'_>, expr: spec::Expr) -> PlanResult<NamedExpr> {
+             resolver
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
+index 44a27fa..c86aeca 100644
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
+@@ -19,6 +19,7 @@ use datafusion_expr::utils::{conjunction, split_conjunction_owned};
+ use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, lit};
+ 
+ use crate::function::scalar::math::{FusedDecimalDivide, integer_divide_args};
++use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
+ 
+ /// Preserve early expression errors before NULL and empty-result rewrites.
+ #[derive(Debug)]
+@@ -43,12 +44,15 @@ fn candidate(expr: &Expr) -> bool {
+     null_divide(expr) && expr.contains_scalar_subquery()
+ }
+ 
+-// ponytail: only direct DIV outputs; general folding needs Spark's NULL and
+-// conditional-expression rules, not eager physical evaluation of the parent.
++// Only direct integer outputs. CASE and other parent expressions keep their
++// own evaluation rules; local VALUES are checked before later NULL pruning.
+ fn integer_candidate(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
+     match expr {
+         Expr::Alias(alias) => integer_candidate(&alias.expr, schema),
+         Expr::Cast(cast) => integer_candidate(&cast.expr, schema),
++        Expr::ScalarFunction(f) if f.func.inner().is::<SparkCheckedArithmetic>() => {
++            row_expression(expr, true)
++        }
+         _ => {
+             match integer_divide_args(expr, schema) {
+                 Some((left, right)) => Ok(row_expression(expr, false)?

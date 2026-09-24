@@ -1,0 +1,308 @@
+{"id": "tinyint_add_0_constants", "sql": "SELECT CAST(127 AS TINYINT) + CAST(0 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_add_0_scalar_array", "sql": "SELECT CAST(127 AS TINYINT) + b AS r FROM VALUES (CAST(0 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_add_0_array_scalar", "sql": "SELECT a + CAST(0 AS TINYINT) AS r FROM VALUES (CAST(127 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_add_0_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(0 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_add_1_constants", "sql": "SELECT CAST(127 AS TINYINT) + CAST(1 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_add_1_scalar_array", "sql": "SELECT CAST(127 AS TINYINT) + b AS r FROM VALUES (CAST(1 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_add_1_array_scalar", "sql": "SELECT a + CAST(1 AS TINYINT) AS r FROM VALUES (CAST(127 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_add_1_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(1 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_add_2_constants", "sql": "SELECT CAST(-128 AS TINYINT) + CAST(0 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_add_2_scalar_array", "sql": "SELECT CAST(-128 AS TINYINT) + b AS r FROM VALUES (CAST(0 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_add_2_array_scalar", "sql": "SELECT a + CAST(0 AS TINYINT) AS r FROM VALUES (CAST(-128 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_add_2_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(-128 AS TINYINT),CAST(0 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_add_3_constants", "sql": "SELECT CAST(-128 AS TINYINT) + CAST(-1 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_add_3_scalar_array", "sql": "SELECT CAST(-128 AS TINYINT) + b AS r FROM VALUES (CAST(-1 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_add_3_array_scalar", "sql": "SELECT a + CAST(-1 AS TINYINT) AS r FROM VALUES (CAST(-128 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_add_3_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(-128 AS TINYINT),CAST(-1 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_add_null_False", "sql": "SELECT a + b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(NULL AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_add_null_True", "sql": "SELECT a + b AS r FROM VALUES (CAST(NULL AS TINYINT),CAST(127 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_add_promote_INT", "sql": "SELECT a + b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_add_promote_BIGINT", "sql": "SELECT a + b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_sub_0_constants", "sql": "SELECT CAST(127 AS TINYINT) - CAST(0 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_sub_0_scalar_array", "sql": "SELECT CAST(127 AS TINYINT) - b AS r FROM VALUES (CAST(0 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_sub_0_array_scalar", "sql": "SELECT a - CAST(0 AS TINYINT) AS r FROM VALUES (CAST(127 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_sub_0_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(0 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_sub_1_constants", "sql": "SELECT CAST(127 AS TINYINT) - CAST(-1 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_sub_1_scalar_array", "sql": "SELECT CAST(127 AS TINYINT) - b AS r FROM VALUES (CAST(-1 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_sub_1_array_scalar", "sql": "SELECT a - CAST(-1 AS TINYINT) AS r FROM VALUES (CAST(127 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_sub_1_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(-1 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_sub_2_constants", "sql": "SELECT CAST(-128 AS TINYINT) - CAST(0 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_sub_2_scalar_array", "sql": "SELECT CAST(-128 AS TINYINT) - b AS r FROM VALUES (CAST(0 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_sub_2_array_scalar", "sql": "SELECT a - CAST(0 AS TINYINT) AS r FROM VALUES (CAST(-128 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_sub_2_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(-128 AS TINYINT),CAST(0 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_sub_3_constants", "sql": "SELECT CAST(-128 AS TINYINT) - CAST(1 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_sub_3_scalar_array", "sql": "SELECT CAST(-128 AS TINYINT) - b AS r FROM VALUES (CAST(1 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_sub_3_array_scalar", "sql": "SELECT a - CAST(1 AS TINYINT) AS r FROM VALUES (CAST(-128 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_sub_3_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(-128 AS TINYINT),CAST(1 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_sub_null_False", "sql": "SELECT a - b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(NULL AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_sub_null_True", "sql": "SELECT a - b AS r FROM VALUES (CAST(NULL AS TINYINT),CAST(127 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_sub_promote_INT", "sql": "SELECT a - b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_sub_promote_BIGINT", "sql": "SELECT a - b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_0_constants", "sql": "SELECT CAST(63 AS TINYINT) * CAST(2 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_mul_0_scalar_array", "sql": "SELECT CAST(63 AS TINYINT) * b AS r FROM VALUES (CAST(2 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_mul_0_array_scalar", "sql": "SELECT a * CAST(2 AS TINYINT) AS r FROM VALUES (CAST(63 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_mul_0_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(63 AS TINYINT),CAST(2 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_1_constants", "sql": "SELECT CAST(64 AS TINYINT) * CAST(2 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_mul_1_scalar_array", "sql": "SELECT CAST(64 AS TINYINT) * b AS r FROM VALUES (CAST(2 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_mul_1_array_scalar", "sql": "SELECT a * CAST(2 AS TINYINT) AS r FROM VALUES (CAST(64 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_mul_1_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(64 AS TINYINT),CAST(2 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_2_constants", "sql": "SELECT CAST(-64 AS TINYINT) * CAST(2 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_mul_2_scalar_array", "sql": "SELECT CAST(-64 AS TINYINT) * b AS r FROM VALUES (CAST(2 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_mul_2_array_scalar", "sql": "SELECT a * CAST(2 AS TINYINT) AS r FROM VALUES (CAST(-64 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_mul_2_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-64 AS TINYINT),CAST(2 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_3_constants", "sql": "SELECT CAST(-65 AS TINYINT) * CAST(2 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_mul_3_scalar_array", "sql": "SELECT CAST(-65 AS TINYINT) * b AS r FROM VALUES (CAST(2 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_mul_3_array_scalar", "sql": "SELECT a * CAST(2 AS TINYINT) AS r FROM VALUES (CAST(-65 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_mul_3_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-65 AS TINYINT),CAST(2 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_4_constants", "sql": "SELECT CAST(-128 AS TINYINT) * CAST(-1 AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_mul_4_scalar_array", "sql": "SELECT CAST(-128 AS TINYINT) * b AS r FROM VALUES (CAST(-1 AS TINYINT)) t(b)", "batch_size": 2}
+{"id": "tinyint_mul_4_array_scalar", "sql": "SELECT a * CAST(-1 AS TINYINT) AS r FROM VALUES (CAST(-128 AS TINYINT)) t(a)", "batch_size": 2}
+{"id": "tinyint_mul_4_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-128 AS TINYINT),CAST(-1 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_null_False", "sql": "SELECT a * b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(NULL AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_null_True", "sql": "SELECT a * b AS r FROM VALUES (CAST(NULL AS TINYINT),CAST(127 AS TINYINT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_promote_INT", "sql": "SELECT a * b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "tinyint_mul_promote_BIGINT", "sql": "SELECT a * b AS r FROM VALUES (CAST(127 AS TINYINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_add_0_constants", "sql": "SELECT CAST(32767 AS SMALLINT) + CAST(0 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_add_0_scalar_array", "sql": "SELECT CAST(32767 AS SMALLINT) + b AS r FROM VALUES (CAST(0 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_add_0_array_scalar", "sql": "SELECT a + CAST(0 AS SMALLINT) AS r FROM VALUES (CAST(32767 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_add_0_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(0 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_add_1_constants", "sql": "SELECT CAST(32767 AS SMALLINT) + CAST(1 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_add_1_scalar_array", "sql": "SELECT CAST(32767 AS SMALLINT) + b AS r FROM VALUES (CAST(1 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_add_1_array_scalar", "sql": "SELECT a + CAST(1 AS SMALLINT) AS r FROM VALUES (CAST(32767 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_add_1_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(1 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_add_2_constants", "sql": "SELECT CAST(-32768 AS SMALLINT) + CAST(0 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_add_2_scalar_array", "sql": "SELECT CAST(-32768 AS SMALLINT) + b AS r FROM VALUES (CAST(0 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_add_2_array_scalar", "sql": "SELECT a + CAST(0 AS SMALLINT) AS r FROM VALUES (CAST(-32768 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_add_2_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(-32768 AS SMALLINT),CAST(0 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_add_3_constants", "sql": "SELECT CAST(-32768 AS SMALLINT) + CAST(-1 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_add_3_scalar_array", "sql": "SELECT CAST(-32768 AS SMALLINT) + b AS r FROM VALUES (CAST(-1 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_add_3_array_scalar", "sql": "SELECT a + CAST(-1 AS SMALLINT) AS r FROM VALUES (CAST(-32768 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_add_3_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(-32768 AS SMALLINT),CAST(-1 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_add_null_False", "sql": "SELECT a + b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(NULL AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_add_null_True", "sql": "SELECT a + b AS r FROM VALUES (CAST(NULL AS SMALLINT),CAST(32767 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_add_promote_INT", "sql": "SELECT a + b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_add_promote_BIGINT", "sql": "SELECT a + b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_sub_0_constants", "sql": "SELECT CAST(32767 AS SMALLINT) - CAST(0 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_sub_0_scalar_array", "sql": "SELECT CAST(32767 AS SMALLINT) - b AS r FROM VALUES (CAST(0 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_sub_0_array_scalar", "sql": "SELECT a - CAST(0 AS SMALLINT) AS r FROM VALUES (CAST(32767 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_sub_0_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(0 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_sub_1_constants", "sql": "SELECT CAST(32767 AS SMALLINT) - CAST(-1 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_sub_1_scalar_array", "sql": "SELECT CAST(32767 AS SMALLINT) - b AS r FROM VALUES (CAST(-1 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_sub_1_array_scalar", "sql": "SELECT a - CAST(-1 AS SMALLINT) AS r FROM VALUES (CAST(32767 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_sub_1_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(-1 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_sub_2_constants", "sql": "SELECT CAST(-32768 AS SMALLINT) - CAST(0 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_sub_2_scalar_array", "sql": "SELECT CAST(-32768 AS SMALLINT) - b AS r FROM VALUES (CAST(0 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_sub_2_array_scalar", "sql": "SELECT a - CAST(0 AS SMALLINT) AS r FROM VALUES (CAST(-32768 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_sub_2_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(-32768 AS SMALLINT),CAST(0 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_sub_3_constants", "sql": "SELECT CAST(-32768 AS SMALLINT) - CAST(1 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_sub_3_scalar_array", "sql": "SELECT CAST(-32768 AS SMALLINT) - b AS r FROM VALUES (CAST(1 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_sub_3_array_scalar", "sql": "SELECT a - CAST(1 AS SMALLINT) AS r FROM VALUES (CAST(-32768 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_sub_3_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(-32768 AS SMALLINT),CAST(1 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_sub_null_False", "sql": "SELECT a - b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(NULL AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_sub_null_True", "sql": "SELECT a - b AS r FROM VALUES (CAST(NULL AS SMALLINT),CAST(32767 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_sub_promote_INT", "sql": "SELECT a - b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_sub_promote_BIGINT", "sql": "SELECT a - b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_0_constants", "sql": "SELECT CAST(16383 AS SMALLINT) * CAST(2 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_mul_0_scalar_array", "sql": "SELECT CAST(16383 AS SMALLINT) * b AS r FROM VALUES (CAST(2 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_mul_0_array_scalar", "sql": "SELECT a * CAST(2 AS SMALLINT) AS r FROM VALUES (CAST(16383 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_mul_0_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(16383 AS SMALLINT),CAST(2 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_1_constants", "sql": "SELECT CAST(16384 AS SMALLINT) * CAST(2 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_mul_1_scalar_array", "sql": "SELECT CAST(16384 AS SMALLINT) * b AS r FROM VALUES (CAST(2 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_mul_1_array_scalar", "sql": "SELECT a * CAST(2 AS SMALLINT) AS r FROM VALUES (CAST(16384 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_mul_1_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(16384 AS SMALLINT),CAST(2 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_2_constants", "sql": "SELECT CAST(-16384 AS SMALLINT) * CAST(2 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_mul_2_scalar_array", "sql": "SELECT CAST(-16384 AS SMALLINT) * b AS r FROM VALUES (CAST(2 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_mul_2_array_scalar", "sql": "SELECT a * CAST(2 AS SMALLINT) AS r FROM VALUES (CAST(-16384 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_mul_2_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-16384 AS SMALLINT),CAST(2 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_3_constants", "sql": "SELECT CAST(-16385 AS SMALLINT) * CAST(2 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_mul_3_scalar_array", "sql": "SELECT CAST(-16385 AS SMALLINT) * b AS r FROM VALUES (CAST(2 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_mul_3_array_scalar", "sql": "SELECT a * CAST(2 AS SMALLINT) AS r FROM VALUES (CAST(-16385 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_mul_3_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-16385 AS SMALLINT),CAST(2 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_4_constants", "sql": "SELECT CAST(-32768 AS SMALLINT) * CAST(-1 AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_mul_4_scalar_array", "sql": "SELECT CAST(-32768 AS SMALLINT) * b AS r FROM VALUES (CAST(-1 AS SMALLINT)) t(b)", "batch_size": 2}
+{"id": "smallint_mul_4_array_scalar", "sql": "SELECT a * CAST(-1 AS SMALLINT) AS r FROM VALUES (CAST(-32768 AS SMALLINT)) t(a)", "batch_size": 2}
+{"id": "smallint_mul_4_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-32768 AS SMALLINT),CAST(-1 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_null_False", "sql": "SELECT a * b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(NULL AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_null_True", "sql": "SELECT a * b AS r FROM VALUES (CAST(NULL AS SMALLINT),CAST(32767 AS SMALLINT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_promote_INT", "sql": "SELECT a * b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "smallint_mul_promote_BIGINT", "sql": "SELECT a * b AS r FROM VALUES (CAST(32767 AS SMALLINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "int_add_0_constants", "sql": "SELECT CAST(2147483647 AS INT) + CAST(0 AS INT) AS r", "batch_size": 2}
+{"id": "int_add_0_scalar_array", "sql": "SELECT CAST(2147483647 AS INT) + b AS r FROM VALUES (CAST(0 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_add_0_array_scalar", "sql": "SELECT a + CAST(0 AS INT) AS r FROM VALUES (CAST(2147483647 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_add_0_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(0 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_add_1_constants", "sql": "SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) AS r", "batch_size": 2}
+{"id": "int_add_1_scalar_array", "sql": "SELECT CAST(2147483647 AS INT) + b AS r FROM VALUES (CAST(1 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_add_1_array_scalar", "sql": "SELECT a + CAST(1 AS INT) AS r FROM VALUES (CAST(2147483647 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_add_1_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(1 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_add_2_constants", "sql": "SELECT CAST(-2147483648 AS INT) + CAST(0 AS INT) AS r", "batch_size": 2}
+{"id": "int_add_2_scalar_array", "sql": "SELECT CAST(-2147483648 AS INT) + b AS r FROM VALUES (CAST(0 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_add_2_array_scalar", "sql": "SELECT a + CAST(0 AS INT) AS r FROM VALUES (CAST(-2147483648 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_add_2_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(-2147483648 AS INT),CAST(0 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_add_3_constants", "sql": "SELECT CAST(-2147483648 AS INT) + CAST(-1 AS INT) AS r", "batch_size": 2}
+{"id": "int_add_3_scalar_array", "sql": "SELECT CAST(-2147483648 AS INT) + b AS r FROM VALUES (CAST(-1 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_add_3_array_scalar", "sql": "SELECT a + CAST(-1 AS INT) AS r FROM VALUES (CAST(-2147483648 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_add_3_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(-2147483648 AS INT),CAST(-1 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_add_null_False", "sql": "SELECT a + b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(NULL AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_add_null_True", "sql": "SELECT a + b AS r FROM VALUES (CAST(NULL AS INT),CAST(2147483647 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_add_promote_INT", "sql": "SELECT a + b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_add_promote_BIGINT", "sql": "SELECT a + b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "int_sub_0_constants", "sql": "SELECT CAST(2147483647 AS INT) - CAST(0 AS INT) AS r", "batch_size": 2}
+{"id": "int_sub_0_scalar_array", "sql": "SELECT CAST(2147483647 AS INT) - b AS r FROM VALUES (CAST(0 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_sub_0_array_scalar", "sql": "SELECT a - CAST(0 AS INT) AS r FROM VALUES (CAST(2147483647 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_sub_0_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(0 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_sub_1_constants", "sql": "SELECT CAST(2147483647 AS INT) - CAST(-1 AS INT) AS r", "batch_size": 2}
+{"id": "int_sub_1_scalar_array", "sql": "SELECT CAST(2147483647 AS INT) - b AS r FROM VALUES (CAST(-1 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_sub_1_array_scalar", "sql": "SELECT a - CAST(-1 AS INT) AS r FROM VALUES (CAST(2147483647 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_sub_1_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(-1 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_sub_2_constants", "sql": "SELECT CAST(-2147483648 AS INT) - CAST(0 AS INT) AS r", "batch_size": 2}
+{"id": "int_sub_2_scalar_array", "sql": "SELECT CAST(-2147483648 AS INT) - b AS r FROM VALUES (CAST(0 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_sub_2_array_scalar", "sql": "SELECT a - CAST(0 AS INT) AS r FROM VALUES (CAST(-2147483648 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_sub_2_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(-2147483648 AS INT),CAST(0 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_sub_3_constants", "sql": "SELECT CAST(-2147483648 AS INT) - CAST(1 AS INT) AS r", "batch_size": 2}
+{"id": "int_sub_3_scalar_array", "sql": "SELECT CAST(-2147483648 AS INT) - b AS r FROM VALUES (CAST(1 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_sub_3_array_scalar", "sql": "SELECT a - CAST(1 AS INT) AS r FROM VALUES (CAST(-2147483648 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_sub_3_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(-2147483648 AS INT),CAST(1 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_sub_null_False", "sql": "SELECT a - b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(NULL AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_sub_null_True", "sql": "SELECT a - b AS r FROM VALUES (CAST(NULL AS INT),CAST(2147483647 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_sub_promote_INT", "sql": "SELECT a - b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_sub_promote_BIGINT", "sql": "SELECT a - b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_0_constants", "sql": "SELECT CAST(1073741823 AS INT) * CAST(2 AS INT) AS r", "batch_size": 2}
+{"id": "int_mul_0_scalar_array", "sql": "SELECT CAST(1073741823 AS INT) * b AS r FROM VALUES (CAST(2 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_mul_0_array_scalar", "sql": "SELECT a * CAST(2 AS INT) AS r FROM VALUES (CAST(1073741823 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_mul_0_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(1073741823 AS INT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_1_constants", "sql": "SELECT CAST(1073741824 AS INT) * CAST(2 AS INT) AS r", "batch_size": 2}
+{"id": "int_mul_1_scalar_array", "sql": "SELECT CAST(1073741824 AS INT) * b AS r FROM VALUES (CAST(2 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_mul_1_array_scalar", "sql": "SELECT a * CAST(2 AS INT) AS r FROM VALUES (CAST(1073741824 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_mul_1_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(1073741824 AS INT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_2_constants", "sql": "SELECT CAST(-1073741824 AS INT) * CAST(2 AS INT) AS r", "batch_size": 2}
+{"id": "int_mul_2_scalar_array", "sql": "SELECT CAST(-1073741824 AS INT) * b AS r FROM VALUES (CAST(2 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_mul_2_array_scalar", "sql": "SELECT a * CAST(2 AS INT) AS r FROM VALUES (CAST(-1073741824 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_mul_2_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-1073741824 AS INT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_3_constants", "sql": "SELECT CAST(-1073741825 AS INT) * CAST(2 AS INT) AS r", "batch_size": 2}
+{"id": "int_mul_3_scalar_array", "sql": "SELECT CAST(-1073741825 AS INT) * b AS r FROM VALUES (CAST(2 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_mul_3_array_scalar", "sql": "SELECT a * CAST(2 AS INT) AS r FROM VALUES (CAST(-1073741825 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_mul_3_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-1073741825 AS INT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_4_constants", "sql": "SELECT CAST(-2147483648 AS INT) * CAST(-1 AS INT) AS r", "batch_size": 2}
+{"id": "int_mul_4_scalar_array", "sql": "SELECT CAST(-2147483648 AS INT) * b AS r FROM VALUES (CAST(-1 AS INT)) t(b)", "batch_size": 2}
+{"id": "int_mul_4_array_scalar", "sql": "SELECT a * CAST(-1 AS INT) AS r FROM VALUES (CAST(-2147483648 AS INT)) t(a)", "batch_size": 2}
+{"id": "int_mul_4_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-2147483648 AS INT),CAST(-1 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_null_False", "sql": "SELECT a * b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(NULL AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_null_True", "sql": "SELECT a * b AS r FROM VALUES (CAST(NULL AS INT),CAST(2147483647 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_promote_INT", "sql": "SELECT a * b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "int_mul_promote_BIGINT", "sql": "SELECT a * b AS r FROM VALUES (CAST(2147483647 AS INT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_add_0_constants", "sql": "SELECT CAST(9223372036854775807 AS BIGINT) + CAST(0 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_add_0_scalar_array", "sql": "SELECT CAST(9223372036854775807 AS BIGINT) + b AS r FROM VALUES (CAST(0 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_add_0_array_scalar", "sql": "SELECT a + CAST(0 AS BIGINT) AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_add_0_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_add_1_constants", "sql": "SELECT CAST(9223372036854775807 AS BIGINT) + CAST(1 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_add_1_scalar_array", "sql": "SELECT CAST(9223372036854775807 AS BIGINT) + b AS r FROM VALUES (CAST(1 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_add_1_array_scalar", "sql": "SELECT a + CAST(1 AS BIGINT) AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_add_1_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(1 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_add_2_constants", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) + CAST(0 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_add_2_scalar_array", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) + b AS r FROM VALUES (CAST(0 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_add_2_array_scalar", "sql": "SELECT a + CAST(0 AS BIGINT) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_add_2_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT),CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_add_3_constants", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) + CAST(-1 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_add_3_scalar_array", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) + b AS r FROM VALUES (CAST(-1 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_add_3_array_scalar", "sql": "SELECT a + CAST(-1 AS BIGINT) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_add_3_arrays", "sql": "SELECT a + b AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT),CAST(-1 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_add_null_False", "sql": "SELECT a + b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_add_null_True", "sql": "SELECT a + b AS r FROM VALUES (CAST(NULL AS BIGINT),CAST(9223372036854775807 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_add_promote_INT", "sql": "SELECT a + b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_add_promote_BIGINT", "sql": "SELECT a + b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_sub_0_constants", "sql": "SELECT CAST(9223372036854775807 AS BIGINT) - CAST(0 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_sub_0_scalar_array", "sql": "SELECT CAST(9223372036854775807 AS BIGINT) - b AS r FROM VALUES (CAST(0 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_sub_0_array_scalar", "sql": "SELECT a - CAST(0 AS BIGINT) AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_sub_0_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_sub_1_constants", "sql": "SELECT CAST(9223372036854775807 AS BIGINT) - CAST(-1 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_sub_1_scalar_array", "sql": "SELECT CAST(9223372036854775807 AS BIGINT) - b AS r FROM VALUES (CAST(-1 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_sub_1_array_scalar", "sql": "SELECT a - CAST(-1 AS BIGINT) AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_sub_1_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(-1 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_sub_2_constants", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) - CAST(0 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_sub_2_scalar_array", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) - b AS r FROM VALUES (CAST(0 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_sub_2_array_scalar", "sql": "SELECT a - CAST(0 AS BIGINT) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_sub_2_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT),CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_sub_3_constants", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) - CAST(1 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_sub_3_scalar_array", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) - b AS r FROM VALUES (CAST(1 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_sub_3_array_scalar", "sql": "SELECT a - CAST(1 AS BIGINT) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_sub_3_arrays", "sql": "SELECT a - b AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT),CAST(1 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_sub_null_False", "sql": "SELECT a - b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_sub_null_True", "sql": "SELECT a - b AS r FROM VALUES (CAST(NULL AS BIGINT),CAST(9223372036854775807 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_sub_promote_INT", "sql": "SELECT a - b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_sub_promote_BIGINT", "sql": "SELECT a - b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_0_constants", "sql": "SELECT CAST(4611686018427387903 AS BIGINT) * CAST(2 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_mul_0_scalar_array", "sql": "SELECT CAST(4611686018427387903 AS BIGINT) * b AS r FROM VALUES (CAST(2 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_mul_0_array_scalar", "sql": "SELECT a * CAST(2 AS BIGINT) AS r FROM VALUES (CAST(4611686018427387903 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_mul_0_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(4611686018427387903 AS BIGINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_1_constants", "sql": "SELECT CAST(4611686018427387904 AS BIGINT) * CAST(2 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_mul_1_scalar_array", "sql": "SELECT CAST(4611686018427387904 AS BIGINT) * b AS r FROM VALUES (CAST(2 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_mul_1_array_scalar", "sql": "SELECT a * CAST(2 AS BIGINT) AS r FROM VALUES (CAST(4611686018427387904 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_mul_1_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(4611686018427387904 AS BIGINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_2_constants", "sql": "SELECT CAST(-4611686018427387904 AS BIGINT) * CAST(2 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_mul_2_scalar_array", "sql": "SELECT CAST(-4611686018427387904 AS BIGINT) * b AS r FROM VALUES (CAST(2 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_mul_2_array_scalar", "sql": "SELECT a * CAST(2 AS BIGINT) AS r FROM VALUES (CAST(-4611686018427387904 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_mul_2_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-4611686018427387904 AS BIGINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_3_constants", "sql": "SELECT CAST(-4611686018427387905 AS BIGINT) * CAST(2 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_mul_3_scalar_array", "sql": "SELECT CAST(-4611686018427387905 AS BIGINT) * b AS r FROM VALUES (CAST(2 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_mul_3_array_scalar", "sql": "SELECT a * CAST(2 AS BIGINT) AS r FROM VALUES (CAST(-4611686018427387905 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_mul_3_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-4611686018427387905 AS BIGINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_4_constants", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) * CAST(-1 AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_mul_4_scalar_array", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) * b AS r FROM VALUES (CAST(-1 AS BIGINT)) t(b)", "batch_size": 2}
+{"id": "bigint_mul_4_array_scalar", "sql": "SELECT a * CAST(-1 AS BIGINT) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)) t(a)", "batch_size": 2}
+{"id": "bigint_mul_4_arrays", "sql": "SELECT a * b AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT),CAST(-1 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_null_False", "sql": "SELECT a * b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_null_True", "sql": "SELECT a * b AS r FROM VALUES (CAST(NULL AS BIGINT),CAST(9223372036854775807 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_promote_INT", "sql": "SELECT a * b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(2 AS INT)) t(a,b)", "batch_size": 2}
+{"id": "bigint_mul_promote_BIGINT", "sql": "SELECT a * b AS r FROM VALUES (CAST(9223372036854775807 AS BIGINT),CAST(2 AS BIGINT)) t(a,b)", "batch_size": 2}
+{"id": "arithmetic_overflow_ansi", "sql": "SELECT CAST(2147483647 AS INT) + id AS r FROM VALUES (1) AS t(id)", "batch_size": 2}
+{"id": "add_dead_case", "sql": "SELECT CASE WHEN keep THEN a + 1 ELSE 0 END AS r FROM VALUES (2147483647,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "add_live_case", "sql": "SELECT CASE WHEN NOT keep THEN a + 1 ELSE 0 END AS r FROM VALUES (2147483647,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "add_filtered", "sql": "SELECT a + 1 AS r FROM VALUES (2147483647,false),(0,true) t(a,keep) WHERE keep", "batch_size": 2}
+{"id": "add_live_filter", "sql": "SELECT a AS r FROM VALUES (2147483647,false),(0,true) t(a,keep) WHERE a + 1 = 0", "batch_size": 2}
+{"id": "add_empty", "sql": "SELECT a + 1 AS r FROM VALUES (2147483647,false),(0,true) t(a,keep) WHERE false", "batch_size": 2}
+{"id": "add_constant_dead_case", "sql": "SELECT CASE WHEN false THEN 2147483647 + 1 ELSE 0 END AS r", "batch_size": 2}
+{"id": "add_untyped_null", "sql": "SELECT a + NULL AS r FROM VALUES (2147483647,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "add_nested_error_null", "sql": "SELECT (a + 1) + CAST(NULL AS INT) AS r FROM VALUES (2147483647,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "add_left_null_False", "sql": "SELECT CAST(NULL AS INT) + (a + 1) AS r FROM VALUES (2147483647,CAST(NULL AS INT)),(0,1) t(a,n)", "batch_size": 2}
+{"id": "add_left_null_True", "sql": "SELECT n + (a + 1) AS r FROM VALUES (2147483647,CAST(NULL AS INT)),(0,1) t(a,n)", "batch_size": 2}
+{"id": "add_derived_null_range", "sql": "SELECT n + r AS r FROM (SELECT CAST(NULL AS INT) AS n,CAST(2147483647 AS INT) + CAST(id+1 AS INT) AS r FROM range(2)) q", "batch_size": 2}
+{"id": "add_derived_null_values", "sql": "SELECT n + r AS r FROM (SELECT CAST(NULL AS INT) AS n,CAST(2147483647 AS INT) + CAST(id+1 AS INT) AS r FROM (VALUES(0),(1)) t(id)) q", "batch_size": 2}
+{"id": "add_constant_error_right_null", "sql": "SELECT (2147483647 + 1) + CAST(NULL AS INT) AS r", "batch_size": 2}
+{"id": "add_constant_error_left_null", "sql": "SELECT CAST(NULL AS INT) + (2147483647 + 1) AS r", "batch_size": 2}
+{"id": "add_float_control", "sql": "SELECT CAST(1.5 AS FLOAT) + CAST(2 AS FLOAT) AS r", "batch_size": 2}
+{"id": "add_double_control", "sql": "SELECT CAST(1.5 AS DOUBLE) + CAST(2 AS BIGINT) AS r", "batch_size": 2}
+{"id": "add_decimal_control", "sql": "SELECT CAST(1.5 AS DECIMAL(8,2)) + CAST(2 AS DECIMAL(8,2)) AS r", "batch_size": 2}
+{"id": "sub_dead_case", "sql": "SELECT CASE WHEN keep THEN a - 1 ELSE 0 END AS r FROM VALUES (-2147483648,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "sub_live_case", "sql": "SELECT CASE WHEN NOT keep THEN a - 1 ELSE 0 END AS r FROM VALUES (-2147483648,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "sub_filtered", "sql": "SELECT a - 1 AS r FROM VALUES (-2147483648,false),(0,true) t(a,keep) WHERE keep", "batch_size": 2}
+{"id": "sub_live_filter", "sql": "SELECT a AS r FROM VALUES (-2147483648,false),(0,true) t(a,keep) WHERE a - 1 = 0", "batch_size": 2}
+{"id": "sub_empty", "sql": "SELECT a - 1 AS r FROM VALUES (-2147483648,false),(0,true) t(a,keep) WHERE false", "batch_size": 2}
+{"id": "sub_constant_dead_case", "sql": "SELECT CASE WHEN false THEN -2147483648 - 1 ELSE 0 END AS r", "batch_size": 2}
+{"id": "sub_untyped_null", "sql": "SELECT a - NULL AS r FROM VALUES (-2147483648,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "sub_nested_error_null", "sql": "SELECT (a - 1) - CAST(NULL AS INT) AS r FROM VALUES (-2147483648,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "sub_left_null_False", "sql": "SELECT CAST(NULL AS INT) - (a - 1) AS r FROM VALUES (-2147483648,CAST(NULL AS INT)),(0,1) t(a,n)", "batch_size": 2}
+{"id": "sub_left_null_True", "sql": "SELECT n - (a - 1) AS r FROM VALUES (-2147483648,CAST(NULL AS INT)),(0,1) t(a,n)", "batch_size": 2}
+{"id": "sub_derived_null_range", "sql": "SELECT n - r AS r FROM (SELECT CAST(NULL AS INT) AS n,CAST(-2147483648 AS INT) - CAST(id+1 AS INT) AS r FROM range(2)) q", "batch_size": 2}
+{"id": "sub_derived_null_values", "sql": "SELECT n - r AS r FROM (SELECT CAST(NULL AS INT) AS n,CAST(-2147483648 AS INT) - CAST(id+1 AS INT) AS r FROM (VALUES(0),(1)) t(id)) q", "batch_size": 2}
+{"id": "sub_constant_error_right_null", "sql": "SELECT (-2147483648 - 1) - CAST(NULL AS INT) AS r", "batch_size": 2}
+{"id": "sub_constant_error_left_null", "sql": "SELECT CAST(NULL AS INT) - (-2147483648 - 1) AS r", "batch_size": 2}
+{"id": "sub_float_control", "sql": "SELECT CAST(1.5 AS FLOAT) - CAST(2 AS FLOAT) AS r", "batch_size": 2}
+{"id": "sub_double_control", "sql": "SELECT CAST(1.5 AS DOUBLE) - CAST(2 AS BIGINT) AS r", "batch_size": 2}
+{"id": "sub_decimal_control", "sql": "SELECT CAST(1.5 AS DECIMAL(8,2)) - CAST(2 AS DECIMAL(8,2)) AS r", "batch_size": 2}
+{"id": "mul_dead_case", "sql": "SELECT CASE WHEN keep THEN a * 2 ELSE 0 END AS r FROM VALUES (1073741824,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "mul_live_case", "sql": "SELECT CASE WHEN NOT keep THEN a * 2 ELSE 0 END AS r FROM VALUES (1073741824,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "mul_filtered", "sql": "SELECT a * 2 AS r FROM VALUES (1073741824,false),(0,true) t(a,keep) WHERE keep", "batch_size": 2}
+{"id": "mul_live_filter", "sql": "SELECT a AS r FROM VALUES (1073741824,false),(0,true) t(a,keep) WHERE a * 2 = 0", "batch_size": 2}
+{"id": "mul_empty", "sql": "SELECT a * 2 AS r FROM VALUES (1073741824,false),(0,true) t(a,keep) WHERE false", "batch_size": 2}
+{"id": "mul_constant_dead_case", "sql": "SELECT CASE WHEN false THEN 1073741824 * 2 ELSE 0 END AS r", "batch_size": 2}
+{"id": "mul_untyped_null", "sql": "SELECT a * NULL AS r FROM VALUES (1073741824,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "mul_nested_error_null", "sql": "SELECT (a * 2) * CAST(NULL AS INT) AS r FROM VALUES (1073741824,false),(0,true) t(a,keep)", "batch_size": 2}
+{"id": "mul_left_null_False", "sql": "SELECT CAST(NULL AS INT) * (a * 2) AS r FROM VALUES (1073741824,CAST(NULL AS INT)),(0,1) t(a,n)", "batch_size": 2}
+{"id": "mul_left_null_True", "sql": "SELECT n * (a * 2) AS r FROM VALUES (1073741824,CAST(NULL AS INT)),(0,1) t(a,n)", "batch_size": 2}
+{"id": "mul_derived_null_range", "sql": "SELECT n * r AS r FROM (SELECT CAST(NULL AS INT) AS n,CAST(1073741824 AS INT) * CAST(id+2 AS INT) AS r FROM range(2)) q", "batch_size": 2}
+{"id": "mul_derived_null_values", "sql": "SELECT n * r AS r FROM (SELECT CAST(NULL AS INT) AS n,CAST(1073741824 AS INT) * CAST(id+2 AS INT) AS r FROM (VALUES(0),(1)) t(id)) q", "batch_size": 2}
+{"id": "mul_constant_error_right_null", "sql": "SELECT (1073741824 * 2) * CAST(NULL AS INT) AS r", "batch_size": 2}
+{"id": "mul_constant_error_left_null", "sql": "SELECT CAST(NULL AS INT) * (1073741824 * 2) AS r", "batch_size": 2}
+{"id": "mul_float_control", "sql": "SELECT CAST(1.5 AS FLOAT) * CAST(2 AS FLOAT) AS r", "batch_size": 2}
+{"id": "mul_double_control", "sql": "SELECT CAST(1.5 AS DOUBLE) * CAST(2 AS BIGINT) AS r", "batch_size": 2}
+{"id": "mul_decimal_control", "sql": "SELECT CAST(1.5 AS DECIMAL(8,2)) * CAST(2 AS DECIMAL(8,2)) AS r", "batch_size": 2}
