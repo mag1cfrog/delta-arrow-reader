@@ -1,5 +1,7 @@
 //! Public reader integration tests.
 
+#[path = "reader/data_file_location.rs"]
+mod data_file_location;
 #[cfg(feature = "datafusion")]
 #[path = "reader/datafusion_adapter.rs"]
 mod datafusion_adapter;
