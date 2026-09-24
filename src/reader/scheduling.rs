@@ -1195,9 +1195,13 @@ mod tests {
                 let limiter = ScanReadLimiter::new(options, 3, 3);
                 let cancellation = ScanCancellation::new();
                 let metrics = metrics();
+                let admitted_files = Arc::new(Barrier::new(scan_cap));
                 let executor: FileExecutor<usize, FileBatchStream> =
                     Arc::new(move |task, permit, _| {
+                        let admitted_files = Arc::clone(&admitted_files);
                         async move {
+                            // Make task counts independent of which producer runs first.
+                            admitted_files.wait().await;
                             if task != failed_partition {
                                 return Ok(pending_file_stream(permit));
                             }
