@@ -12,6 +12,8 @@ The [FLOAT BROUND type fix](FLOAT_BROUND.md) makes the declared result type agre
 
 The [FLOAT BROUND boundary fix](FLOAT_BROUND_BOUNDARIES.md) preserves positive zero and finite results at extreme scales, including subnormal inputs. It layers on the selected type fix; its focused checks and cost evidence do not change the default runtime.
 
+The [ROUND argument fix](ROUND_ARGUMENTS.md) resolves constant INT scales, converts string values and skips ordinary inputs when the scale is NULL. Its evidence keeps remaining numerical-kernel and CAST/subquery differences with their separate owners.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.

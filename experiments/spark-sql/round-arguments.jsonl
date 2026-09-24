@@ -1,0 +1,194 @@
+{"id": "decimal_default_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3))) AS r", "batch_size": 2}
+{"id": "decimal_default_column", "sql": "SELECT ROUND(a) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_negative_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), -1) AS r", "batch_size": 2}
+{"id": "decimal_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_zero_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 0) AS r", "batch_size": 2}
+{"id": "decimal_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_positive_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2) AS r", "batch_size": 2}
+{"id": "decimal_positive_column", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_tiny_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), CAST(2 AS TINYINT)) AS r", "batch_size": 2}
+{"id": "decimal_tiny_column", "sql": "SELECT ROUND(a, CAST(2 AS TINYINT)) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_small_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), CAST(2 AS SMALLINT)) AS r", "batch_size": 2}
+{"id": "decimal_small_column", "sql": "SELECT ROUND(a, CAST(2 AS SMALLINT)) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_long_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2L) AS r", "batch_size": 2}
+{"id": "decimal_long_column", "sql": "SELECT ROUND(a, 2L) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_decimal_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2.9) AS r", "batch_size": 2}
+{"id": "decimal_decimal_column", "sql": "SELECT ROUND(a, 2.9) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_float_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2.9F) AS r", "batch_size": 2}
+{"id": "decimal_float_column", "sql": "SELECT ROUND(a, 2.9F) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_double_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), CAST(2.9 AS DOUBLE)) AS r", "batch_size": 2}
+{"id": "decimal_double_column", "sql": "SELECT ROUND(a, CAST(2.9 AS DOUBLE)) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_negative_decimal_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), -1.9) AS r", "batch_size": 2}
+{"id": "decimal_negative_decimal_column", "sql": "SELECT ROUND(a, -1.9) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_string_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), '2') AS r", "batch_size": 2}
+{"id": "decimal_string_column", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_fraction_string_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), '2.9') AS r", "batch_size": 2}
+{"id": "decimal_fraction_string_column", "sql": "SELECT ROUND(a, '2.9') AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_spaced_string_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), ' 2 ') AS r", "batch_size": 2}
+{"id": "decimal_spaced_string_column", "sql": "SELECT ROUND(a, ' 2 ') AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_bad_string_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 'bad') AS r", "batch_size": 2}
+{"id": "decimal_bad_string_column", "sql": "SELECT ROUND(a, 'bad') AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_boolean_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), true) AS r", "batch_size": 2}
+{"id": "decimal_boolean_column", "sql": "SELECT ROUND(a, true) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_null_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), NULL) AS r", "batch_size": 2}
+{"id": "decimal_null_column", "sql": "SELECT ROUND(a, NULL) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_string_null_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), CAST(NULL AS STRING)) AS r", "batch_size": 2}
+{"id": "decimal_string_null_column", "sql": "SELECT ROUND(a, CAST(NULL AS STRING)) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_folded_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 1+1) AS r", "batch_size": 2}
+{"id": "decimal_folded_column", "sql": "SELECT ROUND(a, 1+1) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_folded_string_literal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), concat('2','')) AS r", "batch_size": 2}
+{"id": "decimal_folded_string_column", "sql": "SELECT ROUND(a, concat('2','')) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "float_default_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT)) AS r", "batch_size": 2}
+{"id": "float_default_column", "sql": "SELECT ROUND(a) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_negative_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), -1) AS r", "batch_size": 2}
+{"id": "float_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_zero_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), 0) AS r", "batch_size": 2}
+{"id": "float_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_positive_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), 2) AS r", "batch_size": 2}
+{"id": "float_positive_column", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_tiny_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), CAST(2 AS TINYINT)) AS r", "batch_size": 2}
+{"id": "float_tiny_column", "sql": "SELECT ROUND(a, CAST(2 AS TINYINT)) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_small_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), CAST(2 AS SMALLINT)) AS r", "batch_size": 2}
+{"id": "float_small_column", "sql": "SELECT ROUND(a, CAST(2 AS SMALLINT)) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_long_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), 2L) AS r", "batch_size": 2}
+{"id": "float_long_column", "sql": "SELECT ROUND(a, 2L) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_decimal_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), 2.9) AS r", "batch_size": 2}
+{"id": "float_decimal_column", "sql": "SELECT ROUND(a, 2.9) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_float_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), 2.9F) AS r", "batch_size": 2}
+{"id": "float_float_column", "sql": "SELECT ROUND(a, 2.9F) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_double_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), CAST(2.9 AS DOUBLE)) AS r", "batch_size": 2}
+{"id": "float_double_column", "sql": "SELECT ROUND(a, CAST(2.9 AS DOUBLE)) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_negative_decimal_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), -1.9) AS r", "batch_size": 2}
+{"id": "float_negative_decimal_column", "sql": "SELECT ROUND(a, -1.9) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), '2') AS r", "batch_size": 2}
+{"id": "float_string_column", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_fraction_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), '2.9') AS r", "batch_size": 2}
+{"id": "float_fraction_string_column", "sql": "SELECT ROUND(a, '2.9') AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_spaced_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), ' 2 ') AS r", "batch_size": 2}
+{"id": "float_spaced_string_column", "sql": "SELECT ROUND(a, ' 2 ') AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_bad_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), 'bad') AS r", "batch_size": 2}
+{"id": "float_bad_string_column", "sql": "SELECT ROUND(a, 'bad') AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_boolean_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), true) AS r", "batch_size": 2}
+{"id": "float_boolean_column", "sql": "SELECT ROUND(a, true) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_null_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), NULL) AS r", "batch_size": 2}
+{"id": "float_null_column", "sql": "SELECT ROUND(a, NULL) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_string_null_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), CAST(NULL AS STRING)) AS r", "batch_size": 2}
+{"id": "float_string_null_column", "sql": "SELECT ROUND(a, CAST(NULL AS STRING)) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_folded_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), 1+1) AS r", "batch_size": 2}
+{"id": "float_folded_column", "sql": "SELECT ROUND(a, 1+1) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "float_folded_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), concat('2','')) AS r", "batch_size": 2}
+{"id": "float_folded_string_column", "sql": "SELECT ROUND(a, concat('2','')) AS r FROM VALUES (CAST(1.25 AS FLOAT)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_default_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE)) AS r", "batch_size": 2}
+{"id": "double_default_column", "sql": "SELECT ROUND(a) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_negative_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), -1) AS r", "batch_size": 2}
+{"id": "double_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_zero_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), 0) AS r", "batch_size": 2}
+{"id": "double_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_positive_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), 2) AS r", "batch_size": 2}
+{"id": "double_positive_column", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_tiny_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), CAST(2 AS TINYINT)) AS r", "batch_size": 2}
+{"id": "double_tiny_column", "sql": "SELECT ROUND(a, CAST(2 AS TINYINT)) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_small_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), CAST(2 AS SMALLINT)) AS r", "batch_size": 2}
+{"id": "double_small_column", "sql": "SELECT ROUND(a, CAST(2 AS SMALLINT)) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_long_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), 2L) AS r", "batch_size": 2}
+{"id": "double_long_column", "sql": "SELECT ROUND(a, 2L) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_decimal_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), 2.9) AS r", "batch_size": 2}
+{"id": "double_decimal_column", "sql": "SELECT ROUND(a, 2.9) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_float_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), 2.9F) AS r", "batch_size": 2}
+{"id": "double_float_column", "sql": "SELECT ROUND(a, 2.9F) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_double_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), CAST(2.9 AS DOUBLE)) AS r", "batch_size": 2}
+{"id": "double_double_column", "sql": "SELECT ROUND(a, CAST(2.9 AS DOUBLE)) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_negative_decimal_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), -1.9) AS r", "batch_size": 2}
+{"id": "double_negative_decimal_column", "sql": "SELECT ROUND(a, -1.9) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), '2') AS r", "batch_size": 2}
+{"id": "double_string_column", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_fraction_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), '2.9') AS r", "batch_size": 2}
+{"id": "double_fraction_string_column", "sql": "SELECT ROUND(a, '2.9') AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_spaced_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), ' 2 ') AS r", "batch_size": 2}
+{"id": "double_spaced_string_column", "sql": "SELECT ROUND(a, ' 2 ') AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_bad_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), 'bad') AS r", "batch_size": 2}
+{"id": "double_bad_string_column", "sql": "SELECT ROUND(a, 'bad') AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_boolean_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), true) AS r", "batch_size": 2}
+{"id": "double_boolean_column", "sql": "SELECT ROUND(a, true) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_null_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), NULL) AS r", "batch_size": 2}
+{"id": "double_null_column", "sql": "SELECT ROUND(a, NULL) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_string_null_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), CAST(NULL AS STRING)) AS r", "batch_size": 2}
+{"id": "double_string_null_column", "sql": "SELECT ROUND(a, CAST(NULL AS STRING)) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_folded_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), 1+1) AS r", "batch_size": 2}
+{"id": "double_folded_column", "sql": "SELECT ROUND(a, 1+1) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "double_folded_string_literal", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), concat('2','')) AS r", "batch_size": 2}
+{"id": "double_folded_string_column", "sql": "SELECT ROUND(a, concat('2','')) AS r FROM VALUES (CAST(1.25 AS DOUBLE)), (NULL) t(a)", "batch_size": 2}
+{"id": "string_default_literal", "sql": "SELECT ROUND('1.25') AS r", "batch_size": 2}
+{"id": "string_default_column", "sql": "SELECT ROUND(a) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_negative_literal", "sql": "SELECT ROUND('1.25', -1) AS r", "batch_size": 2}
+{"id": "string_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_zero_literal", "sql": "SELECT ROUND('1.25', 0) AS r", "batch_size": 2}
+{"id": "string_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_positive_literal", "sql": "SELECT ROUND('1.25', 2) AS r", "batch_size": 2}
+{"id": "string_positive_column", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_tiny_literal", "sql": "SELECT ROUND('1.25', CAST(2 AS TINYINT)) AS r", "batch_size": 2}
+{"id": "string_tiny_column", "sql": "SELECT ROUND(a, CAST(2 AS TINYINT)) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_small_literal", "sql": "SELECT ROUND('1.25', CAST(2 AS SMALLINT)) AS r", "batch_size": 2}
+{"id": "string_small_column", "sql": "SELECT ROUND(a, CAST(2 AS SMALLINT)) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_long_literal", "sql": "SELECT ROUND('1.25', 2L) AS r", "batch_size": 2}
+{"id": "string_long_column", "sql": "SELECT ROUND(a, 2L) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_decimal_literal", "sql": "SELECT ROUND('1.25', 2.9) AS r", "batch_size": 2}
+{"id": "string_decimal_column", "sql": "SELECT ROUND(a, 2.9) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_float_literal", "sql": "SELECT ROUND('1.25', 2.9F) AS r", "batch_size": 2}
+{"id": "string_float_column", "sql": "SELECT ROUND(a, 2.9F) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_double_literal", "sql": "SELECT ROUND('1.25', CAST(2.9 AS DOUBLE)) AS r", "batch_size": 2}
+{"id": "string_double_column", "sql": "SELECT ROUND(a, CAST(2.9 AS DOUBLE)) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_negative_decimal_literal", "sql": "SELECT ROUND('1.25', -1.9) AS r", "batch_size": 2}
+{"id": "string_negative_decimal_column", "sql": "SELECT ROUND(a, -1.9) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_string_literal", "sql": "SELECT ROUND('1.25', '2') AS r", "batch_size": 2}
+{"id": "string_string_column", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_fraction_string_literal", "sql": "SELECT ROUND('1.25', '2.9') AS r", "batch_size": 2}
+{"id": "string_fraction_string_column", "sql": "SELECT ROUND(a, '2.9') AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_spaced_string_literal", "sql": "SELECT ROUND('1.25', ' 2 ') AS r", "batch_size": 2}
+{"id": "string_spaced_string_column", "sql": "SELECT ROUND(a, ' 2 ') AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_bad_string_literal", "sql": "SELECT ROUND('1.25', 'bad') AS r", "batch_size": 2}
+{"id": "string_bad_string_column", "sql": "SELECT ROUND(a, 'bad') AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_boolean_literal", "sql": "SELECT ROUND('1.25', true) AS r", "batch_size": 2}
+{"id": "string_boolean_column", "sql": "SELECT ROUND(a, true) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_null_literal", "sql": "SELECT ROUND('1.25', NULL) AS r", "batch_size": 2}
+{"id": "string_null_column", "sql": "SELECT ROUND(a, NULL) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_string_null_literal", "sql": "SELECT ROUND('1.25', CAST(NULL AS STRING)) AS r", "batch_size": 2}
+{"id": "string_string_null_column", "sql": "SELECT ROUND(a, CAST(NULL AS STRING)) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_folded_literal", "sql": "SELECT ROUND('1.25', 1+1) AS r", "batch_size": 2}
+{"id": "string_folded_column", "sql": "SELECT ROUND(a, 1+1) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "string_folded_string_literal", "sql": "SELECT ROUND('1.25', concat('2','')) AS r", "batch_size": 2}
+{"id": "string_folded_string_column", "sql": "SELECT ROUND(a, concat('2','')) AS r FROM VALUES ('1.25'), (NULL) t(a)", "batch_size": 2}
+{"id": "long_overflow", "sql": "SELECT ROUND(a, 2147483648L) AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "long_underflow", "sql": "SELECT ROUND(a, -2147483649L) AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "float_overflow", "sql": "SELECT ROUND(a, CAST(2147483648 AS FLOAT)) AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "double_overflow", "sql": "SELECT ROUND(a, CAST(2147483648 AS DOUBLE)) AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "decimal_overflow", "sql": "SELECT ROUND(a, CAST(2147483648 AS DECIMAL(12,1))) AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "string_overflow", "sql": "SELECT ROUND(a, '2147483648') AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "string_underflow", "sql": "SELECT ROUND(a, '-2147483649') AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "nan", "sql": "SELECT ROUND(a, CAST('NaN' AS DOUBLE)) AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "infinity", "sql": "SELECT ROUND(a, CAST('Infinity' AS DOUBLE)) AS r FROM VALUES (CAST(0 AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "evaluation_bad_decimal_null", "sql": "SELECT ROUND(CAST('bad' AS DECIMAL(10,3)), CAST(NULL AS INT)) AS r", "batch_size": 2}
+{"id": "evaluation_bad_decimal_live", "sql": "SELECT ROUND(CAST('bad' AS DECIMAL(10,3)), 2) AS r", "batch_size": 2}
+{"id": "evaluation_bad_double_null", "sql": "SELECT ROUND(CAST('bad' AS DOUBLE), CAST(NULL AS INT)) AS r", "batch_size": 2}
+{"id": "evaluation_bad_double_live", "sql": "SELECT ROUND(CAST('bad' AS DOUBLE), 2) AS r", "batch_size": 2}
+{"id": "evaluation_bad_string_null", "sql": "SELECT ROUND('bad', CAST(NULL AS INT)) AS r", "batch_size": 2}
+{"id": "evaluation_bad_string_live", "sql": "SELECT ROUND('bad', 2) AS r", "batch_size": 2}
+{"id": "evaluation_division_null", "sql": "SELECT ROUND(CAST(1 AS DECIMAL(10,3))/CAST(0 AS DECIMAL(10,3)), CAST(NULL AS INT)) AS r", "batch_size": 2}
+{"id": "evaluation_division_live", "sql": "SELECT ROUND(CAST(1 AS DECIMAL(10,3))/CAST(0 AS DECIMAL(10,3)), 2) AS r", "batch_size": 2}
+{"id": "column_bad_NULL", "sql": "SELECT ROUND(CAST(a AS DECIMAL(10,3)), NULL) AS r FROM VALUES ('bad'), (NULL) t(a)", "batch_size": 2}
+{"id": "column_bad_'bad'", "sql": "SELECT ROUND(CAST(a AS DECIMAL(10,3)), 'bad') AS r FROM VALUES ('bad'), (NULL) t(a)", "batch_size": 2}
+{"id": "column_bad_2", "sql": "SELECT ROUND(CAST(a AS DECIMAL(10,3)), 2) AS r FROM VALUES ('bad'), (NULL) t(a)", "batch_size": 2}
+{"id": "invalid_value_true", "sql": "SELECT ROUND(true, 2) AS r", "batch_size": 2}
+{"id": "invalid_value_array(1,2)", "sql": "SELECT ROUND(array(1,2), 2) AS r", "batch_size": 2}
+{"id": "null_input", "sql": "SELECT ROUND(NULL, '2') AS r", "batch_size": 2}
+{"id": "empty", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3))) t(a) WHERE false", "batch_size": 2}
+{"id": "all_null", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(NULL AS DECIMAL(10,3))), (NULL) t(a)", "batch_size": 2}
+{"id": "column_scale", "sql": "SELECT ROUND(a,d) AS r FROM VALUES (CAST(1.255 AS DECIMAL(10,3)),2) t(a,d)", "batch_size": 2}
+{"id": "null_dynamic_scale", "sql": "SELECT ROUND(CAST(NULL AS DECIMAL(10,3)), id) AS r FROM range(2)", "batch_size": 2}
+{"id": "volatile_scale", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), rand()) AS r", "batch_size": 2}
+{"id": "subquery_scale", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), (SELECT 2)) AS r", "batch_size": 2}
+{"id": "subquery_bad_input", "sql": "SELECT ROUND((SELECT CAST(v AS DECIMAL(10,3)) FROM VALUES ('bad') t(v)), NULL) AS r", "batch_size": 2}
+{"id": "subquery_multiple_rows", "sql": "SELECT ROUND((SELECT CAST(v AS DECIMAL(10,3)) FROM VALUES (1), (2) t(v)), NULL) AS r", "batch_size": 2}
+{"id": "no_arguments", "sql": "SELECT ROUND() AS r", "batch_size": 2}
+{"id": "extra_argument", "sql": "SELECT ROUND(1.2, 2, 3) AS r", "batch_size": 2}
+{"id": "nested", "sql": "SELECT ROUND(ROUND(CAST(1.255 AS DECIMAL(10,3)), '2'), 1.9) AS r", "batch_size": 2}
