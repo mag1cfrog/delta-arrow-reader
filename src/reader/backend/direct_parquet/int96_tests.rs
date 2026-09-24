@@ -3,7 +3,7 @@
 use std::{error::Error, fs, sync::Arc};
 
 use arrow::{
-    array::{Array, AsArray, ListArray, MapArray, StructArray},
+    array::{Array, AsArray, MapArray, StructArray},
     datatypes::{DataType, Field, Int32Type, Schema, TimeUnit, TimestampMicrosecondType},
     record_batch::RecordBatch,
 };
@@ -177,6 +177,24 @@ fn timestamp_values(batches: &[RecordBatch], column: &str) -> Vec<Option<i64>> {
                 .unwrap()
                 .as_primitive::<TimestampMicrosecondType>()
                 .iter()
+        })
+        .collect()
+}
+
+fn timestamp_lists(batches: &[RecordBatch], column: &str) -> Vec<Option<Vec<Option<i64>>>> {
+    batches
+        .iter()
+        .flat_map(|batch| {
+            let lists = batch.column_by_name(column).unwrap().as_list::<i32>();
+            (0..lists.len()).map(|row| {
+                lists.is_valid(row).then(|| {
+                    lists
+                        .value(row)
+                        .as_primitive::<TimestampMicrosecondType>()
+                        .iter()
+                        .collect()
+                })
+            })
         })
         .collect()
 }
@@ -585,6 +603,13 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
     )?;
     let mut group = writer.next_row_group()?;
     let expected = [Some(i64::MIN), Some(i64::MAX), Some(1_704_067_200_123_456)];
+    let expected_lists = vec![
+        Some(vec![expected[0], None, expected[1]]),
+        None,
+        Some(vec![]),
+        Some(vec![expected[2]]),
+        Some(vec![expected[0]]),
+    ];
     let timestamps = expected
         .iter()
         .map(|n| int96(i128::from(n.unwrap()) * 1_000))
@@ -635,11 +660,7 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
             ),
             Field::new(
                 "items",
-                DataType::List(Arc::new(Field::new(
-                    "element",
-                    DataType::Timestamp(TimeUnit::Microsecond, None),
-                    true,
-                ))),
+                DataType::List(Arc::new(Field::new("element", micro.clone(), true))),
                 true,
             ),
             Field::new(
@@ -712,30 +733,9 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
                 .collect::<Vec<_>>(),
             [Some(123_456), None, None, Some(123_456), Some(123_456)]
         );
-        let list = batch
-            .column(1)
-            .as_any()
-            .downcast_ref::<ListArray>()
-            .unwrap();
-        let lists = (0..5)
-            .map(|i| {
-                (!list.is_null(i)).then(|| {
-                    list.value(i)
-                        .as_primitive::<TimestampMicrosecondType>()
-                        .iter()
-                        .collect::<Vec<_>>()
-                })
-            })
-            .collect::<Vec<_>>();
         assert_eq!(
-            lists,
-            [
-                Some(vec![expected[0], None, expected[1]]),
-                None,
-                Some(vec![]),
-                Some(vec![expected[2]]),
-                Some(vec![expected[0]])
-            ]
+            timestamp_lists(std::slice::from_ref(&batch), "items"),
+            expected_lists
         );
         let map = batch.column(2).as_any().downcast_ref::<MapArray>().unwrap();
         assert_eq!(map.value_offsets(), [0, 2, 2, 2, 3, 4]);
@@ -749,6 +749,60 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
             [expected[0], None, expected[1], expected[2]]
         );
         assert_eq!(timestamp_values(&[batch], "tail"), vec![expected[0]; 5]);
+    }
+    fs::create_dir_all(root.path().join("_delta_log"))?;
+    for ntz in [false, true] {
+        let timestamp = if ntz { "timestamp_ntz" } else { "timestamp" };
+        let protocol = json!({"protocol":{"minReaderVersion":3,"minWriterVersion":7,"readerFeatures":["timestampNtz"],"writerFeatures":["timestampNtz"]}});
+        let schema = json!({"type":"struct","fields":[
+            {"name":"items","type":{"type":"array","elementType":timestamp,"containsNull":true},"nullable":true,"metadata":{}}
+        ]});
+        let metadata = json!({"metaData":{"id":"int96-timestamp-array","format":{"provider":"parquet","options":{}},"schemaString":schema.to_string(),"partitionColumns":[],"configuration":{}}});
+        let add = json!({"add":{"path":"part.parquet","partitionValues":{},"size":bytes.len(),"modificationTime":0,"dataChange":true}});
+        fs::write(
+            root.path().join("_delta_log/00000000000000000000.json"),
+            format!("{protocol}\n{metadata}\n{add}\n"),
+        )?;
+        let table = DeltaTableBuilder::new(root.path().to_string_lossy())
+            .load_table()
+            .await?;
+        let batches = table
+            .scan()
+            .with_target_partitions(1)?
+            .build()
+            .await?
+            .into_stream()
+            .try_collect::<Vec<_>>()
+            .await?;
+        assert_eq!(timestamp_lists(&batches, "items"), expected_lists);
+        for batch in &batches {
+            assert_eq!(
+                batch.column(0).as_list::<i32>().values().data_type(),
+                &DataType::Timestamp(
+                    TimeUnit::Microsecond,
+                    if ntz { None } else { Some("UTC".into()) }
+                ),
+            );
+        }
+        #[cfg(feature = "datafusion")]
+        for use_arrow_view_types in [false, true] {
+            use crate::datafusion::{DeltaTableProvider, ScanOptions};
+            use datafusion::prelude::{SessionConfig, SessionContext};
+            let provider = Arc::new(DeltaTableProvider::try_new(
+                table.clone(),
+                ScanOptions {
+                    use_arrow_view_types,
+                    ..Default::default()
+                },
+            )?);
+            let context = SessionContext::new_with_config(
+                SessionConfig::new()
+                    .with_target_partitions(1)
+                    .with_batch_size(2),
+            );
+            let batches = context.read_table(provider)?.collect().await?;
+            assert_eq!(timestamp_lists(&batches, "items"), expected_lists);
+        }
     }
     Ok(())
 }

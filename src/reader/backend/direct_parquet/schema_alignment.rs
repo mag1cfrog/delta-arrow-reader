@@ -394,13 +394,6 @@ fn build_matched_list_field_plan(
         parquet_list_element_field(parquet_field, path)?,
         &element_path,
     )?;
-    if matches!(element_plan, FieldPlan::Cast { .. }) {
-        return Err(incompatible_parquet_type(
-            &element_path,
-            target_element.data_type(),
-            file_element.data_type(),
-        ));
-    }
     if file_field.data_type() != target_field.data_type() || !element_plan.is_identity() {
         Ok(FieldPlan::List {
             element_plan: Box::new(element_plan),
@@ -1333,47 +1326,131 @@ mod tests {
     }
 
     #[test]
-    fn direct_parquet_schema_alignment_rejects_list_primitive_leaf_cast()
+    fn direct_parquet_schema_alignment_casts_only_supported_list_primitive_leaves()
     -> Result<(), Box<dyn std::error::Error>> {
-        let target_schema = Arc::new(Schema::new(vec![
-            Field::new(
-                "tags",
-                DataType::List(Arc::new(Field::new("element", DataType::Int64, true))),
-                true,
-            ),
-            Field::new("id", DataType::Int32, false),
-        ]));
-        let file_element = Field::new("element", DataType::Int32, true);
-        let file_schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int32, false),
-            Field::new("customer_name", DataType::Utf8, true),
-            Field::new("tags", DataType::List(Arc::new(file_element.clone())), true),
-        ]));
-        let tags = list_array(
-            file_element,
-            vec![0, 2, 2, 3],
-            Arc::new(Int32Array::from(vec![Some(7), Some(11), None])) as ArrayRef,
-            Some(NullBuffer::from(vec![true, false, true])),
-        )?;
+        for target_type in [DataType::Int64, DataType::Utf8] {
+            let target_schema = Arc::new(Schema::new(vec![
+                Field::new(
+                    "tags",
+                    DataType::List(Arc::new(Field::new("element", target_type.clone(), true))),
+                    true,
+                ),
+                Field::new("id", DataType::Int32, false),
+            ]));
+            let file_element = Field::new("element", DataType::Int32, true);
+            let file_schema = Arc::new(Schema::new(vec![
+                Field::new("id", DataType::Int32, false),
+                Field::new("customer_name", DataType::Utf8, true),
+                Field::new("tags", DataType::List(Arc::new(file_element.clone())), true),
+            ]));
+            let tags = list_array(
+                file_element,
+                vec![0, 2, 2, 3, 3],
+                Arc::new(Int32Array::from(vec![Some(7), Some(11), None])) as ArrayRef,
+                Some(NullBuffer::from(vec![true, false, true, true])),
+            )?;
+            let result = project_parquet_batch_to_target_schema(
+                "list-primitive-leaf-cast-schema-match",
+                file_schema,
+                vec![
+                    Arc::new(Int32Array::from(vec![1, 2, 3, 4])) as ArrayRef,
+                    Arc::new(StringArray::from(vec![
+                        Some("alice"),
+                        Some("bob"),
+                        None,
+                        None,
+                    ])) as ArrayRef,
+                    tags,
+                ],
+                Arc::clone(&target_schema),
+            );
+            if target_type == DataType::Utf8 {
+                let error = match result {
+                    Ok(_) => return Err("unsupported list element cast must fail".into()),
+                    Err(error) => error.to_string(),
+                };
+                assert!(error.contains("tags.element"), "{error}");
+                assert!(error.contains("expected Parquet type Utf8"), "{error}");
+                assert!(error.contains("found Int32"), "{error}");
+                continue;
+            }
+            let batch = result?;
+            assert_eq!(batch.schema(), target_schema);
+            let tags = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<ListArray>()
+                .ok_or("expected ListArray")?;
+            assert_eq!(tags.value_offsets(), &[0, 2, 2, 3, 3]);
+            assert_eq!(
+                tags.nulls()
+                    .ok_or("expected list validity")?
+                    .iter()
+                    .collect::<Vec<_>>(),
+                [true, false, true, true]
+            );
+            assert_eq!(
+                tags.values().as_ref(),
+                &Int64Array::from(vec![Some(7), Some(11), None]) as &dyn Array
+            );
+            assert_eq!(
+                batch.column(1).as_ref(),
+                &Int32Array::from(vec![1, 2, 3, 4]) as &dyn Array
+            );
+        }
+        Ok(())
+    }
 
-        let error = match project_parquet_batch_to_target_schema(
-            "list-primitive-leaf-cast-schema-match",
-            file_schema,
-            vec![
-                Arc::new(Int32Array::from(vec![1, 2, 3])) as ArrayRef,
-                Arc::new(StringArray::from(vec![Some("alice"), Some("bob"), None])) as ArrayRef,
-                tags,
-            ],
-            target_schema,
-        ) {
-            Ok(_) => return Err("primitive list element cast must fail".into()),
-            Err(error) => error.to_string(),
-        };
+    #[test]
+    fn list_timestamp_casts_enforce_required_element_nullability()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use arrow::array::TimestampMillisecondArray;
 
-        assert!(error.contains("tags.element"), "{error}");
-        assert!(error.contains("expected Parquet type Int64"), "{error}");
-        assert!(error.contains("found Int32"), "{error}");
-
+        for value in [0, i64::MAX] {
+            let element = Field::new(
+                "element",
+                DataType::Timestamp(TimeUnit::Millisecond, None),
+                false,
+            );
+            let schema = Arc::new(Schema::new(vec![Field::new(
+                "items",
+                DataType::List(Arc::new(element.clone())),
+                false,
+            )]));
+            let items = list_array(
+                element,
+                vec![0, 1],
+                Arc::new(TimestampMillisecondArray::from(vec![value])),
+                None,
+            )?;
+            let target_type = DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()));
+            let target = Arc::new(Schema::new(vec![Field::new(
+                "items",
+                DataType::List(Arc::new(Field::new("element", target_type, false))),
+                false,
+            )]));
+            let result = project_parquet_batch_to_target_schema(
+                "required-list-timestamp",
+                schema,
+                vec![items],
+                target,
+            );
+            if value == i64::MAX {
+                // Unit overflow creates a NULL, which a required element must reject.
+                assert!(result.is_err());
+            } else {
+                let batch = result?;
+                let items = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<ListArray>()
+                    .ok_or("expected ListArray")?;
+                assert_eq!(
+                    items.values().as_ref(),
+                    &TimestampMicrosecondArray::from(vec![0]).with_timezone("UTC") as &dyn Array
+                );
+            }
+        }
         Ok(())
     }
 
