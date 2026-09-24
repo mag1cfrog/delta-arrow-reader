@@ -87,6 +87,7 @@ futures-util = "0.3"
 object_store = "0.13.2"
 parquet = { version = "58.3.0", features = ["async", "object_store"] }
 snafu = "0.9"
+thrift = { version = "0.17", default-features = false }
 tokio = { version = "1", features = ["net", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 url = "2"

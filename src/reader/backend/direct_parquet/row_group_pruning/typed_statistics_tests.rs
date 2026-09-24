@@ -2,14 +2,15 @@
 //!
 //! Independent Arrow casts or integer oracles provide the expected logical values.
 //! Comparisons are evaluated on those values.
-//! It does not call the statistics conversion under test. Singleton row groups must
-//! be pruned exactly; multi-row groups must retain every matching row. This catches
+//! It does not call the statistics conversion under test. Singleton row groups with
+//! complete bounds must be pruned exactly; all groups must retain every matching row. This catches
 //! both wrong results and a fix that simply disables pruning for widened types.
 //!
 //! Coverage: scalar widening families accepted by schema alignment; decimal precision and
 //! scale changes; all timestamp units/timezone directions; pre-epoch timestamps;
 //! null-only groups; all six comparisons; exact boundaries; absent statistics.
-//! NaN ordering and INT96 value decoding belong to issues #120 and #119.
+//! Floating range bounds may omit NaNs; the sibling floating statistics matrix
+//! covers that fallback (#120). INT96 value decoding is covered separately (#119).
 
 #![allow(clippy::unwrap_used)]
 
@@ -55,8 +56,26 @@ fn file_schema(metadata: &ParquetMetaData) -> TestResult<Arc<Schema>> {
     )?))
 }
 
-fn pruned_row_groups(
+pub(super) fn pruned_row_groups(
     metadata: &ParquetMetaData,
+    target_schema: &Arc<Schema>,
+    file_size: u64,
+    byte_range: Option<&std::ops::Range<u64>>,
+    predicate: Option<&DeltaKernelPredicate>,
+) -> TestResult<Option<Vec<usize>>> {
+    pruned_row_groups_with_nan_counts(
+        metadata,
+        &super::NanCounts::default(),
+        target_schema,
+        file_size,
+        byte_range,
+        predicate,
+    )
+}
+
+pub(super) fn pruned_row_groups_with_nan_counts(
+    metadata: &ParquetMetaData,
+    nan_counts: &super::NanCounts,
     target_schema: &Arc<Schema>,
     file_size: u64,
     byte_range: Option<&std::ops::Range<u64>>,
@@ -70,6 +89,7 @@ fn pruned_row_groups(
     )?;
     Ok(super::pruned_row_groups(
         metadata,
+        nan_counts,
         &file_schema,
         &alignment,
         file_size,
@@ -353,7 +373,7 @@ fn parquet_file(
     Ok((bytes, metadata))
 }
 
-const COMPARISONS: [DeltaComparison; 6] = [
+pub(super) const COMPARISONS: [DeltaComparison; 6] = [
     DeltaComparison::Eq,
     DeltaComparison::NotEq,
     DeltaComparison::Lt,
@@ -375,7 +395,7 @@ fn predicate(op: DeltaComparison, scalar: KernelScalar) -> DeltaKernelPredicate 
     })
 }
 
-fn matching_rows(
+pub(super) fn matching_rows(
     values: &ArrayRef,
     literal: ArrayRef,
     op: DeltaComparison,
@@ -418,10 +438,15 @@ fn check_matrix(group_size: usize, statistics: EnabledStatistics) -> TestResult 
                     .map(|i| i / group_size)
                     .collect::<std::collections::BTreeSet<_>>();
                 let missing = expected_groups.iter().any(|i| !selected.contains(i));
-                // Non-null singleton groups have exact bounds. All-null handling is
-                // checked separately from the typed min/max conversion contract.
+                // Even singleton floating bounds are treated as incomplete for
+                // NaN-sensitive comparisons. Equality and non-floating sources
+                // (including integers widened to doubles) must still prune.
                 let unnecessary = group_size == 1
                     && statistics != EnabledStatistics::None
+                    && (!matches!(
+                        case.source.data_type(),
+                        ArrowType::Float32 | ArrowType::Float64
+                    ) || op == DeltaComparison::Eq)
                     && selected
                         .iter()
                         .any(|&i| converted.is_valid(i) && !expected_groups.contains(&i));
@@ -517,7 +542,13 @@ fn typed_statistics_composed_predicates_and_nulls_match_arrow() -> TestResult {
             let expected = (0..values.len())
                 .filter(|&i| expected.is_valid(i) && expected.value(i))
                 .collect::<Vec<_>>();
-            if actual != expected {
+            let nan_sensitive = matches!(
+                case.source.data_type(),
+                ArrowType::Float32 | ArrowType::Float64
+            ) && matches!(name, "and" | "or" | "not-and");
+            if expected.iter().any(|i| !actual.contains(i))
+                || (!nan_sensitive && actual != expected)
+            {
                 failures.push(format!(
                     "{} {name}: got={actual:?}, expected={expected:?}",
                     case.name
@@ -1015,7 +1046,7 @@ fn delta_type(data_type: &ArrowType) -> String {
     }
 }
 
-fn metadata_action(data_type: &str, mapped: bool, from: Option<&str>) -> Value {
+pub(super) fn metadata_action(data_type: &str, mapped: bool, from: Option<&str>) -> Value {
     let mut value_metadata = json!({});
     let mut id_metadata = json!({});
     let mut configuration = json!({"delta.enableTypeWidening":"true"});
@@ -1183,7 +1214,7 @@ fn public_scalar(value: KernelScalar) -> DeltaScalar {
     }
 }
 
-fn ids(batches: &[RecordBatch]) -> Vec<i32> {
+pub(super) fn ids(batches: &[RecordBatch]) -> Vec<i32> {
     let mut result = batches
         .iter()
         .flat_map(|b| {
@@ -1200,7 +1231,7 @@ fn ids(batches: &[RecordBatch]) -> Vec<i32> {
     result
 }
 
-fn expected_ids(mask: &BooleanArray) -> Vec<i32> {
+pub(super) fn expected_ids(mask: &BooleanArray) -> Vec<i32> {
     (0..mask.len())
         .filter(|&i| mask.is_valid(i) && mask.value(i))
         .map(|i| i32::try_from(i).unwrap())

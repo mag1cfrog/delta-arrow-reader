@@ -1213,6 +1213,7 @@ dependencies = [
  "parquet",
  "serde_json",
  "snafu",
+ "thrift",
  "tokio",
  "tracing",
  "url",
