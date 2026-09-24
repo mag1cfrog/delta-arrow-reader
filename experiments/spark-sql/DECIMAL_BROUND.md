@@ -78,7 +78,7 @@ because it errors.
 
 The existing [Decimal benchmark](examples/decimal_bench.rs) gains a `bround`
 mode. It reuses the MemTable input, planner, stream consumer and timing settings:
-1,048,576 rows, batches of 8,192, two warmups and nine samples per process. It
+1,048,576 rows, batches of 8,192, eight warmups and 41 samples per process. It
 separates planning and execution for Decimal columns/literals, ordinary ROUND
 and DOUBLE BROUND, with and without NULL input.
 

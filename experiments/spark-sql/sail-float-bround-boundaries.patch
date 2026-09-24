@@ -1,0 +1,168 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
+@@ -158,10 +158,8 @@
+             (DataType::Float32, DataType::Int32) => {
+                 let x = as_primitive_array::<Float32Type>(&x_array);
+                 let d = as_primitive_array::<Int32Type>(&d_array);
+-                let result = binary::<Float32Type, Int32Type, _, Float32Type>(x, d, |x, s| {
+-                    let pow = 10f32.powi(s);
+-                    round_half_to_even_f32(x * pow) / pow
+-                })?;
++                let result =
++                    binary::<Float32Type, Int32Type, _, Float32Type>(x, d, spark_bround_f32)?;
+                 Ok(ColumnarValue::Array(Arc::new(result)))
+             }
+ 
+@@ -351,21 +349,22 @@
+     }
+ }
+ 
+-fn round_half_to_even_f32(value: f32) -> f32 {
+-    let rounded: f32 = value.trunc();
+-    let fraction: f32 = value - rounded;
+-
+-    if fraction.abs() != 0.5 {
+-        return value.round();
+-    }
+-
+-    if (rounded as i32) % 2 == 0 {
+-        rounded
+-    } else if value > 0.0 {
+-        rounded + 1.0
+-    } else {
+-        rounded - 1.0
+-    }
++fn spark_bround_f32(value: f32, scale: i32) -> f32 {
++    if !value.is_finite() {
++        return value;
++    }
++    // Every finite Float32 is smaller than half of 10^39.
++    if value == 0.0 || scale <= -39 {
++        return 0.0;
++    }
++    // At scale 45 the rounding error is below half the smallest Float32 ULP.
++    if scale >= 45 {
++        return value;
++    }
++    let factor = 10f64.powi(scale);
++    let rounded = ((f64::from(value) * factor).round_ties_even() / factor) as f32;
++    // Spark's BigDecimal result has positive zero, including for negative inputs.
++    rounded + 0.0
+ }
+ 
+ fn spark_bround_f64(x: f64, scale: i32) -> f64 {
+@@ -388,6 +387,113 @@
+     use datafusion_common::config::ConfigOptions;
+ 
+     use super::*;
++
++    #[test]
++    fn float_bround_zero_scale_boundaries() -> Result<()> {
++        use datafusion::arrow::array::Float32Array;
++
++        for (value, scale, expected) in [
++            (-0.5, 0, 0.0),
++            (-0.0, 45, 0.0),
++            (2.5, 39, 2.5),
++            (2.5, -46, 0.0),
++            (f32::from_bits(1), 44, 0.0),
++            (f32::from_bits(1), 45, f32::from_bits(1)),
++            (-f32::from_bits(1), 44, 0.0),
++            (-f32::from_bits(1), 45, -f32::from_bits(1)),
++            (f32::MAX, -39, 0.0),
++            (f32::MAX, 39, f32::MAX),
++            (f32::INFINITY, 39, f32::INFINITY),
++            (f32::NEG_INFINITY, -46, f32::NEG_INFINITY),
++        ] {
++            assert_eq!(spark_bround_f32(value, scale).to_bits(), expected.to_bits());
++        }
++        let udf = SparkBRound::new();
++        let input = Float32Array::from(vec![
++            Some(99.0),
++            Some(-0.5),
++            Some(2.5),
++            None,
++            Some(f32::from_bits(1)),
++            Some(-f32::from_bits(1)),
++            Some(f32::INFINITY),
++            Some(f32::NAN),
++        ]);
++        for (scale, expected) in [
++            (
++                0,
++                vec![
++                    Some(0.0),
++                    Some(2.0),
++                    None,
++                    Some(0.0),
++                    Some(0.0),
++                    Some(f32::INFINITY),
++                    Some(f32::NAN),
++                ],
++            ),
++            (
++                39,
++                vec![
++                    Some(-0.5),
++                    Some(2.5),
++                    None,
++                    Some(0.0),
++                    Some(0.0),
++                    Some(f32::INFINITY),
++                    Some(f32::NAN),
++                ],
++            ),
++            (
++                -46,
++                vec![
++                    Some(0.0),
++                    Some(0.0),
++                    None,
++                    Some(0.0),
++                    Some(0.0),
++                    Some(f32::INFINITY),
++                    Some(f32::NAN),
++                ],
++            ),
++        ] {
++            for (offset, len) in [(1, 7), (3, 1), (3, 0)] {
++                let array = input.slice(offset, len);
++                let scale = ScalarValue::Int32(Some(scale));
++                let fields = vec![
++                    Arc::new(Field::new("a", DataType::Float32, true)),
++                    Arc::new(Field::new("scale", DataType::Int32, false)),
++                ];
++                let field = udf.return_field_from_args(ReturnFieldArgs {
++                    arg_fields: &fields,
++                    scalar_arguments: &[None, Some(&scale)],
++                })?;
++                let result = udf
++                    .invoke_with_args(ScalarFunctionArgs {
++                        args: vec![
++                            ColumnarValue::Array(Arc::new(array)),
++                            ColumnarValue::Scalar(scale),
++                        ],
++                        arg_fields: fields,
++                        number_rows: len,
++                        return_field: field,
++                        config_options: Arc::new(ConfigOptions::default()),
++                    })?
++                    .into_array(len)?;
++                let actual = as_primitive_array::<Float32Type>(&result);
++                for (actual, expected) in actual.iter().zip(&expected[offset - 1..offset - 1 + len])
++                {
++                    match (actual, expected) {
++                        (Some(a), Some(b)) if b.is_nan() => assert!(a.is_nan()),
++                        (Some(a), Some(b)) => assert_eq!(a.to_bits(), b.to_bits()),
++                        (None, None) => {}
++                        _ => panic!("BROUND changed validity"),
++                    }
++                }
++            }
++        }
++        Ok(())
++    }
+ 
+     #[test]
+     fn float_bround_return_field_matches_scalar_and_array_results() -> Result<()> {

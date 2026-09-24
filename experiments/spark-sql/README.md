@@ -10,6 +10,8 @@ The [Decimal BROUND fix](DECIMAL_BROUND.md) adds exact HALF_EVEN Decimal128 roun
 
 The [FLOAT BROUND type fix](FLOAT_BROUND.md) makes the declared result type agree with the existing Float32 output. Its numerical boundary differences and performance follow-ups retain separate owners.
 
+The [FLOAT BROUND boundary fix](FLOAT_BROUND_BOUNDARIES.md) preserves positive zero and finite results at extreme scales, including subnormal inputs. It layers on the selected type fix; its focused checks and cost evidence do not change the default runtime.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
