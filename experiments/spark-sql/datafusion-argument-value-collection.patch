@@ -1,0 +1,46 @@
+--- a/src/scalar_function.rs
++++ b/src/scalar_function.rs
+@@ -295,14 +295,14 @@
+     }
+ 
+     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
++        let Some(first) = self.args.first() else {
++            return self.invoke_evaluated(batch, Vec::new());
++        };
++        let first = first.evaluate(batch)?;
+         if self.short_circuit_null {
+             use arrow::array::{Array, BooleanArray, new_null_array};
+             use arrow::compute::{filter, filter_record_batch};
+             use datafusion_physical_expr_common::utils::scatter;
+-            let Some(first) = self.args.first() else {
+-                return internal_err!("NULL short circuit requires a first argument");
+-            };
+-            let first = first.evaluate(batch)?;
+             match &first {
+                 ColumnarValue::Scalar(value) if value.is_null() => {
+                     return Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(
+@@ -338,18 +338,12 @@
+                 }
+                 _ => {}
+             }
+-            let mut args = Vec::with_capacity(self.args.len());
+-            args.push(first);
+-            for expr in &self.args[1..] {
+-                args.push(expr.evaluate(batch)?);
+-            }
+-            return self.invoke_evaluated(batch, args);
+-        }
+-        let args = self
+-            .args
+-            .iter()
+-            .map(|e| e.evaluate(batch))
+-            .collect::<Result<Vec<_>>>()?;
++        }
++        let mut args = Vec::with_capacity(self.args.len());
++        args.push(first);
++        for expr in &self.args[1..] {
++            args.push(expr.evaluate(batch)?);
++        }
+         self.invoke_evaluated(batch, args)
+     }
+ 

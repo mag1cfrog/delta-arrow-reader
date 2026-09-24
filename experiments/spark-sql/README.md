@@ -6,6 +6,28 @@ The [decimal division patch evaluation](DECIMAL_DIVISION.md) tests a small subse
 
 The [ANSI integer overflow fix](INTEGER_OVERFLOW.md) establishes the optional correctness baseline for signed-integer arithmetic. Its remaining performance costs are separate follow-up work; the default checkpoint below remains unchanged.
 
+The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
+
+The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
+
+The [checked overflow formatting follow-up](CHECKED_OVERFLOW_FORMAT.md) moves error text construction out of successful arithmetic loops. Several calibrated large-batch queries improve; remaining argument and NULL-selection costs stay open.
+
+The [argument capacity experiment](ARGUMENT_CAPACITY.md) reduces allocation bytes but flags a native query slowdown. The broad rewrite and streaming-filter replacement are not selected; their evidence is retained for the narrower NULL-path follow-up.
+
+The [NULL-only argument capacity follow-up](NULL_ARGUMENT_CAPACITY.md) removes one vector growth per affected batch. It retains the allocation improvement and a calibrated small-batch INT query gain, with broader timing flags still open.
+
+The [checked buffer length follow-up](CHECKED_BUFFER_LENGTH.md) removes per-row buffer bookkeeping from checked array kernels. One calibrated large-batch query improves 8.6%; rejected prototypes, shared-caller controls and the remaining planning flag are retained.
+
+The [shared argument collection follow-up](ARGUMENT_VALUE_COLLECTION.md) removes spare value-vector capacity without allocating before a failing first argument. It retains the allocation improvement; query/planning acceptance remains open.
+
+The [scatter NULL bitmap follow-up](SCATTER_NULL_COUNT.md) removes a duplicate bitmap traversal and preserves shared type callers. Its full-query latency comparison remains inconclusive.
+
+The [integer phase-counter follow-up](INTEGER_PHASE_COUNTERS.md) reuses existing perf controls to separate planning and execution work. It narrows the scatter change's attribution while leaving elapsed-time acceptance open.
+
+The [checked-addition alternatives](CHECKED_ADD_ALTERNATIVES.md) retain two rejected overflow-reduction prototypes, including early-error costs and unaffected controls. Neither changes the selected runtime.
+
+The [fixed-block follow-ups](FIXED_CHECKED_BLOCKS.md) remove those prototypes' extra success allocation but still fail the performance gate. Their source, compiler diagnostics and all original measurements are retained.
+
 `inputs.json` pins Apache Spark 4.2.0 and Sail 0.7.1, session settings, table schemas and data. Both engines receive the same explicit schemas, including nested nullability. The runner verifies those schemas and captures input rows for comparison. This avoids differences caused by each engine inferring its own schema from SQL VALUES.
 
 `queries.jsonl` contains 116 stable query IDs. The existing `seed_*` fields retain earlier expectations. Ordered queries compare sequences; unordered queries compare row multisets with duplicates preserved. Partition-dependent cases compare input IDs and check nonnegative partition IDs, partition-local ordering and unique/nonnegative monotonic IDs. SORT BY and monotonic-ID queries expose partition IDs for those checks. The `known_boundary` marker records earlier findings and does not suppress oracle differences.

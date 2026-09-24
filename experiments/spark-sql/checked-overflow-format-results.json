@@ -1,0 +1,232 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/195",
+  "status": "cold text formatting retained after correctness and calibrated query improvements; remaining checked-kernel, argument and NULL-selection costs stay open",
+  "baseline_commit": "1b5cb6fd092332ea95be1d965fed6771dd06b0ed",
+  "runtime_change": "ArrowNativeTypeOp checked +, -, * call a cold non-inlined String formatting helper; the caller retains the primitive check and constructs ArithmeticOverflow. Wrapping arithmetic unchanged.",
+  "patch": {
+    "patch_sha256": "c8fcb524b32206b0113a7570413dd023668f4a36cb9b26f6294a3a3722728f89",
+    "before_sha256": "6428b04aa7760e8c0159eb240664d1c67f46b6812677e67eea7795c4fe73c096",
+    "after_sha256": "008110fe975edfc942333d2e3bcb94af5f2de9b1e456d7d5cf696a4da7b4fc50",
+    "forward_reverse_exact": true
+  },
+  "source_check": {
+    "original_registry_unchanged": true,
+    "local_files_differing_from_published_crate": [
+      "src/arithmetic.rs"
+    ],
+    "published_arithmetic_sha256": "6428b04aa7760e8c0159eb240664d1c67f46b6812677e67eea7795c4fe73c096"
+  },
+  "lock_check": {
+    "only_change": "arrow-array 58.4.0 registry identity/checksum removed for the local path patch; package versions/dependencies unchanged",
+    "exact": true
+  },
+  "binaries": {
+    "before": {
+      "probe": "4013a4a94bf83154b8dd21a7a62e180419caef423bbac67d7e7f47bd4ab4f7da",
+      "bench": "fa40ee082b22d8eae05d185293d2cbfd9ef1c9b7a006959857ebcd2f6d3eed56",
+      "runner": "72b6ae9eb12c1e7aa0be641c7ba617a1377d6aa47cde1aa6fa14169ad25a150b"
+    },
+    "after": {
+      "probe": "64c04f513f2701ddc80785642614106d3194a07ee58b0eefdf99d6fb5c418196",
+      "bench": "f20661575f111a7e2aa4ded18caedcb7c335cdfff81ffafb4120871bec2647e1",
+      "runner": "6008b9c8f327feb9d2a86d70cb64e3fdfcbd582e6cf5e2913702ba9078ce7f5e"
+    }
+  },
+  "correctness": {
+    "focused_agreement": 616,
+    "focused_total": 616,
+    "focused_error_payloads_equal": 131,
+    "changed_error_payloads": 0,
+    "regression_groups": 37,
+    "regression_observations": 6784,
+    "regression_agreement_before_and_after": 6403,
+    "changed_status_or_successful_values_types": 0,
+    "previously_agreeing_regressions": 0,
+    "delta_unchanged": 116,
+    "delta_adapter_checks_passed": 18,
+    "planner_tests_passed": 38,
+    "runner_tests_passed": 28,
+    "upstream_arithmetic_module_tests_passed": 10,
+    "delta_spark_strict_report": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    }
+  },
+  "allocation": {
+    "rows": 1048576,
+    "processes": 4,
+    "case_modes_per_process": 100,
+    "all_counts_bytes_and_peak_unchanged": true,
+    "source": "allocation-summary.json"
+  },
+  "query_timing": {
+    "processes": 32,
+    "rows": 1048576,
+    "warmups": 4,
+    "samples": 15,
+    "cpu": 2,
+    "same_binary_tolerance": 0.05,
+    "scope": "Before/after checked runtime, identical semantics; calibrated comparisons require every same-binary control to pass. No unchanged reruns; no general absence-of-regression claim.",
+    "calibration": {
+      "8192": {
+        "planning": {
+          "passed": 39,
+          "total": 48
+        },
+        "execution": {
+          "passed": 7,
+          "total": 48
+        }
+      },
+      "256": {
+        "planning": {
+          "passed": 22,
+          "total": 48
+        },
+        "execution": {
+          "passed": 13,
+          "total": 48
+        }
+      }
+    },
+    "representative_ansi_cases": {
+      "8192": [
+        {
+          "id": "i32_add_arrays",
+          "before_ms": 2.129841,
+          "after_ms": 1.7324074999999999,
+          "median_paired_ratio": 0.8177353724185831,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i32_add_scalar",
+          "before_ms": 1.2091500000000002,
+          "after_ms": 0.820789,
+          "median_paired_ratio": 0.6746602207075614,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i32_mul_arrays",
+          "before_ms": 1.4163000000000001,
+          "after_ms": 1.0116640000000001,
+          "median_paired_ratio": 0.7106534704264273,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "before_ms": 6.2718395000000005,
+          "after_ms": 5.651462,
+          "median_paired_ratio": 0.9015045988135304,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i64_add_arrays",
+          "before_ms": 3.9626200000000003,
+          "after_ms": 3.7118694999999997,
+          "median_paired_ratio": 0.9391398502072907,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i64_add_scalar",
+          "before_ms": 1.517038,
+          "after_ms": 1.2009205,
+          "median_paired_ratio": 0.7386780902182835,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "before_ms": 9.324078,
+          "after_ms": 7.5131795,
+          "median_paired_ratio": 0.8165124194505591,
+          "same_binary_calibration_passed": false
+        }
+      ],
+      "256": [
+        {
+          "id": "i32_add_arrays",
+          "before_ms": 5.642435,
+          "after_ms": 5.3035455,
+          "median_paired_ratio": 0.9467920366392506,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i32_add_scalar",
+          "before_ms": 5.2585619999999995,
+          "after_ms": 4.8613395,
+          "median_paired_ratio": 0.9278420725075237,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i32_mul_arrays",
+          "before_ms": 5.637591,
+          "after_ms": 5.350839000000001,
+          "median_paired_ratio": 0.9506211524415895,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "before_ms": 15.676431000000001,
+          "after_ms": 14.932099,
+          "median_paired_ratio": 0.9528229220425941,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i64_add_arrays",
+          "before_ms": 6.564211500000001,
+          "after_ms": 6.3959695000000005,
+          "median_paired_ratio": 0.9688767243440601,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i64_add_scalar",
+          "before_ms": 6.3823595,
+          "after_ms": 6.042277500000001,
+          "median_paired_ratio": 0.9474564634194336,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "before_ms": 18.3660275,
+          "after_ms": 18.002632000000002,
+          "median_paired_ratio": 0.9811966865956229,
+          "same_binary_calibration_passed": false
+        }
+      ]
+    }
+  },
+  "counters": {
+    "scope": "Whole-process 48-case query benchmark, includes setup, validation, warmups, planning, execution and serialization; not per-query latency.",
+    "processes": 8,
+    "running_percent": 100,
+    "median_ratios": {
+      "8192": {
+        "instructions:u": 0.991176129295284,
+        "cycles:u": 0.9730991671261674,
+        "branches:u": 1.0000081089144164,
+        "branch-misses:u": 0.9799803579987993
+      },
+      "256": {
+        "instructions:u": 0.9940738998893696,
+        "cycles:u": 0.979928092706444,
+        "branches:u": 1.00050675533077,
+        "branch-misses:u": 0.9785683253430106
+      }
+    }
+  },
+  "prototypes": {
+    "cold_error": "rejected: calibrated nullable BIGINT kernels slower and more whole-process instructions",
+    "cold_string": "21/24 kernel cases calibrated; calibrated improvements about 8%-49%; evaluated separately in the full runtime"
+  },
+  "restoration": {
+    "source_lock_paths": 85,
+    "executable_slots": 3
+  },
+  "remaining": "Intrinsic checked-loop work, argument vectors, required NULL selection/scatter and complete-query/unaffected-path acceptance remain open in issue 195; default-build integration belongs to issue 165.",
+  "raw_archive": {
+    "path": "checked-overflow-format-runs.json.gz",
+    "sha256": "352e4c8b67c237f9a97fb5ccfc96ba55a0ecadcc1009b3c574e8ea1ab3643657",
+    "text_files": 464,
+    "compressed_bytes": 1614678
+  }
+}

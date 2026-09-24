@@ -1,0 +1,89 @@
+--- a/integer_overflow_bench.rs
++++ b/integer_overflow_bench.rs
+@@ -1,5 +1,5 @@
+ //! Bounded planning/execution comparison for the optional integer-overflow patch.
+-use std::{error::Error, fs, sync::Arc, time::Instant};
++use std::{error::Error, fs, io::{BufRead, BufReader, Write}, path::PathBuf, sync::Arc, time::Instant};
+ 
+ use arrow::{
+     array::{Array, ArrayRef, Float64Array, Int32Array, Int64Array, RecordBatch},
+@@ -20,6 +20,25 @@
+ const ROWS: usize = 1_048_576;
+ const WARMUPS: usize = 4;
+ const SAMPLES: usize = 15;
++
++// perf stat --delay=-1 --control=fifo:DIR/control,DIR/ack
++// Counting covers the enabled phase and the control handshake.
++fn perf_command(command: &[u8]) -> Result<()> {
++    if let Some(dir) = std::env::var_os("DECIMAL_BENCH_PERF_DIR") {
++        let dir = PathBuf::from(dir);
++        fs::OpenOptions::new()
++            .write(true)
++            .open(dir.join("control"))?
++            .write_all(command)?;
++        let mut ack = String::new();
++        BufReader::new(fs::File::open(dir.join("ack"))?).read_line(&mut ack)?;
++        if ack != "ack\n" {
++            return Err("unexpected perf control acknowledgement".into());
++        }
++    }
++    Ok(())
++}
++
+ 
+ async fn plan(ctx: &SessionContext, ansi: bool, sql: &str) -> Result<Arc<dyn ExecutionPlan>> {
+     let config = PlanConfig {
+@@ -42,6 +61,12 @@
+ async fn main() -> Result<()> {
+     let args = std::env::args().collect::<Vec<_>>();
+     let batch_size: usize = args.get(2).ok_or("expected batch size")?.parse()?;
++    let selected = args.get(3).ok_or("expected case ID")?;
++    let selected_ansi: bool = args.get(4).ok_or("expected ANSI bool")?.parse()?;
++    let phase = args.get(5).ok_or("expected phase")?;
++    if !matches!(phase.as_str(), "planning" | "execution") {
++        return Err("phase must be planning or execution".into());
++    }
+     let ctx = SessionContext::new_with_state(
+         SessionStateBuilder::new()
+             .with_default_features()
+@@ -125,6 +150,7 @@
+     let mut results = Vec::<Value>::new();
+     for (id, expr) in cases {
+         for ansi in [true, false] {
++            if id != *selected || ansi != selected_ansi { continue; }
+             let sql = format!("SELECT {expr} AS r FROM input");
+             let physical = plan(&ctx, ansi, &sql).await?;
+             let output = collect(physical.clone(), ctx.task_ctx()).await?;
+@@ -166,6 +192,7 @@
+             let mut execution = Vec::new();
+             let mut planning = Vec::new();
+             for iteration in 0..WARMUPS + SAMPLES {
++                if iteration == WARMUPS && phase == "execution" { perf_command(b"enable\n")?; }
+                 let start = Instant::now();
+                 let output = collect(physical.clone(), ctx.task_ctx()).await?;
+                 drop(output);
+@@ -174,7 +201,9 @@
+                     execution.push(elapsed);
+                 }
+             }
++            if phase == "execution" { perf_command(b"disable\n")?; }
+             for iteration in 0..WARMUPS + SAMPLES {
++                if iteration == WARMUPS && phase == "planning" { perf_command(b"enable\n")?; }
+                 let start = Instant::now();
+                 let physical = plan(&ctx, ansi, &sql).await?;
+                 std::hint::black_box(physical);
+@@ -183,12 +212,14 @@
+                     planning.push(elapsed);
+                 }
+             }
++            if phase == "planning" { perf_command(b"disable\n")?; }
+             results.push(json!({"id": id, "ansi": ansi, "sql": sql,
+                 "types": format!("{:?}", physical.schema().field(0).data_type()),
+                 "physical_plan": displayable(physical.as_ref()).indent(true).to_string(),
+                 "output_bytes": output_bytes, "execution_ms": execution, "planning_ms": planning}));
+         }
+     }
++    if results.len() != 1 { return Err("case ID did not select one result".into()); }
+     fs::write(
+         args.get(1).ok_or("expected output path")?,
+         serde_json::to_vec_pretty(&json!({

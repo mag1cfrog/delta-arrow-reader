@@ -1,0 +1,19 @@
+--- a/src/utils.rs
++++ b/src/utils.rs
+@@ -208,15 +208,10 @@
+     output_len: usize,
+     selectivity: f64,
+ ) -> Option<NullBuffer> {
+-    let false_count = output_len - mask.count_set_bits();
+     let src_null_count = src_nulls.map(|n| n.null_count()).unwrap_or(0);
+ 
+     if src_null_count == 0 {
+-        if false_count == 0 {
+-            None
+-        } else {
+-            Some(NullBuffer::new(mask.clone()))
+-        }
++        Some(NullBuffer::new(mask.clone())).filter(|n| n.null_count() > 0)
+     } else {
+         let src_nulls = src_nulls.unwrap();
+         let scattered = scatter_bits(src_nulls.inner(), mask, output_len, selectivity);

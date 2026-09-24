@@ -1,0 +1,1427 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/195",
+  "status": "column reuse retained for allocation reduction; whole-query timing inconclusive; performance issue remains open",
+  "baseline_commit": "34c3d4e6e7c4639c91fb43f3080979e30b378bcf",
+  "baseline_pr": "https://github.com/mag1cfrog/delta-arrow-reader/pull/194",
+  "versions": {
+    "spark": "4.2.0",
+    "sail_provenance": "0.7.1",
+    "datafusion": "54.1.0",
+    "arrow": "58.4.0",
+    "rustc": "1.98.1"
+  },
+  "runtime_change": {
+    "patch_sha256": "d0cdf117532dbda0446343139f7ac6cf3364d95b7f0e08397fc7d20d85e5b917",
+    "before_sha256": "3596b6ef83bc5d332ca099a5ab09590856a37997d7d9f160f8216296d7433ea7",
+    "after_sha256": "2d828c4b35ff9ed2d6b24bd742b71cba3fbb781455ed914aeed7f783584287a7",
+    "forward_and_reverse_exact": true
+  },
+  "runtime_sources_changed": [
+    "native-scalar-function.rs"
+  ],
+  "binaries": {
+    "before": {
+      "probe": "99abacb2f9be96e96b5c4ca2a59390f82dd9f8ba38818f1b2a6115d19394b71d",
+      "bench": "3307444d7f900f695f8e3e5b32f324c2b90c514ae1d3908ae38e58de35e1bf7d",
+      "runner": "760f376d780074f5aa7e1e0232e8a5c78998abe542211fc29d63e686f234050a"
+    },
+    "after": {
+      "probe": "36ee938c26ec46967bf35534adbf30af9d2286d6383d1e7a2b2d3799b91db3fc",
+      "bench": "385d0c6ea296af6aa084ded53d681afd0ef3bebfe4745d5292467c4016e49356",
+      "runner": "bad005d303c0cc6fc047b136be4c3ecb76ef10317fcb64605ae082387a8cb8ea"
+    }
+  },
+  "correctness": {
+    "focused_agreement": 616,
+    "focused_total": 616,
+    "regression_groups": 37,
+    "regression_observations": 6784,
+    "regression_agreement_before_and_after": 6403,
+    "changed_status_or_successful_values_types": 0,
+    "previously_agreeing_regressions": 0,
+    "delta_unchanged": 116,
+    "delta_adapter_checks_passed": 18,
+    "planner_tests_passed": 38,
+    "runner_tests_passed": 28,
+    "delta_spark_strict_report": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    }
+  },
+  "diagnostic": {
+    "rows": 1048576,
+    "processes": 8,
+    "cases_per_batch": 20,
+    "calibrated_cases": {
+      "8192": 17,
+      "256": 9
+    },
+    "representative_cases": {
+      "8192": [
+        {
+          "id": "i32_add_arrays",
+          "process_medians_ms": {
+            "wrapping": [
+              0.126184,
+              0.126986,
+              0.13069199999999997,
+              0.12603399999999998
+            ],
+            "native_a": [
+              0.901124,
+              0.9023460000000001,
+              0.9028769999999999,
+              0.907445
+            ],
+            "spark_a": [
+              0.922674,
+              0.924979,
+              0.9264209999999999,
+              0.9258689999999999
+            ],
+            "spark_b": [
+              0.9228240000000001,
+              0.924858,
+              0.92607,
+              0.924578
+            ],
+            "native_b": [
+              0.907536,
+              0.905892,
+              0.907065,
+              0.905722
+            ]
+          },
+          "medians_ms": {
+            "wrapping": 0.126585,
+            "native_checked": 0.9046505,
+            "spark_checked": 0.925071
+          },
+          "process_ratios": {
+            "native_same_plan": [
+              1.007115557903241,
+              1.003929756434893,
+              1.0046385055771718,
+              0.9981012623354585
+            ],
+            "spark_same_plan": [
+              1.000162570962225,
+              0.9998691862193628,
+              0.9996211225781799,
+              0.9986056342743953
+            ],
+            "native_checked_over_wrapping": [
+              7.166756482596844,
+              7.119832107476416,
+              6.924455972821597,
+              7.193166129774506
+            ],
+            "spark_over_native_checked": [
+              1.020367564937578,
+              1.0230052681118302,
+              1.0235084881172987,
+              1.0205607095209652
+            ]
+          },
+          "median_ratios": {
+            "native_same_plan": 1.0042841310060324,
+            "spark_same_plan": 0.9997451543987714,
+            "native_checked_over_wrapping": 7.14329429503663,
+            "spark_over_native_checked": 1.0217829888163976
+          },
+          "same_plan_calibration_passed": true,
+          "allocation_counts": {
+            "wrapping": {
+              "allocation_calls": [
+                384
+              ],
+              "allocated_bytes": [
+                4215808
+              ],
+              "peak_live_bytes": [
+                32936
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_a": {
+              "allocation_calls": [
+                384
+              ],
+              "allocated_bytes": [
+                4215808
+              ],
+              "peak_live_bytes": [
+                32936
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_a": {
+              "allocation_calls": [
+                1152
+              ],
+              "allocated_bytes": [
+                4285696
+              ],
+              "peak_live_bytes": [
+                33482
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_b": {
+              "allocation_calls": [
+                1152
+              ],
+              "allocated_bytes": [
+                4285696
+              ],
+              "peak_live_bytes": [
+                33482
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_b": {
+              "allocation_calls": [
+                384
+              ],
+              "allocated_bytes": [
+                4215808
+              ],
+              "peak_live_bytes": [
+                32936
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "process_medians_ms": {
+            "wrapping": [
+              0.22190200000000002,
+              0.25297,
+              0.220289,
+              0.218726
+            ],
+            "native_a": [
+              1.5324959999999999,
+              1.6007129999999998,
+              1.533809,
+              1.542855
+            ],
+            "spark_a": [
+              7.630162,
+              7.753902,
+              7.653144,
+              7.685294
+            ],
+            "spark_b": [
+              7.6597360000000005,
+              7.6312940000000005,
+              7.674204,
+              7.688009
+            ],
+            "native_b": [
+              1.5336379999999998,
+              1.53995,
+              1.532587,
+              1.539148
+            ]
+          },
+          "medians_ms": {
+            "wrapping": 0.2210955,
+            "native_checked": 1.53709975,
+            "spark_checked": 7.67516275
+          },
+          "process_ratios": {
+            "native_same_plan": [
+              1.0007451895469874,
+              0.962040040906771,
+              0.9992032906313628,
+              0.9975973114777473
+            ],
+            "spark_same_plan": [
+              1.0038759334336544,
+              0.9841875742045747,
+              1.0027518102364203,
+              1.0003532721064412
+            ],
+            "native_checked_over_wrapping": [
+              6.908757018864183,
+              6.207579950191723,
+              6.959938989236866,
+              7.0453512613955365
+            ],
+            "spark_over_native_checked": [
+              4.986702472886051,
+              4.898709603672855,
+              4.998489431893336,
+              4.988088265975081
+            ]
+          },
+          "median_ratios": {
+            "native_same_plan": 0.998400301054555,
+            "spark_same_plan": 1.0015525411714308,
+            "native_checked_over_wrapping": 6.934348004050524,
+            "spark_over_native_checked": 4.987395369430566
+          },
+          "same_plan_calibration_passed": true,
+          "allocation_counts": {
+            "wrapping": {
+              "allocation_calls": [
+                1152
+              ],
+              "allocated_bytes": [
+                8453632
+              ],
+              "peak_live_bytes": [
+                65872
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_a": {
+              "allocation_calls": [
+                1152
+              ],
+              "allocated_bytes": [
+                8453632
+              ],
+              "peak_live_bytes": [
+                65872
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_a": {
+              "allocation_calls": [
+                6144
+              ],
+              "allocated_bytes": [
+                31107396
+              ],
+              "peak_live_bytes": [
+                141777
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_b": {
+              "allocation_calls": [
+                6144
+              ],
+              "allocated_bytes": [
+                31107396
+              ],
+              "peak_live_bytes": [
+                141777
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_b": {
+              "allocation_calls": [
+                1152
+              ],
+              "allocated_bytes": [
+                8453632
+              ],
+              "peak_live_bytes": [
+                65872
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "process_medians_ms": {
+            "wrapping": [
+              0.71054,
+              0.6740109999999999,
+              0.6837,
+              0.694459
+            ],
+            "native_a": [
+              1.725615,
+              1.79844,
+              1.796057,
+              1.71776
+            ],
+            "spark_a": [
+              14.412398999999999,
+              14.311671,
+              14.248665,
+              14.053652
+            ],
+            "spark_b": [
+              14.109214999999999,
+              14.307444,
+              14.310759,
+              14.217545999999999
+            ],
+            "native_b": [
+              1.741455,
+              1.793912,
+              1.799502,
+              1.723381
+            ]
+          },
+          "medians_ms": {
+            "wrapping": 0.6890795000000001,
+            "native_checked": 1.7648555,
+            "spark_checked": 14.2702595
+          },
+          "process_ratios": {
+            "native_same_plan": [
+              1.009179336062795,
+              0.9974822624051956,
+              1.0019180905728493,
+              1.0032722848360656
+            ],
+            "spark_same_plan": [
+              0.9789636687133072,
+              0.9997046466481796,
+              1.0043578819489403,
+              1.0116620220850778
+            ],
+            "native_checked_over_wrapping": [
+              2.439743012356799,
+              2.6649060623639675,
+              2.629485885622349,
+              2.4775695901413903
+            ],
+            "spark_over_native_checked": [
+              8.226431540176577,
+              7.966678933467545,
+              7.942971871689493,
+              8.215646496322004
+            ]
+          },
+          "median_ratios": {
+            "native_same_plan": 1.0025951877044574,
+            "spark_same_plan": 1.00203126429856,
+            "native_checked_over_wrapping": 2.5535277378818697,
+            "spark_over_native_checked": 8.091162714894775
+          },
+          "same_plan_calibration_passed": true,
+          "allocation_counts": {
+            "wrapping": {
+              "allocation_calls": [
+                1152
+              ],
+              "allocated_bytes": [
+                16842752
+              ],
+              "peak_live_bytes": [
+                131408
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_a": {
+              "allocation_calls": [
+                1152
+              ],
+              "allocated_bytes": [
+                16842752
+              ],
+              "peak_live_bytes": [
+                131408
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_a": {
+              "allocation_calls": [
+                6144
+              ],
+              "allocated_bytes": [
+                53280136
+              ],
+              "peak_live_bytes": [
+                282233
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_b": {
+              "allocation_calls": [
+                6144
+              ],
+              "allocated_bytes": [
+                53280136
+              ],
+              "peak_live_bytes": [
+                282233
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_b": {
+              "allocation_calls": [
+                1152
+              ],
+              "allocated_bytes": [
+                16842752
+              ],
+              "peak_live_bytes": [
+                131408
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            }
+          }
+        }
+      ],
+      "256": [
+        {
+          "id": "i32_add_arrays",
+          "process_medians_ms": {
+            "wrapping": [
+              0.635911,
+              0.6354000000000001,
+              0.637053,
+              0.626694
+            ],
+            "native_a": [
+              1.411271,
+              1.404939,
+              1.415149,
+              1.397876
+            ],
+            "spark_a": [
+              2.044518,
+              2.02426,
+              2.064945,
+              2.036092
+            ],
+            "spark_b": [
+              2.040801,
+              2.027446,
+              2.070765,
+              2.031854
+            ],
+            "native_b": [
+              1.411962,
+              1.406372,
+              1.428914,
+              1.402034
+            ]
+          },
+          "medians_ms": {
+            "wrapping": 0.6356555,
+            "native_checked": 1.408636,
+            "spark_checked": 2.0383162500000003
+          },
+          "process_ratios": {
+            "native_same_plan": [
+              1.000489629560871,
+              1.0010199731091527,
+              1.0097268909492922,
+              1.0029745127607885
+            ],
+            "spark_same_plan": [
+              0.9981819675835576,
+              1.0015739084900162,
+              1.002818477005441,
+              0.997918561636704
+            ],
+            "native_checked_over_wrapping": [
+              2.2198334358109864,
+              2.212237173434057,
+              2.232202815150388,
+              2.233873309781169
+            ],
+            "spark_over_native_checked": [
+              1.4470357211041385,
+              1.4412158597892584,
+              1.4541555514065614,
+              1.4528845570036182
+            ]
+          },
+          "median_ratios": {
+            "native_same_plan": 1.0019972429349706,
+            "spark_same_plan": 0.9998779380367868,
+            "native_checked_over_wrapping": 2.226018125480687,
+            "spark_over_native_checked": 1.4499601390538783
+          },
+          "same_plan_calibration_passed": true,
+          "allocation_counts": {
+            "wrapping": {
+              "allocation_calls": [
+                12288
+              ],
+              "allocated_bytes": [
+                4882432
+              ],
+              "peak_live_bytes": [
+                1192
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_a": {
+              "allocation_calls": [
+                12288
+              ],
+              "allocated_bytes": [
+                4882432
+              ],
+              "peak_live_bytes": [
+                1192
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_a": {
+              "allocation_calls": [
+                36864
+              ],
+              "allocated_bytes": [
+                7118848
+              ],
+              "peak_live_bytes": [
+                1738
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_b": {
+              "allocation_calls": [
+                36864
+              ],
+              "allocated_bytes": [
+                7118848
+              ],
+              "peak_live_bytes": [
+                1738
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_b": {
+              "allocation_calls": [
+                12288
+              ],
+              "allocated_bytes": [
+                4882432
+              ],
+              "peak_live_bytes": [
+                1192
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "process_medians_ms": {
+            "wrapping": [
+              1.2659019999999999,
+              1.331934,
+              1.264969,
+              1.2587679999999999
+            ],
+            "native_a": [
+              2.635215,
+              2.67602,
+              2.717347,
+              2.642087
+            ],
+            "spark_a": [
+              13.941824,
+              13.010054,
+              12.942047,
+              13.053144
+            ],
+            "spark_b": [
+              14.165029,
+              12.966032,
+              12.9,
+              13.116451
+            ],
+            "native_b": [
+              3.235689,
+              2.6521359999999996,
+              2.672875,
+              2.642217
+            ]
+          },
+          "medians_ms": {
+            "wrapping": 1.2654355,
+            "native_checked": 2.6795945,
+            "spark_checked": 13.03642025
+          },
+          "process_ratios": {
+            "native_same_plan": [
+              1.2278652785446347,
+              0.9910748051210378,
+              0.983634037169342,
+              1.000049203527363
+            ],
+            "spark_same_plan": [
+              1.0160097416234777,
+              0.9966163092020986,
+              0.9967511321817947,
+              1.004849942665154
+            ],
+            "native_checked_over_wrapping": [
+              2.3188619656181917,
+              2.000157665469911,
+              2.130574741357298,
+              2.0989983857231835
+            ],
+            "spark_over_native_checked": [
+              4.787482983881188,
+              4.8752487727461435,
+              4.794245394716582,
+              4.952325793519828
+            ]
+          },
+          "median_ratios": {
+            "native_same_plan": 0.9955620043242004,
+            "spark_same_plan": 1.0008005374234743,
+            "native_checked_over_wrapping": 2.1147865635402407,
+            "spark_over_native_checked": 4.834747083731363
+          },
+          "same_plan_calibration_passed": false,
+          "allocation_counts": {
+            "wrapping": {
+              "allocation_calls": [
+                36864
+              ],
+              "allocated_bytes": [
+                10469376
+              ],
+              "peak_live_bytes": [
+                2384
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_a": {
+              "allocation_calls": [
+                36864
+              ],
+              "allocated_bytes": [
+                10469376
+              ],
+              "peak_live_bytes": [
+                2384
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_a": {
+              "allocation_calls": [
+                176128
+              ],
+              "allocated_bytes": [
+                41382468
+              ],
+              "peak_live_bytes": [
+                5753
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_b": {
+              "allocation_calls": [
+                176128
+              ],
+              "allocated_bytes": [
+                41382468
+              ],
+              "peak_live_bytes": [
+                5753
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_b": {
+              "allocation_calls": [
+                36864
+              ],
+              "allocated_bytes": [
+                10469376
+              ],
+              "peak_live_bytes": [
+                2384
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            }
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "process_medians_ms": {
+            "wrapping": [
+              2.061078,
+              2.162817,
+              2.495245,
+              2.107424
+            ],
+            "native_a": [
+              3.352477,
+              3.514688,
+              3.330175,
+              3.410975
+            ],
+            "spark_a": [
+              14.009541,
+              14.556235000000001,
+              14.470917,
+              14.204982999999999
+            ],
+            "spark_b": [
+              14.350003000000001,
+              14.548371,
+              14.375309,
+              14.22509
+            ],
+            "native_b": [
+              3.476257,
+              3.5361469999999997,
+              3.379838,
+              3.51614
+            ]
+          },
+          "medians_ms": {
+            "wrapping": 2.1351205,
+            "native_checked": 3.4389622500000003,
+            "spark_checked": 14.31907475
+          },
+          "process_ratios": {
+            "native_same_plan": [
+              1.0369219535286893,
+              1.0061055206038203,
+              1.0149130300960159,
+              1.0308313605347446
+            ],
+            "spark_same_plan": [
+              1.024302152368875,
+              0.9994597504093605,
+              0.9933930931951306,
+              1.0014154891984033
+            ],
+            "native_checked_over_wrapping": [
+              1.6565928121109437,
+              1.6300119242635875,
+              1.3445599530306642,
+              1.6435029211017813
+            ],
+            "spark_over_native_checked": [
+              4.152972425049797,
+              4.127824009496748,
+              4.298982133119564,
+              4.104172227543501
+            ]
+          },
+          "median_ratios": {
+            "native_same_plan": 1.0228721953153803,
+            "spark_same_plan": 1.0004376198038818,
+            "native_checked_over_wrapping": 1.6367574226826844,
+            "spark_over_native_checked": 4.1403982172732725
+          },
+          "same_plan_calibration_passed": true,
+          "allocation_counts": {
+            "wrapping": {
+              "allocation_calls": [
+                36864
+              ],
+              "allocated_bytes": [
+                18874368
+              ],
+              "peak_live_bytes": [
+                4432
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_a": {
+              "allocation_calls": [
+                36864
+              ],
+              "allocated_bytes": [
+                18874368
+              ],
+              "peak_live_bytes": [
+                4432
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_a": {
+              "allocation_calls": [
+                176128
+              ],
+              "allocated_bytes": [
+                63718536
+              ],
+              "peak_live_bytes": [
+                10185
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "spark_b": {
+              "allocation_calls": [
+                176128
+              ],
+              "allocated_bytes": [
+                63718536
+              ],
+              "peak_live_bytes": [
+                10185
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            },
+            "native_b": {
+              "allocation_calls": [
+                36864
+              ],
+              "allocated_bytes": [
+                18874368
+              ],
+              "peak_live_bytes": [
+                4432
+              ],
+              "live_bytes_after": [
+                0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "limits": "Physical expressions only. Native eager checking is a valid-input diagnostic, not a full Spark replacement. Inactive allocator hook remains in diagnostic timing."
+  },
+  "allocation": {
+    "rows": 1048576,
+    "after_processes": 2,
+    "counts": "untimed; includes output and temporary allocations, excludes prebuilt input/plan storage; peak requested live heap bytes, not RSS",
+    "nested_cases": {
+      "8192": [
+        {
+          "id": "i32_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 6144,
+            "allocated_bytes": 31107396,
+            "peak_live_bytes": 141777,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 5376,
+            "allocated_bytes": 27356632,
+            "peak_live_bytes": 117776,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 6144,
+            "allocated_bytes": 53280136,
+            "peak_live_bytes": 282233,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 5376,
+            "allocated_bytes": 45934256,
+            "peak_live_bytes": 234816,
+            "live_bytes_after": 0
+          }
+        }
+      ],
+      "256": [
+        {
+          "id": "i32_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 176128,
+            "allocated_bytes": 41382468,
+            "peak_live_bytes": 5753,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 151552,
+            "allocated_bytes": 36214488,
+            "peak_live_bytes": 4705,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 176128,
+            "allocated_bytes": 63718536,
+            "peak_live_bytes": 10185,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 151552,
+            "allocated_bytes": 54955440,
+            "peak_live_bytes": 8257,
+            "live_bytes_after": 0
+          }
+        }
+      ]
+    },
+    "all_other_case_mode_counts_unchanged": true
+  },
+  "whole_query": {
+    "rows": 1048576,
+    "processes": 32,
+    "observations_per_process": 48,
+    "calibration": "Every same-binary paired ratio within +/-5%, separately per query and phase. Retain all failures; no unchanged timing reruns.",
+    "calibrated_cases": {
+      "8192": {
+        "planning": 31,
+        "execution": 5
+      },
+      "256": {
+        "planning": 2,
+        "execution": 9
+      }
+    },
+    "target_cases": {
+      "8192": [
+        {
+          "id": "i32_add_nested_nulls",
+          "ansi": true,
+          "output_bytes": {
+            "before": [
+              4337664
+            ],
+            "after": [
+              4337664
+            ]
+          },
+          "planning": {
+            "before_ms": 0.4189035,
+            "after_ms": 0.4189985,
+            "median_paired_ratio": 1.0082433882837423,
+            "process_medians_ms": [
+              0.405282,
+              0.431221,
+              0.417105,
+              0.417686,
+              0.416364,
+              0.41713500000000003,
+              0.453733,
+              0.414781,
+              0.42644200000000004,
+              0.423757,
+              0.421453,
+              0.42573099999999997,
+              0.415812,
+              0.420311,
+              0.421443,
+              0.415883
+            ],
+            "paired_ratios": {
+              "same_before": [
+                1.0640023489816968,
+                0.9868072313456386
+              ],
+              "same_after": [
+                1.0013929346327664,
+                1.0108197935605514
+              ],
+              "change": [
+                1.0018517451076463,
+                1.0939097981826553,
+                1.0063361785174052,
+                1.0101505980500791
+              ]
+            },
+            "same_binary_calibration_passed": false
+          },
+          "execution": {
+            "before_ms": 8.9599975,
+            "after_ms": 6.37477,
+            "median_paired_ratio": 0.7255154330282241,
+            "process_medians_ms": [
+              8.88344,
+              10.061017,
+              6.224,
+              6.971649,
+              9.72894,
+              6.371394,
+              6.348421,
+              8.980691,
+              6.705354,
+              8.830210999999998,
+              9.217329999999999,
+              6.85893,
+              6.378146,
+              6.341198,
+              8.939304,
+              8.680653
+            ],
+            "paired_ratios": {
+              "same_before": [
+                1.1325586709653017,
+                0.9710658682152435
+              ],
+              "same_after": [
+                1.1201235539845757,
+                0.9942070940364175
+              ],
+              "change": [
+                0.6548908719757753,
+                0.7068967187491475,
+                0.7593650933143048,
+                0.7441341473073005
+              ]
+            },
+            "same_binary_calibration_passed": false
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "ansi": true,
+          "output_bytes": {
+            "before": [
+              8531968
+            ],
+            "after": [
+              8531968
+            ]
+          },
+          "planning": {
+            "before_ms": 0.42073150000000004,
+            "after_ms": 0.41750050000000005,
+            "median_paired_ratio": 1.0191963559789576,
+            "process_medians_ms": [
+              0.41566200000000003,
+              0.416062,
+              0.418437,
+              0.41656400000000005,
+              0.415792,
+              0.431943,
+              0.42088200000000003,
+              0.421072,
+              0.447171,
+              0.421703,
+              0.42622200000000005,
+              0.413759,
+              0.414881,
+              0.412977,
+              0.423246,
+              0.420391
+            ],
+            "paired_ratios": {
+              "same_before": [
+                1.00096232034682,
+                0.9932545139233449
+              ],
+              "same_after": [
+                0.9955238184003805,
+                0.9954107322340623
+              ],
+              "change": [
+                1.03884394120137,
+                0.9995487707565452,
+                1.0603932151300797,
+                0.9707593695304324
+              ]
+            },
+            "same_binary_calibration_passed": true
+          },
+          "execution": {
+            "before_ms": 10.475026499999998,
+            "after_ms": 8.9759365,
+            "median_paired_ratio": 0.8764714347335525,
+            "process_medians_ms": [
+              10.401769999999999,
+              11.845561,
+              8.169834000000002,
+              8.505277,
+              11.006574,
+              10.081695999999999,
+              8.622876,
+              10.361054,
+              9.056992,
+              10.345245,
+              10.548283,
+              9.255790999999999,
+              8.894881,
+              9.595543,
+              11.893119,
+              10.077568
+            ],
+            "paired_ratios": {
+              "same_before": [
+                1.1388024345856524,
+                0.847344418230407
+              ],
+              "same_after": [
+                1.0410587289778468,
+                1.078771374231988
+              ],
+              "change": [
+                0.9159704009621885,
+                0.8322392683215434,
+                0.8754739012947493,
+                0.8774689681723555
+              ]
+            },
+            "same_binary_calibration_passed": false
+          }
+        }
+      ],
+      "256": [
+        {
+          "id": "i32_add_nested_nulls",
+          "ansi": true,
+          "output_bytes": {
+            "before": [
+              4849664
+            ],
+            "after": [
+              4849664
+            ]
+          },
+          "planning": {
+            "before_ms": 1.6366,
+            "after_ms": 1.4851079999999999,
+            "median_paired_ratio": 0.8147812875487581,
+            "process_medians_ms": [
+              1.449543,
+              1.4593399999999999,
+              1.458509,
+              1.443361,
+              1.4766320000000002,
+              1.499455,
+              1.456736,
+              1.796347,
+              1.87379,
+              2.340968,
+              3.17111,
+              2.595931,
+              1.579664,
+              1.470761,
+              1.853623,
+              1.476853
+            ],
+            "paired_ratios": {
+              "same_before": [
+                1.0067586818742182,
+                0.7967386032650652
+              ],
+              "same_after": [
+                0.9896140510617348,
+                0.9310593898449291
+              ],
+              "change": [
+                1.0154561190601312,
+                0.8109435426451571,
+                0.8004338376261444,
+                0.818619032452359
+              ]
+            },
+            "same_binary_calibration_passed": false
+          },
+          "execution": {
+            "before_ms": 19.000531,
+            "after_ms": 15.9937815,
+            "median_paired_ratio": 0.834038686900197,
+            "process_medians_ms": [
+              19.051346,
+              18.885728,
+              15.865839,
+              15.822256999999999,
+              18.949716,
+              15.896356,
+              15.665577,
+              18.89224,
+              16.091207,
+              19.771313,
+              20.9383,
+              18.959865,
+              16.386767,
+              16.479528000000002,
+              22.620054,
+              18.937804
+            ],
+            "paired_ratios": {
+              "same_before": [
+                0.9913067559635944,
+                0.8372130322942642
+              ],
+              "same_after": [
+                0.9972530920047783,
+                1.0056607261212662
+              ],
+              "change": [
+                0.8388704084008437,
+                0.8292069653995503,
+                0.8138663830773405,
+                0.9055111924081707
+              ]
+            },
+            "same_binary_calibration_passed": false
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "ansi": true,
+          "output_bytes": {
+            "before": [
+              9043968
+            ],
+            "after": [
+              9043968
+            ]
+          },
+          "planning": {
+            "before_ms": 1.4543365,
+            "after_ms": 1.4674755,
+            "median_paired_ratio": 1.0026957561892533,
+            "process_medians_ms": [
+              1.4195959999999999,
+              1.436949,
+              1.446246,
+              1.475641,
+              1.4525379999999999,
+              1.4593099999999999,
+              1.4571969999999999,
+              1.456135,
+              2.5236579999999997,
+              2.105281,
+              5.046133,
+              2.5773469999999996,
+              1.93275,
+              1.452828,
+              1.449973,
+              1.4563849999999998
+            ],
+            "paired_ratios": {
+              "same_before": [
+                1.0122239003209366,
+                1.0044221513090243
+              ],
+              "same_after": [
+                1.0203250346068373,
+                0.7516895615056267
+              ],
+              "change": [
+                1.0046621843972412,
+                1.0007293279812655,
+                1.1987273907853628,
+                0.5107568508400392
+              ]
+            },
+            "same_binary_calibration_passed": false
+          },
+          "execution": {
+            "before_ms": 22.216078500000002,
+            "after_ms": 19.0099035,
+            "median_paired_ratio": 0.834005269150514,
+            "process_medians_ms": [
+              22.217556,
+              22.164929,
+              18.636525000000002,
+              19.029735,
+              22.48891,
+              18.706545000000002,
+              18.44558,
+              22.058852,
+              19.878592,
+              23.050534000000003,
+              31.587339999999998,
+              20.160555,
+              20.018833,
+              18.990072,
+              22.214601000000002,
+              22.124834
+            ],
+            "paired_ratios": {
+              "same_before": [
+                0.9976312876177741,
+                0.9959590991528499
+              ],
+              "same_after": [
+                1.0210988904852163,
+                0.9486103410723292
+              ],
+              "change": [
+                0.8318119908879533,
+                0.8361985474130748,
+                0.8623918213781945,
+                0.6382479499698297
+              ]
+            },
+            "same_binary_calibration_passed": false
+          }
+        }
+      ]
+    },
+    "resolved_target_speedup": false,
+    "unaffected_zero_regression_claim": false
+  },
+  "remaining": [
+    "Native checked-kernel cost relative to wrapping is observed, not proven unavoidable.",
+    "Scalar-function dispatch and argument allocation costs remain, especially with small batches.",
+    "Remaining NULL selection/scatter work is outside the one removed duplicate filter.",
+    "Whole-query speedup and unaffected-path performance acceptance remain unresolved by noisy controls."
+  ],
+  "restoration": {
+    "source_lock_paths": 83,
+    "executable_slots": 3,
+    "verified": true
+  },
+  "raw_archive": {
+    "path": "integer-cost-runs.json.gz",
+    "sha256": "a91e1f1a7a087c08394f5a9c87abbd55df7f81177741c824aebc6916d2aee2ab",
+    "text_files": 376,
+    "compressed_bytes": 1541629
+  }
+}

@@ -1,0 +1,4255 @@
+{
+  "decision": "Measurement only; keep vector candidate unselected and selected optional runtime at d2c5755.",
+  "runtime_optimization": false,
+  "selected_runtime": "d2c5755",
+  "summary": [
+    {
+      "batch_size": 8192,
+      "id": "i32_add_arrays",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            37492154,
+            37496718,
+            37525575,
+            37520663,
+            37497815,
+            37503661,
+            37527624,
+            37497928,
+            37511343,
+            37491463,
+            37498524,
+            37521913,
+            37513407,
+            37510622,
+            37492070,
+            37498065
+          ],
+          "before_median": 37497266.5,
+          "after_median": 37517035.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0001217321362759,
+              1.0001599004802881
+            ],
+            "same_after": [
+              0.9998691026053564,
+              0.9999257598756626
+            ],
+            "change": [
+              1.0001559024172475,
+              1.0007919370904974,
+              1.0005302540474348,
+              1.0006237312167274
+            ]
+          },
+          "median_paired_ratio": 1.000576992632081,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            23201434,
+            23243148,
+            23248733,
+            23252628,
+            23735959,
+            23167956,
+            23285402,
+            23464221,
+            23052679,
+            22886255,
+            23576731,
+            23360391,
+            22921242,
+            23084147,
+            23328434,
+            23574719
+          ],
+          "before_median": 23396327.5,
+          "after_median": 23208344.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0017979061121824,
+              1.0105572881574476
+            ],
+            "same_after": [
+              1.0001675360115323,
+              1.0071071628666544
+            ],
+            "change": [
+              0.9760699367571372,
+              0.9923790779161175,
+              1.0072717882414577,
+              0.9908240035482443
+            ]
+          },
+          "median_paired_ratio": 0.9916015407321809,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            6835589,
+            6837480,
+            6848146,
+            6846981,
+            6837823,
+            6843078,
+            6848160,
+            6837880,
+            6844432,
+            6835939,
+            6837689,
+            6846896,
+            6845270,
+            6844338,
+            6835652,
+            6837873
+          ],
+          "before_median": 6837584.5,
+          "after_median": 6846083.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0002766403889993,
+              1.0003249141413284
+            ],
+            "same_after": [
+              0.9998298809634023,
+              0.9998638475911104
+            ],
+            "change": [
+              1.0007685194542182,
+              1.001503389939572,
+              1.0012424042988095,
+              1.0013465075700285
+            ]
+          },
+          "median_paired_ratio": 1.001294455934419,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            196017,
+            193657,
+            191598,
+            193587,
+            193727,
+            193676,
+            192612,
+            196301,
+            190190,
+            192571,
+            201130,
+            192949,
+            193744,
+            188535,
+            194085,
+            197771
+          ],
+          "before_median": 195051.0,
+          "after_median": 192780.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9879602279394134,
+              1.0189916789035731
+            ],
+            "same_after": [
+              1.0103811104500047,
+              0.973114006111157
+            ],
+            "change": [
+              0.999736742942388,
+              0.9812074314445672,
+              0.9876357291596346,
+              0.9593248147964003
+            ]
+          },
+          "median_paired_ratio": 0.9844215803021009,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_add_arrays",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            158544031,
+            158543947,
+            89496570,
+            89496396,
+            158543933,
+            89496753,
+            89496607,
+            158543913,
+            89496484,
+            158543788,
+            158543794,
+            89496534,
+            89496445,
+            89496673,
+            158543812,
+            158543880
+          ],
+          "before_median": 158543896.5,
+          "after_median": 89496552.0,
+          "paired_ratios": {
+            "same_before": [
+              0.999999470178729,
+              1.000000428903526
+            ],
+            "same_after": [
+              0.9999980557914119,
+              1.0000025475872254
+            ],
+            "change": [
+              0.5644918181763536,
+              0.564490968505363,
+              0.5644906377536533,
+              0.5644909317611007
+            ]
+          },
+          "median_paired_ratio": 0.5644909501332318,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            44627529,
+            44898842,
+            24306153,
+            24928778,
+            53456246,
+            31806636,
+            30352087,
+            59465579,
+            32894422,
+            45379766,
+            45437792,
+            24238691,
+            24348493,
+            31736000,
+            57700863,
+            58064457
+          ],
+          "before_median": 49447019.0,
+          "after_median": 27640432.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0060794985982755,
+              1.0063013615584917
+            ],
+            "same_after": [
+              1.0256159417740849,
+              1.3034071554243625
+            ],
+            "change": [
+              0.5950031732493898,
+              0.5104143861106608,
+              0.7248698021051938,
+              0.5334478180629904
+            ]
+          },
+          "median_paired_ratio": 0.5642254956561901,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            34731406,
+            34731366,
+            9169194,
+            9169191,
+            34731412,
+            9169213,
+            9169239,
+            34731355,
+            9169198,
+            34731355,
+            34731357,
+            9169201,
+            9169196,
+            9169225,
+            34731357,
+            34731361
+          ],
+          "before_median": 34731359.0,
+          "after_median": 9169199.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999988483046152,
+              1.0000001151697009
+            ],
+            "same_after": [
+              0.9999996728174799,
+              1.000003162763671
+            ],
+            "change": [
+              0.2640034617653898,
+              0.26400464364261056,
+              0.26400346315310763,
+              0.2640035343277834
+            ]
+          },
+          "median_paired_ratio": 0.2640034987404455,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            77777,
+            85350,
+            20671,
+            20338,
+            78223,
+            21313,
+            21391,
+            81501,
+            20839,
+            69717,
+            73369,
+            20857,
+            20836,
+            20597,
+            81818,
+            82453
+          ],
+          "before_median": 79862.0,
+          "after_median": 20837.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0973681165383082,
+              1.007761128358063
+            ],
+            "same_after": [
+              0.9838904745779111,
+              0.9885294682280668
+            ],
+            "change": [
+              0.2724646203801951,
+              0.26246303726334647,
+              0.2989084441384454,
+              0.28427537515844564
+            ]
+          },
+          "median_paired_ratio": 0.27836999776932037,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_add_arrays",
+      "ansi": false,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            35370019,
+            35370321,
+            35385783,
+            35380341,
+            35373263,
+            35380297,
+            35386074,
+            35370449,
+            35385239,
+            35375589,
+            35375589,
+            35381100,
+            35380239,
+            35376713,
+            35375905,
+            35370213
+          ],
+          "before_median": 35371856.0,
+          "after_median": 35380720.5,
+          "paired_ratios": {
+            "same_before": [
+              1.000008538304715,
+              0.9998390995226836
+            ],
+            "same_after": [
+              0.9998462094225808,
+              0.999900339847902
+            ],
+            "change": [
+              1.0001988507534632,
+              1.0004417529446685,
+              1.0002727869774832,
+              1.0001557853920113
+            ]
+          },
+          "median_paired_ratio": 1.0002358188654732,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            21249657,
+            21319178,
+            21640750,
+            21665468,
+            21230048,
+            21735746,
+            21666338,
+            21352827,
+            21566329,
+            21271602,
+            21695966,
+            21624243,
+            21617784,
+            22519837,
+            21599936,
+            21719233
+          ],
+          "before_median": 21336002.5,
+          "after_median": 21653109.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0032716292785337,
+              1.0055230256237797
+            ],
+            "same_after": [
+              1.0011421970125804,
+              1.0417273574386718
+            ],
+            "change": [
+              1.0238199178824279,
+              1.014682411841767,
+              1.0138554209504296,
+              0.9966941780790033
+            ]
+          },
+          "median_paired_ratio": 1.0142689163960983,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            6439807,
+            6439810,
+            6443061,
+            6441891,
+            6440547,
+            6441920,
+            6443064,
+            6439859,
+            6443003,
+            6440814,
+            6440768,
+            6442257,
+            6441953,
+            6441018,
+            6440842,
+            6439829
+          ],
+          "before_median": 6440203.0,
+          "after_median": 6442105.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000004658524704,
+              0.999842722426664
+            ],
+            "same_after": [
+              0.9998184092933468,
+              0.9998548576805822
+            ],
+            "change": [
+              1.0002131806506498,
+              1.0004976817039006,
+              1.0003398638743488,
+              1.0002311836104016
+            ]
+          },
+          "median_paired_ratio": 1.0002855237423751,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            180860,
+            174102,
+            179480,
+            179520,
+            180280,
+            178567,
+            180100,
+            180896,
+            185293,
+            177045,
+            178721,
+            179037,
+            177436,
+            176862,
+            178095,
+            178687
+          ],
+          "before_median": 178704.0,
+          "after_median": 179258.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9626340816100851,
+              1.003324068615065
+            ],
+            "same_after": [
+              1.0002228660574994,
+              0.9967650307716586
+            ],
+            "change": [
+              0.9904981140448191,
+              0.9955996815849991,
+              1.0465870258973706,
+              1.001768119023506
+            ]
+          },
+          "median_paired_ratio": 0.9986839003042525,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_add_arrays",
+      "ansi": false,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            37130795,
+            37131059,
+            37156429,
+            37156495,
+            37130756,
+            37156385,
+            37156260,
+            37132151,
+            37156147,
+            37130916,
+            37131065,
+            37156353,
+            37156608,
+            37156045,
+            37131131,
+            37130821
+          ],
+          "before_median": 37130987.5,
+          "after_median": 37156369.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000071100012806,
+              0.9999916512104089
+            ],
+            "same_after": [
+              1.0000017762740332,
+              0.9999848479172264
+            ],
+            "change": [
+              1.0006902364174863,
+              1.0006492756102388,
+              1.000679514612567,
+              1.0006810469885525
+            ]
+          },
+          "median_paired_ratio": 1.0006802808005597,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            19273040,
+            19025519,
+            19179982,
+            19265755,
+            19300794,
+            19213431,
+            19629998,
+            19686403,
+            19805862,
+            19513757,
+            22757850,
+            18962609,
+            19428088,
+            19198565,
+            19622153,
+            19177452
+          ],
+          "before_median": 19407275.5,
+          "after_median": 19239593.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9871571376388987,
+              0.9773367886796113
+            ],
+            "same_after": [
+              1.0044720062823833,
+              0.9881860222169058
+            ],
+            "change": [
+              0.9954736059045032,
+              0.9971348244775848,
+              1.0149691830230334,
+              0.8332337632948631
+            ]
+          },
+          "median_paired_ratio": 0.996304215191044,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            5037601,
+            5037611,
+            5028677,
+            5028690,
+            5037600,
+            5028679,
+            5028679,
+            5037450,
+            5028680,
+            5037628,
+            5037686,
+            5028679,
+            5028704,
+            5028679,
+            5037606,
+            5037597
+          ],
+          "before_median": 5037603.5,
+          "after_median": 5028679.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000019850718627,
+              0.9999982134370969
+            ],
+            "same_after": [
+              1.0000025851729988,
+              0.9999950285401566
+            ],
+            "change": [
+              0.9982291170398603,
+              0.9982588412788216,
+              0.9982237672174286,
+              0.9982120759412159
+            ]
+          },
+          "median_paired_ratio": 0.9982264421286444,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            17427,
+            17549,
+            19183,
+            19568,
+            17993,
+            18648,
+            20245,
+            17797,
+            19658,
+            18803,
+            18511,
+            17821,
+            20865,
+            19763,
+            22012,
+            18102
+          ],
+          "before_median": 18047.5,
+          "after_median": 19613.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0070006312044528,
+              0.8223696165727785
+            ],
+            "same_after": [
+              1.020069853516134,
+              0.9471842798945602
+            ],
+            "change": [
+              1.0364030456288558,
+              1.1375512726864079,
+              1.0454714673190448,
+              0.9627248662957161
+            ]
+          },
+          "median_paired_ratio": 1.0409372564739503,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_add_scalar",
+      "ansi": false,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            38484450,
+            38484783,
+            38485158,
+            38484355,
+            38484718,
+            38484853,
+            38484195,
+            38486088,
+            38485312,
+            38485182,
+            38485361,
+            38485274,
+            38484515,
+            38485149,
+            38484075,
+            38485013
+          ],
+          "before_median": 38484898.0,
+          "after_median": 38485001.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000086528455,
+              1.0000243737182197
+            ],
+            "same_after": [
+              0.999979134813478,
+              1.0000164741585025
+            ],
+            "change": [
+              1.0000035078859093,
+              0.9999508133952196,
+              1.0000033779234823,
+              0.9999977394001839
+            ]
+          },
+          "median_paired_ratio": 1.000000558661833,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            22776181,
+            22374073,
+            22524734,
+            22490657,
+            22724326,
+            22792826,
+            22293779,
+            22707388,
+            22802077,
+            22751118,
+            23022252,
+            22600328,
+            23079258,
+            22701543,
+            22588951,
+            22836003
+          ],
+          "before_median": 22737722.0,
+          "after_median": 22650935.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9823452404070726,
+              1.0109368513836698
+            ],
+            "same_after": [
+              0.9984871297481249,
+              0.9836340059112819
+            ],
+            "change": [
+              1.003014390833858,
+              0.9817852674204537,
+              1.0022398459715254,
+              0.9816732090327219
+            ]
+          },
+          "median_paired_ratio": 0.9920125566959895,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            7018490,
+            7018495,
+            7018612,
+            7018495,
+            7018498,
+            7018573,
+            7018431,
+            7018757,
+            7018627,
+            7018579,
+            7018637,
+            7018593,
+            7018491,
+            7018572,
+            7018413,
+            7018557
+          ],
+          "before_median": 7018527.5,
+          "after_median": 7018572.5,
+          "paired_ratios": {
+            "same_before": [
+              1.00000071240395,
+              1.0000205174588614
+            ],
+            "same_after": [
+              0.999983330037335,
+              1.0000115409423478
+            ],
+            "change": [
+              1.0000106860470717,
+              0.9999535530294039,
+              1.0000068389911976,
+              0.9999937309765414
+            ]
+          },
+          "median_paired_ratio": 1.0000002849838694,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            176836,
+            178474,
+            179260,
+            177238,
+            174564,
+            179033,
+            167166,
+            174734,
+            182200,
+            176033,
+            187249,
+            170401,
+            178403,
+            177063,
+            183761,
+            177343
+          ],
+          "before_median": 177089.5,
+          "after_median": 177820.5,
+          "paired_ratios": {
+            "same_before": [
+              1.009262819787826,
+              0.9650741996397495
+            ],
+            "same_after": [
+              0.9887202945442374,
+              0.9924889155451422
+            ],
+            "change": [
+              1.025600925734974,
+              0.9566884521615713,
+              1.0350332040015224,
+              0.910023551527645
+            ]
+          },
+          "median_paired_ratio": 0.9911446889482727,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_add_scalar",
+      "ansi": false,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            34064283,
+            34063605,
+            34063729,
+            34059943,
+            34061583,
+            34057262,
+            34062870,
+            34054738,
+            34064565,
+            34063873,
+            34061284,
+            34064639,
+            34065141,
+            34060789,
+            34059406,
+            34059851
+          ],
+          "before_median": 34061433.5,
+          "after_median": 34063299.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999800964546942,
+              1.000013065406954
+            ],
+            "same_after": [
+              0.999888855386326,
+              0.9998722447677525
+            ],
+            "change": [
+              0.999873141538959,
+              1.0002387920294673,
+              1.000020314777477,
+              1.0000984989291655
+            ]
+          },
+          "median_paired_ratio": 1.0000594068533213,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            13598739,
+            13588389,
+            13537148,
+            13871757,
+            13616656,
+            13899672,
+            13456968,
+            13723789,
+            13779449,
+            13372289,
+            13559500,
+            13502150,
+            13634878,
+            13691454,
+            13288477,
+            13511395
+          ],
+          "before_median": 13573944.5,
+          "after_median": 13663166.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9992389000185973,
+              1.0167752858359915
+            ],
+            "same_after": [
+              1.0247178356918312,
+              1.0041493587254686
+            ],
+            "change": [
+              1.020784545045421,
+              0.9805577745329661,
+              1.0304480407206276,
+              0.9957704930122793
+            ]
+          },
+          "median_paired_ratio": 1.0082775190288502,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            5207444,
+            5207038,
+            5207262,
+            5206316,
+            5206389,
+            5206005,
+            5206962,
+            5204786,
+            5207164,
+            5206913,
+            5206281,
+            5207313,
+            5207328,
+            5206535,
+            5206060,
+            5206123
+          ],
+          "before_median": 5206335.0,
+          "after_median": 5207063.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999220346872669,
+              1.0000121012819676
+            ],
+            "same_after": [
+              0.9998183306313375,
+              0.999847714605264
+            ],
+            "change": [
+              0.9999262444661742,
+              1.0004180767470554,
+              1.000048205145736,
+              1.0001982221090255
+            ]
+          },
+          "median_paired_ratio": 1.0001232136273808,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            18528,
+            18942,
+            17344,
+            19118,
+            18904,
+            18076,
+            17421,
+            16836,
+            17271,
+            19391,
+            18805,
+            18803,
+            18040,
+            16572,
+            18102,
+            18796
+          ],
+          "before_median": 18800.5,
+          "after_median": 17730.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0223445595854923,
+              1.0383383051596509
+            ],
+            "same_after": [
+              1.1022832103321034,
+              0.9186252771618625
+            ],
+            "change": [
+              0.9561997460854845,
+              1.0347469707769066,
+              0.8906709298127997,
+              0.9998936453070991
+            ]
+          },
+          "median_paired_ratio": 0.9780466956962919,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i64_add_nulls",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            37697536,
+            37696759,
+            37704044,
+            37707960,
+            37695990,
+            37702254,
+            37691309,
+            37697950,
+            37701932,
+            37690650,
+            37702115,
+            37690729,
+            37702242,
+            37698050,
+            37701478,
+            37701763
+          ],
+          "before_median": 37697743.0,
+          "after_median": 37702087.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999793885733009,
+              1.0000075593853377
+            ],
+            "same_after": [
+              1.0001038615380355,
+              0.9998888129782839
+            ],
+            "change": [
+              1.0001661715211618,
+              0.9998238365746679,
+              1.0002993315318256,
+              0.9996980010272634
+            ]
+          },
+          "median_paired_ratio": 0.9999950040479149,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            23811096,
+            23689408,
+            23955306,
+            23612716,
+            24435253,
+            23676480,
+            23343399,
+            23778494,
+            23996114,
+            23214582,
+            23347680,
+            23418782,
+            23518310,
+            23358123,
+            23558350,
+            23272499
+          ],
+          "before_median": 23623879.0,
+          "after_median": 23565513.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9948894414604015,
+              0.9878662554890304
+            ],
+            "same_after": [
+              0.9856987842275945,
+              0.9931888388238781
+            ],
+            "change": [
+              0.9689476102416456,
+              0.9817021633077352,
+              1.0336655641699686,
+              1.0030453561124704
+            ]
+          },
+          "median_paired_ratio": 0.9923737597101028,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            6879713,
+            6879584,
+            6881344,
+            6882107,
+            6879513,
+            6880837,
+            6878543,
+            6879790,
+            6880803,
+            6878490,
+            6880851,
+            6878449,
+            6880859,
+            6879796,
+            6880736,
+            6880772
+          ],
+          "before_median": 6879751.5,
+          "after_median": 6880820.0,
+          "paired_ratios": {
+            "same_before": [
+              0.999981249217809,
+              1.0000052319984374
+            ],
+            "same_after": [
+              1.0001108795026088,
+              0.9998455134744078
+            ],
+            "change": [
+              1.000192455483404,
+              0.999818744467491,
+              1.000336265662958,
+              0.9996509152719627
+            ]
+          },
+          "median_paired_ratio": 1.0000055999754476,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            211460,
+            207173,
+            207198,
+            211749,
+            207913,
+            204664,
+            196577,
+            194566,
+            208098,
+            207185,
+            207946,
+            206957,
+            194895,
+            206158,
+            189393,
+            207353
+          ],
+          "before_median": 207269.0,
+          "after_median": 206557.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9797266622529084,
+              1.094829270353181
+            ],
+            "same_after": [
+              1.021964497726812,
+              1.057790092100875
+            ],
+            "change": [
+              0.9843732715126038,
+              1.0103358243475222,
+              1.0044066896734802,
+              0.9952439575659066
+            ]
+          },
+          "median_paired_ratio": 0.9998253236196935,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i64_add_nulls",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            228326434,
+            228326803,
+            228389917,
+            228389919,
+            228326517,
+            228390212,
+            228389714,
+            228326610,
+            228389940,
+            228326747,
+            228326363,
+            228389787,
+            228389988,
+            228389704,
+            228326325,
+            228326486
+          ],
+          "before_median": 228326501.5,
+          "after_median": 228389918.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000016161072265,
+              1.000000705131132
+            ],
+            "same_after": [
+              1.000000008756954,
+              0.9999987565129168
+            ],
+            "change": [
+              1.0002789645321835,
+              1.0002763760211741,
+              1.0002767656476095,
+              1.0002777778227914
+            ]
+          },
+          "median_paired_ratio": 1.0002772717352004,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            93418881,
+            95038100,
+            92825581,
+            95052028,
+            95060456,
+            92821617,
+            92990062,
+            93167541,
+            92870742,
+            95503514,
+            107888068,
+            94537840,
+            97057051,
+            94170559,
+            93321788,
+            93184534
+          ],
+          "before_median": 94228490.5,
+          "after_median": 93580310.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0173328879843893,
+              0.998529239495497
+            ],
+            "same_after": [
+              1.0239852740593134,
+              0.970259842327169
+            ],
+            "change": [
+              0.9764482615147565,
+              0.998095055444256,
+              0.9724327211666788,
+              0.876258531202913
+            ]
+          },
+          "median_paired_ratio": 0.9744404913407176,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            32583089,
+            32583087,
+            32598456,
+            32598448,
+            32583094,
+            32598481,
+            32598424,
+            32583068,
+            32598444,
+            32583125,
+            32583079,
+            32598454,
+            32598490,
+            32598437,
+            32583078,
+            32583086
+          ],
+          "before_median": 32583086.5,
+          "after_median": 32598451.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999999386184656,
+              1.0000002455262207
+            ],
+            "same_after": [
+              0.9999997545896039,
+              0.9999983741578214
+            ],
+            "change": [
+              1.0004722387628382,
+              1.0004712877252688,
+              1.0004701513436787,
+              1.000471870690919
+            ]
+          },
+          "median_paired_ratio": 1.000471579208094,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            74544,
+            75290,
+            72591,
+            73358,
+            75694,
+            65881,
+            72705,
+            73417,
+            71276,
+            71776,
+            81689,
+            72486,
+            75318,
+            73875,
+            73779,
+            73518
+          ],
+          "before_median": 74161.5,
+          "after_median": 72648.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0100075123417043,
+              0.996462408002277
+            ],
+            "same_after": [
+              1.0105660481326886,
+              0.9808412331713534
+            ],
+            "change": [
+              0.8703596057811716,
+              0.9903019736573273,
+              0.9930338831921534,
+              0.8873410128658693
+            ]
+          },
+          "median_paired_ratio": 0.9388214932615984,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_mul_arrays",
+      "ansi": false,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            35097145,
+            35097243,
+            35021496,
+            35020847,
+            35097203,
+            35021472,
+            35021397,
+            35096219,
+            35021128,
+            35097479,
+            35096603,
+            35020741,
+            35014051,
+            35013151,
+            35096621,
+            35097451
+          ],
+          "before_median": 35097174.0,
+          "after_median": 35020987.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000027922499108,
+              1.000023649000284
+            ],
+            "same_after": [
+              0.99998146852436,
+              0.9999742960333268
+            ],
+            "change": [
+              0.9978422497086163,
+              0.9978680894372126,
+              0.9978246015903307,
+              0.9978384802654547
+            ]
+          },
+          "median_paired_ratio": 0.9978403649870355,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            21366427,
+            21549735,
+            21472384,
+            21599562,
+            21657113,
+            21482363,
+            23030159,
+            21144898,
+            21455142,
+            21554171,
+            21432117,
+            21604721,
+            21257072,
+            21528849,
+            21563828,
+            20999798
+          ],
+          "before_median": 21490926.0,
+          "after_median": 21505606.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0085792537984943,
+              0.9738436978814707
+            ],
+            "same_after": [
+              1.0059228635255406,
+              1.0127852509508366
+            ],
+            "change": [
+              0.9919310574775133,
+              1.089159143732923,
+              0.9954055760251693,
+              1.008053520797782
+            ]
+          },
+          "median_paired_ratio": 1.0017295484114757,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            6389482,
+            6389491,
+            6374491,
+            6374425,
+            6389475,
+            6374497,
+            6374507,
+            6389319,
+            6374480,
+            6389518,
+            6389423,
+            6374434,
+            6372625,
+            6372514,
+            6389409,
+            6389522
+          ],
+          "before_median": 6389478.5,
+          "after_median": 6374457.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000014085648883,
+              1.0000176855167668
+            ],
+            "same_after": [
+              0.9999896462321463,
+              0.9999825817461407
+            ],
+            "change": [
+              0.9976558324431976,
+              0.9976817560682132,
+              0.9976464578392298,
+              0.9976540917701019
+            ]
+          },
+          "median_paired_ratio": 0.9976549621066497,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            174020,
+            181424,
+            178959,
+            181964,
+            183909,
+            179035,
+            178730,
+            177221,
+            179794,
+            176457,
+            173340,
+            182438,
+            179180,
+            178133,
+            177809,
+            176801
+          ],
+          "before_median": 177011.0,
+          "after_median": 179107.5,
+          "paired_ratios": {
+            "same_before": [
+              1.042546833697276,
+              0.9943309956188945
+            ],
+            "same_after": [
+              1.016791555607709,
+              0.9941567139189642
+            ],
+            "change": [
+              0.9734977624803571,
+              1.008514792265025,
+              1.018911122823124,
+              1.0524864428291218
+            ]
+          },
+          "median_paired_ratio": 1.0137129575440746,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_mul_arrays",
+      "ansi": false,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            60684026,
+            60683959,
+            60639681,
+            60639516,
+            60683988,
+            60639652,
+            60639436,
+            60683947,
+            60639665,
+            60683773,
+            60683907,
+            60639334,
+            60639659,
+            60639689,
+            60683966,
+            60683744
+          ],
+          "before_median": 60683953.0,
+          "after_median": 60639655.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999988959203201,
+              0.9999963417025183
+            ],
+            "same_after": [
+              0.9999972790094328,
+              1.0000004947257373
+            ],
+            "change": [
+              0.9992693954128394,
+              0.9992665111252569,
+              0.9992731500066747,
+              0.9992654889540978
+            ]
+          },
+          "median_paired_ratio": 0.9992679532690482,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            22252459,
+            21146468,
+            26171790,
+            21555055,
+            21034006,
+            20947932,
+            21123441,
+            20658001,
+            21392373,
+            21059264,
+            20997844,
+            21224808,
+            20975198,
+            21325254,
+            20372363,
+            21317741
+          ],
+          "before_median": 21046635.0,
+          "after_median": 21275031.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9502980322309548,
+              1.046404926124672
+            ],
+            "same_after": [
+              0.8235988061955258,
+              1.0166890438888825
+            ],
+            "change": [
+              0.995907864626453,
+              1.0225307376062185,
+              1.0158176942935897,
+              1.0108089192395182
+            ]
+          },
+          "median_paired_ratio": 1.013313306766554,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            5015030,
+            5015011,
+            5020482,
+            5020457,
+            5015012,
+            5020462,
+            5020471,
+            5015013,
+            5020458,
+            5015009,
+            5015009,
+            5020459,
+            5020454,
+            5020458,
+            5015011,
+            5015016
+          ],
+          "before_median": 5015011.5,
+          "after_median": 5020458.5,
+          "paired_ratios": {
+            "same_before": [
+              0.999996211388566,
+              1.0000009970067862
+            ],
+            "same_after": [
+              0.9999950203984398,
+              1.0000007967406932
+            ],
+            "change": [
+              1.0010867371802898,
+              1.0010883321738149,
+              1.001086538428944,
+              1.0010867378303807
+            ]
+          },
+          "median_paired_ratio": 1.0010867375053354,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            19846,
+            19771,
+            19196,
+            17680,
+            19414,
+            18099,
+            18752,
+            20306,
+            17789,
+            20647,
+            19088,
+            17672,
+            18142,
+            18225,
+            18850,
+            18513
+          ],
+          "before_median": 19592.5,
+          "after_median": 18120.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9962209009372166,
+              0.9821220159151194
+            ],
+            "same_after": [
+              0.9210252135861637,
+              1.00457501929225
+            ],
+            "change": [
+              0.9322653755022149,
+              0.9234708953018812,
+              0.8615779532135419,
+              0.9258172673931265
+            ]
+          },
+          "median_paired_ratio": 0.9246440813475039,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i64_mul_arrays",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            37344126,
+            37340385,
+            37343810,
+            37340355,
+            37341068,
+            37332984,
+            37333266,
+            37334451,
+            37337310,
+            37334105,
+            37339015,
+            37333578,
+            37334216,
+            37340363,
+            37340348,
+            37340593
+          ],
+          "before_median": 37340366.5,
+          "after_median": 37335763.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9998998236027803,
+              1.0000065612671847
+            ],
+            "same_after": [
+              0.9999074813201974,
+              1.0001646478929678
+            ],
+            "change": [
+              0.9997835091379818,
+              0.9999682598787913,
+              1.0000858464398705,
+              0.9998543882317196
+            ]
+          },
+          "median_paired_ratio": 0.9999113240552555,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            23307458,
+            23447412,
+            23600963,
+            23748767,
+            22844258,
+            23169860,
+            23501219,
+            23652462,
+            23544891,
+            23338126,
+            23091430,
+            23576286,
+            23457991,
+            23559632,
+            23529767,
+            23298453
+          ],
+          "before_median": 23322792.0,
+          "after_median": 23552261.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0060046874266597,
+              0.9901693034189416
+            ],
+            "same_after": [
+              1.0062626258089553,
+              1.0043328944921157
+            ],
+            "change": [
+              1.0142531221631275,
+              0.9936056128110469,
+              1.0088595373938765,
+              1.0209972271097978
+            ]
+          },
+          "median_paired_ratio": 1.011556329778502,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            6811312,
+            6810825,
+            6811302,
+            6810809,
+            6810968,
+            6808483,
+            6808741,
+            6808996,
+            6809965,
+            6808838,
+            6810464,
+            6808772,
+            6808896,
+            6810852,
+            6810850,
+            6810844
+          ],
+          "before_median": 6810834.5,
+          "after_median": 6809430.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999285012931429,
+              0.999999119052688
+            ],
+            "same_after": [
+              0.9999276202993201,
+              1.0002872712404478
+            ],
+            "change": [
+              0.9996351473094574,
+              0.9999625495447493,
+              1.0001655201665836,
+              0.9997515587777867
+            ]
+          },
+          "median_paired_ratio": 0.9998570541612679,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            189395,
+            192829,
+            210715,
+            209542,
+            192541,
+            194660,
+            206643,
+            206710,
+            207559,
+            204266,
+            205100,
+            206293,
+            205494,
+            205154,
+            205097,
+            209407
+          ],
+          "before_median": 204681.5,
+          "after_median": 206468.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0181314184640566,
+              1.021014446822723
+            ],
+            "same_after": [
+              0.9944332392093587,
+              0.9983454504754397
+            ],
+            "change": [
+              1.0110054481902555,
+              0.9996758744134294,
+              1.016121136165588,
+              1.005816674792784
+            ]
+          },
+          "median_paired_ratio": 1.0084110614915196,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i64_mul_arrays",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            158640175,
+            158640325,
+            158640005,
+            158640278,
+            158640027,
+            158640082,
+            158640203,
+            158640778,
+            158640314,
+            158639943,
+            158640131,
+            158640076,
+            158639997,
+            158640112,
+            158640205,
+            158640179
+          ],
+          "before_median": 158640177.0,
+          "after_median": 158640097.0,
+          "paired_ratios": {
+            "same_before": [
+              1.000000945536022,
+              0.9999998361071205
+            ],
+            "same_after": [
+              1.0000017208774041,
+              1.0000007249117635
+            ],
+            "change": [
+              1.0000003466968648,
+              0.9999963754590261,
+              1.0000023386291812,
+              0.9999996533033625
+            ]
+          },
+          "median_paired_ratio": 1.0000000000001137,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            96175908,
+            96922419,
+            95689506,
+            94889608,
+            97036211,
+            93741267,
+            95733568,
+            96344386,
+            95237092,
+            97762167,
+            97923030,
+            95874151,
+            94252782,
+            95644944,
+            100310949,
+            97185919
+          ],
+          "before_median": 97111065.0,
+          "after_median": 95441018.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0077619334771448,
+              0.9688465712750859
+            ],
+            "same_after": [
+              0.991640692554103,
+              1.0147705136173062
+            ],
+            "change": [
+              0.9660441811768599,
+              0.9936600561240797,
+              0.9741712456107893,
+              0.9790766380492923
+            ]
+          },
+          "median_paired_ratio": 0.9766239418300409,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            34755207,
+            34755145,
+            34755127,
+            34755234,
+            34755162,
+            34755180,
+            34755161,
+            34755313,
+            34755212,
+            34755190,
+            34755170,
+            34755162,
+            34755191,
+            34755160,
+            34755176,
+            34755179
+          ],
+          "before_median": 34755177.5,
+          "after_median": 34755171.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999982160946416,
+              1.0000000863180782
+            ],
+            "same_after": [
+              1.0000030786824632,
+              0.9999991080469102
+            ],
+            "change": [
+              1.000000517908678,
+              0.9999956265679437,
+              1.0000006329989852,
+              0.9999997698184184
+            ]
+          },
+          "median_paired_ratio": 1.0000001438635482,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            101290,
+            108237,
+            105743,
+            112354,
+            104732,
+            102792,
+            101126,
+            106706,
+            107917,
+            106443,
+            105442,
+            107624,
+            105359,
+            108769,
+            110990,
+            108309
+          ],
+          "before_median": 106574.5,
+          "after_median": 106683.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0685852502714976,
+              0.9758446706910533
+            ],
+            "same_after": [
+              1.0625195048371996,
+              1.032365531183857
+            ],
+            "change": [
+              0.9814765305732728,
+              0.9477067831237231,
+              1.0138477870785303,
+              1.0206938411638626
+            ]
+          },
+          "median_paired_ratio": 0.9976621588259016,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_arrays",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            123651368,
+            123656103,
+            124988069,
+            124988499,
+            123654872,
+            124988859,
+            124985683,
+            123656856,
+            124986606,
+            123655906,
+            123655147,
+            124985023,
+            124996386,
+            124990316,
+            123654467,
+            123653067
+          ],
+          "before_median": 123655009.5,
+          "after_median": 124988284.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000382931469063,
+              0.999988678128385
+            ],
+            "same_after": [
+              1.0000034403283724,
+              0.9999514385959927
+            ],
+            "change": [
+              1.0107879857738238,
+              1.0107460843093083,
+              1.0107613137378169,
+              1.0107547160976647
+            ]
+          },
+          "median_paired_ratio": 1.0107580149177409,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            100618871,
+            99344056,
+            86886794,
+            86666594,
+            100446725,
+            86937462,
+            105656097,
+            102126338,
+            88397028,
+            99772067,
+            102301711,
+            93548485,
+            88098275,
+            90829718,
+            101395018,
+            102035797
+          ],
+          "before_median": 101006944.5,
+          "after_median": 88247651.5,
+          "paired_ratios": {
+            "same_before": [
+              0.987330259350654,
+              1.0063196300236368
+            ],
+            "same_after": [
+              0.9974656677975712,
+              1.0310045003718857
+            ],
+            "change": [
+              0.8655081785891974,
+              1.034562670797028,
+              0.8859897430009143,
+              0.9144371495409299
+            ]
+          },
+          "median_paired_ratio": 0.9002134462709221,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            25703805,
+            25704774,
+            26141067,
+            26141147,
+            25704453,
+            26141304,
+            26140632,
+            25704908,
+            26140811,
+            25704653,
+            25704452,
+            26140348,
+            26142979,
+            26141529,
+            25704391,
+            25704088
+          ],
+          "before_median": 25704452.5,
+          "after_median": 26141107.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000376986986945,
+              0.9999882121307601
+            ],
+            "same_after": [
+              1.0000030603188461,
+              0.9999445357776556
+            ],
+            "change": [
+              1.0169951486615958,
+              1.0169510040650602,
+              1.0169680563281676,
+              1.0169579962257123
+            ]
+          },
+          "median_paired_ratio": 1.0169630262769398,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            204777,
+            204208,
+            189583,
+            204707,
+            209173,
+            190595,
+            199132,
+            203644,
+            196034,
+            201312,
+            210689,
+            205129,
+            189423,
+            210617,
+            214875,
+            207627
+          ],
+          "before_median": 206202.0,
+          "after_median": 197583.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9972213676340604,
+              0.9662687609075044
+            ],
+            "same_after": [
+              1.0797750853188313,
+              1.1118871520353917
+            ],
+            "change": [
+              0.9111835657565747,
+              0.977843688004557,
+              0.973781990144651,
+              0.9736103925691422
+            ]
+          },
+          "median_paired_ratio": 0.9736961913568967,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_arrays",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            613353518,
+            613369949,
+            543384227,
+            543384329,
+            613353602,
+            543383933,
+            543385301,
+            613354111,
+            543385930,
+            613353177,
+            613354191,
+            543380305,
+            543385175,
+            543384187,
+            613359220,
+            613356589
+          ],
+          "before_median": 613354151.0,
+          "after_median": 543384278.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000267887922998,
+              0.9999957105071315
+            ],
+            "same_after": [
+              1.0000001877124784,
+              0.9999981817685769
+            ],
+            "change": [
+              0.8859227878146544,
+              0.8859242829791679,
+              0.8859266575544289,
+              0.8859160220525827
+            ]
+          },
+          "median_paired_ratio": 0.8859235353969112,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            350792337,
+            349125097,
+            306300024,
+            305796688,
+            347562266,
+            303386889,
+            313849857,
+            353125696,
+            302623409,
+            351443668,
+            387469437,
+            383259706,
+            306627444,
+            304637266,
+            347827742,
+            344449686
+          ],
+          "before_median": 349958717.0,
+          "after_median": 306048356.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9952472165889986,
+              0.9902881352114806
+            ],
+            "same_after": [
+              0.9983567222965676,
+              0.9935094589902397
+            ],
+            "change": [
+              0.8728993871849138,
+              0.8887766043511034,
+              0.8610865312275309,
+              0.9891353211427615
+            ]
+          },
+          "median_paired_ratio": 0.8808379957680086,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            120929271,
+            120932545,
+            98062702,
+            98062724,
+            120929261,
+            98062607,
+            98062946,
+            120929402,
+            98062972,
+            120929257,
+            120929390,
+            98061725,
+            98062926,
+            98062516,
+            120930526,
+            120929944
+          ],
+          "before_median": 120929396.0,
+          "after_median": 98062713.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000270736768107,
+              0.9999951873193704
+            ],
+            "same_after": [
+              1.0000002243462556,
+              0.9999958190111521
+            ],
+            "change": [
+              0.81090884198821,
+              0.8109106997816792,
+              0.8109118871043755,
+              0.8109006834484156
+            ]
+          },
+          "median_paired_ratio": 0.8109097708849446,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            232760,
+            235645,
+            32663,
+            32899,
+            231447,
+            29050,
+            94129,
+            235403,
+            35770,
+            229879,
+            236559,
+            38070,
+            31864,
+            32895,
+            234305,
+            234028
+          ],
+          "before_median": 234166.5,
+          "after_median": 32897.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0123947413644956,
+              0.9988177802436995
+            ],
+            "same_after": [
+              1.0072253007990692,
+              1.0323562641225208
+            ],
+            "change": [
+              0.12551469666921586,
+              0.3998632132980463,
+              0.15560360015486407,
+              0.1609323678236719
+            ]
+          },
+          "median_paired_ratio": 0.158267983989268,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_arrays",
+      "ansi": false,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            122852812,
+            122857694,
+            122862866,
+            122858933,
+            122853778,
+            122860437,
+            122859699,
+            122854670,
+            122863946,
+            122856956,
+            122858482,
+            122865806,
+            122855913,
+            122860992,
+            122856213,
+            122862281
+          ],
+          "before_median": 122856584.5,
+          "after_median": 122860714.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000397386101345,
+              1.0000493910714958
+            ],
+            "same_after": [
+              0.9999679887005077,
+              1.000041341111518
+            ],
+            "change": [
+              1.000054202647313,
+              1.0000409345448569,
+              1.0000568954353712,
+              1.0000596133037034
+            ]
+          },
+          "median_paired_ratio": 1.000055549041342,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            95599266,
+            90981765,
+            86966763,
+            84191044,
+            92025346,
+            87416568,
+            83961979,
+            92337319,
+            84467200,
+            90758733,
+            93672760,
+            84472614,
+            121299349,
+            83702864,
+            91477831,
+            92278427
+          ],
+          "before_median": 92151886.5,
+          "after_median": 84469907.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9516994094912821,
+              1.0087518034834035
+            ],
+            "same_after": [
+              0.9680829905098342,
+              0.6900520463634146
+            ],
+            "change": [
+              0.949918384441608,
+              0.9092962618938503,
+              0.9306784835790953,
+              0.9017841899822318
+            ]
+          },
+          "median_paired_ratio": 0.9199873727364728,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            25737034,
+            25738127,
+            25739232,
+            25738418,
+            25737302,
+            25738696,
+            25738563,
+            25737559,
+            25739412,
+            25737936,
+            25738317,
+            25739820,
+            25737805,
+            25738763,
+            25737780,
+            25739045
+          ],
+          "before_median": 25737858.0,
+          "after_median": 25738729.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000424679860158,
+              1.0000491495381498
+            ],
+            "same_after": [
+              0.9999683751247901,
+              1.0000372215113138
+            ],
+            "change": [
+              1.0000541626313435,
+              1.0000390091383569,
+              1.0000573472558172,
+              1.000058395426554
+            ]
+          },
+          "median_paired_ratio": 1.0000557549435802,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            181733,
+            192461,
+            179777,
+            191102,
+            173692,
+            190321,
+            185597,
+            188265,
+            177864,
+            181292,
+            184170,
+            184012,
+            185987,
+            176274,
+            176002,
+            186473
+          ],
+          "before_median": 182951.5,
+          "after_median": 184804.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0590316563309912,
+              1.0594936421177032
+            ],
+            "same_after": [
+              1.0629947101130846,
+              0.9477759198223532
+            ],
+            "change": [
+              1.0957384335490408,
+              0.9858284864419834,
+              0.9810912781589921,
+              0.9991420969756204
+            ]
+          },
+          "median_paired_ratio": 0.9924852917088018,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_arrays",
+      "ansi": false,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            453981732,
+            453985634,
+            453987074,
+            454002140,
+            453984639,
+            453986178,
+            453985978,
+            453985814,
+            453988403,
+            453984227,
+            453986623,
+            453992908,
+            453988056,
+            453985954,
+            453984091,
+            453986128
+          ],
+          "before_median": 453985136.5,
+          "after_median": 453987565.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000085950595035,
+              1.0000044869413718
+            ],
+            "same_after": [
+              1.0000331859668763,
+              0.999995369922243
+            ],
+            "change": [
+              1.000003389982541,
+              1.0000003612447679,
+              1.0000091985574644,
+              1.0000138440202455
+            ]
+          },
+          "median_paired_ratio": 1.0000062942700025,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            266676856,
+            273359449,
+            268391559,
+            270331361,
+            266056167,
+            277678804,
+            266465001,
+            264366853,
+            267872522,
+            265746941,
+            265895206,
+            266581975,
+            270042240,
+            275567682,
+            267385143,
+            322360213
+          ],
+          "before_median": 266366511.5,
+          "after_median": 269216899.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0250587662545414,
+              1.2056025603486877
+            ],
+            "same_after": [
+              1.0072275074791006,
+              1.0204613989278122
+            ],
+            "change": [
+              1.0436848998129031,
+              1.0079365017822413,
+              1.007998515399656,
+              1.002582855893987
+            ]
+          },
+          "median_paired_ratio": 1.0079675085909487,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            87763641,
+            87764421,
+            87764758,
+            87767869,
+            87764280,
+            87764719,
+            87764586,
+            87764501,
+            87765093,
+            87764215,
+            87764772,
+            87766244,
+            87764993,
+            87764618,
+            87764204,
+            87764618
+          ],
+          "before_median": 87764350.5,
+          "after_median": 87764875.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000088875072992,
+              1.0000047171851523
+            ],
+            "same_after": [
+              1.0000354470298887,
+              0.9999957272257745
+            ],
+            "change": [
+              1.0000050020349964,
+              1.0000009685009204,
+              1.0000100040774023,
+              1.0000167721053272
+            ]
+          },
+          "median_paired_ratio": 1.0000075030561995,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            31814,
+            29148,
+            91399,
+            31429,
+            28351,
+            32500,
+            31145,
+            30867,
+            32165,
+            26628,
+            30101,
+            27695,
+            31323,
+            32662,
+            29217,
+            31809
+          ],
+          "before_median": 29659.0,
+          "after_median": 31797.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9162004149116741,
+              1.0887154738679536
+            ],
+            "same_after": [
+              0.3438659066291754,
+              1.042748140344156
+            ],
+            "change": [
+              1.1463440443017883,
+              1.0090063822204944,
+              1.2079390115667719,
+              0.9200691006943291
+            ]
+          },
+          "median_paired_ratio": 1.0776752132611414,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_scalar",
+      "ansi": false,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            117400669,
+            117400700,
+            117398188,
+            117407843,
+            117399969,
+            117403440,
+            117401936,
+            117403075,
+            117405559,
+            117402428,
+            117400829,
+            117402107,
+            117401625,
+            117400411,
+            117400118,
+            117401507
+          ],
+          "before_median": 117400764.5,
+          "after_median": 117402021.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000002640530097,
+              1.0000118313339343
+            ],
+            "same_after": [
+              1.0000822414737782,
+              0.9999896594276272
+            ],
+            "change": [
+              1.0000295655955411,
+              0.9999902983801745,
+              1.0000266689544104,
+              1.0000108857834384
+            ]
+          },
+          "median_paired_ratio": 1.0000187773689244,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            91899920,
+            90473256,
+            83587986,
+            83335981,
+            116291718,
+            84817882,
+            82657452,
+            92223349,
+            85059436,
+            90665210,
+            92605793,
+            81626419,
+            111805546,
+            82734815,
+            91486348,
+            91482899
+          ],
+          "before_median": 91693134.0,
+          "after_median": 83461983.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9844758950823896,
+              0.9999623003860642
+            ],
+            "same_after": [
+              0.9969851528663461,
+              0.7399884706971512
+            ],
+            "change": [
+              0.7293544498155922,
+              0.8962746733476357,
+              0.9381706169323382,
+              0.8814396632832678
+            ]
+          },
+          "median_paired_ratio": 0.8888571683154518,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            24127153,
+            24127135,
+            24126801,
+            24128979,
+            24127006,
+            24127890,
+            24127708,
+            24127619,
+            24128421,
+            24127502,
+            24127156,
+            24127673,
+            24127644,
+            24127355,
+            24127046,
+            24127251
+          ],
+          "before_median": 24127154.5,
+          "after_median": 24127690.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999992539525903,
+              1.0000084966887368
+            ],
+            "same_after": [
+              1.0000902730536054,
+              0.9999880220381235
+            ],
+            "change": [
+              1.0000366394404676,
+              1.0000036887187251,
+              1.000038089314012,
+              1.0000214281368265
+            ]
+          },
+          "median_paired_ratio": 1.000029033788647,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            218574,
+            207379,
+            209995,
+            212889,
+            220590,
+            212208,
+            209297,
+            213976,
+            214224,
+            219417,
+            214823,
+            218803,
+            219133,
+            210396,
+            221732,
+            211189
+          ],
+          "before_median": 216698.5,
+          "after_median": 212548.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9487816483204773,
+              0.9524516082477946
+            ],
+            "same_after": [
+              1.0137812805066788,
+              0.9601292365823495
+            ],
+            "change": [
+              0.9620019039847681,
+              0.978133061651774,
+              0.9763327362966406,
+              1.0185268802688725
+            ]
+          },
+          "median_paired_ratio": 0.9772328989742074,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_scalar",
+      "ansi": false,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            440660360,
+            440660245,
+            440676783,
+            440674242,
+            440658334,
+            440676602,
+            440676249,
+            440660415,
+            440683933,
+            440660745,
+            440665969,
+            440679493,
+            440676382,
+            440674901,
+            440658407,
+            440661022
+          ],
+          "before_median": 440660387.5,
+          "after_median": 440676492.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999997390280351,
+              1.0000059343018504
+            ],
+            "same_after": [
+              0.9999942338691349,
+              0.9999966392571499
+            ],
+            "change": [
+              1.0000414561545545,
+              1.000035932431099,
+              1.000052620979434,
+              1.0000306899124312
+            ]
+          },
+          "median_paired_ratio": 1.0000386942928268,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            263546851,
+            261439296,
+            264489138,
+            259758330,
+            281398990,
+            261331903,
+            261598649,
+            263911237,
+            261776592,
+            261504170,
+            264863380,
+            264194081,
+            262393238,
+            260699689,
+            265950683,
+            262841153
+          ],
+          "before_median": 263729044.0,
+          "after_median": 261687620.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9920031106727206,
+              0.9883078698466813
+            ],
+            "same_after": [
+              0.982113412914522,
+              0.9935457597424824
+            ],
+            "change": [
+              0.9286881342395721,
+              0.9912372507275997,
+              1.001041750118172,
+              0.9974730406294747
+            ]
+          },
+          "median_paired_ratio": 0.9943551456785372,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            82031906,
+            82031998,
+            82036730,
+            82036130,
+            82031503,
+            82036674,
+            82036576,
+            82032001,
+            82038056,
+            82032015,
+            82033263,
+            82037296,
+            82036601,
+            82036289,
+            82031538,
+            82032065
+          ],
+          "before_median": 82031999.5,
+          "after_median": 82036637.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000011215148408,
+              1.0000064243583975
+            ],
+            "same_after": [
+              0.9999926862028752,
+              0.9999961968195148
+            ],
+            "change": [
+              1.0000630367579635,
+              1.000055770917986,
+              1.0000736419799026,
+              1.0000491629840447
+            ]
+          },
+          "median_paired_ratio": 1.0000594038379749,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            285560,
+            281643,
+            285865,
+            283439,
+            284092,
+            283561,
+            288585,
+            289089,
+            283482,
+            283843,
+            286575,
+            285875,
+            282429,
+            281651,
+            296121,
+            282215
+          ],
+          "before_median": 284826.0,
+          "after_median": 283521.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9862830928701499,
+              0.9530394669746489
+            ],
+            "same_after": [
+              0.9915134766410718,
+              0.9972453253738107
+            ],
+            "change": [
+              0.9981308871773933,
+              0.9982565922605149,
+              0.9987281701504,
+              0.9975573584576464
+            ]
+          },
+          "median_paired_ratio": 0.9981937397189541,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i64_add_nulls",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            125913846,
+            125915241,
+            126064105,
+            126063601,
+            125924954,
+            126067690,
+            126080121,
+            125927975,
+            126070812,
+            125921887,
+            125919931,
+            126073236,
+            126075277,
+            126071571,
+            125915945,
+            125916186
+          ],
+          "before_median": 125918058.5,
+          "after_median": 126071191.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000110790039722,
+              1.0000019139752316
+            ],
+            "same_after": [
+              0.9999960020340445,
+              0.9999706048633151
+            ],
+            "change": [
+              1.0011335005133295,
+              1.0012081985754158,
+              1.0011826776388761,
+              1.0012174800191083
+            ]
+          },
+          "median_paired_ratio": 1.001195438107146,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            104768512,
+            149425747,
+            159899717,
+            179010587,
+            117954150,
+            115074682,
+            95431505,
+            102983294,
+            135735294,
+            102981219,
+            103695068,
+            97004047,
+            97950153,
+            97575875,
+            103952773,
+            104138918
+          ],
+          "before_median": 104045845.5,
+          "after_median": 106512417.5,
+          "paired_ratios": {
+            "same_before": [
+              1.426246723824807,
+              1.0017906689223193
+            ],
+            "same_after": [
+              1.1195178475519127,
+              0.9961788931559913
+            ],
+            "change": [
+              0.9755882433979643,
+              0.9266697664574606,
+              1.3180587229211183,
+              0.9354740670983503
+            ]
+          },
+          "median_paired_ratio": 0.9555311552481573,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            25967619,
+            25967815,
+            25954519,
+            25954390,
+            25969966,
+            25955230,
+            25958010,
+            25970634,
+            25955973,
+            25969278,
+            25968890,
+            25956435,
+            25956938,
+            25956190,
+            25967944,
+            25968022
+          ],
+          "before_median": 25968456.0,
+          "after_median": 25956081.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000075478618198,
+              1.0000030037033352
+            ],
+            "same_after": [
+              0.9999950297672633,
+              0.9999711830416977
+            ],
+            "change": [
+              0.9994325753064136,
+              0.99951391252135,
+              0.9994876638464881,
+              0.9995203876638548
+            ]
+          },
+          "median_paired_ratio": 0.9995007881839191,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            214901,
+            223823,
+            235604,
+            226194,
+            211549,
+            223893,
+            228321,
+            218127,
+            234751,
+            214824,
+            216815,
+            225290,
+            223608,
+            213697,
+            219969,
+            220394
+          ],
+          "before_median": 217471.0,
+          "after_median": 225742.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0415167914528085,
+              1.0019320904309243
+            ],
+            "same_after": [
+              0.9600601008471843,
+              0.9556768988587171
+            ],
+            "change": [
+              1.0583505476272637,
+              1.046734241978297,
+              1.0927596544147768,
+              1.0390886239420705
+            ]
+          },
+          "median_paired_ratio": 1.0525423948027803,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i64_add_nulls",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            696250132,
+            696253258,
+            698261093,
+            698261889,
+            696248339,
+            698260870,
+            698258523,
+            696250087,
+            698259782,
+            696249548,
+            696250275,
+            698260977,
+            698262827,
+            698260634,
+            696254953,
+            696248845
+          ],
+          "before_median": 696250109.5,
+          "after_median": 698260923.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000044897657556,
+              0.9999912273514555
+            ],
+            "same_after": [
+              1.0000011399747286,
+              0.9999968593487792
+            ],
+            "change": [
+              1.002890536159685,
+              1.0028846473953834,
+              1.002887232035948,
+              1.0028879011932885
+            ]
+          },
+          "median_paired_ratio": 1.0028875666146182,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            491456542,
+            492473115,
+            496367604,
+            494931400,
+            492892132,
+            515669346,
+            495253229,
+            495236408,
+            501298336,
+            490165276,
+            492857893,
+            496655068,
+            501608162,
+            498281524,
+            497148740,
+            492357481
+          ],
+          "before_median": 492665504.0,
+          "after_median": 497468296.0,
+          "paired_ratios": {
+            "same_before": [
+              1.002068490116874,
+              0.9903625241009361
+            ],
+            "same_after": [
+              0.9971065718462964,
+              0.9933680544855249
+            ],
+            "change": [
+              1.0462113564434012,
+              1.0000339655964874,
+              1.022712869607679,
+              1.007704401317156
+            ]
+          },
+          "median_paired_ratio": 1.0152086354624177,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            120833219,
+            120833768,
+            121318938,
+            121319012,
+            120832787,
+            121318774,
+            121318385,
+            120833185,
+            121318649,
+            120833051,
+            120833242,
+            121318839,
+            121319269,
+            121318737,
+            120834160,
+            120832884
+          ],
+          "before_median": 120833202.0,
+          "after_median": 121318806.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000045434525748,
+              0.9999894400722444
+            ],
+            "same_after": [
+              1.0000006099624776,
+              0.9999956148763145
+            ],
+            "change": [
+              1.0040219795642056,
+              1.004015453205177,
+              1.0040187514589862,
+              1.004018736830714
+            ]
+          },
+          "median_paired_ratio": 1.00401874414485,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            414338,
+            421858,
+            443308,
+            421129,
+            418163,
+            423701,
+            420956,
+            413442,
+            417411,
+            417690,
+            417505,
+            421348,
+            422273,
+            423175,
+            414529,
+            414744
+          ],
+          "before_median": 416124.5,
+          "after_median": 421810.5,
+          "paired_ratios": {
+            "same_before": [
+              1.018149433554248,
+              1.0005186609380767
+            ],
+            "same_after": [
+              0.9499693215552167,
+              1.0021360589002848
+            ],
+            "change": [
+              1.0132436394420357,
+              1.0181742541880119,
+              0.9993320405085111,
+              1.0092046801834709
+            ]
+          },
+          "median_paired_ratio": 1.0112241598127532,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_mul_arrays",
+      "ansi": false,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            122517764,
+            122525214,
+            122543769,
+            122532338,
+            122521508,
+            122537620,
+            122537074,
+            122523821,
+            122535104,
+            122524073,
+            122520566,
+            122546249,
+            122540193,
+            122534868,
+            122519864,
+            122519552
+          ],
+          "before_median": 122521037.0,
+          "after_median": 122537347.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000608075086972,
+              0.9999974534741567
+            ],
+            "same_after": [
+              0.9999067190433811,
+              0.9999565448701391
+            ],
+            "change": [
+              1.0001315034418283,
+              1.0001081667213105,
+              1.0000900312871577,
+              1.0002096219503263
+            ]
+          },
+          "median_paired_ratio": 1.0001198350815694,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            93160286,
+            93012740,
+            85409184,
+            84571175,
+            91268811,
+            82919622,
+            83762351,
+            92629541,
+            84880718,
+            90175187,
+            90308035,
+            83717909,
+            91199347,
+            83692421,
+            91290075,
+            90745254
+          ],
+          "before_median": 91279443.0,
+          "after_median": 84166763.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9984162135354544,
+              0.9940319799277194
+            ],
+            "same_after": [
+              0.9901883034030626,
+              0.9176866255412991
+            ],
+            "change": [
+              0.9085208965853625,
+              0.904272547350742,
+              0.9412868531118211,
+              0.927026138925512
+            ]
+          },
+          "median_paired_ratio": 0.9177735177554373,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            25672335,
+            25673933,
+            25678430,
+            25676000,
+            25673011,
+            25677060,
+            25676915,
+            25673562,
+            25676579,
+            25673736,
+            25672825,
+            25678951,
+            25677613,
+            25676501,
+            25672626,
+            25672645
+          ],
+          "before_median": 25672918.0,
+          "after_median": 25676987.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000622459935957,
+              1.0000007400879054
+            ],
+            "same_after": [
+              0.9999053680462552,
+              0.9999566937939286
+            ],
+            "change": [
+              1.000157714262655,
+              1.0001306012776878,
+              1.0001107357339811,
+              1.0002386180718328
+            ]
+          },
+          "median_paired_ratio": 1.0001441577701713,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            180422,
+            174916,
+            177601,
+            171213,
+            177678,
+            173689,
+            190768,
+            176066,
+            177561,
+            178388,
+            181615,
+            187032,
+            186940,
+            189858,
+            179184,
+            176716
+          ],
+          "before_median": 178033.0,
+          "after_median": 182270.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9694826573256033,
+              0.9862264487900705
+            ],
+            "same_after": [
+              0.9640317340555515,
+              1.015609286402054
+            ],
+            "change": [
+              0.9775492745303301,
+              1.083502777367578,
+              0.9953640379397717,
+              1.0298268314841836
+            ]
+          },
+          "median_paired_ratio": 1.0125954347119777,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_mul_arrays",
+      "ansi": false,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            475392826,
+            475388612,
+            475398730,
+            475394494,
+            475391314,
+            475392048,
+            475395979,
+            475396242,
+            475392534,
+            475391623,
+            475391039,
+            475393100,
+            475394991,
+            475395329,
+            475398186,
+            475392996
+          ],
+          "before_median": 475392224.5,
+          "after_median": 475394742.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999911357518045,
+              0.9999890828359198
+            ],
+            "same_after": [
+              0.999991089584947,
+              1.0000007109877185
+            ],
+            "change": [
+              1.0000015439911887,
+              0.9999994467772844,
+              1.0000019163147937,
+              1.0000043353783117
+            ]
+          },
+          "median_paired_ratio": 1.000001730152991,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            282354566,
+            300259792,
+            283992830,
+            286212901,
+            289275979,
+            281075775,
+            280739061,
+            283551807,
+            310929620,
+            285742235,
+            288454214,
+            283018435,
+            282433532,
+            279690863,
+            282863402,
+            281897068
+          ],
+          "before_median": 284647021.0,
+          "after_median": 282725983.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0634139771623172,
+              0.9965837432726627
+            ],
+            "same_after": [
+              1.0078173487689812,
+              0.9902891523517824
+            ],
+            "change": [
+              0.9716526618340474,
+              0.9900803100859802,
+              1.08814722471811,
+              0.981155487643526
+            ]
+          },
+          "median_paired_ratio": 0.985617898864753,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            87282569,
+            87281702,
+            87283963,
+            87283025,
+            87282293,
+            87282473,
+            87283340,
+            87283381,
+            87282631,
+            87282354,
+            87282250,
+            87282764,
+            87283155,
+            87283100,
+            87283833,
+            87282670
+          ],
+          "before_median": 87282461.5,
+          "after_median": 87283062.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999900667451711,
+              0.999986675653898
+            ],
+            "same_after": [
+              0.9999892534668711,
+              0.9999993698669577
+            ],
+            "change": [
+              1.0000020622739598,
+              0.9999995302656757,
+              1.0000031736082644,
+              1.000005888940764
+            ]
+          },
+          "median_paired_ratio": 1.0000026179411121,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            30572,
+            28729,
+            33114,
+            28976,
+            33951,
+            30933,
+            27536,
+            31022,
+            31713,
+            27544,
+            27162,
+            29338,
+            33846,
+            31374,
+            30241,
+            30452
+          ],
+          "before_median": 30346.5,
+          "after_median": 31153.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9397160800732697,
+              1.0069772824972718
+            ],
+            "same_after": [
+              0.8750377483843691,
+              0.9269633043786563
+            ],
+            "change": [
+              0.9111071838826544,
+              0.8876281348720263,
+              1.1513578274760383,
+              1.0801119210661954
+            ]
+          },
+          "median_paired_ratio": 0.9956095524744248,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i64_mul_arrays",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            123379218,
+            123380179,
+            123521192,
+            123524979,
+            123383252,
+            123523062,
+            123524872,
+            123379077,
+            123519015,
+            123379444,
+            123379548,
+            123519426,
+            123521969,
+            123519262,
+            123377949,
+            123383822
+          ],
+          "before_median": 123379496.0,
+          "after_median": 123521580.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000077889940913,
+              1.0000476016990687
+            ],
+            "same_after": [
+              1.0000306587067262,
+              0.9999780848700688
+            ],
+            "change": [
+              1.0011331359624076,
+              1.0011816833416576,
+              1.001131233822062,
+              1.0011337211253197
+            ]
+          },
+          "median_paired_ratio": 1.0011334285438638,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            99778431,
+            99407943,
+            94554071,
+            93694521,
+            99443230,
+            92676934,
+            93228215,
+            99745791,
+            92165719,
+            100278386,
+            99615333,
+            93805420,
+            93626596,
+            93405498,
+            101277051,
+            104498141
+          ],
+          "before_median": 99762111.0,
+          "after_median": 93516047.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9962868929057423,
+              1.0318047372844614
+            ],
+            "same_after": [
+              0.9909094342431856,
+              0.9976385128858044
+            ],
+            "change": [
+              0.9319582036906886,
+              0.9346581350986529,
+              0.919098548315287,
+              0.9416765188146287
+            ]
+          },
+          "median_paired_ratio": 0.9333081693946708,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            25652841,
+            25652991,
+            25636025,
+            25636898,
+            25653770,
+            25636372,
+            25636878,
+            25652869,
+            25635572,
+            25652844,
+            25652905,
+            25635703,
+            25636222,
+            25635703,
+            25652561,
+            25653874
+          ],
+          "before_median": 25652887.0,
+          "after_median": 25636123.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000058473055675,
+              1.0000511839734052
+            ],
+            "same_after": [
+              1.0000340536413115,
+              0.9999797552073001
+            ],
+            "change": [
+              0.9993218150782517,
+              0.9993766389248704,
+              0.9993267023336672,
+              0.9993294326704909
+            ]
+          },
+          "median_paired_ratio": 0.999328067502079,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            219818,
+            223070,
+            215541,
+            220319,
+            223885,
+            216450,
+            224298,
+            207484,
+            220325,
+            214794,
+            213872,
+            224633,
+            216806,
+            225918,
+            217626,
+            215485
+          ],
+          "before_median": 216555.5,
+          "after_median": 220322.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0147940569016185,
+              0.9901620210820399
+            ],
+            "same_after": [
+              1.0221674762574173,
+              1.0420283571487874
+            ],
+            "change": [
+              0.9667909864439332,
+              1.0810375739816083,
+              1.0257502537314822,
+              1.0503151417670382
+            ]
+          },
+          "median_paired_ratio": 1.0380326977492602,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i64_mul_arrays",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            609940069,
+            609942540,
+            610036170,
+            610036027,
+            609940047,
+            610034968,
+            610042674,
+            609945639,
+            610032300,
+            609949559,
+            609945296,
+            610033992,
+            610033478,
+            610033276,
+            609943482,
+            609941830
+          ],
+          "before_median": 609943011.0,
+          "after_median": 610034480.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000040512176942,
+              0.9999972915523343
+            ],
+            "same_after": [
+              0.99999976558767,
+              0.9999996688706321
+            ],
+            "change": [
+              1.0001556234919593,
+              1.000159087947836,
+              1.0001356522007092,
+              1.0001454163194334
+            ]
+          },
+          "median_paired_ratio": 1.0001505199056964,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            449301846,
+            443917289,
+            454351234,
+            458658626,
+            448466579,
+            456551784,
+            474526353,
+            443145746,
+            454564130,
+            444168531,
+            445126316,
+            454087815,
+            457056363,
+            455606377,
+            445203917,
+            445934582
+          ],
+          "before_median": 445165116.5,
+          "after_median": 456079080.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9880157247339687,
+              1.0016411917597752
+            ],
+            "same_after": [
+              1.0094803131975207,
+              0.9968275553796414
+            ],
+            "change": [
+              1.0180285563709754,
+              1.0708132872384608,
+              1.023404627465605,
+              1.020132485269642
+            ]
+          },
+          "median_paired_ratio": 1.0217685563676235,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            120109724,
+            120110096,
+            120128792,
+            120128743,
+            120109595,
+            120128622,
+            120129946,
+            120110881,
+            120127925,
+            120111529,
+            120110878,
+            120128357,
+            120128237,
+            120128150,
+            120110335,
+            120110094
+          ],
+          "before_median": 120110215.5,
+          "after_median": 120128489.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000030971680527,
+              0.9999979935115492
+            ],
+            "same_after": [
+              0.9999995921044473,
+              0.9999992757739381
+            ],
+            "change": [
+              1.000158413655462,
+              1.000158728333697,
+              1.000136506463089,
+              1.0001455238717012
+            ]
+          },
+          "median_paired_ratio": 1.0001519687635816,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            394530,
+            399049,
+            399359,
+            401756,
+            410500,
+            402724,
+            468937,
+            449681,
+            460799,
+            395046,
+            397040,
+            424783,
+            404799,
+            401004,
+            395748,
+            399737
+          ],
+          "before_median": 398044.5,
+          "after_median": 403761.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0114541353002307,
+              1.0100796466438238
+            ],
+            "same_after": [
+              1.0060021183947276,
+              0.9906249768403578
+            ],
+            "change": [
+              0.9810572472594397,
+              1.0428214667731126,
+              1.1664439077980793,
+              1.0698745718315534
+            ]
+          },
+          "median_paired_ratio": 1.056348019302333,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    }
+  ],
+  "calibration": {
+    "instructions:u": {
+      "passed": 24,
+      "total": 24
+    },
+    "cycles:u": {
+      "passed": 16,
+      "total": 24
+    },
+    "branches:u": {
+      "passed": 24,
+      "total": 24
+    },
+    "branch-misses:u": {
+      "passed": 12,
+      "total": 24
+    }
+  },
+  "raw_archive": {
+    "path": "sse2-query-counters-runs.json.gz",
+    "sha256": "16ed6cfdaf4f97b208ba523c0cd529def9a0f0c3e89b097ec54485463b90b7eb",
+    "text_files": 1185,
+    "compressed_bytes": 271333
+  }
+}

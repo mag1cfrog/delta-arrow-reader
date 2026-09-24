@@ -1,0 +1,1044 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/195",
+  "status": "field reuse retained for allocation reduction; no consistent complete-query speedup established; remaining costs stay open",
+  "baseline_commit": "c786dea5c735145aa3f568108b2f48bd52d43ab9",
+  "runtime_change": "Column::return_field shares the existing Arc<Field> after the same bounds check. All 83 preceding recorded source identities are unchanged; column.rs is separately recorded.",
+  "patch": {
+    "patch_sha256": "7e7cd0543722d0223017299768dc4eac012d431ee0f216942083f1a443ef9ab1",
+    "before_sha256": "c93fe93a13bb131e52b00f8b6fdc935507bcfbf2d54e9115f912d33f6f639cb1",
+    "after_sha256": "75d22bef42f5dcd487ac06d1c0e0505407d9480d95b0423278e8ca693a3c9660",
+    "forward_reverse_exact": true
+  },
+  "binaries": {
+    "before": {
+      "probe": "36ee938c26ec46967bf35534adbf30af9d2286d6383d1e7a2b2d3799b91db3fc",
+      "bench": "385d0c6ea296af6aa084ded53d681afd0ef3bebfe4745d5292467c4016e49356",
+      "runner": "bad005d303c0cc6fc047b136be4c3ecb76ef10317fcb64605ae082387a8cb8ea"
+    },
+    "after": {
+      "probe": "4013a4a94bf83154b8dd21a7a62e180419caef423bbac67d7e7f47bd4ab4f7da",
+      "bench": "fa40ee082b22d8eae05d185293d2cbfd9ef1c9b7a006959857ebcd2f6d3eed56",
+      "runner": "72b6ae9eb12c1e7aa0be641c7ba617a1377d6aa47cde1aa6fa14169ad25a150b"
+    }
+  },
+  "correctness": {
+    "focused_agreement": 616,
+    "focused_total": 616,
+    "regression_groups": 37,
+    "regression_observations": 6784,
+    "regression_agreement_before_and_after": 6403,
+    "changed_status_or_successful_values_types": 0,
+    "previously_agreeing_regressions": 0,
+    "delta_unchanged": 116,
+    "delta_adapter_checks_passed": 18,
+    "planner_tests_passed": 38,
+    "runner_tests_passed": 28,
+    "complete_field_contract_check": "passed",
+    "delta_spark_strict_report": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    }
+  },
+  "allocation": {
+    "rows": 1048576,
+    "processes": 4,
+    "ordinary_array_allocations_per_batch": {
+      "before": 9,
+      "after": 5
+    },
+    "native_mode_counts_unchanged": true,
+    "cases": {
+      "8192": [
+        {
+          "id": "i32_add_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 4285696,
+            "peak_live_bytes": 33482,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 4252672,
+            "peak_live_bytes": 33224,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1280,
+            "allocated_bytes": 4291200,
+            "peak_live_bytes": 33525,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 1024,
+            "allocated_bytes": 4274688,
+            "peak_live_bytes": 33396,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 4285696,
+            "peak_live_bytes": 33482,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 4252672,
+            "peak_live_bytes": 33224,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 5376,
+            "allocated_bytes": 27356632,
+            "peak_live_bytes": 117776,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 4864,
+            "allocated_bytes": 27323608,
+            "peak_live_bytes": 117776,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_sub_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 4285696,
+            "peak_live_bytes": 33482,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 4252672,
+            "peak_live_bytes": 33224,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_sub_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1280,
+            "allocated_bytes": 4291200,
+            "peak_live_bytes": 33525,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 1024,
+            "allocated_bytes": 4274688,
+            "peak_live_bytes": 33396,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_sub_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 4285696,
+            "peak_live_bytes": 33482,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 4252672,
+            "peak_live_bytes": 33224,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_mul_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 4285696,
+            "peak_live_bytes": 33482,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 4252672,
+            "peak_live_bytes": 33224,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_mul_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1280,
+            "allocated_bytes": 4291200,
+            "peak_live_bytes": 33525,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 1024,
+            "allocated_bytes": 4274688,
+            "peak_live_bytes": 33396,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_mul_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 4285696,
+            "peak_live_bytes": 33482,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 4252672,
+            "peak_live_bytes": 33224,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 8480000,
+            "peak_live_bytes": 66250,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 8446976,
+            "peak_live_bytes": 65992,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1280,
+            "allocated_bytes": 8486016,
+            "peak_live_bytes": 66297,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 1024,
+            "allocated_bytes": 8469504,
+            "peak_live_bytes": 66168,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 8480000,
+            "peak_live_bytes": 66250,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 8446976,
+            "peak_live_bytes": 65992,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 5376,
+            "allocated_bytes": 45934256,
+            "peak_live_bytes": 234816,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 4864,
+            "allocated_bytes": 45901232,
+            "peak_live_bytes": 234816,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_sub_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 8480000,
+            "peak_live_bytes": 66250,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 8446976,
+            "peak_live_bytes": 65992,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_sub_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1280,
+            "allocated_bytes": 8486016,
+            "peak_live_bytes": 66297,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 1024,
+            "allocated_bytes": 8469504,
+            "peak_live_bytes": 66168,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_sub_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 8480000,
+            "peak_live_bytes": 66250,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 8446976,
+            "peak_live_bytes": 65992,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_mul_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 8480000,
+            "peak_live_bytes": 66250,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 8446976,
+            "peak_live_bytes": 65992,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_mul_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1280,
+            "allocated_bytes": 8486016,
+            "peak_live_bytes": 66297,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 1024,
+            "allocated_bytes": 8469504,
+            "peak_live_bytes": 66168,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_mul_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1152,
+            "allocated_bytes": 8480000,
+            "peak_live_bytes": 66250,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 8446976,
+            "peak_live_bytes": 65992,
+            "live_bytes_after": 0
+          }
+        }
+      ],
+      "256": [
+        {
+          "id": "i32_add_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 7118848,
+            "peak_live_bytes": 1738,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 6062080,
+            "peak_live_bytes": 1480,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 40960,
+            "allocated_bytes": 7294976,
+            "peak_live_bytes": 1781,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 32768,
+            "allocated_bytes": 6766592,
+            "peak_live_bytes": 1652,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 7118848,
+            "peak_live_bytes": 1738,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 6062080,
+            "peak_live_bytes": 1480,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 151552,
+            "allocated_bytes": 36214488,
+            "peak_live_bytes": 4705,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 135168,
+            "allocated_bytes": 35157720,
+            "peak_live_bytes": 4576,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_sub_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 7118848,
+            "peak_live_bytes": 1738,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 6062080,
+            "peak_live_bytes": 1480,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_sub_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 40960,
+            "allocated_bytes": 7294976,
+            "peak_live_bytes": 1781,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 32768,
+            "allocated_bytes": 6766592,
+            "peak_live_bytes": 1652,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_sub_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 7118848,
+            "peak_live_bytes": 1738,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 6062080,
+            "peak_live_bytes": 1480,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_mul_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 7118848,
+            "peak_live_bytes": 1738,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 6062080,
+            "peak_live_bytes": 1480,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_mul_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 40960,
+            "allocated_bytes": 7294976,
+            "peak_live_bytes": 1781,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 32768,
+            "allocated_bytes": 6766592,
+            "peak_live_bytes": 1652,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_mul_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 7118848,
+            "peak_live_bytes": 1738,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 6062080,
+            "peak_live_bytes": 1480,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 11313152,
+            "peak_live_bytes": 2762,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 10256384,
+            "peak_live_bytes": 2504,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 40960,
+            "allocated_bytes": 11505664,
+            "peak_live_bytes": 2809,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 32768,
+            "allocated_bytes": 10977280,
+            "peak_live_bytes": 2680,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 11313152,
+            "peak_live_bytes": 2762,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 10256384,
+            "peak_live_bytes": 2504,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 151552,
+            "allocated_bytes": 54955440,
+            "peak_live_bytes": 8257,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 135168,
+            "allocated_bytes": 53898672,
+            "peak_live_bytes": 8128,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_sub_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 11313152,
+            "peak_live_bytes": 2762,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 10256384,
+            "peak_live_bytes": 2504,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_sub_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 40960,
+            "allocated_bytes": 11505664,
+            "peak_live_bytes": 2809,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 32768,
+            "allocated_bytes": 10977280,
+            "peak_live_bytes": 2680,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_sub_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 11313152,
+            "peak_live_bytes": 2762,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 10256384,
+            "peak_live_bytes": 2504,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_mul_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 11313152,
+            "peak_live_bytes": 2762,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 10256384,
+            "peak_live_bytes": 2504,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_mul_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 40960,
+            "allocated_bytes": 11505664,
+            "peak_live_bytes": 2809,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 32768,
+            "allocated_bytes": 10977280,
+            "peak_live_bytes": 2680,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_mul_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 36864,
+            "allocated_bytes": 11313152,
+            "peak_live_bytes": 2762,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 10256384,
+            "peak_live_bytes": 2504,
+            "live_bytes_after": 0
+          }
+        }
+      ]
+    }
+  },
+  "query_timing": {
+    "processes": 32,
+    "observations_per_process": 48,
+    "calibrated_case_counts": {
+      "8192": {
+        "planning": 32,
+        "execution": 7
+      },
+      "256": {
+        "planning": 21,
+        "execution": 22
+      }
+    },
+    "calibration": "All same-binary paired ratios within +/-5%, separately per case and phase. Retain all samples and failures.",
+    "consistent_speedup_established": false,
+    "zero_regression_claim": false
+  },
+  "hardware_counters": {
+    "processes": 8,
+    "scope": "Entire 48-case/mode benchmark process: setup, validation, warmup, repeated planning/execution and serialization; original allocator. Not per-operator work or query latency.",
+    "summary": {
+      "8192": {
+        "runs": [
+          {
+            "variant": "before",
+            "counts": {
+              "instructions:u": {
+                "value": 88922715592,
+                "runtime_ns": 6321517055,
+                "running_percent": 100.0
+              },
+              "cycles:u": {
+                "value": 25559507053,
+                "runtime_ns": 6321517055,
+                "running_percent": 100.0
+              },
+              "branches:u": {
+                "value": 16563140631,
+                "runtime_ns": 6321517055,
+                "running_percent": 100.0
+              },
+              "branch-misses:u": {
+                "value": 19028960,
+                "runtime_ns": 6321517055,
+                "running_percent": 100.0
+              }
+            },
+            "eligible": true
+          },
+          {
+            "variant": "after",
+            "counts": {
+              "instructions:u": {
+                "value": 88888031916,
+                "runtime_ns": 6466625123,
+                "running_percent": 100.0
+              },
+              "cycles:u": {
+                "value": 25740757587,
+                "runtime_ns": 6466625123,
+                "running_percent": 100.0
+              },
+              "branches:u": {
+                "value": 16556108099,
+                "runtime_ns": 6466625123,
+                "running_percent": 100.0
+              },
+              "branch-misses:u": {
+                "value": 19047585,
+                "runtime_ns": 6466625123,
+                "running_percent": 100.0
+              }
+            },
+            "eligible": true
+          },
+          {
+            "variant": "after",
+            "counts": {
+              "instructions:u": {
+                "value": 88888832859,
+                "runtime_ns": 6376007301,
+                "running_percent": 100.0
+              },
+              "cycles:u": {
+                "value": 25501251268,
+                "runtime_ns": 6376007301,
+                "running_percent": 100.0
+              },
+              "branches:u": {
+                "value": 16556268003,
+                "runtime_ns": 6376007301,
+                "running_percent": 100.0
+              },
+              "branch-misses:u": {
+                "value": 18665481,
+                "runtime_ns": 6376007301,
+                "running_percent": 100.0
+              }
+            },
+            "eligible": true
+          },
+          {
+            "variant": "before",
+            "counts": {
+              "instructions:u": {
+                "value": 88923437067,
+                "runtime_ns": 6343741174,
+                "running_percent": 100.0
+              },
+              "cycles:u": {
+                "value": 26035489653,
+                "runtime_ns": 6343741174,
+                "running_percent": 100.0
+              },
+              "branches:u": {
+                "value": 16563201888,
+                "runtime_ns": 6343741174,
+                "running_percent": 100.0
+              },
+              "branch-misses:u": {
+                "value": 18895406,
+                "runtime_ns": 6343741174,
+                "running_percent": 100.0
+              }
+            },
+            "eligible": true
+          }
+        ],
+        "paired_ratios": {
+          "instructions:u": [
+            0.9996099570759946,
+            0.9996108539082456
+          ],
+          "cycles:u": [
+            1.007091315713725,
+            0.9794803788167494
+          ],
+          "branches:u": [
+            0.9995754107172864,
+            0.9995813680804662
+          ],
+          "branch-misses:u": [
+            1.0009787713043699,
+            0.9878316983503821
+          ]
+        },
+        "median_ratios": {
+          "instructions:u": 0.9996104054921201,
+          "cycles:u": 0.9932858472652372,
+          "branches:u": 0.9995783893988763,
+          "branch-misses:u": 0.994405234827376
+        },
+        "all_counters_eligible": true
+      },
+      "256": {
+        "runs": [
+          {
+            "variant": "before",
+            "counts": {
+              "instructions:u": {
+                "value": 126916786930,
+                "runtime_ns": 11238725585,
+                "running_percent": 100.0
+              },
+              "cycles:u": {
+                "value": 50981273544,
+                "runtime_ns": 11238725585,
+                "running_percent": 100.0
+              },
+              "branches:u": {
+                "value": 24048663612,
+                "runtime_ns": 11238725585,
+                "running_percent": 100.0
+              },
+              "branch-misses:u": {
+                "value": 28693354,
+                "runtime_ns": 11238725585,
+                "running_percent": 100.0
+              }
+            },
+            "eligible": true
+          },
+          {
+            "variant": "after",
+            "counts": {
+              "instructions:u": {
+                "value": 125698114444,
+                "runtime_ns": 11257574555,
+                "running_percent": 100.0
+              },
+              "cycles:u": {
+                "value": 50448103938,
+                "runtime_ns": 11257574555,
+                "running_percent": 100.0
+              },
+              "branches:u": {
+                "value": 23785492229,
+                "runtime_ns": 11257574555,
+                "running_percent": 100.0
+              },
+              "branch-misses:u": {
+                "value": 29927984,
+                "runtime_ns": 11257574555,
+                "running_percent": 100.0
+              }
+            },
+            "eligible": true
+          },
+          {
+            "variant": "after",
+            "counts": {
+              "instructions:u": {
+                "value": 125722474701,
+                "runtime_ns": 11308847550,
+                "running_percent": 100.0
+              },
+              "cycles:u": {
+                "value": 50930757557,
+                "runtime_ns": 11308847550,
+                "running_percent": 100.0
+              },
+              "branches:u": {
+                "value": 23792582922,
+                "runtime_ns": 11308847550,
+                "running_percent": 100.0
+              },
+              "branch-misses:u": {
+                "value": 29971211,
+                "runtime_ns": 11308847550,
+                "running_percent": 100.0
+              }
+            },
+            "eligible": true
+          },
+          {
+            "variant": "before",
+            "counts": {
+              "instructions:u": {
+                "value": 126862370537,
+                "runtime_ns": 11343532686,
+                "running_percent": 100.0
+              },
+              "cycles:u": {
+                "value": 50946970528,
+                "runtime_ns": 11343532686,
+                "running_percent": 100.0
+              },
+              "branches:u": {
+                "value": 24032582790,
+                "runtime_ns": 11343532686,
+                "running_percent": 100.0
+              },
+              "branch-misses:u": {
+                "value": 30428902,
+                "runtime_ns": 11343532686,
+                "running_percent": 100.0
+              }
+            },
+            "eligible": true
+          }
+        ],
+        "paired_ratios": {
+          "instructions:u": [
+            0.9903978621309398,
+            0.9910147049028416
+          ],
+          "cycles:u": [
+            0.9895418539213258,
+            0.9996817677119567
+          ],
+          "branches:u": [
+            0.9890567148659071,
+            0.990013563248813
+          ],
+          "branch-misses:u": [
+            1.0430284309042435,
+            0.9849586751437827
+          ]
+        },
+        "median_ratios": {
+          "instructions:u": 0.9907062835168907,
+          "cycles:u": 0.9946118108166413,
+          "branches:u": 0.98953513905736,
+          "branch-misses:u": 1.013993553024013
+        },
+        "all_counters_eligible": true
+      }
+    }
+  },
+  "restoration": {
+    "source_lock_paths": 84,
+    "executable_slots": 3,
+    "verified": true
+  },
+  "remaining": [
+    "Argument vector allocations and scalar-function dispatch.",
+    "Native checked arithmetic kernel costs.",
+    "Remaining NULL selection/scatter work.",
+    "Complete-query and unaffected-path performance acceptance."
+  ],
+  "raw_archive": {
+    "path": "column-field-reuse-runs.json.gz",
+    "sha256": "a4d83f001209b9ed470f318c5777fc314cac45e5e899b08d1da2006d5fd5d2fd",
+    "text_files": 384,
+    "compressed_bytes": 1498354
+  }
+}

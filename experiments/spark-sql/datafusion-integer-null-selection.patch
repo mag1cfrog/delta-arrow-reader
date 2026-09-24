@@ -1,0 +1,20 @@
+diff --git a/src/scalar_function.rs b/src/scalar_function.rs
+--- a/src/scalar_function.rs
++++ b/src/scalar_function.rs
+@@ -318,7 +318,15 @@
+                     }
+                     let mask = BooleanArray::new(array.nulls().unwrap().inner().clone(), None);
+                     let selected = filter_record_batch(batch, &mask)?;
+-                    let mut args = vec![ColumnarValue::Array(filter(array.as_ref(), &mask)?)];
++                    // A column has already been filtered with the input batch.
++                    // Reuse it; computed left operands still need their own selection.
++                    let selected_first = if let Some(column) = self.args[0].downcast_ref::<Column>()
++                    {
++                        Arc::clone(selected.column(column.index()))
++                    } else {
++                        filter(array.as_ref(), &mask)?
++                    };
++                    let mut args = vec![ColumnarValue::Array(selected_first)];
+                     for expr in &self.args[1..] {
+                         args.push(expr.evaluate(&selected)?);
+                     }

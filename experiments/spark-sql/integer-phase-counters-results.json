@@ -1,0 +1,2884 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/195",
+  "status": "Measurement-only follow-up. Region counters localize the latest checkpoint work reduction to nested NULL execution; complete elapsed-time acceptance and historical checkpoint flags stay open.",
+  "before_commit": "5232f9104deaf4e9bacd0d19f6e0d8d6eb443de2",
+  "after_commit": "d2c57557c17c84b3f0d6503311ba4d6c16238382",
+  "source_provenance": {
+    "query_source": "integer_overflow_bench.rs",
+    "query_source_sha256": "971ad5fe8fb00a9640585c66de320ba4fa1125b82ca9f2fa5a13cd4029b60256",
+    "helper_source": "examples/decimal_bench.rs",
+    "helper_source_sha256": "d19b96f339f730bdd5e764a04292530d4f194ab25a42e7ca4536630d5751c2bf",
+    "helper_text": "// perf stat --delay=-1 --control=fifo:DIR/control,DIR/ack\n// Counting covers the enabled phase and the control handshake.\nfn perf_command(command: &[u8]) -> Result<()> {\n    if let Some(dir) = std::env::var_os(\"DECIMAL_BENCH_PERF_DIR\") {\n        let dir = PathBuf::from(dir);\n        fs::OpenOptions::new()\n            .write(true)\n            .open(dir.join(\"control\"))?\n            .write_all(command)?;\n        let mut ack = String::new();\n        BufReader::new(fs::File::open(dir.join(\"ack\"))?).read_line(&mut ack)?;\n        if ack != \"ack\\n\" {\n            return Err(\"unexpected perf control acknowledgement\".into());\n        }\n    }\n    Ok(())\n}\n",
+    "derived_source_sha256": "a37f7d57375dec6239ba348065925056305139dce3c871006c34b065726fd4f8",
+    "derivation": "Only add the existing perf handshake, select one existing case/ANSI mode, and enable counters around the selected measured phase after warmups. Keep original queries, row/type/value validation, timing loops and sample counts."
+  },
+  "patch": {
+    "before_sha256": "971ad5fe8fb00a9640585c66de320ba4fa1125b82ca9f2fa5a13cd4029b60256",
+    "after_sha256": "a37f7d57375dec6239ba348065925056305139dce3c871006c34b065726fd4f8",
+    "patch_sha256": "9f402a101b75df32e7916c65a7a4b282bb271fa9af316962ab3f2e307974542f",
+    "forward_reverse_exact": true
+  },
+  "processes": 256,
+  "rows": 1048576,
+  "case_modes": 4,
+  "phases": [
+    "planning",
+    "execution"
+  ],
+  "batch_sizes": [
+    8192,
+    256
+  ],
+  "warmups": 4,
+  "counted_samples_per_process": 15,
+  "all_outputs_match_exact_original_query": true,
+  "all_counter_running_percent_100": true,
+  "calibration": {
+    "instructions:u": {
+      "passed": 16,
+      "total": 16
+    },
+    "cycles:u": {
+      "passed": 15,
+      "total": 16
+    },
+    "branches:u": {
+      "passed": 16,
+      "total": 16
+    },
+    "branch-misses:u": {
+      "passed": 10,
+      "total": 16
+    }
+  },
+  "summary": [
+    {
+      "batch_size": 8192,
+      "id": "i32_add_arrays",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            37488149,
+            37493964,
+            37491947,
+            37497938,
+            37494991,
+            37498131,
+            37492309,
+            37494395,
+            37498363,
+            37488018,
+            37488838,
+            37497791,
+            37498993,
+            37493494,
+            37488760,
+            37489369
+          ],
+          "before_median": 37489103.5,
+          "after_median": 37497864.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0001551156873603,
+              1.0000162448691288
+            ],
+            "same_after": [
+              1.0001597943152967,
+              0.9998533560621214
+            ],
+            "change": [
+              1.000083744519368,
+              0.999944365017758,
+              1.000275954839757,
+              1.0002388177515664
+            ]
+          },
+          "median_paired_ratio": 1.0001612811354672,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            23059827,
+            23264005,
+            23099049,
+            23371511,
+            22784413,
+            23471880,
+            23366633,
+            22909410,
+            23092170,
+            23387951,
+            23239278,
+            23055668,
+            23367262,
+            23436101,
+            23327851,
+            22939199
+          ],
+          "before_median": 23149552.5,
+          "after_median": 23366947.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0088542728442846,
+              0.9833395712275426
+            ],
+            "same_after": [
+              1.0117953773767916,
+              1.0029459591799843
+            ],
+            "change": [
+              1.0301726886709788,
+              1.019957868840795,
+              0.9873532743419892,
+              0.9920991521337281
+            ]
+          },
+          "median_paired_ratio": 1.0060285104872615,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            6835170,
+            6837306,
+            6835627,
+            6837888,
+            6837479,
+            6837939,
+            6835629,
+            6837234,
+            6837929,
+            6835488,
+            6835221,
+            6837816,
+            6838028,
+            6836312,
+            6835217,
+            6835303
+          ],
+          "before_median": 6835395.5,
+          "after_median": 6837852.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0003125013715826,
+              1.0000125818975463
+            ],
+            "same_after": [
+              1.0003307670240054,
+              0.999749050457237
+            ],
+            "change": [
+              1.0000672762578138,
+              0.9997652559499938,
+              1.0003571069102895,
+              1.000379651221226
+            ]
+          },
+          "median_paired_ratio": 1.0002121915840516,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            192073,
+            192309,
+            193019,
+            198718,
+            190619,
+            195213,
+            197534,
+            194319,
+            197883,
+            196924,
+            194217,
+            195517,
+            196152,
+            196322,
+            196269,
+            192144
+          ],
+          "before_median": 193263.0,
+          "after_median": 196237.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0012286995048758,
+              0.9789829264937407
+            ],
+            "same_after": [
+              1.0295255907449525,
+              1.0008666748236061
+            ],
+            "change": [
+              1.0241004307020811,
+              1.0165449595767784,
+              1.0048698990473481,
+              1.0066935438195421
+            ]
+          },
+          "median_paired_ratio": 1.0116192516981601,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_add_arrays",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            158543702,
+            158543858,
+            158543834,
+            158545517,
+            158544002,
+            158543766,
+            158543909,
+            158544008,
+            158543535,
+            158545715,
+            158543932,
+            158543791,
+            158543722,
+            158543753,
+            158543914,
+            158545769
+          ],
+          "before_median": 158543967.0,
+          "after_median": 158543778.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000009839558306,
+              1.000011700228367
+            ],
+            "same_after": [
+              1.0000106153607966,
+              1.0000001955296596
+            ],
+            "change": [
+              0.9999985114542523,
+              0.9999993755676972,
+              0.9999862500225881,
+              0.9999991106565971
+            ]
+          },
+          "median_paired_ratio": 0.9999988110554248,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            46152868,
+            46337136,
+            47610055,
+            47017762,
+            46431936,
+            52854307,
+            46482810,
+            46309680,
+            46886589,
+            46502284,
+            46108244,
+            46846068,
+            46319876,
+            46690315,
+            46256694,
+            46735885
+          ],
+          "before_median": 46323408.0,
+          "after_median": 46866328.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0039925579489448,
+              1.0103593871191918
+            ],
+            "same_after": [
+              0.9875594976733382,
+              1.0079974091467776
+            ],
+            "change": [
+              1.138317967185344,
+              1.0037385272366381,
+              1.008264217731757,
+              1.0160019973868448
+            ]
+          },
+          "median_paired_ratio": 1.012133107559301,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            34731353,
+            34731377,
+            34731369,
+            34731690,
+            34731369,
+            34731357,
+            34731355,
+            34731382,
+            34731363,
+            34731736,
+            34731398,
+            34731365,
+            34731361,
+            34731362,
+            34731363,
+            34731732
+          ],
+          "before_median": 34731379.5,
+          "after_median": 34731362.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000006910182855,
+              1.000010624403079
+            ],
+            "same_after": [
+              1.0000092423653095,
+              1.000000028792422
+            ],
+            "change": [
+              0.9999996544910165,
+              0.999999222605078,
+              0.999989260542577,
+              0.9999990498510887
+            ]
+          },
+          "median_paired_ratio": 0.9999991362280833,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            81885,
+            78351,
+            79783,
+            81288,
+            79811,
+            80990,
+            78862,
+            71522,
+            79966,
+            77611,
+            78235,
+            81960,
+            76967,
+            78917,
+            76359,
+            78867
+          ],
+          "before_median": 78293.0,
+          "after_median": 79874.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9568419124381755,
+              1.032844851294543
+            ],
+            "same_after": [
+              1.0188636676986325,
+              1.0253355334104226
+            ],
+            "change": [
+              1.0147723997945146,
+              1.1026257654987277,
+              1.0303436368556003,
+              1.047612960950981
+            ]
+          },
+          "median_paired_ratio": 1.0389782989032907,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_add_nested_nulls",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            54179660,
+            54180231,
+            54185753,
+            54185921,
+            54179931,
+            54186968,
+            54192248,
+            54180044,
+            54186800,
+            54183713,
+            54179437,
+            54186657,
+            54186059,
+            54187398,
+            54180362,
+            54180046
+          ],
+          "before_median": 54180045.0,
+          "after_median": 54186728.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000105390103962,
+              0.999994167628485
+            ],
+            "same_after": [
+              1.0000031004459788,
+              1.000024711153103
+            ],
+            "change": [
+              1.0001298820406397,
+              1.0002252489865087,
+              1.0000569728397903,
+              1.0001332608901048
+            ]
+          },
+          "median_paired_ratio": 1.0001315714653722,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            30619105,
+            30300783,
+            30823839,
+            30771220,
+            31189833,
+            30507793,
+            30960111,
+            30845668,
+            30953837,
+            30784833,
+            30171865,
+            30515648,
+            31002631,
+            30974900,
+            30547191,
+            30679367
+          ],
+          "before_median": 30649236.0,
+          "after_median": 30888838.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9896038110846153,
+              1.0043269444971226
+            ],
+            "same_after": [
+              0.9982929121839755,
+              0.9991055275276476
+            ],
+            "change": [
+              0.9781326177668216,
+              1.0037101806321718,
+              1.0054898462499375,
+              1.0113941581006014
+            ]
+          },
+          "median_paired_ratio": 1.0046000134410547,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            9912332,
+            9912387,
+            9912968,
+            9912994,
+            9912305,
+            9913189,
+            9914405,
+            9912334,
+            9913202,
+            9913311,
+            9912150,
+            9913143,
+            9913019,
+            9913170,
+            9912411,
+            9912367
+          ],
+          "before_median": 9912350.5,
+          "after_median": 9913156.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000055486438508,
+              0.9999955611202965
+            ],
+            "same_after": [
+              1.0000026228269878,
+              1.000015232493754
+            ],
+            "change": [
+              1.0000891820822704,
+              1.0002089316199394,
+              0.9999890046826938,
+              1.0001001800820206
+            ]
+          },
+          "median_paired_ratio": 1.0000946810821456,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            247608,
+            243878,
+            240577,
+            245039,
+            248140,
+            240448,
+            251401,
+            249047,
+            241406,
+            251478,
+            241528,
+            240542,
+            249304,
+            243705,
+            250158,
+            243895
+          ],
+          "before_median": 247874.0,
+          "after_median": 242555.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9849358663694227,
+              0.97496382286395
+            ],
+            "same_after": [
+              1.0185470764038125,
+              0.9775414754677021
+            ],
+            "change": [
+              0.9690013701942451,
+              1.009452031142716,
+              0.9599487827961094,
+              0.9959176575800736
+            ]
+          },
+          "median_paired_ratio": 0.9824595138871594,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i32_add_nested_nulls",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            1310990811,
+            1310990665,
+            1308600640,
+            1308600066,
+            1310990482,
+            1308600048,
+            1308600105,
+            1310990803,
+            1308600106,
+            1310991097,
+            1310990600,
+            1308599954,
+            1308600228,
+            1308599949,
+            1310990698,
+            1310990625
+          ],
+          "before_median": 1310990681.5,
+          "after_median": 1308600085.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999998886338495,
+              0.99999994431692
+            ],
+            "same_after": [
+              0.9999995613635035,
+              0.9999997867950853
+            ],
+            "change": [
+              0.9981766198665659,
+              0.9981764189386155,
+              0.9981761958525337,
+              0.9981764583209063
+            ]
+          },
+          "median_paired_ratio": 0.9981764386297609,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            358563835,
+            355171209,
+            354500242,
+            353651337,
+            356047682,
+            356818924,
+            358096946,
+            356187428,
+            368084169,
+            355653212,
+            354971528,
+            355204113,
+            352831161,
+            357199512,
+            354047387,
+            356089701
+          ],
+          "before_median": 355850447.0,
+          "after_median": 356011518.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9905382928537676,
+              1.005768476410193
+            ],
+            "same_after": [
+              0.9976053471918364,
+              1.0123808537421104
+            ],
+            "change": [
+              1.0021661199861427,
+              1.0053609921347364,
+              1.0349524665617247,
+              1.0006552215646998
+            ]
+          },
+          "median_paired_ratio": 1.0037635560604397,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            241747937,
+            241747925,
+            241651995,
+            241651907,
+            241747933,
+            241651926,
+            241651890,
+            241747918,
+            241651900,
+            241747984,
+            241747911,
+            241651917,
+            241651913,
+            241651906,
+            241747929,
+            241747901
+          ],
+          "before_median": 241747927.0,
+          "after_median": 241651910.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999999503615206,
+              0.9999998841768775
+            ],
+            "same_after": [
+              0.9999996358399607,
+              0.9999999710327143
+            ],
+            "change": [
+              0.9996028632021436,
+              0.9996027763101563,
+              0.9996025447724106,
+              0.9996029169410279
+            ]
+          },
+          "median_paired_ratio": 0.99960281975615,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            249587,
+            259997,
+            259323,
+            239897,
+            254828,
+            256800,
+            237846,
+            262698,
+            267222,
+            260426,
+            268893,
+            279274,
+            246779,
+            267854,
+            263125,
+            249714
+          ],
+          "before_median": 260211.5,
+          "after_median": 258061.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0417089031079343,
+              0.9490318289786224
+            ],
+            "same_after": [
+              0.925089560123861,
+              1.0854002974321153
+            ],
+            "change": [
+              1.0077385530632426,
+              0.9053970719228924,
+              1.0260957047299424,
+              1.03860643452972
+            ]
+          },
+          "median_paired_ratio": 1.0169171288965924,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i64_add_nested_nulls",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            54205287,
+            54196101,
+            54182763,
+            54212951,
+            54177614,
+            54184672,
+            54185527,
+            54207490,
+            54212896,
+            54175649,
+            54206552,
+            54185998,
+            54217175,
+            54218214,
+            54208943,
+            54206788
+          ],
+          "before_median": 54205919.5,
+          "after_median": 54199447.0,
+          "paired_ratios": {
+            "same_before": [
+              0.999830533136002,
+              0.9999602464117406
+            ],
+            "same_after": [
+              1.000557151358265,
+              1.0000191636690772
+            ],
+            "change": [
+              1.0001302752092405,
+              0.9995948345883567,
+              1.000687522912739,
+              0.9996208207450642
+            ]
+          },
+          "median_paired_ratio": 0.9998755479771524,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            31141451,
+            31309679,
+            31099388,
+            31275298,
+            30718984,
+            31532365,
+            32393665,
+            31283726,
+            31027880,
+            31050848,
+            31124266,
+            31295470,
+            30892802,
+            31374917,
+            31157194,
+            31036293
+          ],
+          "before_median": 31132858.5,
+          "after_median": 31285384.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0054020604242238,
+              0.9961196441502402
+            ],
+            "same_after": [
+              1.005656381405319,
+              1.0156060625384515
+            ],
+            "change": [
+              1.026478121802466,
+              1.035479757110774,
+              0.9992603100565884,
+              1.0055006598388536
+            ]
+          },
+          "median_paired_ratio": 1.0159893908206596,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            9910225,
+            9908021,
+            9905615,
+            9910632,
+            9904584,
+            9905567,
+            9905645,
+            9910320,
+            9910926,
+            9904714,
+            9909891,
+            9905533,
+            9911868,
+            9911941,
+            9910695,
+            9909976
+          ],
+          "before_median": 9909933.5,
+          "after_median": 9908138.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9997776034348362,
+              0.999927452111078
+            ],
+            "same_after": [
+              1.0005064804154007,
+              1.000007364908411
+            ],
+            "change": [
+              1.0000992469749361,
+              0.9995282695210649,
+              1.0006271761102845,
+              0.9995602373426711
+            ]
+          },
+          "median_paired_ratio": 0.9998297421588036,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            255546,
+            264975,
+            263134,
+            251089,
+            247665,
+            258189,
+            254793,
+            261168,
+            252652,
+            253634,
+            251825,
+            253517,
+            248742,
+            251109,
+            259987,
+            248787
+          ],
+          "before_median": 254590.0,
+          "after_median": 253084.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0368974666009252,
+              0.9569209229692254
+            ],
+            "same_after": [
+              0.9542248436158003,
+              1.0095158839279252
+            ],
+            "change": [
+              1.0424928835321907,
+              0.9755904245543099,
+              0.9961282793316354,
+              1.0067189516529336
+            ]
+          },
+          "median_paired_ratio": 1.0014236154922844,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "i64_add_nested_nulls",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            1301120371,
+            1301119857,
+            1298729283,
+            1298729438,
+            1301119727,
+            1298729530,
+            1298729492,
+            1301120060,
+            1298729906,
+            1301119956,
+            1301120668,
+            1298729512,
+            1298729357,
+            1298729479,
+            1301120024,
+            1301119988
+          ],
+          "before_median": 1301120006.0,
+          "after_median": 1298729485.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999996049558431,
+              0.9999999723315303
+            ],
+            "same_after": [
+              1.0000001193474284,
+              1.0000000939379705
+            ],
+            "change": [
+              0.998162969209981,
+              0.9981626845411945,
+              0.9981630825128932,
+              0.9981622334816374
+            ]
+          },
+          "median_paired_ratio": 0.9981628268755878,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            420997741,
+            417927303,
+            416960111,
+            419172942,
+            418190673,
+            418869226,
+            420156758,
+            417948285,
+            416809792,
+            418525489,
+            431955582,
+            417797284,
+            419673404,
+            421104402,
+            419188198,
+            421613598
+          ],
+          "before_median": 418856843.5,
+          "after_median": 419021084.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9927067589657209,
+              1.0057859453380888
+            ],
+            "same_after": [
+              1.0053070568182,
+              1.0034097895800898
+            ],
+            "change": [
+              1.0016225923814421,
+              1.005284081976793,
+              0.9959006152669473,
+              0.96722279190271
+            ]
+          },
+          "median_paired_ratio": 0.9987616038241947,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            235208561,
+            235208528,
+            235112483,
+            235112552,
+            235208521,
+            235112549,
+            235112518,
+            235208570,
+            235112584,
+            235208568,
+            235208704,
+            235112517,
+            235112546,
+            235112584,
+            235208576,
+            235208543
+          ],
+          "before_median": 235208564.5,
+          "after_median": 235112547.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999998596989843,
+              0.9999998596989933
+            ],
+            "same_after": [
+              1.0000002934765484,
+              1.0000001616247225
+            ],
+            "change": [
+              0.9995919705647058,
+              0.9995916305260476,
+              0.9995919196276898,
+              0.999591056800347
+            ]
+          },
+          "median_paired_ratio": 0.9995917750768687,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            348922,
+            346571,
+            344265,
+            348479,
+            338433,
+            326863,
+            354266,
+            346804,
+            344392,
+            341766,
+            361861,
+            338403,
+            352976,
+            359910,
+            346612,
+            341041
+          ],
+          "before_median": 346591.5,
+          "after_median": 346435.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9932621044244846,
+              0.9839272731469193
+            ],
+            "same_after": [
+              1.0122405704907558,
+              1.0196443950863514
+            ],
+            "change": [
+              0.9658130265074624,
+              1.0215164761652116,
+              1.0076836197866377,
+              0.9351740032775016
+            ]
+          },
+          "median_paired_ratio": 0.98674832314705,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "decimal_control",
+      "ansi": false,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            47435961,
+            47436757,
+            47435573,
+            47436175,
+            47435952,
+            47436292,
+            47436171,
+            47436742,
+            47436378,
+            47435408,
+            47436378,
+            47437119,
+            47435928,
+            47435953,
+            47436688,
+            47436064
+          ],
+          "before_median": 47436221.0,
+          "after_median": 47436173.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000167805180546,
+              0.9999868456246355
+            ],
+            "same_after": [
+              1.0000126908976097,
+              1.0000005270266874
+            ],
+            "change": [
+              1.000007167559323,
+              0.9999879629170149,
+              1.0000204488596367,
+              1.0000156209228284
+            ]
+          },
+          "median_paired_ratio": 1.0000113942410755,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            26921036,
+            26308166,
+            26604051,
+            26530533,
+            26242523,
+            26742228,
+            26444457,
+            26272872,
+            26631914,
+            26817555,
+            26412071,
+            27205222,
+            28258213,
+            27096928,
+            26393949,
+            25861320
+          ],
+          "before_median": 26351057.5,
+          "after_median": 26687071.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9772345313902482,
+              0.9798200337509176
+            ],
+            "same_after": [
+              0.9972365862627462,
+              0.9589045138841582
+            ],
+            "change": [
+              1.0190418047837855,
+              1.0065308809786764,
+              0.9930776314246396,
+              1.0300298677828028
+            ]
+          },
+          "median_paired_ratio": 1.012786342881231,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            8638572,
+            8638704,
+            8638495,
+            8638600,
+            8638555,
+            8638583,
+            8638595,
+            8638724,
+            8638596,
+            8638519,
+            8638643,
+            8638731,
+            8638587,
+            8638541,
+            8638732,
+            8638583
+          ],
+          "before_median": 8638613.0,
+          "after_median": 8638591.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000152803032722,
+              0.9999827520983403
+            ],
+            "same_after": [
+              1.0000121548950367,
+              0.9999946750550756
+            ],
+            "change": [
+              1.0000032412828304,
+              0.9999850672390969,
+              1.0000089135649293,
+              1.0000101867851234
+            ]
+          },
+          "median_paired_ratio": 1.0000060774238797,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            212085,
+            211489,
+            219074,
+            212276,
+            212398,
+            219209,
+            207906,
+            213230,
+            208966,
+            222443,
+            214012,
+            232167,
+            211005,
+            211109,
+            213148,
+            205010
+          ],
+          "before_median": 212773.0,
+          "after_median": 211692.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9971898059740198,
+              0.9618199560868504
+            ],
+            "same_after": [
+              0.9689693893387622,
+              1.000492879315656
+            ],
+            "change": [
+              1.032067156941214,
+              0.9750316559583548,
+              0.9394136924965047,
+              1.0848316916808403
+            ]
+          },
+          "median_paired_ratio": 1.0035494064497845,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 8192,
+      "id": "decimal_control",
+      "ansi": false,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            1988918948,
+            1988919259,
+            1988918840,
+            1988919346,
+            1988919356,
+            1988918913,
+            1988918839,
+            1988918961,
+            1988919081,
+            1988918905,
+            1988919084,
+            1988918888,
+            1988919231,
+            1988919154,
+            1988919215,
+            1988918962
+          ],
+          "before_median": 1988919023.0,
+          "after_median": 1988918997.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000001563663519,
+              0.9999998727952357
+            ],
+            "same_after": [
+              1.0000002544095765,
+              0.9999999612855068
+            ],
+            "change": [
+              0.9999997772659818,
+              0.9999999386601454,
+              1.0000000884902847,
+              0.9999999014540101
+            ]
+          },
+          "median_paired_ratio": 0.9999999200570777,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            498153720,
+            498074190,
+            501745994,
+            499011350,
+            497991471,
+            499482284,
+            497376603,
+            497969010,
+            497845047,
+            497179044,
+            497391446,
+            500717266,
+            497767609,
+            496918304,
+            498295129,
+            497352807
+          ],
+          "before_median": 497980240.5,
+          "after_median": 498428198.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9998403504845853,
+              0.9981089078637171
+            ],
+            "same_after": [
+              0.9945497442277537,
+              0.9982937720642244
+            ],
+            "change": [
+              1.0029936516723998,
+              0.9988103536804429,
+              1.0013395637005167,
+              1.0066865243195195
+            ]
+          },
+          "median_paired_ratio": 1.0021666076864584,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            83127198,
+            83127234,
+            83127172,
+            83127264,
+            83127212,
+            83127180,
+            83127171,
+            83127179,
+            83127205,
+            83127159,
+            83127256,
+            83127166,
+            83127226,
+            83127173,
+            83127230,
+            83127180
+          ],
+          "before_median": 83127205.0,
+          "after_median": 83127176.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000004330712555,
+              0.9999993985123767
+            ],
+            "same_after": [
+              1.000001106737999,
+              0.9999993624230886
+            ],
+            "change": [
+              0.9999996150478377,
+              0.9999999037619213,
+              1.000000553369086,
+              0.9999989173226168
+            ]
+          },
+          "median_paired_ratio": 0.9999997594048795,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            185144,
+            181011,
+            184347,
+            196898,
+            184929,
+            195346,
+            188766,
+            190027,
+            189732,
+            187990,
+            189121,
+            195320,
+            196275,
+            195809,
+            196571,
+            191199
+          ],
+          "before_median": 188555.5,
+          "after_median": 195333.0,
+          "paired_ratios": {
+            "same_before": [
+              0.977676835328177,
+              0.9726714520453169
+            ],
+            "same_after": [
+              1.0680835598084049,
+              0.9976257801553943
+            ],
+            "change": [
+              1.0563297265437006,
+              0.993364100890926,
+              1.0092664503431032,
+              1.0327779569693476
+            ]
+          },
+          "median_paired_ratio": 1.0210222036562255,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_arrays",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            123648300,
+            123654566,
+            123652655,
+            123654810,
+            123653452,
+            123653640,
+            123653273,
+            123653374,
+            123658134,
+            123648702,
+            123651758,
+            123653475,
+            123655244,
+            123652215,
+            123650388,
+            123651769
+          ],
+          "before_median": 123651763.5,
+          "after_median": 123653557.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000506759898842,
+              1.0000111685860622
+            ],
+            "same_after": [
+              1.000017427850619,
+              0.9999755044759767
+            ],
+            "change": [
+              1.0000015203780968,
+              0.9999991832006137,
+              1.0000762806228245,
+              1.0000138857710377
+            ]
+          },
+          "median_paired_ratio": 1.000007703074567,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            99518740,
+            98108243,
+            98587504,
+            97937568,
+            97817551,
+            98385935,
+            99301640,
+            99575349,
+            98611763,
+            97425770,
+            99803733,
+            97613450,
+            98036116,
+            97799160,
+            99175694,
+            100138506
+          ],
+          "before_median": 99347217.0,
+          "after_median": 98211025.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9858268201546764,
+              1.0097081448202418
+            ],
+            "same_after": [
+              0.9934075215049567,
+              0.9975829723813212
+            ],
+            "change": [
+              1.0058106545726135,
+              0.9972512373519273,
+              1.0121732987073133,
+              0.9780540974354136
+            ]
+          },
+          "median_paired_ratio": 1.0015309459622705,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            25703445,
+            25704777,
+            25703903,
+            25704508,
+            25704397,
+            25704256,
+            25704159,
+            25704496,
+            25705129,
+            25703500,
+            25704140,
+            25704251,
+            25704609,
+            25703967,
+            25703755,
+            25704146
+          ],
+          "before_median": 25704143.0,
+          "after_median": 25704253.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000518218472272,
+              1.0000152117852041
+            ],
+            "same_after": [
+              1.0000235372814783,
+              0.9999750239344236
+            ],
+            "change": [
+              0.9999945145571787,
+              0.9999868894531135,
+              1.0000633765829556,
+              1.0000043183705036
+            ]
+          },
+          "median_paired_ratio": 0.9999994164638412,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            222249,
+            213493,
+            216088,
+            218954,
+            215781,
+            205104,
+            213072,
+            213987,
+            215340,
+            202888,
+            211989,
+            208370,
+            217056,
+            213219,
+            205595,
+            209528
+          ],
+          "before_median": 212741.0,
+          "after_median": 214279.5,
+          "paired_ratios": {
+            "same_before": [
+              0.960602747368942,
+              1.0191298426518154
+            ],
+            "same_after": [
+              1.0132631150272111,
+              0.9823225342768687
+            ],
+            "change": [
+              0.9505192764886621,
+              0.9957240393107992,
+              1.0613737628642403,
+              0.982928359490351
+            ]
+          },
+          "median_paired_ratio": 0.9893261994005751,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_arrays",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            613353824,
+            613355895,
+            613353050,
+            613353572,
+            613352474,
+            613354993,
+            613352104,
+            613355662,
+            613355150,
+            613354156,
+            613357358,
+            613364848,
+            613354387,
+            613357182,
+            613355950,
+            613356360
+          ],
+          "before_median": 613355778.5,
+          "after_median": 613354690.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000033765176297,
+              1.0000006684536116
+            ],
+            "same_after": [
+              1.0000008510595977,
+              1.000004556908794
+            ],
+            "change": [
+              1.0000041069370498,
+              0.9999941991242269,
+              1.0000016205971547,
+              1.0000122114781902
+            ]
+          },
+          "median_paired_ratio": 1.0000028637671021,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            349611485,
+            347906995,
+            340466695,
+            342084672,
+            348154902,
+            340148112,
+            344962990,
+            353302743,
+            341503158,
+            347179144,
+            346218067,
+            342799260,
+            345115672,
+            340230502,
+            361583294,
+            346263617
+          ],
+          "before_median": 348030948.5,
+          "after_median": 341793915.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9951246166870061,
+              0.9576316791892493
+            ],
+            "same_after": [
+              1.0047522328138438,
+              0.985844832917353
+            ],
+            "change": [
+              0.9770022195465167,
+              0.9763948818251886,
+              0.983651131993113,
+              0.9901252784708084
+            ]
+          },
+          "median_paired_ratio": 0.9803266757698148,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            120929283,
+            120929878,
+            120929133,
+            120929296,
+            120929028,
+            120929517,
+            120928940,
+            120929815,
+            120929647,
+            120929436,
+            120930092,
+            120931583,
+            120929486,
+            120930095,
+            120929828,
+            120929906
+          ],
+          "before_median": 120929821.5,
+          "after_median": 120929501.5,
+          "paired_ratios": {
+            "same_before": [
+              1.000004920230942,
+              1.0000006450021577
+            ],
+            "same_after": [
+              1.0000013478968712,
+              1.000005035992628
+            ],
+            "change": [
+              1.0000040436941244,
+              0.9999927643980933,
+              1.0000017448191854,
+              1.0000123294374075
+            ]
+          },
+          "median_paired_ratio": 1.0000028942566548,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            235568,
+            235462,
+            231034,
+            231547,
+            234057,
+            231897,
+            230809,
+            291183,
+            230617,
+            236280,
+            235635,
+            229435,
+            227997,
+            235859,
+            236770,
+            233660
+          ],
+          "before_median": 235601.5,
+          "after_median": 230921.5,
+          "paired_ratios": {
+            "same_before": [
+              0.999550023772329,
+              0.9868648899776155
+            ],
+            "same_after": [
+              1.0022204524009453,
+              1.034482909862849
+            ],
+            "change": [
+              0.9907714787423576,
+              0.7926595989463671,
+              0.9760326730997122,
+              0.9736881193371104
+            ]
+          },
+          "median_paired_ratio": 0.9748603962184113,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_nested_nulls",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            143540849,
+            143543011,
+            143546359,
+            143551093,
+            143541624,
+            143542456,
+            143547761,
+            143541805,
+            143544605,
+            143545288,
+            143536553,
+            143548898,
+            143544563,
+            143549036,
+            143536856,
+            143539156
+          ],
+          "before_median": 143541236.5,
+          "after_median": 143547060.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000150619145356,
+              1.0000160237590825
+            ],
+            "same_after": [
+              1.0000329788929025,
+              1.0000311610548427
+            ],
+            "change": [
+              1.000005796228138,
+              1.000041493138532,
+              0.9999952419197486,
+              1.0000860059667172
+            ]
+          },
+          "median_paired_ratio": 1.0000236446833348,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            111478917,
+            112397275,
+            112098530,
+            135028241,
+            111034237,
+            115505273,
+            113003881,
+            111826468,
+            113066593,
+            112775674,
+            113655393,
+            112445377,
+            115370069,
+            112782680,
+            111134011,
+            111588180
+          ],
+          "before_median": 111707324.0,
+          "after_median": 113035237.0,
+          "paired_ratios": {
+            "same_before": [
+              1.008237952293706,
+              1.0040866787395983
+            ],
+            "same_after": [
+              1.2045496136300806,
+              0.977573134674991
+            ],
+            "change": [
+              1.040267183535471,
+              1.0105289295196196,
+              1.0025796254607178,
+              0.9893536420220728
+            ]
+          },
+          "median_paired_ratio": 1.0065542774901686,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        },
+        "branches:u": {
+          "values": [
+            29404472,
+            29404979,
+            29404977,
+            29406154,
+            29404618,
+            29404263,
+            29405432,
+            29404680,
+            29404682,
+            29405557,
+            29403635,
+            29405625,
+            29404647,
+            29405568,
+            29403588,
+            29404037
+          ],
+          "before_median": 29404545.0,
+          "after_median": 29405204.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000172422752567,
+              1.0000152702452503
+            ],
+            "same_after": [
+              1.000040027237566,
+              1.000031321579885
+            ],
+            "change": [
+              0.999987927066422,
+              1.0000255741603037,
+              0.99997024371958,
+              1.0000676787070715
+            ]
+          },
+          "median_paired_ratio": 1.000006750613363,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            242027,
+            234950,
+            257414,
+            257830,
+            236810,
+            240410,
+            238202,
+            239634,
+            237796,
+            243319,
+            254863,
+            238848,
+            245437,
+            240979,
+            240630,
+            238850
+          ],
+          "before_median": 240132.0,
+          "after_median": 240694.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9707594607213245,
+              0.9926027511116652
+            ],
+            "same_after": [
+              1.0016160737178241,
+              0.9818364794224179
+            ],
+            "change": [
+              1.015202060723787,
+              0.994024220269244,
+              0.9773014026853637,
+              0.9371623185790012
+            ]
+          },
+          "median_paired_ratio": 0.9856628114773038,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i32_add_nested_nulls",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            2409942414,
+            2409940068,
+            2400109492,
+            2400111385,
+            2409943580,
+            2400114404,
+            2400118083,
+            2409940087,
+            2400116943,
+            2409944031,
+            2411382587,
+            2400108903,
+            2400110400,
+            2400114203,
+            2411379604,
+            2411387006
+          ],
+          "before_median": 2409943805.5,
+          "after_median": 2400112794.0,
+          "paired_ratios": {
+            "same_before": [
+              0.999999026532756,
+              1.0000030696120958
+            ],
+            "same_after": [
+              1.0000007887140177,
+              1.000001584510446
+            ],
+            "change": [
+              0.9959214082513915,
+              0.9959243783474191,
+              0.995922275424827,
+              0.9953248049227951
+            ]
+          },
+          "median_paired_ratio": 0.9959218418381093,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            977594132,
+            976320038,
+            949164856,
+            959062557,
+            967537234,
+            953154013,
+            954071167,
+            967904267,
+            958120191,
+            983234164,
+            969942522,
+            976197416,
+            954442289,
+            955469298,
+            978805798,
+            988202999
+          ],
+          "before_median": 976957085.0,
+          "after_median": 954955793.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9986967045338198,
+              1.0096006797458712
+            ],
+            "same_after": [
+              1.010427799699318,
+              1.001076030485904
+            ],
+            "change": [
+              0.9851341938123283,
+              0.9857081940108856,
+              0.9744577905045212,
+              1.0064487264535042
+            ]
+          },
+          "median_paired_ratio": 0.9854211939116069,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            447479303,
+            447478801,
+            446311387,
+            446311809,
+            447479582,
+            446312408,
+            446313197,
+            447478723,
+            446312904,
+            447479671,
+            447820398,
+            446311289,
+            446311569,
+            446312313,
+            447819714,
+            447821203
+          ],
+          "before_median": 447479626.5,
+          "after_median": 446312061.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999988781604051,
+              1.0000033249987739
+            ],
+            "same_after": [
+              1.0000009455281946,
+              1.0000016669968956
+            ],
+            "change": [
+              0.9973916709343846,
+              0.9973953487839913,
+              0.9973925809916848,
+              0.9966301021419752
+            ]
+          },
+          "median_paired_ratio": 0.9973921259630347,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            401617,
+            595386,
+            461328,
+            575059,
+            442113,
+            439568,
+            455751,
+            436672,
+            451165,
+            425245,
+            406031,
+            456102,
+            463797,
+            466507,
+            423149,
+            426299
+          ],
+          "before_median": 425772.0,
+          "after_median": 458715.0,
+          "paired_ratios": {
+            "same_before": [
+              1.4824721065094355,
+              1.0074441863268022
+            ],
+            "same_after": [
+              1.2465295841570423,
+              1.0058430735860733
+            ],
+            "change": [
+              0.9942435531187728,
+              1.0436918327715081,
+              1.0609530976260744,
+              1.1233181702874904
+            ]
+          },
+          "median_paired_ratio": 1.0523224651987912,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i64_add_nested_nulls",
+      "ansi": true,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            143738798,
+            143740367,
+            143751934,
+            143744898,
+            143736638,
+            143743068,
+            143748207,
+            143750549,
+            143750591,
+            143740055,
+            143742635,
+            143745233,
+            143750686,
+            143748862,
+            143738247,
+            143738353
+          ],
+          "before_median": 143739426.5,
+          "after_median": 143748534.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000109156332309,
+              1.0000007374515985
+            ],
+            "same_after": [
+              0.999951054571551,
+              0.9999873113649002
+            ],
+            "change": [
+              1.0000447345929993,
+              0.9999837078883087,
+              1.0000732989840584,
+              1.0000180739694942
+            ]
+          },
+          "median_paired_ratio": 1.0000314042812466,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            109246175,
+            106694581,
+            106688161,
+            106874213,
+            107820810,
+            107845451,
+            107403636,
+            106188448,
+            108449005,
+            105663792,
+            106532550,
+            108211652,
+            107277745,
+            107671493,
+            106269294,
+            106558656
+          ],
+          "before_median": 106545603.0,
+          "after_median": 107537564.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9766436307724276,
+              1.0027229126035222
+            ],
+            "same_after": [
+              1.0017438860906038,
+              1.0036703605207213
+            ],
+            "change": [
+              1.0002285365876957,
+              1.0114436930088666,
+              1.0263591997531187,
+              1.0157613987462049
+            ]
+          },
+          "median_paired_ratio": 1.0136025458775357,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            29445084,
+            29445302,
+            29447215,
+            29445655,
+            29444547,
+            29445408,
+            29446362,
+            29447574,
+            29446953,
+            29445217,
+            29445752,
+            29445842,
+            29446927,
+            29446481,
+            29444807,
+            29444916
+          ],
+          "before_median": 29445150.5,
+          "after_median": 29446421.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0000074036127728,
+              1.000003701841211
+            ],
+            "same_after": [
+              0.9999470238526801,
+              0.9999848541071875
+            ],
+            "change": [
+              1.0000292414075855,
+              0.9999588421103891,
+              1.0000589569436693,
+              1.0000030564680433
+            ]
+          },
+          "median_paired_ratio": 1.0000161489378145,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            240700,
+            234144,
+            251456,
+            235537,
+            252701,
+            242704,
+            239199,
+            239954,
+            252089,
+            256481,
+            257225,
+            252182,
+            251679,
+            260789,
+            227547,
+            249036
+          ],
+          "before_median": 244868.0,
+          "after_median": 251567.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9727627752388865,
+              1.0944376326649
+            ],
+            "same_after": [
+              0.9366927017052685,
+              1.0361969016087953
+            ],
+            "change": [
+              0.9604394125864164,
+              0.9968535635996899,
+              0.9828759245324215,
+              0.9803945961706677
+            ]
+          },
+          "median_paired_ratio": 0.9816352603515446,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "i64_add_nested_nulls",
+      "ansi": true,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            2547865805,
+            2547864780,
+            2538032403,
+            2538035307,
+            2547868691,
+            2538031867,
+            2538038922,
+            2547863527,
+            2538033031,
+            2547862602,
+            2550970092,
+            2538039879,
+            2538034828,
+            2538037982,
+            2550970560,
+            2550970546
+          ],
+          "before_median": 2547867248.0,
+          "after_median": 2538035067.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999995977025171,
+              0.9999999945118928
+            ],
+            "same_after": [
+              1.0000011441934298,
+              1.0000012426937428
+            ],
+            "change": [
+              0.9961391950712581,
+              0.9961439830289623,
+              0.9961420325443436,
+              0.9949312565284282
+            ]
+          },
+          "median_paired_ratio": 0.9961406138078008,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            1147005073,
+            1175328556,
+            1142541048,
+            1127862834,
+            1142975772,
+            1142399415,
+            1130415306,
+            1143918112,
+            1138543247,
+            1139276022,
+            1147011575,
+            1147831801,
+            1155601642,
+            1127190554,
+            1158001349,
+            1147472679
+          ],
+          "before_median": 1147008324.0,
+          "after_median": 1140471331.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0246934243507047,
+              0.9909078948749999
+            ],
+            "same_after": [
+              0.987153009490824,
+              0.975414462071178
+            ],
+            "change": [
+              0.9994957399674436,
+              0.9881960029670376,
+              0.9993568064403624,
+              1.0007150982761444
+            ]
+          },
+          "median_paired_ratio": 0.999426273203903,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            472872457,
+            472872460,
+            471704381,
+            471705100,
+            472872996,
+            471704305,
+            471705742,
+            472871895,
+            471704558,
+            472871668,
+            473766496,
+            471706022,
+            471704876,
+            471705516,
+            473766650,
+            473766547
+          ],
+          "before_median": 472872728.0,
+          "after_median": 471704988.0,
+          "paired_ratios": {
+            "same_before": [
+              1.0000000063442054,
+              0.9999997825933927
+            ],
+            "same_after": [
+              1.000001524259746,
+              1.0000013567805477
+            ],
+            "change": [
+              0.9975285308954288,
+              0.9975338923451985,
+              0.9975318673564516,
+              0.9956508659489505
+            ]
+          },
+          "median_paired_ratio": 0.9975301991259402,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            1541129,
+            1737148,
+            1537038,
+            1483644,
+            1503799,
+            1972707,
+            1693995,
+            1479803,
+            1494970,
+            1559975,
+            1534006,
+            1513967,
+            1494522,
+            1573974,
+            1559260,
+            1570123
+          ],
+          "before_median": 1550194.5,
+          "after_median": 1525502.5,
+          "paired_ratios": {
+            "same_before": [
+              1.1271918184655536,
+              1.0069667662865718
+            ],
+            "same_after": [
+              0.9652617567034777,
+              1.053162148165099
+            ],
+            "change": [
+              1.3118156083359545,
+              1.1447435908698658,
+              0.9583294604080194,
+              0.9869368177177925
+            ]
+          },
+          "median_paired_ratio": 1.065840204293829,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "decimal_control",
+      "ansi": false,
+      "phase": "planning",
+      "events": {
+        "instructions:u": {
+          "values": [
+            133324816,
+            133320556,
+            133324516,
+            133323338,
+            133330124,
+            133321368,
+            133323972,
+            133320841,
+            133322320,
+            133324439,
+            133326307,
+            133324034,
+            133324420,
+            133321476,
+            133327906,
+            133323268
+          ],
+          "before_median": 133324627.5,
+          "after_median": 133323655.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999680479589036,
+              0.9999652135840189
+            ],
+            "same_after": [
+              0.9999911644157028,
+              0.9999779185238533
+            ],
+            "change": [
+              0.9999343284192851,
+              1.0000234847003402,
+              0.9999841064397803,
+              0.999982951601592
+            ]
+          },
+          "median_paired_ratio": 0.9999835290206862,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            102338347,
+            103558587,
+            103700761,
+            104870805,
+            103248945,
+            120541380,
+            107115964,
+            105786382,
+            107200223,
+            105579235,
+            103807215,
+            102541461,
+            106351886,
+            104717852,
+            105994756,
+            105633793
+          ],
+          "before_median": 104693225.0,
+          "after_median": 105611345.5,
+          "paired_ratios": {
+            "same_before": [
+              1.0119235852031105,
+              0.9965945202043769
+            ],
+            "same_after": [
+              1.0112828873068733,
+              0.9846355898192534
+            ],
+            "change": [
+              1.1674829219804619,
+              1.012568555374169,
+              1.0153532841945672,
+              0.9878066856913559
+            ]
+          },
+          "median_paired_ratio": 1.0139609197843682,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            27418360,
+            27417403,
+            27418247,
+            27418021,
+            27419442,
+            27417643,
+            27418124,
+            27417611,
+            27417749,
+            27418206,
+            27418624,
+            27418287,
+            27418258,
+            27417550,
+            27418951,
+            27417975
+          ],
+          "before_median": 27418283.0,
+          "after_median": 27418072.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9999650963806734,
+              0.9999644041816188
+            ],
+            "same_after": [
+              0.9999917573140252,
+              0.9999741777905803
+            ],
+            "change": [
+              0.9999343896203285,
+              1.0000187106017369,
+              0.9999833322428171,
+              0.9999877090841612
+            ]
+          },
+          "median_paired_ratio": 0.9999855206634891,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            231801,
+            215435,
+            226489,
+            231176,
+            224687,
+            229276,
+            224599,
+            228024,
+            223929,
+            226786,
+            220734,
+            230300,
+            231629,
+            230586,
+            238460,
+            239904
+          ],
+          "before_median": 227405.0,
+          "after_median": 229788.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9293963356499756,
+              1.0060555229388577
+            ],
+            "same_after": [
+              1.0206941617473697,
+              0.9954971096019929
+            ],
+            "change": [
+              1.0204239675637665,
+              0.9849796512647792,
+              0.9874022205956275,
+              1.0433372294254624
+            ]
+          },
+          "median_paired_ratio": 1.003913094079697,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": false,
+          "resolved_counter_comparison": false
+        }
+      }
+    },
+    {
+      "batch_size": 256,
+      "id": "decimal_control",
+      "ansi": false,
+      "phase": "execution",
+      "events": {
+        "instructions:u": {
+          "values": [
+            2596296462,
+            2596296301,
+            2596292006,
+            2596295659,
+            2596290094,
+            2596293195,
+            2596291212,
+            2596292016,
+            2596293042,
+            2596291217,
+            2596292545,
+            2596296395,
+            2596289637,
+            2596290478,
+            2596289961,
+            2596290276
+          ],
+          "before_median": 2596291616.5,
+          "after_median": 2596292524.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999999379885917,
+              1.0000001213269722
+            ],
+            "same_after": [
+              1.0000014070066046,
+              1.000000323923798
+            ],
+            "change": [
+              1.0000011943965765,
+              0.9999996903275922,
+              1.000000702925769,
+              1.0000014828837402
+            ]
+          },
+          "median_paired_ratio": 1.0000009486611727,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "cycles:u": {
+          "values": [
+            932753212,
+            932067090,
+            937607396,
+            925680664,
+            951985100,
+            927182683,
+            920161131,
+            930229604,
+            928432969,
+            935957461,
+            930051522,
+            927798352,
+            920419253,
+            930893105,
+            925118054,
+            928820819
+          ],
+          "before_median": 931148347.0,
+          "after_median": 927490517.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9992644120747343,
+              1.0040024783691013
+            ],
+            "same_after": [
+              0.9872796097269694,
+              1.0113794360188162
+            ],
+            "change": [
+              0.9739466331983557,
+              0.9891763571523574,
+              0.9919606474508353,
+              0.997577370772799
+            ]
+          },
+          "median_paired_ratio": 0.9905685023015964,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branches:u": {
+          "values": [
+            199293636,
+            199293608,
+            199292657,
+            199293384,
+            199292325,
+            199292872,
+            199292545,
+            199292640,
+            199292813,
+            199292561,
+            199292734,
+            199293505,
+            199292139,
+            199292294,
+            199292136,
+            199292327
+          ],
+          "before_median": 199292600.5,
+          "after_median": 199292735.0,
+          "paired_ratios": {
+            "same_before": [
+              0.9999998595037927,
+              1.0000009583920562
+            ],
+            "same_after": [
+              1.0000036479015884,
+              1.000000777752704
+            ],
+            "change": [
+              1.0000027447118196,
+              0.9999995233140572,
+              1.0000012644726866,
+              1.0000038686809325
+            ]
+          },
+          "median_paired_ratio": 1.000002004592253,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        },
+        "branch-misses:u": {
+          "values": [
+            1271870,
+            1270284,
+            1263799,
+            1268024,
+            1272467,
+            1272737,
+            1268136,
+            1327269,
+            1272125,
+            1271420,
+            1265682,
+            1269481,
+            1279707,
+            1265530,
+            1269359,
+            1271462
+          ],
+          "before_median": 1271441.0,
+          "after_median": 1268808.5,
+          "paired_ratios": {
+            "same_before": [
+              0.9987530172108785,
+              1.0016567417097921
+            ],
+            "same_after": [
+              1.003343094906706,
+              0.9889216828539658
+            ],
+            "change": [
+              1.0002121862492308,
+              0.9554476146131643,
+              1.0005544981202121,
+              1.003001543831705
+            ]
+          },
+          "median_paired_ratio": 1.0003833421847215,
+          "all_counters_eligible": true,
+          "same_binary_calibration_passed": true,
+          "resolved_counter_comparison": true
+        }
+      }
+    }
+  ],
+  "limits": [
+    "Counter regions include loop bookkeeping and the existing perf handshake; no estimated overhead was subtracted.",
+    "Derived binaries reuse exact original runtime libraries, but their instrumented elapsed samples are not a latency comparison.",
+    "Counts compare 5232f91 with d2c5755 only; older flags with other baselines are not cleared.",
+    "Changes within the declared 1% instruction and 5% cycle control tolerances do not establish broad performance parity."
+  ],
+  "raw_archive": {
+    "path": "integer-phase-counters-runs.json.gz",
+    "sha256": "4d31a9e9a4767b756acb90efd7022276a3c505e1c9ed275e8f2ae36b9d89c05b",
+    "text_files": 795,
+    "compressed_bytes": 177907
+  }
+}

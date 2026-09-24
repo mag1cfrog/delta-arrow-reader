@@ -1,0 +1,1485 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/195",
+  "status": "Retain removal of the duplicate scatter bitmap count as the next experimental checkpoint. Shared-caller and frozen regressions pass. Complete query/planning acceptance and remaining checked/UDF/NULL work stay open.",
+  "retention_gate_passed": true,
+  "retention_gate_blockers": [],
+  "baseline_commit": "5232f9104deaf4e9bacd0d19f6e0d8d6eb443de2",
+  "runtime_change": "Remove the duplicate mask count in DataFusion physical-expr-common scatter_null_mask, using safe NullBuffer construction and its stored null count. No scatter algorithm, threshold, filtering, public API or dependency-version change.",
+  "patch": {
+    "patch_sha256": "0c31d82861004af836cd2b45c9b7c7969ce7bfe6e51f08fcd88d38cd8a6c0f13",
+    "before_sha256": "f78fae5518ca468d4562e2ff79ba19cc15693d3cd2462498e418179c4e66026b",
+    "after_sha256": "aec739c4df4c1a01a1f09a16efddabd69e5f283e4490c3a2570504f10cfcbcf8",
+    "forward_reverse_exact": true
+  },
+  "binaries": {
+    "before": {
+      "probe": "a5affc635386a526abf7a8df3cfc50dbddc3aebaafee026ad63dd3d3df816e68",
+      "bench": "f46bd7bab55883e7f1147b6f012b4f4e45f2c5a6fd7cf3babbf08550aab3856a",
+      "runner": "6a9350a27ed1c248c73e165a220d0a3a1e95a1a082cced558d93b8b6619ba571"
+    },
+    "after": {
+      "probe": "ff8462c65d540b84aaa5c085f2d4ed38f73db44c8539fa7e5553a8dec0285a50",
+      "bench": "fd2054fc2823e194435fa01566191968369e0394cc74539378785dd209f815e6",
+      "runner": "f63f05d76d2e3e4d44c481cb99c4d99b4993635af559751f25a8ddb59beda513"
+    }
+  },
+  "correctness": {
+    "focused_agreement": 616,
+    "focused_total": 616,
+    "focused_error_payloads_equal": 131,
+    "changed_error_payloads": 0,
+    "regression_groups": 37,
+    "regression_observations": 6784,
+    "regression_agreement_before_and_after": 6403,
+    "changed_status_or_successful_values_types": 0,
+    "previously_agreeing_regressions": 0,
+    "delta_unchanged": 116,
+    "delta_adapter_checks_passed": 18,
+    "planner_tests_passed": 38,
+    "runner_tests_passed": 28,
+    "independent_take_reference_observations": 40320,
+    "existing_scatter_tests_per_variant": 13,
+    "delta_spark_strict_report": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    }
+  },
+  "allocation": {
+    "rows": 1048576,
+    "processes": 4,
+    "case_modes_per_process": 100,
+    "all_calls_requested_bytes_peak_and_zero_live_bytes_unchanged": true
+  },
+  "query_timing": {
+    "rows": 1048576,
+    "processes": 32,
+    "cpu": 2,
+    "warmups": 4,
+    "samples": 15,
+    "same_binary_tolerance": 0.05,
+    "calibration": {
+      "8192": {
+        "execution": {
+          "passed": 1,
+          "total": 48
+        },
+        "planning": {
+          "passed": 13,
+          "total": 48
+        }
+      },
+      "256": {
+        "execution": {
+          "passed": 0,
+          "total": 48
+        },
+        "planning": {
+          "passed": 0,
+          "total": 48
+        }
+      }
+    },
+    "calibrated_flags": [],
+    "representative_cases": [
+      {
+        "batch": 8192,
+        "id": "i32_add_arrays",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            4206592
+          ],
+          "after": [
+            4206592
+          ]
+        },
+        "planning": {
+          "before_ms": 0.3302835,
+          "after_ms": 0.3249885,
+          "median_paired_ratio": 1.001509315921296,
+          "process_medians_ms": [
+            0.32827,
+            0.332297,
+            0.33187700000000003,
+            0.329572,
+            0.32190799999999997,
+            0.323782,
+            0.32326099999999997,
+            0.400113,
+            0.330314,
+            0.32302,
+            0.318241,
+            0.317349,
+            0.325544,
+            0.324433,
+            0.33335899999999996,
+            0.35238400000000003
+          ],
+          "paired_ratios": {
+            "same_before": [
+              1.0122673409083986,
+              1.0570706055633718
+            ],
+            "same_after": [
+              0.9930546557911514,
+              0.9965872508785295
+            ],
+            "change": [
+              1.0058215390732757,
+              0.8079242613961555,
+              1.0225806451612904,
+              0.9971970927693163
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 1.6113979999999999,
+          "after_ms": 1.60171,
+          "median_paired_ratio": 0.9950021100640963,
+          "process_medians_ms": [
+            1.5682829999999999,
+            1.6072650000000002,
+            1.709384,
+            1.598038,
+            1.581958,
+            1.560889,
+            1.550149,
+            1.911741,
+            1.655786,
+            1.6155309999999998,
+            1.5954730000000001,
+            1.600774,
+            1.602646,
+            1.62097,
+            1.93842,
+            1.915768
+          ],
+          "paired_ratios": {
+            "same_before": [
+              1.024856483172999,
+              0.9883141940343165
+            ],
+            "same_after": [
+              0.9348619151694412,
+              1.01143359169773
+            ],
+            "change": [
+              0.9866816944571222,
+              0.8108572238603451,
+              1.024917503904289,
+              1.0033225256710705
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 8192,
+        "id": "i32_sub_arrays",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            4206592
+          ],
+          "after": [
+            4206592
+          ]
+        },
+        "planning": {
+          "before_ms": 0.31544099999999997,
+          "after_ms": 0.314534,
+          "median_paired_ratio": 1.0083494676022862,
+          "process_medians_ms": [
+            0.314764,
+            0.30703,
+            0.314524,
+            0.31680800000000003,
+            0.308654,
+            0.313653,
+            0.316668,
+            0.33682599999999996,
+            0.31646799999999997,
+            0.316118,
+            0.309715,
+            0.314544,
+            0.31227,
+            0.31383300000000003,
+            0.326125,
+            0.321377
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9754292104560879,
+              0.9854411651973937
+            ],
+            "same_after": [
+              1.007261766987575,
+              1.0050052838889423
+            ],
+            "change": [
+              1.0161961289988144,
+              0.9401530760689497,
+              1.0011071814955175,
+              1.015591753709055
+            ]
+          },
+          "same_binary_calibration_passed": true
+        },
+        "execution": {
+          "before_ms": 0.8800745000000001,
+          "after_ms": 0.8499685,
+          "median_paired_ratio": 0.9781012501564191,
+          "process_medians_ms": [
+            0.880846,
+            0.862512,
+            1.497331,
+            0.874594,
+            0.8793030000000001,
+            0.840771,
+            0.851241,
+            1.0814489999999999,
+            0.868734,
+            0.848486,
+            0.848456,
+            0.848476,
+            0.8407519999999999,
+            0.848696,
+            1.062714,
+            1.078734
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9791859189915149,
+              1.0150746108548492
+            ],
+            "same_after": [
+              0.5841019787875894,
+              1.0094486840352448
+            ],
+            "change": [
+              0.956178928082811,
+              0.7871300449674465,
+              1.023863681899289,
+              1.0000235722300272
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 8192,
+        "id": "i32_mul_arrays",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            4206592
+          ],
+          "after": [
+            4206592
+          ]
+        },
+        "planning": {
+          "before_ms": 0.315241,
+          "after_ms": 0.31456449999999997,
+          "median_paired_ratio": 0.9955071564950995,
+          "process_medians_ms": [
+            0.31419400000000003,
+            0.30804200000000004,
+            0.31524599999999997,
+            0.322058,
+            0.311899,
+            0.311468,
+            0.30980599999999997,
+            0.348367,
+            0.31388299999999997,
+            0.316288,
+            0.307851,
+            0.312981,
+            0.31702899999999995,
+            0.315375,
+            0.332507,
+            0.36095
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9804197406697773,
+              1.0855410562785144
+            ],
+            "same_after": [
+              1.0216085215990054,
+              0.9947828116670717
+            ],
+            "change": [
+              0.9986181424114859,
+              0.8893092629324821,
+              0.9923961705787129,
+              1.0166639055906916
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 0.981293,
+          "after_ms": 0.938208,
+          "median_paired_ratio": 0.9885463009082354,
+          "process_medians_ms": [
+            0.92589,
+            1.008874,
+            0.944945,
+            0.975042,
+            0.938894,
+            0.932903,
+            1.6732680000000002,
+            1.1251600000000002,
+            0.922924,
+            0.9384330000000001,
+            0.953712,
+            0.928284,
+            0.943513,
+            0.9304979999999999,
+            1.202033,
+            2.415407
+          ],
+          "paired_ratios": {
+            "same_before": [
+              1.089626197496463,
+              2.0094348491264387
+            ],
+            "same_after": [
+              1.0318505309832846,
+              0.9862058074451543
+            ],
+            "change": [
+              0.9936190879907636,
+              1.4871378292865014,
+              0.9834735138257072,
+              0.9733378630026674
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 8192,
+        "id": "i32_add_nested_nulls",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            4337664
+          ],
+          "after": [
+            4337664
+          ]
+        },
+        "planning": {
+          "before_ms": 0.418392,
+          "after_ms": 0.419424,
+          "median_paired_ratio": 1.0151544917042774,
+          "process_medians_ms": [
+            0.422564,
+            0.413779,
+            0.417726,
+            0.42546100000000003,
+            0.412125,
+            0.417385,
+            0.440358,
+            0.418407,
+            0.41724500000000003,
+            0.418377,
+            0.41109399999999996,
+            0.418307,
+            0.422445,
+            0.420541,
+            0.46199799999999996,
+            0.764841
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9792102498083131,
+              1.6555071666976915
+            ],
+            "same_after": [
+              1.0185169225760429,
+              0.9954929044017564
+            ],
+            "change": [
+              1.012763117986048,
+              1.0524632714079833,
+              0.9972943063313711,
+              1.017545865422507
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 5.491880500000001,
+          "after_ms": 5.4978715000000005,
+          "median_paired_ratio": 1.0061002935182572,
+          "process_medians_ms": [
+            5.441427,
+            5.542334,
+            5.55124,
+            5.643362,
+            5.392416,
+            5.460892,
+            5.751763,
+            5.750942,
+            5.483555,
+            5.418222999999999,
+            5.430416,
+            5.347552,
+            5.461934,
+            5.512188,
+            6.002008,
+            6.197351
+          ],
+          "paired_ratios": {
+            "same_before": [
+              1.0185442164344023,
+              1.0325462745134628
+            ],
+            "same_after": [
+              1.0165948508801637,
+              1.009200770276609
+            ],
+            "change": [
+              1.0126985751841104,
+              1.000142759221011,
+              1.0120578278155035,
+              0.9847407638751802
+            ]
+          },
+          "same_binary_calibration_passed": true
+        }
+      },
+      {
+        "batch": 8192,
+        "id": "i64_add_arrays",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            8400896
+          ],
+          "after": [
+            8400896
+          ]
+        },
+        "planning": {
+          "before_ms": 0.3265115,
+          "after_ms": 0.3220085,
+          "median_paired_ratio": 1.0128792623784664,
+          "process_medians_ms": [
+            0.327859,
+            0.325164,
+            0.31521499999999997,
+            0.32348099999999996,
+            0.318451,
+            0.320536,
+            0.32604599999999995,
+            0.372983,
+            0.328611,
+            0.31798,
+            0.308674,
+            0.314604,
+            0.311518,
+            0.331085,
+            0.33357,
+            0.33653500000000003
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9917800029890899,
+              1.0088886890307882
+            ],
+            "same_after": [
+              1.0262233713497138,
+              1.0628117797366445
+            ],
+            "change": [
+              1.0065473181117346,
+              0.8741578034387625,
+              1.0334329203094534,
+              1.0192112066451984
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 3.746599,
+          "after_ms": 3.679414,
+          "median_paired_ratio": 1.0028595443433328,
+          "process_medians_ms": [
+            3.6191619999999998,
+            3.8285910000000003,
+            3.728525,
+            3.6057580000000002,
+            3.6646069999999997,
+            3.628299,
+            3.960597,
+            4.014366,
+            3.682149,
+            3.6254939999999998,
+            1.9214390000000001,
+            2.348592,
+            3.683682,
+            3.676679,
+            3.936431,
+            4.126183999999999
+          ],
+          "paired_ratios": {
+            "same_before": [
+              1.0578667105810684,
+              1.0482043251869522
+            ],
+            "same_after": [
+              0.9670735746709491,
+              0.9980989129897749
+            ],
+            "change": [
+              0.9900922527299655,
+              0.9866058550715107,
+              1.0156268359567,
+              1.2223089049405158
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 8192,
+        "id": "i64_add_nested_nulls",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            8531968
+          ],
+          "after": [
+            8531968
+          ]
+        },
+        "planning": {
+          "before_ms": 0.424118,
+          "after_ms": 0.4204715,
+          "median_paired_ratio": 1.0037267187916499,
+          "process_medians_ms": [
+            0.423787,
+            0.413127,
+            0.42082200000000003,
+            0.427043,
+            0.423256,
+            0.417095,
+            0.472217,
+            0.42515000000000003,
+            0.41984,
+            0.42444899999999997,
+            0.412566,
+            0.420121,
+            0.419038,
+            0.450787,
+            0.696283,
+            0.9662050000000001
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9748458541673057,
+              1.3876613388521624
+            ],
+            "same_after": [
+              1.0147829723731172,
+              1.075766398274142
+            ],
+            "change": [
+              0.9854437976071219,
+              1.1107068093614019,
+              0.9891412160235977,
+              1.018312221559702
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 7.8610454999999995,
+          "after_ms": 7.3420570000000005,
+          "median_paired_ratio": 1.0883133482678926,
+          "process_medians_ms": [
+            7.792103,
+            6.264075,
+            7.296763,
+            6.699733999999999,
+            8.261254000000001,
+            8.253409,
+            9.014462000000002,
+            7.853275999999999,
+            7.387351000000001,
+            6.678243999999999,
+            7.868815,
+            8.423134000000001,
+            6.5256810000000005,
+            6.83221,
+            9.931416,
+            15.443594
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.8039004361210318,
+              1.555024379202321
+            ],
+            "same_after": [
+              0.9181789239968462,
+              1.0469727220806533
+            ],
+            "change": [
+              0.9990503862972859,
+              1.147860077756086,
+              1.1061816549380348,
+              1.0704450415977502
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 256,
+        "id": "i32_add_arrays",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            4587520
+          ],
+          "after": [
+            4587520
+          ]
+        },
+        "planning": {
+          "before_ms": 2.3183914999999997,
+          "after_ms": 2.3087124999999995,
+          "median_paired_ratio": 0.9702913337106527,
+          "process_medians_ms": [
+            2.852127,
+            2.187874,
+            2.819276,
+            3.315408,
+            2.448909,
+            2.3002819999999997,
+            2.3171429999999997,
+            2.141357,
+            1.574494,
+            1.572491,
+            1.807978,
+            1.5623220000000002,
+            1.6059830000000002,
+            2.472803,
+            3.077256,
+            2.7820169999999997
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.7671025869465139,
+              0.9040577059562154
+            ],
+            "same_after": [
+              1.175978513632578,
+              1.5397441940543577
+            ],
+            "change": [
+              0.9393088922454855,
+              1.0820909357944517,
+              1.0012737751758198,
+              0.864126665258095
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 6.0339220000000005,
+          "after_ms": 5.7138525,
+          "median_paired_ratio": 0.9409810243978671,
+          "process_medians_ms": [
+            6.819035,
+            5.599621,
+            6.293139,
+            7.594405,
+            5.96041,
+            5.737877,
+            5.689828,
+            7.034736,
+            5.015185,
+            5.02344,
+            5.425006,
+            4.987193,
+            5.063585,
+            7.098796,
+            6.501545,
+            6.1074340000000005
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.82117499030288,
+              0.9393819469064661
+            ],
+            "same_after": [
+              1.20677534692941,
+              1.401930845438558
+            ],
+            "change": [
+              0.9626648166820738,
+              0.8088189805559157,
+              0.9983567037727135,
+              0.9192972321136604
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 256,
+        "id": "i32_sub_arrays",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            4587520
+          ],
+          "after": [
+            4587520
+          ]
+        },
+        "planning": {
+          "before_ms": 1.8812894999999998,
+          "after_ms": 1.859629,
+          "median_paired_ratio": 1.0090403483458785,
+          "process_medians_ms": [
+            2.2117679999999997,
+            1.766451,
+            3.309177,
+            2.871313,
+            1.9961279999999997,
+            1.941085,
+            1.8378839999999999,
+            1.379361,
+            1.2044169999999998,
+            1.2008800000000002,
+            1.186163,
+            1.2041160000000002,
+            1.2308160000000001,
+            1.8813739999999999,
+            2.6859789999999997,
+            2.289583
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.7986601668891132,
+              0.8524202907021984
+            ],
+            "same_after": [
+              0.8676819039900252,
+              1.5285582897849879
+            ],
+            "change": [
+              0.972425115022684,
+              1.3324169669868873,
+              1.002945340083938,
+              1.0151353566078187
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 5.8720465,
+          "after_ms": 5.867317999999999,
+          "median_paired_ratio": 1.0068729790893143,
+          "process_medians_ms": [
+            6.650513,
+            5.726406,
+            6.624064,
+            7.294257999999999,
+            6.017687,
+            5.8804419999999995,
+            5.854194,
+            5.362439999999999,
+            5.010086,
+            5.005116,
+            4.986131,
+            5.0497190000000005,
+            5.065658,
+            5.9333409999999995,
+            6.846666000000001,
+            6.248205
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.8610472605647113,
+              0.9125908873019363
+            ],
+            "same_after": [
+              1.1011756528922425,
+              1.1712873233842473
+            ],
+            "change": [
+              0.9771930643783899,
+              1.0917034036744468,
+              1.000992983978793,
+              1.0127529741998356
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 256,
+        "id": "i32_mul_arrays",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            4587520
+          ],
+          "after": [
+            4587520
+          ]
+        },
+        "planning": {
+          "before_ms": 1.7731729999999999,
+          "after_ms": 1.8760145000000001,
+          "median_paired_ratio": 1.0018012345901086,
+          "process_medians_ms": [
+            2.1000799999999997,
+            1.787079,
+            2.582046,
+            2.614136,
+            1.9159190000000001,
+            1.8796410000000001,
+            1.872388,
+            1.751703,
+            1.202123,
+            1.209847,
+            1.2027940000000001,
+            1.2148059999999998,
+            1.207032,
+            2.110901,
+            2.677814,
+            1.759267
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.8509575825682832,
+              0.6569787894155455
+            ],
+            "same_after": [
+              1.0124281287010377,
+              1.748835987778286
+            ],
+            "change": [
+              0.9810649615145526,
+              1.0688958116758378,
+              0.9936157216573667,
+              1.0099867475228508
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 6.064904500000001,
+          "after_ms": 6.0690170000000006,
+          "median_paired_ratio": 1.0035604683884944,
+          "process_medians_ms": [
+            6.490485,
+            5.987081,
+            6.550096,
+            6.831047,
+            6.297226,
+            6.085783,
+            6.066136,
+            6.013159,
+            5.204186,
+            5.212992,
+            5.257445000000001,
+            5.383259,
+            5.226628,
+            6.071898,
+            7.079098,
+            6.116650000000001
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9224396944142079,
+              0.8640436959623953
+            ],
+            "same_after": [
+              1.042892653787059,
+              1.1617237729564835
+            ],
+            "change": [
+              0.9664228344353529,
+              1.008810177811696,
+              0.9983107589652929,
+              1.0239306355083124
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 256,
+        "id": "i32_add_nested_nulls",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            4849664
+          ],
+          "after": [
+            4849664
+          ]
+        },
+        "planning": {
+          "before_ms": 2.2090379999999996,
+          "after_ms": 1.9907120000000003,
+          "median_paired_ratio": 1.003944322793934,
+          "process_medians_ms": [
+            2.4432270000000003,
+            2.065997,
+            1.736024,
+            3.0558859999999997,
+            2.269866,
+            2.2260050000000002,
+            2.1946660000000002,
+            2.346448,
+            1.786758,
+            1.4620250000000001,
+            1.4436010000000001,
+            1.482884,
+            1.487563,
+            2.598938,
+            3.008318,
+            2.1482099999999997
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.8456017390115612,
+              0.714090066276238
+            ],
+            "same_after": [
+              1.760278659742031,
+              1.747111214785525
+            ],
+            "change": [
+              0.9806768329055549,
+              0.9353141429087711,
+              1.2221117969938955,
+              1.027211812682313
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 15.246071999999998,
+          "after_ms": 15.131709999999998,
+          "median_paired_ratio": 1.005400673356813,
+          "process_medians_ms": [
+            15.242189999999999,
+            15.018264,
+            20.6369,
+            18.727593000000002,
+            15.392158,
+            15.232581999999999,
+            15.030838,
+            15.413447999999999,
+            14.464726,
+            14.103765000000001,
+            14.05249,
+            14.349963,
+            14.070483999999999,
+            15.839129,
+            16.445495,
+            15.249953999999999
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9853088040498118,
+              0.9273028267011725
+            ],
+            "same_after": [
+              0.9074809200994336,
+              1.1256989453951975
+            ],
+            "change": [
+              0.9896326428042123,
+              0.9751768715215441,
+              1.0255932369831744,
+              1.021168703909414
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 256,
+        "id": "i64_add_arrays",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            8781824
+          ],
+          "after": [
+            8781824
+          ]
+        },
+        "planning": {
+          "before_ms": 1.8950200000000001,
+          "after_ms": 1.9349189999999998,
+          "median_paired_ratio": 0.9537248300784655,
+          "process_medians_ms": [
+            2.102905,
+            1.7632450000000002,
+            5.141719999999999,
+            2.738135,
+            1.939192,
+            1.925136,
+            1.944702,
+            2.126059,
+            1.235053,
+            1.226298,
+            1.5429650000000001,
+            1.2333610000000002,
+            1.25453,
+            2.372496,
+            3.414903,
+            1.850848
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.8384805780574968,
+              0.5419913830641749
+            ],
+            "same_after": [
+              0.5325328878274197,
+              1.8911432966927855
+            ],
+            "change": [
+              0.9927516202624598,
+              0.9146980398944713,
+              1.00713937395315,
+              0.7993447680277906
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 6.713048499999999,
+          "after_ms": 6.5626584999999995,
+          "median_paired_ratio": 0.9974798930238407,
+          "process_medians_ms": [
+            6.745258,
+            6.342751,
+            10.385489,
+            7.665838,
+            6.770535000000001,
+            6.686929,
+            6.104959,
+            6.775164,
+            6.077238,
+            6.0331459999999995,
+            6.034027,
+            6.121861,
+            6.438388,
+            8.34529,
+            7.885757,
+            6.680839
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.9403274122353807,
+              0.8472032551852663
+            ],
+            "same_after": [
+              0.7381297115619688,
+              1.2961769312442806
+            ],
+            "change": [
+              0.9876514928288532,
+              0.9010791473092017,
+              1.0073082932188282,
+              1.014556447957558
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      },
+      {
+        "batch": 256,
+        "id": "i64_add_nested_nulls",
+        "ansi": true,
+        "output_bytes": {
+          "before": [
+            9043968
+          ],
+          "after": [
+            9043968
+          ]
+        },
+        "planning": {
+          "before_ms": 2.2361934999999997,
+          "after_ms": 2.2223175,
+          "median_paired_ratio": 0.9840268573259724,
+          "process_medians_ms": [
+            2.7003660000000003,
+            2.257002,
+            3.1518639999999998,
+            2.562519,
+            2.296646,
+            2.220414,
+            2.224221,
+            2.215385,
+            1.456325,
+            1.454512,
+            1.643132,
+            1.460302,
+            2.102545,
+            3.360201,
+            2.7654870000000003,
+            2.090163
+          ],
+          "paired_ratios": {
+            "same_before": [
+              0.8358133675212914,
+              0.7558028658243556
+            ],
+            "same_after": [
+              0.8130169956571731,
+              1.5981588979070602
+            ],
+            "change": [
+              0.9668072484832229,
+              1.0039884715297793,
+              1.001246466168722,
+              0.8887307897356999
+            ]
+          },
+          "same_binary_calibration_passed": false
+        },
+        "execution": {
+          "before_ms": 18.31896,
+          "after_ms": 18.128806500000003,
+          "median_paired_ratio": 0.9753757504205767,
+          "process_medians_ms": [
+            18.268972,
+            18.609945999999997,
+            20.883257,
+            20.467967,
+            19.263099,
+            18.201036000000002,
+            17.394277,
+            18.368948,
+            17.10002,
+            16.917381,
+            17.055598000000003,
+            17.120619,
+            18.056577,
+            19.930658,
+            19.913366,
+            18.042310999999998
+          ],
+          "paired_ratios": {
+            "same_before": [
+              1.0186641043623033,
+              0.9060402445272184
+            ],
+            "same_after": [
+              0.9801137341747028,
+              1.103789383779661
+            ],
+            "change": [
+              0.9448654133999935,
+              0.9469392041395076,
+              1.0107959382128948,
+              1.0038122967016458
+            ]
+          },
+          "same_binary_calibration_passed": false
+        }
+      }
+    ]
+  },
+  "whole_query_counter_ratios": {
+    "8192": {
+      "instructions:u": 0.9999469460273893,
+      "cycles:u": 0.9897423399976386,
+      "branches:u": 0.9999980909216917,
+      "branch-misses:u": 1.0028323166289903
+    },
+    "256": {
+      "instructions:u": 0.9998668148240079,
+      "cycles:u": 0.9867260211046043,
+      "branches:u": 0.9999891188969245,
+      "branch-misses:u": 0.9906298943901806
+    }
+  },
+  "linked_assembly": {
+    "before": {
+      "binary_sha256": "aa7d499ec5b21ebd580534ec7d6a2ae9698f4db795ddbaca414d2dd4143cee81",
+      "nm_command": [
+        "nm",
+        "-S",
+        "-C",
+        "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/before-diagnostic"
+      ],
+      "relocation_command": [
+        "readelf",
+        "-rW",
+        "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/before-diagnostic"
+      ],
+      "functions": {
+        "scatter-null-mask": {
+          "address": "0000000000bd3c50",
+          "size": "0000000000000142",
+          "symbol": "datafusion_physical_expr_common::utils::scatter_null_mask",
+          "command": [
+            "objdump",
+            "-d",
+            "--demangle",
+            "--start-address=0x0000000000bd3c50",
+            "--stop-address=0xbd3d92",
+            "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/before-diagnostic"
+          ],
+          "resolved_calls": [
+            {
+              "line": "  bd3c73:\tff 15 0f a6 c3 00    \tcall   *0xc3a60f(%rip)        # 180e288 <_DYNAMIC+0x10b8>",
+              "got_slot": "0x180e288",
+              "relocated_target": "0x161fe10",
+              "symbol": "<arrow_buffer::buffer::boolean::BooleanBuffer>::count_set_bits"
+            },
+            {
+              "line": "  bd3ca5:\te8 96 c7 ff ff       \tcall   bd0440 <datafusion_physical_expr_common::utils::scatter_bits>",
+              "symbol": null
+            },
+            {
+              "line": "  bd3cb2:\tff 15 28 a6 c3 00    \tcall   *0xc3a628(%rip)        # 180e2e0 <_DYNAMIC+0x1110>",
+              "got_slot": "0x180e2e0",
+              "relocated_target": "0x1623f60",
+              "symbol": "<arrow_buffer::buffer::null::NullBuffer>::new"
+            },
+            {
+              "line": "  bd3d68:\tff 15 72 a5 c3 00    \tcall   *0xc3a572(%rip)        # 180e2e0 <_DYNAMIC+0x1110>",
+              "got_slot": "0x180e2e0",
+              "relocated_target": "0x1623f60",
+              "symbol": "<arrow_buffer::buffer::null::NullBuffer>::new"
+            },
+            {
+              "line": "  bd3d88:\tff 15 d2 96 c3 00    \tcall   *0xc396d2(%rip)        # 180d460 <_DYNAMIC+0x290>",
+              "got_slot": "0x180d460",
+              "relocated_target": "0x1627150",
+              "symbol": "<alloc::sync::Arc<arrow_buffer::bytes::Bytes>>::drop_slow"
+            }
+          ]
+        },
+        "null-buffer-new": {
+          "address": "0000000001623f60",
+          "size": "000000000000027a",
+          "symbol": "<arrow_buffer::buffer::null::NullBuffer>::new",
+          "command": [
+            "objdump",
+            "-d",
+            "--demangle",
+            "--start-address=0x0000000001623f60",
+            "--stop-address=0x16241da",
+            "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/before-diagnostic"
+          ],
+          "resolved_calls": [
+            {
+              "line": " 1623f89:\tff 15 39 ab 1e 00    \tcall   *0x1eab39(%rip)        # 180eac8 <_DYNAMIC+0x18f8>",
+              "got_slot": "0x180eac8",
+              "relocated_target": "0x16273f0",
+              "symbol": "<arrow_buffer::util::bit_chunk_iterator::UnalignedBitChunk>::new"
+            },
+            {
+              "line": " 1624118:\tff 15 42 93 1e 00    \tcall   *0x1e9342(%rip)        # 180d460 <_DYNAMIC+0x290>",
+              "got_slot": "0x180d460",
+              "relocated_target": "0x1627150",
+              "symbol": "<alloc::sync::Arc<arrow_buffer::bytes::Bytes>>::drop_slow"
+            },
+            {
+              "line": " 1624121:\te8 2a 1a 06 00       \tcall   1685b50 <_Unwind_Resume@plt>",
+              "symbol": null
+            },
+            {
+              "line": " 1624126:\tff 15 1c 93 1e 00    \tcall   *0x1e931c(%rip)        # 180d448 <_DYNAMIC+0x278>",
+              "got_slot": "0x180d448",
+              "relocated_target": "0x167cbfb",
+              "symbol": "core::panicking::panic_in_cleanup"
+            }
+          ]
+        },
+        "count-set-bits": {
+          "address": "000000000161fe10",
+          "size": "000000000000021f",
+          "symbol": "<arrow_buffer::buffer::boolean::BooleanBuffer>::count_set_bits",
+          "command": [
+            "objdump",
+            "-d",
+            "--demangle",
+            "--start-address=0x000000000161fe10",
+            "--stop-address=0x162002f",
+            "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/before-diagnostic"
+          ],
+          "resolved_calls": [
+            {
+              "line": " 161fe2c:\tff 15 96 ec 1e 00    \tcall   *0x1eec96(%rip)        # 180eac8 <_DYNAMIC+0x18f8>",
+              "got_slot": "0x180eac8",
+              "relocated_target": "0x16273f0",
+              "symbol": "<arrow_buffer::util::bit_chunk_iterator::UnalignedBitChunk>::new"
+            }
+          ]
+        }
+      },
+      "relocation_rows": [
+        "000000000180d448  0000000000000008 R_X86_64_RELATIVE                         167cbfb",
+        "000000000180d460  0000000000000008 R_X86_64_RELATIVE                         1627150",
+        "000000000180e288  0000000000000008 R_X86_64_RELATIVE                         161fe10",
+        "000000000180e2e0  0000000000000008 R_X86_64_RELATIVE                         1623f60",
+        "000000000180eac8  0000000000000008 R_X86_64_RELATIVE                         16273f0"
+      ],
+      "symbol_rows": [
+        "00000000016273f0 0000000000000338 T <arrow_buffer::util::bit_chunk_iterator::UnalignedBitChunk>::new",
+        "0000000001623f60 000000000000027a T <arrow_buffer::buffer::null::NullBuffer>::new",
+        "000000000161fe10 000000000000021f T <arrow_buffer::buffer::boolean::BooleanBuffer>::count_set_bits",
+        "0000000001627150 00000000000000a4 T <alloc::sync::Arc<arrow_buffer::bytes::Bytes>>::drop_slow",
+        "000000000167cbfb 0000000000000014 T core::panicking::panic_in_cleanup"
+      ]
+    },
+    "after": {
+      "binary_sha256": "d011c9c0e96878224e5e2aaf5799cf3ef6d45a26729eceaacb524352becb5416",
+      "nm_command": [
+        "nm",
+        "-S",
+        "-C",
+        "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/after-diagnostic"
+      ],
+      "relocation_command": [
+        "readelf",
+        "-rW",
+        "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/after-diagnostic"
+      ],
+      "functions": {
+        "scatter-null-mask": {
+          "address": "0000000000bd43c0",
+          "size": "000000000000018d",
+          "symbol": "datafusion_physical_expr_common::utils::scatter_null_mask",
+          "command": [
+            "objdump",
+            "-d",
+            "--demangle",
+            "--start-address=0x0000000000bd43c0",
+            "--stop-address=0xbd454d",
+            "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/after-diagnostic"
+          ],
+          "resolved_calls": [
+            {
+              "line": "  bd43e9:\te8 c2 c7 ff ff       \tcall   bd0bb0 <datafusion_physical_expr_common::utils::scatter_bits>",
+              "symbol": null
+            },
+            {
+              "line": "  bd43f4:\tff 15 6e a6 c3 00    \tcall   *0xc3a66e(%rip)        # 180ea68 <_DYNAMIC+0x1118>",
+              "got_slot": "0x180ea68",
+              "relocated_target": "0x16246e0",
+              "symbol": "<arrow_buffer::buffer::null::NullBuffer>::new"
+            },
+            {
+              "line": "  bd44a4:\tff 15 be a5 c3 00    \tcall   *0xc3a5be(%rip)        # 180ea68 <_DYNAMIC+0x1118>",
+              "got_slot": "0x180ea68",
+              "relocated_target": "0x16246e0",
+              "symbol": "<arrow_buffer::buffer::null::NullBuffer>::new"
+            },
+            {
+              "line": "  bd4533:\tff 15 a7 96 c3 00    \tcall   *0xc396a7(%rip)        # 180dbe0 <_DYNAMIC+0x290>",
+              "got_slot": "0x180dbe0",
+              "relocated_target": "0x16278d0",
+              "symbol": "<alloc::sync::Arc<arrow_buffer::bytes::Bytes>>::drop_slow"
+            }
+          ]
+        },
+        "null-buffer-new": {
+          "address": "00000000016246e0",
+          "size": "000000000000027a",
+          "symbol": "<arrow_buffer::buffer::null::NullBuffer>::new",
+          "command": [
+            "objdump",
+            "-d",
+            "--demangle",
+            "--start-address=0x00000000016246e0",
+            "--stop-address=0x162495a",
+            "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/after-diagnostic"
+          ],
+          "resolved_calls": [
+            {
+              "line": " 1624709:\tff 15 41 ab 1e 00    \tcall   *0x1eab41(%rip)        # 180f250 <_DYNAMIC+0x1900>",
+              "got_slot": "0x180f250",
+              "relocated_target": "0x1627b70",
+              "symbol": "<arrow_buffer::util::bit_chunk_iterator::UnalignedBitChunk>::new"
+            },
+            {
+              "line": " 1624898:\tff 15 42 93 1e 00    \tcall   *0x1e9342(%rip)        # 180dbe0 <_DYNAMIC+0x290>",
+              "got_slot": "0x180dbe0",
+              "relocated_target": "0x16278d0",
+              "symbol": "<alloc::sync::Arc<arrow_buffer::bytes::Bytes>>::drop_slow"
+            },
+            {
+              "line": " 16248a1:\te8 2a 1a 06 00       \tcall   16862d0 <_Unwind_Resume@plt>",
+              "symbol": null
+            },
+            {
+              "line": " 16248a6:\tff 15 14 93 1e 00    \tcall   *0x1e9314(%rip)        # 180dbc0 <_DYNAMIC+0x270>",
+              "got_slot": "0x180dbc0",
+              "relocated_target": "0x167d37b",
+              "symbol": "core::panicking::panic_in_cleanup"
+            }
+          ]
+        },
+        "count-set-bits": {
+          "address": "0000000001620590",
+          "size": "000000000000021f",
+          "symbol": "<arrow_buffer::buffer::boolean::BooleanBuffer>::count_set_bits",
+          "command": [
+            "objdump",
+            "-d",
+            "--demangle",
+            "--start-address=0x0000000001620590",
+            "--stop-address=0x16207af",
+            "/home/hanbo/.cache/delta-reader-spark-planning/scatter-null-count-5232f91/after-diagnostic"
+          ],
+          "resolved_calls": [
+            {
+              "line": " 16205ac:\tff 15 9e ec 1e 00    \tcall   *0x1eec9e(%rip)        # 180f250 <_DYNAMIC+0x1900>",
+              "got_slot": "0x180f250",
+              "relocated_target": "0x1627b70",
+              "symbol": "<arrow_buffer::util::bit_chunk_iterator::UnalignedBitChunk>::new"
+            }
+          ]
+        }
+      },
+      "relocation_rows": [
+        "000000000180dbc0  0000000000000008 R_X86_64_RELATIVE                         167d37b",
+        "000000000180dbe0  0000000000000008 R_X86_64_RELATIVE                         16278d0",
+        "000000000180ea68  0000000000000008 R_X86_64_RELATIVE                         16246e0",
+        "000000000180f250  0000000000000008 R_X86_64_RELATIVE                         1627b70"
+      ],
+      "symbol_rows": [
+        "0000000001627b70 0000000000000338 T <arrow_buffer::util::bit_chunk_iterator::UnalignedBitChunk>::new",
+        "00000000016246e0 000000000000027a T <arrow_buffer::buffer::null::NullBuffer>::new",
+        "00000000016278d0 00000000000000a4 T <alloc::sync::Arc<arrow_buffer::bytes::Bytes>>::drop_slow",
+        "000000000167d37b 0000000000000014 T core::panicking::panic_in_cleanup"
+      ]
+    }
+  },
+  "remaining_work": [
+    "The ordinary argument and field vectors still allocate; scalar-function dispatch remains.",
+    "Required NULL selection/scatter remains.",
+    "Checked kernels still perform overflow checking; wrapping parity is not established.",
+    "Full-query/planning acceptance includes every prior flag and failed calibration; this checkpoint does not clear them."
+  ],
+  "raw_archive": {
+    "path": "scatter-null-count-runs.json.gz",
+    "sha256": "e8532f5ffbcbea7a07fdb9da502e8d16643a56f1e64169896788979b26646be7",
+    "text_files": 417,
+    "compressed_bytes": 1663109
+  }
+}

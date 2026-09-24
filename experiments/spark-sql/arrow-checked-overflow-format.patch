@@ -1,0 +1,63 @@
+diff --git a/src/arithmetic.rs b/src/arithmetic.rs
+--- a/src/arithmetic.rs
++++ b/src/arithmetic.rs
+@@ -137,6 +137,14 @@
+     }
+ }
+ 
++// Keep formatting arguments out of the successful arithmetic loop. Returning
++// only the text lets callers construct a statically known error variant.
++#[cold]
++#[inline(never)]
++fn overflow_message<T: std::fmt::Debug>(left: T, right: T, op: char) -> String {
++    format!("Overflow happened on: {left:?} {op} {right:?}")
++}
++
+ macro_rules! native_type_op {
+     ($t:tt) => {
+         native_type_op!($t, 0, 1);
+@@ -153,12 +161,8 @@
+ 
+             #[inline]
+             fn add_checked(self, rhs: Self) -> Result<Self, ArrowError> {
+-                self.checked_add(rhs).ok_or_else(|| {
+-                    ArrowError::ArithmeticOverflow(format!(
+-                        "Overflow happened on: {:?} + {:?}",
+-                        self, rhs
+-                    ))
+-                })
++                self.checked_add(rhs)
++                    .ok_or_else(|| ArrowError::ArithmeticOverflow(overflow_message(self, rhs, '+')))
+             }
+ 
+             #[inline]
+@@ -168,12 +172,8 @@
+ 
+             #[inline]
+             fn sub_checked(self, rhs: Self) -> Result<Self, ArrowError> {
+-                self.checked_sub(rhs).ok_or_else(|| {
+-                    ArrowError::ArithmeticOverflow(format!(
+-                        "Overflow happened on: {:?} - {:?}",
+-                        self, rhs
+-                    ))
+-                })
++                self.checked_sub(rhs)
++                    .ok_or_else(|| ArrowError::ArithmeticOverflow(overflow_message(self, rhs, '-')))
+             }
+ 
+             #[inline]
+@@ -183,12 +183,8 @@
+ 
+             #[inline]
+             fn mul_checked(self, rhs: Self) -> Result<Self, ArrowError> {
+-                self.checked_mul(rhs).ok_or_else(|| {
+-                    ArrowError::ArithmeticOverflow(format!(
+-                        "Overflow happened on: {:?} * {:?}",
+-                        self, rhs
+-                    ))
+-                })
++                self.checked_mul(rhs)
++                    .ok_or_else(|| ArrowError::ArithmeticOverflow(overflow_message(self, rhs, '*')))
+             }
+ 
+             #[inline]
