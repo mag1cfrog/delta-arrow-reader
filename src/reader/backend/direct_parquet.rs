@@ -209,6 +209,7 @@ impl DirectParquetReader {
             ProjectionMask::roots(builder.parquet_schema(), schema_alignment.projected_roots());
         let mut builder = Self::apply_row_group_selection(
             builder,
+            &schema_alignment,
             task.parquet_byte_range.as_ref(),
             object.file_size,
             options.row_group_predicate,
@@ -343,12 +344,15 @@ impl DirectParquetReader {
     /// range always expands to complete Parquet row groups.
     fn apply_row_group_selection(
         builder: ParquetRecordBatchStreamBuilder<ParquetObjectReader>,
+        schema_alignment: &ParquetSchemaAlignment,
         parquet_byte_range: Option<&Range<u64>>,
         file_size: u64,
         row_group_predicate: Option<&DeltaKernelPredicate>,
     ) -> Result<ParquetRecordBatchStreamBuilder<ParquetObjectReader>, DeltaReaderError> {
         let row_groups = pruned_row_groups(
             builder.metadata(),
+            builder.schema(),
+            schema_alignment,
             file_size,
             parquet_byte_range,
             row_group_predicate,

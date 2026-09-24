@@ -5,7 +5,7 @@ use std::sync::Arc;
 use arrow::{
     array::{Array, ArrayRef, ListArray, MapArray, StructArray, new_null_array},
     compute::cast,
-    datatypes::{DataType, Field, Fields, SchemaRef},
+    datatypes::{DataType, Field, Fields, SchemaRef, TimeUnit},
     record_batch::RecordBatch,
 };
 use parquet::{
@@ -72,6 +72,20 @@ struct RootMatch {
 impl ParquetSchemaAlignment {
     pub(super) fn projected_roots(&self) -> impl Iterator<Item = usize> + '_ {
         self.projected_roots.iter().copied()
+    }
+
+    /// Target fields and the file roots selected by the data reader, excluding null fills.
+    pub(super) fn matched_root_fields(&self) -> impl Iterator<Item = (&Field, usize)> {
+        self.target_schema
+            .fields()
+            .iter()
+            .zip(&self.target_column_plans)
+            .filter_map(|(field, plan)| match plan {
+                TargetColumnPlan::ProjectedStreamColumn { stream_index, .. } => {
+                    Some((field.as_ref(), self.projected_roots[*stream_index]))
+                }
+                TargetColumnPlan::Null => None,
+            })
     }
 
     pub(super) fn reshape_batch_to_target_schema(
@@ -545,7 +559,10 @@ fn incompatible_parquet_type(
     ))
 }
 
-fn leaf_cast_plan(target_type: &DataType, file_type: &DataType) -> Result<Option<DataType>, ()> {
+pub(super) fn leaf_cast_plan(
+    target_type: &DataType,
+    file_type: &DataType,
+) -> Result<Option<DataType>, ()> {
     use DataType::{Date32, Decimal128, Float32, Float64, Int8, Int16, Int32, Int64, Timestamp};
 
     if file_type.equals_datatype(target_type) {
@@ -607,6 +624,25 @@ fn parquet_field_id(parquet_field: &TypePtr) -> Option<i32> {
     basic_info.has_id().then(|| basic_info.id())
 }
 
+/// Cast leaf data and footer bounds with identical overflow-to-NULL semantics.
+pub(super) fn cast_leaf_array(
+    array: &dyn Array,
+    target_type: &DataType,
+) -> Result<ArrayRef, arrow::error::ArrowError> {
+    if array.data_type() == &DataType::Date32
+        && matches!(
+            target_type,
+            DataType::Timestamp(TimeUnit::Microsecond | TimeUnit::Nanosecond, _)
+        )
+    {
+        // Arrow's direct Date32 casts multiply unchecked. Date32 always fits in
+        // seconds; the subsequent time-unit cast uses checked multiplication.
+        let seconds = cast(array, &DataType::Timestamp(TimeUnit::Second, None))?;
+        return cast(seconds.as_ref(), target_type);
+    }
+    cast(array, target_type)
+}
+
 fn reshape_array_to_target_field(
     array: ArrayRef,
     target_field: &Field,
@@ -615,7 +651,7 @@ fn reshape_array_to_target_field(
     match field_plan {
         FieldPlan::Identity => Ok(array),
         FieldPlan::Cast { target_type } => {
-            cast(array.as_ref(), target_type).map_err(delta_kernel::Error::from)
+            cast_leaf_array(array.as_ref(), target_type).map_err(delta_kernel::Error::from)
         }
         FieldPlan::Struct { child_plans } => {
             let DataType::Struct(target_fields) = target_field.data_type() else {
@@ -869,6 +905,52 @@ mod tests {
             .transpose()?
             .ok_or("expected one projected Parquet batch")?;
         Ok(schema_alignment.reshape_batch_to_target_schema(projected)?)
+    }
+
+    #[test]
+    fn date32_timestamp_casts_check_range_in_all_units() -> Result<(), Box<dyn std::error::Error>> {
+        use arrow::{array::Date32Array, compute::cast};
+
+        for (unit, units_per_day) in [
+            (TimeUnit::Second, 86_400_i64),
+            (TimeUnit::Millisecond, 86_400_000),
+            (TimeUnit::Microsecond, 86_400_000_000),
+            (TimeUnit::Nanosecond, 86_400_000_000_000),
+        ] {
+            let limit = i64::MAX / units_per_day;
+            let mut days = vec![
+                None,
+                Some(i32::MIN),
+                Some(i32::MAX),
+                Some(-1),
+                Some(0),
+                Some(1),
+                Some(120_000_000),
+            ];
+            for sign in [-1, 1] {
+                for offset in [-1, 0, 1] {
+                    if let Ok(day) = i32::try_from(sign * limit + offset) {
+                        days.push(Some(day));
+                    }
+                }
+            }
+            // i128 arithmetic is independent of the Arrow conversion under test.
+            let expected = Int64Array::from_iter(days.iter().map(|day| {
+                day.and_then(|day| i64::try_from(i128::from(day) * i128::from(units_per_day)).ok())
+            }));
+            let source = Arc::new(Date32Array::from(days)) as ArrayRef;
+            let target = DataType::Timestamp(unit, None);
+            let batch = project_parquet_batch_to_target_schema(
+                "date32-checked-cast",
+                Arc::new(Schema::new(vec![Field::new("v", DataType::Date32, true)])),
+                vec![source],
+                Arc::new(Schema::new(vec![Field::new("v", target.clone(), true)])),
+            )?;
+            assert_eq!(batch.column(0).data_type(), &target);
+            let actual = cast(batch.column(0).as_ref(), &DataType::Int64)?;
+            assert_eq!(actual.as_ref(), &expected as &dyn Array, "{unit:?}");
+        }
+        Ok(())
     }
 
     #[test]
