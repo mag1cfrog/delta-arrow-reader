@@ -941,7 +941,7 @@ fn direct_exact_predicates_cover_hidden_null_and_match_edges() -> TestResult {
 }
 
 #[test]
-fn direct_partial_pruning_predicate_remains_residual_only() -> TestResult {
+fn direct_partial_predicate_pushes_safe_conjunct_and_keeps_residual() -> TestResult {
     runtime()?.block_on(async {
         let fixture =
             RealParquetDeltaTable::new_with_supported_types("direct-partial-pruning-predicate")?;
@@ -970,7 +970,9 @@ fn direct_partial_pruning_predicate_remains_residual_only() -> TestResult {
             &[2],
         )?;
 
-        assert_eq!(metrics.scheduler_rows_emitted, 3);
+        // The Parquet filter applies id > 1, emitting ids 2 and 3. The logical
+        // residual still removes id 3's NULL score, as the output assertion above verifies.
+        assert_eq!(metrics.scheduler_rows_emitted, 2);
         Ok::<_, Box<dyn Error>>(())
     })
 }
