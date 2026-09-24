@@ -17,6 +17,175 @@ use crate::{DeltaReaderError, DeltaScanExecutionOptions, delta::kernel::DeltaKer
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
+#[tokio::test]
+async fn data_file_location_alias_reads_the_declared_object_not_a_prefixed_decoy() -> TestResult {
+    let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+    let correct = super::tests::parquet_bytes_for(
+        Arc::clone(&schema),
+        vec![Arc::new(Int32Array::from(vec![777]))],
+    )?;
+    let decoy = super::tests::parquet_bytes_for(
+        Arc::clone(&schema),
+        vec![Arc::new(Int32Array::from(vec![888]))],
+    )?;
+    assert_eq!(
+        correct.len(),
+        decoy.len(),
+        "decoy must also pass the size check"
+    );
+    let size = u64::try_from(correct.len())?;
+    let cases = [
+        (
+            "abfss://container@account.dfs.core.windows.net/table/",
+            "https://account.blob.core.windows.net/container/other/part.parquet",
+            "other/part.parquet",
+            "container/other/part.parquet",
+        ),
+        (
+            "abfss://container@account.dfs.core.windows.net/table/",
+            "https://account.dfs.core.windows.net/container/other/part.parquet",
+            "other/part.parquet",
+            "container/other/part.parquet",
+        ),
+        (
+            "https://account.blob.core.windows.net/container/table/",
+            "https://account.blob.core.windows.net/container/other/part.parquet",
+            "other/part.parquet",
+            "container/other/part.parquet",
+        ),
+        (
+            "https://account.blob.core.windows.net/container/table/",
+            "//account.blob.core.windows.net/container/other/part.parquet",
+            "other/part.parquet",
+            "container/other/part.parquet",
+        ),
+        (
+            "abfss://container@account.dfs.core.windows.net/table/",
+            "abfs://container@account.blob.core.windows.net/other/part.parquet",
+            "other/part.parquet",
+            "part.parquet",
+        ),
+        (
+            "abfss://workspace@account.dfs.fabric.microsoft.com/table/",
+            "https://account.blob.fabric.microsoft.com/workspace/other/part.parquet",
+            "other/part.parquet",
+            "workspace/other/part.parquet",
+        ),
+        (
+            "https://s3.us-east-1.amazonaws.com/bucket/table/",
+            "https://s3.us-east-1.amazonaws.com/bucket/other/part.parquet",
+            "other/part.parquet",
+            "bucket/other/part.parquet",
+        ),
+        (
+            "https://account.r2.cloudflarestorage.com/bucket/table/",
+            "https://account.r2.cloudflarestorage.com/bucket/other/part.parquet",
+            "other/part.parquet",
+            "bucket/other/part.parquet",
+        ),
+        (
+            "https://s3.s3.us-east-1.amazonaws.com/table/",
+            "https://s3.s3.us-east-1.amazonaws.com/other/part.parquet",
+            "other/part.parquet",
+            "part.parquet",
+        ),
+        (
+            "https://example.com/table/",
+            "https://example.com/other/part.parquet",
+            "other/part.parquet",
+            "part.parquet",
+        ),
+        (
+            "https://account.blob.core.windows.net/container/table/",
+            "part.parquet",
+            "container/table/part.parquet",
+            "table/part.parquet",
+        ),
+        (
+            "https://s3.us-east-1.amazonaws.com/bucket/table/",
+            "part.parquet",
+            "bucket/table/part.parquet",
+            "table/part.parquet",
+        ),
+        (
+            "abfss://container@account.dfs.core.windows.net/table/",
+            "https://account.blob.core.windows.net/container/a%20b/%252F.parquet",
+            "a b/%2F.parquet",
+            "container/a b/%2F.parquet",
+        ),
+        (
+            "https://account.blob.core.windows.net/container/table/",
+            "/container/other/part.parquet",
+            "container/other/part.parquet",
+            "other/part.parquet",
+        ),
+    ];
+    for (table, file, expected_key, decoy_key) in cases {
+        for mode in ["ordinary", "ranged", "cached", "buffered"] {
+            let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
+            store
+                .put(&Path::parse(expected_key)?, correct.clone().into())
+                .await?;
+            store
+                .put(&Path::parse(decoy_key)?, decoy.clone().into())
+                .await?;
+            let options = DeltaScanExecutionOptions::new()
+                .with_parquet_full_file_read_threshold_bytes(
+                    (mode == "buffered").then_some(correct.len()),
+                )?;
+            let mut reader = reader(table, options)?;
+            reader.store = store;
+            if mode == "cached" {
+                reader = reader.with_metadata_cache(Arc::default());
+                // Prime metadata for the wrong object as well. The URL must not
+                // reuse that entry just because its unnormalized path collides.
+                let mut control = Url::parse("memory:///")?;
+                control
+                    .path_segments_mut()
+                    .map_err(|()| "control URL has no path")?
+                    .extend(decoy_key.split('/'));
+                let mut control = task(control.path(), Some(size))?;
+                control.parquet_byte_range = Some(0..size);
+                let mut stream = reader
+                    .open_physical_parquet_stream(&control, &schema, Default::default())
+                    .await?;
+                let batch = stream.next_batch().await?.ok_or("missing decoy batch")?;
+                assert_eq!(
+                    batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<Int32Array>()
+                        .ok_or("id type")?
+                        .values(),
+                    &[888]
+                );
+            }
+            let mut task = task(file, Some(size))?;
+            if mode == "ranged" || mode == "cached" {
+                task.parquet_byte_range = Some(0..size);
+            }
+            let mut stream = reader
+                .open_physical_parquet_stream(&task, &schema, Default::default())
+                .await
+                .map_err(|error| {
+                    format!(
+                        "{table} + {file}, mode={mode}: {error}, source={:?}",
+                        error.source()
+                    )
+                })?;
+            let batch = stream.next_batch().await?.ok_or("missing batch")?;
+            let ids = batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int32Array>()
+                .ok_or("id type")?;
+            assert_eq!(ids.values(), &[777], "{table} + {file}, mode={mode}");
+            assert!(stream.next_batch().await?.is_none());
+        }
+    }
+    Ok(())
+}
+
 fn reader(table: &str, options: DeltaScanExecutionOptions) -> TestResult<DirectParquetReader> {
     // Store construction is offline; the reader's store is replaced below for I/O tests.
     let storage_options = [
@@ -168,7 +337,7 @@ fn data_file_location_preserves_same_store_paths_and_aliases() -> TestResult {
         (
             "abfs://container@account.dfs.core.windows.net/table/",
             "https://account.blob.core.windows.net/container/other/part.parquet",
-            "container/other/part.parquet",
+            "other/part.parquet",
         ),
         (
             "https://account.dfs.core.windows.net/container/table/",
@@ -178,7 +347,7 @@ fn data_file_location_preserves_same_store_paths_and_aliases() -> TestResult {
         (
             "abfss://workspace@account.dfs.fabric.microsoft.com/table/",
             "https://account.blob.fabric.microsoft.com/workspace/other/part.parquet",
-            "workspace/other/part.parquet",
+            "other/part.parquet",
         ),
         (
             "s3://bucket/table/",
@@ -228,7 +397,7 @@ fn data_file_location_preserves_same_store_paths_and_aliases() -> TestResult {
         (
             "https://account.blob.core.windows.net/container/table/",
             "https://account.blob.core.windows.net/container/other/part.parquet",
-            "container/other/part.parquet",
+            "other/part.parquet",
         ),
         (
             "https://account.dfs.fabric.microsoft.com/workspace/table/",

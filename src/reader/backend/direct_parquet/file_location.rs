@@ -13,23 +13,34 @@ pub(super) fn resolve_data_file_path(
     let location = table_url
         .join(file_path)
         .map_err(|error| data_file_error("data_file_path_resolution_failed", error))?;
+    let mut key = location.path();
     // Compare the full authority, not just the host (ABFS puts its container in
     // the username). Do not infer aliases across endpoints: storage options may
     // point an s3:// or az:// URL at a private service with the same bucket name.
-    if !is_path_reference(file_path)
-        && storage_identity(table_url, path_namespace(table_url))
-            != storage_identity(&location, path_namespace(&location))
-    {
-        return Err(data_file_error(
-            "data_file_store_mismatch",
-            std::io::Error::other("data file URL does not identify the configured table store"),
-        ));
+    if !is_path_reference(file_path) {
+        let namespace = path_namespace(&location);
+        if storage_identity(table_url, path_namespace(table_url))
+            != storage_identity(&location, namespace)
+        {
+            return Err(data_file_error(
+                "data_file_store_mismatch",
+                std::io::Error::other("data file URL does not identify the configured table store"),
+            ));
+        }
+        // In an explicit cloud HTTPS URL the first segment identifies the
+        // bucket/container. It must not become part of the key inside that store.
+        if !namespace.is_empty() {
+            key = key
+                .strip_prefix('/')
+                .unwrap_or(key)
+                .split_once('/')
+                .map_or("", |(_, key)| key);
+        }
     }
 
-    // Keep the same object-key convention as Kernel's storage handler. In
-    // particular, changing the path prefix here alone would make relative data
-    // files use a different table directory from the transaction log.
-    Path::from_url_path(location.path()).map_err(|_| {
+    // Path-only references keep Kernel's table directory convention. Changing
+    // their prefix here alone would separate relative data files from the log.
+    Path::from_url_path(key).map_err(|_| {
         // object_store path errors can contain the complete, unredacted input.
         data_file_error(
             "data_file_path_resolution_failed",
