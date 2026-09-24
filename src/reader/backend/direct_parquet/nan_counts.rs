@@ -4,8 +4,9 @@
 //! indexed by row-group ordinal and physical leaf ordinal, never by field name.
 //! Unknown or malformed counts cannot establish that a column is NaN-free.
 //!
-//! ponytail: Remove this module and footer capture after upgrading to Parquet 60;
-//! use Statistics::nan_count_opt() instead, keeping the same Some(0) pruning rule.
+//! ponytail: Replace this module and footer capture with Statistics::nan_count_opt()
+//! after upgrading to Parquet 60 and verifying the malformed-encoding regressions.
+//! Keep the same Some(0) pruning rule; an API upgrade alone does not validate counts.
 
 use std::collections::HashMap;
 
@@ -54,7 +55,7 @@ impl NanCounts {
                     read_struct_list(p, row.num_columns(), |p, column_index| {
                         let count = read_field(p, 3, TType::Struct, |p| {
                             Ok(read_field(p, 12, TType::Struct, |p| {
-                                read_field(p, 9, TType::I64, |p| p.read_i64())
+                                read_field(p, 9, TType::I64, read_i64)
                             })?
                             .flatten())
                         })?
@@ -85,6 +86,28 @@ type Protocol<'a> = TCompactInputProtocol<&'a [u8]>;
 
 fn invalid_metadata() -> thrift::Error {
     new_protocol_error(ProtocolErrorKind::InvalidData, "invalid NaN-count metadata")
+}
+
+/// Reject over-wide encodings before decoding ZigZag. thrift 0.17 can truncate
+/// an overflowing varint to zero, falsely establishing that a column has no NaNs.
+fn read_varint(p: &mut Protocol<'_>) -> thrift::Result<u64> {
+    let mut value = 0_u64;
+    for shift in (0..70).step_by(7) {
+        let byte = p.read_byte()?;
+        if shift == 63 && byte > 1 {
+            return Err(invalid_metadata());
+        }
+        value |= u64::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            return Ok(value);
+        }
+    }
+    Err(invalid_metadata())
+}
+
+fn read_i64(p: &mut Protocol<'_>) -> thrift::Result<i64> {
+    let value = read_varint(p)?;
+    Ok((value >> 1) as i64 ^ -((value & 1) as i64))
 }
 
 /// Visit one optional field in a struct, checking its type and uniqueness.

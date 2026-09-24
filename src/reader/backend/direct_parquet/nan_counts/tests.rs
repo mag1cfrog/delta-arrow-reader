@@ -19,6 +19,7 @@ use super::NanCounts;
 pub(crate) enum CountField {
     Missing,
     Count(i64),
+    Encoded(Vec<u8>),
     WrongType,
     Duplicate(i64, i64),
 }
@@ -29,6 +30,7 @@ enum Value {
     I16(i16),
     I32(i32),
     I64(i64),
+    RawI64(Vec<u8>),
     Double(f64),
     Bytes(Vec<u8>),
     Struct(Vec<(i16, Self)>),
@@ -75,7 +77,7 @@ impl Value {
             Self::Bool(_) => TType::Bool,
             Self::I16(_) => TType::I16,
             Self::I32(_) => TType::I32,
-            Self::I64(_) => TType::I64,
+            Self::I64(_) | Self::RawI64(_) => TType::I64,
             Self::Double(_) => TType::Double,
             Self::Bytes(_) => TType::String,
             Self::Struct(_) => TType::Struct,
@@ -89,6 +91,12 @@ impl Value {
             Self::I16(v) => p.write_i16(*v),
             Self::I32(v) => p.write_i32(*v),
             Self::I64(v) => p.write_i64(*v),
+            Self::RawI64(bytes) => {
+                for byte in bytes {
+                    p.write_byte(*byte)?;
+                }
+                Ok(())
+            }
             Self::Double(v) => p.write_double(*v),
             Self::Bytes(v) => p.write_bytes(v),
             Self::Struct(fields) => {
@@ -161,6 +169,7 @@ pub(crate) fn with_nan_counts(bytes: &Bytes, counts: &[Vec<CountField>]) -> Byte
                 match count {
                     CountField::Missing => {}
                     CountField::Count(count) => stats.push((9, Value::I64(*count))),
+                    CountField::Encoded(bytes) => stats.push((9, Value::RawI64(bytes.clone()))),
                     CountField::WrongType => stats.push((9, Value::Bytes(vec![0xff]))),
                     CountField::Duplicate(a, b) => {
                         stats.push((9, Value::I64(*a)));
@@ -504,4 +513,131 @@ async fn nan_counts_reach_whole_file_and_cached_ranged_streams()
         }
     }
     Ok(())
+}
+
+fn overflowing_count() -> Vec<u8> {
+    // 2^64 cannot fit the unsigned intermediate of an i64 ZigZag value.
+    let mut bytes = vec![0x80; 9];
+    bytes.push(0x02);
+    bytes
+}
+
+#[test]
+fn nan_counts_reject_overflowing_wire_integers() {
+    let bytes = sample();
+    for last in 2..=255 {
+        let mut wire = vec![0x80; 9];
+        wire.push(last);
+        if last & 0x80 != 0 {
+            wire.push(0);
+        }
+        let mut counts = sample_counts();
+        counts[0][2] = CountField::Encoded(wire);
+        let bytes = with_nan_counts(&bytes, &counts);
+        // Native parquet-rs skips this unknown field, so the side reader must
+        // reject its invalid encoding without relying on native validation.
+        let native = metadata(&bytes);
+        assert!(
+            NanCounts::decode(footer(&bytes), &native).0.is_empty(),
+            "invalid tenth byte {last:#x} must not establish a NaN-free column"
+        );
+    }
+}
+
+#[tokio::test]
+async fn overflowing_count_preserves_public_scan_rows() -> Result<(), Box<dyn std::error::Error>> {
+    use super::super::tests::TestDir;
+    use crate::{DeltaComparison, DeltaPredicate, DeltaScalar, DeltaTableBuilder};
+    use arrow::{array::Float64Array, compute::kernels::cmp};
+    use futures_util::TryStreamExt;
+    use serde_json::json;
+    use std::fs;
+    let mut counts = sample_counts();
+    counts[0][2] = CountField::Encoded(overflowing_count());
+    let bytes = with_nan_counts(&sample(), &counts);
+    let root = TestDir::new("review-overflow-public")?;
+    fs::create_dir_all(root.path().join("_delta_log"))?;
+    fs::write(root.path().join("part.parquet"), &bytes)?;
+    let schema = json!({"type":"struct","fields":[
+        {"name":"id","type":"integer","nullable":false,"metadata":{}},
+        {"name":"f","type":"float","nullable":true,"metadata":{}},
+        {"name":"d","type":"double","nullable":true,"metadata":{}}
+    ]});
+    let protocol = json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}});
+    let meta = json!({"metaData":{"id":"review-overflow","format":{"provider":"parquet","options":{}},"schemaString":schema.to_string(),"partitionColumns":[],"configuration":{}}});
+    let add = json!({"add":{"path":"part.parquet","partitionValues":{},"size":bytes.len(),"modificationTime":0,"dataChange":true}});
+    fs::write(
+        root.path().join("_delta_log/00000000000000000000.json"),
+        format!("{protocol}\n{meta}\n{add}\n"),
+    )?;
+    let table = DeltaTableBuilder::new(root.path().to_string_lossy())
+        .load_table()
+        .await?;
+    let full = table
+        .scan()
+        .with_target_partitions(1)?
+        .build()
+        .await?
+        .into_stream()
+        .try_collect::<Vec<_>>()
+        .await?;
+    let expected: usize = full
+        .iter()
+        .map(|batch| {
+            cmp::gt(&batch.column(2).as_ref(), &Float64Array::new_scalar(100.0))
+                .unwrap()
+                .true_count()
+        })
+        .sum();
+    assert_eq!(expected, 1, "Arrow oracle must see the positive NaN match");
+    let result = table
+        .scan()
+        .with_target_partitions(1)?
+        .with_predicate(DeltaPredicate::Compare {
+            column: "d".into(),
+            op: DeltaComparison::Gt,
+            value: DeltaScalar::Float64(100.0),
+        })
+        .build()
+        .await?
+        .into_stream()
+        .try_collect::<Vec<_>>()
+        .await?;
+    let actual: usize = result.iter().map(|batch| batch.num_rows()).sum();
+    assert_eq!(
+        actual, expected,
+        "overflowing optional metadata silently discarded the NaN match"
+    );
+    Ok(())
+}
+
+#[test]
+fn checked_counts_preserve_the_full_i64_domain_and_reject_truncation() {
+    let mut values = vec![0, -1, i64::MIN, i64::MAX];
+    for bit in 0..63 {
+        let value = 1_i64 << bit;
+        values.extend([value, -value, value - 1, -value + 1]);
+    }
+    for value in values {
+        let mut bytes = Vec::new();
+        TCompactOutputProtocol::new(&mut bytes)
+            .write_i64(value)
+            .unwrap();
+        assert_eq!(
+            super::read_i64(&mut TCompactInputProtocol::new(bytes.as_slice())).unwrap(),
+            value
+        );
+        for end in 0..bytes.len() {
+            assert!(super::read_i64(&mut TCompactInputProtocol::new(&bytes[..end])).is_err());
+        }
+    }
+    // Overlong but representable zero remains zero; only overflow is rejected.
+    for length in 1..=10 {
+        let mut bytes = vec![0x80; length - 1];
+        bytes.push(0);
+        assert_eq!(
+            super::read_i64(&mut TCompactInputProtocol::new(bytes.as_slice())).unwrap(),
+            0
+        );
+    }
 }
