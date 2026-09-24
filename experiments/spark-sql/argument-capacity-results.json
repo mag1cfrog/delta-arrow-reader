@@ -1,0 +1,555 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/195",
+  "status": "Broad capacity rewrite not selected: allocation reductions and several calibrated ANSI query gains do not clear the native query and planning flags. Existing cold-format runtime remains the selected baseline.",
+  "candidate_retained": false,
+  "baseline_commit": "c4bef63ff803f5a43eeadb8aef0c72fe0daf4b0a",
+  "runtime_change": "Experiment only: reserve the known argument count for ordinary args, arg_fields and partial-NULL args in ScalarFunctionExpr. No public API/dependency/evaluation-order change. The patch is retained as candidate.patch inside the archive, not selected for the runtime.",
+  "patch": {
+    "patch_sha256": "763325f79c9f81f78ec79d0ad58c8798dd7ad9098837083c7e5b060676fe44fc",
+    "before_sha256": "2d828c4b35ff9ed2d6b24bd742b71cba3fbb781455ed914aeed7f783584287a7",
+    "after_sha256": "f482be393eb7d727d2240f5a42c2593c1313ce717236540d5cc3bfe8e8c4d033",
+    "forward_reverse_exact": true
+  },
+  "binaries": {
+    "before": {
+      "probe": "64c04f513f2701ddc80785642614106d3194a07ee58b0eefdf99d6fb5c418196",
+      "bench": "f20661575f111a7e2aa4ded18caedcb7c335cdfff81ffafb4120871bec2647e1",
+      "runner": "6008b9c8f327feb9d2a86d70cb64e3fdfcbd582e6cf5e2913702ba9078ce7f5e"
+    },
+    "after": {
+      "probe": "17df9a1fdc2129d86318d1db1fe02230c94da12db10eb45979c8d90675a812ad",
+      "bench": "2ded55fda5fb14f9255cdce96849dc73df4db343855867517724de92a5c691d9",
+      "runner": "054545626788c2911b31bf13d9632ab73ada4d62bca5c4a37f8c664b0ed90a5b"
+    }
+  },
+  "correctness": {
+    "focused_agreement": 616,
+    "focused_total": 616,
+    "focused_error_payloads_equal": 131,
+    "changed_error_payloads": 0,
+    "regression_groups": 37,
+    "regression_observations": 6784,
+    "regression_agreement_before_and_after": 6403,
+    "changed_status_or_successful_values_types": 0,
+    "previously_agreeing_regressions": 0,
+    "delta_unchanged": 116,
+    "delta_adapter_checks_passed": 18,
+    "planner_tests_passed": 38,
+    "runner_tests_passed": 28,
+    "delta_spark_strict_report": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    }
+  },
+  "allocation": {
+    "rows": 1048576,
+    "processes": 4,
+    "case_modes_per_process": 100,
+    "ordinary_binary_requested_bytes_removed_per_batch": 144,
+    "nested_null_requested_bytes_removed_per_batch": 352,
+    "nested_null_growth_calls_removed_per_batch": 1,
+    "native_counts_unchanged": true,
+    "cases": {
+      "8192": [
+        {
+          "id": "i32_add_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 640,
+            "allocated_bytes": 4252672,
+            "peak_live_bytes": 33224,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 640,
+            "allocated_bytes": 4234240,
+            "peak_live_bytes": 33080,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 1024,
+            "allocated_bytes": 4274688,
+            "peak_live_bytes": 33396,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 1024,
+            "allocated_bytes": 4256256,
+            "peak_live_bytes": 33252,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 4864,
+            "allocated_bytes": 27323608,
+            "peak_live_bytes": 117776,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 4736,
+            "allocated_bytes": 27278552,
+            "peak_live_bytes": 117776,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 4864,
+            "allocated_bytes": 45901232,
+            "peak_live_bytes": 234816,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 4736,
+            "allocated_bytes": 45856176,
+            "peak_live_bytes": 234816,
+            "live_bytes_after": 0
+          }
+        }
+      ],
+      "256": [
+        {
+          "id": "i32_add_arrays",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 6062080,
+            "peak_live_bytes": 1480,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 20480,
+            "allocated_bytes": 5472256,
+            "peak_live_bytes": 1336,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_scalar",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 32768,
+            "allocated_bytes": 6766592,
+            "peak_live_bytes": 1652,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 32768,
+            "allocated_bytes": 6176768,
+            "peak_live_bytes": 1508,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 135168,
+            "allocated_bytes": 35157720,
+            "peak_live_bytes": 4576,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 131072,
+            "allocated_bytes": 33715928,
+            "peak_live_bytes": 4432,
+            "live_bytes_after": 0
+          }
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "mode": "spark_a",
+          "affected": true,
+          "before": {
+            "allocation_calls": 135168,
+            "allocated_bytes": 53898672,
+            "peak_live_bytes": 8128,
+            "live_bytes_after": 0
+          },
+          "after": {
+            "allocation_calls": 131072,
+            "allocated_bytes": 52456880,
+            "peak_live_bytes": 8096,
+            "live_bytes_after": 0
+          }
+        }
+      ]
+    }
+  },
+  "query_timing": {
+    "rows": 1048576,
+    "processes": 32,
+    "cpu": 2,
+    "warmups": 4,
+    "samples": 15,
+    "same_binary_tolerance": 0.05,
+    "calibration": {
+      "8192": {
+        "planning": {
+          "passed": 28,
+          "total": 48
+        },
+        "execution": {
+          "passed": 5,
+          "total": 48
+        }
+      },
+      "256": {
+        "planning": {
+          "passed": 31,
+          "total": 48
+        },
+        "execution": {
+          "passed": 18,
+          "total": 48
+        }
+      }
+    },
+    "representative_cases": {
+      "8192": [
+        {
+          "id": "i32_add_arrays",
+          "ansi": true,
+          "before_ms": 1.7390045,
+          "after_ms": 1.7257755000000001,
+          "median_paired_ratio": 0.977717243890178,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i32_add_scalar",
+          "ansi": true,
+          "before_ms": 0.8236399999999999,
+          "after_ms": 0.8099345,
+          "median_paired_ratio": 0.9898790870048332,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i32_mul_nulls",
+          "ansi": false,
+          "before_ms": 0.31537550000000003,
+          "after_ms": 0.319398,
+          "median_paired_ratio": 0.9778045563772759,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "ansi": true,
+          "before_ms": 5.721617500000001,
+          "after_ms": 5.658920999999999,
+          "median_paired_ratio": 0.9790842360319933,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "ansi": true,
+          "before_ms": 7.5672654999999995,
+          "after_ms": 7.0386385,
+          "median_paired_ratio": 0.8587894999358776,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "read_control",
+          "ansi": true,
+          "before_ms": 0.0659225,
+          "after_ms": 0.0655115,
+          "median_paired_ratio": 1.000552224609867,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "udf_control",
+          "ansi": true,
+          "before_ms": 2.7786210000000002,
+          "after_ms": 2.0331615,
+          "median_paired_ratio": 0.9237956429836237,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "double_control",
+          "ansi": true,
+          "before_ms": 0.807455,
+          "after_ms": 0.6718675000000001,
+          "median_paired_ratio": 1.4954284934266027,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "decimal_control",
+          "ansi": true,
+          "before_ms": 10.099699000000001,
+          "after_ms": 10.001782000000002,
+          "median_paired_ratio": 1.032428941712703,
+          "same_binary_calibration_passed": false
+        }
+      ],
+      "256": [
+        {
+          "id": "i32_add_arrays",
+          "ansi": true,
+          "before_ms": 5.34065,
+          "after_ms": 5.000237,
+          "median_paired_ratio": 0.9295486582921806,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "i32_add_scalar",
+          "ansi": true,
+          "before_ms": 4.90732,
+          "after_ms": 4.6476625,
+          "median_paired_ratio": 0.9495761181300965,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i32_mul_nulls",
+          "ansi": false,
+          "before_ms": 4.416528,
+          "after_ms": 4.6738055,
+          "median_paired_ratio": 1.0505141667881364,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i32_add_nested_nulls",
+          "ansi": true,
+          "before_ms": 15.040716,
+          "after_ms": 14.2965935,
+          "median_paired_ratio": 0.9400667310777622,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "i64_add_nested_nulls",
+          "ansi": true,
+          "before_ms": 17.7960085,
+          "after_ms": 17.163513000000002,
+          "median_paired_ratio": 0.9631132560981815,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "read_control",
+          "ansi": true,
+          "before_ms": 1.7569685,
+          "after_ms": 1.7432375000000002,
+          "median_paired_ratio": 1.000842935885347,
+          "same_binary_calibration_passed": true
+        },
+        {
+          "id": "udf_control",
+          "ansi": true,
+          "before_ms": 6.1674205,
+          "after_ms": 5.5282225,
+          "median_paired_ratio": 0.8748480944188001,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "double_control",
+          "ansi": true,
+          "before_ms": 4.149737,
+          "after_ms": 4.085463000000001,
+          "median_paired_ratio": 0.9933150525622361,
+          "same_binary_calibration_passed": false
+        },
+        {
+          "id": "decimal_control",
+          "ansi": true,
+          "before_ms": 16.615681000000002,
+          "after_ms": 16.260246000000002,
+          "median_paired_ratio": 0.9878214234849457,
+          "same_binary_calibration_passed": true
+        }
+      ]
+    },
+    "calibrated_above_five_percent_flags": [
+      {
+        "batch": 256,
+        "id": "i32_mul_nulls",
+        "ansi": false,
+        "phase": "execution",
+        "before_ms": 4.416528,
+        "after_ms": 4.6738055,
+        "median_paired_ratio": 1.0505141667881364,
+        "process_medians_ms": [
+          4.411574,
+          4.377371,
+          4.686765,
+          4.677187,
+          4.424558,
+          4.748729999999999,
+          4.615242,
+          4.3881,
+          4.639307,
+          4.421482,
+          4.3912960000000005,
+          4.58732,
+          4.670424000000001,
+          4.753659000000001,
+          4.429597,
+          4.426011
+        ],
+        "paired_ratios": {
+          "same_before": [
+            0.9922469848629991,
+            0.9991904455416598
+          ],
+          "same_after": [
+            0.9979563728926029,
+            1.0178217223960824
+          ],
+          "change": [
+            1.0732665274135855,
+            1.051763177685103,
+            1.0492651558911694,
+            1.0446392135715743
+          ]
+        },
+        "same_binary_calibration_passed": true
+      },
+      {
+        "batch": 256,
+        "id": "i64_mul_nulls",
+        "ansi": false,
+        "phase": "planning",
+        "before_ms": 1.2673035,
+        "after_ms": 1.2694174999999999,
+        "median_paired_ratio": 1.2466792130126856,
+        "process_medians_ms": [
+          1.311807,
+          1.260621,
+          1.258508,
+          1.260722,
+          1.277703,
+          2.675179,
+          1.2672029999999999,
+          1.273976,
+          1.886424,
+          1.258728,
+          1.543887,
+          1.252075,
+          1.2716319999999999,
+          1.2721230000000001,
+          1.2606309999999998,
+          1.259249
+        ],
+        "paired_ratios": {
+          "same_before": [
+            0.9609805405825705,
+            0.9989037236114297
+          ],
+          "same_after": [
+            1.0017592260041255,
+            1.0003861179964018
+          ],
+          "change": [
+            2.093740877183508,
+            0.9946835733169227,
+            1.4986748527084486,
+            0.8109887575968967
+          ]
+        },
+        "same_binary_calibration_passed": true
+      }
+    ]
+  },
+  "counters": {
+    "processes": 8,
+    "running_percent": 100,
+    "scope": "Whole-process totals including setup, validation, warmups, planning, execution and serialization, not per-query latency.",
+    "median_ratios": {
+      "8192": {
+        "instructions:u": 0.9997555653733443,
+        "cycles:u": 1.0013598451307573,
+        "branches:u": 0.999807677411263,
+        "branch-misses:u": 1.0096995968604685
+      },
+      "256": {
+        "instructions:u": 0.9950922598450281,
+        "cycles:u": 0.9900096638995628,
+        "branches:u": 0.9971053078877057,
+        "branch-misses:u": 0.9771966450296536
+      }
+    }
+  },
+  "filter_replacement": {
+    "decision": "Reject replacing the multi-column Arrow helper with an unoptimized filter builder. No runtime code change and no new density/width heuristic.",
+    "reason": "Nullable two-column gains do not generalize across bit patterns; calibrated small-batch INT alternating and sparse masks slow about 22.6% and 15.2%. The required nullable case does not share the larger gains of nonnullable controls. Whole-process user instructions increase 23.5% at batch 8192 and 18.0% at batch 256.",
+    "calibrated": {
+      "8192": 29,
+      "256": 30
+    },
+    "remaining": "Required filtering/scattering cost remains open. Retain existing Arrow strategy and investigate avoidable argument allocation in the same owner."
+  },
+  "physical_order_followup": {
+    "processes": 16,
+    "scope": "Existing physical-expression diagnostic; reverse changes mode order within cases, case order fixed. No planning/collection timing, inactive allocation hook. Does not by itself clear a whole-query regression.",
+    "calibration": {
+      "8192": {
+        "passed": 56,
+        "total": 100
+      },
+      "256": {
+        "passed": 45,
+        "total": 100
+      }
+    },
+    "target_small_batch": {
+      "id": "i32_mul_nulls",
+      "mode": "wrapping",
+      "process_medians_ms": [
+        0.722001,
+        0.742128,
+        0.7120120000000001,
+        0.72686,
+        0.732881,
+        0.728343,
+        0.729365,
+        0.753249
+      ],
+      "same_variant_order_ratios": [
+        1.0432797184491434,
+        0.9828021581182761,
+        1.022936411184081,
+        1.00828357592934
+      ],
+      "change_ratios": [
+        1.0278766926915615,
+        0.9795724073411664,
+        0.9938079988429226,
+        0.9682920256117168
+      ],
+      "forward_change_ratios": [
+        1.0278766926915615,
+        0.9682920256117168
+      ],
+      "reverse_change_ratios": [
+        0.9795724073411664,
+        0.9938079988429226
+      ],
+      "median_paired_ratio": 0.9866902030920445,
+      "calibrated": true
+    }
+  },
+  "restoration": {
+    "source_lock_paths": 85,
+    "executable_slots": 3
+  },
+  "next": "Keep cold-format baseline and narrow the next capacity candidate to only the partial-NULL vector growth. General UDF argument vectors, required NULL selection/scatter and checked-kernel costs remain open in issue 195.",
+  "raw_archive": {
+    "path": "argument-capacity-runs.json.gz",
+    "sha256": "555bbb6fbb215ac087f93c563860cc1987079b89e942a06c989842f8cc044496",
+    "text_files": 456,
+    "compressed_bytes": 1745982
+  }
+}
