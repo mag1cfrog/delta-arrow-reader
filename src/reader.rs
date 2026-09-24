@@ -24,7 +24,6 @@ pub use options::{
 pub use predicate::{DeltaComparison, DeltaPredicate, DeltaScalar};
 
 use std::{
-    collections::VecDeque,
     fmt,
     pin::Pin,
     sync::Arc,
@@ -40,7 +39,7 @@ use self::{
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
         DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream,
-        FileExecutor, PartitionStream,
+        FileExecutor, OrderedPartitionStream,
     },
 };
 
@@ -575,7 +574,7 @@ impl DeltaScan {
         let projection = (self.plan.logical_schema.as_ref() != schema.as_ref())
             .then(|| (0..schema.fields().len()).collect::<Vec<_>>());
         let partitions = if self.limit == Some(0) {
-            VecDeque::new()
+            OrderedPartitionStream::default()
         } else {
             let scheduler = DeltaScanScheduler::new(Arc::clone(&self.plan));
             let admission: FileAdmissionPolicy<_> = Arc::new(|_| Ok(FileAdmissionDecision::Admit));
@@ -624,7 +623,7 @@ impl DeltaScan {
 pub struct DeltaBatchStream {
     schema: SchemaRef,
     metrics: DeltaScanMetrics,
-    partitions: VecDeque<PartitionStream>,
+    partitions: OrderedPartitionStream,
     predicate: Option<DeltaPredicate>,
     projection: Option<Vec<usize>>,
     remaining: Option<usize>,
@@ -652,9 +651,6 @@ impl DeltaBatchStream {
         }
         self.started = true;
         trace_execution_started(self.snapshot_version, self.backend, self.partition_count);
-        for partition in &mut self.partitions {
-            partition.start();
-        }
     }
 
     fn complete(&mut self) {
@@ -703,40 +699,35 @@ impl Stream for DeltaBatchStream {
         }
         this.start();
 
-        loop {
-            let Some(partition) = this.partitions.front_mut() else {
-                this.complete();
-                return Poll::Ready(None);
-            };
-            match Pin::new(partition).poll_next(context) {
-                Poll::Ready(Some(Ok(batch))) => {
-                    let mut batch = match this.finalize_batch(batch) {
-                        Ok(batch) => batch,
-                        Err(error) => {
-                            this.fail(&error);
-                            return Poll::Ready(Some(Err(error)));
-                        }
-                    };
-                    if let Some(remaining) = this.remaining.as_mut() {
-                        if batch.num_rows() >= *remaining {
-                            batch = batch.slice(0, *remaining);
-                            *remaining = 0;
-                            this.complete();
-                        } else {
-                            *remaining -= batch.num_rows();
-                        }
+        match Pin::new(&mut this.partitions).poll_next(context) {
+            Poll::Ready(Some(Ok(batch))) => {
+                let mut batch = match this.finalize_batch(batch) {
+                    Ok(batch) => batch,
+                    Err(error) => {
+                        this.fail(&error);
+                        return Poll::Ready(Some(Err(error)));
                     }
-                    return Poll::Ready(Some(Ok(batch)));
+                };
+                if let Some(remaining) = this.remaining.as_mut() {
+                    if batch.num_rows() >= *remaining {
+                        batch = batch.slice(0, *remaining);
+                        *remaining = 0;
+                        this.complete();
+                    } else {
+                        *remaining -= batch.num_rows();
+                    }
                 }
-                Poll::Ready(Some(Err(error))) => {
-                    this.fail(&error);
-                    return Poll::Ready(Some(Err(error)));
-                }
-                Poll::Ready(None) => {
-                    this.partitions.pop_front();
-                }
-                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Some(Ok(batch)))
             }
+            Poll::Ready(Some(Err(error))) => {
+                this.fail(&error);
+                Poll::Ready(Some(Err(error)))
+            }
+            Poll::Ready(None) => {
+                this.complete();
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -926,7 +917,8 @@ mod tests {
             metrics::DeltaScanMetricsConfig,
             scheduling::{
                 FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream, FileExecutor,
-                FileReadPermit, PartitionStream, ScanCancellation, ScanReadLimiter,
+                FileReadPermit, OrderedPartitionStream, PartitionStream, ScanCancellation,
+                ScanReadLimiter,
             },
         },
     };
@@ -1123,11 +1115,12 @@ mod tests {
     fn direct_stream(
         partitions: VecDeque<PartitionStream>,
         metrics: DeltaScanMetrics,
+        scan_capacity: usize,
     ) -> DeltaBatchStream {
         DeltaBatchStream {
             schema: schema(),
             metrics,
-            partitions,
+            partitions: OrderedPartitionStream::new(partitions, scan_capacity),
             predicate: None,
             projection: None,
             remaining: None,
@@ -1182,7 +1175,7 @@ mod tests {
         );
 
         Ok(ControlledMerge {
-            stream: direct_stream(VecDeque::from([first, second]), metrics.clone()),
+            stream: direct_stream(VecDeque::from([first, second]), metrics.clone(), 2),
             limiter,
             cancellation,
             metrics,
@@ -1316,6 +1309,139 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn merged_stream_stops_without_admitting_waiting_partitions()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for stop in ["limit", "drop", "error"] {
+            let options = execution_options()?.with_max_concurrent_file_reads_per_scan(Some(1))?;
+            let limiter = ScanReadLimiter::new(options, 3, 3);
+            let cancellation = ScanCancellation::new();
+            let metrics = metrics();
+            let executor: FileExecutor<i32, FileBatchStream> = Arc::new(move |task, permit, _| {
+                async move {
+                    Ok(if stop == "error" {
+                        Box::pin(stream::once(async move {
+                            let _permit = permit;
+                            Err(InvalidConfigurationSnafu {
+                                reason: "controlled_partition_failure",
+                            }
+                            .build())
+                        })) as FileBatchStream
+                    } else {
+                        gated_file_stream(permit, vec![batch(task); 3], Arc::new(Notify::new()))
+                    })
+                }
+                .boxed()
+            });
+            let partitions = (0..3)
+                .map(|index| {
+                    Ok(PartitionStream::new(
+                        vec![index as i32; 2],
+                        limiter.partition(index)?,
+                        options,
+                        Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                        Arc::clone(&executor),
+                        metrics.clone(),
+                        cancellation.clone(),
+                    ))
+                })
+                .collect::<Result<VecDeque<_>, crate::DeltaReaderError>>()?;
+            let mut stream = direct_stream(partitions, metrics.clone(), 1);
+            if stop == "limit" {
+                stream.remaining = Some(1);
+            }
+            let first = timeout(Duration::from_secs(5), stream.next())
+                .await?
+                .ok_or("missing result")?;
+            if stop == "error" {
+                assert_eq!(
+                    first.expect_err("controlled failure").code(),
+                    "invalid_configuration"
+                );
+            } else {
+                assert_eq!(batch_id(&first?), 0);
+            }
+            if stop != "drop" {
+                assert!(stream.next().await.is_none());
+            }
+            drop(stream);
+            timeout(Duration::from_secs(5), async {
+                while limiter.active_file_reads() != 0 {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await?;
+            assert!(cancellation.is_cancelled());
+            assert_eq!(metrics.snapshot().file_tasks_started, 1);
+            assert_eq!(metrics.snapshot().scan_partitions_started, 1);
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn merged_stream_progresses_with_small_scan_read_limits()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for backend in [
+            ParquetReaderBackend::Direct,
+            ParquetReaderBackend::DeltaKernel,
+        ] {
+            for cap in [1, 2, 4, 8] {
+                for prefetch in [0, 2, usize::MAX] {
+                    let options = DeltaScanExecutionOptions::new()
+                        .with_parquet_backend(backend)
+                        .with_max_concurrent_file_reads_per_scan(Some(cap))?
+                        .with_prefetch_files_per_partition(prefetch);
+                    let limiter = ScanReadLimiter::new(options, 5, 5);
+                    let cancellation = ScanCancellation::new();
+                    let metrics = metrics();
+                    let executor: FileExecutor<i32, FileBatchStream> =
+                        Arc::new(|task, permit, _| {
+                            async move {
+                                // Multiple batches fill later partitions' output queues while
+                                // the front partition still needs permits for subsequent files.
+                                Ok(file_stream(permit, vec![batch(task); 3]))
+                            }
+                            .boxed()
+                        });
+                    let partitions = (0..5)
+                        .map(|partition| {
+                            Ok(PartitionStream::new(
+                                (partition * 4..partition * 4 + 4)
+                                    .map(|id| id as i32)
+                                    .collect(),
+                                limiter.partition(partition)?,
+                                options,
+                                Arc::new(|_| Ok(FileAdmissionDecision::Admit)),
+                                Arc::clone(&executor),
+                                metrics.clone(),
+                                cancellation.clone(),
+                            ))
+                        })
+                        .collect::<Result<VecDeque<_>, crate::DeltaReaderError>>()?;
+                    let mut stream = direct_stream(partitions, metrics.clone(), cap);
+                    let ids = timeout(Duration::from_secs(2), async {
+                        let mut ids = Vec::new();
+                        while let Some(batch) = stream.next().await {
+                            ids.push(batch_id(&batch?));
+                            assert!(limiter.active_file_reads() <= cap);
+                            tokio::task::yield_now().await;
+                        }
+                        Ok::<_, crate::DeltaReaderError>(ids)
+                    })
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!("stalled: {backend:?}, cap={cap}, prefetch={prefetch}")
+                    })?;
+                    assert_eq!(ids, (0..20).flat_map(|id| [id; 3]).collect::<Vec<_>>());
+                    assert_eq!(limiter.active_file_reads(), 0);
+                    assert_eq!(metrics.snapshot().file_tasks_completed, 20);
+                    assert_eq!(metrics.snapshot().scan_partitions_completed, 5);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn merged_stream_is_ordered_and_bounds_later_partition_queues()
     -> Result<(), Box<dyn std::error::Error>> {
         let ControlledMerge {
@@ -1382,7 +1508,7 @@ mod tests {
     async fn merged_stream_forwards_one_concurrent_error_and_releases_permits()
     -> Result<(), Box<dyn std::error::Error>> {
         let options = execution_options()?;
-        let limiter = ScanReadLimiter::new(options, 2, 2);
+        let limiter = ScanReadLimiter::new(options, 3, 3);
         let cancellation = ScanCancellation::new();
         let metrics = metrics();
         let executor: FileExecutor<i32, FileBatchStream> = Arc::new(|task, permit, _| {
@@ -1418,12 +1544,21 @@ mod tests {
             vec![2],
             limiter.partition(1)?,
             options,
+            admission.clone(),
+            Arc::clone(&executor),
+            metrics.clone(),
+            cancellation.clone(),
+        );
+        let third = PartitionStream::new(
+            vec![3],
+            limiter.partition(2)?,
+            options,
             admission,
             executor,
             metrics.clone(),
             cancellation.clone(),
         );
-        let mut stream = direct_stream(VecDeque::from([first, second]), metrics);
+        let mut stream = direct_stream(VecDeque::from([first, second, third]), metrics.clone(), 2);
 
         let error = timeout(Duration::from_secs(5), stream.next())
             .await?
@@ -1432,6 +1567,7 @@ mod tests {
         assert_eq!(error.code(), "invalid_configuration");
         assert!(stream.next().await.is_none());
         assert!(cancellation.is_cancelled());
+        assert_eq!(metrics.snapshot().file_tasks_started, 2);
         timeout(Duration::from_secs(5), async {
             while limiter.active_file_reads() != 0 {
                 tokio::task::yield_now().await;

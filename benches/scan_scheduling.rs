@@ -105,6 +105,10 @@ fn optional_usize(value: &str) -> BenchResult<Option<usize>> {
 
 fn prepare(root: &Path, shape: &str) -> BenchResult<Value> {
     let rows_per_file: Vec<usize> = match shape {
+        "tiny" => vec![512; 64],
+        "unequal-tiny" => std::iter::once(262_144)
+            .chain(std::iter::repeat_n(512, 63))
+            .collect(),
         "small" => vec![4_096; 64],
         "batches" => vec![32_768; 64],
         "unequal" => std::iter::once(262_144)

@@ -4,7 +4,7 @@ Build the Rust target with cargo bench --locked --bench scan_scheduling --no-run
 Pass its executable as --binary baseline=PATH and choose an empty --output-dir.
 The runner saves executable copies, fixture hashes, environment metadata, warmups,
 every measured result, and summaries. A later --binary candidate=PATH runs both
-versions in counterbalanced order on the same fixtures. No scheduler fix is applied.
+versions in counterbalanced order on the same fixtures.
 
 Execution timings exclude process startup, fixture generation, table loading, and
 scan planning. CPU seconds cover the whole child. Peak RSS includes the HTTP server
@@ -59,6 +59,12 @@ def optional(value):
 
 def cases():
     result = []
+    # Each short file fits in one output batch. The old scheduler can finish
+    # later partitions and reuse their permits before the consumer reaches them.
+    for shape in ("tiny", "unequal-tiny"):
+        for transport in ("local", "http"):
+            for backend in ("direct", "kernel"):
+                result.append(Case("performance", shape, transport, 64, 8, 2, backend=backend))
     for shape in ("small", "batches", "unequal", "large"):
         for transport in ("local", "http"):
             # These controls have enough permits for every active partition.
