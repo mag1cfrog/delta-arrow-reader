@@ -1,5 +1,6 @@
 //! Direct asynchronous Parquet data-file reader.
 
+mod file_location;
 mod metadata_cache;
 mod metered_object_store;
 mod nan_counts;
@@ -7,6 +8,8 @@ mod range_planning;
 mod row_group_pruning;
 mod schema_alignment;
 
+#[cfg(test)]
+mod file_location_tests;
 #[cfg(test)]
 mod int96_tests;
 
@@ -36,6 +39,7 @@ use snafu::{IntoError, ResultExt};
 pub(crate) use self::metadata_cache::ParquetMetadataCache;
 pub(crate) use self::metered_object_store::ParquetRangeReadEstimator;
 use self::{
+    file_location::resolve_data_file_path,
     metadata_cache::CachedParquetMetadata,
     metered_object_store::{MeteredParquetObjectStore, MultiRangeReadStrategy},
     nan_counts::NanCounts,
@@ -439,19 +443,7 @@ impl DirectParquetReader {
         &self,
         task: &DeltaScanFileTask,
     ) -> Result<ParquetFileObject, DeltaReaderError> {
-        let location = self
-            .engine_context
-            .table_url()
-            .join(&task.path)
-            .boxed()
-            .context(DataFileReadSnafu {
-                reason: "data_file_path_resolution_failed",
-            })?;
-        let path = Path::from_url_path(location.path())
-            .boxed()
-            .context(DataFileReadSnafu {
-                reason: "data_file_path_resolution_failed",
-            })?;
+        let path = resolve_data_file_path(self.engine_context.table_url(), &task.path)?;
         let file_size = task.file_size.ok_or_else(|| {
             data_file_error(
                 "data_file_size_missing",
@@ -1305,7 +1297,7 @@ mod tests {
         Ok(writer.into_inner()?)
     }
 
-    fn parquet_bytes() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub(super) fn parquet_bytes() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, true),
