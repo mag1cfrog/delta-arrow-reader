@@ -966,6 +966,74 @@ async fn cast_bench(ctx: &SessionContext, output: &str, selected: Option<&str>) 
     Ok(())
 }
 
+async fn bround_bench(ctx: &SessionContext, output: &str) -> Result<()> {
+    let mut results = Vec::new();
+    for nulls in [false, true] {
+        ctx.deregister_table("bench_input")?;
+        ctx.register_table("bench_input", Arc::new(input(18, 4, 4, nulls)?))?;
+        for (id, expression) in [
+            ("decimal_column", "BROUND(a, 1)"),
+            ("decimal_literal", "BROUND(CAST(2.345 AS DECIMAL(6,3)), 2)"),
+            ("round_control", "ROUND(a, 1)"),
+            ("double_control", "BROUND(CAST(a AS DOUBLE), 1)"),
+        ] {
+            let sql = format!("SELECT {expression} AS r FROM bench_input");
+            let mut result = json!({"id":format!("{id}_nulls{nulls}"),"sql":sql});
+            let plan = plan_query(ctx, &sql, true).await?;
+            result["plan"] = json!(displayable(plan.as_ref()).indent(true).to_string());
+            // The old unsupported Decimal column result is an error, not a timing.
+            match consume(ctx, plan.clone()).await {
+                Err(error) => {
+                    result["error"] = json!(error.to_string());
+                }
+                Ok(counts) => {
+                    let mut stream = execute_stream(plan.clone(), ctx.task_ctx())?;
+                    let batch = stream.next().await.ok_or("missing first batch")??;
+                    result["first_values"] = json!(
+                        (0..batch.num_rows().min(12))
+                            .map(|i| array_value_to_string(batch.column(0).as_ref(), i))
+                            .collect::<std::result::Result<Vec<_>, _>>()?
+                    );
+                    result["type"] = json!(format!("{:?}", batch.column(0).data_type()));
+                    drop(stream);
+                    let expected_nulls = if nulls && id != "decimal_literal" {
+                        (0..ROWS).filter(|i| i % 10 == 9).count()
+                    } else {
+                        0
+                    };
+                    assert_eq!(counts, (ROWS, expected_nulls));
+                    for _ in 0..WARMUPS {
+                        consume(ctx, plan.clone()).await?;
+                    }
+                    let mut execution = Vec::new();
+                    for _ in 0..SAMPLES {
+                        let start = Instant::now();
+                        assert_eq!(consume(ctx, plan.clone()).await?, counts);
+                        execution.push(start.elapsed().as_nanos() as u64);
+                    }
+                    result["execution_ns"] = json!(execution);
+                }
+            }
+            let mut planning = Vec::new();
+            for _ in 0..SAMPLES {
+                let start = Instant::now();
+                black_box(plan_query(ctx, &sql, true).await?);
+                planning.push(start.elapsed().as_nanos() as u64);
+            }
+            result["planning_ns"] = json!(planning);
+            results.push(result);
+        }
+    }
+    fs::write(
+        output,
+        serde_json::to_vec_pretty(&json!({
+            "rows":ROWS,"batch_size":BATCH_SIZE,"warmups":WARMUPS,"samples":SAMPLES,
+            "results":results,
+        }))?,
+    )?;
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     if cfg!(debug_assertions) {
@@ -987,6 +1055,7 @@ async fn main() -> Result<()> {
             .build(),
     );
     let inputs = match args.get(2).map(String::as_str) {
+        Some("bround") => return bround_bench(&ctx, output).await,
         Some(mode @ ("generic-in" | "generic-in-check")) => {
             return generic_in_bench(
                 &ctx,

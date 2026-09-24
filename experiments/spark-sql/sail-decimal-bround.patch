@@ -1,0 +1,398 @@
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_bround.rs
+@@ -1,15 +1,19 @@
++// Modified from Sail v0.7.1 for the Delta reader experiment. See experiments/spark-sql/UPSTREAM.md in the host repository.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::array::{Array, as_primitive_array};
+ use datafusion::arrow::compute::binary;
+ use datafusion::arrow::datatypes::{
+-    DataType, Field, FieldRef, Float32Type, Float64Type, Int32Type, Int64Type,
++    DataType, Decimal128Type, DecimalType, Field, FieldRef, Float32Type, Float64Type, Int32Type,
++    Int64Type,
+ };
+-use datafusion_common::{Result, ScalarValue, internal_err};
++use datafusion::arrow::error::ArrowError;
++use datafusion_common::{Result, ScalarValue, exec_err, internal_err};
+ use datafusion_expr::{
+     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+ };
+ 
++use super::utils::decimal::round_decimal_base;
+ use crate::error::{
+     invalid_arg_count_exec_err, unsupported_data_type_exec_err, unsupported_data_types_exec_err,
+ };
+@@ -66,10 +70,21 @@
+         }
+         let t = &arg_types[0];
+         let data_type = match t {
+-            DataType::Float64
+-            | DataType::Float32
+-            | DataType::Decimal128(_, _)
+-            | DataType::Decimal256(_, _) => DataType::Float64,
++            DataType::Decimal128(precision, scale) => {
++                let target = match args.scalar_arguments.get(1) {
++                    None if arg_types.len() == 1 => 0,
++                    Some(Some(ScalarValue::Int32(value))) => value.unwrap_or(0),
++                    _ => {
++                        return exec_err!(
++                            "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] BROUND scale must be a constant INT"
++                        );
++                    }
++                };
++                let (precision, scale) =
++                    round_decimal_base(i32::from(*precision), i32::from(*scale), target, true);
++                DataType::Decimal128(precision, scale)
++            }
++            DataType::Float64 | DataType::Float32 | DataType::Decimal256(_, _) => DataType::Float64,
+             DataType::Int32 => DataType::Int32,
+             DataType::Int64 => DataType::Int64,
+             _ => {
+@@ -84,6 +99,13 @@
+     }
+ 
+     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
++        if args
++            .args
++            .first()
++            .is_some_and(|x| matches!(x.data_type(), DataType::Decimal128(_, _)))
++        {
++            return decimal_bround(&args);
++        }
+         let ScalarFunctionArgs { args, .. } = args;
+         let args: Vec<ColumnarValue> = match args.len() {
+             1 => vec![
+@@ -106,17 +128,6 @@
+                 args.len(),
+             ));
+         };
+-        if let (
+-            ColumnarValue::Scalar(ScalarValue::Decimal128(Some(val), _, scale)),
+-            ColumnarValue::Scalar(ScalarValue::Int32(Some(d))),
+-        ) = (x, d)
+-        {
+-            let float_val = *val as f64 / 10f64.powi(*scale as i32);
+-            let scale = 10f64.powi(*d);
+-            let rounded = (float_val * scale).round() / scale;
+-            return Ok(ColumnarValue::Scalar(ScalarValue::Float64(Some(rounded))));
+-        }
+-
+         let len = match (x, d) {
+             (ColumnarValue::Array(arr), _) => arr.len(),
+             (_, ColumnarValue::Array(arr)) => arr.len(),
+@@ -172,13 +183,6 @@
+                 })?;
+                 Ok(ColumnarValue::Array(Arc::new(result)))
+             }
+-
+-            // fallback
+-            (DataType::Decimal128(_, _), DataType::Int32) => Err(unsupported_data_types_exec_err(
+-                "spark_bround",
+-                "vectorized Decimal128",
+-                &[x_array.data_type().clone(), d_array.data_type().clone()],
+-            )),
+ 
+             (dt_x, dt_d) => Err(unsupported_data_types_exec_err(
+                 "spark_bround",
+@@ -247,6 +251,88 @@
+     }
+ }
+ 
++fn decimal_bround(args: &ScalarFunctionArgs) -> Result<ColumnarValue> {
++    if !(1..=2).contains(&args.args.len()) {
++        return Err(invalid_arg_count_exec_err(
++            "spark_bround",
++            (1, 2),
++            args.args.len(),
++        ));
++    }
++    let DataType::Decimal128(_, input_scale) = args.args[0].data_type() else {
++        return internal_err!("BROUND requires Decimal128 input");
++    };
++    if input_scale < 0 {
++        return exec_err!("BROUND does not support negative Decimal input scale");
++    }
++    let DataType::Decimal128(precision, output_scale) = *args.return_field.data_type() else {
++        return internal_err!("BROUND requires a Decimal128 return field");
++    };
++    let target = match args.args.get(1) {
++        None => 0,
++        Some(ColumnarValue::Scalar(ScalarValue::Int32(Some(value)))) => *value,
++        Some(ColumnarValue::Scalar(ScalarValue::Int32(None))) => {
++            return Ok(ColumnarValue::Scalar(ScalarValue::Decimal128(
++                None,
++                precision,
++                output_scale,
++            )));
++        }
++        _ => {
++            return exec_err!(
++                "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] BROUND scale must be a constant INT"
++            );
++        }
++    };
++    // Powers are computed once per batch. All valid Decimal128 payloads fit below 10^38.
++    let drop = (i64::from(input_scale) - i64::from(target)).max(0);
++    let factor = (drop <= 38).then(|| 10_i128.pow(drop as u32));
++    let multiplier = if factor.is_some() && target < 0 {
++        10_i128.pow((i64::from(output_scale) - i64::from(target)) as u32)
++    } else {
++        1
++    };
++    let round = |value: i128| -> std::result::Result<i128, ArrowError> {
++        if value != 0 && drop > i64::from(i32::MAX) {
++            return Err(ArrowError::ComputeError(
++                "Underflow: BROUND scale difference exceeds INT".into(),
++            ));
++        }
++        let Some(factor) = factor else { return Ok(0) };
++        let quotient = value / factor;
++        let remainder = (value % factor).abs();
++        let half = factor / 2;
++        let increment =
++            factor > 1 && (remainder > half || (remainder == half && quotient % 2 != 0));
++        let rounded = (quotient + if increment { value.signum() } else { 0 }) * multiplier;
++        Decimal128Type::validate_decimal_precision(rounded, precision, output_scale).map_err(
++            |e| {
++                ArrowError::ComputeError(format!(
++                    "[NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION] {e}"
++                ))
++            },
++        )?;
++        Ok(rounded)
++    };
++    match &args.args[0] {
++        ColumnarValue::Scalar(ScalarValue::Decimal128(value, _, _)) => Ok(ColumnarValue::Scalar(
++            ScalarValue::Decimal128(value.map(round).transpose()?, precision, output_scale),
++        )),
++        ColumnarValue::Array(array) => {
++            let input = as_primitive_array::<Decimal128Type>(array);
++            let output = if target >= i32::from(input_scale) {
++                input.clone()
++            } else {
++                input.try_unary::<_, Decimal128Type, _>(round)?
++            };
++            Ok(ColumnarValue::Array(Arc::new(
++                output.with_precision_and_scale(precision, output_scale)?,
++            )))
++        }
++        _ => internal_err!("BROUND requires Decimal128 input"),
++    }
++}
++
+ fn round_half_to_even_f64(value: f64) -> f64 {
+     let rounded: f64 = value.trunc();
+     let fraction: f64 = value - rounded;
+@@ -301,6 +387,114 @@
+     use datafusion_common::config::ConfigOptions;
+ 
+     use super::*;
++
++    #[test]
++    fn decimal_bround_scalars_arrays_slices_and_nulls() -> Result<()> {
++        use datafusion::arrow::array::Decimal128Array;
++        use datafusion::arrow::buffer::NullBuffer;
++
++        let udf = SparkBRound::new();
++        let invoke = |input: ColumnarValue, target: i32, precision: u8, scale: i8| {
++            let fields = vec![
++                Arc::new(Field::new("x", input.data_type(), true)),
++                Arc::new(Field::new("d", DataType::Int32, false)),
++            ];
++            let target = ScalarValue::Int32(Some(target));
++            let result = udf.return_field_from_args(ReturnFieldArgs {
++                arg_fields: &fields,
++                scalar_arguments: &[None, Some(&target)],
++            })?;
++            assert_eq!(result.data_type(), &DataType::Decimal128(precision, scale));
++            assert!(result.is_nullable());
++            let number_rows = match &input {
++                ColumnarValue::Array(a) => a.len(),
++                _ => 1,
++            };
++            udf.invoke_with_args(ScalarFunctionArgs {
++                args: vec![input, ColumnarValue::Scalar(target)],
++                arg_fields: fields,
++                number_rows,
++                return_field: result,
++                config_options: Arc::new(ConfigOptions::default()),
++            })
++        };
++        for (value, expected) in [
++            (2345, 234),
++            (2355, 236),
++            (-2345, -234),
++            (-2355, -236),
++            (2344, 234),
++            (2346, 235),
++            (9995, 1000),
++            (0, 0),
++        ] {
++            let result = invoke(
++                ColumnarValue::Scalar(ScalarValue::Decimal128(Some(value), 6, 3)),
++                2,
++                6,
++                2,
++            )?;
++            let ColumnarValue::Scalar(result) = result else {
++                panic!("expected scalar")
++            };
++            assert_eq!(result, ScalarValue::Decimal128(Some(expected), 6, 2));
++        }
++        let array = Decimal128Array::new(
++            vec![9999, 2345, 2355, i128::MAX, -2345, -2355, 9999].into(),
++            Some(NullBuffer::from(vec![
++                true, true, true, false, true, true, true,
++            ])),
++        )
++        .with_precision_and_scale(6, 3)?;
++        for (offset, len, expected) in [
++            (
++                1,
++                5,
++                vec![Some(234), Some(236), None, Some(-234), Some(-236)],
++            ),
++            (3, 1, vec![None]),
++            (3, 0, vec![]),
++        ] {
++            let result = invoke(
++                ColumnarValue::Array(Arc::new(array.slice(offset, len))),
++                2,
++                6,
++                2,
++            )?
++            .into_array(len)?;
++            assert_eq!(
++                as_primitive_array::<Decimal128Type>(&result)
++                    .iter()
++                    .collect::<Vec<_>>(),
++                expected
++            );
++        }
++        // An overflowing hidden payload must not turn a NULL row into an error.
++        let array = Decimal128Array::new(
++            vec![10_i128.pow(38) - 1, 25, 35].into(),
++            Some(NullBuffer::from(vec![false, true, true])),
++        )
++        .with_precision_and_scale(38, 0)?;
++        let result = invoke(ColumnarValue::Array(Arc::new(array)), -1, 38, 0)?.into_array(3)?;
++        assert_eq!(
++            as_primitive_array::<Decimal128Type>(&result)
++                .iter()
++                .collect::<Vec<_>>(),
++            vec![None, Some(20), Some(40)]
++        );
++        assert!(
++            invoke(
++                ColumnarValue::Scalar(ScalarValue::Decimal128(Some(10_i128.pow(38) - 1), 38, 0)),
++                -1,
++                38,
++                0
++            )
++            .unwrap_err()
++            .to_string()
++            .contains("[NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION]")
++        );
++        Ok(())
++    }
+ 
+     #[test]
+     fn test_bround_null_propagation() -> Result<()> {
+diff --git a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -1591,6 +1591,81 @@
+     ))
+ }
+ 
++fn spark_bround(input: ScalarFunctionInput, udf: &ScalarUDF) -> PlanResult<Expr> {
++    let ScalarFunctionInput {
++        mut arguments,
++        function_context,
++    } = input;
++    if !(1..=2).contains(&arguments.len())
++        || !matches!(
++            arguments[0].get_type(function_context.schema)?,
++            DataType::Decimal128(_, _)
++        )
++    {
++        return Ok(udf.call(arguments));
++    }
++    let target = arguments.get(1).cloned().unwrap_or_else(|| lit(0_i32));
++    let target_type = target.get_type(function_context.schema)?;
++    if !(target_type.is_numeric() || target_type.is_null() || target_type.is_string()) {
++        return Err(PlanError::invalid(
++            "[DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE] BROUND scale requires INT",
++        ));
++    }
++    if target.is_volatile() || !target.column_refs().is_empty() {
++        return Err(PlanError::invalid(
++            "[DATATYPE_MISMATCH.NON_FOLDABLE_INPUT] BROUND scale must be constant",
++        ));
++    }
++    let value = match target {
++        Expr::Literal(value, _) => value,
++        expression => {
++            let context = SimplifyContextBuilder::default()
++                .with_schema(function_context.schema.clone())
++                .build();
++            let coerced = ExprSimplifier::new(context).coerce(expression, function_context.schema)?;
++            LiteralEvaluator::new().evaluate(&coerced)?
++        }
++    };
++    let ansi = function_context.plan_config.ansi_mode;
++    let target = if value.is_null() {
++        ScalarValue::Int32(None)
++    } else {
++        match &value {
++            ScalarValue::Int64(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
++            ScalarValue::Float32(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
++            ScalarValue::Float64(Some(v)) if !ansi => ScalarValue::Int32(Some(*v as i32)),
++            ScalarValue::Decimal128(Some(v), _, s) if !ansi && *s >= 0 => {
++                ScalarValue::Int32(Some((v / 10_i128.pow(*s as u32)) as i32))
++            }
++            _ if target_type.is_string() && !ansi => {
++                use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInt32;
++                LiteralEvaluator::new().evaluate(
++                    &ScalarUDF::from(SparkCastStringToInt32::new()).call(vec![lit(value)]),
++                )?
++            }
++            _ => value.cast_to(&DataType::Int32).map_err(|e| {
++                PlanError::invalid(format!(
++                    "[{}] BROUND scale: {e}",
++                    if target_type.is_string() {
++                        "CAST_INVALID_INPUT"
++                    } else {
++                        "CAST_OVERFLOW"
++                    },
++                ))
++            })?,
++        }
++    };
++    let null_scale = target.is_null();
++    let call = udf.call(vec![arguments.remove(0), lit(target)]);
++    if null_scale {
++        // Spark checks NULL scale before evaluating the input, even when it would fail.
++        return Ok(lit(ScalarValue::try_from(
++            &call.get_type(function_context.schema)?,
++        )?));
++    }
++    Ok(call)
++}
++
+ fn spark_decimal_round(input: ScalarFunctionInput) -> PlanResult<Expr> {
+     let ScalarFunctionInput {
+         mut arguments,
+@@ -1655,7 +1730,10 @@
+         ("atan2", F::binary(double2(expr_fn::atan2))),
+         ("atanh", F::unary(double(expr_fn::atanh))),
+         ("bin", F::custom(spark_bin)),
+-        ("bround", F::udf(SparkBRound::new())),
++        ("bround", {
++            let udf = ScalarUDF::from(SparkBRound::new());
++            F::custom(move |input| spark_bround(input, &udf))
++        }),
+         ("cbrt", F::unary(double(expr_fn::cbrt))),
+         ("ceil", F::custom(|arg| ceil_floor(arg, "ceil"))),
+         ("ceiling", F::custom(|arg| ceil_floor(arg, "ceil"))),
