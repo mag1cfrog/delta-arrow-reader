@@ -267,11 +267,6 @@ impl DirectParquetReader {
         let metadata = self
             .load_parquet_metadata(&object.path, object.file_size, &mut reader, &reader_options)
             .await?;
-        let metadata = ArrowReaderMetadata::try_new(metadata, reader_options.clone())
-            .boxed()
-            .context(DataFileReadSnafu {
-                reason: "parquet_read_setup_failed",
-            })?;
         let metadata = metadata_with_decode_schema(
             metadata,
             reader_options,
@@ -535,26 +530,30 @@ fn predicate_root_index(
 }
 
 fn metadata_with_decode_schema(
-    metadata: ArrowReaderMetadata,
+    metadata: Arc<ParquetMetaData>,
     reader_options: ArrowReaderOptions,
     use_view_types: bool,
 ) -> ParquetResult<ArrowReaderMetadata> {
-    let parquet_schema = metadata.parquet_schema();
+    let parquet_schema = metadata.file_metadata().schema_descr();
     let has_int96 = parquet_schema
         .columns()
         .iter()
         .any(|column| column.physical_type() == PhysicalType::INT96);
     if !has_int96 && !use_view_types {
-        return Ok(metadata);
+        return ArrowReaderMetadata::try_new(metadata, reader_options);
     }
 
     // Hints describe the complete file schema, not the projected Delta schema.
-    // Row numbers are added by reader_options and must not be supplied twice.
-    let mut fields = metadata
+    // Infer it without generated columns. A physical field can itself carry a
+    // RowNumber extension, so its metadata cannot identify a generated column.
+    let file_metadata = ArrowReaderMetadata::try_new(
+        Arc::clone(&metadata),
+        reader_options.clone().with_virtual_columns(Vec::new())?,
+    )?;
+    let mut fields = file_metadata
         .schema()
         .fields()
         .iter()
-        .filter(|field| !field.has_valid_extension_type::<RowNumber>())
         .cloned()
         .collect::<Vec<_>>();
     if has_int96 {
@@ -569,16 +568,14 @@ fn metadata_with_decode_schema(
             ));
         }
     }
-    let file_schema = Schema::new_with_metadata(fields, metadata.schema().metadata().clone());
+    let file_schema = Schema::new_with_metadata(fields, file_metadata.schema().metadata().clone());
     let schema = if use_view_types {
         schema_with_view_types(&file_schema)
     } else {
         Arc::new(file_schema)
     };
-    ArrowReaderMetadata::try_new(
-        Arc::clone(metadata.metadata()),
-        reader_options.with_schema(schema),
-    )
+    // Apply the requested virtual columns only after the physical decode schema is ready.
+    ArrowReaderMetadata::try_new(metadata, reader_options.with_schema(schema))
 }
 
 /// In a full file schema, Arrow leaves and Parquet columns have the same depth-first order.

@@ -726,10 +726,7 @@ async fn int96_nested_struct_list_and_map_preserve_values_and_nulls() -> TestRes
 #[test]
 fn int96_decode_schema_preserves_embedded_hints_and_field_identity() -> TestResult {
     use super::{ORIGINAL_ROW_INDEX_COLUMN, arrow_reader_options, metadata_with_decode_schema};
-    use parquet::arrow::{
-        PARQUET_FIELD_ID_META_KEY, add_encoded_arrow_schema_to_metadata,
-        arrow_reader::ArrowReaderMetadata,
-    };
+    use parquet::arrow::{PARQUET_FIELD_ID_META_KEY, add_encoded_arrow_schema_to_metadata};
     use parquet::file::reader::{FileReader, SerializedFileReader};
 
     let parquet_schema = Arc::new(parse_message_type(&format!(
@@ -807,11 +804,8 @@ fn int96_decode_schema_preserves_embedded_hints_and_field_identity() -> TestResu
                 .close()?;
                 let file = SerializedFileReader::new(bytes::Bytes::from(bytes))?;
                 let options = arrow_reader_options(false, false)?;
-                let metadata = ArrowReaderMetadata::try_new(
-                    Arc::new(file.metadata().clone()),
-                    options.clone(),
-                )?;
-                let converted = metadata_with_decode_schema(metadata, options, false)?;
+                let converted =
+                    metadata_with_decode_schema(Arc::new(file.metadata().clone()), options, false)?;
                 assert_eq!(
                     converted.schema().as_ref(),
                     &schema(TimeUnit::Microsecond),
@@ -860,5 +854,137 @@ async fn int96_disjoint_ranges_preserve_values_and_original_indexes() -> TestRes
     assert!(nonempty_ranges > 1);
     assert_eq!(indexes, (0..EPOCH_NANOS.len() as i64).collect::<Vec<_>>());
     assert_eq!(timestamp_values(&batches, "ts"), expected_micros());
+    Ok(())
+}
+
+#[tokio::test]
+async fn int96_physical_row_number_extension_is_not_a_generated_column() -> TestResult {
+    use arrow::datatypes::Int64Type as ArrowInt64;
+    use parquet::arrow::{RowNumber, add_encoded_arrow_schema_to_metadata};
+
+    for with_int96 in [false, true] {
+        let source_schema = Schema::new(vec![
+            Field::new(
+                "ts",
+                DataType::Timestamp(
+                    if with_int96 {
+                        TimeUnit::Nanosecond
+                    } else {
+                        TimeUnit::Microsecond
+                    },
+                    None,
+                ),
+                false,
+            ),
+            Field::new("stored_row_number", DataType::Int64, false).with_extension_type(RowNumber),
+            Field::new("label", DataType::Utf8, false),
+        ]);
+        let timestamp_type = if with_int96 {
+            "INT96 ts"
+        } else {
+            "INT64 ts (TIMESTAMP(MICROS,false))"
+        };
+        let parquet_schema = Arc::new(parse_message_type(&format!(
+            "message m {{
+        REQUIRED {timestamp_type};
+        REQUIRED INT64 stored_row_number;
+        REQUIRED BINARY label (STRING);
+    }}"
+        ))?);
+        let mut properties = WriterProperties::default();
+        add_encoded_arrow_schema_to_metadata(&source_schema, &mut properties);
+        let mut bytes = Vec::new();
+        let mut writer =
+            SerializedFileWriter::new(&mut bytes, parquet_schema, Arc::new(properties))?;
+        let mut group = writer.next_row_group()?;
+        if with_int96 {
+            let timestamps = EPOCH_NANOS[..3]
+                .iter()
+                .map(|n| int96(n.unwrap()))
+                .collect::<Vec<_>>();
+            write_column::<Int96Type>(&mut group, &timestamps, None, None)?;
+        } else {
+            let timestamps = expected_micros()[..3]
+                .iter()
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>();
+            write_column::<Int64Type>(&mut group, &timestamps, None, None)?;
+        }
+        // These are persisted values, distinct from the generated row indexes 0, 1, 2.
+        write_column::<Int64Type>(&mut group, &[900, 700, 800], None, None)?;
+        write_column::<ByteArrayType>(&mut group, &vec![ByteArray::from("value"); 3], None, None)?;
+        group.close()?;
+        writer.close()?;
+        let root = TestDir::new("int96-stored-row-number")?;
+        fs::write(root.path().join("part.parquet"), &bytes)?;
+        let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
+        let task = task("part.parquet", Some(bytes.len() as u64))?;
+        for views in [false, true] {
+            let schema = Arc::new(Schema::new(vec![
+                Field::new(
+                    "ts",
+                    DataType::Timestamp(TimeUnit::Microsecond, None),
+                    false,
+                ),
+                Field::new("stored_row_number", DataType::Int64, false),
+                Field::new(
+                    "label",
+                    if views {
+                        DataType::Utf8View
+                    } else {
+                        DataType::Utf8
+                    },
+                    false,
+                ),
+            ]));
+            for include_original_row_index in [false, true] {
+                let mut stream = reader
+                    .open_physical_parquet_stream(
+                        &task,
+                        &schema,
+                        PhysicalParquetStreamOptions {
+                            include_original_row_index,
+                            output_batch_size_rows: Some(2),
+                            ..Default::default()
+                        },
+                    )
+                    .await?;
+                let mut batches = Vec::new();
+                let mut generated = Vec::new();
+                while let Some((batch, original)) =
+                    stream.next_batch_with_original_row_indexes().await?
+                {
+                    assert_eq!(original.is_some(), include_original_row_index);
+                    if let Some(original) = original {
+                        generated.extend_from_slice(original.values());
+                    }
+                    batches.push(batch);
+                }
+                assert_eq!(timestamp_values(&batches, "ts"), expected_micros()[..3]);
+                let stored = batches
+                    .iter()
+                    .flat_map(|batch| {
+                        batch
+                            .column_by_name("stored_row_number")
+                            .unwrap()
+                            .as_primitive::<ArrowInt64>()
+                            .values()
+                            .iter()
+                            .copied()
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(stored, [900, 700, 800]);
+                assert_eq!(
+                    generated,
+                    if include_original_row_index {
+                        vec![0, 1, 2]
+                    } else {
+                        vec![]
+                    }
+                );
+            }
+        }
+    }
     Ok(())
 }
