@@ -1,0 +1,253 @@
+{"id": "ties_0_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_0_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_1_literal", "sql": "SELECT BROUND(CAST('2.355' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_1_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('2.355' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_2_literal", "sql": "SELECT BROUND(CAST('-2.345' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_2_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('-2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_3_literal", "sql": "SELECT BROUND(CAST('-2.355' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_3_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('-2.355' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_4_literal", "sql": "SELECT BROUND(CAST('2.344' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_4_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('2.344' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_5_literal", "sql": "SELECT BROUND(CAST('2.346' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_5_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('2.346' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_6_literal", "sql": "SELECT BROUND(CAST('-2.344' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_6_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('-2.344' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_7_literal", "sql": "SELECT BROUND(CAST('-2.346' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_7_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('-2.346' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_8_literal", "sql": "SELECT BROUND(CAST('0' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_8_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_9_literal", "sql": "SELECT BROUND(CAST('9.995' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_9_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('9.995' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "ties_10_literal", "sql": "SELECT BROUND(CAST('-9.995' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "ties_10_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('-9.995' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_1_literal", "sql": "SELECT BROUND(CAST('0.5' AS DECIMAL(1,1)), 0) AS r", "batch_size": 2, "control": false}
+{"id": "precision_1_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('0.5' AS DECIMAL(1,1))),(CAST(NULL AS DECIMAL(1,1))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_2_literal", "sql": "SELECT BROUND(CAST('0.05' AS DECIMAL(2,2)), 1) AS r", "batch_size": 2, "control": false}
+{"id": "precision_2_column", "sql": "SELECT BROUND(a, 1) AS r FROM VALUES (CAST('0.05' AS DECIMAL(2,2))),(CAST(NULL AS DECIMAL(2,2))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_3_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(3,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_3_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(3,3))),(CAST(NULL AS DECIMAL(3,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_4_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(4,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_4_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(4,3))),(CAST(NULL AS DECIMAL(4,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_5_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(5,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_5_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(5,3))),(CAST(NULL AS DECIMAL(5,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_6_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_6_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_7_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(7,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_7_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(7,3))),(CAST(NULL AS DECIMAL(7,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_8_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(8,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_8_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(8,3))),(CAST(NULL AS DECIMAL(8,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_9_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(9,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_9_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(9,3))),(CAST(NULL AS DECIMAL(9,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_10_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(10,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_10_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(10,3))),(CAST(NULL AS DECIMAL(10,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_11_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(11,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_11_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(11,3))),(CAST(NULL AS DECIMAL(11,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_12_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(12,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_12_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(12,3))),(CAST(NULL AS DECIMAL(12,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_13_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(13,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_13_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(13,3))),(CAST(NULL AS DECIMAL(13,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_14_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(14,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_14_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(14,3))),(CAST(NULL AS DECIMAL(14,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_15_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(15,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_15_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(15,3))),(CAST(NULL AS DECIMAL(15,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_16_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(16,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_16_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(16,3))),(CAST(NULL AS DECIMAL(16,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_17_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(17,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_17_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(17,3))),(CAST(NULL AS DECIMAL(17,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_18_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(18,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_18_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(18,3))),(CAST(NULL AS DECIMAL(18,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_19_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(19,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_19_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(19,3))),(CAST(NULL AS DECIMAL(19,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_20_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(20,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_20_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(20,3))),(CAST(NULL AS DECIMAL(20,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_21_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(21,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_21_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(21,3))),(CAST(NULL AS DECIMAL(21,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_22_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(22,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_22_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(22,3))),(CAST(NULL AS DECIMAL(22,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_23_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(23,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_23_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(23,3))),(CAST(NULL AS DECIMAL(23,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_24_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(24,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_24_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(24,3))),(CAST(NULL AS DECIMAL(24,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_25_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(25,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_25_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(25,3))),(CAST(NULL AS DECIMAL(25,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_26_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(26,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_26_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(26,3))),(CAST(NULL AS DECIMAL(26,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_27_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(27,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_27_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(27,3))),(CAST(NULL AS DECIMAL(27,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_28_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(28,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_28_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(28,3))),(CAST(NULL AS DECIMAL(28,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_29_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(29,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_29_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(29,3))),(CAST(NULL AS DECIMAL(29,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_30_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(30,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_30_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(30,3))),(CAST(NULL AS DECIMAL(30,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_31_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(31,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_31_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(31,3))),(CAST(NULL AS DECIMAL(31,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_32_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(32,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_32_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(32,3))),(CAST(NULL AS DECIMAL(32,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_33_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(33,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_33_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(33,3))),(CAST(NULL AS DECIMAL(33,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_34_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(34,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_34_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(34,3))),(CAST(NULL AS DECIMAL(34,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_35_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(35,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_35_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(35,3))),(CAST(NULL AS DECIMAL(35,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_36_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(36,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_36_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(36,3))),(CAST(NULL AS DECIMAL(36,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_37_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(37,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_37_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(37,3))),(CAST(NULL AS DECIMAL(37,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "precision_38_literal", "sql": "SELECT BROUND(CAST('0.005' AS DECIMAL(38,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "precision_38_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.005' AS DECIMAL(38,3))),(CAST(NULL AS DECIMAL(38,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_0_-1_literal", "sql": "SELECT BROUND(CAST('5' AS DECIMAL(38,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "scale_0_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('5' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_0_0_literal", "sql": "SELECT BROUND(CAST('5' AS DECIMAL(38,0)), 0) AS r", "batch_size": 2, "control": false}
+{"id": "scale_0_0_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('5' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_0_0_literal", "sql": "SELECT BROUND(CAST('5' AS DECIMAL(38,0)), 0) AS r", "batch_size": 2, "control": false}
+{"id": "scale_0_0_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('5' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_0_1_literal", "sql": "SELECT BROUND(CAST('5' AS DECIMAL(38,0)), 1) AS r", "batch_size": 2, "control": false}
+{"id": "scale_0_1_column", "sql": "SELECT BROUND(a, 1) AS r FROM VALUES (CAST('5' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_0_2147483647_literal", "sql": "SELECT BROUND(CAST('5' AS DECIMAL(38,0)), 2147483647) AS r", "batch_size": 2, "control": false}
+{"id": "scale_0_2147483647_column", "sql": "SELECT BROUND(a, 2147483647) AS r FROM VALUES (CAST('5' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_1_-1_literal", "sql": "SELECT BROUND(CAST('0.5' AS DECIMAL(38,1)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "scale_1_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('0.5' AS DECIMAL(38,1))),(CAST(NULL AS DECIMAL(38,1))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_1_0_literal", "sql": "SELECT BROUND(CAST('0.5' AS DECIMAL(38,1)), 0) AS r", "batch_size": 2, "control": false}
+{"id": "scale_1_0_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('0.5' AS DECIMAL(38,1))),(CAST(NULL AS DECIMAL(38,1))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_1_1_literal", "sql": "SELECT BROUND(CAST('0.5' AS DECIMAL(38,1)), 1) AS r", "batch_size": 2, "control": false}
+{"id": "scale_1_1_column", "sql": "SELECT BROUND(a, 1) AS r FROM VALUES (CAST('0.5' AS DECIMAL(38,1))),(CAST(NULL AS DECIMAL(38,1))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_1_2_literal", "sql": "SELECT BROUND(CAST('0.5' AS DECIMAL(38,1)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "scale_1_2_column", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST('0.5' AS DECIMAL(38,1))),(CAST(NULL AS DECIMAL(38,1))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_1_2147483647_literal", "sql": "SELECT BROUND(CAST('0.5' AS DECIMAL(38,1)), 2147483647) AS r", "batch_size": 2, "control": false}
+{"id": "scale_1_2147483647_column", "sql": "SELECT BROUND(a, 2147483647) AS r FROM VALUES (CAST('0.5' AS DECIMAL(38,1))),(CAST(NULL AS DECIMAL(38,1))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_18_-1_literal", "sql": "SELECT BROUND(CAST('0.000000000000000005' AS DECIMAL(38,18)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "scale_18_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('0.000000000000000005' AS DECIMAL(38,18))),(CAST(NULL AS DECIMAL(38,18))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_18_0_literal", "sql": "SELECT BROUND(CAST('0.000000000000000005' AS DECIMAL(38,18)), 0) AS r", "batch_size": 2, "control": false}
+{"id": "scale_18_0_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('0.000000000000000005' AS DECIMAL(38,18))),(CAST(NULL AS DECIMAL(38,18))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_18_18_literal", "sql": "SELECT BROUND(CAST('0.000000000000000005' AS DECIMAL(38,18)), 18) AS r", "batch_size": 2, "control": false}
+{"id": "scale_18_18_column", "sql": "SELECT BROUND(a, 18) AS r FROM VALUES (CAST('0.000000000000000005' AS DECIMAL(38,18))),(CAST(NULL AS DECIMAL(38,18))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_18_19_literal", "sql": "SELECT BROUND(CAST('0.000000000000000005' AS DECIMAL(38,18)), 19) AS r", "batch_size": 2, "control": false}
+{"id": "scale_18_19_column", "sql": "SELECT BROUND(a, 19) AS r FROM VALUES (CAST('0.000000000000000005' AS DECIMAL(38,18))),(CAST(NULL AS DECIMAL(38,18))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_18_2147483647_literal", "sql": "SELECT BROUND(CAST('0.000000000000000005' AS DECIMAL(38,18)), 2147483647) AS r", "batch_size": 2, "control": false}
+{"id": "scale_18_2147483647_column", "sql": "SELECT BROUND(a, 2147483647) AS r FROM VALUES (CAST('0.000000000000000005' AS DECIMAL(38,18))),(CAST(NULL AS DECIMAL(38,18))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_28_-1_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000005' AS DECIMAL(38,28)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "scale_28_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('0.0000000000000000000000000005' AS DECIMAL(38,28))),(CAST(NULL AS DECIMAL(38,28))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_28_0_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000005' AS DECIMAL(38,28)), 0) AS r", "batch_size": 2, "control": false}
+{"id": "scale_28_0_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('0.0000000000000000000000000005' AS DECIMAL(38,28))),(CAST(NULL AS DECIMAL(38,28))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_28_28_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000005' AS DECIMAL(38,28)), 28) AS r", "batch_size": 2, "control": false}
+{"id": "scale_28_28_column", "sql": "SELECT BROUND(a, 28) AS r FROM VALUES (CAST('0.0000000000000000000000000005' AS DECIMAL(38,28))),(CAST(NULL AS DECIMAL(38,28))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_28_29_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000005' AS DECIMAL(38,28)), 29) AS r", "batch_size": 2, "control": false}
+{"id": "scale_28_29_column", "sql": "SELECT BROUND(a, 29) AS r FROM VALUES (CAST('0.0000000000000000000000000005' AS DECIMAL(38,28))),(CAST(NULL AS DECIMAL(38,28))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_28_2147483647_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000005' AS DECIMAL(38,28)), 2147483647) AS r", "batch_size": 2, "control": false}
+{"id": "scale_28_2147483647_column", "sql": "SELECT BROUND(a, 2147483647) AS r FROM VALUES (CAST('0.0000000000000000000000000005' AS DECIMAL(38,28))),(CAST(NULL AS DECIMAL(38,28))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_37_-1_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "scale_37_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37))),(CAST(NULL AS DECIMAL(38,37))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_37_0_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37)), 0) AS r", "batch_size": 2, "control": false}
+{"id": "scale_37_0_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37))),(CAST(NULL AS DECIMAL(38,37))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_37_37_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37)), 37) AS r", "batch_size": 2, "control": false}
+{"id": "scale_37_37_column", "sql": "SELECT BROUND(a, 37) AS r FROM VALUES (CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37))),(CAST(NULL AS DECIMAL(38,37))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_37_38_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37)), 38) AS r", "batch_size": 2, "control": false}
+{"id": "scale_37_38_column", "sql": "SELECT BROUND(a, 38) AS r FROM VALUES (CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37))),(CAST(NULL AS DECIMAL(38,37))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_37_2147483647_literal", "sql": "SELECT BROUND(CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37)), 2147483647) AS r", "batch_size": 2, "control": false}
+{"id": "scale_37_2147483647_column", "sql": "SELECT BROUND(a, 2147483647) AS r FROM VALUES (CAST('0.0000000000000000000000000000000000005' AS DECIMAL(38,37))),(CAST(NULL AS DECIMAL(38,37))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_38_-1_literal", "sql": "SELECT BROUND(CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "scale_38_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38))),(CAST(NULL AS DECIMAL(38,38))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_38_0_literal", "sql": "SELECT BROUND(CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38)), 0) AS r", "batch_size": 2, "control": false}
+{"id": "scale_38_0_column", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38))),(CAST(NULL AS DECIMAL(38,38))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_38_38_literal", "sql": "SELECT BROUND(CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38)), 38) AS r", "batch_size": 2, "control": false}
+{"id": "scale_38_38_column", "sql": "SELECT BROUND(a, 38) AS r FROM VALUES (CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38))),(CAST(NULL AS DECIMAL(38,38))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_38_39_literal", "sql": "SELECT BROUND(CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38)), 39) AS r", "batch_size": 2, "control": false}
+{"id": "scale_38_39_column", "sql": "SELECT BROUND(a, 39) AS r FROM VALUES (CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38))),(CAST(NULL AS DECIMAL(38,38))) t(a)", "batch_size": 2, "control": false}
+{"id": "scale_38_2147483647_literal", "sql": "SELECT BROUND(CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38)), 2147483647) AS r", "batch_size": 2, "control": false}
+{"id": "scale_38_2147483647_column", "sql": "SELECT BROUND(a, 2147483647) AS r FROM VALUES (CAST('0.00000000000000000000000000000000000005' AS DECIMAL(38,38))),(CAST(NULL AS DECIMAL(38,38))) t(a)", "batch_size": 2, "control": false}
+{"id": "negative_25_literal", "sql": "SELECT BROUND(CAST('25' AS DECIMAL(6,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "negative_25_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('25' AS DECIMAL(6,0))),(CAST(NULL AS DECIMAL(6,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "negative_35_literal", "sql": "SELECT BROUND(CAST('35' AS DECIMAL(6,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "negative_35_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('35' AS DECIMAL(6,0))),(CAST(NULL AS DECIMAL(6,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "negative_-25_literal", "sql": "SELECT BROUND(CAST('-25' AS DECIMAL(6,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "negative_-25_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('-25' AS DECIMAL(6,0))),(CAST(NULL AS DECIMAL(6,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "negative_-35_literal", "sql": "SELECT BROUND(CAST('-35' AS DECIMAL(6,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "negative_-35_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('-35' AS DECIMAL(6,0))),(CAST(NULL AS DECIMAL(6,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "negative_99_literal", "sql": "SELECT BROUND(CAST('99' AS DECIMAL(6,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "negative_99_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('99' AS DECIMAL(6,0))),(CAST(NULL AS DECIMAL(6,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "negative_-99_literal", "sql": "SELECT BROUND(CAST('-99' AS DECIMAL(6,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "negative_-99_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('-99' AS DECIMAL(6,0))),(CAST(NULL AS DECIMAL(6,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_-38_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), -38) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_-38_column", "sql": "SELECT BROUND(a, -38) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-38_literal", "sql": "SELECT BROUND(CAST('0' AS DECIMAL(38,0)), -38) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-38_column", "sql": "SELECT BROUND(a, -38) AS r FROM VALUES (CAST('0' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_-39_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), -39) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_-39_column", "sql": "SELECT BROUND(a, -39) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-39_literal", "sql": "SELECT BROUND(CAST('0' AS DECIMAL(38,0)), -39) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-39_column", "sql": "SELECT BROUND(a, -39) AS r FROM VALUES (CAST('0' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_-255_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), -255) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_-255_column", "sql": "SELECT BROUND(a, -255) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-255_literal", "sql": "SELECT BROUND(CAST('0' AS DECIMAL(38,0)), -255) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-255_column", "sql": "SELECT BROUND(a, -255) AS r FROM VALUES (CAST('0' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_-256_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), -256) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_-256_column", "sql": "SELECT BROUND(a, -256) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-256_literal", "sql": "SELECT BROUND(CAST('0' AS DECIMAL(38,0)), -256) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-256_column", "sql": "SELECT BROUND(a, -256) AS r FROM VALUES (CAST('0' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_-1000_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), -1000) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_-1000_column", "sql": "SELECT BROUND(a, -1000) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-1000_literal", "sql": "SELECT BROUND(CAST('0' AS DECIMAL(38,0)), -1000) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-1000_column", "sql": "SELECT BROUND(a, -1000) AS r FROM VALUES (CAST('0' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_-2147483648_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), -2147483648) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_-2147483648_column", "sql": "SELECT BROUND(a, -2147483648) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-2147483648_literal", "sql": "SELECT BROUND(CAST('0' AS DECIMAL(38,0)), -2147483648) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-2147483648_column", "sql": "SELECT BROUND(a, -2147483648) AS r FROM VALUES (CAST('0' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_-2147483647_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), -2147483647) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_-2147483647_column", "sql": "SELECT BROUND(a, -2147483647) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-2147483647_literal", "sql": "SELECT BROUND(CAST('0' AS DECIMAL(38,0)), -2147483647) AS r", "batch_size": 2, "control": false}
+{"id": "extreme_zero_-2147483647_column", "sql": "SELECT BROUND(a, -2147483647) AS r FROM VALUES (CAST('0' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_0_-1_literal", "sql": "SELECT BROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_0_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_0_-38_literal", "sql": "SELECT BROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), -38) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_0_-38_column", "sql": "SELECT BROUND(a, -38) AS r FROM VALUES (CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_0_-39_literal", "sql": "SELECT BROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), -39) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_0_-39_column", "sql": "SELECT BROUND(a, -39) AS r FROM VALUES (CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_1_-1_literal", "sql": "SELECT BROUND(CAST('-99999999999999999999999999999999999999' AS DECIMAL(38,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_1_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('-99999999999999999999999999999999999999' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_1_-38_literal", "sql": "SELECT BROUND(CAST('-99999999999999999999999999999999999999' AS DECIMAL(38,0)), -38) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_1_-38_column", "sql": "SELECT BROUND(a, -38) AS r FROM VALUES (CAST('-99999999999999999999999999999999999999' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_1_-39_literal", "sql": "SELECT BROUND(CAST('-99999999999999999999999999999999999999' AS DECIMAL(38,0)), -39) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_1_-39_column", "sql": "SELECT BROUND(a, -39) AS r FROM VALUES (CAST('-99999999999999999999999999999999999999' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_2_-1_literal", "sql": "SELECT BROUND(CAST('50000000000000000000000000000000000000' AS DECIMAL(38,0)), -1) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_2_-1_column", "sql": "SELECT BROUND(a, -1) AS r FROM VALUES (CAST('50000000000000000000000000000000000000' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_2_-38_literal", "sql": "SELECT BROUND(CAST('50000000000000000000000000000000000000' AS DECIMAL(38,0)), -38) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_2_-38_column", "sql": "SELECT BROUND(a, -38) AS r FROM VALUES (CAST('50000000000000000000000000000000000000' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "overflow_2_-39_literal", "sql": "SELECT BROUND(CAST('50000000000000000000000000000000000000' AS DECIMAL(38,0)), -39) AS r", "batch_size": 2, "control": false}
+{"id": "overflow_2_-39_column", "sql": "SELECT BROUND(a, -39) AS r FROM VALUES (CAST('50000000000000000000000000000000000000' AS DECIMAL(38,0))),(CAST(NULL AS DECIMAL(38,0))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_default_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3))) AS r", "batch_size": 2, "control": false}
+{"id": "argument_default_column", "sql": "SELECT BROUND(a) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_null_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), NULL) AS r", "batch_size": 2, "control": false}
+{"id": "argument_null_column", "sql": "SELECT BROUND(a, NULL) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_typed_null_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), CAST(NULL AS INT)) AS r", "batch_size": 2, "control": false}
+{"id": "argument_typed_null_column", "sql": "SELECT BROUND(a, CAST(NULL AS INT)) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_tiny_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), CAST(2 AS TINYINT)) AS r", "batch_size": 2, "control": false}
+{"id": "argument_tiny_column", "sql": "SELECT BROUND(a, CAST(2 AS TINYINT)) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_small_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), CAST(2 AS SMALLINT)) AS r", "batch_size": 2, "control": false}
+{"id": "argument_small_column", "sql": "SELECT BROUND(a, CAST(2 AS SMALLINT)) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_big_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), 2L) AS r", "batch_size": 2, "control": false}
+{"id": "argument_big_column", "sql": "SELECT BROUND(a, 2L) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_decimal_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), 2.9) AS r", "batch_size": 2, "control": false}
+{"id": "argument_decimal_column", "sql": "SELECT BROUND(a, 2.9) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_double_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), CAST(2.9 AS DOUBLE)) AS r", "batch_size": 2, "control": false}
+{"id": "argument_double_column", "sql": "SELECT BROUND(a, CAST(2.9 AS DOUBLE)) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_string_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), '2') AS r", "batch_size": 2, "control": false}
+{"id": "argument_string_column", "sql": "SELECT BROUND(a, '2') AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_invalid_string_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), 'bad') AS r", "batch_size": 2, "control": false}
+{"id": "argument_invalid_string_column", "sql": "SELECT BROUND(a, 'bad') AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_bool_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), true) AS r", "batch_size": 2, "control": false}
+{"id": "argument_bool_column", "sql": "SELECT BROUND(a, true) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_large_big_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), 2147483648L) AS r", "batch_size": 2, "control": false}
+{"id": "argument_large_big_column", "sql": "SELECT BROUND(a, 2147483648L) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_folded_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), 1+1) AS r", "batch_size": 2, "control": false}
+{"id": "argument_folded_column", "sql": "SELECT BROUND(a, 1+1) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "argument_volatile_literal", "sql": "SELECT BROUND(CAST('2.345' AS DECIMAL(6,3)), rand()) AS r", "batch_size": 2, "control": false}
+{"id": "argument_volatile_column", "sql": "SELECT BROUND(a, rand()) AS r FROM VALUES (CAST('2.345' AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": false}
+{"id": "column_scale", "sql": "SELECT BROUND(a, d) AS r FROM VALUES (CAST(2.345 AS DECIMAL(6,3)),2) t(a,d)", "batch_size": 2, "control": false}
+{"id": "null_input", "sql": "SELECT BROUND(CAST(NULL AS DECIMAL(6,3)), 2) AS r", "batch_size": 2, "control": false}
+{"id": "empty", "sql": "SELECT BROUND(a, 2) AS r FROM VALUES (CAST(2.345 AS DECIMAL(6,3))) t(a) WHERE false", "batch_size": 2, "control": false}
+{"id": "null_scale_skips_input", "sql": "SELECT BROUND(CAST(1 AS DECIMAL(6,3))/CAST(0 AS DECIMAL(6,3)), NULL) AS r", "batch_size": 2, "control": false}
+{"id": "control_integer", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS INT)),(CAST(3.5 AS INT)),(CAST(NULL AS INT)) t(a)", "batch_size": 2, "control": true}
+{"id": "control_bigint", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS BIGINT)),(CAST(3.5 AS BIGINT)),(CAST(NULL AS BIGINT)) t(a)", "batch_size": 2, "control": true}
+{"id": "control_double", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS DOUBLE)),(CAST(3.5 AS DOUBLE)),(CAST(NULL AS DOUBLE)) t(a)", "batch_size": 2, "control": true}
+{"id": "control_float", "sql": "SELECT BROUND(a, 0) AS r FROM VALUES (CAST(2.5 AS FLOAT)),(CAST(3.5 AS FLOAT)),(CAST(NULL AS FLOAT)) t(a)", "batch_size": 2, "control": true}
+{"id": "control_round", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(2.345 AS DECIMAL(6,3))),(CAST(-2.345 AS DECIMAL(6,3))),(CAST(NULL AS DECIMAL(6,3))) t(a)", "batch_size": 2, "control": true}

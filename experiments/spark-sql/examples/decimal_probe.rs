@@ -39,6 +39,13 @@ async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
         Err(e) => return Ok(json!({"status":"planning_error","error":e.to_string()})),
     };
     let logical_plan = named.plan.display_indent().to_string();
+    let logical_nullable = named
+        .plan
+        .schema()
+        .fields()
+        .iter()
+        .map(|f| f.is_nullable())
+        .collect::<Vec<_>>();
     let mut physical_plan = None;
     let executed: datafusion::common::Result<_> = async {
         let frame = ctx.execute_logical_plan(named.plan).await?;
@@ -88,7 +95,8 @@ async fn observe(case: &Value, include_physical_plan: bool) -> Result<Value> {
             );
         }
     }
-    let mut actual = json!({"status":"ok","types":types,"rows":rows,"logical_plan":logical_plan});
+    let mut actual = json!({"status":"ok","types":types,"rows":rows,"logical_plan":logical_plan,
+        "logical_nullable":logical_nullable,"physical_nullable":schema.fields().iter().map(|f| f.is_nullable()).collect::<Vec<_>>()});
     if let Some(plan) = physical_plan {
         actual["physical_plan"] = json!(plan);
     }

@@ -6,6 +6,8 @@ The [decimal division patch evaluation](DECIMAL_DIVISION.md) tests a small subse
 
 The [ANSI integer overflow fix](INTEGER_OVERFLOW.md) establishes the optional correctness baseline for signed-integer arithmetic. Its remaining performance costs are separate follow-up work; the default checkpoint below remains unchanged.
 
+The [Decimal BROUND fix](DECIMAL_BROUND.md) adds exact HALF_EVEN Decimal128 rounding and result types on the selected optional runtime. Its focused Spark comparison, existing regressions and bounded cost check remain separate from the default checkpoint below.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
