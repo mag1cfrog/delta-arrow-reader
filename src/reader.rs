@@ -35,7 +35,9 @@ use futures_util::Stream;
 use snafu::ResultExt;
 
 use self::{
-    planning::{DeltaScanPartitionTargetOptions, DeltaScanPlan, plan_scan},
+    planning::{
+        DeltaScanPartitionTargetOptions, DeltaScanPlan, build_physical_row_predicate, plan_scan,
+    },
     predicate::{evaluate_predicate, referenced_columns, validate_predicate},
     scheduling::{
         DeltaScanScheduler, FileAdmissionDecision, FileAdmissionPolicy, FileBatchStream,
@@ -46,7 +48,7 @@ use self::{
 use crate::{
     DeltaProtocol, DeltaReaderError,
     delta::{
-        kernel::{kernel_pruning_is_exact, kernel_pruning_predicate},
+        kernel::{DeltaKernelPredicate, kernel_pruning_predicate, kernel_row_predicate},
         protocol::validate_protocol,
         snapshot::{
             ArrowTableSnapshot, KernelTableSnapshot, load_delta_table_snapshot,
@@ -473,14 +475,18 @@ impl<'table> DeltaScanBuilder<'table> {
             .as_ref()
             .map(referenced_columns)
             .unwrap_or_default();
-        let enforce_physical_predicate_rows =
-            predicate.as_ref().is_some_and(kernel_pruning_is_exact);
+        let row_predicate = predicate
+            .as_ref()
+            .filter(|_| backend == ParquetReaderBackend::Direct)
+            .and_then(|predicate| kernel_row_predicate(predicate, snapshot.partition_columns()));
         let kernel_predicate = predicate.as_ref().and_then(kernel_pruning_predicate);
         let include_stats = kernel_predicate.is_some();
         let execution_options = self.execution_options;
         let target_partitions = self.target_partitions;
         let result = tokio::task::spawn_blocking(move || {
-            plan_scan(
+            // Reuse the already-mapped predicate for ordinary data-only filters.
+            let same_predicate = row_predicate.is_some() && row_predicate == kernel_predicate;
+            let plan = plan_scan(
                 snapshot.as_ref(),
                 projection.as_deref(),
                 &hidden_columns,
@@ -491,7 +497,20 @@ impl<'table> DeltaScanBuilder<'table> {
                     explicit_target_partitions: target_partitions,
                     datafusion_target_partitions: None,
                 },
-            )
+            )?;
+            let physical_row_predicate = if plan.partitions.is_empty() {
+                None
+            } else if same_predicate {
+                plan.physical_predicate.clone()
+            } else {
+                build_physical_row_predicate(
+                    snapshot.as_ref(),
+                    projection.as_deref(),
+                    &hidden_columns,
+                    row_predicate,
+                )?
+            };
+            Ok((plan, physical_row_predicate))
         })
         .await
         .boxed()
@@ -501,7 +520,7 @@ impl<'table> DeltaScanBuilder<'table> {
         .and_then(|result| result);
 
         match result {
-            Ok(plan) => {
+            Ok((plan, physical_row_predicate)) => {
                 trace_planning_completed(
                     snapshot_version,
                     backend,
@@ -512,7 +531,7 @@ impl<'table> DeltaScanBuilder<'table> {
                     plan: Arc::new(plan),
                     predicate,
                     limit: self.limit,
-                    enforce_physical_predicate_rows,
+                    physical_row_predicate,
                 })
             }
             Err(error) => {
@@ -548,7 +567,7 @@ pub struct DeltaScan {
     plan: Arc<DeltaScanPlan>,
     predicate: Option<DeltaPredicate>,
     limit: Option<usize>,
-    enforce_physical_predicate_rows: bool,
+    physical_row_predicate: Option<DeltaKernelPredicate>,
 }
 
 impl DeltaScan {
@@ -579,13 +598,9 @@ impl DeltaScan {
             let scheduler = DeltaScanScheduler::new(Arc::clone(&self.plan));
             let admission: FileAdmissionPolicy<_> = Arc::new(|_| Ok(FileAdmissionDecision::Admit));
             let executor = match backend {
-                ParquetReaderBackend::Direct => direct_parquet_executor(
-                    &self.plan,
-                    None,
-                    self.enforce_physical_predicate_rows
-                        .then(|| self.plan.physical_predicate.clone())
-                        .flatten(),
-                ),
+                ParquetReaderBackend::Direct => {
+                    direct_parquet_executor(&self.plan, None, self.physical_row_predicate)
+                }
                 ParquetReaderBackend::DeltaKernel => delta_kernel_executor(&self.plan),
             };
             scheduler.partition_streams(admission, executor)

@@ -323,6 +323,35 @@ impl RealParquetDeltaTable {
         )
     }
 
+    /// Covers all nine true/false/null combinations of partition and data equality.
+    pub(crate) fn new_with_partition_truth_table(
+        name: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let files = [None, Some("us-west"), Some("us-east")]
+            .into_iter()
+            .enumerate()
+            .map(|(index, region)| {
+                let first = i32::try_from(index * 3 + 1)?;
+                let mut file = file_batch(
+                    index + 1,
+                    vec![
+                        (first, None),
+                        (first + 1, Some("a")),
+                        (first + 2, Some("z")),
+                    ],
+                )?;
+                file.partition_values_json = serde_json::json!({"region": region}).to_string();
+                Ok(file)
+            })
+            .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+        Self::new_with_protocol_metadata_file_batches(
+            name,
+            PROTOCOL_JSON,
+            PARTITIONED_METADATA_JSON,
+            files,
+        )
+    }
+
     /// Creates a local Delta table with two partition columns and four real
     /// Parquet files. One file matches both partition values, two files match
     /// only one value each, and one file matches neither value.

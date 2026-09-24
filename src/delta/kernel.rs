@@ -322,20 +322,32 @@ impl KernelScanFileMetadata {
 
 #[allow(dead_code)]
 pub(crate) fn kernel_pruning_predicate(predicate: &DeltaPredicate) -> Option<DeltaKernelPredicate> {
-    convert_predicate(predicate)
+    convert_predicate(predicate, &[])
         .map(|converted| DeltaKernelPredicate(Arc::new(converted.predicate)))
 }
 
-pub(crate) fn kernel_pruning_is_exact(predicate: &DeltaPredicate) -> bool {
-    convert_predicate(predicate).is_some_and(|converted| converted.exact)
+/// Converts the data-only portion usable before partition values are materialized.
+/// The complete logical predicate must still be evaluated on the resulting rows.
+pub(crate) fn kernel_row_predicate(
+    predicate: &DeltaPredicate,
+    partition_columns: &[String],
+) -> Option<DeltaKernelPredicate> {
+    convert_predicate(predicate, partition_columns)
+        // Constants need no data columns; file pruning and the logical filter handle them.
+        .filter(|converted| !converted.predicate.references().is_empty())
+        .map(|converted| DeltaKernelPredicate(Arc::new(converted.predicate)))
 }
 
 struct ConvertedPredicate {
     predicate: Predicate,
+    // Dropping an AND term makes this false; OR and NOT require complete children.
     exact: bool,
 }
 
-fn convert_predicate(predicate: &DeltaPredicate) -> Option<ConvertedPredicate> {
+fn convert_predicate(
+    predicate: &DeltaPredicate,
+    excluded_columns: &[String],
+) -> Option<ConvertedPredicate> {
     let exact = |predicate| {
         Some(ConvertedPredicate {
             predicate,
@@ -344,6 +356,13 @@ fn convert_predicate(predicate: &DeltaPredicate) -> Option<ConvertedPredicate> {
     };
 
     match predicate {
+        DeltaPredicate::Compare { column, .. }
+        | DeltaPredicate::IsNull { column }
+        | DeltaPredicate::IsNotNull { column }
+            if excluded_columns.contains(column) =>
+        {
+            None
+        }
         DeltaPredicate::Constant(value) => exact(Predicate::literal(*value)),
         DeltaPredicate::Compare { column, op, value } => {
             let column = Expression::Column(ColumnName::new([column.as_str()]));
@@ -365,11 +384,11 @@ fn convert_predicate(predicate: &DeltaPredicate) -> Option<ConvertedPredicate> {
         DeltaPredicate::IsNotNull { column } => exact(Predicate::is_not_null(Expression::Column(
             ColumnName::new([column.as_str()]),
         ))),
-        DeltaPredicate::And(children) => convert_and(children),
+        DeltaPredicate::And(children) => convert_and(children, excluded_columns),
         DeltaPredicate::Or(children) => {
             let converted = children
                 .iter()
-                .map(convert_predicate)
+                .map(|child| convert_predicate(child, excluded_columns))
                 .collect::<Option<Vec<_>>>()?;
             converted
                 .iter()
@@ -382,7 +401,7 @@ fn convert_predicate(predicate: &DeltaPredicate) -> Option<ConvertedPredicate> {
                 })
         }
         DeltaPredicate::Not(child) => {
-            let child = convert_predicate(child)?;
+            let child = convert_predicate(child, excluded_columns)?;
             child.exact.then(|| ConvertedPredicate {
                 predicate: Predicate::not(child.predicate),
                 exact: true,
@@ -391,7 +410,10 @@ fn convert_predicate(predicate: &DeltaPredicate) -> Option<ConvertedPredicate> {
     }
 }
 
-fn convert_and(children: &[DeltaPredicate]) -> Option<ConvertedPredicate> {
+fn convert_and(
+    children: &[DeltaPredicate],
+    excluded_columns: &[String],
+) -> Option<ConvertedPredicate> {
     if children.is_empty() {
         return Some(ConvertedPredicate {
             predicate: Predicate::literal(true),
@@ -402,7 +424,7 @@ fn convert_and(children: &[DeltaPredicate]) -> Option<ConvertedPredicate> {
     let mut exact = true;
     let converted = children
         .iter()
-        .filter_map(|child| match convert_predicate(child) {
+        .filter_map(|child| match convert_predicate(child, excluded_columns) {
             Some(converted) => {
                 exact &= converted.exact;
                 Some(converted.predicate)
@@ -917,14 +939,110 @@ mod tests {
     }
 
     #[test]
-    fn row_filtering_requires_exact_kernel_conversion() {
+    fn row_filtering_excludes_partition_columns_and_keeps_safe_conjuncts() {
         let safe = compare("id", DeltaComparison::Gt, DeltaScalar::Int32(1));
         let unsupported = compare("score", DeltaComparison::NotEq, DeltaScalar::Float64(0.0));
+        let partition = compare("part", DeltaComparison::Eq, DeltaScalar::Int32(1));
+        let excluded = ["part".to_owned()];
+        let expected = kernel_pruning_predicate(&safe);
+        assert_eq!(kernel_row_predicate(&safe, &excluded), expected);
+        assert!(kernel_row_predicate(&partition, &excluded).is_none());
+        let mixed = DeltaPredicate::And(vec![safe.clone(), partition, unsupported]);
+        assert_eq!(kernel_row_predicate(&mixed, &excluded), expected);
+        for predicate in [
+            DeltaPredicate::Or(vec![mixed.clone(), safe]),
+            DeltaPredicate::Not(Box::new(mixed)),
+            DeltaPredicate::IsNull {
+                column: "part".into(),
+            },
+            DeltaPredicate::IsNotNull {
+                column: "part".into(),
+            },
+        ] {
+            assert!(kernel_row_predicate(&predicate, &excluded).is_none());
+        }
+    }
 
-        assert!(kernel_pruning_is_exact(&safe));
-        assert!(!kernel_pruning_is_exact(&DeltaPredicate::And(vec![
-            safe,
-            unsupported
-        ])));
+    #[test]
+    fn data_row_predicates_never_remove_logical_matches() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let batch = RecordBatch::try_from_iter([
+            ("id", Arc::new(Int32Array::from_iter_values(0..9)) as _),
+            (
+                "part",
+                Arc::new(Int32Array::from(vec![
+                    None,
+                    None,
+                    None,
+                    Some(1),
+                    Some(1),
+                    Some(1),
+                    Some(2),
+                    Some(2),
+                    Some(2),
+                ])) as _,
+            ),
+            (
+                "score",
+                Arc::new(Float64Array::from(vec![
+                    None,
+                    Some(-0.0),
+                    Some(0.0),
+                    None,
+                    Some(-0.0),
+                    Some(0.0),
+                    None,
+                    Some(-0.0),
+                    Some(0.0),
+                ])) as _,
+            ),
+        ])?;
+        let excluded = ["part".to_owned()];
+        let atoms = [
+            DeltaPredicate::Constant(false),
+            DeltaPredicate::Constant(true),
+            compare("part", DeltaComparison::Eq, DeltaScalar::Int32(1)),
+            DeltaPredicate::IsNull {
+                column: "part".into(),
+            },
+            compare("id", DeltaComparison::Gt, DeltaScalar::Int32(4)),
+            compare("score", DeltaComparison::NotEq, DeltaScalar::Float64(0.0)),
+        ];
+        let mut predicates = atoms.to_vec();
+        for left in &atoms {
+            for right in &atoms {
+                let and = DeltaPredicate::And(vec![left.clone(), right.clone()]);
+                let or = DeltaPredicate::Or(vec![left.clone(), right.clone()]);
+                predicates.extend([
+                    and.clone(),
+                    or.clone(),
+                    DeltaPredicate::Not(Box::new(and.clone())),
+                    DeltaPredicate::Not(Box::new(or.clone())),
+                    DeltaPredicate::Or(vec![and, atoms[4].clone()]),
+                    DeltaPredicate::And(vec![or, atoms[4].clone()]),
+                ]);
+            }
+        }
+        for predicate in predicates {
+            let expected = evaluate_predicate(&batch, &predicate)?;
+            let candidates = match kernel_row_predicate(&predicate, &excluded) {
+                Some(row_predicate) => {
+                    assert!(
+                        !row_predicate
+                            .as_ref()
+                            .references()
+                            .contains(&ColumnName::new(["part"]))
+                    );
+                    apply_kernel_pruning(&batch, &row_predicate)?
+                }
+                None => batch.clone(),
+            };
+            assert_eq!(
+                evaluate_predicate(&candidates, &predicate)?,
+                expected,
+                "{predicate:?}"
+            );
+        }
+        Ok(())
     }
 }
