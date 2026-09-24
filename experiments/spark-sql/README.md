@@ -26,6 +26,8 @@ The [integer phase-counter follow-up](INTEGER_PHASE_COUNTERS.md) reuses existing
 
 The [checked-addition alternatives](CHECKED_ADD_ALTERNATIVES.md) retain two rejected overflow-reduction prototypes, including early-error costs and unaffected controls. Neither changes the selected runtime.
 
+The [fixed-block follow-ups](FIXED_CHECKED_BLOCKS.md) remove those prototypes' extra success allocation but still fail the performance gate. Their source, compiler diagnostics and all original measurements are retained.
+
 `inputs.json` pins Apache Spark 4.2.0 and Sail 0.7.1, session settings, table schemas and data. Both engines receive the same explicit schemas, including nested nullability. The runner verifies those schemas and captures input rows for comparison. This avoids differences caused by each engine inferring its own schema from SQL VALUES.
 
 `queries.jsonl` contains 116 stable query IDs. The existing `seed_*` fields retain earlier expectations. Ordered queries compare sequences; unordered queries compare row multisets with duplicates preserved. Partition-dependent cases compare input IDs and check nonnegative partition IDs, partition-local ordering and unique/nonnegative monotonic IDs. SORT BY and monotonic-ID queries expose partition IDs for those checks. The `known_boundary` marker records earlier findings and does not suppress oracle differences.
