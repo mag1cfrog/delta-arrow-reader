@@ -5,7 +5,7 @@ use std::sync::Arc;
 use arrow::{
     compute::cast,
     datatypes::{DataType, FieldRef, Schema, SchemaRef},
-    record_batch::RecordBatch,
+    record_batch::{RecordBatch, RecordBatchOptions},
 };
 use snafu::ResultExt;
 
@@ -57,11 +57,15 @@ pub(crate) fn align_batch_to_logical_schema(
         .context(DataFileReadSnafu {
             reason: "backend_logical_schema_mismatch",
         })?;
-    RecordBatch::try_new(Arc::clone(logical_schema), columns)
-        .boxed()
-        .context(DataFileReadSnafu {
-            reason: "backend_logical_schema_mismatch",
-        })
+    RecordBatch::try_new_with_options(
+        Arc::clone(logical_schema),
+        columns,
+        &RecordBatchOptions::new().with_row_count(Some(batch.num_rows())),
+    )
+    .boxed()
+    .context(DataFileReadSnafu {
+        reason: "backend_logical_schema_mismatch",
+    })
 }
 
 pub(crate) fn schema_with_view_types(schema: &Schema) -> SchemaRef {
@@ -182,10 +186,35 @@ mod tests {
     use arrow::{
         array::{Array, DictionaryArray, StringArray, StringViewArray},
         datatypes::{DataType, Field, Schema, UInt16Type},
-        record_batch::RecordBatch,
+        record_batch::{RecordBatch, RecordBatchOptions},
     };
 
     use super::{align_batch_to_logical_schema, schema_uses_view_types, schema_with_view_types};
+
+    #[test]
+    fn empty_projection_alignment_preserves_rows_and_target_metadata()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let source_schema = Arc::new(Schema::empty());
+        let target_schema = Arc::new(Schema::empty().with_metadata(HashMap::from([(
+            "schema-key".to_owned(),
+            "target-value".to_owned(),
+        )])));
+        for rows in [0, 1, 17] {
+            let source = RecordBatch::try_new_with_options(
+                Arc::clone(&source_schema),
+                vec![],
+                &RecordBatchOptions::new().with_row_count(Some(rows)),
+            )?;
+            for schema in [&source_schema, &target_schema] {
+                let aligned =
+                    align_batch_to_logical_schema(source.clone(), schema, "schema mismatch")?;
+                assert_eq!(aligned.schema(), *schema);
+                assert_eq!(aligned.num_columns(), 0);
+                assert_eq!(aligned.num_rows(), rows);
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn view_schema_recurses_and_preserves_schema_contract() {
