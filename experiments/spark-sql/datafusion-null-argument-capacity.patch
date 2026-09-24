@@ -1,0 +1,13 @@
+diff --git a/src/scalar_function.rs b/src/scalar_function.rs
+--- a/src/scalar_function.rs
++++ b/src/scalar_function.rs
+@@ -326,7 +326,8 @@
+                     } else {
+                         filter(array.as_ref(), &mask)?
+                     };
+-                    let mut args = vec![ColumnarValue::Array(selected_first)];
++                    let mut args = Vec::with_capacity(self.args.len());
++                    args.push(ColumnarValue::Array(selected_first));
+                     for expr in &self.args[1..] {
+                         args.push(expr.evaluate(&selected)?);
+                     }
