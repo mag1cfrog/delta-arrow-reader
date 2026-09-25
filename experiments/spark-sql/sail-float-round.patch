@@ -1,0 +1,202 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -32,6 +32,7 @@
+ use sail_function::scalar::math::spark_decimal_round::SparkDecimalRound;
+ use sail_function::scalar::math::spark_div::SparkIntervalDiv;
+ use sail_function::scalar::math::spark_integer_round::SparkIntegerRound;
++use sail_function::scalar::math::spark_float_round::SparkFloatRound;
+ use sail_function::scalar::math::spark_negative::SparkNegative;
+ use sail_function::scalar::math::spark_pmod::SparkPmod;
+ use sail_function::scalar::math::spark_signum::SparkSignum;
+@@ -1725,7 +1726,9 @@
+             try_cast(value, DataType::Float64)
+         };
+     }
+-    let call = if value_type.is_signed_integer() {
++    let call = if value_type == DataType::Float32 {
++        ScalarUDF::from(SparkFloatRound::new(scale)).call(vec![value])
++    } else if value_type.is_signed_integer() {
+         ScalarUDF::from(SparkIntegerRound::new(
+             scale,
+             function_context.plan_config.ansi_mode,
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/mod.rs
+@@ -24,3 +24,5 @@
+ pub mod spark_uniform;
+ mod utils;
+ pub mod xorshift;
++
++pub mod spark_float_round;
+--- /dev/null
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/math/spark_float_round.rs
+@@ -0,0 +1,170 @@
++// FLOAT HALF_UP follows the retained FLOAT BROUND boundary guards, with
++// Float64 intermediates and ties rounded away from zero.
++use std::sync::Arc;
++
++use datafusion::arrow::array::{AsArray, Float32Array};
++use datafusion::arrow::datatypes::{DataType, Float32Type};
++use datafusion_common::{Result, ScalarValue, internal_err};
++use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility};
++
++#[derive(Debug, PartialEq, Eq, Hash)]
++pub struct SparkFloatRound {
++    signature: Signature,
++    scale: Option<i32>,
++}
++
++impl SparkFloatRound {
++    pub fn new(scale: Option<i32>) -> Self {
++        Self {
++            signature: Signature::exact(vec![DataType::Float32], Volatility::Immutable),
++            scale,
++        }
++    }
++}
++
++impl ScalarUDFImpl for SparkFloatRound {
++    fn name(&self) -> &str {
++        "spark_float_round"
++    }
++
++    fn signature(&self) -> &Signature {
++        &self.signature
++    }
++
++    fn return_type(&self, types: &[DataType]) -> Result<DataType> {
++        match types {
++            [DataType::Float32] => Ok(DataType::Float32),
++            _ => internal_err!("FLOAT ROUND requires one FLOAT input"),
++        }
++    }
++
++    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
++        let [value] = args.args.as_slice() else {
++            return internal_err!("FLOAT ROUND requires one input");
++        };
++        let Some(scale) = self.scale else {
++            return Ok(ColumnarValue::Scalar(ScalarValue::Float32(None)));
++        };
++        let factor = 10_f64.powi(scale.clamp(-39, 45));
++        let round = |value: f32| {
++            if !value.is_finite() {
++                return value;
++            }
++            // Every finite Float32 is smaller than half of 10^39. At scale
++            // 45 the rounding error is below half the smallest Float32 ULP.
++            // ponytail: JVM BigDecimal capacity/INT-scale errors remain under
++            // the reference review; these guards express numerical rounding.
++            if value == 0.0 || scale <= -39 {
++                return 0.0;
++            }
++            if scale >= 45 {
++                return value;
++            }
++            // Normalize rounded zero to Spark BigDecimal's positive zero.
++            ((f64::from(value) * factor).round() / factor) as f32 + 0.0
++        };
++        match value {
++            ColumnarValue::Scalar(ScalarValue::Float32(value)) => Ok(ColumnarValue::Scalar(
++                ScalarValue::Float32(value.map(round)),
++            )),
++            ColumnarValue::Array(array) if array.data_type() == &DataType::Float32 => {
++                let result: Float32Array = array.as_primitive::<Float32Type>().unary(round);
++                Ok(ColumnarValue::Array(Arc::new(result)))
++            }
++            _ => internal_err!("FLOAT ROUND requires a FLOAT input"),
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use datafusion::arrow::array::Array;
++    use datafusion::arrow::datatypes::Field;
++    use datafusion_common::config::ConfigOptions;
++
++    #[test]
++    fn half_up_float_boundaries_scalars_slices_and_nulls() -> Result<()> {
++        let invoke = |input: ColumnarValue, scale: Option<i32>| {
++            let len = match &input {
++                ColumnarValue::Array(a) => a.len(),
++                _ => 1,
++            };
++            let result = SparkFloatRound::new(scale).invoke_with_args(ScalarFunctionArgs {
++                args: vec![input],
++                arg_fields: vec![Arc::new(Field::new("a", DataType::Float32, true))],
++                number_rows: len,
++                return_field: Arc::new(Field::new("r", DataType::Float32, true)),
++                config_options: Arc::new(ConfigOptions::default()),
++            })?;
++            result.into_array(len)
++        };
++        for (value, scale, expected) in [
++            (2.675, 2, 2.67),
++            (-2.675, 2, -2.67),
++            (2.5, 0, 3.0),
++            (-2.5, 0, -3.0),
++            (1.25, 1, 1.3),
++            (-1.25, 1, -1.3),
++            (25.0, -1, 30.0),
++            (-25.0, -1, -30.0),
++            (f32::from_bits(0x3EFFFFFF), 0, 0.0),
++            (f32::from_bits(0x3F000001), 0, 1.0),
++            (-0.0, 1000, 0.0),
++            (-0.25, 0, 0.0),
++            (f32::from_bits(1), 44, 0.0),
++            (f32::from_bits(1), 45, f32::from_bits(1)),
++            (-f32::from_bits(1), 45, -f32::from_bits(1)),
++            (f32::MAX, -39, 0.0),
++            (f32::MAX, 1000, f32::MAX),
++            (f32::INFINITY, -1000, f32::INFINITY),
++            (f32::NEG_INFINITY, 1000, f32::NEG_INFINITY),
++        ] {
++            let actual = invoke(
++                ColumnarValue::Scalar(ScalarValue::Float32(Some(value))),
++                Some(scale),
++            )?;
++            assert_eq!(
++                actual.as_primitive::<Float32Type>().value(0).to_bits(),
++                expected.to_bits()
++            );
++        }
++        let input = Float32Array::from(vec![
++            Some(99.0),
++            Some(2.675),
++            None,
++            Some(-2.675),
++            Some(-0.0),
++            Some(f32::NAN),
++            Some(f32::INFINITY),
++        ]);
++        let expected = [
++            Some(99.0_f32),
++            Some(2.67),
++            None,
++            Some(-2.67),
++            Some(0.0),
++            Some(f32::NAN),
++            Some(f32::INFINITY),
++        ];
++        for (offset, len) in [(1, 6), (2, 1), (2, 0)] {
++            let result = invoke(
++                ColumnarValue::Array(Arc::new(input.slice(offset, len))),
++                Some(2),
++            )?;
++            let actual = result.as_primitive::<Float32Type>();
++            assert_eq!(actual.len(), len);
++            for (a, b) in actual.iter().zip(&expected[offset..offset + len]) {
++                match (a, b) {
++                    (None, None) => {}
++                    (Some(a), Some(b)) if b.is_nan() => assert!(a.is_nan()),
++                    (Some(a), Some(b)) => assert_eq!(a.to_bits(), b.to_bits()),
++                    _ => panic!("ROUND changed validity"),
++                }
++            }
++        }
++        let nulls = invoke(ColumnarValue::Array(Arc::new(input)), None)?;
++        assert_eq!(nulls.null_count(), nulls.len());
++        Ok(())
++    }
++}
