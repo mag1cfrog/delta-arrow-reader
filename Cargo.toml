@@ -91,7 +91,7 @@ bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 datafusion = { version = "54.1.0", default-features = false, features = ["sql"], optional = true }
 delta_kernel = { version = "=0.25.0", default-features = false, features = ["arrow", "internal-api"] }
-delta_kernel_default_engine = { version = "=0.25.0", default-features = false, features = ["arrow", "native-tls"] }
+delta_kernel_default_engine = { version = "=0.25.0", default-features = false, features = ["arrow", "rustls"] }
 futures-util = "0.3"
 object_store = "0.13.2"
 parquet = { version = "58.3.0", features = ["async", "object_store"] }
