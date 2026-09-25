@@ -1,0 +1,69 @@
+--- a/lexical-parse-float/src/number.rs
++++ b/lexical-parse-float/src/number.rs
+@@ -38,11 +38,8 @@
+     #[inline(always)]
+     pub fn is_fast_path<F: RawFloat, const FORMAT: u128>(&self) -> bool {
+         let format = NumberFormat::<FORMAT> {};
+-        debug_assert!(
+-            format.mantissa_radix() == format.exponent_base(),
+-            "fast path requires same radix"
+-        );
+-        F::min_exponent_fast_path(format.radix()) <= self.exponent
++        format.mantissa_radix() == format.exponent_base()
++            && F::min_exponent_fast_path(format.radix()) <= self.exponent
+             && self.exponent <= F::max_exponent_disguised_fast_path(format.radix())
+             && self.mantissa <= F::MAX_MANTISSA_FAST_PATH
+             && !self.many_digits
+@@ -63,10 +60,10 @@
+     #[allow(clippy::let_unit_value)] // reason = "intentional ASM drop for X87 FPUs"
+     pub fn try_fast_path<F: RawFloat, const FORMAT: u128>(&self) -> Option<F> {
+         let format = NumberFormat::<FORMAT> {};
+-        debug_assert!(
+-            format.mantissa_radix() == format.exponent_base(),
+-            "fast path requires same radix"
+-        );
++        // Adapted from rust-lexical PR 172: the fast path requires equal bases.
++        if format.mantissa_radix() != format.exponent_base() {
++            return None;
++        }
+         // The fast path crucially depends on arithmetic being rounded to the correct
+         // number of bits without any intermediate rounding. On x86 (without SSE
+         // or SSE2) this requires the precision of the x87 FPU stack to be
+--- a/lexical-parse-float/src/binary.rs
++++ b/lexical-parse-float/src/binary.rs
+@@ -34,6 +34,12 @@
+         mant: 0,
+         exp: 0,
+     };
++
++    // An all-zero mantissa stays zero even when its exponent is out of range.
++    // Avoid shifting by 64 and passing zero through overflow rounding.
++    if num.mantissa == 0 && !num.many_digits {
++        return fp_zero;
++    }
+ 
+     // Normalize our mantissa for simpler results.
+     let ctlz = num.mantissa.leading_zeros();
+@@ -51,8 +57,8 @@
+     // disambiguate the float. If it's even, and exactly halfway, this
+     // step fails.
+     let power2 = shared::calculate_power2::<F, FORMAT>(num.exponent, ctlz);
+-    if -power2 + 1 >= 64 {
+-        // Have more than 63 bits below the minimum exponent, must be 0.
++    if -power2 + 1 > 64 {
++        // More than 64 discarded bits are strictly below half the minimum subnormal.
+         // Since we can't have partial digit rounding, this is true always
+         // if the power-of-two >= 64.
+         return fp_zero;
+@@ -64,8 +70,9 @@
+     let shift = shared::calculate_shift::<F>(power2);
+ 
+     // Determine if we can see if we're at a halfway point.
+-    let last_bit = 1u64 << shift;
+-    let truncated = last_bit - 1;
++    // At shift 64, zero is the even endpoint and every mantissa bit is discarded.
++    let last_bit = 1u64.checked_shl(shift as u32).unwrap_or(0);
++    let truncated = last_bit.wrapping_sub(1);
+     let halfway = lower_n_halfway(shift as u64);
+     let is_even = mantissa & last_bit == 0;
+     let is_halfway = mantissa & truncated == halfway;
