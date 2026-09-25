@@ -531,6 +531,86 @@ async fn annotated_legacy_wrappers_follow_the_arrow_decoder() -> TestResult {
 }
 
 #[tokio::test]
+async fn conflicting_list_annotations_follow_decoder_precedence() -> TestResult {
+    use parquet::{
+        basic::{ConvertedType, LogicalType, Repetition, Type as PhysicalType},
+        schema::types::Type,
+    };
+    // Group metadata can retain conflicting legacy and logical annotations.
+    // The Arrow decoder checks the logical annotation first when deciding
+    // whether a named, one-field repeated group is a struct or a wrapper.
+    for wrapper in ["array", "v_tuple"] {
+        for (converted, logical, structure) in [
+            (ConvertedType::LIST, LogicalType::Map, true),
+            (ConvertedType::MAP, LogicalType::List, false),
+        ] {
+            let item = Arc::new(
+                Type::primitive_type_builder("item", PhysicalType::INT32)
+                    .with_repetition(Repetition::REQUIRED)
+                    .build()?,
+            );
+            let repeated = Arc::new(
+                Type::group_type_builder(wrapper)
+                    .with_repetition(Repetition::REPEATED)
+                    .with_converted_type(converted)
+                    .with_logical_type(Some(logical.clone()))
+                    .with_fields(vec![item])
+                    .build()?,
+            );
+            let list_type = Arc::new(
+                Type::group_type_builder("v")
+                    .with_repetition(Repetition::OPTIONAL)
+                    .with_converted_type(ConvertedType::LIST)
+                    .with_fields(vec![repeated])
+                    .build()?,
+            );
+            let schema = Arc::new(
+                Type::group_type_builder("m")
+                    .with_fields(vec![list_type])
+                    .build()?,
+            );
+            let mut bytes = Vec::new();
+            let mut writer = SerializedFileWriter::new(
+                &mut bytes,
+                schema,
+                Arc::new(WriterProperties::builder().build()),
+            )?;
+            let mut group = writer.next_row_group()?;
+            let mut column = group.next_column()?.ok_or("missing item column")?;
+            column
+                .typed::<Int32Type>()
+                .write_batch(&[10, 20], Some(&[2, 2]), Some(&[0, 1]))?;
+            column.close()?;
+            group.close()?;
+            writer.close()?;
+            let builder = ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(&bytes))?;
+            let info = builder.parquet_schema().root_schema().get_fields()[0].get_fields()[0]
+                .get_basic_info();
+            assert_eq!(info.converted_type(), converted);
+            assert_eq!(info.logical_type_ref(), Some(&logical));
+            let values = Arc::new(Int32Array::from(vec![10, 20])) as ArrayRef;
+            let (values, delta) = if structure {
+                (
+                    Arc::new(StructArray::try_new(
+                        vec![Field::new("item", DataType::Int32, false)].into(),
+                        vec![values],
+                        None,
+                    )?) as ArrayRef,
+                    json!({"type":"struct", "fields":[field("item", json!("integer"), false)]}),
+                )
+            } else {
+                (values, json!("integer"))
+            };
+            let expected = list(values, vec![0, 2], None, false)?;
+            assert_parquet_values(&bytes, &expected)?;
+            let fixture = fixture(&bytes, vec![field("v", array_type(delta, false), true)], 1)?;
+            check_fixture(&fixture, &expected).await?;
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn mixed_list_encodings_preserve_null_inner_lists() -> TestResult {
     for child in [
         "REPEATED INT32 array;",

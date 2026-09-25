@@ -10,7 +10,7 @@ use arrow::{
 };
 use parquet::{
     arrow::PARQUET_FIELD_ID_META_KEY,
-    basic::{ConvertedType, Repetition},
+    basic::{ConvertedType, LogicalType, Repetition},
     schema::types::{SchemaDescriptor, Type, TypePtr},
 };
 
@@ -466,10 +466,13 @@ fn parquet_list_element_field<'a>(
     // TypeVisitor does not implement those exceptions.
     let legacy_struct = repeated_child.name() == "array"
         || repeated_child.name().strip_suffix("_tuple") == Some(parquet_field.name());
-    if legacy_struct
-        && repeated_child.get_basic_info().converted_type() != ConvertedType::LIST
-        && !is_repeated(element)
-    {
+    let info = repeated_child.get_basic_info();
+    let annotated_list = info
+        .logical_type_ref()
+        .map_or(info.converted_type() == ConvertedType::LIST, |logical| {
+            logical == &LogicalType::List
+        });
+    if legacy_struct && !annotated_list && !is_repeated(element) {
         return Ok(repeated_child);
     }
     Ok(element)
