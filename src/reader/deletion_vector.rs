@@ -1254,9 +1254,9 @@ mod tests {
     #[test]
     fn production_boundary_reuses_kernel_context_without_an_extra_decoder_or_runtime() {
         let deletion_vector_source = include_str!("deletion_vector.rs")
-            .split("#[cfg(test)]\nmod tests {")
-            .next()
-            .expect("production source");
+            .split_once("mod tests {")
+            .expect("test module boundary")
+            .0;
         let kernel_source = include_str!("../delta/kernel.rs");
 
         for forbidden in [
