@@ -1,0 +1,4740 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/238",
+  "created_utc": "2026-09-25T09:35:21.539098+00:00",
+  "integration_base": "bb1454385b2818ef3fb6d3dd6fde6fad44e109f2",
+  "runtime_change": "Parse explicit FLOAT/DOUBLE strings at target precision using the existing lexical dependency with Java suffix/hex grammar and ASCII 0-32 trimming. Preserve strict literal error folding and query-local modes. Backport upstream mixed-base guards and fix zero/subnormal hexadecimal rounding.",
+  "candidate_is_optional": true,
+  "checks": {
+    "focused": {
+      "before": {
+        "agreement": 394,
+        "total": 488
+      },
+      "after": {
+        "agreement": 488,
+        "total": 488
+      }
+    },
+    "strict": {
+      "before": {
+        "agreement": 496,
+        "total": 496
+      },
+      "after": {
+        "agreement": 496,
+        "total": 496
+      }
+    },
+    "legacy": {
+      "before": {
+        "agreement": 528,
+        "total": 562
+      },
+      "after": {
+        "agreement": 562,
+        "total": 562
+      }
+    },
+    "owned": {
+      "before": {
+        "agreement": 89,
+        "total": 126
+      },
+      "after": {
+        "agreement": 90,
+        "total": 126
+      }
+    }
+  },
+  "assigned_fixed": [
+    "float_6_true",
+    "float_7_true",
+    "float_8_true",
+    "float_24_true",
+    "float_24_false",
+    "float_25_true",
+    "float_25_false",
+    "float_26_true",
+    "float_26_false",
+    "float_27_true",
+    "float_27_false",
+    "float_cast_column_false",
+    "float_cast_space_true",
+    "float_try_cast_column_true",
+    "float_try_cast_column_false",
+    "float_try_cast_space_true",
+    "float_try_cast_space_false",
+    "double_6_true",
+    "double_7_true",
+    "double_8_true",
+    "double_24_true",
+    "double_24_false",
+    "double_25_true",
+    "double_25_false",
+    "double_26_true",
+    "double_26_false",
+    "double_27_true",
+    "double_27_false",
+    "double_cast_column_false",
+    "double_cast_space_true",
+    "double_try_cast_column_true",
+    "double_try_cast_column_false",
+    "double_try_cast_space_true",
+    "double_try_cast_space_false"
+  ],
+  "standalone_parser": {
+    "strings": 2082,
+    "ieee_observations": 4164,
+    "release_differences": 0,
+    "debug_differences": 0
+  },
+  "schema": {
+    "focused": {
+      "before": {
+        "logical_nullable_difference": 8,
+        "physical_nullable_difference": 50
+      },
+      "after": {
+        "logical_nullable_difference": 16,
+        "physical_nullable_difference": 66
+      }
+    },
+    "strict": {
+      "before": {
+        "logical_nullable_difference": 0,
+        "physical_nullable_difference": 12
+      },
+      "after": {
+        "logical_nullable_difference": 0,
+        "physical_nullable_difference": 12
+      }
+    },
+    "legacy": {
+      "before": {
+        "logical_nullable_difference": 40,
+        "physical_nullable_difference": 188
+      },
+      "after": {
+        "logical_nullable_difference": 54,
+        "physical_nullable_difference": 210
+      }
+    },
+    "owned": {
+      "before": {
+        "logical_nullable_difference": 0,
+        "physical_nullable_difference": 3
+      },
+      "after": {
+        "logical_nullable_difference": 0,
+        "physical_nullable_difference": 4
+      }
+    }
+  },
+  "phase_labels": {
+    "focused": {
+      "before": 22,
+      "after": 0
+    },
+    "strict": {
+      "before": 0,
+      "after": 0
+    },
+    "legacy": {
+      "before": 16,
+      "after": 0
+    },
+    "owned": {
+      "before": 37,
+      "after": 36
+    }
+  },
+  "ownership": {
+    "sql_literal_quotes": 137,
+    "schema_and_error_reporting": 149,
+    "performance": 159,
+    "default_build": 165
+  },
+  "sql_literal_quotes": {
+    "owner": 137,
+    "checks": {
+      "before": {
+        "agreement": 2,
+        "total": 8,
+        "cases": [
+          {
+            "id": "quote_tail_true",
+            "reference": [
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_tail_false",
+            "reference": [
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_middle_true",
+            "reference": [
+              [
+                "a'b"
+              ]
+            ],
+            "actual": [
+              [
+                "ab"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_middle_false",
+            "reference": [
+              [
+                "a'b"
+              ]
+            ],
+            "actual": [
+              [
+                "ab"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_backslash_true",
+            "reference": [
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1'"
+              ]
+            ],
+            "agreement": true
+          },
+          {
+            "id": "quote_backslash_false",
+            "reference": [
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1'"
+              ]
+            ],
+            "agreement": true
+          },
+          {
+            "id": "quote_column_true",
+            "reference": [
+              [
+                "1'"
+              ],
+              [
+                "a'b"
+              ],
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1"
+              ],
+              [
+                "ab"
+              ],
+              [
+                "1'"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_column_false",
+            "reference": [
+              [
+                "1'"
+              ],
+              [
+                "a'b"
+              ],
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1"
+              ],
+              [
+                "ab"
+              ],
+              [
+                "1'"
+              ]
+            ],
+            "agreement": false
+          }
+        ]
+      },
+      "after": {
+        "agreement": 2,
+        "total": 8,
+        "cases": [
+          {
+            "id": "quote_tail_true",
+            "reference": [
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_tail_false",
+            "reference": [
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_middle_true",
+            "reference": [
+              [
+                "a'b"
+              ]
+            ],
+            "actual": [
+              [
+                "ab"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_middle_false",
+            "reference": [
+              [
+                "a'b"
+              ]
+            ],
+            "actual": [
+              [
+                "ab"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_backslash_true",
+            "reference": [
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1'"
+              ]
+            ],
+            "agreement": true
+          },
+          {
+            "id": "quote_backslash_false",
+            "reference": [
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1'"
+              ]
+            ],
+            "agreement": true
+          },
+          {
+            "id": "quote_column_true",
+            "reference": [
+              [
+                "1'"
+              ],
+              [
+                "a'b"
+              ],
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1"
+              ],
+              [
+                "ab"
+              ],
+              [
+                "1'"
+              ]
+            ],
+            "agreement": false
+          },
+          {
+            "id": "quote_column_false",
+            "reference": [
+              [
+                "1'"
+              ],
+              [
+                "a'b"
+              ],
+              [
+                "1'"
+              ]
+            ],
+            "actual": [
+              [
+                "1"
+              ],
+              [
+                "ab"
+              ],
+              [
+                "1'"
+              ]
+            ],
+            "agreement": false
+          }
+        ]
+      }
+    },
+    "input_encoding": {
+      "spark_outcomes_unchanged": 488,
+      "reason": "Backslash-escaped quote reaches the float parser; doubled-quote SQL token discrepancy remains owned by issue 137."
+    },
+    "scope": "Confirmed existing SQL literal token handling; floating parser consumes backslash-escaped quote in the main corpus. Six lexical differences remain open."
+  },
+  "prior_controls": {
+    "arithmetic-check": {
+      "agreement": 575,
+      "total": 578
+    },
+    "string-check": {
+      "agreement": 472,
+      "total": 480
+    },
+    "bigint-check": {
+      "agreement": 232,
+      "total": 234
+    },
+    "modulo-check": {
+      "agreement": 427,
+      "total": 442
+    },
+    "extreme-check": {
+      "agreement": 1194,
+      "total": 1322
+    },
+    "float-round-check": {
+      "summary": {
+        "target": {
+          "total": 398,
+          "agreement": 398
+        },
+        "control": {
+          "total": 18,
+          "agreement": 16
+        },
+        "boundary": {
+          "total": 0,
+          "agreement": 0
+        }
+      }
+    },
+    "arguments-check": {
+      "agreement": 388,
+      "total": 388
+    },
+    "integer-check": {
+      "agreement": 1254,
+      "total": 1254
+    },
+    "legacy-check": {
+      "agreement": 234,
+      "total": 234
+    },
+    "boundaries-check": {
+      "summary": {
+        "target": {
+          "total": 246,
+          "agreement": 246
+        },
+        "control": {
+          "total": 8,
+          "agreement": 8
+        },
+        "boundary": {
+          "total": 0,
+          "agreement": 0
+        }
+      }
+    },
+    "float-check": {
+      "summary": {
+        "target": {
+          "total": 80,
+          "agreement": 80
+        },
+        "control": {
+          "total": 8,
+          "agreement": 8
+        },
+        "boundary": {
+          "total": 10,
+          "agreement": 10
+        }
+      }
+    },
+    "decimal-check": {
+      "agreement": 506,
+      "total": 506
+    }
+  },
+  "prior_suite_changes": [],
+  "regression": {
+    "groups": 37,
+    "observations": 6784,
+    "before_agreements": 6508,
+    "after_agreements": 6508,
+    "changed_outcomes": 0,
+    "comparison_limit": "Historical Decimal-text and coarse-stage comparison; schema and exact error parameters remain separate.",
+    "integer_agreements": 616,
+    "integer_error_payloads": {
+      "focused_error_payloads_equal": 131,
+      "changed_error_payloads": 0
+    }
+  },
+  "error_audit": {
+    "errors_retained": 908,
+    "changed_actual_payloads": [
+      [
+        "existing-string",
+        "unicode_cast_batch4_true"
+      ],
+      [
+        "existing-unicode",
+        "round_overflow_cast_batch1_true"
+      ],
+      [
+        "existing-nonfinite",
+        "float_finite_overflow_after_cast_batch1_true"
+      ],
+      [
+        "existing-nonfinite",
+        "float_finite_overflow_after_cast_batch4_true"
+      ],
+      [
+        "existing-nonfinite",
+        "float_finite_overflow_before_cast_batch1_true"
+      ],
+      [
+        "existing-nonfinite",
+        "float_finite_overflow_before_cast_batch4_true"
+      ],
+      [
+        "existing-nonfinite",
+        "float_constructor_4_true"
+      ],
+      [
+        "existing-nonfinite",
+        "float_multirow_child_true"
+      ],
+      [
+        "existing-nonfinite",
+        "float_multirow_child_false"
+      ],
+      [
+        "existing-nonfinite",
+        "double_finite_overflow_after_cast_batch1_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_finite_overflow_after_cast_batch4_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_finite_overflow_before_cast_batch1_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_finite_overflow_before_cast_batch4_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_finite_4_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_finite_5_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_finite_6_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_finite_7_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_constructor_4_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_multirow_child_true"
+      ],
+      [
+        "existing-nonfinite",
+        "double_multirow_child_false"
+      ],
+      [
+        "existing-float-null",
+        "float_live_zero_batch1_true"
+      ],
+      [
+        "existing-float-null",
+        "float_live_zero_batch3_true"
+      ],
+      [
+        "existing-float-null",
+        "double_live_zero_batch1_true"
+      ],
+      [
+        "existing-float-null",
+        "double_live_zero_batch3_true"
+      ],
+      [
+        "existing-float-null",
+        "zero_2_0_true"
+      ],
+      [
+        "existing-float-null",
+        "zero_2_-0.0_true"
+      ],
+      [
+        "existing-float-null",
+        "zero_NaN_0_true"
+      ],
+      [
+        "existing-float-null",
+        "zero_NaN_-0.0_true"
+      ],
+      [
+        "existing-float-null",
+        "zero_Infinity_0_true"
+      ],
+      [
+        "existing-float-null",
+        "zero_Infinity_-0.0_true"
+      ],
+      [
+        "existing-float-null",
+        "zero_-Infinity_0_true"
+      ],
+      [
+        "existing-float-null",
+        "zero_-Infinity_-0.0_true"
+      ],
+      [
+        "existing-float-null",
+        "null_bad_cast_true"
+      ],
+      [
+        "existing-float-null",
+        "bad_cast_null_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_range_bad_literal_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_range_bad_literal_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_literal_bad_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_literal_bad_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_values_correlated_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_values_correlated_left_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_values_correlated_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_values_correlated_right_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_values_correlated_bad_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_values_correlated_bad_left_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_values_correlated_bad_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_values_correlated_bad_right_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_values_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_values_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_range_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_range_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_sort_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_sort_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_local_dead_case_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_local_dead_case_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_local_live_case_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_local_live_case_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_runtime_case_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_runtime_case_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_bad_filtered_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_bad_filtered_left_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_bad_filtered_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_bad_filtered_right_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_false_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_false_left_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_false_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_false_right_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_or_bad_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_or_bad_left_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_or_bad_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_correlated_or_bad_right_false"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_union_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_union_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_sort_bad_literal_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_sort_bad_literal_right_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_negative_zero_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_negative_zero_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_positive_zero_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_positive_zero_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_mixed_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_mixed_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_scalar_left_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_scalar_right_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_both_scalar_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_subquery_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_window_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_negative_zero_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_negative_zero_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_positive_zero_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_positive_zero_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_mixed_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_mixed_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_scalar_left_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_scalar_right_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_both_scalar_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_subquery_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_modulo_window_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_NaN_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_Infinity_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "float_divide_-Infinity_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_negative_zero_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_negative_zero_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_positive_zero_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_positive_zero_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_mixed_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_mixed_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_scalar_left_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_scalar_right_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_both_scalar_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_subquery_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_window_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_negative_zero_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_negative_zero_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_positive_zero_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_positive_zero_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_mixed_b1_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_mixed_b3_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_scalar_left_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_scalar_right_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_both_scalar_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_subquery_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_modulo_window_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_NaN_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_Infinity_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "double_divide_-Infinity_true"
+      ],
+      [
+        "existing-nonansi-zero",
+        "volatile_divisor_true"
+      ],
+      [
+        "existing-div-null-cast",
+        "tinyint_numeric_control_nan_true"
+      ],
+      [
+        "existing-div-null-cast",
+        "tinyint_numeric_control_inf_true"
+      ],
+      [
+        "existing-div-null-cast",
+        "smallint_numeric_control_nan_true"
+      ],
+      [
+        "existing-div-null-cast",
+        "smallint_numeric_control_inf_true"
+      ],
+      [
+        "existing-div-null-cast",
+        "int_numeric_control_nan_true"
+      ],
+      [
+        "existing-div-null-cast",
+        "int_numeric_control_inf_true"
+      ],
+      [
+        "existing-div-null-cast",
+        "bigint_numeric_control_nan_true"
+      ],
+      [
+        "existing-div-null-cast",
+        "bigint_numeric_control_inf_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_float_below_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_float_above_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_float_nan_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_float_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_float_negative_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_float_upper_adjacent_1_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_double_below_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_double_above_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_double_nan_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_double_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_double_negative_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_double_upper_adjacent_1_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_function_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_limit0_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_unused_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_parent_null_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_multirow_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_filter_bad_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_filter_bad_double_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_endpoint_mixed_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_endpoint_mixed_bad_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_endpoint_mixed_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_cast_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "tinyint_long_endpoint_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_float_below_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_float_above_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_float_nan_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_float_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_float_negative_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_float_upper_adjacent_1_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_double_below_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_double_above_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_double_nan_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_double_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_double_negative_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_double_upper_adjacent_1_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_function_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_limit0_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_unused_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_parent_null_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_multirow_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_filter_bad_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_filter_bad_double_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_endpoint_mixed_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_endpoint_mixed_bad_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_endpoint_mixed_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_cast_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "smallint_long_endpoint_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_float_max_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_float_above_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_float_max_fraction_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_float_nan_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_float_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_float_negative_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_float_upper_adjacent_1_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_double_below_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_double_above_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_double_nan_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_double_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_double_negative_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_double_upper_adjacent_1_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_function_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_limit0_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_unused_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_parent_null_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_multirow_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_filter_bad_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_filter_bad_double_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_endpoint_mixed_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_endpoint_mixed_bad_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_endpoint_mixed_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_cast_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "int_long_endpoint_chain_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_float_nan_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_float_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_float_negative_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_float_upper_adjacent_1_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_double_nan_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_double_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_double_negative_infinity_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_double_upper_adjacent_1_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_function_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_limit0_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_unused_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_parent_null_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_multirow_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_filter_bad_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_filter_bad_double_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_endpoint_mixed_bad_true"
+      ],
+      [
+        "existing-div-null-numeric",
+        "bigint_cast_chain_true"
+      ]
+    ],
+    "changed_error_texts": [
+      [
+        "existing-string",
+        "unicode_cast_batch4_true"
+      ],
+      [
+        "existing-unicode",
+        "round_overflow_cast_batch1_true"
+      ],
+      [
+        "existing-float-null",
+        "null_bad_cast_true"
+      ],
+      [
+        "existing-float-null",
+        "bad_cast_null_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_range_bad_literal_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_range_bad_literal_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_literal_bad_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-order_literal_bad_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_values_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_values_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_range_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_range_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_sort_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_sort_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_local_dead_case_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_local_dead_case_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_local_live_case_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_local_live_case_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_runtime_case_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_runtime_case_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_union_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_literal_cast_empty_union_right_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_sort_bad_literal_left_true"
+      ],
+      [
+        "existing-float-null",
+        "decimal-null-analyzer_sort_bad_literal_right_true"
+      ]
+    ]
+  },
+  "delta": {
+    "before_after": {
+      "match": 116
+    },
+    "spark": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    },
+    "adapters": 18
+  },
+  "tests": {
+    "function": 314,
+    "planner": 47,
+    "runner": 28,
+    "comparator": 1
+  },
+  "performance": {
+    "owner": 159,
+    "status": "Bounded compatibility cost check; final acceptance remains open.",
+    "same_binary_calibration": false,
+    "instructions_allocations_memory_measured": false,
+    "measurements": {
+      "protocol": {
+        "order": [
+          "before",
+          "after",
+          "after",
+          "before",
+          "after",
+          "before",
+          "before",
+          "after"
+        ],
+        "cpu": 2,
+        "platform": "Linux-6.19.14-200.fc43.x86_64-x86_64-with-glibc2.42",
+        "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.50\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+        "rows": 1048576,
+        "batch_size": 8192,
+        "warmups": 8,
+        "samples": 41,
+        "reference_sha256": "37410fdfe71adb595755b6e132371cb7dfd0068f209d0e4e423881e37bf0d488",
+        "ansi_mode": "per-query; FLOAT/DOUBLE canonical, suffix, hexadecimal, padded, invalid and long strings, integer/Decimal/numeric/native/analyzer controls",
+        "scope": "Focused compatibility-PR cost check, not final performance acceptance.",
+        "binaries": {
+          "before": "0a7cf30ed5112bd2b0a70061e29fc865ccdf240f97309b53d332fe34ad3031d1",
+          "after": "db2fc7fb68c2aeeb3bc7786b785216bd3fa3e90920f2339166a0be71c345fec6"
+        }
+      },
+      "records": [
+        {
+          "variant": "before",
+          "path": "timing-0-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/timing-0-before.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/bench-reference.json",
+            "before"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-1-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/timing-1-after.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/bench-reference.json",
+            "after"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-2-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/timing-2-after.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/bench-reference.json",
+            "after"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-3-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/timing-3-before.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/bench-reference.json",
+            "before"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-4-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/timing-4-after.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/bench-reference.json",
+            "after"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-5-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/timing-5-before.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/bench-reference.json",
+            "before"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-6-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/timing-6-before.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/bench-reference.json",
+            "before"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-7-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/timing-7-after.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/bench-reference.json",
+            "after"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "id": "ansi_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.313813,
+                0.307932,
+                0.307672,
+                0.310426
+              ],
+              "median_ms": 0.309179
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.933161,
+                8.818218,
+                8.989005,
+                8.770248
+              ],
+              "median_ms": 8.8756895
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.320716,
+                0.325084,
+                0.318532,
+                0.321737
+              ],
+              "median_ms": 0.32122649999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.890911,
+                16.933159,
+                16.896692,
+                16.799311
+              ],
+              "median_ms": 16.893801500000002
+            }
+          },
+          "ratios": {
+            "planning": 1.0389661005436979,
+            "execution": 1.903379055790539
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "legacy_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.362733,
+                0.357313,
+                0.35518,
+                0.36084
+              ],
+              "median_ms": 0.3590765
+            },
+            "execution": {
+              "process_medians_ms": [
+                19.709145,
+                19.543447,
+                19.56665,
+                19.46415
+              ],
+              "median_ms": 19.555048499999998
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.321648,
+                0.324973,
+                0.321728,
+                0.321046
+              ],
+              "median_ms": 0.321688
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.910718,
+                16.947336,
+                16.902964,
+                16.808738
+              ],
+              "median_ms": 16.906841
+            }
+          },
+          "ratios": {
+            "planning": 0.8958759484399562,
+            "execution": 0.8645767869100403
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "try_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.310958,
+                0.305357,
+                0.308674,
+                0.309845
+              ],
+              "median_ms": 0.3092595
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.804335,
+                7.722413,
+                7.691776,
+                7.701133
+              ],
+              "median_ms": 7.711773
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.319062,
+                0.324542,
+                0.322429,
+                0.319844
+              ],
+              "median_ms": 0.32113650000000005
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.897824,
+                16.832803,
+                16.891582,
+                16.813026
+              ],
+              "median_ms": 16.8621925
+            }
+          },
+          "ratios": {
+            "planning": 1.0384046407628547,
+            "execution": 2.1865519770875
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "suffix_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 1048576,
+            "baseline_incorrect": true
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.322459,
+                0.319593,
+                0.319323,
+                0.320545
+              ],
+              "median_ms": 0.32006900000000005
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.919424,
+                16.780677,
+                16.870623,
+                16.860004
+              ],
+              "median_ms": 16.8653135
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline returns incorrect NULL values; candidate timing only."
+        },
+        {
+          "id": "hex_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 1048576,
+            "baseline_incorrect": true
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "5f8ced3d34e00c8d",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.321577,
+                0.322669,
+                0.318792,
+                0.319513
+              ],
+              "median_ms": 0.32054499999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                20.682753,
+                20.609948,
+                20.554515,
+                20.539868
+              ],
+              "median_ms": 20.5822315
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline returns incorrect NULL values; candidate timing only."
+        },
+        {
+          "id": "space_ansi_float_nullsfalse",
+          "before": {
+            "error": "Arrow error: Cast error: Cannot cast string ' \t-99.25\n' to value of Float32 type"
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.322038,
+                0.325163,
+                0.322218,
+                0.319414
+              ],
+              "median_ms": 0.32212799999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                18.011843,
+                17.971909,
+                18.021281,
+                17.830195
+              ],
+              "median_ms": 17.991875999999998
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only."
+        },
+        {
+          "id": "invalid_legacy_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "ac34069db36c5c1a",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.360159,
+                0.356723,
+                0.356082,
+                0.359518
+              ],
+              "median_ms": 0.3581205
+            },
+            "execution": {
+              "process_medians_ms": [
+                19.625439,
+                19.233191,
+                19.22201,
+                19.485419
+              ],
+              "median_ms": 19.359305
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "ac34069db36c5c1a",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.321627,
+                0.322438,
+                0.3177,
+                0.3231
+              ],
+              "median_ms": 0.3220325
+            },
+            "execution": {
+              "process_medians_ms": [
+                18.16669,
+                18.071022,
+                18.205482,
+                17.994581
+              ],
+              "median_ms": 18.118856
+            }
+          },
+          "ratios": {
+            "planning": 0.8992294493054712,
+            "execution": 0.935924920858471
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "invalid_try_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "ac34069db36c5c1a",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.314755,
+                0.309415,
+                0.310347,
+                0.310547
+              ],
+              "median_ms": 0.31044700000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.583555,
+                7.494139,
+                7.469262,
+                7.506913
+              ],
+              "median_ms": 7.500526
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "ac34069db36c5c1a",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.322669,
+                0.324673,
+                0.32319,
+                0.318972
+              ],
+              "median_ms": 0.3229295
+            },
+            "execution": {
+              "process_medians_ms": [
+                18.206275,
+                18.187028,
+                18.318402,
+                18.151723
+              ],
+              "median_ms": 18.1966515
+            }
+          },
+          "ratios": {
+            "planning": 1.0402081514719097,
+            "execution": 2.4260500530229483
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "long_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.313633,
+                0.30715,
+                0.305047,
+                0.308283
+              ],
+              "median_ms": 0.30771649999999995
+            },
+            "execution": {
+              "process_medians_ms": [
+                28.953885,
+                28.575331,
+                28.724659,
+                28.633901
+              ],
+              "median_ms": 28.67928
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.32314,
+                0.319313,
+                0.316888,
+                0.316198
+              ],
+              "median_ms": 0.3181005
+            },
+            "execution": {
+              "process_medians_ms": [
+                36.42968,
+                36.299819,
+                36.377933,
+                36.259794
+              ],
+              "median_ms": 36.338876
+            }
+          },
+          "ratios": {
+            "planning": 1.0337453467721103,
+            "execution": 1.2670776951164744
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "ansi_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.313201,
+                0.309655,
+                0.307581,
+                0.313852
+              ],
+              "median_ms": 0.31142800000000004
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.847712,
+                8.709977,
+                8.834428,
+                8.713543
+              ],
+              "median_ms": 8.7739855
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.321327,
+                0.322599,
+                0.321968,
+                0.320064
+              ],
+              "median_ms": 0.3216475
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.795954,
+                16.749798,
+                16.893746,
+                16.730874
+              ],
+              "median_ms": 16.772875999999997
+            }
+          },
+          "ratios": {
+            "planning": 1.0328149684678318,
+            "execution": 1.9116598722439189
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "legacy_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.362283,
+                0.356562,
+                0.355521,
+                0.363495
+              ],
+              "median_ms": 0.3594225
+            },
+            "execution": {
+              "process_medians_ms": [
+                19.678849,
+                19.320854,
+                19.383711,
+                19.187877
+              ],
+              "median_ms": 19.3522825
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.321677,
+                0.323721,
+                0.31795,
+                0.318892
+              ],
+              "median_ms": 0.32028449999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.788941,
+                16.739109,
+                16.786797,
+                16.737426
+              ],
+              "median_ms": 16.762953
+            }
+          },
+          "ratios": {
+            "planning": 0.8911086534649333,
+            "execution": 0.8662003047960879
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "try_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.315005,
+                0.308022,
+                0.307851,
+                0.308623
+              ],
+              "median_ms": 0.3083225
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.772565,
+                7.673251,
+                7.662462,
+                7.746468
+              ],
+              "median_ms": 7.7098595
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.32293,
+                0.322549,
+                0.318402,
+                0.31738
+              ],
+              "median_ms": 0.3204755
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.807466,
+                16.747104,
+                16.796174,
+                16.797137
+              ],
+              "median_ms": 16.7966555
+            }
+          },
+          "ratios": {
+            "planning": 1.0394165200398933,
+            "execution": 2.178594240271175
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "suffix_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 1048576,
+            "baseline_incorrect": true
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.323711,
+                0.323802,
+                0.321176,
+                0.319003
+              ],
+              "median_ms": 0.3224435
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.95002,
+                16.820661,
+                16.833985,
+                16.840799
+              ],
+              "median_ms": 16.837392
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline returns incorrect NULL values; candidate timing only."
+        },
+        {
+          "id": "hex_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 1048576,
+            "baseline_incorrect": true
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "5f8ced3d34e00c8d",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.323731,
+                0.323731,
+                0.320505,
+                0.320636
+              ],
+              "median_ms": 0.32218349999999996
+            },
+            "execution": {
+              "process_medians_ms": [
+                20.506596,
+                20.418853,
+                20.399427,
+                20.371807
+              ],
+              "median_ms": 20.40914
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline returns incorrect NULL values; candidate timing only."
+        },
+        {
+          "id": "space_ansi_double_nullsfalse",
+          "before": {
+            "error": "Arrow error: Cast error: Cannot cast string ' \t-99.25\n' to value of Float64 type"
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.322609,
+                0.32333,
+                0.319393,
+                0.321898
+              ],
+              "median_ms": 0.32225349999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.928798,
+                17.884426,
+                17.907428,
+                17.808986
+              ],
+              "median_ms": 17.895927
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only."
+        },
+        {
+          "id": "invalid_legacy_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "ac34069db36c5c1a",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.363325,
+                0.357134,
+                0.355961,
+                0.360479
+              ],
+              "median_ms": 0.35880650000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                19.346743,
+                19.07674,
+                19.205961,
+                19.473989
+              ],
+              "median_ms": 19.276352
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "ac34069db36c5c1a",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.320004,
+                0.323481,
+                0.320986,
+                0.320446
+              ],
+              "median_ms": 0.320716
+            },
+            "execution": {
+              "process_medians_ms": [
+                18.211303,
+                18.087143,
+                18.160178,
+                17.792816
+              ],
+              "median_ms": 18.1236605
+            }
+          },
+          "ratios": {
+            "planning": 0.8938411093444516,
+            "execution": 0.9402017819554239
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "invalid_try_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "ac34069db36c5c1a",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.314754,
+                0.30682,
+                0.308823,
+                0.308933
+              ],
+              "median_ms": 0.308878
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.593864,
+                7.447362,
+                7.472859,
+                7.522912
+              ],
+              "median_ms": 7.4978855
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "ac34069db36c5c1a",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.322439,
+                0.324873,
+                0.322198,
+                0.320064
+              ],
+              "median_ms": 0.32231849999999995
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.9294,
+                17.86502,
+                18.110206,
+                17.821309
+              ],
+              "median_ms": 17.89721
+            }
+          },
+          "ratios": {
+            "planning": 1.0435139440167314,
+            "execution": 2.3869676324078304
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "long_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.314133,
+                0.303413,
+                0.303844,
+                0.309214
+              ],
+              "median_ms": 0.306529
+            },
+            "execution": {
+              "process_medians_ms": [
+                29.319914,
+                28.994501,
+                28.970726,
+                28.993299
+              ],
+              "median_ms": 28.9939
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.316648,
+                0.321256,
+                0.319403,
+                0.316408
+              ],
+              "median_ms": 0.31802549999999996
+            },
+            "execution": {
+              "process_medians_ms": [
+                36.259213,
+                35.992478,
+                36.170689,
+                35.953866
+              ],
+              "median_ms": 36.0815835
+            }
+          },
+          "ratios": {
+            "planning": 1.0375054236303904,
+            "execution": 1.2444542990077223
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "native_float_nullsfalse",
+          "before": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.17757,
+                0.173232,
+                0.171319,
+                0.172561
+              ],
+              "median_ms": 0.1728965
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.947618,
+                8.809031,
+                8.978586,
+                8.778684
+              ],
+              "median_ms": 8.8783245
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.170687,
+                0.17237,
+                0.170597,
+                0.169234
+              ],
+              "median_ms": 0.17064200000000002
+            },
+            "execution": {
+              "process_medians_ms": [
+                9.717919,
+                9.666393,
+                9.655984,
+                9.662456
+              ],
+              "median_ms": 9.664424499999999
+            }
+          },
+          "ratios": {
+            "planning": 0.9869604069486658,
+            "execution": 1.0885414809967804
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "native_double_nullsfalse",
+          "before": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.176969,
+                0.172169,
+                0.171528,
+                0.173222
+              ],
+              "median_ms": 0.1726955
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.826313,
+                8.724985,
+                8.814941,
+                8.705649
+              ],
+              "median_ms": 8.769963
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "96e2aabfb14df3a5",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.170487,
+                0.170256,
+                0.170597,
+                0.170096
+              ],
+              "median_ms": 0.1703715
+            },
+            "execution": {
+              "process_medians_ms": [
+                9.922048,
+                9.889338,
+                9.895999,
+                9.815941
+              ],
+              "median_ms": 9.8926685
+            }
+          },
+          "ratios": {
+            "planning": 0.9865427877391131,
+            "execution": 1.1280171307450213
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "legacy_long_nullsfalse",
+          "before": {
+            "type": "Int64",
+            "values_digest": "892a595ceb6e03b3",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.32284,
+                0.315345,
+                0.316017,
+                0.320304
+              ],
+              "median_ms": 0.31816049999999996
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.122872,
+                6.040719,
+                6.033566,
+                6.030891
+              ],
+              "median_ms": 6.0371425
+            }
+          },
+          "after": {
+            "type": "Int64",
+            "values_digest": "892a595ceb6e03b3",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.320035,
+                0.319122,
+                0.316938,
+                0.313973
+              ],
+              "median_ms": 0.31803000000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.303276,
+                6.296734,
+                6.280234,
+                6.271629
+              ],
+              "median_ms": 6.288484
+            }
+          },
+          "ratios": {
+            "planning": 0.9995898296614447,
+            "execution": 1.0416325273090705
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "ansi_long_nullsfalse",
+          "before": {
+            "type": "Int64",
+            "values_digest": "892a595ceb6e03b3",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.361832,
+                0.354729,
+                0.354719,
+                0.357735
+              ],
+              "median_ms": 0.356232
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.20855,
+                16.634224,
+                16.819779,
+                16.746572
+              ],
+              "median_ms": 16.7831755
+            }
+          },
+          "after": {
+            "type": "Int64",
+            "values_digest": "892a595ceb6e03b3",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.357434,
+                0.356993,
+                0.355781,
+                0.352144
+              ],
+              "median_ms": 0.356387
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.901371,
+                16.810842,
+                17.003891,
+                16.832663
+              ],
+              "median_ms": 16.867017
+            }
+          },
+          "ratios": {
+            "planning": 1.0004351097037887,
+            "execution": 1.004995568329724
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "decimal_nullsfalse",
+          "before": {
+            "type": "Decimal128(18, 4)",
+            "values_digest": "b6e734e2b046cee7",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.329281,
+                0.32311,
+                0.322299,
+                0.32864
+              ],
+              "median_ms": 0.325875
+            },
+            "execution": {
+              "process_medians_ms": [
+                73.900864,
+                72.912027,
+                72.96226,
+                72.963132
+              ],
+              "median_ms": 72.962696
+            }
+          },
+          "after": {
+            "type": "Decimal128(18, 4)",
+            "values_digest": "b6e734e2b046cee7",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.324663,
+                0.324723,
+                0.326617,
+                0.324533
+              ],
+              "median_ms": 0.324693
+            },
+            "execution": {
+              "process_medians_ms": [
+                73.034344,
+                72.483782,
+                72.819936,
+                72.684695
+              ],
+              "median_ms": 72.75231550000001
+            }
+          },
+          "ratios": {
+            "planning": 0.9963728423475259,
+            "execution": 0.9971166018865314
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "numeric_nullsfalse",
+          "before": {
+            "type": "Int64",
+            "values_digest": "12cac135c3676f0b",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.365699,
+                0.362914,
+                0.362213,
+                0.361261
+              ],
+              "median_ms": 0.36256350000000004
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.448503,
+                0.451759,
+                0.448713,
+                0.455566
+              ],
+              "median_ms": 0.45023599999999997
+            }
+          },
+          "after": {
+            "type": "Int64",
+            "values_digest": "12cac135c3676f0b",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.360239,
+                0.361291,
+                0.361542,
+                0.363195
+              ],
+              "median_ms": 0.3614165
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.620112,
+                0.615943,
+                0.611466,
+                0.614822
+              ],
+              "median_ms": 0.6153824999999999
+            }
+          },
+          "ratios": {
+            "planning": 0.9968364162415685,
+            "execution": 1.3667998560754804
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "null_div_nullsfalse",
+          "before": {
+            "type": "Int64",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.37694,
+                0.366371,
+                0.368264,
+                0.37175
+              ],
+              "median_ms": 0.370007
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.143316,
+                0.143737,
+                0.144548,
+                0.14536
+              ],
+              "median_ms": 0.1441425
+            }
+          },
+          "after": {
+            "type": "Int64",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.372412,
+                0.3715,
+                0.369767,
+                0.365629
+              ],
+              "median_ms": 0.3706335
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.151071,
+                0.144799,
+                0.150169,
+                0.151
+              ],
+              "median_ms": 0.1505845
+            }
+          },
+          "ratios": {
+            "planning": 1.0016932112095178,
+            "execution": 1.0446918847668107
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "ansi_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.299346,
+                0.290299,
+                0.288936,
+                0.298695
+              ],
+              "median_ms": 0.294497
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.449703,
+                8.382759,
+                8.369955,
+                8.36692
+              ],
+              "median_ms": 8.376356999999999
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.307251,
+                0.301631,
+                0.304275,
+                0.304225
+              ],
+              "median_ms": 0.30425
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.056388,
+                17.005945,
+                17.100881,
+                16.982902
+              ],
+              "median_ms": 17.031166499999998
+            }
+          },
+          "ratios": {
+            "planning": 1.0331174850677596,
+            "execution": 2.0332426733960838
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "legacy_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.553728,
+                0.34442,
+                0.34448,
+                0.346334
+              ],
+              "median_ms": 0.345407
+            },
+            "execution": {
+              "process_medians_ms": [
+                18.929216,
+                18.752639,
+                18.726981,
+                19.085186
+              ],
+              "median_ms": 18.8409275
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.305958,
+                0.304555,
+                0.305137,
+                0.307521
+              ],
+              "median_ms": 0.30554749999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.031642,
+                17.025952,
+                17.086925,
+                16.973053
+              ],
+              "median_ms": 17.028797
+            }
+          },
+          "ratios": {
+            "planning": 0.8846013543442951,
+            "execution": 0.9038194643018505
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "try_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.294718,
+                0.294076,
+                0.293164,
+                0.295669
+              ],
+              "median_ms": 0.294397
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.314274,
+                7.305348,
+                7.250736,
+                7.223446
+              ],
+              "median_ms": 7.278042
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.309915,
+                0.309805,
+                0.30735,
+                0.307351
+              ],
+              "median_ms": 0.308578
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.030781,
+                17.019029,
+                17.048473,
+                16.980558
+              ],
+              "median_ms": 17.024905
+            }
+          },
+          "ratios": {
+            "planning": 1.0481696484678853,
+            "execution": 2.339214997660085
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "suffix_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 943719,
+            "baseline_incorrect": true
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.313923,
+                0.305848,
+                0.305608,
+                0.303273
+              ],
+              "median_ms": 0.305728
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.010723,
+                17.010774,
+                17.099618,
+                16.983052
+              ],
+              "median_ms": 17.0107485
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline returns incorrect NULL values; candidate timing only."
+        },
+        {
+          "id": "hex_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 943719,
+            "baseline_incorrect": true
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "6ff7931ce9dca481",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.309856,
+                0.307571,
+                0.310356,
+                0.305608
+              ],
+              "median_ms": 0.3087135
+            },
+            "execution": {
+              "process_medians_ms": [
+                20.572699,
+                20.585853,
+                20.965689,
+                20.517467
+              ],
+              "median_ms": 20.579276
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline returns incorrect NULL values; candidate timing only."
+        },
+        {
+          "id": "space_ansi_float_nullstrue",
+          "before": {
+            "error": "Arrow error: Cast error: Cannot cast string ' \t-99.25\n' to value of Float32 type"
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.305627,
+                0.307421,
+                0.307942,
+                0.305427
+              ],
+              "median_ms": 0.306524
+            },
+            "execution": {
+              "process_medians_ms": [
+                18.199061,
+                18.161331,
+                18.102501,
+                18.5216
+              ],
+              "median_ms": 18.180196000000002
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only."
+        },
+        {
+          "id": "invalid_legacy_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "926f75c2e15e47ce",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.346694,
+                0.338879,
+                0.340032,
+                0.342406
+              ],
+              "median_ms": 0.341219
+            },
+            "execution": {
+              "process_medians_ms": [
+                19.240785,
+                18.872031,
+                18.907066,
+                18.714848
+              ],
+              "median_ms": 18.8895485
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "926f75c2e15e47ce",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.319424,
+                0.319413,
+                0.318662,
+                0.31774
+              ],
+              "median_ms": 0.3190375
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.217477,
+                17.200566,
+                17.196018,
+                17.177734
+              ],
+              "median_ms": 17.198292
+            }
+          },
+          "ratios": {
+            "planning": 0.9349933620343532,
+            "execution": 0.9104660177557975
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "invalid_try_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "926f75c2e15e47ce",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.295479,
+                0.293405,
+                0.292112,
+                0.292353
+              ],
+              "median_ms": 0.292879
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.192288,
+                7.172912,
+                7.082885,
+                7.063008
+              ],
+              "median_ms": 7.127898500000001
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "926f75c2e15e47ce",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.324894,
+                0.32837,
+                0.322419,
+                0.326236
+              ],
+              "median_ms": 0.325565
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.171572,
+                17.171362,
+                17.210355,
+                17.136987
+              ],
+              "median_ms": 17.171467
+            }
+          },
+          "ratios": {
+            "planning": 1.1116024023572875,
+            "execution": 2.409050437516752
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "long_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.300889,
+                0.288075,
+                0.292513,
+                0.29608
+              ],
+              "median_ms": 0.2942965
+            },
+            "execution": {
+              "process_medians_ms": [
+                26.491061,
+                26.279988,
+                26.262987,
+                26.276292
+              ],
+              "median_ms": 26.27814
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.324603,
+                0.32308,
+                0.325695,
+                0.320806
+              ],
+              "median_ms": 0.3238415
+            },
+            "execution": {
+              "process_medians_ms": [
+                34.444904,
+                34.417442,
+                34.419245,
+                34.450233
+              ],
+              "median_ms": 34.4320745
+            }
+          },
+          "ratios": {
+            "planning": 1.1003919516541991,
+            "execution": 1.3102934416210583
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "ansi_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.314524,
+                0.306599,
+                0.308002,
+                0.309806
+              ],
+              "median_ms": 0.308904
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.498234,
+                8.322497,
+                8.321796,
+                8.343947
+              ],
+              "median_ms": 8.333222
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.325204,
+                0.328591,
+                0.320675,
+                0.323491
+              ],
+              "median_ms": 0.3243475
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.938359,
+                16.88507,
+                17.029729,
+                16.829657
+              ],
+              "median_ms": 16.9117145
+            }
+          },
+          "ratios": {
+            "planning": 1.0499944966721053,
+            "execution": 2.029432853222919
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "legacy_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.367513,
+                0.362554,
+                0.362543,
+                0.36067
+              ],
+              "median_ms": 0.3625485
+            },
+            "execution": {
+              "process_medians_ms": [
+                18.980302,
+                18.703497,
+                18.726971,
+                18.869486
+              ],
+              "median_ms": 18.7982285
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.327298,
+                0.327669,
+                0.325895,
+                0.326687
+              ],
+              "median_ms": 0.3269925
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.867638,
+                16.911098,
+                16.90607,
+                16.840057
+              ],
+              "median_ms": 16.886854
+            }
+          },
+          "ratios": {
+            "planning": 0.9019276041688216,
+            "execution": 0.8983215625876662
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "try_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.316728,
+                0.313111,
+                0.310808,
+                0.311178
+              ],
+              "median_ms": 0.3121445
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.311119,
+                7.238815,
+                7.23685,
+                7.228976
+              ],
+              "median_ms": 7.2378325
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.326687,
+                0.327098,
+                0.321668,
+                0.323601
+              ],
+              "median_ms": 0.325144
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.864552,
+                16.908624,
+                16.980457,
+                16.808037
+              ],
+              "median_ms": 16.886588
+            }
+          },
+          "ratios": {
+            "planning": 1.041645776235045,
+            "execution": 2.3331001373684734
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "suffix_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 943719,
+            "baseline_incorrect": true
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.324032,
+                0.327829,
+                0.325815,
+                0.322429
+              ],
+              "median_ms": 0.32492350000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.914034,
+                16.985026,
+                16.940563,
+                16.84198
+              ],
+              "median_ms": 16.9272985
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline returns incorrect NULL values; candidate timing only."
+        },
+        {
+          "id": "hex_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 943719,
+            "baseline_incorrect": true
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "6ff7931ce9dca481",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.325284,
+                0.326286,
+                0.325154,
+                0.322519
+              ],
+              "median_ms": 0.32521900000000004
+            },
+            "execution": {
+              "process_medians_ms": [
+                20.295524,
+                20.515012,
+                20.208142,
+                20.215637
+              ],
+              "median_ms": 20.2555805
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline returns incorrect NULL values; candidate timing only."
+        },
+        {
+          "id": "space_ansi_double_nullstrue",
+          "before": {
+            "error": "Arrow error: Cast error: Cannot cast string ' \t-99.25\n' to value of Float64 type"
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.325304,
+                0.325054,
+                0.32297,
+                0.321747
+              ],
+              "median_ms": 0.32401199999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.929089,
+                17.951692,
+                17.937876,
+                18.297673
+              ],
+              "median_ms": 17.944784
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only."
+        },
+        {
+          "id": "invalid_legacy_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "926f75c2e15e47ce",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.365349,
+                0.362323,
+                0.358215,
+                0.361972
+              ],
+              "median_ms": 0.3621475
+            },
+            "execution": {
+              "process_medians_ms": [
+                18.959352,
+                18.660216,
+                19.066802,
+                18.695923
+              ],
+              "median_ms": 18.8276375
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "926f75c2e15e47ce",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.325504,
+                0.320705,
+                0.323982,
+                0.320275
+              ],
+              "median_ms": 0.3223435
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.063461,
+                17.038886,
+                16.99269,
+                16.931857
+              ],
+              "median_ms": 17.015788
+            }
+          },
+          "ratios": {
+            "planning": 0.8900889830800985,
+            "execution": 0.9037664975225914
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "invalid_try_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "926f75c2e15e47ce",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.315646,
+                0.310286,
+                0.308042,
+                0.309825
+              ],
+              "median_ms": 0.31005550000000004
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.157143,
+                7.133188,
+                7.129993,
+                7.084097
+              ],
+              "median_ms": 7.1315905
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "926f75c2e15e47ce",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.324433,
+                0.327608,
+                0.322279,
+                0.321948
+              ],
+              "median_ms": 0.323356
+            },
+            "execution": {
+              "process_medians_ms": [
+                17.054024,
+                16.988783,
+                17.017787,
+                16.916419
+              ],
+              "median_ms": 17.003284999999998
+            }
+          },
+          "ratios": {
+            "planning": 1.0428971587344844,
+            "execution": 2.38422060268323
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "long_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.315405,
+                0.30651,
+                0.307852,
+                0.311098
+              ],
+              "median_ms": 0.309475
+            },
+            "execution": {
+              "process_medians_ms": [
+                26.812859,
+                26.632705,
+                26.595434,
+                26.610965
+              ],
+              "median_ms": 26.621835
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.323812,
+                0.321136,
+                0.324973,
+                0.316538
+              ],
+              "median_ms": 0.322474
+            },
+            "execution": {
+              "process_medians_ms": [
+                34.689688,
+                34.502781,
+                34.421479,
+                34.512719
+              ],
+              "median_ms": 34.50775
+            }
+          },
+          "ratios": {
+            "planning": 1.0420033928427175,
+            "execution": 1.296219813547789
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "native_float_nullstrue",
+          "before": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.182419,
+                0.174785,
+                0.174564,
+                0.175256
+              ],
+              "median_ms": 0.1750205
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.543668,
+                8.409849,
+                8.387779,
+                8.358293
+              ],
+              "median_ms": 8.398814
+            }
+          },
+          "after": {
+            "type": "Float32",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.172991,
+                0.17208,
+                0.172581,
+                0.171078
+              ],
+              "median_ms": 0.1723305
+            },
+            "execution": {
+              "process_medians_ms": [
+                9.203203,
+                9.211167,
+                9.20204,
+                9.187514
+              ],
+              "median_ms": 9.2026215
+            }
+          },
+          "ratios": {
+            "planning": 0.9846303718707238,
+            "execution": 1.0957048816654351
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "native_double_nullstrue",
+          "before": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.176508,
+                0.174154,
+                0.174244,
+                0.174043
+              ],
+              "median_ms": 0.174199
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.434996,
+                8.331624,
+                8.347784,
+                8.358735
+              ],
+              "median_ms": 8.3532595
+            }
+          },
+          "after": {
+            "type": "Float64",
+            "values_digest": "20999ed517620bc8",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.173893,
+                0.17278,
+                0.173392,
+                0.17246
+              ],
+              "median_ms": 0.173086
+            },
+            "execution": {
+              "process_medians_ms": [
+                9.373088,
+                9.404858,
+                9.357469,
+                9.311314
+              ],
+              "median_ms": 9.365278499999999
+            }
+          },
+          "ratios": {
+            "planning": 0.993610755515244,
+            "execution": 1.1211525872026362
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "legacy_long_nullstrue",
+          "before": {
+            "type": "Int64",
+            "values_digest": "846e3120d453778c",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.324122,
+                0.319012,
+                0.318842,
+                0.319714
+              ],
+              "median_ms": 0.319363
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.997463,
+                7.852745,
+                7.844038,
+                7.852425
+              ],
+              "median_ms": 7.8525849999999995
+            }
+          },
+          "after": {
+            "type": "Int64",
+            "values_digest": "846e3120d453778c",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.319213,
+                0.321717,
+                0.320314,
+                0.316598
+              ],
+              "median_ms": 0.3197635
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.680304,
+                7.778156,
+                7.692527,
+                7.66753
+              ],
+              "median_ms": 7.6864155
+            }
+          },
+          "ratios": {
+            "planning": 1.00125405886092,
+            "execution": 0.9788388791716359
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "ansi_long_nullstrue",
+          "before": {
+            "type": "Int64",
+            "values_digest": "846e3120d453778c",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.361802,
+                0.356072,
+                0.355961,
+                0.358676
+              ],
+              "median_ms": 0.35737399999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.879239,
+                16.557632,
+                16.73433,
+                17.100259
+              ],
+              "median_ms": 16.8067845
+            }
+          },
+          "after": {
+            "type": "Int64",
+            "values_digest": "846e3120d453778c",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.354909,
+                0.355801,
+                0.35517,
+                0.353417
+              ],
+              "median_ms": 0.35503949999999995
+            },
+            "execution": {
+              "process_medians_ms": [
+                16.677665,
+                16.539689,
+                16.788701,
+                16.500706
+              ],
+              "median_ms": 16.608677
+            }
+          },
+          "ratios": {
+            "planning": 0.9934676277513192,
+            "execution": 0.9882126471009371
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "decimal_nullstrue",
+          "before": {
+            "type": "Decimal128(18, 4)",
+            "values_digest": "dadf65bd341f6063",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.330244,
+                0.325074,
+                0.325334,
+                0.32807
+              ],
+              "median_ms": 0.326702
+            },
+            "execution": {
+              "process_medians_ms": [
+                67.703593,
+                67.042155,
+                67.158572,
+                66.996731
+              ],
+              "median_ms": 67.1003635
+            }
+          },
+          "after": {
+            "type": "Decimal128(18, 4)",
+            "values_digest": "dadf65bd341f6063",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.36623,
+                0.32812,
+                0.325865,
+                0.325485
+              ],
+              "median_ms": 0.3269925
+            },
+            "execution": {
+              "process_medians_ms": [
+                66.795867,
+                66.552536,
+                66.45277,
+                66.435389
+              ],
+              "median_ms": 66.50265300000001
+            }
+          },
+          "ratios": {
+            "planning": 1.000889189536642,
+            "execution": 0.9910922911766343
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "numeric_nullstrue",
+          "before": {
+            "type": "Int64",
+            "values_digest": "3dc2248ca482f1c6",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.364557,
+                0.363875,
+                0.363364,
+                0.36621
+              ],
+              "median_ms": 0.364216
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.800036,
+                0.793214,
+                0.81293,
+                0.799265
+              ],
+              "median_ms": 0.7996505
+            }
+          },
+          "after": {
+            "type": "Int64",
+            "values_digest": "3dc2248ca482f1c6",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.370267,
+                0.363215,
+                0.359808,
+                0.358956
+              ],
+              "median_ms": 0.3615115
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.874905,
+                0.816036,
+                0.791701,
+                0.788905
+              ],
+              "median_ms": 0.8038685
+            }
+          },
+          "ratios": {
+            "planning": 0.992574461308674,
+            "execution": 1.0052748044301854
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        },
+        {
+          "id": "null_div_nullstrue",
+          "before": {
+            "type": "Int64",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.3716,
+                0.36595,
+                0.367853,
+                0.366671
+              ],
+              "median_ms": 0.367262
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.147634,
+                0.147635,
+                0.148335,
+                0.149658
+              ],
+              "median_ms": 0.14798499999999998
+            }
+          },
+          "after": {
+            "type": "Int64",
+            "values_digest": "234f0e66e4c4c873",
+            "reference_mismatches": 0,
+            "planning": {
+              "process_medians_ms": [
+                0.367753,
+                0.362794,
+                0.366631,
+                0.367051
+              ],
+              "median_ms": 0.366841
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.144288,
+                0.144108,
+                0.146042,
+                0.143867
+              ],
+              "median_ms": 0.144198
+            }
+          },
+          "ratios": {
+            "planning": 0.9988536793896455,
+            "execution": 0.9744095685373518
+          },
+          "equivalent_outputs": true,
+          "comparison": "All outputs match the same Spark reference; complete types and output digests agree."
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "build": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/floating-string-cast-bb14543/override.toml",
+        "-j",
+        "3",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json"
+      ],
+      "sources": {
+        "math.rs": "f13214060a61e3aca8ae9781be14212dd79bf3c9a19dfb00ddaf1abb8481bf5a",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "30f3ae9e61a7b0af2aeed023e562662e330866134d9cce0281a0f88dd33af8de",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "17aabfe61876632a6b26a4dffb3b0dcd603a5344e023b66e58bcb85b61b7871b",
+        "scalar-mod.rs": "cfaa4c666296ef5553deb7dfbe8b98cc562267b4ff9d346c2c6f34a10c800776",
+        "Cargo.lock": "273c79133f7f724ccd25039958ee4fd76f83f75efafca9936248fab6ab0527ba",
+        "decimal_bench.rs": "8292aed9e59abdf8453139ec63a3984c265be1af777bd1611ecd00a8072ff208",
+        "string-cast.rs": "8573690df0fd2d1f7a753ee0614dbdfb44d74bca8335677e6bc9cfab3ddd4b4a",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "67b5dfdc2968f8524ebee27d9083e61694058a7aec38cd80af275d7228f5ae2c",
+        "decimal-null.rs": "487a8b5829aad0ef5078d4ea6fab51c8f97e466ab10fafce246e942cab7bdc89",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "a6aa195940c3d52f9f8b706f8309194cb917462e27efd8f2c43d667dedd7d043",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "2ced18332150ae4059513f27f5e78a5b16bb7a8a2f9970053b5ff5f4a14183f8",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "0c42106505312d109f9059f537f36e3d7e1f1b60921919b425013239f4fbf6b5",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "58f954be1e00423f05b8fc08fb23bba456f722c8d5bc8ab5566efd277b6beb34",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "native-aggregates.rs": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+        "resolver-sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "native-binary": "66ba58d025ab8127b8232b85028a0c93d96e224f2c92e9a11b8e7ff0a5c8f088",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180",
+        "checked.rs": "6a6d15a2255937a3d4a48b1a2d7b59040bc57588bf1b1f32e593f8e5edbacb19",
+        "native-scalar-function.rs": "c3853b994aa861c5d7f0b30fd777d878c0b7300b2848de6b913f437289366c21",
+        "udf.rs": "b7f05300615df5c0f87495f5dbcee8974b6e36f027b070d05f79c147044ef0ed",
+        "expression-mod.rs": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+        "overflow-bench.rs": "971ad5fe8fb00a9640585c66de320ba4fa1125b82ca9f2fa5a13cd4029b60256",
+        "native-column.rs": "75d22bef42f5dcd487ac06d1c0e0505407d9480d95b0423278e8ca693a3c9660",
+        "arrow-arithmetic.rs": "008110fe975edfc942333d2e3bcb94af5f2de9b1e456d7d5cf696a4da7b4fc50",
+        "arrow-arity.rs": "5be993560d41ad908accd1324b1529614accd0af859dd0d886c109052270e360",
+        "scatter-utils.rs": "aec739c4df4c1a01a1f09a16efddabd69e5f283e4490c3a2570504f10cfcbcf8",
+        "filter.rs": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d",
+        "bround.rs": "a61cbf4c2e43ef954cadfc2b34de95b0c7fa7fd4d09e50cf263f0be3b9ba6f87",
+        "integer-round.rs": "ec3fe37d07b79fb490abf013bb86a2953c69d26d7b865c4fd15f46875fd6c8b3",
+        "float-round.rs": "c1a7162e21856de26da9b95a3b0b7d399587bdeda3e43e20cdc10b726b4a237b",
+        "integer-cast.rs": "963b9ac541b0057933461fb76356803f80d6b01b70f511b9cb068389997045e6",
+        "floating-cast.rs": "c0970aa7b4b52e86dae57e6d1b8b41ee0e86d71adcaba3f36ea86a7db032164d",
+        "lexical-number.rs": "7d6b9673a13cf3ff9420b1efef8d8e4216727091ff07f701c0dbbbf9a044e4c8",
+        "lexical-binary.rs": "73cae5e3d170e2f6e088b15d013f75b90c8d1de2ee38f8d2567114cd85fa26f9"
+      },
+      "binaries": {
+        "probe": "cf9b986c3c154324807ac9ea5d337a08005cc7199f605f87e57ecbaa0b23092f",
+        "runner": "fb7cfb17a0b9323ed7dd7cbb0355e8635df1499118f68be0e464f1621f920f5a"
+      },
+      "baseline_archives": {
+        "decimal-bround": {
+          "path": "decimal-bround-runs.json.gz",
+          "sha256": "efc7950580211733038b6f0d50cdd6553657ae272d9242aea1d737079c357b2a",
+          "files": 353,
+          "compressed_bytes": 1862230,
+          "uncompressed_bytes": 39588746
+        },
+        "float-bround": {
+          "path": "float-bround-runs.json.gz",
+          "sha256": "b15ed6079960f83ae39ac60debf2b60ec885c9263c43d355f0c8a96b284cbee4",
+          "files": 150,
+          "compressed_bytes": 605197
+        },
+        "float-bround-boundaries": {
+          "path": "float-bround-boundaries-runs.json.gz",
+          "sha256": "da65ffe24567793625612e18061643e3d233eaa1937031536a439aa94ed744a0",
+          "files": 166,
+          "compressed_bytes": 655607
+        },
+        "round-arguments": {
+          "path": "round-arguments-runs.json.gz",
+          "sha256": "973e2d14ec1336d1a35c3a28463ac07aa955357ebeb73656fbe3e3aa9722482c",
+          "files": 200,
+          "compressed_bytes": 844977
+        },
+        "integer-round": {
+          "path": "integer-round-runs.json.gz",
+          "sha256": "06e3642dda06de137e37eb65266e7c4c64c3a702e7ed0ff45ee6c357fb6d136f",
+          "files": 196,
+          "compressed_bytes": 806079
+        },
+        "float-round": {
+          "path": "float-round-runs.json.gz",
+          "sha256": "b47ed590d36c6c7f1ca8130157968b2ecd9d8dd304b52f2352b7e3ce3536f687",
+          "files": 190,
+          "compressed_bytes": 940244
+        },
+        "decimal-round-extreme": {
+          "path": "decimal-round-extreme-runs.json.gz",
+          "sha256": "d74f39c888d987f286e759c063780840f67b1f66a477764c101f23ddda3f3fc8",
+          "files": 183,
+          "compressed_bytes": 930381
+        },
+        "modulo-null-guard": {
+          "path": "modulo-null-guard-runs.json.gz",
+          "sha256": "9f6d3d0d9477dbc34b65e78db54caf36d3b56cdb456c8049c9dde4825ef9c691",
+          "files": 194,
+          "compressed_bytes": 1097974
+        },
+        "bigint-div-overflow": {
+          "path": "bigint-div-overflow-runs.json.gz",
+          "sha256": "80ef19455a686cf236a9e0057a8da0814b50b751fe397ce2484129eb24b0fa8d",
+          "files": 203,
+          "compressed_bytes": 1161778
+        },
+        "string-division-coercion": {
+          "path": "string-division-coercion-runs.json.gz",
+          "sha256": "4d33643d1338d9c02df80cf1a04e7bdd3120c7afab7066d9961acfa3d16614ae",
+          "files": 237,
+          "compressed_bytes": 2529661
+        },
+        "decimal-arithmetic-types": {
+          "path": "decimal-arithmetic-types-runs.json.gz",
+          "sha256": "5391fc7bec1b93c769ed581ce67c4d478eb511e912ad441fc43074865c4184c2",
+          "files": 487,
+          "compressed_bytes": 3954076
+        },
+        "legacy-numeric-cast": {
+          "path": "legacy-numeric-cast-runs.json.gz",
+          "sha256": "3b82c84594333826f6eb0033b3ddee9d20027874387bf697b4906d422e3f5d0f",
+          "files": 243,
+          "compressed_bytes": 1369491
+        },
+        "strict-integer-cast": {
+          "path": "strict-integer-cast-runs.json.gz",
+          "sha256": "7d09f244dbe6b63e01d62cdfefc44d58c3aa34d12ff976a9f3a193605e562812",
+          "files": 481,
+          "compressed_bytes": 2656716
+        }
+      },
+      "integration_base": "bb1454385b2818ef3fb6d3dd6fde6fad44e109f2",
+      "changed_runtime_sources": [
+        "cast.rs",
+        "scalar-mod.rs",
+        "function-Cargo.toml",
+        "Cargo.lock",
+        "floating-cast.rs",
+        "lexical-number.rs",
+        "lexical-binary.rs"
+      ]
+    },
+    "libraries": {
+      "libraries_per_variant": {
+        "before": 414,
+        "after": 414
+      },
+      "linked_artifacts": {
+        "before": 505,
+        "after": 505
+      },
+      "added": [],
+      "removed": [],
+      "changed": [
+        "arrow",
+        "arrow_cast",
+        "arrow_csv",
+        "arrow_json",
+        "datafusion",
+        "datafusion_catalog",
+        "datafusion_catalog_listing",
+        "datafusion_common",
+        "datafusion_datasource",
+        "datafusion_datasource_arrow",
+        "datafusion_datasource_csv",
+        "datafusion_datasource_json",
+        "datafusion_execution",
+        "datafusion_expr",
+        "datafusion_expr_common",
+        "datafusion_functions",
+        "datafusion_functions_aggregate",
+        "datafusion_functions_aggregate_common",
+        "datafusion_functions_nested",
+        "datafusion_functions_table",
+        "datafusion_functions_window",
+        "datafusion_functions_window_common",
+        "datafusion_optimizer",
+        "datafusion_physical_expr",
+        "datafusion_physical_expr_adapter",
+        "datafusion_physical_expr_common",
+        "datafusion_physical_optimizer",
+        "datafusion_physical_plan",
+        "datafusion_pruning",
+        "datafusion_session",
+        "datafusion_spark",
+        "datafusion_sql",
+        "delta_arrow_reader",
+        "delta_kernel",
+        "delta_kernel_default_engine",
+        "jiter",
+        "lexical",
+        "lexical_core",
+        "lexical_parse_float",
+        "lexical_parse_integer",
+        "lexical_util",
+        "lexical_write_float",
+        "lexical_write_integer",
+        "parquet_variant",
+        "parquet_variant_compute",
+        "parquet_variant_json",
+        "sail_common_datafusion",
+        "sail_function",
+        "sail_logical_plan",
+        "sail_plan",
+        "xee_interpreter",
+        "xee_ir",
+        "xee_xpath",
+        "xee_xpath_compiler"
+      ],
+      "all_files_hash_verified": true,
+      "scope": "Both benchmark links use only the corresponding private dependency snapshot. Additional lexical features and the patched lexical-parse-float source rebuild downstream artifacts; this is not an isolated sail_plan-only comparison."
+    },
+    "baseline_binaries": {
+      "probe": "607ef3f7636b391615d743166ddf588a1b9a0b553a7c141dadd13b2ae532261d",
+      "runner": "a8d9ce69bf41804c8263f858919ee71beebc6aee2fd6fc5769874925f43ad376"
+    },
+    "versions": {
+      "spark": "4.2.0",
+      "sail": "0.7.1",
+      "datafusion": "54.1.0",
+      "arrow": "58.4.0"
+    },
+    "native_settings": {
+      "target_partitions": 2,
+      "default_batch_size": 1,
+      "case_batch_size": "stored per query",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    "spark_settings": {
+      "spark.ui.enabled": "false",
+      "spark.driver.bindAddress": "127.0.0.1",
+      "spark.driver.host": "127.0.0.1",
+      "spark.sql.shuffle.partitions": "2",
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.decimalOperations.allowPrecisionLoss": "true"
+    },
+    "reference_python": "/home/hanbo/.cache/delta-reader-spark-oracle-4.2.0/venv/bin/python",
+    "java_home": "/home/hanbo/.cache/delta-reader-spark-oracle-4.2.0/java/jdk-21.0.12.1+1-jre",
+    "lexical": {
+      "crate": "lexical-parse-float",
+      "version": "1.0.6",
+      "registry_source": "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/lexical-parse-float-1.0.6",
+      "license": "\"MIT/Apache-2.0\"",
+      "upstream_pr": {
+        "baseRefOid": "28985e507879c0bab4bde9179b8fae2042085a12",
+        "body": "Fix #87 on parsing hexfloats by changing the assertions to return failure (`None` and `false`).",
+        "files": [
+          {
+            "path": "lexical-core/tests/float_pow2_tests.rs",
+            "additions": 1,
+            "deletions": 0,
+            "changeType": "MODIFIED"
+          },
+          {
+            "path": "lexical-parse-float/src/number.rs",
+            "additions": 10,
+            "deletions": 9,
+            "changeType": "MODIFIED"
+          },
+          {
+            "path": "lexical-parse-float/tests/issue_87_tests.rs",
+            "additions": 16,
+            "deletions": 0,
+            "changeType": "ADDED"
+          },
+          {
+            "path": "lexical-parse-float/tests/number_tests.rs",
+            "additions": 13,
+            "deletions": 0,
+            "changeType": "MODIFIED"
+          }
+        ],
+        "headRefOid": "62e40dc16560833f11e360ae6371875c513e2038",
+        "state": "OPEN",
+        "title": "Fix #87 parsing hexfloats",
+        "url": "https://github.com/Alexhuszagh/rust-lexical/pull/172"
+      },
+      "additional_change": "Return zero before normalization and round the 64-bit-discard boundary correctly near the minimum subnormal.",
+      "unchanged_crate_files": {
+        ".cargo_vcs_info.json": "f8ebe0e61436df66785823345ca422282fd975470ceabe34b2bc895703906214",
+        "CODE_OF_CONDUCT.md": "6760f79fd0016b6c25204964c62c8a659b0c6768cfe6a4115d9cd53530632cd6",
+        "Cargo.lock": "cac7c8bb5536befd94eefbfc248dfb82dc279dbc40a5896ef4b3ccacf42d96c1",
+        "Cargo.toml": "db34a26bd4c26dadf8cec77760f433a3975cf90f58255b48392f43fd2180846b",
+        "Cargo.toml.orig": "a90e81f66983712bf2ee9ccf66a8fb1c0412192954cb2db6d9d9fb3b50fda3c0",
+        "LICENSE-APACHE": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+        "LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "LICENSE.md": "99aab70a96f3ecab683d8a319d9070af2213ae4c1601fb053fbe85e1361e32fe",
+        "README.md": "9eb1bda170506c954431f288a2749710fbca9baf727c717d26dbd3342ca8cc29",
+        ".cargo-ok": "afbf9d0f3560b0fd7795e81c42a0a79ee6b6fc67e064f77826aee642cad28d91",
+        "src/api.rs": "a2891df2614c6400c2e9dbaf0f6f905fe947945188343a828832ac34c6ffbdd6",
+        "src/bellerophon.rs": "49f1309c02a2b792e5aa14d567bd7dfa968372107d8ed594e16b231ced4e5dda",
+        "src/bigint.rs": "aac269d0c716fb343f76e32d04220f5dc6ad692dc4242a16a65b69b0127fa9e3",
+        "src/binary.rs": "9b536b7cce82e251b58218292a28e75a2bc1ee241aa37bdba7777adeaa54de33",
+        "src/float.rs": "d5db5cce67b5d05c617620a4f91e16537f111bba488565fd0aa0f869793b99b5",
+        "src/fpu.rs": "c0edf8d061b096bfc771b904577534bfee8b8415fdfdc62e8d6ba5be7b478866",
+        "src/lemire.rs": "254e41b8442d9964511674eab5b89d0ecb3c2fd59f2b4f9e0bd5c0a400147633",
+        "src/lib.rs": "3be7092999e9526a0881fe171fdf8160411666149ec9ab5d9c49dc5bf485c0a0",
+        "src/libm.rs": "c20f93ff5506032ba75c301c60c115734e07b90f5dbf753cd8b63b37a676c385",
+        "src/limits.rs": "ee4b53585b9532270ae6d6aafa8dd99b10d10bb450b4191668c90b64b26918f1",
+        "src/mask.rs": "12cace0998e2646d4c56cfc49e302bae0e17f42f29631a5efa0197308fee9e13",
+        "src/number.rs": "87b48fbdf9cff3bfb42156e913800f63fbb77f96009c4e95a2ab14d48fe5b0be",
+        "src/options.rs": "3002d609eec12ed936833f8e87d58805e783f9e86b0bf8bcb904726d5f93ca9c",
+        "src/parse.rs": "d323f5e706e04e9bcf4d870c7453c349c9d3f6bf8565978c32e820fac85d5a85",
+        "src/shared.rs": "767eb25a7fb681184b8073ebe010ba833cf68d17e325d261c5cdea1a74f76018",
+        "src/slow.rs": "65c94200a69ed4a30c874096a6ed2fdbc50ccc6685ec3f27e60caa055212b54d",
+        "src/table.rs": "c3e24051c1172682bdec1d721c1d8618f46db6233783ee9e68392437cd978f43",
+        "src/table_bellerophon_decimal.rs": "fec4c5a2583cc8804d8fe783ea1f6c6bbbeee7a17ce54fe27b6aedaa6d7ca63d",
+        "src/table_bellerophon_radix.rs": "29013efb561e6f2c9fecd1fc6ef07e32e9484bd824efedc402f53cba77d574a2",
+        "src/table_binary.rs": "81e1401995c3340506e169e72e0f61e0925c38e47b8fd710f769c236bccfc096",
+        "src/table_decimal.rs": "169236e8e5d063bac5fbbd8bfe963b31fdb71156e55982bd249a8a483503e096",
+        "src/table_large.rs": "1ab9621a3332c1e6006876a25b2998129feec5f9eadfbea876763077bac31986",
+        "src/table_lemire.rs": "bc6f10d1c1eb661ee5929a11d712811410866775fdff6ae28574f69557d83667",
+        "src/table_radix.rs": "f803474182d232abcf3407582f7449bafc91ae70af5c96c739ea2245fd48bc1f",
+        "src/table_small.rs": "b433c3f13dbd62ccdd5de32e8eceea960b1d2b6facee3013839be5530543b50e",
+        "tests/api_tests.rs": "a0c08b827af28c2aa70aa702f9c4b04b744bd13c75956979d8538decb33f6732",
+        "tests/bellerophon.rs": "4499d8527b3c73554a79514b90cc5052b6b19587fdbd92b36ad3b17160916275",
+        "tests/bellerophon_radix_tests.rs": "184956aa39f693777ca9c6ddd93bf05ffc84871afaf4250c64e4f7e7802fe99b",
+        "tests/bellerophon_tests.rs": "f8cd002efd0b48cb2852c15215711232a3d9b4969ac7ce8369448a118733bdbf",
+        "tests/bigfloat_tests.rs": "d58c8c0c4dd72e545c3ad5fa4637ca66be6bb25b1a1d4c2137294c629b11a4dd",
+        "tests/bigint_tests.rs": "33a71076507ce1321aca3beb154ea9d425e4b564a24f0108d19142233c9910b8",
+        "tests/binary_tests.rs": "53407bd96c957154c8bc9359e3532e5d4a439fdd14fa6e4f0ce05d124a127d2c",
+        "tests/float_tests.rs": "82249c80a5bf8be6417e2d1530b9b578f5460ac635a60e0624402f318643edcf",
+        "tests/issue_96_tests.rs": "f4c6f83ad7b66dfefb2674e0ad0c7fee609e1adace4ed86a6c2f70ea594ccc47",
+        "tests/issue_98_tests.rs": "313288dae0504a20c2edc72cc6d4cb87fe9c84d638163023b47d6b5751255378",
+        "tests/lemire_tests.rs": "57fa35f7f4845008154044722d3dc1986ba5e6f5a5f861c706b066988a91a3e4",
+        "tests/libm_tests.rs": "7aafc4bd127d5cbdf12744ba6cd5f13ef064ff09b7c7f7ad5575a36876365969",
+        "tests/limits_tests.rs": "258b52fc6e579cf906deb0261af0a7f203ad380d4de05239085fbd5612e886d4",
+        "tests/mask_tests.rs": "38a82822af4062928b19609f228a61462ff7e41ba1bcd8207b1fb2399e8b540e",
+        "tests/number_tests.rs": "1fc17605cc54322713db0a09a0c4d94177629259fb56aaea4583366889074fb9",
+        "tests/options_tests.rs": "7da28960e477cc1d5f99e3cf970312cf787b4d31d4f922505f26e576eb711e39",
+        "tests/parse_tests.rs": "aec2f159908afe40e4eb982bab0ac4952e6e1b541c20877a08172b9d6ed076b5",
+        "tests/shared_tests.rs": "3eec6b22a1d53d4073ac99a5a0a562a6699fdcd0def8c49c7425ebbadaa58411",
+        "tests/slow_tests.rs": "c86983a4de71bb0bfbb802fba0eb6be95667a7a5fbab087c2ddb6dcff95039a1",
+        "tests/stackvec.rs": "205d0742ab925c99b9d240f8777bf1562e6a8983ede765781e92e339223d476c",
+        "tests/stackvec_tests.rs": "b6d9113bbd5876b402fcdeb46df07cfbea2e9da43c7832c600686b834c13d366"
+      }
+    }
+  },
+  "repository_files": {
+    "legacy_numeric_cast.py": "11fe9b735c2db3a0e4f5e58a729fb4b72a1704ea9f61d35e8c77b4d13d72b491",
+    "legacy-numeric-cast.jsonl": "9a2dee36077fd4e3f12e01224657d00ce12e96addbb43c75547b69911f4438c8",
+    "sail-legacy-numeric-cast.patch": "8a2dbfa959e1921fec0dba7a0eb9d66cd61ceea9c89e17a03ad1891dd0f88f35",
+    "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec",
+    "division_cast_classification.py": "049f9c0e9a4d8002584b3af5036afa032189896eea8567c60b4f581a8308e27d",
+    "test_division_cast_classification.py": "6526b38132fae216ec5d63e92ee8563b8495f0ca2fe208a147414d1202daee0d",
+    "decimal_arithmetic_types.py": "f355276a7660aba73f528e5b1fb959ef439332e66913f952ef0c70be633de317",
+    "string_division_coercion.py": "675bd82b1371f53eac368e46a67a26ef3e7ff97b91b9c80a86efd137a90a688d",
+    "bigint_div_overflow.py": "fbd40d0634454ee8b744e7df8951d406a1b4ca2c65d78c824dd5189521e965f3",
+    "modulo_null_guard.py": "1de2534e63053b48cf71f3845226eb21c8ff2868cf94cfba6416d5ca046b7e2f",
+    "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
+    "integer_round.py": "88ccca74ef38a616cbe3137dca5d41880a0d33a966c7087da534f0592d111271",
+    "float_bround.py": "80d227e9b16391fa193990c40d9560ec3368cbfb545dd1f0343c1edfc5e643ce",
+    "decimal_bround.py": "90f12456275c926ddf64e17453912c75243c8a348b7db8bb570796e2af6a74d4",
+    "integer_overflow.py": "2364a1ea92dc5d55a424e1049f3c657a6821c6350eb355f48f99b834bd593c76",
+    "oracle.py": "ff7e117a861e47b10c38dcd2cf47ae581acf91f12542b453746df01b20e9ec68",
+    "reference.py": "41e799f66e70378dd7a5f87139c1815cd029ff011bf61eb2fec0c54a338dee2e",
+    "extracted.py": "1386974b4fbfff0bf1713fab4b06a63aa4114caa0298c0dd92bb5d2e9b1901dc",
+    "inputs.json": "c9f64793df9198d5fdfb1f66e2393ac4f004f9a75e76148d4727401b31461ee3",
+    "queries.jsonl": "1b2a601c39379ad23488e07acf7496f8a69d81dea29df3e77dbc7483bacb3603",
+    "spark-oracle.json": "220ad53f828e307a75f1fc5b075477b3c2b1cefc5847e0161916c225e3e408ed",
+    "extracted-baseline.json": "90cc1a65c635d911f96f0ba60b7aacdf3efac3dfadf4a21d21c709a8c0053ec5",
+    "decimal-round-types.jsonl": "1c2b7aaef9032fc1fb134dc5e013d35e43ef07da821c4a4c431c00b4919f59a0",
+    "examples/decimal_probe.rs": "7f8d142623db9e1b30b400c2afdf507a48329eeee2180775141b448e28f0f9d0",
+    "decimal-arithmetic-types.jsonl": "511ba2fad902d94d6ff5b3f0b0558c2aaec807492b0ba1e45f1b1b86606fdabd",
+    "string-division-coercion.jsonl": "7a8140c093de3a7165eba5ad73e2d2c3eed2f22feaa4c26fec65dfb5cff3bb74",
+    "bigint-div-overflow.jsonl": "4dd7c7cf73b41576d5f46f3014adf879c10f823428727463f6ba1257baa06981",
+    "modulo-null-guard.jsonl": "30c16d7d9d03eee2009beeb76253afbc22552da92e383bc65802fde4119715bd",
+    "decimal-round-extreme.jsonl": "4ba78f714516e1a376378640d9f4bf40b0bf04e2094ebcdc8e3bf9c77cd88104",
+    "float-round.jsonl": "0c9b1869f1565d8e241be0327e2ecf6239eac1dcf81704e8a8f2a3ebbacf28b1",
+    "round-arguments.jsonl": "d485408ebd7f927642c8c5a9029ce1993ed976e6b0b317c29a2e5121037daf2a",
+    "integer-round.jsonl": "539ab3a27261708d83515876c1b3d9cf3257119f12edc8419cece357a2d4ffaf",
+    "float-bround-boundaries.jsonl": "40551b6b83e4d2bdb5e0c1b5ada0f84cd12b1366349cb67df2346c7c0cc06b8f",
+    "float-bround.jsonl": "b7dff7210eff43ee0d805b620a37ace1e8652da259b985ce8f65e85a9e8ebca6",
+    "decimal-bround.jsonl": "c13bb97b7bf5cb36aaae12a7b14b58cff394f423c6bd2b571252f8cab5f238ec",
+    "integer-overflow.jsonl": "c692c28758d273fc3022057e77b5baf344481dc075553d2d5428d39b1a34065a",
+    "strict_integer_cast.py": "fa9234ea51ffab97d8d64aa884fa05d30e776acdf7d27300073c4ce3a0884724",
+    "strict-integer-cast.jsonl": "85010e7d22199bc24bf26d939ccdf4139f361d2f15ae1a9154a41273de752281",
+    "sail-strict-integer-cast.patch": "2a64c1880ccbbab74592e71a493b523ee00ca6d595c43be001e9b72f243ac0a5",
+    "floating_string_cast.py": "f53565f37f82568a289488ee20c9433f105dffced211348c5953aa1c1b814853",
+    "floating-string-cast.jsonl": "607c2f4d6874b0d6d6574c352ae0643654296a689c956aab1b326a3ab2b4e7a9",
+    "sail-floating-string-cast.patch": "473c6a0fc9583a5bfde4ebc55afe607c5cd2de859da7043c55d82e96e35f6e31",
+    "lexical-hex-float.patch": "81319aaef1ff94890e4284fb20052847d45345261684e64f30b2edfacfdb2c00"
+  },
+  "baseline_archives": {
+    "decimal": {
+      "path": "decimal-bround-runs.json.gz",
+      "sha256": "efc7950580211733038b6f0d50cdd6553657ae272d9242aea1d737079c357b2a",
+      "files": 353,
+      "compressed_bytes": 1862230,
+      "uncompressed_bytes": 39588746
+    },
+    "float_type": {
+      "path": "float-bround-runs.json.gz",
+      "sha256": "b15ed6079960f83ae39ac60debf2b60ec885c9263c43d355f0c8a96b284cbee4",
+      "files": 150,
+      "compressed_bytes": 605197
+    },
+    "float_boundaries": {
+      "path": "float-bround-boundaries-runs.json.gz",
+      "sha256": "da65ffe24567793625612e18061643e3d233eaa1937031536a439aa94ed744a0",
+      "files": 166,
+      "compressed_bytes": 655607
+    },
+    "round_arguments": {
+      "path": "round-arguments-runs.json.gz",
+      "sha256": "973e2d14ec1336d1a35c3a28463ac07aa955357ebeb73656fbe3e3aa9722482c",
+      "files": 200,
+      "compressed_bytes": 844977
+    },
+    "integer_round": {
+      "path": "integer-round-runs.json.gz",
+      "sha256": "06e3642dda06de137e37eb65266e7c4c64c3a702e7ed0ff45ee6c357fb6d136f",
+      "files": 196,
+      "compressed_bytes": 806079
+    },
+    "float_round": {
+      "path": "float-round-runs.json.gz",
+      "sha256": "b47ed590d36c6c7f1ca8130157968b2ecd9d8dd304b52f2352b7e3ce3536f687",
+      "files": 190,
+      "compressed_bytes": 940244
+    },
+    "decimal_round_extreme": {
+      "path": "decimal-round-extreme-runs.json.gz",
+      "sha256": "d74f39c888d987f286e759c063780840f67b1f66a477764c101f23ddda3f3fc8",
+      "files": 183,
+      "compressed_bytes": 930381
+    },
+    "modulo_null_guard": {
+      "path": "modulo-null-guard-runs.json.gz",
+      "sha256": "9f6d3d0d9477dbc34b65e78db54caf36d3b56cdb456c8049c9dde4825ef9c691",
+      "files": 194,
+      "compressed_bytes": 1097974
+    },
+    "bigint_div_overflow": {
+      "path": "bigint-div-overflow-runs.json.gz",
+      "sha256": "80ef19455a686cf236a9e0057a8da0814b50b751fe397ce2484129eb24b0fa8d",
+      "files": 203,
+      "compressed_bytes": 1161778
+    },
+    "string_division_coercion": {
+      "path": "string-division-coercion-runs.json.gz",
+      "sha256": "4d33643d1338d9c02df80cf1a04e7bdd3120c7afab7066d9961acfa3d16614ae",
+      "files": 237,
+      "compressed_bytes": 2529661
+    },
+    "arithmetic": {
+      "path": "decimal-arithmetic-types-runs.json.gz",
+      "sha256": "5391fc7bec1b93c769ed581ce67c4d478eb511e912ad441fc43074865c4184c2",
+      "files": 487,
+      "compressed_bytes": 3954076
+    },
+    "classification": {
+      "path": "division-cast-classification-runs.json.gz",
+      "sha256": "8d9ed31b80c933b29058d0be7efb04e5f39c8a1924f171ab6e6ab5f88f081fda",
+      "files": 152,
+      "compressed_bytes": 547387
+    },
+    "legacy_cast": {
+      "path": "legacy-numeric-cast-runs.json.gz",
+      "sha256": "3b82c84594333826f6eb0033b3ddee9d20027874387bf697b4906d422e3f5d0f",
+      "files": 243,
+      "compressed_bytes": 1369491
+    },
+    "strict_cast": {
+      "path": "strict-integer-cast-runs.json.gz",
+      "sha256": "7d09f244dbe6b63e01d62cdfefc44d58c3aa34d12ff976a9f3a193605e562812",
+      "files": 481,
+      "compressed_bytes": 2656716
+    }
+  },
+  "archive": {
+    "path": "floating-string-cast-runs.json.gz",
+    "sha256": "2649ff9e58b9b5e3635e6b46c87b428caddcfb2b705d9708874a811798e8c245",
+    "files": 525,
+    "compressed_bytes": 3407291
+  }
+}
