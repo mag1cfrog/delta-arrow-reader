@@ -1,0 +1,348 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -833,7 +833,6 @@
+         &self,
+         input: datafusion_expr::ScalarFunctionArgs,
+     ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
+-        use datafusion::arrow::array::{Array, AsArray, BooleanArray};
+         use datafusion::arrow::compute::kernels::numeric::div;
+         use datafusion::arrow::datatypes::Float64Type;
+         use datafusion::physical_expr_common::datum::apply;
+@@ -841,29 +840,110 @@
+             return datafusion_common::internal_err!("spark_checked_divide requires two arguments");
+         };
+         apply(left, right, |left, right| {
+-            let (a, a_scalar) = left.get();
+-            let (b, b_scalar) = right.get();
+-            let a = a.as_primitive::<Float64Type>();
+-            let b = b.as_primitive::<Float64Type>();
+-            let has_zero = if b_scalar {
+-                b.is_valid(0) && b.value(0) == 0.0 && a.null_count() != a.len()
+-            } else if a_scalar {
+-                a.is_valid(0) && BooleanArray::from_unary(b, |b| b == 0.0).has_true()
+-            } else {
+-                if a.len() != b.len() {
++            check_float_divisor::<Float64Type>(left, right)?;
++            div(left, right)
++        })
++    }
++}
++
++// Division and remainder share this validity-aware zero check. It preserves
++// scalar broadcasting and combines both array masks before rejecting a zero.
++fn check_float_divisor<T: datafusion::arrow::datatypes::ArrowPrimitiveType>(
++    left: &dyn datafusion::arrow::array::Datum,
++    right: &dyn datafusion::arrow::array::Datum,
++) -> Result<(), ArrowError> {
++    use datafusion::arrow::array::{Array, ArrowNativeTypeOp, AsArray, BooleanArray};
++    let (a, a_scalar) = left.get();
++    let (b, b_scalar) = right.get();
++    let a = a.as_primitive::<T>();
++    let b = b.as_primitive::<T>();
++    let has_zero = if b_scalar {
++        b.is_valid(0) && b.value(0).is_zero() && a.null_count() != a.len()
++    } else if a_scalar {
++        a.is_valid(0) && BooleanArray::from_unary(b, |b| b.is_zero()).has_true()
++    } else {
++        if a.len() != b.len() {
++            return Err(ArrowError::ComputeError(
++                "division array lengths differ".into(),
++            ));
++        }
++        BooleanArray::from_binary(a, b, |_, b| b.is_zero()).has_true()
++    };
++    if has_zero {
++        Err(ArrowError::DivideByZero)
++    } else {
++        Ok(())
++    }
++}
++
++#[derive(Debug, PartialEq, Eq, Hash)]
++struct SparkCheckedModulo {
++    signature: datafusion_expr::Signature,
++    data_type: DataType,
++}
++
++impl datafusion_expr::ScalarUDFImpl for SparkCheckedModulo {
++    fn name(&self) -> &str {
++        "spark_checked_modulo"
++    }
++    fn signature(&self) -> &datafusion_expr::Signature {
++        &self.signature
++    }
++    fn return_type(&self, _arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
++        Ok(self.data_type.clone())
++    }
++    fn simplify(
++        &self,
++        args: Vec<Expr>,
++        _info: &datafusion_expr::simplify::SimplifyContext,
++    ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
++        use datafusion_expr::simplify::ExprSimplifyResult;
++        if args
++            .iter()
++            .any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
++        {
++            return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::try_from(
++                &self.data_type,
++            )?)));
++        }
++        if matches!(&args[1], Expr::Literal(ScalarValue::Float32(Some(b)), _) if *b != 0.0)
++            || matches!(&args[1], Expr::Literal(ScalarValue::Float64(Some(b)), _) if *b != 0.0)
++        {
++            let (left, right) = args.two()?;
++            return Ok(ExprSimplifyResult::Simplified(Expr::BinaryExpr(
++                BinaryExpr::new(Box::new(left), Operator::Modulo, Box::new(right)),
++            )));
++        }
++        Ok(ExprSimplifyResult::Original(args))
++    }
++    fn invoke_with_args(
++        &self,
++        input: datafusion_expr::ScalarFunctionArgs,
++    ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
++        use datafusion::arrow::compute::kernels::numeric::rem;
++        use datafusion::arrow::datatypes::{Float32Type, Float64Type};
++        use datafusion::physical_expr_common::datum::apply;
++        let [left, right] = input.args.as_slice() else {
++            return datafusion_common::internal_err!("spark_checked_modulo requires two arguments");
++        };
++        apply(left, right, |left, right| {
++            let check = match self.data_type {
++                DataType::Float32 => check_float_divisor::<Float32Type>(left, right),
++                DataType::Float64 => check_float_divisor::<Float64Type>(left, right),
++                _ => {
+                     return Err(ArrowError::ComputeError(
+-                        "division array lengths differ".into(),
++                        "unexpected floating remainder type".into(),
+                     ));
+                 }
+-                // from_binary combines both validity masks. The predicate uses
+-                // IEEE equality so +0.0 and -0.0 both count as zero.
+-                BooleanArray::from_binary(a, b, |_, b| b == 0.0).has_true()
+             };
+-            if has_zero {
+-                Err(ArrowError::DivideByZero)
+-            } else {
+-                div(left, right)
+-            }
++            check.map_err(|error| {
++                if matches!(error, ArrowError::DivideByZero) {
++                    ArrowError::ComputeError("[REMAINDER_BY_ZERO] Remainder by zero".into())
++                } else {
++                    error
++                }
++            })?;
++            rem(left, right)
+         })
+     }
+ }
+@@ -1454,56 +1534,170 @@
+     move |arg1: Expr, arg2| func(cast(arg1, DataType::Float64), cast(arg2, DataType::Float64))
+ }
+ 
+-/// Modulo operation with division-by-zero handling.
+-///
+-/// In ANSI mode: raises error for integral/decimal modulo by zero.
+-/// In non-ANSI mode: returns NULL for modulo by zero.
+-/// Float/double modulo by zero returns NaN (IEEE 754).
++#[test]
++fn checked_modulo_respects_slices_nulls_and_scalar_positions() -> datafusion_common::Result<()> {
++    use datafusion::arrow::array::{Array, Float64Array};
++    use datafusion::arrow::buffer::NullBuffer;
++    use datafusion::arrow::compute::cast as cast_array;
++    use datafusion::arrow::datatypes::Field;
++    use datafusion_common::config::ConfigOptions;
++    use datafusion_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDFImpl};
++    for data_type in [DataType::Float32, DataType::Float64] {
++        let udf = SparkCheckedModulo {
++            signature: datafusion_expr::Signature::exact(
++                vec![data_type.clone(); 2],
++                datafusion_expr::Volatility::Immutable,
++            ),
++            data_type: data_type.clone(),
++        };
++        let scalar = |v| -> datafusion_common::Result<ColumnarValue> {
++            Ok(ColumnarValue::Scalar(
++                ScalarValue::Float64(v).cast_to(&data_type)?,
++            ))
++        };
++        let array = |values: Vec<f64>,
++                     valid: Vec<bool>,
++                     offset,
++                     len|
++         -> datafusion_common::Result<ColumnarValue> {
++            let a =
++                Float64Array::new(values.into(), Some(NullBuffer::from(valid))).slice(offset, len);
++            Ok(ColumnarValue::Array(cast_array(&a, &data_type)?))
++        };
++        let run = |left: ColumnarValue, right: ColumnarValue, len, host_ansi| {
++            let mut config = ConfigOptions::default();
++            config.execution.enable_ansi_mode = host_ansi;
++            udf.invoke_with_args(ScalarFunctionArgs {
++                args: vec![left, right],
++                number_rows: len,
++                arg_fields: vec![
++                    Arc::new(Field::new("a", data_type.clone(), true)),
++                    Arc::new(Field::new("b", data_type.clone(), true)),
++                ],
++                return_field: Arc::new(Field::new("r", data_type.clone(), true)),
++                config_options: Arc::new(config),
++            })
++        };
++        for host_ansi in [false, true] {
++            for (a, b, n, expected) in [
++                (scalar(None)?, scalar(Some(-0.0))?, 1, vec![None]),
++                (scalar(Some(-5.0))?, scalar(Some(2.0))?, 1, vec![Some(-1.0)]),
++                (
++                    array(vec![99.0, 5.0, 5.0], vec![true, false, true], 1, 2)?,
++                    array(vec![1.0, -0.0, 2.0], vec![true, true, true], 1, 2)?,
++                    2,
++                    vec![None, Some(1.0)],
++                ),
++                (
++                    array(vec![99.0, 5.0, 5.0], vec![true, false, false], 1, 2)?,
++                    scalar(Some(0.0))?,
++                    2,
++                    vec![None, None],
++                ),
++                (
++                    scalar(None)?,
++                    array(vec![0.0, -0.0], vec![true, true], 0, 2)?,
++                    2,
++                    vec![None, None],
++                ),
++                (
++                    scalar(Some(5.0))?,
++                    array(vec![0.0, 2.0], vec![false, true], 0, 2)?,
++                    2,
++                    vec![None, Some(1.0)],
++                ),
++                (array(vec![], vec![], 0, 0)?, scalar(Some(0.0))?, 0, vec![]),
++            ] {
++                let result = run(a, b, n, host_ansi)?.into_array(n)?;
++                assert_eq!(result.data_type(), &data_type);
++                let values = cast_array(&result, &DataType::Float64)?;
++                assert_eq!(
++                    values
++                        .as_any()
++                        .downcast_ref::<Float64Array>()
++                        .unwrap()
++                        .iter()
++                        .collect::<Vec<_>>(),
++                    expected
++                );
++            }
++            assert!(matches!(
++                run(scalar(Some(5.0))?, scalar(Some(2.0))?, 1, host_ansi)?,
++                ColumnarValue::Scalar(_)
++            ));
++            for zero in [0.0, -0.0] {
++                for value in [0.0, 5.0, f64::NAN, f64::INFINITY] {
++                    let error = run(scalar(Some(value))?, scalar(Some(zero))?, 1, host_ansi)
++                        .unwrap_err()
++                        .to_string();
++                    assert!(error.contains("[REMAINDER_BY_ZERO]"), "{error}");
++                    assert!(
++                        run(
++                            array(vec![0.0, value], vec![false, true], 0, 2)?,
++                            array(vec![zero, zero], vec![true, true], 0, 2)?,
++                            2,
++                            host_ansi
++                        )
++                        .is_err()
++                    );
++                }
++            }
++        }
++    }
++    Ok(())
++}
++
++/// Modulo checks zero only after NULL propagation, and preserves native kernels.
+ fn spark_modulo(input: ScalarFunctionInput) -> PlanResult<Expr> {
+     let ScalarFunctionInput {
+         arguments,
+         function_context,
+     } = input;
+-
+     let (dividend, divisor) = arguments.two()?;
+-
+-    // Plan-time check for literal zero divisors.
+-    if is_zero_literal(&divisor) {
+-        if function_context.plan_config.ansi_mode {
+-            return Err(PlanError::ArrowError(ArrowError::ArithmeticOverflow(
+-                "Remainder by zero".to_string(),
+-            )));
+-        } else {
+-            return Ok(Expr::Literal(ScalarValue::Null, None));
+-        }
+-    }
+-
+     let ansi_mode = function_context.plan_config.ansi_mode;
+     let (dividend, divisor) = match (
+         dividend.get_type(function_context.schema),
+         divisor.get_type(function_context.schema),
+     ) {
+-        (Ok(left_type), Ok(right_type)) => coerce_spark_arithmetic_operands(
+-            dividend, divisor, &left_type, &right_type, ansi_mode,
+-        ),
++        (Ok(left_type), Ok(right_type)) => {
++            coerce_spark_arithmetic_operands(dividend, divisor, &left_type, &right_type, ansi_mode)
++        }
+         _ => (dividend, divisor),
+     };
+-    let divisor_type = divisor.get_type(function_context.schema);
+-
+-    // Apply runtime zero-divisor guard to the divisor before building the modulo expression.
+-    let effective_divisor_type = divisor_type.unwrap_or(DataType::Int32);
+-    let divisor = make_safe_divisor(
+-        divisor,
+-        &effective_divisor_type,
+-        ansi_mode,
+-        "Remainder by zero",
+-    );
+-
+-    Ok(Expr::BinaryExpr(BinaryExpr {
+-        left: Box::new(dividend),
+-        op: Operator::Modulo,
+-        right: Box::new(divisor),
+-    }))
++    let modulo = |left, right| {
++        Expr::BinaryExpr(BinaryExpr::new(
++            Box::new(left),
++            Operator::Modulo,
++            Box::new(right),
++        ))
++    };
++    let data_type = modulo(dividend.clone(), divisor.clone()).get_type(function_context.schema)?;
++    if !ansi_mode && is_zero_literal(&divisor) {
++        // Legacy zero skips the dividend, including a dead failing CAST, but
++        // still has the declared remainder result type.
++        return Ok(lit(ScalarValue::try_from(&data_type)?));
++    }
++    if ansi_mode {
++        if matches!(data_type, DataType::Float32 | DataType::Float64) {
++            return Ok(ScalarUDF::from(SparkCheckedModulo {
++                signature: datafusion_expr::Signature::exact(
++                    vec![data_type.clone(); 2],
++                    datafusion_expr::Volatility::Immutable,
++                ),
++                data_type: data_type.clone(),
++            })
++            .call(vec![
++                cast(dividend, data_type.clone()),
++                cast(divisor, data_type),
++            ]));
++        }
++        // Arrow integer/Decimal remainder already checks zeros only on valid
++        // rows. A separate divisor-only CASE loses the dividend's NULL mask.
++        return Ok(modulo(dividend, divisor));
++    }
++    let divisor_type = divisor.get_type(function_context.schema)?;
++    let divisor = make_safe_divisor(divisor, &divisor_type, false, "Remainder by zero");
++    Ok(modulo(dividend, divisor))
+ }
+ 
+ fn spark_abs(input: ScalarFunctionInput) -> PlanResult<Expr> {

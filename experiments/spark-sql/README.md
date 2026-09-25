@@ -20,6 +20,8 @@ The [FLOAT ROUND fix](FLOAT_ROUND.md) rounds represented Float32 inputs with Flo
 
 The [Decimal ROUND scale guard](DECIMAL_ROUND_EXTREME.md) preserves Underflow for live nonzero inputs at extreme negative scales. Ordinary scales keep the existing kernel; neighboring JVM capacity differences and measured costs remain explicitly tracked.
 
+The [NULL-aware modulo guard](MODULO_NULL_GUARD.md) checks both operands before rejecting a zero divisor. It reuses native integer/Decimal remainder and the existing floating validity check; CAST, schema and final performance acceptance retain their own owners.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
