@@ -45,7 +45,7 @@ You can set the target explicitly:
 - The DataFusion adapter uses `datafusion::ScanOptions::target_partitions`.
 
 An explicit target must be greater than zero. It wins over the automatic target
-and its resource caps.
+and its resource caps, so planning skips the environment probes for that scan.
 
 Without an explicit value, the reader starts with the process's available
 parallelism. It then caps that number with the values it can determine cheaply:
