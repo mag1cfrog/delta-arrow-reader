@@ -16,6 +16,8 @@ The [ROUND argument fix](ROUND_ARGUMENTS.md) resolves constant INT scales, conve
 
 The [integer ROUND fix](INTEGER_ROUND.md) preserves signed-integer values/types and query-specific overflow behavior, including BIGINT scale -19. Its passing bounded matrix is separate from the retained extreme-scale reference questions.
 
+The [FLOAT ROUND fix](FLOAT_ROUND.md) rounds represented Float32 inputs with Float64 intermediates and preserves HALF_UP boundaries, positive zero and finite results at large scales. Its reference and performance limits retain their existing owners.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
