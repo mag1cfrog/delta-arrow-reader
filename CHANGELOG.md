@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+## [0.6.1](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.6.0...v0.6.1) - 2026-09-25
+
+### Documentation
+
+- pin the compatible DataFusion installation major ([#242](https://github.com/mag1cfrog/delta-arrow-reader/pull/242))
+- add Search Console verification and benchmark metadata
+- add Databricks server timings to selective S3 benchmark
+- label Lakehouse RT benchmark comparisons as Beta
+- clarify evidence and Beta context for selective S3 benchmark
+- highlight selective S3 performance in the README
+- refresh Delta reader benchmarks with auditable results
+- publish an anonymized four-engine selective S3 case study
+
+### Fixed
+
+- honor Linux cgroup memory in automatic partition targets ([#239](https://github.com/mag1cfrog/delta-arrow-reader/pull/239))
+- offload DataFusion scan planning to blocking pool ([#228](https://github.com/mag1cfrog/delta-arrow-reader/pull/228))
+- validate execution capacities against Tokio limits ([#227](https://github.com/mag1cfrog/delta-arrow-reader/pull/227))
+- report nested schema violations without panicking ([#224](https://github.com/mag1cfrog/delta-arrow-reader/pull/224))
+- read legacy Parquet lists without panicking ([#221](https://github.com/mag1cfrog/delta-arrow-reader/pull/221))
+- expose a valid execution partition for empty DataFusion scans ([#218](https://github.com/mag1cfrog/delta-arrow-reader/pull/218))
+- separate streaming partition predicates from row filters ([#215](https://github.com/mag1cfrog/delta-arrow-reader/pull/215))
+- prevent ordered scans from deadlocking under file-read limits ([#210](https://github.com/mag1cfrog/delta-arrow-reader/pull/210))
+- preserve row counts for empty DV projections ([#201](https://github.com/mag1cfrog/delta-arrow-reader/pull/201))
+- validate data-file URLs before Parquet reads ([#199](https://github.com/mag1cfrog/delta-arrow-reader/pull/199))
+- preserve NaN matches in row-group pruning ([#198](https://github.com/mag1cfrog/delta-arrow-reader/pull/198))
+- preserve INT96 timestamps across the full microsecond range ([#196](https://github.com/mag1cfrog/delta-arrow-reader/pull/196))
+- preserve rows when Parquet statistics need type conversion ([#193](https://github.com/mag1cfrog/delta-arrow-reader/pull/193))
+
+### Maintenance
+
+- use rustls for Kernel HTTPS access ([#248](https://github.com/mag1cfrog/delta-arrow-reader/pull/248))
+
+### Performance
+
+- build deletion-vector Arrow masks directly ([#249](https://github.com/mag1cfrog/delta-arrow-reader/pull/249))
+- compact dense deletion vector coordinates ([#236](https://github.com/mag1cfrog/delta-arrow-reader/pull/236))
+
 ## [0.6.0](https://github.com/mag1cfrog/delta-arrow-reader/compare/v0.5.3...v0.6.0) - 2026-08-30
 
 ### Added
