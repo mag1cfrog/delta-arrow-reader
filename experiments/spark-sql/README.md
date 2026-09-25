@@ -28,6 +28,8 @@ The [string-peer division fix](STRING_DIVISION_COERCION.md) applies Spark's mode
 
 The [Decimal arithmetic fix](DECIMAL_ARITHMETIC_TYPES.md) preserves remainder precision and adjusts precision-38 results using native wide arithmetic and casts. It also prevents Decimal `% 1` from folding to zero. The report retains VALUES input-type differences and separates the cost of correct wide execution from faster old queries with incorrect results.
 
+The [division/CAST classification](DIVISION_CAST_CLASSIFICATION.md) accounts for all 156 original evaluation observations, adds reduced queries and separates five implementation causes. It preserves unresolved error reporting and NULLIF controls with their existing owners. The diagnostic changes no runtime code.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
