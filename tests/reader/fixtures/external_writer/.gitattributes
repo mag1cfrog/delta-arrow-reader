@@ -1,0 +1,2 @@
+# Preserve writer output and recorded hashes on every platform.
+corpus/** -text

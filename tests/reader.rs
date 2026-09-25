@@ -11,6 +11,8 @@ mod datafusion_adapter;
 mod empty_projection;
 #[path = "reader/execution_capacities.rs"]
 mod execution_capacities;
+#[path = "reader/external_writer.rs"]
+mod external_writer;
 #[path = "reader/legacy_lists.rs"]
 mod legacy_lists;
 #[path = "reader/nested_nullability.rs"]

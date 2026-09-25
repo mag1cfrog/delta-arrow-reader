@@ -1,0 +1,244 @@
+{
+  "provenance": "Original synthetic data written and read by Apache Spark / Delta Lake; no reader fixture helper is used.",
+  "license": "Apache-2.0 (same as this repository)",
+  "generator": "../generate.py",
+  "generation_command": "JAVA_HOME=/path/to/java-21 SPARK_LOCAL_IP=127.0.0.1 uv run --python 3.13.12 --script tests/reader/fixtures/external_writer/generate.py NEW_OUTPUT_DIRECTORY",
+  "tools": {
+    "pyspark": "4.0.1",
+    "delta-spark": "4.0.0",
+    "pyarrow": "20.0.0",
+    "pandas": "2.2.3"
+  },
+  "python": "3.13.12",
+  "java": "21.0.12.1+1-LTS",
+  "size_budget_bytes": 262144,
+  "fixtures": [
+    {
+      "name": "partitioned",
+      "snapshot_version": 0,
+      "protocol": {
+        "minReaderVersion": 1,
+        "minWriterVersion": 2
+      },
+      "partition_columns": [
+        "region"
+      ],
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "label",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "region",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "expected_schema_and_rows": "expected.arrow",
+      "expected_row_count": 360,
+      "physical_row_count": 360,
+      "row_groups_per_file": {
+        "region=__HIVE_DEFAULT_PARTITION__/part-00000-e8d78ea9-ceee-48d2-9827-dd3f0cea7aa0.c000.snappy.parquet": 2,
+        "region=east/part-00000-2676fbbc-5dc5-462f-871e-1d38911024a1.c000.snappy.parquet": 2,
+        "region=west/part-00000-b78559d1-e252-4a53-b848-79cfbb831781.c000.snappy.parquet": 2
+      },
+      "deletion_vectors": [],
+      "files": {
+        "expected.arrow": {
+          "bytes": 10306,
+          "sha256": "f0a22a11d2bf82de3e5a00db8d649296b77cf7d96efa8c2a347492e58602c7e9"
+        },
+        "table/_delta_log/00000000000000000000.json": {
+          "bytes": 2198,
+          "sha256": "8fda0fa35962630d0a63fb04d4f4a54c2de79ea28835a1c245a193321572b158"
+        },
+        "table/region=__HIVE_DEFAULT_PARTITION__/part-00000-e8d78ea9-ceee-48d2-9827-dd3f0cea7aa0.c000.snappy.parquet": {
+          "bytes": 2870,
+          "sha256": "e865d262040873bf42ae1b2b555ee91e91ea07a2cc285a3f9e658806426e118c"
+        },
+        "table/region=east/part-00000-2676fbbc-5dc5-462f-871e-1d38911024a1.c000.snappy.parquet": {
+          "bytes": 2867,
+          "sha256": "81b5b469b3c3758f8fbebe332a13f9dd463dc70ba721b806d164ad190621345e"
+        },
+        "table/region=west/part-00000-b78559d1-e252-4a53-b848-79cfbb831781.c000.snappy.parquet": {
+          "bytes": 2873,
+          "sha256": "4fa2e417e30cca712a98d683f58a30e37c195445528883e706621fe987c0aff2"
+        }
+      }
+    },
+    {
+      "name": "nested_mapping",
+      "snapshot_version": 1,
+      "protocol": {
+        "minReaderVersion": 2,
+        "minWriterVersion": 7,
+        "writerFeatures": [
+          "columnMapping",
+          "invariants",
+          "appendOnly"
+        ]
+      },
+      "partition_columns": [],
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "profile",
+            "type": {
+              "type": "struct",
+              "fields": [
+                {
+                  "name": "score",
+                  "type": "integer",
+                  "nullable": true,
+                  "metadata": {}
+                },
+                {
+                  "name": "city",
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {}
+                }
+              ]
+            },
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "expected_schema_and_rows": "expected.arrow",
+      "expected_row_count": 6,
+      "physical_row_count": 6,
+      "row_groups_per_file": {
+        "part-00000-0e7998fd-66c0-4f67-8966-4cc952dae739-c000.snappy.parquet": 1
+      },
+      "deletion_vectors": [],
+      "files": {
+        "expected.arrow": {
+          "bytes": 1202,
+          "sha256": "a8239c0d373968f78e8e4bc0685340b0237caddd81b420bf9432927eec6c2436"
+        },
+        "table/_delta_log/00000000000000000000.json": {
+          "bytes": 2694,
+          "sha256": "599d78ed980cfe5f2f8db84053ab1c213e6adb6a24e634825e0bf071376f19fc"
+        },
+        "table/_delta_log/00000000000000000001.json": {
+          "bytes": 1596,
+          "sha256": "28c57c5758c8883907d14b797d64afa197f38673ed3c6a8cf1003d2b1c07ddca"
+        },
+        "table/part-00000-0e7998fd-66c0-4f67-8966-4cc952dae739-c000.snappy.parquet": {
+          "bytes": 2562,
+          "sha256": "5c27c8bfde6c99800021346220f1e3771d49ca39ec234f8609b441ec674b07a3"
+        }
+      }
+    },
+    {
+      "name": "deletion_vectors",
+      "snapshot_version": 1,
+      "protocol": {
+        "minReaderVersion": 3,
+        "minWriterVersion": 7,
+        "readerFeatures": [
+          "deletionVectors"
+        ],
+        "writerFeatures": [
+          "deletionVectors",
+          "invariants",
+          "appendOnly"
+        ]
+      },
+      "partition_columns": [],
+      "schema": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "value",
+            "type": "integer",
+            "nullable": true,
+            "metadata": {}
+          },
+          {
+            "name": "label",
+            "type": "string",
+            "nullable": true,
+            "metadata": {}
+          }
+        ]
+      },
+      "expected_schema_and_rows": "expected.arrow",
+      "expected_row_count": 9,
+      "physical_row_count": 12,
+      "row_groups_per_file": {
+        "part-00000-4c279b40-2c14-499d-a248-465671fbe165-c000.snappy.parquet": 1
+      },
+      "deletion_vectors": [
+        {
+          "storageType": "u",
+          "pathOrInlineDv": "cCU1[^Up1jQwH?biS09Q",
+          "offset": 1,
+          "sizeInBytes": 38,
+          "cardinality": 3
+        }
+      ],
+      "files": {
+        "expected.arrow": {
+          "bytes": 978,
+          "sha256": "7a14da9a44bc8b71d3719bed6e993dd0f3ffaa6a5a6b4de648f790d0c0c292d1"
+        },
+        "table/_delta_log/00000000000000000000.json": {
+          "bytes": 1394,
+          "sha256": "3f1a8269ab5109d600ae8b61bbf3301fb66c871c1a66b3e2bea44b07bae215aa"
+        },
+        "table/_delta_log/00000000000000000001.json": {
+          "bytes": 1369,
+          "sha256": "74d85dde38baf2ea9e14717ce6a50815064381fdeea5dd05d950e3587bcaa6be"
+        },
+        "table/deletion_vector_26c07c94-d286-4024-a2fb-a6c539fb5da1.bin": {
+          "bytes": 47,
+          "sha256": "0fb26994fe979457726da80c606a7044a66c553075f9347301b6f4bf9f3fe5b6"
+        },
+        "table/part-00000-4c279b40-2c14-499d-a248-465671fbe165-c000.snappy.parquet": {
+          "bytes": 1108,
+          "sha256": "4ea32d09eaddb1c2f830dda74a7f09bbd7994ce5fb72687997c5682ba38e8a5e"
+        }
+      }
+    }
+  ],
+  "data_bytes": 34064
+}
