@@ -11,7 +11,7 @@ them, see [scan planning](https://mag1cfrog.github.io/delta-arrow-reader/scan-pl
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `parquet_backend` | `Direct` | Backend used to read Parquet data files. |
-| `max_concurrent_file_reads_per_scan` | `None` | Scan-wide active-read cap. `None` resolves to the partition target multiplied by the per-partition cap. |
+| `max_concurrent_file_reads_per_scan` | `None` | Scan-wide active-read cap. `None` resolves to the partition target multiplied by the per-partition cap, capped at `tokio::sync::Semaphore::MAX_PERMITS`. |
 | `max_concurrent_file_reads_per_partition` | `3` | Active-read cap for one execution partition. |
 | `output_buffer_batches_per_partition` | `1` | Batches held between a partition producer and its consumer. |
 | `prefetch_files_per_partition` | `2` | Future direct Parquet file streams prepared per partition. `0` is fully lazy. |
@@ -19,7 +19,10 @@ them, see [scan planning](https://mag1cfrog.github.io/delta-arrow-reader/scan-pl
 | `parquet_full_file_read_threshold_bytes` | `None` | Largest file the `Direct` backend may fetch once and buffer for local range reads. `None` disables full-file buffering. |
 
 The concurrency limits, output capacity, and enabled byte-size values must be
-greater than zero. Prefetch depth may be zero.
+greater than zero. Explicit concurrency limits and output capacity must also be
+at most `tokio::sync::Semaphore::MAX_PERMITS`; larger values return a configuration
+error from the setter. This upper bound does not apply to byte-size values or
+prefetch depth. Prefetch depth may be zero.
 
 The Parquet metadata hint is only a first request size. If the footer is larger,
 the Parquet reader safely requests more data. A hint at least as large as the

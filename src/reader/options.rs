@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use tokio::sync::Semaphore;
+
 use crate::{DeltaReaderError, error::InvalidConfigurationSnafu};
 
 const DEFAULT_MAX_CONCURRENT_FILE_READS_PER_PARTITION: usize = 3;
@@ -131,39 +133,52 @@ impl DeltaScanExecutionOptions {
     }
 
     /// Sets or clears the scan-wide file-read limit.
+    ///
+    /// Explicit limits must be in `1..=tokio::sync::Semaphore::MAX_PERMITS`.
+    /// `None` derives the limit from the partition target and per-partition limit,
+    /// capped at Tokio's maximum.
     pub fn with_max_concurrent_file_reads_per_scan(
         mut self,
         max_concurrent_file_reads: Option<usize>,
     ) -> Result<Self, DeltaReaderError> {
-        validate_optional_positive(
-            max_concurrent_file_reads,
-            "max_concurrent_file_reads_per_scan_must_be_positive",
-        )?;
+        if let Some(capacity) = max_concurrent_file_reads {
+            validate_capacity(
+                capacity,
+                "max_concurrent_file_reads_per_scan_must_be_positive",
+                "max_concurrent_file_reads_per_scan_exceeds_tokio_max_permits",
+            )?;
+        }
         self.max_concurrent_file_reads_per_scan = max_concurrent_file_reads;
         Ok(self)
     }
 
     /// Sets the per-partition file-read limit.
+    ///
+    /// The limit must be in `1..=tokio::sync::Semaphore::MAX_PERMITS`.
     pub fn with_max_concurrent_file_reads_per_partition(
         mut self,
         max_concurrent_file_reads: usize,
     ) -> Result<Self, DeltaReaderError> {
-        validate_positive(
+        validate_capacity(
             max_concurrent_file_reads,
             "max_concurrent_file_reads_per_partition_must_be_positive",
+            "max_concurrent_file_reads_per_partition_exceeds_tokio_max_permits",
         )?;
         self.max_concurrent_file_reads_per_partition = max_concurrent_file_reads;
         Ok(self)
     }
 
     /// Sets the number of output batches buffered per partition.
+    ///
+    /// The capacity must be in `1..=tokio::sync::Semaphore::MAX_PERMITS`.
     pub fn with_output_buffer_batches_per_partition(
         mut self,
         output_buffer_batches: usize,
     ) -> Result<Self, DeltaReaderError> {
-        validate_positive(
+        validate_capacity(
             output_buffer_batches,
             "output_buffer_batches_per_partition_must_be_positive",
+            "output_buffer_batches_per_partition_exceeds_tokio_max_permits",
         )?;
         self.output_buffer_batches_per_partition = output_buffer_batches;
         Ok(self)
@@ -208,7 +223,7 @@ impl DeltaScanExecutionOptions {
         self.max_concurrent_file_reads_per_scan.unwrap_or_else(|| {
             target_partitions
                 .saturating_mul(self.max_concurrent_file_reads_per_partition)
-                .max(1)
+                .clamp(1, Semaphore::MAX_PERMITS)
         })
     }
 }
@@ -219,9 +234,22 @@ impl Default for DeltaScanExecutionOptions {
     }
 }
 
-fn validate_positive(value: usize, reason: &'static str) -> Result<(), DeltaReaderError> {
+fn validate_capacity(
+    value: usize,
+    zero_reason: &'static str,
+    overflow_reason: &'static str,
+) -> Result<(), DeltaReaderError> {
     if value == 0 {
-        return InvalidConfigurationSnafu { reason }.fail();
+        return InvalidConfigurationSnafu {
+            reason: zero_reason,
+        }
+        .fail();
+    }
+    if value > Semaphore::MAX_PERMITS {
+        return InvalidConfigurationSnafu {
+            reason: overflow_reason,
+        }
+        .fail();
     }
     Ok(())
 }
@@ -326,15 +354,34 @@ mod tests {
     #[test]
     fn scan_capacity_resolves_once_from_the_fixed_partition_target()
     -> Result<(), Box<dyn std::error::Error>> {
-        let defaults = DeltaScanExecutionOptions::new();
-        assert_eq!(defaults.resolved_max_concurrent_file_reads_per_scan(4), 12);
-        assert_eq!(
-            defaults.resolved_max_concurrent_file_reads_per_scan(usize::MAX),
-            usize::MAX
-        );
-
-        let explicit = defaults.with_max_concurrent_file_reads_per_scan(Some(7))?;
-        assert_eq!(explicit.resolved_max_concurrent_file_reads_per_scan(4), 7);
+        let max = tokio::sync::Semaphore::MAX_PERMITS;
+        for partition_capacity in [1, 3, max] {
+            let options = DeltaScanExecutionOptions::new()
+                .with_max_concurrent_file_reads_per_partition(partition_capacity)?;
+            for target in [0, 1, 4, max / 3, max / 3 + 1, max, max + 1, usize::MAX] {
+                // Widen the product to check both capacity overflow and usize overflow.
+                let product = (target as u128) * (partition_capacity as u128);
+                let expected = usize::try_from(product.clamp(1, max as u128))?;
+                assert_eq!(
+                    options.resolved_max_concurrent_file_reads_per_scan(target),
+                    expected
+                );
+                for explicit in [1, 7, max] {
+                    let options =
+                        options.with_max_concurrent_file_reads_per_scan(Some(explicit))?;
+                    assert_eq!(
+                        options.resolved_max_concurrent_file_reads_per_scan(target),
+                        explicit
+                    );
+                    assert_eq!(
+                        options
+                            .with_max_concurrent_file_reads_per_scan(None)?
+                            .resolved_max_concurrent_file_reads_per_scan(target),
+                        expected,
+                    );
+                }
+            }
+        }
         Ok(())
     }
 }
