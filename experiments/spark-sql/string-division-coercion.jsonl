@@ -1,0 +1,240 @@
+{"id": "byte_left_divide_literal", "sql": "SELECT '7' / CAST(2 AS TINYINT) AS r", "category": "target", "batch_size": 2}
+{"id": "byte_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',CAST(2 AS TINYINT)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "byte_left_div_literal", "sql": "SELECT '7' DIV CAST(2 AS TINYINT) AS r", "category": "target", "batch_size": 2}
+{"id": "byte_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',CAST(2 AS TINYINT)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "byte_right_divide_literal", "sql": "SELECT CAST(2 AS TINYINT) / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "byte_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(2 AS TINYINT),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "byte_right_div_literal", "sql": "SELECT CAST(2 AS TINYINT) DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "byte_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(2 AS TINYINT),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "short_left_divide_literal", "sql": "SELECT '7' / CAST(2 AS SMALLINT) AS r", "category": "target", "batch_size": 2}
+{"id": "short_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',CAST(2 AS SMALLINT)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "short_left_div_literal", "sql": "SELECT '7' DIV CAST(2 AS SMALLINT) AS r", "category": "target", "batch_size": 2}
+{"id": "short_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',CAST(2 AS SMALLINT)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "short_right_divide_literal", "sql": "SELECT CAST(2 AS SMALLINT) / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "short_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(2 AS SMALLINT),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "short_right_div_literal", "sql": "SELECT CAST(2 AS SMALLINT) DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "short_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(2 AS SMALLINT),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "int_left_divide_literal", "sql": "SELECT '7' / 2 AS r", "category": "target", "batch_size": 2}
+{"id": "int_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',2),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "int_left_div_literal", "sql": "SELECT '7' DIV 2 AS r", "category": "target", "batch_size": 2}
+{"id": "int_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',2),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "int_right_divide_literal", "sql": "SELECT 2 / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "int_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,2,'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "int_right_div_literal", "sql": "SELECT 2 DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "int_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,2,'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "long_left_divide_literal", "sql": "SELECT '7' / 2L AS r", "category": "target", "batch_size": 2}
+{"id": "long_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',2L),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "long_left_div_literal", "sql": "SELECT '7' DIV 2L AS r", "category": "target", "batch_size": 2}
+{"id": "long_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',2L),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "long_right_divide_literal", "sql": "SELECT 2L / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "long_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,2L,'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "long_right_div_literal", "sql": "SELECT 2L DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "long_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,2L,'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "decimal_left_divide_literal", "sql": "SELECT '7' / CAST(2 AS DECIMAL(10,2)) AS r", "category": "target", "batch_size": 2}
+{"id": "decimal_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',CAST(2 AS DECIMAL(10,2))),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "decimal_left_div_literal", "sql": "SELECT '7' DIV CAST(2 AS DECIMAL(10,2)) AS r", "category": "target", "batch_size": 2}
+{"id": "decimal_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',CAST(2 AS DECIMAL(10,2))),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "decimal_right_divide_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "decimal_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(2 AS DECIMAL(10,2)),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "decimal_right_div_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "decimal_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(2 AS DECIMAL(10,2)),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "float_left_divide_literal", "sql": "SELECT '7' / CAST(2 AS FLOAT) AS r", "category": "target", "batch_size": 2}
+{"id": "float_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',CAST(2 AS FLOAT)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "float_left_div_literal", "sql": "SELECT '7' DIV CAST(2 AS FLOAT) AS r", "category": "target", "batch_size": 2}
+{"id": "float_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',CAST(2 AS FLOAT)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "float_right_divide_literal", "sql": "SELECT CAST(2 AS FLOAT) / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "float_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(2 AS FLOAT),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "float_right_div_literal", "sql": "SELECT CAST(2 AS FLOAT) DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "float_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(2 AS FLOAT),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "double_left_divide_literal", "sql": "SELECT '7' / CAST(2 AS DOUBLE) AS r", "category": "target", "batch_size": 2}
+{"id": "double_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',CAST(2 AS DOUBLE)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "double_left_div_literal", "sql": "SELECT '7' DIV CAST(2 AS DOUBLE) AS r", "category": "target", "batch_size": 2}
+{"id": "double_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',CAST(2 AS DOUBLE)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "double_right_divide_literal", "sql": "SELECT CAST(2 AS DOUBLE) / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "double_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(2 AS DOUBLE),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "double_right_div_literal", "sql": "SELECT CAST(2 AS DOUBLE) DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "double_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(2 AS DOUBLE),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "string_left_divide_literal", "sql": "SELECT '7' / '2' AS r", "category": "target", "batch_size": 2}
+{"id": "string_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7','2'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "string_left_div_literal", "sql": "SELECT '7' DIV '2' AS r", "category": "target", "batch_size": 2}
+{"id": "string_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7','2'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "string_right_divide_literal", "sql": "SELECT '2' / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "string_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'2','7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "string_right_div_literal", "sql": "SELECT '2' DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "string_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'2','7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "null_left_divide_literal", "sql": "SELECT '7' / NULL AS r", "category": "target", "batch_size": 2}
+{"id": "null_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',NULL),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "null_left_div_literal", "sql": "SELECT '7' DIV NULL AS r", "category": "target", "batch_size": 2}
+{"id": "null_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',NULL),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "null_right_divide_literal", "sql": "SELECT NULL / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "null_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,NULL,'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "null_right_div_literal", "sql": "SELECT NULL DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "null_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,NULL,'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "typed_null_left_divide_literal", "sql": "SELECT '7' / CAST(NULL AS INT) AS r", "category": "target", "batch_size": 2}
+{"id": "typed_null_left_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,'7',CAST(NULL AS INT)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "typed_null_left_div_literal", "sql": "SELECT '7' DIV CAST(NULL AS INT) AS r", "category": "target", "batch_size": 2}
+{"id": "typed_null_left_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,'7',CAST(NULL AS INT)),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "typed_null_right_divide_literal", "sql": "SELECT CAST(NULL AS INT) / '7' AS r", "category": "target", "batch_size": 2}
+{"id": "typed_null_right_divide_column", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(NULL AS INT),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "typed_null_right_div_literal", "sql": "SELECT CAST(NULL AS INT) DIV '7' AS r", "category": "target", "batch_size": 2}
+{"id": "typed_null_right_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(NULL AS INT),'7'),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "fraction_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('7.5',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "fraction_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('7.5',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "fraction_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'7.5') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "fraction_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'7.5') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "fraction_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '7.5' AS r", "category": "target", "batch_size": 2}
+{"id": "fraction_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('7.5') t(a)", "category": "target", "batch_size": 2}
+{"id": "negative_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('-7',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "negative_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('-7',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "negative_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'-7') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "negative_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'-7') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "negative_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '-7' AS r", "category": "target", "batch_size": 2}
+{"id": "negative_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('-7') t(a)", "category": "target", "batch_size": 2}
+{"id": "spaces_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('  +7  ',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "spaces_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('  +7  ',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "spaces_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'  +7  ') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "spaces_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'  +7  ') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "spaces_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '  +7  ' AS r", "category": "target", "batch_size": 2}
+{"id": "spaces_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('  +7  ') t(a)", "category": "target", "batch_size": 2}
+{"id": "tabs_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('\t-7\n',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "tabs_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('\t-7\n',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "tabs_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'\t-7\n') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "tabs_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'\t-7\n') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "tabs_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '\t-7\n' AS r", "category": "target", "batch_size": 2}
+{"id": "tabs_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('\t-7\n') t(a)", "category": "target", "batch_size": 2}
+{"id": "control_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('\u00017\u001f',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "control_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('\u00017\u001f',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "control_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'\u00017\u001f') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "control_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'\u00017\u001f') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "control_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '\u00017\u001f' AS r", "category": "target", "batch_size": 2}
+{"id": "control_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('\u00017\u001f') t(a)", "category": "target", "batch_size": 2}
+{"id": "del_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('\u007f7\u007f',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "del_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('\u007f7\u007f',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "del_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'\u007f7\u007f') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "del_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'\u007f7\u007f') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "del_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '\u007f7\u007f' AS r", "category": "target", "batch_size": 2}
+{"id": "del_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('\u007f7\u007f') t(a)", "category": "target", "batch_size": 2}
+{"id": "exponent_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('7e1',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "exponent_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('7e1',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "exponent_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'7e1') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "exponent_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'7e1') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "exponent_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '7e1' AS r", "category": "target", "batch_size": 2}
+{"id": "exponent_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('7e1') t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "empty_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "empty_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "empty_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "empty_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '' AS r", "category": "target", "batch_size": 2}
+{"id": "empty_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('') t(a)", "category": "target", "batch_size": 2}
+{"id": "space_only_left_divide", "sql": "SELECT a / b AS r FROM VALUES (' ',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "space_only_left_div", "sql": "SELECT a DIV b AS r FROM VALUES (' ',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "space_only_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,' ') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "space_only_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,' ') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "space_only_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / ' ' AS r", "category": "target", "batch_size": 2}
+{"id": "space_only_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES (' ') t(a)", "category": "target", "batch_size": 2}
+{"id": "bad_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('bad',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "bad_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "bad_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'bad') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "bad_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'bad') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "bad_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / 'bad' AS r", "category": "target", "batch_size": 2}
+{"id": "bad_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('bad') t(a)", "category": "target", "batch_size": 2}
+{"id": "too_large_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('9223372036854775808',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "too_large_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('9223372036854775808',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "too_large_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'9223372036854775808') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "too_large_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'9223372036854775808') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "too_large_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '9223372036854775808' AS r", "category": "target", "batch_size": 2}
+{"id": "too_large_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('9223372036854775808') t(a)", "category": "target", "batch_size": 2}
+{"id": "too_small_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('-9223372036854775809',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "too_small_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('-9223372036854775809',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "too_small_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'-9223372036854775809') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "too_small_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'-9223372036854775809') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "too_small_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '-9223372036854775809' AS r", "category": "target", "batch_size": 2}
+{"id": "too_small_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('-9223372036854775809') t(a)", "category": "target", "batch_size": 2}
+{"id": "min_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('-9223372036854775808',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "min_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('-9223372036854775808',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "min_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'-9223372036854775808') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "min_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'-9223372036854775808') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "min_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '-9223372036854775808' AS r", "category": "target", "batch_size": 2}
+{"id": "min_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('-9223372036854775808') t(a)", "category": "target", "batch_size": 2}
+{"id": "max_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('9223372036854775807',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "max_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('9223372036854775807',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "max_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'9223372036854775807') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "max_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'9223372036854775807') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "max_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '9223372036854775807' AS r", "category": "target", "batch_size": 2}
+{"id": "max_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('9223372036854775807') t(a)", "category": "target", "batch_size": 2}
+{"id": "above_double_integer_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('9007199254740993',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "above_double_integer_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('9007199254740993',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "above_double_integer_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'9007199254740993') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "above_double_integer_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'9007199254740993') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "above_double_integer_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '9007199254740993' AS r", "category": "target", "batch_size": 2}
+{"id": "above_double_integer_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('9007199254740993') t(a)", "category": "target", "batch_size": 2}
+{"id": "float_overflow_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('1e309',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "float_overflow_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('1e309',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "float_overflow_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'1e309') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "float_overflow_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'1e309') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "float_overflow_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '1e309' AS r", "category": "target", "batch_size": 2}
+{"id": "float_overflow_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('1e309') t(a)", "category": "target", "batch_size": 2}
+{"id": "nan_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('NaN',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "nan_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('NaN',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "nan_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'NaN') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "nan_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'NaN') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "nan_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / 'NaN' AS r", "category": "target", "batch_size": 2}
+{"id": "nan_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('NaN') t(a)", "category": "target", "batch_size": 2}
+{"id": "infinity_left_divide", "sql": "SELECT a / b AS r FROM VALUES ('-Infinity',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "infinity_left_div", "sql": "SELECT a DIV b AS r FROM VALUES ('-Infinity',2) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "infinity_right_divide", "sql": "SELECT a / b AS r FROM VALUES (7,'-Infinity') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "infinity_right_div", "sql": "SELECT a DIV b AS r FROM VALUES (7,'-Infinity') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "infinity_decimal_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '-Infinity' AS r", "category": "target", "batch_size": 2}
+{"id": "infinity_decimal_column", "sql": "SELECT a / CAST(2 AS DECIMAL(10,2)) AS r FROM VALUES ('-Infinity') t(a)", "category": "target", "batch_size": 2}
+{"id": "zero_divide_literal", "sql": "SELECT '7' / 0 AS r", "category": "target", "batch_size": 2}
+{"id": "zero_divide_column", "sql": "SELECT a / b AS r FROM VALUES ('7',0) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "string_zero_divide_literal", "sql": "SELECT 7 / '0' AS r", "category": "target", "batch_size": 2}
+{"id": "string_zero_divide_column", "sql": "SELECT a / b AS r FROM VALUES (7,'0') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "bad_left_zero_divide_literal", "sql": "SELECT 'bad' / 0 AS r", "category": "target", "batch_size": 2}
+{"id": "bad_left_zero_divide_column", "sql": "SELECT a / b AS r FROM VALUES ('bad',0) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "both_bad_divide_literal", "sql": "SELECT 'bad' / 'worse' AS r", "category": "target", "batch_size": 2}
+{"id": "both_bad_divide_column", "sql": "SELECT a / b AS r FROM VALUES ('bad','worse') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "bad_left_null_divide_literal", "sql": "SELECT 'bad' / CAST(NULL AS BIGINT) AS r", "category": "evaluation_reference", "batch_size": 2}
+{"id": "bad_left_null_divide_column", "sql": "SELECT a / b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "category": "evaluation_reference", "batch_size": 2}
+{"id": "null_left_bad_divide_literal", "sql": "SELECT CAST(NULL AS BIGINT) / 'bad' AS r", "category": "evaluation_reference", "batch_size": 2}
+{"id": "null_left_bad_divide_column", "sql": "SELECT a / b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad') t(a,b)", "category": "evaluation_reference", "batch_size": 2}
+{"id": "null_masks_divide", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(NULL AS STRING),0),(1,'7',NULL),(2,'8',2) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "live_zero_divide", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(NULL AS STRING),0),(1,'7',0) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "all_null_divide", "sql": "SELECT a / b AS r FROM VALUES (0,CAST(NULL AS STRING),0),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "empty_divide", "sql": "SELECT a / b AS r FROM VALUES ('7',2) t(a,b) WHERE false", "category": "target", "batch_size": 2}
+{"id": "dead_branch_divide", "sql": "SELECT CASE WHEN false THEN 'bad' / 2 ELSE 7 END AS r", "category": "target", "batch_size": 2}
+{"id": "array_scalar_divide", "sql": "SELECT a / 2 AS r FROM VALUES (0,'7'),(1,'-9'),(2,NULL) t(id,a) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "scalar_array_divide", "sql": "SELECT 7 / b AS r FROM VALUES (0,'2'),(1,'-3'),(2,NULL) t(id,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "zero_div_literal", "sql": "SELECT '7' DIV 0 AS r", "category": "target", "batch_size": 2}
+{"id": "zero_div_column", "sql": "SELECT a DIV b AS r FROM VALUES ('7',0) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "string_zero_div_literal", "sql": "SELECT 7 DIV '0' AS r", "category": "target", "batch_size": 2}
+{"id": "string_zero_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (7,'0') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "bad_left_zero_div_literal", "sql": "SELECT 'bad' DIV 0 AS r", "category": "target", "batch_size": 2}
+{"id": "bad_left_zero_div_column", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',0) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "both_bad_div_literal", "sql": "SELECT 'bad' DIV 'worse' AS r", "category": "target", "batch_size": 2}
+{"id": "both_bad_div_column", "sql": "SELECT a DIV b AS r FROM VALUES ('bad','worse') t(a,b)", "category": "target", "batch_size": 2}
+{"id": "bad_left_null_div_literal", "sql": "SELECT 'bad' DIV CAST(NULL AS BIGINT) AS r", "category": "evaluation_reference", "batch_size": 2}
+{"id": "bad_left_null_div_column", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "category": "evaluation_reference", "batch_size": 2}
+{"id": "null_left_bad_div_literal", "sql": "SELECT CAST(NULL AS BIGINT) DIV 'bad' AS r", "category": "evaluation_reference", "batch_size": 2}
+{"id": "null_left_bad_div_column", "sql": "SELECT a DIV b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad') t(a,b)", "category": "evaluation_reference", "batch_size": 2}
+{"id": "null_masks_div", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(NULL AS STRING),0),(1,'7',NULL),(2,'8',2) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "live_zero_div", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(NULL AS STRING),0),(1,'7',0) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "all_null_div", "sql": "SELECT a DIV b AS r FROM VALUES (0,CAST(NULL AS STRING),0),(1,NULL,NULL) t(id,a,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "empty_div", "sql": "SELECT a DIV b AS r FROM VALUES ('7',2) t(a,b) WHERE false", "category": "target", "batch_size": 2}
+{"id": "dead_branch_div", "sql": "SELECT CASE WHEN false THEN 'bad' DIV 2 ELSE 7 END AS r", "category": "target", "batch_size": 2}
+{"id": "array_scalar_div", "sql": "SELECT a DIV 2 AS r FROM VALUES (0,'7'),(1,'-9'),(2,NULL) t(id,a) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "scalar_array_div", "sql": "SELECT 7 DIV b AS r FROM VALUES (0,'2'),(1,'-3'),(2,NULL) t(id,b) ORDER BY id", "category": "target", "batch_size": 2}
+{"id": "div_alias", "sql": "SELECT div(a,b) AS r FROM VALUES ('7',2),('-9',2),(NULL,NULL) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "divide_alias", "sql": "SELECT `/`(a,b) AS r FROM VALUES ('7',2),('-9',2),(NULL,NULL) t(a,b)", "category": "target", "batch_size": 2}
+{"id": "decimal_seed", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) / '3' AS r", "category": "target", "batch_size": 2}
+{"id": "div_seed", "sql": "SELECT '7' DIV 2 AS r", "category": "target", "batch_size": 2}
+{"id": "range_column", "sql": "SELECT CAST(id+7 AS STRING) DIV 2 AS r FROM range(4)", "category": "target", "batch_size": 2}
+{"id": "decimal_range", "sql": "SELECT CAST(id+7 AS STRING) / CAST(2 AS DECIMAL(10,2)) AS r FROM range(4)", "category": "target", "batch_size": 2}
+{"id": "numeric_divide", "sql": "SELECT 7 / 2 AS r", "category": "control", "batch_size": 2}
+{"id": "numeric_div", "sql": "SELECT 7L DIV 2L AS r", "category": "control", "batch_size": 2}
+{"id": "overflow_div", "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) DIV -1L AS r", "category": "control", "batch_size": 2}
+{"id": "decimal_cast", "sql": "SELECT CAST('7.5' AS DECIMAL(10,2)) / CAST(2 AS DECIMAL(10,2)) AS r", "category": "control", "batch_size": 2}
+{"id": "explicit_double", "sql": "SELECT CAST('7.5' AS DOUBLE) / 2 AS r", "category": "control", "batch_size": 2}
+{"id": "decimal_div", "sql": "SELECT CAST(7 AS DECIMAL(10,2)) DIV CAST(2 AS DECIMAL(10,2)) AS r", "category": "control", "batch_size": 2}
+{"id": "remainder", "sql": "SELECT 7 % 2 AS r", "category": "control", "batch_size": 2}
+{"id": "round", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)),2) AS r", "category": "control", "batch_size": 2}

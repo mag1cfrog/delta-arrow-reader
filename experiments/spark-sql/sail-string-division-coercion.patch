@@ -1,0 +1,159 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -1034,6 +1034,61 @@
+     Ok(())
+ }
+ 
++// Spark promotes strings before the operator-specific division coercion.
++// Keep this local to `/` and DIV; explicit CAST and other arithmetic are separate.
++fn coerce_string_division_operands(
++    left: Expr,
++    right: Expr,
++    schema: &DFSchemaRef,
++    ansi: bool,
++    integral: bool,
++) -> PlanResult<(Expr, Expr)> {
++    let (Ok(left_type), Ok(right_type)) = (left.get_type(schema), right.get_type(schema)) else {
++        return Ok((left, right));
++    };
++    if !left_type.is_string() && !right_type.is_string() {
++        return Ok((left, right));
++    }
++    let peer = if left_type.is_string() { &right_type } else { &left_type };
++    let target = if ansi && peer.is_signed_integer() {
++        DataType::Int64
++    } else {
++        DataType::Float64
++    };
++    let wrong_type = ansi && (peer.is_string() || peer.is_null())
++        || integral && target == DataType::Float64;
++    if wrong_type {
++        // Legacy DIV widens integer peers but not FLOAT/NULL peers. Decimal
++        // peers promote to DOUBLE. Preserve Spark's two distinct type errors.
++        let condition = if !ansi && integral
++            && (peer.is_signed_integer() || *peer == DataType::Float32 || peer.is_null())
++        {
++            "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES"
++        } else {
++            "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE"
++        };
++        return Err(PlanError::invalid(format!("[{condition}] unsupported string division operands")));
++    }
++    if !(peer.is_numeric() || peer.is_string() || peer.is_null()) {
++        return Ok((left, right));
++    }
++    let convert = |expr, data_type: &DataType| {
++        if data_type.is_string() {
++            // Long accepts ASCII control/space bytes and DEL. Ordinary DOUBLE
++            // parsing trims only bytes through SPACE.
++            let mut trim: String = (0_u8..=32).map(char::from).collect();
++            if target == DataType::Int64 { trim.push('\u{7f}'); }
++            let expr = expr_fn::btrim(vec![expr, lit(trim)]);
++            if ansi { cast(expr, target.clone()) } else { try_cast(expr, target.clone()) }
++        } else if data_type != &target {
++            cast(expr, target.clone())
++        } else {
++            expr
++        }
++    };
++    Ok((convert(left, &left_type), convert(right, &right_type)))
++}
++
+ fn spark_divide(input: ScalarFunctionInput) -> PlanResult<Expr> {
+     let ScalarFunctionInput {
+         arguments,
+@@ -1043,6 +1098,9 @@
+     let (dividend, divisor) = arguments.two()?;
+ 
+     let ansi_mode = function_context.plan_config.ansi_mode;
++    let (dividend, divisor) = coerce_string_division_operands(
++        dividend, divisor, function_context.schema, ansi_mode, false,
++    )?;
+     let (dividend, divisor) =
+         coerce_decimal_divide_operands(dividend, divisor, function_context.schema);
+     let dividend_type = dividend.get_type(function_context.schema);
+@@ -1201,6 +1259,9 @@
+     } = input;
+ 
+     let (dividend, divisor) = arguments.two()?;
++    let (dividend, divisor) = coerce_string_division_operands(
++        dividend, divisor, function_context.schema, function_context.plan_config.ansi_mode, true,
++    )?;
+ 
+     let dividend_type = dividend.get_type(function_context.schema);
+     let divisor_type = divisor.get_type(function_context.schema);
+@@ -2112,6 +2173,74 @@
+     }
+ 
+     #[tokio::test]
++    async fn string_division_uses_query_coercion_on_native_tables() {
++        use arrow::array::{Float64Array, LargeStringArray, StringArray, StringViewArray};
++        use datafusion::prelude::SessionConfig;
++        for host_ansi in [false, true] {
++            let mut settings = SessionConfig::new();
++            settings.options_mut().execution.enable_ansi_mode = host_ansi;
++            let ctx = SessionContext::new_with_config(settings);
++            let strings = vec![Some(" \t+7\n"), Some("-9"), None];
++            for input in [
++                Arc::new(StringArray::from(strings.clone())) as ArrayRef,
++                Arc::new(LargeStringArray::from(strings.clone())) as ArrayRef,
++                Arc::new(StringViewArray::from(strings.clone())) as ArrayRef,
++            ] {
++                let schema = Arc::new(Schema::new(vec![
++                    Field::new("a", input.data_type().clone(), true),
++                    Field::new("b", DataType::Int32, false),
++                ]));
++                let batch = RecordBatch::try_new(schema.clone(), vec![
++                    input, Arc::new(Int32Array::from(vec![2, 2, 0])),
++                ]).unwrap();
++                ctx.deregister_table("strings").unwrap();
++                ctx.register_table("strings", Arc::new(MemTable::try_new(
++                    schema.clone(), vec![vec![RecordBatch::new_empty(schema), batch]],
++                ).unwrap())).unwrap();
++                for query_ansi in [false, true] {
++                    for sql in ["SELECT a / b AS r FROM strings", "SELECT `/`(a,b) AS r FROM strings"] {
++                        let out = frame(&ctx, query_ansi, sql).await.collect().await.unwrap();
++                        let actual = out.iter().flat_map(|batch| batch.column(0).as_any()
++                            .downcast_ref::<Float64Array>().unwrap().iter()).collect::<Vec<_>>();
++                        assert_eq!(actual, vec![Some(3.5), Some(-4.5), None]);
++                    }
++                    for sql in ["SELECT a DIV b AS r FROM strings", "SELECT div(a,b) AS r FROM strings"] {
++                        let ast = sail_sql_analyzer::parser::parse_one_statement(sql).unwrap();
++                        let spec = sail_sql_analyzer::statement::from_ast_statement(ast).unwrap();
++                        let plan = PlanResolver::new(&ctx, Arc::new(PlanConfig {
++                            ansi_mode: query_ansi, ..Default::default()
++                        })).resolve_named_plan(spec).await;
++                        if query_ansi {
++                            let out = ctx.execute_logical_plan(plan.unwrap().plan).await.unwrap()
++                                .collect().await.unwrap();
++                            let actual = out.iter().flat_map(|batch| batch.column(0).as_any()
++                                .downcast_ref::<Int64Array>().unwrap().iter()).collect::<Vec<_>>();
++                            assert_eq!(actual, vec![Some(3), Some(-4), None]);
++                        } else {
++                            assert!(plan.err().unwrap().to_string()
++                                .contains("[DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES]"));
++                        }
++                    }
++                }
++            }
++            // Explicit per-query casts must stay independent of host ANSI mode.
++            let sql = "SELECT 'bad' / CAST(2 AS DECIMAL(10,2)) AS r";
++            let out = frame(&ctx, false, sql).await.collect().await.unwrap();
++            assert!(out[0].column(0).is_null(0));
++            let ast = sail_sql_analyzer::parser::parse_one_statement(sql).unwrap();
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast).unwrap();
++            let plan = PlanResolver::new(&ctx, Arc::new(PlanConfig {
++                ansi_mode: true, ..Default::default()
++            })).resolve_named_plan(spec).await.unwrap();
++            let failure = async {
++                ctx.execute_logical_plan(plan.plan).await?.collect().await
++            }.await.unwrap_err();
++            assert!(failure.to_string().contains("Cannot cast"));
++            assert_eq!(ctx.state().config_options().execution.enable_ansi_mode, host_ansi);
++        }
++    }
++
++    #[tokio::test]
+     async fn legacy_bigint_divide_is_query_scoped() {
+         use datafusion::prelude::SessionConfig;
+         for host_ansi in [false, true] {

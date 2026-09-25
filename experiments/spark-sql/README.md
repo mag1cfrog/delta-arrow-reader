@@ -24,6 +24,8 @@ The [NULL-aware modulo guard](MODULO_NULL_GUARD.md) checks both operands before 
 
 The [legacy BIGINT DIV fix](BIGINT_DIV_OVERFLOW.md) preserves the wrapped MIN / -1 result only in non-ANSI mode, reusing the existing integer kernel. ANSI overflow, query-mode isolation and earlier arithmetic checks are retained; CAST and measured cost questions remain tracked separately.
 
+The [string-peer division fix](STRING_DIVISION_COERCION.md) applies Spark's mode-specific conversions before `/` and `DIV`, using native trim and casts. Its 444 conversion targets pass; eight general CAST evaluation differences and the mixed-error BIGINT diagnostic remain visible. The report records the added string-column costs and leaves final performance acceptance with its existing owner.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
