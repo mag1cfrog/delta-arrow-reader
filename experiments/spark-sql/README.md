@@ -14,6 +14,8 @@ The [FLOAT BROUND boundary fix](FLOAT_BROUND_BOUNDARIES.md) preserves positive z
 
 The [ROUND argument fix](ROUND_ARGUMENTS.md) resolves constant INT scales, converts string values and skips ordinary inputs when the scale is NULL. Its evidence keeps remaining numerical-kernel and CAST/subquery differences with their separate owners.
 
+The [integer ROUND fix](INTEGER_ROUND.md) preserves signed-integer values/types and query-specific overflow behavior, including BIGINT scale -19. Its passing bounded matrix is separate from the retained extreme-scale reference questions.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.

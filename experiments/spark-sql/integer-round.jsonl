@@ -1,0 +1,627 @@
+{"id": "TINYINT_-128_-2", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-128_-1", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-128_0", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-128_2", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-127_-2", "sql": "SELECT ROUND(CAST(-127 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-127_-1", "sql": "SELECT ROUND(CAST(-127 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-127_0", "sql": "SELECT ROUND(CAST(-127 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-127_2", "sql": "SELECT ROUND(CAST(-127 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-26_-2", "sql": "SELECT ROUND(CAST(-26 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-26_-1", "sql": "SELECT ROUND(CAST(-26 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-26_0", "sql": "SELECT ROUND(CAST(-26 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-26_2", "sql": "SELECT ROUND(CAST(-26 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-25_-2", "sql": "SELECT ROUND(CAST(-25 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-25_-1", "sql": "SELECT ROUND(CAST(-25 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-25_0", "sql": "SELECT ROUND(CAST(-25 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-25_2", "sql": "SELECT ROUND(CAST(-25 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-24_-2", "sql": "SELECT ROUND(CAST(-24 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-24_-1", "sql": "SELECT ROUND(CAST(-24 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-24_0", "sql": "SELECT ROUND(CAST(-24 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-24_2", "sql": "SELECT ROUND(CAST(-24 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-16_-2", "sql": "SELECT ROUND(CAST(-16 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-16_-1", "sql": "SELECT ROUND(CAST(-16 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-16_0", "sql": "SELECT ROUND(CAST(-16 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-16_2", "sql": "SELECT ROUND(CAST(-16 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-15_-2", "sql": "SELECT ROUND(CAST(-15 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-15_-1", "sql": "SELECT ROUND(CAST(-15 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-15_0", "sql": "SELECT ROUND(CAST(-15 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-15_2", "sql": "SELECT ROUND(CAST(-15 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-14_-2", "sql": "SELECT ROUND(CAST(-14 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-14_-1", "sql": "SELECT ROUND(CAST(-14 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-14_0", "sql": "SELECT ROUND(CAST(-14 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-14_2", "sql": "SELECT ROUND(CAST(-14 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-6_-2", "sql": "SELECT ROUND(CAST(-6 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-6_-1", "sql": "SELECT ROUND(CAST(-6 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-6_0", "sql": "SELECT ROUND(CAST(-6 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-6_2", "sql": "SELECT ROUND(CAST(-6 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-5_-2", "sql": "SELECT ROUND(CAST(-5 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-5_-1", "sql": "SELECT ROUND(CAST(-5 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-5_0", "sql": "SELECT ROUND(CAST(-5 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-5_2", "sql": "SELECT ROUND(CAST(-5 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_-4_-2", "sql": "SELECT ROUND(CAST(-4 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_-4_-1", "sql": "SELECT ROUND(CAST(-4 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_-4_0", "sql": "SELECT ROUND(CAST(-4 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_-4_2", "sql": "SELECT ROUND(CAST(-4 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_0_-2", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_0_-1", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_0_0", "sql": "SELECT ROUND(CAST(0 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_0_2", "sql": "SELECT ROUND(CAST(0 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_4_-2", "sql": "SELECT ROUND(CAST(4 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_4_-1", "sql": "SELECT ROUND(CAST(4 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_4_0", "sql": "SELECT ROUND(CAST(4 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_4_2", "sql": "SELECT ROUND(CAST(4 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_5_-2", "sql": "SELECT ROUND(CAST(5 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_5_-1", "sql": "SELECT ROUND(CAST(5 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_5_0", "sql": "SELECT ROUND(CAST(5 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_5_2", "sql": "SELECT ROUND(CAST(5 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_6_-2", "sql": "SELECT ROUND(CAST(6 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_6_-1", "sql": "SELECT ROUND(CAST(6 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_6_0", "sql": "SELECT ROUND(CAST(6 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_6_2", "sql": "SELECT ROUND(CAST(6 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_14_-2", "sql": "SELECT ROUND(CAST(14 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_14_-1", "sql": "SELECT ROUND(CAST(14 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_14_0", "sql": "SELECT ROUND(CAST(14 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_14_2", "sql": "SELECT ROUND(CAST(14 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_15_-2", "sql": "SELECT ROUND(CAST(15 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_15_-1", "sql": "SELECT ROUND(CAST(15 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_15_0", "sql": "SELECT ROUND(CAST(15 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_15_2", "sql": "SELECT ROUND(CAST(15 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_16_-2", "sql": "SELECT ROUND(CAST(16 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_16_-1", "sql": "SELECT ROUND(CAST(16 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_16_0", "sql": "SELECT ROUND(CAST(16 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_16_2", "sql": "SELECT ROUND(CAST(16 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_24_-2", "sql": "SELECT ROUND(CAST(24 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_24_-1", "sql": "SELECT ROUND(CAST(24 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_24_0", "sql": "SELECT ROUND(CAST(24 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_24_2", "sql": "SELECT ROUND(CAST(24 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_25_-2", "sql": "SELECT ROUND(CAST(25 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_25_-1", "sql": "SELECT ROUND(CAST(25 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_25_0", "sql": "SELECT ROUND(CAST(25 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_25_2", "sql": "SELECT ROUND(CAST(25 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_26_-2", "sql": "SELECT ROUND(CAST(26 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_26_-1", "sql": "SELECT ROUND(CAST(26 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_26_0", "sql": "SELECT ROUND(CAST(26 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_26_2", "sql": "SELECT ROUND(CAST(26 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_126_-2", "sql": "SELECT ROUND(CAST(126 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_126_-1", "sql": "SELECT ROUND(CAST(126 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_126_0", "sql": "SELECT ROUND(CAST(126 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_126_2", "sql": "SELECT ROUND(CAST(126 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_127_-2", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -2) AS r", "batch_size": 2}
+{"id": "TINYINT_127_-1", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -1) AS r", "batch_size": 2}
+{"id": "TINYINT_127_0", "sql": "SELECT ROUND(CAST(127 AS TINYINT), 0) AS r", "batch_size": 2}
+{"id": "TINYINT_127_2", "sql": "SELECT ROUND(CAST(127 AS TINYINT), 2) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_-38", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -38) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_-20", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -20) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_-19", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -19) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_-18", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -18) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_-10", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -10) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_-5", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -5) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_-3", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), -3) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_18", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), 18) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_-128_38", "sql": "SELECT ROUND(CAST(-128 AS TINYINT), 38) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_-38", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -38) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_-20", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -20) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_-19", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -19) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_-18", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -18) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_-10", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -10) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_-5", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -5) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_-3", "sql": "SELECT ROUND(CAST(127 AS TINYINT), -3) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_18", "sql": "SELECT ROUND(CAST(127 AS TINYINT), 18) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_127_38", "sql": "SELECT ROUND(CAST(127 AS TINYINT), 38) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_-38", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -38) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_-20", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -20) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_-19", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -19) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_-18", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -18) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_-10", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -10) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_-5", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -5) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_-3", "sql": "SELECT ROUND(CAST(0 AS TINYINT), -3) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_18", "sql": "SELECT ROUND(CAST(0 AS TINYINT), 18) AS r", "batch_size": 2}
+{"id": "TINYINT_boundary_0_38", "sql": "SELECT ROUND(CAST(0 AS TINYINT), 38) AS r", "batch_size": 2}
+{"id": "TINYINT_column_-38", "sql": "SELECT ROUND(a, -38) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_-20", "sql": "SELECT ROUND(a, -20) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_-19", "sql": "SELECT ROUND(a, -19) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_-18", "sql": "SELECT ROUND(a, -18) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_-10", "sql": "SELECT ROUND(a, -10) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_-5", "sql": "SELECT ROUND(a, -5) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_-3", "sql": "SELECT ROUND(a, -3) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_-2", "sql": "SELECT ROUND(a, -2) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_-1", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_0", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_2", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_column_38", "sql": "SELECT ROUND(a, 38) AS r FROM VALUES (CAST(-128 AS TINYINT)), (CAST(-127 AS TINYINT)), (CAST(-26 AS TINYINT)), (CAST(-25 AS TINYINT)), (CAST(-24 AS TINYINT)), (CAST(-16 AS TINYINT)), (CAST(-15 AS TINYINT)), (CAST(-14 AS TINYINT)), (CAST(-6 AS TINYINT)), (CAST(-5 AS TINYINT)), (CAST(-4 AS TINYINT)), (CAST(0 AS TINYINT)), (CAST(4 AS TINYINT)), (CAST(5 AS TINYINT)), (CAST(6 AS TINYINT)), (CAST(14 AS TINYINT)), (CAST(15 AS TINYINT)), (CAST(16 AS TINYINT)), (CAST(24 AS TINYINT)), (CAST(25 AS TINYINT)), (CAST(26 AS TINYINT)), (CAST(126 AS TINYINT)), (CAST(127 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_coercion_NULL", "sql": "SELECT ROUND(a, NULL) AS r FROM VALUES (CAST(25 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_coercion_'2'", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(25 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_coercion_-1.9", "sql": "SELECT ROUND(a, -1.9) AS r FROM VALUES (CAST(25 AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_empty_-19", "sql": "SELECT ROUND(CAST(id AS TINYINT), -19) AS r FROM range(0)", "batch_size": 2}
+{"id": "TINYINT_null_-19", "sql": "SELECT ROUND(a, -19) AS r FROM VALUES (CAST(NULL AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_empty_-1", "sql": "SELECT ROUND(CAST(id AS TINYINT), -1) AS r FROM range(0)", "batch_size": 2}
+{"id": "TINYINT_null_-1", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "TINYINT_empty_2", "sql": "SELECT ROUND(CAST(id AS TINYINT), 2) AS r FROM range(0)", "batch_size": 2}
+{"id": "TINYINT_null_2", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(NULL AS TINYINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_-32768_-2", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-32768_-1", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-32768_0", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-32768_2", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-32767_-2", "sql": "SELECT ROUND(CAST(-32767 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-32767_-1", "sql": "SELECT ROUND(CAST(-32767 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-32767_0", "sql": "SELECT ROUND(CAST(-32767 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-32767_2", "sql": "SELECT ROUND(CAST(-32767 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-26_-2", "sql": "SELECT ROUND(CAST(-26 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-26_-1", "sql": "SELECT ROUND(CAST(-26 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-26_0", "sql": "SELECT ROUND(CAST(-26 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-26_2", "sql": "SELECT ROUND(CAST(-26 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-25_-2", "sql": "SELECT ROUND(CAST(-25 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-25_-1", "sql": "SELECT ROUND(CAST(-25 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-25_0", "sql": "SELECT ROUND(CAST(-25 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-25_2", "sql": "SELECT ROUND(CAST(-25 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-24_-2", "sql": "SELECT ROUND(CAST(-24 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-24_-1", "sql": "SELECT ROUND(CAST(-24 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-24_0", "sql": "SELECT ROUND(CAST(-24 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-24_2", "sql": "SELECT ROUND(CAST(-24 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-16_-2", "sql": "SELECT ROUND(CAST(-16 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-16_-1", "sql": "SELECT ROUND(CAST(-16 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-16_0", "sql": "SELECT ROUND(CAST(-16 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-16_2", "sql": "SELECT ROUND(CAST(-16 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-15_-2", "sql": "SELECT ROUND(CAST(-15 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-15_-1", "sql": "SELECT ROUND(CAST(-15 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-15_0", "sql": "SELECT ROUND(CAST(-15 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-15_2", "sql": "SELECT ROUND(CAST(-15 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-14_-2", "sql": "SELECT ROUND(CAST(-14 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-14_-1", "sql": "SELECT ROUND(CAST(-14 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-14_0", "sql": "SELECT ROUND(CAST(-14 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-14_2", "sql": "SELECT ROUND(CAST(-14 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-6_-2", "sql": "SELECT ROUND(CAST(-6 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-6_-1", "sql": "SELECT ROUND(CAST(-6 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-6_0", "sql": "SELECT ROUND(CAST(-6 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-6_2", "sql": "SELECT ROUND(CAST(-6 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-5_-2", "sql": "SELECT ROUND(CAST(-5 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-5_-1", "sql": "SELECT ROUND(CAST(-5 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-5_0", "sql": "SELECT ROUND(CAST(-5 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-5_2", "sql": "SELECT ROUND(CAST(-5 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-4_-2", "sql": "SELECT ROUND(CAST(-4 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_-4_-1", "sql": "SELECT ROUND(CAST(-4 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_-4_0", "sql": "SELECT ROUND(CAST(-4 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_-4_2", "sql": "SELECT ROUND(CAST(-4 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_0_-2", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_0_-1", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_0_0", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_0_2", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_4_-2", "sql": "SELECT ROUND(CAST(4 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_4_-1", "sql": "SELECT ROUND(CAST(4 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_4_0", "sql": "SELECT ROUND(CAST(4 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_4_2", "sql": "SELECT ROUND(CAST(4 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_5_-2", "sql": "SELECT ROUND(CAST(5 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_5_-1", "sql": "SELECT ROUND(CAST(5 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_5_0", "sql": "SELECT ROUND(CAST(5 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_5_2", "sql": "SELECT ROUND(CAST(5 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_6_-2", "sql": "SELECT ROUND(CAST(6 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_6_-1", "sql": "SELECT ROUND(CAST(6 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_6_0", "sql": "SELECT ROUND(CAST(6 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_6_2", "sql": "SELECT ROUND(CAST(6 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_14_-2", "sql": "SELECT ROUND(CAST(14 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_14_-1", "sql": "SELECT ROUND(CAST(14 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_14_0", "sql": "SELECT ROUND(CAST(14 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_14_2", "sql": "SELECT ROUND(CAST(14 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_15_-2", "sql": "SELECT ROUND(CAST(15 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_15_-1", "sql": "SELECT ROUND(CAST(15 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_15_0", "sql": "SELECT ROUND(CAST(15 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_15_2", "sql": "SELECT ROUND(CAST(15 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_16_-2", "sql": "SELECT ROUND(CAST(16 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_16_-1", "sql": "SELECT ROUND(CAST(16 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_16_0", "sql": "SELECT ROUND(CAST(16 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_16_2", "sql": "SELECT ROUND(CAST(16 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_24_-2", "sql": "SELECT ROUND(CAST(24 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_24_-1", "sql": "SELECT ROUND(CAST(24 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_24_0", "sql": "SELECT ROUND(CAST(24 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_24_2", "sql": "SELECT ROUND(CAST(24 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_25_-2", "sql": "SELECT ROUND(CAST(25 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_25_-1", "sql": "SELECT ROUND(CAST(25 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_25_0", "sql": "SELECT ROUND(CAST(25 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_25_2", "sql": "SELECT ROUND(CAST(25 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_26_-2", "sql": "SELECT ROUND(CAST(26 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_26_-1", "sql": "SELECT ROUND(CAST(26 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_26_0", "sql": "SELECT ROUND(CAST(26 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_26_2", "sql": "SELECT ROUND(CAST(26 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_32766_-2", "sql": "SELECT ROUND(CAST(32766 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_32766_-1", "sql": "SELECT ROUND(CAST(32766 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_32766_0", "sql": "SELECT ROUND(CAST(32766 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_32766_2", "sql": "SELECT ROUND(CAST(32766 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_32767_-2", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -2) AS r", "batch_size": 2}
+{"id": "SMALLINT_32767_-1", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -1) AS r", "batch_size": 2}
+{"id": "SMALLINT_32767_0", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), 0) AS r", "batch_size": 2}
+{"id": "SMALLINT_32767_2", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), 2) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_-38", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -38) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_-20", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -20) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_-19", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -19) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_-18", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -18) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_-10", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -10) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_-5", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -5) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_-3", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), -3) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_18", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), 18) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_-32768_38", "sql": "SELECT ROUND(CAST(-32768 AS SMALLINT), 38) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_-38", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -38) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_-20", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -20) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_-19", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -19) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_-18", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -18) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_-10", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -10) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_-5", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -5) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_-3", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), -3) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_18", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), 18) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_32767_38", "sql": "SELECT ROUND(CAST(32767 AS SMALLINT), 38) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_-38", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -38) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_-20", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -20) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_-19", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -19) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_-18", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -18) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_-10", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -10) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_-5", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -5) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_-3", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), -3) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_18", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), 18) AS r", "batch_size": 2}
+{"id": "SMALLINT_boundary_0_38", "sql": "SELECT ROUND(CAST(0 AS SMALLINT), 38) AS r", "batch_size": 2}
+{"id": "SMALLINT_column_-38", "sql": "SELECT ROUND(a, -38) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_-20", "sql": "SELECT ROUND(a, -20) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_-19", "sql": "SELECT ROUND(a, -19) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_-18", "sql": "SELECT ROUND(a, -18) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_-10", "sql": "SELECT ROUND(a, -10) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_-5", "sql": "SELECT ROUND(a, -5) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_-3", "sql": "SELECT ROUND(a, -3) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_-2", "sql": "SELECT ROUND(a, -2) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_-1", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_0", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_2", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_column_38", "sql": "SELECT ROUND(a, 38) AS r FROM VALUES (CAST(-32768 AS SMALLINT)), (CAST(-32767 AS SMALLINT)), (CAST(-26 AS SMALLINT)), (CAST(-25 AS SMALLINT)), (CAST(-24 AS SMALLINT)), (CAST(-16 AS SMALLINT)), (CAST(-15 AS SMALLINT)), (CAST(-14 AS SMALLINT)), (CAST(-6 AS SMALLINT)), (CAST(-5 AS SMALLINT)), (CAST(-4 AS SMALLINT)), (CAST(0 AS SMALLINT)), (CAST(4 AS SMALLINT)), (CAST(5 AS SMALLINT)), (CAST(6 AS SMALLINT)), (CAST(14 AS SMALLINT)), (CAST(15 AS SMALLINT)), (CAST(16 AS SMALLINT)), (CAST(24 AS SMALLINT)), (CAST(25 AS SMALLINT)), (CAST(26 AS SMALLINT)), (CAST(32766 AS SMALLINT)), (CAST(32767 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_coercion_NULL", "sql": "SELECT ROUND(a, NULL) AS r FROM VALUES (CAST(25 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_coercion_'2'", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(25 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_coercion_-1.9", "sql": "SELECT ROUND(a, -1.9) AS r FROM VALUES (CAST(25 AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_empty_-19", "sql": "SELECT ROUND(CAST(id AS SMALLINT), -19) AS r FROM range(0)", "batch_size": 2}
+{"id": "SMALLINT_null_-19", "sql": "SELECT ROUND(a, -19) AS r FROM VALUES (CAST(NULL AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_empty_-1", "sql": "SELECT ROUND(CAST(id AS SMALLINT), -1) AS r FROM range(0)", "batch_size": 2}
+{"id": "SMALLINT_null_-1", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "SMALLINT_empty_2", "sql": "SELECT ROUND(CAST(id AS SMALLINT), 2) AS r FROM range(0)", "batch_size": 2}
+{"id": "SMALLINT_null_2", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(NULL AS SMALLINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_-2147483648_-2", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-2147483648_-1", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-2147483648_0", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-2147483648_2", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-2147483647_-2", "sql": "SELECT ROUND(CAST(-2147483647 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-2147483647_-1", "sql": "SELECT ROUND(CAST(-2147483647 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-2147483647_0", "sql": "SELECT ROUND(CAST(-2147483647 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-2147483647_2", "sql": "SELECT ROUND(CAST(-2147483647 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-26_-2", "sql": "SELECT ROUND(CAST(-26 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-26_-1", "sql": "SELECT ROUND(CAST(-26 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-26_0", "sql": "SELECT ROUND(CAST(-26 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-26_2", "sql": "SELECT ROUND(CAST(-26 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-25_-2", "sql": "SELECT ROUND(CAST(-25 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-25_-1", "sql": "SELECT ROUND(CAST(-25 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-25_0", "sql": "SELECT ROUND(CAST(-25 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-25_2", "sql": "SELECT ROUND(CAST(-25 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-24_-2", "sql": "SELECT ROUND(CAST(-24 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-24_-1", "sql": "SELECT ROUND(CAST(-24 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-24_0", "sql": "SELECT ROUND(CAST(-24 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-24_2", "sql": "SELECT ROUND(CAST(-24 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-16_-2", "sql": "SELECT ROUND(CAST(-16 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-16_-1", "sql": "SELECT ROUND(CAST(-16 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-16_0", "sql": "SELECT ROUND(CAST(-16 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-16_2", "sql": "SELECT ROUND(CAST(-16 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-15_-2", "sql": "SELECT ROUND(CAST(-15 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-15_-1", "sql": "SELECT ROUND(CAST(-15 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-15_0", "sql": "SELECT ROUND(CAST(-15 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-15_2", "sql": "SELECT ROUND(CAST(-15 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-14_-2", "sql": "SELECT ROUND(CAST(-14 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-14_-1", "sql": "SELECT ROUND(CAST(-14 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-14_0", "sql": "SELECT ROUND(CAST(-14 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-14_2", "sql": "SELECT ROUND(CAST(-14 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-6_-2", "sql": "SELECT ROUND(CAST(-6 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-6_-1", "sql": "SELECT ROUND(CAST(-6 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-6_0", "sql": "SELECT ROUND(CAST(-6 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-6_2", "sql": "SELECT ROUND(CAST(-6 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-5_-2", "sql": "SELECT ROUND(CAST(-5 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-5_-1", "sql": "SELECT ROUND(CAST(-5 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-5_0", "sql": "SELECT ROUND(CAST(-5 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-5_2", "sql": "SELECT ROUND(CAST(-5 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_-4_-2", "sql": "SELECT ROUND(CAST(-4 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_-4_-1", "sql": "SELECT ROUND(CAST(-4 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_-4_0", "sql": "SELECT ROUND(CAST(-4 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_-4_2", "sql": "SELECT ROUND(CAST(-4 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_0_-2", "sql": "SELECT ROUND(CAST(0 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_0_-1", "sql": "SELECT ROUND(CAST(0 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_0_0", "sql": "SELECT ROUND(CAST(0 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_0_2", "sql": "SELECT ROUND(CAST(0 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_4_-2", "sql": "SELECT ROUND(CAST(4 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_4_-1", "sql": "SELECT ROUND(CAST(4 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_4_0", "sql": "SELECT ROUND(CAST(4 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_4_2", "sql": "SELECT ROUND(CAST(4 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_5_-2", "sql": "SELECT ROUND(CAST(5 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_5_-1", "sql": "SELECT ROUND(CAST(5 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_5_0", "sql": "SELECT ROUND(CAST(5 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_5_2", "sql": "SELECT ROUND(CAST(5 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_6_-2", "sql": "SELECT ROUND(CAST(6 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_6_-1", "sql": "SELECT ROUND(CAST(6 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_6_0", "sql": "SELECT ROUND(CAST(6 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_6_2", "sql": "SELECT ROUND(CAST(6 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_14_-2", "sql": "SELECT ROUND(CAST(14 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_14_-1", "sql": "SELECT ROUND(CAST(14 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_14_0", "sql": "SELECT ROUND(CAST(14 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_14_2", "sql": "SELECT ROUND(CAST(14 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_15_-2", "sql": "SELECT ROUND(CAST(15 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_15_-1", "sql": "SELECT ROUND(CAST(15 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_15_0", "sql": "SELECT ROUND(CAST(15 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_15_2", "sql": "SELECT ROUND(CAST(15 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_16_-2", "sql": "SELECT ROUND(CAST(16 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_16_-1", "sql": "SELECT ROUND(CAST(16 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_16_0", "sql": "SELECT ROUND(CAST(16 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_16_2", "sql": "SELECT ROUND(CAST(16 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_24_-2", "sql": "SELECT ROUND(CAST(24 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_24_-1", "sql": "SELECT ROUND(CAST(24 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_24_0", "sql": "SELECT ROUND(CAST(24 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_24_2", "sql": "SELECT ROUND(CAST(24 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_25_-2", "sql": "SELECT ROUND(CAST(25 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_25_-1", "sql": "SELECT ROUND(CAST(25 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_25_0", "sql": "SELECT ROUND(CAST(25 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_25_2", "sql": "SELECT ROUND(CAST(25 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_26_-2", "sql": "SELECT ROUND(CAST(26 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_26_-1", "sql": "SELECT ROUND(CAST(26 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_26_0", "sql": "SELECT ROUND(CAST(26 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_26_2", "sql": "SELECT ROUND(CAST(26 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_2147483646_-2", "sql": "SELECT ROUND(CAST(2147483646 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_2147483646_-1", "sql": "SELECT ROUND(CAST(2147483646 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_2147483646_0", "sql": "SELECT ROUND(CAST(2147483646 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_2147483646_2", "sql": "SELECT ROUND(CAST(2147483646 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_2147483647_-2", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -2) AS r", "batch_size": 2}
+{"id": "INT_2147483647_-1", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -1) AS r", "batch_size": 2}
+{"id": "INT_2147483647_0", "sql": "SELECT ROUND(CAST(2147483647 AS INT), 0) AS r", "batch_size": 2}
+{"id": "INT_2147483647_2", "sql": "SELECT ROUND(CAST(2147483647 AS INT), 2) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_-38", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -38) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_-20", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -20) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_-19", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -19) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_-18", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -18) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_-10", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -10) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_-5", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -5) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_-3", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), -3) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_18", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), 18) AS r", "batch_size": 2}
+{"id": "INT_boundary_-2147483648_38", "sql": "SELECT ROUND(CAST(-2147483648 AS INT), 38) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_-38", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -38) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_-20", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -20) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_-19", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -19) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_-18", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -18) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_-10", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -10) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_-5", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -5) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_-3", "sql": "SELECT ROUND(CAST(2147483647 AS INT), -3) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_18", "sql": "SELECT ROUND(CAST(2147483647 AS INT), 18) AS r", "batch_size": 2}
+{"id": "INT_boundary_2147483647_38", "sql": "SELECT ROUND(CAST(2147483647 AS INT), 38) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_-38", "sql": "SELECT ROUND(CAST(0 AS INT), -38) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_-20", "sql": "SELECT ROUND(CAST(0 AS INT), -20) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_-19", "sql": "SELECT ROUND(CAST(0 AS INT), -19) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_-18", "sql": "SELECT ROUND(CAST(0 AS INT), -18) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_-10", "sql": "SELECT ROUND(CAST(0 AS INT), -10) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_-5", "sql": "SELECT ROUND(CAST(0 AS INT), -5) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_-3", "sql": "SELECT ROUND(CAST(0 AS INT), -3) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_18", "sql": "SELECT ROUND(CAST(0 AS INT), 18) AS r", "batch_size": 2}
+{"id": "INT_boundary_0_38", "sql": "SELECT ROUND(CAST(0 AS INT), 38) AS r", "batch_size": 2}
+{"id": "INT_column_-38", "sql": "SELECT ROUND(a, -38) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_-20", "sql": "SELECT ROUND(a, -20) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_-19", "sql": "SELECT ROUND(a, -19) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_-18", "sql": "SELECT ROUND(a, -18) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_-10", "sql": "SELECT ROUND(a, -10) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_-5", "sql": "SELECT ROUND(a, -5) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_-3", "sql": "SELECT ROUND(a, -3) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_-2", "sql": "SELECT ROUND(a, -2) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_-1", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_0", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_2", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_column_38", "sql": "SELECT ROUND(a, 38) AS r FROM VALUES (CAST(-2147483648 AS INT)), (CAST(-2147483647 AS INT)), (CAST(-26 AS INT)), (CAST(-25 AS INT)), (CAST(-24 AS INT)), (CAST(-16 AS INT)), (CAST(-15 AS INT)), (CAST(-14 AS INT)), (CAST(-6 AS INT)), (CAST(-5 AS INT)), (CAST(-4 AS INT)), (CAST(0 AS INT)), (CAST(4 AS INT)), (CAST(5 AS INT)), (CAST(6 AS INT)), (CAST(14 AS INT)), (CAST(15 AS INT)), (CAST(16 AS INT)), (CAST(24 AS INT)), (CAST(25 AS INT)), (CAST(26 AS INT)), (CAST(2147483646 AS INT)), (CAST(2147483647 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_coercion_NULL", "sql": "SELECT ROUND(a, NULL) AS r FROM VALUES (CAST(25 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_coercion_'2'", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(25 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_coercion_-1.9", "sql": "SELECT ROUND(a, -1.9) AS r FROM VALUES (CAST(25 AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_empty_-19", "sql": "SELECT ROUND(CAST(id AS INT), -19) AS r FROM range(0)", "batch_size": 2}
+{"id": "INT_null_-19", "sql": "SELECT ROUND(a, -19) AS r FROM VALUES (CAST(NULL AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_empty_-1", "sql": "SELECT ROUND(CAST(id AS INT), -1) AS r FROM range(0)", "batch_size": 2}
+{"id": "INT_null_-1", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "INT_empty_2", "sql": "SELECT ROUND(CAST(id AS INT), 2) AS r FROM range(0)", "batch_size": 2}
+{"id": "INT_null_2", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(NULL AS INT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_-9223372036854775808_-2", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-9223372036854775808_-1", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-9223372036854775808_0", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-9223372036854775808_2", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-9223372036854775807_-2", "sql": "SELECT ROUND(CAST(-9223372036854775807 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-9223372036854775807_-1", "sql": "SELECT ROUND(CAST(-9223372036854775807 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-9223372036854775807_0", "sql": "SELECT ROUND(CAST(-9223372036854775807 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-9223372036854775807_2", "sql": "SELECT ROUND(CAST(-9223372036854775807 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-26_-2", "sql": "SELECT ROUND(CAST(-26 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-26_-1", "sql": "SELECT ROUND(CAST(-26 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-26_0", "sql": "SELECT ROUND(CAST(-26 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-26_2", "sql": "SELECT ROUND(CAST(-26 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-25_-2", "sql": "SELECT ROUND(CAST(-25 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-25_-1", "sql": "SELECT ROUND(CAST(-25 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-25_0", "sql": "SELECT ROUND(CAST(-25 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-25_2", "sql": "SELECT ROUND(CAST(-25 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-24_-2", "sql": "SELECT ROUND(CAST(-24 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-24_-1", "sql": "SELECT ROUND(CAST(-24 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-24_0", "sql": "SELECT ROUND(CAST(-24 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-24_2", "sql": "SELECT ROUND(CAST(-24 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-16_-2", "sql": "SELECT ROUND(CAST(-16 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-16_-1", "sql": "SELECT ROUND(CAST(-16 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-16_0", "sql": "SELECT ROUND(CAST(-16 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-16_2", "sql": "SELECT ROUND(CAST(-16 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-15_-2", "sql": "SELECT ROUND(CAST(-15 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-15_-1", "sql": "SELECT ROUND(CAST(-15 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-15_0", "sql": "SELECT ROUND(CAST(-15 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-15_2", "sql": "SELECT ROUND(CAST(-15 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-14_-2", "sql": "SELECT ROUND(CAST(-14 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-14_-1", "sql": "SELECT ROUND(CAST(-14 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-14_0", "sql": "SELECT ROUND(CAST(-14 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-14_2", "sql": "SELECT ROUND(CAST(-14 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-6_-2", "sql": "SELECT ROUND(CAST(-6 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-6_-1", "sql": "SELECT ROUND(CAST(-6 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-6_0", "sql": "SELECT ROUND(CAST(-6 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-6_2", "sql": "SELECT ROUND(CAST(-6 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-5_-2", "sql": "SELECT ROUND(CAST(-5 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-5_-1", "sql": "SELECT ROUND(CAST(-5 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-5_0", "sql": "SELECT ROUND(CAST(-5 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-5_2", "sql": "SELECT ROUND(CAST(-5 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_-4_-2", "sql": "SELECT ROUND(CAST(-4 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_-4_-1", "sql": "SELECT ROUND(CAST(-4 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_-4_0", "sql": "SELECT ROUND(CAST(-4 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_-4_2", "sql": "SELECT ROUND(CAST(-4 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_0_-2", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_0_-1", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_0_0", "sql": "SELECT ROUND(CAST(0 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_0_2", "sql": "SELECT ROUND(CAST(0 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_4_-2", "sql": "SELECT ROUND(CAST(4 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_4_-1", "sql": "SELECT ROUND(CAST(4 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_4_0", "sql": "SELECT ROUND(CAST(4 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_4_2", "sql": "SELECT ROUND(CAST(4 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_5_-2", "sql": "SELECT ROUND(CAST(5 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_5_-1", "sql": "SELECT ROUND(CAST(5 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_5_0", "sql": "SELECT ROUND(CAST(5 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_5_2", "sql": "SELECT ROUND(CAST(5 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_6_-2", "sql": "SELECT ROUND(CAST(6 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_6_-1", "sql": "SELECT ROUND(CAST(6 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_6_0", "sql": "SELECT ROUND(CAST(6 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_6_2", "sql": "SELECT ROUND(CAST(6 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_14_-2", "sql": "SELECT ROUND(CAST(14 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_14_-1", "sql": "SELECT ROUND(CAST(14 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_14_0", "sql": "SELECT ROUND(CAST(14 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_14_2", "sql": "SELECT ROUND(CAST(14 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_15_-2", "sql": "SELECT ROUND(CAST(15 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_15_-1", "sql": "SELECT ROUND(CAST(15 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_15_0", "sql": "SELECT ROUND(CAST(15 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_15_2", "sql": "SELECT ROUND(CAST(15 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_16_-2", "sql": "SELECT ROUND(CAST(16 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_16_-1", "sql": "SELECT ROUND(CAST(16 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_16_0", "sql": "SELECT ROUND(CAST(16 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_16_2", "sql": "SELECT ROUND(CAST(16 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_24_-2", "sql": "SELECT ROUND(CAST(24 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_24_-1", "sql": "SELECT ROUND(CAST(24 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_24_0", "sql": "SELECT ROUND(CAST(24 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_24_2", "sql": "SELECT ROUND(CAST(24 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_25_-2", "sql": "SELECT ROUND(CAST(25 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_25_-1", "sql": "SELECT ROUND(CAST(25 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_25_0", "sql": "SELECT ROUND(CAST(25 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_25_2", "sql": "SELECT ROUND(CAST(25 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_26_-2", "sql": "SELECT ROUND(CAST(26 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_26_-1", "sql": "SELECT ROUND(CAST(26 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_26_0", "sql": "SELECT ROUND(CAST(26 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_26_2", "sql": "SELECT ROUND(CAST(26 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_9223372036854775806_-2", "sql": "SELECT ROUND(CAST(9223372036854775806 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_9223372036854775806_-1", "sql": "SELECT ROUND(CAST(9223372036854775806 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_9223372036854775806_0", "sql": "SELECT ROUND(CAST(9223372036854775806 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_9223372036854775806_2", "sql": "SELECT ROUND(CAST(9223372036854775806 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_9223372036854775807_-2", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -2) AS r", "batch_size": 2}
+{"id": "BIGINT_9223372036854775807_-1", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "BIGINT_9223372036854775807_0", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "BIGINT_9223372036854775807_2", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_-38", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -38) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_-20", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -20) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_-19", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_-18", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_-10", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -10) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_-5", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -5) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_-3", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), -3) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_18", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), 18) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_-9223372036854775808_38", "sql": "SELECT ROUND(CAST(-9223372036854775808 AS BIGINT), 38) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_-38", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -38) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_-20", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -20) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_-19", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_-18", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_-10", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -10) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_-5", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -5) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_-3", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), -3) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_18", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), 18) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_9223372036854775807_38", "sql": "SELECT ROUND(CAST(9223372036854775807 AS BIGINT), 38) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_-38", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -38) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_-20", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -20) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_-19", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_-18", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_-10", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -10) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_-5", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -5) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_-3", "sql": "SELECT ROUND(CAST(0 AS BIGINT), -3) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_18", "sql": "SELECT ROUND(CAST(0 AS BIGINT), 18) AS r", "batch_size": 2}
+{"id": "BIGINT_boundary_0_38", "sql": "SELECT ROUND(CAST(0 AS BIGINT), 38) AS r", "batch_size": 2}
+{"id": "BIGINT_column_-38", "sql": "SELECT ROUND(a, -38) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_-20", "sql": "SELECT ROUND(a, -20) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_-19", "sql": "SELECT ROUND(a, -19) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_-18", "sql": "SELECT ROUND(a, -18) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_-10", "sql": "SELECT ROUND(a, -10) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_-5", "sql": "SELECT ROUND(a, -5) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_-3", "sql": "SELECT ROUND(a, -3) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_-2", "sql": "SELECT ROUND(a, -2) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_-1", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_0", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_2", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_column_38", "sql": "SELECT ROUND(a, 38) AS r FROM VALUES (CAST(-9223372036854775808 AS BIGINT)), (CAST(-9223372036854775807 AS BIGINT)), (CAST(-26 AS BIGINT)), (CAST(-25 AS BIGINT)), (CAST(-24 AS BIGINT)), (CAST(-16 AS BIGINT)), (CAST(-15 AS BIGINT)), (CAST(-14 AS BIGINT)), (CAST(-6 AS BIGINT)), (CAST(-5 AS BIGINT)), (CAST(-4 AS BIGINT)), (CAST(0 AS BIGINT)), (CAST(4 AS BIGINT)), (CAST(5 AS BIGINT)), (CAST(6 AS BIGINT)), (CAST(14 AS BIGINT)), (CAST(15 AS BIGINT)), (CAST(16 AS BIGINT)), (CAST(24 AS BIGINT)), (CAST(25 AS BIGINT)), (CAST(26 AS BIGINT)), (CAST(9223372036854775806 AS BIGINT)), (CAST(9223372036854775807 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_coercion_NULL", "sql": "SELECT ROUND(a, NULL) AS r FROM VALUES (CAST(25 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_coercion_'2'", "sql": "SELECT ROUND(a, '2') AS r FROM VALUES (CAST(25 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_coercion_-1.9", "sql": "SELECT ROUND(a, -1.9) AS r FROM VALUES (CAST(25 AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_empty_-19", "sql": "SELECT ROUND(CAST(id AS BIGINT), -19) AS r FROM range(0)", "batch_size": 2}
+{"id": "BIGINT_null_-19", "sql": "SELECT ROUND(a, -19) AS r FROM VALUES (CAST(NULL AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_empty_-1", "sql": "SELECT ROUND(CAST(id AS BIGINT), -1) AS r FROM range(0)", "batch_size": 2}
+{"id": "BIGINT_null_-1", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "BIGINT_empty_2", "sql": "SELECT ROUND(CAST(id AS BIGINT), 2) AS r FROM range(0)", "batch_size": 2}
+{"id": "BIGINT_null_2", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(NULL AS BIGINT)), (NULL) t(a)", "batch_size": 2}
+{"id": "big_exact_9007199254740991_-19", "sql": "SELECT ROUND(CAST(9007199254740991 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740991_-18", "sql": "SELECT ROUND(CAST(9007199254740991 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740991_-1", "sql": "SELECT ROUND(CAST(9007199254740991 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740991_0", "sql": "SELECT ROUND(CAST(9007199254740991 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740991_2", "sql": "SELECT ROUND(CAST(9007199254740991 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740991_-19", "sql": "SELECT ROUND(CAST(-9007199254740991 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740991_-18", "sql": "SELECT ROUND(CAST(-9007199254740991 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740991_-1", "sql": "SELECT ROUND(CAST(-9007199254740991 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740991_0", "sql": "SELECT ROUND(CAST(-9007199254740991 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740991_2", "sql": "SELECT ROUND(CAST(-9007199254740991 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740992_-19", "sql": "SELECT ROUND(CAST(9007199254740992 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740992_-18", "sql": "SELECT ROUND(CAST(9007199254740992 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740992_-1", "sql": "SELECT ROUND(CAST(9007199254740992 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740992_0", "sql": "SELECT ROUND(CAST(9007199254740992 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740992_2", "sql": "SELECT ROUND(CAST(9007199254740992 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740992_-19", "sql": "SELECT ROUND(CAST(-9007199254740992 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740992_-18", "sql": "SELECT ROUND(CAST(-9007199254740992 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740992_-1", "sql": "SELECT ROUND(CAST(-9007199254740992 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740992_0", "sql": "SELECT ROUND(CAST(-9007199254740992 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740992_2", "sql": "SELECT ROUND(CAST(-9007199254740992 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740993_-19", "sql": "SELECT ROUND(CAST(9007199254740993 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740993_-18", "sql": "SELECT ROUND(CAST(9007199254740993 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740993_-1", "sql": "SELECT ROUND(CAST(9007199254740993 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740993_0", "sql": "SELECT ROUND(CAST(9007199254740993 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_9007199254740993_2", "sql": "SELECT ROUND(CAST(9007199254740993 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740993_-19", "sql": "SELECT ROUND(CAST(-9007199254740993 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740993_-18", "sql": "SELECT ROUND(CAST(-9007199254740993 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740993_-1", "sql": "SELECT ROUND(CAST(-9007199254740993 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740993_0", "sql": "SELECT ROUND(CAST(-9007199254740993 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_-9007199254740993_2", "sql": "SELECT ROUND(CAST(-9007199254740993 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_4999999999999999999_-19", "sql": "SELECT ROUND(CAST(4999999999999999999 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_4999999999999999999_-18", "sql": "SELECT ROUND(CAST(4999999999999999999 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_4999999999999999999_-1", "sql": "SELECT ROUND(CAST(4999999999999999999 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_4999999999999999999_0", "sql": "SELECT ROUND(CAST(4999999999999999999 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_4999999999999999999_2", "sql": "SELECT ROUND(CAST(4999999999999999999 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_-4999999999999999999_-19", "sql": "SELECT ROUND(CAST(-4999999999999999999 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_-4999999999999999999_-18", "sql": "SELECT ROUND(CAST(-4999999999999999999 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_-4999999999999999999_-1", "sql": "SELECT ROUND(CAST(-4999999999999999999 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_-4999999999999999999_0", "sql": "SELECT ROUND(CAST(-4999999999999999999 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_-4999999999999999999_2", "sql": "SELECT ROUND(CAST(-4999999999999999999 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000000_-19", "sql": "SELECT ROUND(CAST(5000000000000000000 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000000_-18", "sql": "SELECT ROUND(CAST(5000000000000000000 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000000_-1", "sql": "SELECT ROUND(CAST(5000000000000000000 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000000_0", "sql": "SELECT ROUND(CAST(5000000000000000000 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000000_2", "sql": "SELECT ROUND(CAST(5000000000000000000 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000000_-19", "sql": "SELECT ROUND(CAST(-5000000000000000000 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000000_-18", "sql": "SELECT ROUND(CAST(-5000000000000000000 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000000_-1", "sql": "SELECT ROUND(CAST(-5000000000000000000 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000000_0", "sql": "SELECT ROUND(CAST(-5000000000000000000 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000000_2", "sql": "SELECT ROUND(CAST(-5000000000000000000 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000001_-19", "sql": "SELECT ROUND(CAST(5000000000000000001 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000001_-18", "sql": "SELECT ROUND(CAST(5000000000000000001 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000001_-1", "sql": "SELECT ROUND(CAST(5000000000000000001 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000001_0", "sql": "SELECT ROUND(CAST(5000000000000000001 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_5000000000000000001_2", "sql": "SELECT ROUND(CAST(5000000000000000001 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000001_-19", "sql": "SELECT ROUND(CAST(-5000000000000000001 AS BIGINT), -19) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000001_-18", "sql": "SELECT ROUND(CAST(-5000000000000000001 AS BIGINT), -18) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000001_-1", "sql": "SELECT ROUND(CAST(-5000000000000000001 AS BIGINT), -1) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000001_0", "sql": "SELECT ROUND(CAST(-5000000000000000001 AS BIGINT), 0) AS r", "batch_size": 2}
+{"id": "big_exact_-5000000000000000001_2", "sql": "SELECT ROUND(CAST(-5000000000000000001 AS BIGINT), 2) AS r", "batch_size": 2}
+{"id": "control_default", "sql": "SELECT ROUND(25L) AS r", "batch_size": 2}
+{"id": "control_decimal", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), '2') AS r", "batch_size": 2}
+{"id": "control_float", "sql": "SELECT ROUND(CAST(1.25 AS FLOAT), 1) AS r", "batch_size": 2}
+{"id": "control_double", "sql": "SELECT ROUND(CAST(1.25 AS DOUBLE), 1) AS r", "batch_size": 2}
+{"id": "control_string", "sql": "SELECT ROUND('1.25', '1') AS r", "batch_size": 2}
+{"id": "control_bround_decimal", "sql": "SELECT BROUND(CAST(2.345 AS DECIMAL(6,3)), '2') AS r", "batch_size": 2}
+{"id": "control_bround_float", "sql": "SELECT BROUND(CAST(-0.5 AS FLOAT), 0) AS r", "batch_size": 2}
