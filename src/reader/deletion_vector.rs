@@ -92,63 +92,60 @@ impl DeletionVectorRows {
         }
     }
 
-    // The caller has checked that start + keep.len() fits in u64.
-    fn mask_ordered(&self, start: u64, keep: &mut [bool]) {
-        if keep.is_empty() {
-            return;
+    // The caller has checked that start + len fits in u64.
+    fn mask_ordered(&self, start: u64, len: usize) -> BooleanBuffer {
+        if len == 0 {
+            return BooleanBuffer::new_set(0);
         }
-        let end = start + keep.len() as u64 - 1;
+        let end = start + len as u64 - 1;
         match self {
             Self::Indexes(indexes) => {
+                let mut keep = BooleanBufferBuilder::new(len);
+                keep.append_n(len, true);
                 let first = indexes.partition_point(|row| *row < start);
                 let last = indexes.partition_point(|row| *row <= end);
                 for row in &indexes[first..last] {
-                    keep[(*row - start) as usize] = false;
+                    keep.set_bit((*row - start) as usize, false);
                 }
+                keep.finish()
             }
             Self::Bitmap { first, bits } => {
                 let lower = start.max(*first);
                 let upper = end.min(first + (bits.len() as u64 - 1));
-                if lower <= upper {
-                    let values = bits.slice((lower - first) as usize, (upper - lower + 1) as usize);
-                    let offset = (lower - start) as usize;
-                    if values.count_set_bits() == values.len() {
-                        keep[offset..offset + values.len()].fill(false);
-                    } else {
-                        for index in values.set_indices() {
-                            keep[offset + index] = false;
-                        }
-                    }
+                if lower > upper {
+                    return BooleanBuffer::new_set(len);
                 }
+                let keep = !&bits.slice((lower - first) as usize, (upper - lower + 1) as usize);
+                if lower == start && upper == end {
+                    return keep;
+                }
+                let mut padded = BooleanBufferBuilder::new(len);
+                padded.append_n((lower - start) as usize, true);
+                padded.append_buffer(&keep);
+                padded.append_n((end - upper) as usize, true);
+                padded.finish()
             }
         }
     }
 
-    fn mask_original(&self, rows: &[u64], sorted: bool) -> Vec<bool> {
-        if !sorted {
-            return rows.iter().map(|row| !self.contains(*row)).collect();
-        }
-        let mut keep = vec![true; rows.len()];
-        let Some(&first) = rows.first() else {
-            return keep;
-        };
+    // The caller has rejected negative or null original row indexes.
+    fn mask_original(&self, rows: &[i64]) -> BooleanBuffer {
         match self {
-            Self::Indexes(indexes) => {
+            Self::Indexes(indexes) if rows.is_sorted() => {
+                let first = rows.first().copied().unwrap_or(0) as u64;
                 let mut cursor = indexes.partition_point(|row| *row < first);
-                for (row, keep) in rows.iter().zip(&mut keep) {
-                    while indexes.get(cursor).is_some_and(|deleted| deleted < row) {
+                BooleanBuffer::collect_bool(rows.len(), |index| {
+                    let row = rows[index] as u64;
+                    while indexes.get(cursor).is_some_and(|deleted| *deleted < row) {
                         cursor += 1;
                     }
-                    *keep = indexes.get(cursor) != Some(row);
-                }
+                    indexes.get(cursor) != Some(&row)
+                })
             }
-            Self::Bitmap { .. } => {
-                for (row, keep) in rows.iter().zip(&mut keep) {
-                    *keep = !self.contains(*row);
-                }
+            _ => {
+                BooleanBuffer::collect_bool(rows.len(), |index| !self.contains(rows[index] as u64))
             }
         }
-        keep
     }
 }
 
@@ -317,7 +314,10 @@ impl DeletionVectorMasker {
         self.apply_keep_mask(batch, keep_mask)
     }
 
-    fn consume_ordered_batch(&mut self, batch_len: usize) -> Result<Vec<bool>, DeltaReaderError> {
+    fn consume_ordered_batch(
+        &mut self,
+        batch_len: usize,
+    ) -> Result<BooleanBuffer, DeltaReaderError> {
         self.require_open()?;
         self.select_mode(DeletionVectorAccessMode::Ordered)?;
         let batch_len = match u64::try_from(batch_len) {
@@ -344,9 +344,9 @@ impl DeletionVectorMasker {
                 );
             }
         };
-        let mut keep_mask = vec![true; batch_len];
-        self.deleted_rows
-            .mask_ordered(self.consumed_row_count, &mut keep_mask);
+        let keep_mask = self
+            .deleted_rows
+            .mask_ordered(self.consumed_row_count, batch_len);
         self.consumed_row_count = requested_end;
 
         Ok(keep_mask)
@@ -355,51 +355,47 @@ impl DeletionVectorMasker {
     fn select_original_row_indexes(
         &mut self,
         row_indexes: &Int64Array,
-    ) -> Result<Vec<bool>, DeltaReaderError> {
+    ) -> Result<BooleanBuffer, DeltaReaderError> {
         self.require_open()?;
-        let mut validated_row_indexes = Vec::with_capacity(row_indexes.len());
-        let mut sorted = true;
-        for index in 0..row_indexes.len() {
-            if row_indexes.is_null(index) {
-                return self.reject(
-                    "invalid_deletion_vector_coordinates",
-                    "original row index is missing",
-                );
+        let values = row_indexes.values();
+        if row_indexes.null_count() != 0 || values.iter().any(|row| *row < 0) {
+            // Preserve the first invalid coordinate and its error detail.
+            for (index, row) in values.iter().enumerate() {
+                if row_indexes.is_null(index) {
+                    return self.reject(
+                        "invalid_deletion_vector_coordinates",
+                        "original row index is missing",
+                    );
+                }
+                if *row < 0 {
+                    return self.reject(
+                        "invalid_deletion_vector_coordinates",
+                        "original row index is negative",
+                    );
+                }
             }
-            let Ok(row_index) = u64::try_from(row_indexes.value(index)) else {
-                return self.reject(
-                    "invalid_deletion_vector_coordinates",
-                    "original row index is negative",
-                );
-            };
-            sorted &= validated_row_indexes
-                .last()
-                .is_none_or(|last| *last <= row_index);
-            validated_row_indexes.push(row_index);
         }
         self.select_mode(DeletionVectorAccessMode::OriginalRowIndex)?;
 
-        Ok(self
-            .deleted_rows
-            .mask_original(&validated_row_indexes, sorted))
+        Ok(self.deleted_rows.mask_original(values))
     }
 
     fn apply_keep_mask(
         &mut self,
         batch: RecordBatch,
-        keep_mask: Vec<bool>,
+        keep_mask: BooleanBuffer,
     ) -> Result<RecordBatch, DeltaReaderError> {
         if !self.applied {
             self.metrics.record_deletion_vector_applied();
             self.applied = true;
         }
-        let deleted_rows = keep_mask.iter().filter(|keep| !**keep).count();
+        let deleted_rows = keep_mask.len() - keep_mask.count_set_bits();
         let result = if deleted_rows == 0 {
             Ok(batch)
         } else if deleted_rows == batch.num_rows() {
             Ok(RecordBatch::new_empty(batch.schema()))
         } else {
-            filter_record_batch(&batch, &BooleanArray::from(keep_mask))
+            filter_record_batch(&batch, &BooleanArray::new(keep_mask, None))
                 .boxed()
                 .context(DeletionVectorReadSnafu {
                     reason: "deletion_vector_masking_failed",
@@ -885,7 +881,10 @@ mod tests {
 
         assert_eq!(masker.deleted_rows.all_indexes(), [1, 3]);
         assert_eq!(
-            masker.select_original_row_indexes(&row_indexes(&[0, 1, 2, 3, 4]))?,
+            masker
+                .select_original_row_indexes(&row_indexes(&[0, 1, 2, 3, 4]))?
+                .iter()
+                .collect::<Vec<_>>(),
             [true, false, true, false, true]
         );
         masker.finish()?;
@@ -897,9 +896,18 @@ mod tests {
     fn ordered_mode_tracks_physical_rows_across_batches() -> Result<(), DeltaReaderError> {
         let mut masker = masker(vec![1, 4])?;
 
-        assert_eq!(masker.consume_ordered_batch(2)?, [true, false]);
-        assert_eq!(masker.consume_ordered_batch(0)?, Vec::<bool>::new());
-        assert_eq!(masker.consume_ordered_batch(4)?, [true, true, false, true]);
+        assert_eq!(
+            masker.consume_ordered_batch(2)?.iter().collect::<Vec<_>>(),
+            [true, false]
+        );
+        assert_eq!(
+            masker.consume_ordered_batch(0)?.iter().collect::<Vec<_>>(),
+            Vec::<bool>::new()
+        );
+        assert_eq!(
+            masker.consume_ordered_batch(4)?.iter().collect::<Vec<_>>(),
+            [true, true, false, true]
+        );
         masker.finish()?;
         Ok(())
     }
@@ -909,8 +917,14 @@ mod tests {
         let mut none = masker(Vec::new())?;
         let mut all = masker(vec![0, 1, 2])?;
 
-        assert_eq!(none.consume_ordered_batch(3)?, [true; 3]);
-        assert_eq!(all.consume_ordered_batch(3)?, [false; 3]);
+        assert_eq!(
+            none.consume_ordered_batch(3)?.iter().collect::<Vec<_>>(),
+            [true; 3]
+        );
+        assert_eq!(
+            all.consume_ordered_batch(3)?.iter().collect::<Vec<_>>(),
+            [false; 3]
+        );
         none.finish()?;
         all.finish()?;
         Ok(())
@@ -921,7 +935,7 @@ mod tests {
     -> Result<(), DeltaReaderError> {
         let mut padded = masker(vec![1])?;
         assert_eq!(
-            padded.consume_ordered_batch(5)?,
+            padded.consume_ordered_batch(5)?.iter().collect::<Vec<_>>(),
             [true, false, true, true, true]
         );
         padded.finish()?;
@@ -942,11 +956,17 @@ mod tests {
         let mut masker = masker(vec![1, 4, 7])?;
 
         assert_eq!(
-            masker.select_original_row_indexes(&row_indexes(&[0, 1, 3]))?,
+            masker
+                .select_original_row_indexes(&row_indexes(&[0, 1, 3]))?
+                .iter()
+                .collect::<Vec<_>>(),
             [true, false, true]
         );
         assert_eq!(
-            masker.select_original_row_indexes(&row_indexes(&[4, 8, 9]))?,
+            masker
+                .select_original_row_indexes(&row_indexes(&[4, 8, 9]))?
+                .iter()
+                .collect::<Vec<_>>(),
             [false, true, true]
         );
         masker.finish()?;
@@ -970,11 +990,17 @@ mod tests {
         let mut masker = masker(vec![1, 3])?;
 
         assert_eq!(
-            masker.select_original_row_indexes(&row_indexes(&[3, 1, 1, 4]))?,
+            masker
+                .select_original_row_indexes(&row_indexes(&[3, 1, 1, 4]))?
+                .iter()
+                .collect::<Vec<_>>(),
             [false, false, false, true]
         );
         assert_eq!(
-            masker.select_original_row_indexes(&row_indexes(&[1, 2]))?,
+            masker
+                .select_original_row_indexes(&row_indexes(&[1, 2]))?
+                .iter()
+                .collect::<Vec<_>>(),
             [false, true]
         );
         masker.finish()?;
@@ -986,6 +1012,121 @@ mod tests {
         for indexes in [Int64Array::from(vec![Some(0), None]), row_indexes(&[-1])] {
             let mut masker = masker(vec![1])?;
             assert!(masker.select_original_row_indexes(&indexes).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn packed_masks_preserve_sliced_indexes_payloads_and_metrics()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use arrow::{array::BooleanArray, compute::filter_record_batch};
+        use std::collections::BTreeSet;
+
+        for deleted in [
+            vec![],
+            (0..260).collect(),
+            (7..200).step_by(3).collect(),
+            vec![0, 7, 64, 127, 255, i64::MAX as u64, u64::MAX],
+        ] {
+            let oracle: BTreeSet<_> = deleted.iter().copied().collect();
+            for values in [
+                (0..270).collect::<Vec<i64>>(),
+                vec![129, 7, 7, 64, 0, 200, 255, 260],
+                vec![0, 0, 7, 7, 64, 255, i64::MAX],
+            ] {
+                let original = row_indexes(&values);
+                for offset in [0, 1, 7] {
+                    for len in [0, 1, 7, 8, 63, 64, 65, 127, 128, 129, 255] {
+                        if offset + len > values.len() {
+                            continue;
+                        }
+                        let indexes = original.slice(offset, len);
+                        let mask = BooleanArray::from(
+                            values[offset..offset + len]
+                                .iter()
+                                .map(|row| !oracle.contains(&(*row as u64)))
+                                .collect::<Vec<_>>(),
+                        );
+                        let input = batch(&(0..len as i32).collect::<Vec<_>>());
+                        let expected = filter_record_batch(&input, &mask)?;
+                        let stats = metrics();
+                        let mut masker =
+                            DeletionVectorMasker::try_new(deleted.clone(), stats.clone())?;
+                        let actual = masker.mask_original_row_indexes(input, Some(&indexes))?;
+                        masker.finish()?;
+                        assert_eq!(actual, expected, "{deleted:?}, offset={offset}, len={len}");
+                        let stats = stats.snapshot();
+                        assert_eq!(stats.deletion_vectors_applied, 1);
+                        assert_eq!(
+                            stats.deletion_vector_rows_deleted,
+                            (len - expected.num_rows()) as u64
+                        );
+                        assert_eq!(stats.deletion_vector_coordinate_rejections, 0);
+                        assert_eq!(stats.deletion_vector_failures, 0);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn packed_ordered_masks_pad_both_ends_and_ignore_unused_tail_bits()
+    -> Result<(), DeltaReaderError> {
+        for deleted in [
+            (7..138).collect::<Vec<u64>>(),
+            (7..138).step_by(3).collect(),
+        ] {
+            for start in [0, 6, 7, 8, 63, 64, 128, 137, 138, 150] {
+                for len in [0, 1, 7, 8, 63, 64, 65, 127, 128, 129, 200] {
+                    let mut masker = masker(deleted.clone())?;
+                    masker.consumed_row_count = start;
+                    let actual = masker.consume_ordered_batch(len)?;
+                    let expected: Vec<_> = (start..start + len as u64)
+                        .map(|row| !deleted.contains(&row))
+                        .collect();
+                    assert_eq!(actual.iter().collect::<Vec<_>>(), expected);
+                    assert_eq!(
+                        actual.count_set_bits(),
+                        expected.iter().filter(|keep| **keep).count()
+                    );
+                    assert_eq!(masker.consumed_row_count, start + len as u64);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn original_index_validation_preserves_first_error_without_changing_mode()
+    -> Result<(), DeltaReaderError> {
+        for (indexes, detail) in [
+            (
+                Int64Array::from(vec![Some(-1), None]),
+                "original row index is negative",
+            ),
+            (
+                Int64Array::from(vec![None, Some(-1)]),
+                "original row index is missing",
+            ),
+        ] {
+            let stats = metrics();
+            let mut masker = DeletionVectorMasker::try_new(vec![1], stats.clone())?;
+            let error = masker
+                .select_original_row_indexes(&indexes)
+                .expect_err("invalid indexes");
+            assert!(
+                error
+                    .source()
+                    .expect("coordinate error source")
+                    .to_string()
+                    .contains(detail)
+            );
+            assert_eq!(stats.snapshot().deletion_vector_coordinate_rejections, 1);
+            assert_eq!(stats.snapshot().deletion_vectors_applied, 0);
+            assert_eq!(stats.snapshot().deletion_vector_failures, 0);
+            masker.consume_ordered_batch(2)?;
+            masker.finish()?;
         }
         Ok(())
     }
@@ -1009,8 +1150,14 @@ mod tests {
     #[test]
     fn ordered_mode_requires_no_upfront_physical_row_count() -> Result<(), DeltaReaderError> {
         let mut masker = DeletionVectorMasker::try_new(Vec::new(), metrics())?;
-        assert_eq!(masker.consume_ordered_batch(0)?, Vec::<bool>::new());
-        assert_eq!(masker.consume_ordered_batch(3)?, [true; 3]);
+        assert_eq!(
+            masker.consume_ordered_batch(0)?.iter().collect::<Vec<_>>(),
+            Vec::<bool>::new()
+        );
+        assert_eq!(
+            masker.consume_ordered_batch(3)?.iter().collect::<Vec<_>>(),
+            [true; 3]
+        );
         masker.finish()?;
         Ok(())
     }
@@ -1158,7 +1305,13 @@ mod tests {
             assert!(rows.contains(first + 99_999));
             let mut ordered = DeletionVectorMasker::from_shared(Arc::new(rows), metrics());
             ordered.consumed_row_count = first;
-            assert_eq!(ordered.consume_ordered_batch(127)?, vec![false; 127]);
+            assert_eq!(
+                ordered
+                    .consume_ordered_batch(127)?
+                    .iter()
+                    .collect::<Vec<_>>(),
+                vec![false; 127]
+            );
             assert!(ordered.finish().is_err());
         }
         for deleted in [vec![], vec![0, u64::MAX], vec![0, 1_u64 << 40, 2_u64 << 40]] {
@@ -1215,7 +1368,10 @@ mod tests {
                         .collect::<Vec<_>>(),
                 );
                 assert_eq!(
-                    original.select_original_row_indexes(&indexes)?,
+                    original
+                        .select_original_row_indexes(&indexes)?
+                        .iter()
+                        .collect::<Vec<_>>(),
                     expected,
                     "{deleted:?}"
                 );
@@ -1237,7 +1393,10 @@ mod tests {
                         .map(|row| !deleted.contains(&row))
                         .collect();
                     assert_eq!(
-                        ordered.consume_ordered_batch(len as usize)?,
+                        ordered
+                            .consume_ordered_batch(len as usize)?
+                            .iter()
+                            .collect::<Vec<_>>(),
                         expected,
                         "{deleted:?} at {start}"
                     );
