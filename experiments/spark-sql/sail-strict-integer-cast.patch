@@ -1,0 +1,128 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
+@@ -170,6 +170,14 @@
+                 ScalarUDF::new_from_impl(SparkCastStringToInteger::try_new(to)?).call(vec![expr])
+             }
+             (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
++                to @ (DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64), is_try) =>
++            {
++                // UTF8String's exact integer parser trims ASCII controls, including DEL.
++                let trim: String = (0_u8..=32).chain([127]).map(char::from).collect();
++                let value = expr_fn::btrim(vec![expr, lit(trim)]);
++                if is_try { try_cast(value, to) } else { cast(value, to) }
++            }
++            (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
+                 to @ (DataType::Float32 | DataType::Float64), false)
+                 if !self.config.ansi_mode =>
+             {
+@@ -501,3 +509,84 @@
+         Ok(())
+     }
+ }
++
++
++#[cfg(test)]
++mod strict_integer_cast_tests {
++    use super::*;
++    use crate::config::PlanConfig;
++    use datafusion::arrow::array::{ArrayRef, LargeStringArray, StringArray, StringViewArray};
++    use datafusion::arrow::datatypes::Schema;
++    use datafusion::arrow::record_batch::RecordBatch;
++    use datafusion::datasource::MemTable;
++    use datafusion::prelude::{SessionConfig, SessionContext};
++
++    #[tokio::test]
++    async fn integer_string_trim_keeps_cast_modes_and_widths()
++    -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
++        for (target, data_type, min, max) in [
++            ("TINYINT", DataType::Int8, i8::MIN as i64, i8::MAX as i64),
++            ("SMALLINT", DataType::Int16, i16::MIN as i64, i16::MAX as i64),
++            ("INT", DataType::Int32, i32::MIN as i64, i32::MAX as i64),
++            ("BIGINT", DataType::Int64, i64::MIN, i64::MAX),
++        ] {
++            let mut valid: Vec<Option<String>> = (0_u8..=32).chain([127])
++                .map(|b| Some(format!("{}7{}", char::from(b), char::from(b))))
++                .collect();
++            valid.extend([None, Some(format!("\x00{min}\x7f")), Some(format!("\t+{max}\n"))]);
++            let invalid = vec![Some(" 1.25 ".to_owned()), Some("bad".to_owned()),
++                Some(format!(" {} ", i128::from(max) + 1)), Some("\u{a0}7\u{a0}".to_owned())];
++            for (is_invalid, strings) in [(false, valid), (true, invalid)] {
++                let values: Vec<_> = strings.iter().map(|s| s.as_deref()).collect();
++                let arrays: [ArrayRef; 3] = [
++                    Arc::new(StringArray::from(values.clone())),
++                    Arc::new(LargeStringArray::from(values.clone())),
++                    Arc::new(StringViewArray::from(values)),
++                ];
++                for input in arrays {
++                    let ctx = SessionContext::new_with_config(
++                        SessionConfig::new().with_target_partitions(1).with_batch_size(2));
++                    let schema = Arc::new(Schema::new(vec![Field::new("v", input.data_type().clone(), true)]));
++                    let batch = RecordBatch::try_new(schema.clone(), vec![input])?;
++                    ctx.register_table("t", Arc::new(MemTable::try_new(schema, vec![vec![batch]])?))?;
++                    for ansi in [true, false, true] {
++                        for is_try in [false, true] {
++                            let keyword = if is_try { "TRY_CAST" } else { "CAST" };
++                            let sql = format!("SELECT {keyword}(v AS {target}) AS r FROM t");
++                            let result = async {
++                                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                                let config = PlanConfig { ansi_mode: ansi, ..Default::default() };
++                                let named = PlanResolver::new(&ctx, Arc::new(config)).resolve_named_plan(spec).await?;
++                                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
++                                    ctx.execute_logical_plan(named.plan).await?.collect().await?)
++                            }.await;
++                            if is_invalid && ansi && !is_try {
++                                assert!(result.is_err(), "{sql} must reject fractional text in ANSI mode");
++                                continue;
++                            }
++                            let mut actual = Vec::new();
++                            for batch in result? {
++                                let values = batch.column(0);
++                                assert_eq!(values.data_type(), &data_type);
++                                for row in 0..values.len() {
++                                    actual.push(ScalarValue::try_from_array(values, row)?.cast_to(&DataType::Int64)?);
++                                }
++                            }
++                            let expected: Vec<_> = if is_invalid {
++                                vec![if is_try { None } else { Some(1) }, None, None, None]
++                            } else {
++                                let mut result = vec![Some(7); 34];
++                                result.extend([None, Some(min), Some(max)]);
++                                result
++                            };
++                            assert_eq!(actual, expected.into_iter().map(ScalarValue::Int64).collect::<Vec<_>>(),
++                                "{sql}, ANSI {ansi}");
++                        }
++                    }
++                }
++            }
++        }
++        Ok(())
++    }
++}
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/decimal_null.rs
+@@ -69,9 +69,20 @@
+ fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
+     match expr {
+         Expr::Cast(cast) if cast.field.data_type().is_signed_integer() => {
+-            match cast.expr.as_ref() {
+-                Expr::Column(_) => cast
+-                    .expr
++            // Preserve the same local-column boundary after the CAST resolver
++            // adds its native whitespace normalization. Do not unwrap other functions.
++            let input = match cast.expr.as_ref() {
++                Expr::ScalarFunction(f)
++                    if f.func.inner().is::<datafusion::functions::string::btrim::BTrimFunc>()
++                        && matches!(f.args.as_slice(), [_, Expr::Literal(
++                            ScalarValue::Utf8(Some(trim))
++                            | ScalarValue::LargeUtf8(Some(trim))
++                            | ScalarValue::Utf8View(Some(trim)), _)]
++                            if trim.bytes().eq((0_u8..=32).chain([127]))) => &f.args[0],
++                expr => expr,
++            };
++            match input {
++                Expr::Column(_) => input
+                     .get_type(schema)
+                     .is_ok_and(|t| t.is_string() || t.is_numeric()),
+                 expr => column_cast(expr, schema),

@@ -32,6 +32,8 @@ The [division/CAST classification](DIVISION_CAST_CLASSIFICATION.md) accounts for
 
 The [legacy numeric-string CAST repair](LEGACY_NUMERIC_CAST.md) resolves all 63 assigned non-ANSI observations and preserves prior agreements. Its expanded corpus keeps strict/TRY integer whitespace and floating-string grammar with separate implementation owners. Integer-parser and floating trim/conversion costs are recorded with the existing CAST performance owner.
 
+The [strict integer CAST whitespace repair](STRICT_INTEGER_CAST.md) resolves all 36 assigned ANSI/TRY observations and passes 496 expanded checks. It preserves the local-column analyzer checks and prior numeric suites. The report retains schema/error differences, floating-grammar ownership and the bounded CAST cost measurements.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
