@@ -1,0 +1,357 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/resolver/expression/cast.rs
+@@ -4,6 +4,7 @@
+ 
+ use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, TimeUnit};
+ use datafusion_common::{DFSchemaRef, ScalarValue};
++use datafusion::functions::expr_fn;
+ use datafusion_expr::{ExprSchemable, ScalarUDF, cast, expr, lit, try_cast};
+ use sail_common::spec;
+ use sail_common::utils::datetime::time_unit_to_multiplier;
+@@ -17,7 +18,7 @@
+ use sail_function::scalar::datetime::spark_timestamp::SparkTimestamp;
+ use sail_function::scalar::spark_cast_float_to_decimal::SparkCastFloatToDecimal;
+ use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+-use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInt32;
++use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInteger;
+ use sail_function::scalar::spark_struct_rename::SparkStructRename;
+ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
+ use sail_function::scalar::variant::spark_cast_to_variant::SparkCastToVariant;
+@@ -162,10 +163,19 @@
+                 is_try || !self.config.ansi_mode,
+             ))
+             .call(vec![expr]),
+-            (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View, DataType::Int32, false)
++            (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
++                to @ (DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64), false)
+                 if !self.config.ansi_mode =>
+             {
+-                ScalarUDF::new_from_impl(SparkCastStringToInt32::new()).call(vec![expr])
++                ScalarUDF::new_from_impl(SparkCastStringToInteger::try_new(to)?).call(vec![expr])
++            }
++            (DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View,
++                to @ (DataType::Float32 | DataType::Float64), false)
++                if !self.config.ansi_mode =>
++            {
++                // Spark's floating parser trims bytes through SPACE, not DEL.
++                let trim: String = (0_u8..=32).map(char::from).collect();
++                try_cast(expr_fn::btrim(vec![expr, lit(trim)]), to)
+             }
+             (from, DataType::Timestamp(time_unit, _) | DataType::Duration(time_unit), _)
+                 if from.is_numeric() =>
+--- a/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_int32.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-function/src/scalar/spark_cast_string_to_int32.rs
+@@ -1,42 +1,52 @@
+ use std::sync::Arc;
+ 
+-use datafusion::arrow::array::{ArrayRef, Int32Array};
+-use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+-use datafusion_common::Result;
++use datafusion::arrow::array::{ArrayRef, PrimitiveArray};
++use datafusion::arrow::datatypes::{
++    ArrowPrimitiveType, DataType, Field, FieldRef, Int8Type, Int16Type, Int32Type, Int64Type,
++};
+ use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
++use datafusion_common::{Result, plan_err};
+ use datafusion_expr::{
+     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+ };
++use num::{PrimInt, Signed};
+ 
+ use crate::error::{invalid_arg_count_exec_err, unsupported_data_type_exec_err};
+ use crate::functions_utils::make_scalar_function;
+ 
+ #[derive(Debug, PartialEq, Eq, Hash)]
+-pub struct SparkCastStringToInt32 {
++pub struct SparkCastStringToInteger {
+     signature: Signature,
+-}
+-
+-impl Default for SparkCastStringToInt32 {
+-    fn default() -> Self {
+-        Self::new()
+-    }
+-}
+-
+-impl SparkCastStringToInt32 {
+-    pub fn new() -> Self {
+-        Self {
++    data_type: DataType,
++}
++
++impl SparkCastStringToInteger {
++    pub fn try_new(data_type: DataType) -> Result<Self> {
++        if !matches!(
++            data_type,
++            DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64
++        ) {
++            return plan_err!("legacy string cast requires a signed integer, got {data_type}");
++        }
++        Ok(Self {
+             signature: Signature::uniform(
+                 1,
+                 vec![DataType::Utf8, DataType::LargeUtf8, DataType::Utf8View],
+                 Volatility::Immutable,
+             ),
+-        }
+-    }
+-}
+-
+-impl ScalarUDFImpl for SparkCastStringToInt32 {
++            data_type,
++        })
++    }
++}
++
++impl ScalarUDFImpl for SparkCastStringToInteger {
+     fn name(&self) -> &str {
+-        "spark_cast_string_to_int32"
++        match self.data_type {
++            DataType::Int8 => "spark_cast_string_to_int8",
++            DataType::Int16 => "spark_cast_string_to_int16",
++            DataType::Int32 => "spark_cast_string_to_int32",
++            _ => "spark_cast_string_to_int64",
++        }
+     }
+ 
+     fn signature(&self) -> &Signature {
+@@ -44,33 +54,58 @@
+     }
+ 
+     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+-        Ok(DataType::Int32)
++        Ok(self.data_type.clone())
+     }
+ 
+     fn return_field_from_args(&self, _args: ReturnFieldArgs) -> Result<FieldRef> {
+-        Ok(Arc::new(Field::new(self.name(), DataType::Int32, true)))
++        Ok(Arc::new(Field::new(
++            self.name(),
++            self.data_type.clone(),
++            true,
++        )))
+     }
+ 
+     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> Result<ColumnarValue> {
+-        make_scalar_function(cast_string_array_to_int32, vec![])(&args.args)
+-    }
+-}
+-
+-fn cast_string_array_to_int32(args: &[ArrayRef]) -> Result<ArrayRef> {
++        let data_type = self.data_type.clone();
++        make_scalar_function(
++            move |arrays| cast_string_array_to_integer(arrays, &data_type),
++            vec![],
++        )(&args.args)
++    }
++}
++
++fn cast_string_array_to_integer(args: &[ArrayRef], data_type: &DataType) -> Result<ArrayRef> {
+     let [array] = args else {
+         return Err(invalid_arg_count_exec_err(
+-            "spark_cast_string_to_int32",
++            "spark_cast_string_to_integer",
+             (1, 1),
+             args.len(),
+         ));
+     };
++    match data_type {
++        DataType::Int8 => cast_string_array::<Int8Type>(array),
++        DataType::Int16 => cast_string_array::<Int16Type>(array),
++        DataType::Int32 => cast_string_array::<Int32Type>(array),
++        DataType::Int64 => cast_string_array::<Int64Type>(array),
++        other => Err(unsupported_data_type_exec_err(
++            "spark_cast_string_to_integer",
++            "signed integer",
++            other,
++        )),
++    }
++}
++
++fn cast_string_array<T: ArrowPrimitiveType>(array: &ArrayRef) -> Result<ArrayRef>
++where
++    T::Native: PrimInt + Signed,
++{
+     let result = match array.data_type() {
+-        DataType::Utf8 => parse_string_values(as_string_array(array)?.iter()),
+-        DataType::LargeUtf8 => parse_string_values(as_large_string_array(array)?.iter()),
+-        DataType::Utf8View => parse_string_values(as_string_view_array(array)?.iter()),
++        DataType::Utf8 => parse_string_values::<T>(as_string_array(array)?.iter()),
++        DataType::LargeUtf8 => parse_string_values::<T>(as_large_string_array(array)?.iter()),
++        DataType::Utf8View => parse_string_values::<T>(as_string_view_array(array)?.iter()),
+         other => {
+             return Err(unsupported_data_type_exec_err(
+-                "spark_cast_string_to_int32",
++                "spark_cast_string_to_integer",
+                 "STRING",
+                 other,
+             ));
+@@ -79,13 +114,18 @@
+     Ok(Arc::new(result))
+ }
+ 
+-fn parse_string_values<'a>(values: impl Iterator<Item = Option<&'a str>>) -> Int32Array {
++fn parse_string_values<'a, T: ArrowPrimitiveType>(
++    values: impl Iterator<Item = Option<&'a str>>,
++) -> PrimitiveArray<T>
++where
++    T::Native: PrimInt + Signed,
++{
+     values
+-        .map(|value| value.and_then(parse_spark_legacy_string_to_i32))
++        .map(|value| value.and_then(parse_spark_legacy_string::<T::Native>))
+         .collect()
+ }
+ 
+-fn parse_spark_legacy_string_to_i32(value: &str) -> Option<i32> {
++fn parse_spark_legacy_string<T: PrimInt + Signed>(value: &str) -> Option<T> {
+     let bytes = value.as_bytes();
+     let mut offset = 0;
+     while offset < bytes.len() && is_spark_trim_byte(bytes[offset]) {
+@@ -108,8 +148,9 @@
+         offset += 1;
+     }
+ 
+-    let stop_value = i32::MIN / 10;
+-    let mut result = 0_i32;
++    let radix = T::from(10)?;
++    let stop_value = T::min_value() / radix;
++    let mut result = T::zero();
+     while offset <= end {
+         let byte = bytes[offset];
+         offset += 1;
+@@ -119,7 +160,9 @@
+         if !byte.is_ascii_digit() || result < stop_value {
+             return None;
+         }
+-        result = result.checked_mul(10)?.checked_sub((byte - b'0') as i32)?;
++        result = result
++            .checked_mul(&radix)?
++            .checked_sub(&T::from(byte - b'0')?)?;
+     }
+ 
+     while offset <= end {
+@@ -132,7 +175,7 @@
+     if negative {
+         Some(result)
+     } else {
+-        result.checked_neg()
++        T::zero().checked_sub(&result)
+     }
+ }
+ 
+@@ -142,7 +185,9 @@
+ 
+ #[cfg(test)]
+ mod tests {
+-    use datafusion::arrow::array::{Array, LargeStringArray, StringArray, StringViewArray};
++    use datafusion::arrow::array::{
++        Array, Int32Array, LargeStringArray, StringArray, StringViewArray,
++    };
+     use datafusion_common::exec_err;
+ 
+     use super::*;
+@@ -171,7 +216,7 @@
+ 
+         for (input, expected) in cases {
+             assert_eq!(
+-                parse_spark_legacy_string_to_i32(input),
++                parse_spark_legacy_string::<i32>(input),
+                 expected,
+                 "input: {input:?}"
+             );
+@@ -207,7 +252,7 @@
+         ];
+ 
+         for input in inputs {
+-            let output = cast_string_array_to_int32(&[input])?;
++            let output = cast_string_array_to_integer(&[input], &DataType::Int32)?;
+             assert_eq!(output.data_type(), &DataType::Int32);
+             let Some(output) = output.as_any().downcast_ref::<Int32Array>() else {
+                 return exec_err!("expected Int32Array");
+@@ -218,8 +263,70 @@
+     }
+ 
+     #[test]
++    fn legacy_integer_widths_and_representations() -> Result<()> {
++        use datafusion_common::ScalarValue;
++        for (data_type, min, max) in [
++            (DataType::Int8, i8::MIN as i64, i8::MAX as i64),
++            (DataType::Int16, i16::MIN as i64, i16::MAX as i64),
++            (DataType::Int32, i32::MIN as i64, i32::MAX as i64),
++            (DataType::Int64, i64::MIN, i64::MAX),
++        ] {
++            let strings = [
++                "  +7 ".to_owned(),
++                "-1.9".to_owned(),
++                format!("{min}.9"),
++                format!("{max}.9"),
++                (i128::from(min) - 1).to_string(),
++                (i128::from(max) + 1).to_string(),
++                "bad".to_owned(),
++                "1e2".to_owned(),
++                ".".to_owned(),
++                "\u{7f}7\u{7f}".to_owned(),
++            ];
++            let values = strings
++                .iter()
++                .map(|s| Some(s.as_str()))
++                .chain([None])
++                .collect::<Vec<_>>();
++            let expected = [
++                Some(7),
++                Some(-1),
++                Some(min),
++                Some(max),
++                None,
++                None,
++                None,
++                None,
++                Some(0),
++                Some(7),
++                None,
++            ];
++            let arrays = [
++                Arc::new(StringArray::from(values.clone())) as ArrayRef,
++                Arc::new(LargeStringArray::from(values.clone())) as ArrayRef,
++                Arc::new(StringViewArray::from(values)) as ArrayRef,
++            ];
++            let udf = SparkCastStringToInteger::try_new(data_type.clone())?;
++            assert_eq!(udf.return_type(&[DataType::Utf8])?, data_type);
++            for input in arrays {
++                let output = cast_string_array_to_integer(&[input], &data_type)?;
++                assert_eq!(output.data_type(), &data_type);
++                for (row, value) in expected.iter().enumerate() {
++                    assert_eq!(
++                        ScalarValue::try_from_array(&output, row)?.cast_to(&DataType::Int64)?,
++                        ScalarValue::Int64(*value),
++                        "{data_type} row {row}"
++                    );
++                }
++            }
++        }
++        assert!(SparkCastStringToInteger::try_new(DataType::Float64).is_err());
++        Ok(())
++    }
++
++    #[test]
+     fn test_return_field_is_nullable_for_non_nullable_input() -> Result<()> {
+-        let udf = SparkCastStringToInt32::new();
++        let udf = SparkCastStringToInteger::try_new(DataType::Int32)?;
+         let input = Arc::new(Field::new("value", DataType::Utf8, false));
+         let arg_fields = [input];
+         let scalar_arguments = [None];
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -1961,9 +1961,9 @@
+                 })?))
+             }
+             _ if target_type.is_string() && !ansi => {
+-                use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInt32;
++                use sail_function::scalar::spark_cast_string_to_int32::SparkCastStringToInteger;
+                 LiteralEvaluator::new().evaluate(
+-                    &ScalarUDF::from(SparkCastStringToInt32::new()).call(vec![lit(value)]),
++                    &ScalarUDF::from(SparkCastStringToInteger::try_new(DataType::Int32)?).call(vec![lit(value)]),
+                 )?
+             }
+             _ => value.cast_to(&DataType::Int32).map_err(|e| {
