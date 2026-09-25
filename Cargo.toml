@@ -95,6 +95,7 @@ delta_kernel_default_engine = { version = "=0.25.0", default-features = false, f
 futures-util = "0.3"
 object_store = "0.13.2"
 parquet = { version = "58.3.0", features = ["async", "object_store"] }
+roaring = "0.11"
 snafu = "0.9"
 thrift = { version = "0.17", default-features = false }
 tokio = { version = "1", features = ["net", "rt-multi-thread", "sync", "time"] }

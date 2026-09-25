@@ -1211,6 +1211,7 @@ dependencies = [
  "libc",
  "object_store",
  "parquet",
+ "roaring",
  "serde_json",
  "snafu",
  "thrift",
