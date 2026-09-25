@@ -68,6 +68,37 @@ impl Drop for RealParquetDeltaTable {
 }
 
 impl RealParquetDeltaTable {
+    /// Wraps a low-level Parquet fixture without normalizing its physical schema.
+    pub(crate) fn new_with_raw_parquet(
+        name: &str,
+        parquet: &[u8],
+        rows: usize,
+        protocol: &serde_json::Value,
+        metadata: &serde_json::Value,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        static NEXT_RAW_FIXTURE: std::sync::atomic::AtomicUsize =
+            std::sync::atomic::AtomicUsize::new(0);
+        let sequence = NEXT_RAW_FIXTURE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let fixture = Self {
+            path: Path::new("target")
+                .join("delta-funnel-real-parquet-fixtures")
+                .join(unique_name(&format!("{name}-{sequence}"))?),
+            rows,
+            data_file_size: u64::try_from(parquet.len())?,
+        };
+        fs::create_dir_all(fixture.path.join("_delta_log"))?;
+        fs::write(fixture.path.join(DATA_FILE), parquet)?;
+        let add = serde_json::json!({"add": {
+            "path": DATA_FILE, "partitionValues": {}, "size": fixture.data_file_size,
+            "modificationTime": 0, "dataChange": true
+        }});
+        fs::write(
+            fixture.path.join("_delta_log/00000000000000000000.json"),
+            format!("{protocol}\n{metadata}\n{add}\n"),
+        )?;
+        Ok(fixture)
+    }
+
     /// Creates a local Delta table with one real Parquet file.
     pub(crate) fn new_default(name: &str) -> Result<Self, Box<dyn std::error::Error>> {
         Self::new_with_batch(

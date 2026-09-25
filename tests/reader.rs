@@ -7,6 +7,8 @@ mod data_file_location;
 mod datafusion_adapter;
 #[path = "reader/empty_projection.rs"]
 mod empty_projection;
+#[path = "reader/legacy_lists.rs"]
+mod legacy_lists;
 #[path = "reader/partition_predicates.rs"]
 mod partition_predicates;
 #[path = "reader/portable_fixtures.rs"]

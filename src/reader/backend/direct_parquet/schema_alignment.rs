@@ -10,7 +10,8 @@ use arrow::{
 };
 use parquet::{
     arrow::PARQUET_FIELD_ID_META_KEY,
-    schema::types::{SchemaDescriptor, TypePtr},
+    basic::{ConvertedType, Repetition},
+    schema::types::{SchemaDescriptor, Type, TypePtr},
 };
 
 #[derive(Clone)]
@@ -409,27 +410,69 @@ fn build_matched_list_field_plan(
 }
 
 fn parquet_list_element_field<'a>(
-    parquet_field: &'a parquet::schema::types::Type,
+    parquet_field: &'a Type,
     path: &str,
-) -> Result<&'a parquet::schema::types::Type, delta_kernel::Error> {
-    let parquet_children = parquet_field.get_fields();
-    let Some(repeated_child) = parquet_children.first() else {
+) -> Result<&'a Type, delta_kernel::Error> {
+    let is_repeated = |field: &Type| {
+        let info = field.get_basic_info();
+        info.has_repetition() && info.repetition() == Repetition::REPEATED
+    };
+    // An unwrapped repeated primitive/struct is itself the element of an
+    // implicit list. This also occurs inside legacy lists of lists.
+    if is_repeated(parquet_field)
+        && !matches!(
+            parquet_field.get_basic_info().converted_type(),
+            ConvertedType::LIST | ConvertedType::MAP | ConvertedType::MAP_KEY_VALUE
+        )
+    {
+        return Ok(parquet_field);
+    }
+    let Type::GroupType { fields, .. } = parquet_field else {
         return Err(delta_kernel::Error::generic(format!(
-            "target field '{path}' expected Parquet list element metadata"
+            "target field '{path}' expected a Parquet list group or repeated element"
         )));
     };
-    if parquet_children.len() != 1 {
+    if is_repeated(parquet_field)
+        && parquet_field.get_basic_info().converted_type() == ConvertedType::LIST
+    {
         return Err(delta_kernel::Error::generic(format!(
-            "target field '{path}' expected one Parquet list child but found {}",
-            parquet_children.len()
+            "target field '{path}' expected a required or optional Parquet list group"
         )));
     }
-    let repeated_child_fields = repeated_child.get_fields();
-    if repeated_child_fields.len() == 1 {
-        Ok(repeated_child_fields[0].as_ref())
-    } else {
-        Ok(repeated_child.as_ref())
+    let [repeated_child] = fields.as_slice() else {
+        return Err(delta_kernel::Error::generic(format!(
+            "target field '{path}' expected one Parquet list child but found {}",
+            fields.len()
+        )));
+    };
+    if !is_repeated(repeated_child) {
+        return Err(delta_kernel::Error::generic(format!(
+            "target field '{path}' expected a repeated Parquet list child"
+        )));
     }
+    let Type::GroupType { fields, .. } = repeated_child.as_ref() else {
+        return Ok(repeated_child);
+    };
+    if fields.is_empty() {
+        return Err(delta_kernel::Error::generic(format!(
+            "target field '{path}' expected a non-empty Parquet list element group"
+        )));
+    }
+    let [element] = fields.as_slice() else {
+        return Ok(repeated_child);
+    };
+    // Match parquet-rs's Arrow LIST decoder, including its nested-list
+    // exceptions to the legacy one-field struct naming rule. Its generic
+    // TypeVisitor does not implement those exceptions.
+    let legacy_struct = repeated_child.name() == "array"
+        || repeated_child.name().strip_suffix("_tuple") == Some(parquet_field.name());
+    if legacy_struct
+        && repeated_child.get_basic_info().converted_type() != ConvertedType::LIST
+        && !is_repeated(element)
+    {
+        return Ok(repeated_child);
+    }
+    Ok(element)
 }
 
 fn build_matched_struct_field_plan(
@@ -800,6 +843,112 @@ mod tests {
 
     use super::super::tests::{TestDir, metrics, parquet_bytes_for, reader, task};
     use crate::DeltaScanExecutionOptions;
+
+    #[test]
+    fn list_element_metadata_reports_invalid_shapes_with_field_path()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use parquet::schema::parser::parse_message_type;
+        for (field, message) in [
+            ("REQUIRED INT32 v;", "list group or repeated element"),
+            (
+                "OPTIONAL GROUP v (LIST) {}",
+                "one Parquet list child but found 0",
+            ),
+            (
+                "OPTIONAL GROUP v (LIST) { REPEATED INT32 a; REPEATED INT32 b; }",
+                "one Parquet list child but found 2",
+            ),
+            (
+                "OPTIONAL GROUP v (LIST) { REQUIRED INT32 a; }",
+                "repeated Parquet list child",
+            ),
+            (
+                "OPTIONAL GROUP v (LIST) { OPTIONAL GROUP list { REQUIRED INT32 a; } }",
+                "repeated Parquet list child",
+            ),
+            (
+                "OPTIONAL GROUP v (LIST) { REPEATED GROUP list {} }",
+                "non-empty Parquet list element group",
+            ),
+            (
+                "REPEATED GROUP v (LIST) { REPEATED INT32 a; }",
+                "required or optional Parquet list group",
+            ),
+        ] {
+            let schema = parse_message_type(&format!("message m {{ {field} }}"))?;
+            let error = super::parquet_list_element_field(&schema.get_fields()[0], "outer.items")
+                .err()
+                .ok_or("invalid list layout was accepted")?;
+            let message_text = error.to_string();
+            assert!(
+                message_text.contains("outer.items") && message_text.contains(message),
+                "{field}: {message_text}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_list_struct_alignment_uses_field_ids_before_conflicting_names()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use parquet::{
+            arrow::parquet_to_arrow_schema,
+            schema::{parser::parse_message_type, types::SchemaDescriptor},
+        };
+        for wrapper in ["array", "v_tuple"] {
+            let parquet = SchemaDescriptor::new(Arc::new(parse_message_type(&format!(
+                "message m {{ OPTIONAL GROUP v (LIST) {{ REPEATED GROUP {wrapper} {{ REQUIRED INT32 b = 3; REQUIRED INT32 a = 4; }} }} }}"
+            ))?));
+            let file_schema = Arc::new(parquet_to_arrow_schema(&parquet, None)?);
+            let DataType::List(file_element) = file_schema.field(0).data_type() else {
+                return Err("expected file list".into());
+            };
+            let DataType::Struct(file_fields) = file_element.data_type() else {
+                return Err("expected file struct element".into());
+            };
+            let values: Vec<ArrayRef> = vec![
+                Arc::new(Int32Array::from(vec![10, 20])),
+                Arc::new(Int32Array::from(vec![30, 40])),
+            ];
+            let source = list_array(
+                file_element.as_ref().clone(),
+                vec![0, 2],
+                Arc::new(StructArray::try_new(
+                    file_fields.clone(),
+                    values.clone(),
+                    None,
+                )?),
+                None,
+            )?;
+            let target_fields = vec![
+                field_with_id("a", DataType::Int32, false, 3),
+                field_with_id("b", DataType::Int32, false, 4),
+            ];
+            let target_element = Field::new(
+                "element",
+                DataType::Struct(target_fields.clone().into()),
+                false,
+            );
+            let target_schema = Arc::new(Schema::new(vec![Field::new(
+                "v",
+                DataType::List(Arc::new(target_element.clone())),
+                true,
+            )]));
+            let alignment =
+                super::build_schema_alignment(&parquet, &file_schema, Arc::clone(&target_schema))?;
+            let batch = RecordBatch::try_new(file_schema, vec![source])?;
+            let result = alignment.reshape_batch_to_target_schema(batch)?;
+            let expected = list_array(
+                target_element,
+                vec![0, 2],
+                Arc::new(StructArray::try_new(target_fields.into(), values, None)?),
+                None,
+            )?;
+            assert_eq!(result.schema(), target_schema);
+            assert_eq!(result.column(0).to_data(), expected.to_data());
+        }
+        Ok(())
+    }
 
     fn field_with_id(name: &str, data_type: DataType, nullable: bool, id: i32) -> Field {
         Field::new(name, data_type, nullable).with_metadata(HashMap::from([(
