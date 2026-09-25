@@ -22,9 +22,13 @@ For SQL queries, enable the reader's `datafusion` feature and add DataFusion:
 
 ```bash
 cargo add delta-arrow-reader --features datafusion
-cargo add datafusion --no-default-features --features sql
+cargo add datafusion@54 --no-default-features --features sql
 cargo add tokio --features macros,rt-multi-thread
 ```
+
+The adapter uses DataFusion 54. Your application's direct DataFusion dependency
+must use the same major version because provider types from different majors
+are not interchangeable.
 
 The [DataFusion quickstart](https://mag1cfrog.github.io/delta-arrow-reader/datafusion/)
 shows how to register a table and query it with SQL.
