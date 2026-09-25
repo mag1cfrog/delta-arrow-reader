@@ -18,6 +18,8 @@ The [integer ROUND fix](INTEGER_ROUND.md) preserves signed-integer values/types 
 
 The [FLOAT ROUND fix](FLOAT_ROUND.md) rounds represented Float32 inputs with Float64 intermediates and preserves HALF_UP boundaries, positive zero and finite results at large scales. Its reference and performance limits retain their existing owners.
 
+The [Decimal ROUND scale guard](DECIMAL_ROUND_EXTREME.md) preserves Underflow for live nonzero inputs at extreme negative scales. Ordinary scales keep the existing kernel; neighboring JVM capacity differences and measured costs remain explicitly tracked.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
