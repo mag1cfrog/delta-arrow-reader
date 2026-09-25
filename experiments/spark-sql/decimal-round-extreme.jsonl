@@ -1,0 +1,661 @@
+{"id": "precision_1_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(1,1)), -2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_1_positive_column", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(1,1))),(CAST('0.1' AS DECIMAL(1,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_1_-_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(1,1)), -2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_1_-_column", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(1,1))),(CAST('-0.1' AS DECIMAL(1,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_2_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(2,2)), -2147483646) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_2_positive_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(2,2))),(CAST('0.01' AS DECIMAL(2,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_2_-_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(2,2)), -2147483646) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_2_-_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(2,2))),(CAST('-0.01' AS DECIMAL(2,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_3_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(3,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_3_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(3,3))),(CAST('0.001' AS DECIMAL(3,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_3_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(3,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_3_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(3,3))),(CAST('-0.001' AS DECIMAL(3,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_4_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(4,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_4_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(4,3))),(CAST('0.001' AS DECIMAL(4,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_4_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(4,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_4_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(4,3))),(CAST('-0.001' AS DECIMAL(4,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_5_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(5,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_5_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(5,3))),(CAST('0.001' AS DECIMAL(5,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_5_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(5,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_5_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(5,3))),(CAST('-0.001' AS DECIMAL(5,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_6_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(6,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_6_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(6,3))),(CAST('0.001' AS DECIMAL(6,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_6_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(6,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_6_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(6,3))),(CAST('-0.001' AS DECIMAL(6,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_7_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(7,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_7_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(7,3))),(CAST('0.001' AS DECIMAL(7,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_7_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(7,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_7_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(7,3))),(CAST('-0.001' AS DECIMAL(7,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_8_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(8,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_8_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(8,3))),(CAST('0.001' AS DECIMAL(8,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_8_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(8,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_8_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(8,3))),(CAST('-0.001' AS DECIMAL(8,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_9_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(9,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_9_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(9,3))),(CAST('0.001' AS DECIMAL(9,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_9_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(9,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_9_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(9,3))),(CAST('-0.001' AS DECIMAL(9,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_10_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(10,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_10_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(10,3))),(CAST('0.001' AS DECIMAL(10,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_10_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(10,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_10_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(10,3))),(CAST('-0.001' AS DECIMAL(10,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_11_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(11,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_11_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(11,3))),(CAST('0.001' AS DECIMAL(11,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_11_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(11,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_11_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(11,3))),(CAST('-0.001' AS DECIMAL(11,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_12_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(12,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_12_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(12,3))),(CAST('0.001' AS DECIMAL(12,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_12_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(12,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_12_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(12,3))),(CAST('-0.001' AS DECIMAL(12,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_13_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(13,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_13_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(13,3))),(CAST('0.001' AS DECIMAL(13,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_13_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(13,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_13_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(13,3))),(CAST('-0.001' AS DECIMAL(13,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_14_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(14,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_14_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(14,3))),(CAST('0.001' AS DECIMAL(14,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_14_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(14,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_14_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(14,3))),(CAST('-0.001' AS DECIMAL(14,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_15_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(15,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_15_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(15,3))),(CAST('0.001' AS DECIMAL(15,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_15_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(15,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_15_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(15,3))),(CAST('-0.001' AS DECIMAL(15,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_16_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(16,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_16_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(16,3))),(CAST('0.001' AS DECIMAL(16,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_16_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(16,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_16_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(16,3))),(CAST('-0.001' AS DECIMAL(16,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_17_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(17,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_17_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(17,3))),(CAST('0.001' AS DECIMAL(17,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_17_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(17,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_17_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(17,3))),(CAST('-0.001' AS DECIMAL(17,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_18_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(18,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_18_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(18,3))),(CAST('0.001' AS DECIMAL(18,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_18_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(18,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_18_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(18,3))),(CAST('-0.001' AS DECIMAL(18,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_19_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(19,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_19_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(19,3))),(CAST('0.001' AS DECIMAL(19,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_19_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(19,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_19_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(19,3))),(CAST('-0.001' AS DECIMAL(19,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_20_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(20,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_20_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(20,3))),(CAST('0.001' AS DECIMAL(20,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_20_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(20,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_20_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(20,3))),(CAST('-0.001' AS DECIMAL(20,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_21_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(21,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_21_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(21,3))),(CAST('0.001' AS DECIMAL(21,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_21_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(21,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_21_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(21,3))),(CAST('-0.001' AS DECIMAL(21,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_22_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(22,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_22_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(22,3))),(CAST('0.001' AS DECIMAL(22,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_22_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(22,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_22_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(22,3))),(CAST('-0.001' AS DECIMAL(22,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_23_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(23,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_23_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(23,3))),(CAST('0.001' AS DECIMAL(23,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_23_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(23,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_23_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(23,3))),(CAST('-0.001' AS DECIMAL(23,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_24_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(24,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_24_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(24,3))),(CAST('0.001' AS DECIMAL(24,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_24_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(24,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_24_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(24,3))),(CAST('-0.001' AS DECIMAL(24,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_25_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(25,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_25_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(25,3))),(CAST('0.001' AS DECIMAL(25,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_25_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(25,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_25_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(25,3))),(CAST('-0.001' AS DECIMAL(25,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_26_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(26,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_26_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(26,3))),(CAST('0.001' AS DECIMAL(26,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_26_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(26,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_26_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(26,3))),(CAST('-0.001' AS DECIMAL(26,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_27_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(27,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_27_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(27,3))),(CAST('0.001' AS DECIMAL(27,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_27_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(27,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_27_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(27,3))),(CAST('-0.001' AS DECIMAL(27,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_28_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(28,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_28_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(28,3))),(CAST('0.001' AS DECIMAL(28,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_28_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(28,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_28_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(28,3))),(CAST('-0.001' AS DECIMAL(28,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_29_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(29,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_29_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(29,3))),(CAST('0.001' AS DECIMAL(29,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_29_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(29,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_29_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(29,3))),(CAST('-0.001' AS DECIMAL(29,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_30_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(30,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_30_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(30,3))),(CAST('0.001' AS DECIMAL(30,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_30_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(30,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_30_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(30,3))),(CAST('-0.001' AS DECIMAL(30,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_31_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(31,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_31_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(31,3))),(CAST('0.001' AS DECIMAL(31,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_31_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(31,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_31_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(31,3))),(CAST('-0.001' AS DECIMAL(31,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_32_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(32,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_32_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(32,3))),(CAST('0.001' AS DECIMAL(32,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_32_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(32,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_32_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(32,3))),(CAST('-0.001' AS DECIMAL(32,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_33_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(33,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_33_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(33,3))),(CAST('0.001' AS DECIMAL(33,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_33_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(33,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_33_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(33,3))),(CAST('-0.001' AS DECIMAL(33,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_34_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(34,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_34_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(34,3))),(CAST('0.001' AS DECIMAL(34,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_34_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(34,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_34_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(34,3))),(CAST('-0.001' AS DECIMAL(34,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_35_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(35,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_35_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(35,3))),(CAST('0.001' AS DECIMAL(35,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_35_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(35,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_35_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(35,3))),(CAST('-0.001' AS DECIMAL(35,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_36_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(36,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_36_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(36,3))),(CAST('0.001' AS DECIMAL(36,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_36_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(36,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_36_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(36,3))),(CAST('-0.001' AS DECIMAL(36,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_37_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(37,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_37_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(37,3))),(CAST('0.001' AS DECIMAL(37,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_37_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(37,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_37_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(37,3))),(CAST('-0.001' AS DECIMAL(37,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_38_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_38_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "precision_38_-_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "precision_38_-_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-2147483648_positive_literal", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-2147483648_positive_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-2147483648_negative_literal", "sql": "SELECT ROUND(CAST('-1' AS DECIMAL(38,0)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-2147483648_negative_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('-1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-2147483648_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,0)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-2147483648_zero_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('0' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-2147483647_positive_literal", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), -2147483647) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483647_positive_column", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('1' AS DECIMAL(38,0))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-1' AS DECIMAL(38,0)), -2147483647) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483647_negative_column", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('-1' AS DECIMAL(38,0))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,0)), -2147483647) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483647_zero_column", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('0' AS DECIMAL(38,0))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483646_positive_literal", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), -2147483646) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483646_positive_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('1' AS DECIMAL(38,0))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483646_negative_literal", "sql": "SELECT ROUND(CAST('-1' AS DECIMAL(38,0)), -2147483646) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483646_negative_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('-1' AS DECIMAL(38,0))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483646_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,0)), -2147483646) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-2147483646_zero_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('0' AS DECIMAL(38,0))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_0_-1000_positive_literal", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1000_positive_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1000_negative_literal", "sql": "SELECT ROUND(CAST('-1' AS DECIMAL(38,0)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1000_negative_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('-1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1000_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,0)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1000_zero_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('0' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-39_positive_literal", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-39_positive_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-39_negative_literal", "sql": "SELECT ROUND(CAST('-1' AS DECIMAL(38,0)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-39_negative_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('-1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-39_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,0)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-39_zero_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('0' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1_positive_literal", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1_positive_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1_negative_literal", "sql": "SELECT ROUND(CAST('-1' AS DECIMAL(38,0)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('-1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,0)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_-1_zero_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('0' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_0_positive_literal", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_0_positive_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_0_negative_literal", "sql": "SELECT ROUND(CAST('-1' AS DECIMAL(38,0)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_0_negative_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('-1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_0_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,0)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_0_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('0' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_2147483647_positive_literal", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_2147483647_positive_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-1' AS DECIMAL(38,0)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_2147483647_negative_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('-1' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_0_2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,0)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_0_2147483647_zero_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(CAST('0' AS DECIMAL(38,0))) t(a)", "category": "target", "batch_size": 2}
+{"id": "all_null_0", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,0))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_0", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST('1' AS DECIMAL(38,0))) t(a) WHERE false", "category": "target", "batch_size": 2}
+{"id": "zero_null_0", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(0 AS DECIMAL(38,0))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "null_scale_0", "sql": "SELECT ROUND(CAST('1' AS DECIMAL(38,0)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483648_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483648_positive_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483648_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483648_negative_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483648_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483648_zero_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483647_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), -2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483647_positive_column", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), -2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483647_negative_column", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), -2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483647_zero_column", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-2147483646_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), -2147483646) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483646_positive_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483646_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), -2147483646) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483646_negative_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483646_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), -2147483646) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483646_zero_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483645_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), -2147483645) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483645_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483645_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), -2147483645) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483645_negative_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483645_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), -2147483645) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-2147483645_zero_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_1_-1000_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1000_positive_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1000_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1000_negative_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1000_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1000_zero_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-39_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-39_positive_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-39_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-39_negative_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-39_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-39_zero_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1_positive_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_-1_zero_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_0_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_0_positive_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_0_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_0_negative_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_0_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_0_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_1_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), 1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_1_positive_column", "sql": "SELECT ROUND(a, 1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_1_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), 1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_1_negative_column", "sql": "SELECT ROUND(a, 1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), 1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_1_zero_column", "sql": "SELECT ROUND(a, 1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_2147483647_positive_literal", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_2147483647_positive_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-0.1' AS DECIMAL(38,1)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_2147483647_negative_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('-0.1' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_1_2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,1)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_1_2147483647_zero_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(CAST('0' AS DECIMAL(38,1))) t(a)", "category": "target", "batch_size": 2}
+{"id": "all_null_1", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,1))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_1", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST('0.1' AS DECIMAL(38,1))) t(a) WHERE false", "category": "target", "batch_size": 2}
+{"id": "zero_null_1", "sql": "SELECT ROUND(a, -2147483647) AS r FROM VALUES (CAST(0 AS DECIMAL(38,1))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "null_scale_1", "sql": "SELECT ROUND(CAST('0.1' AS DECIMAL(38,1)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483648_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483648_positive_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483648_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483648_negative_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483648_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483648_zero_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483646_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), -2147483646) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483646_positive_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483646_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), -2147483646) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483646_negative_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483646_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), -2147483646) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483646_zero_column", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-2147483645_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), -2147483645) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483645_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483645_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), -2147483645) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483645_negative_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483645_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), -2147483645) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483645_zero_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483644_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), -2147483644) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483644_positive_column", "sql": "SELECT ROUND(a, -2147483644) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483644_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), -2147483644) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483644_negative_column", "sql": "SELECT ROUND(a, -2147483644) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483644_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), -2147483644) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-2147483644_zero_column", "sql": "SELECT ROUND(a, -2147483644) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_2_-1000_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1000_positive_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1000_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1000_negative_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1000_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1000_zero_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-39_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-39_positive_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-39_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-39_negative_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-39_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-39_zero_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1_positive_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_-1_zero_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_0_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_0_positive_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_0_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_0_negative_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_0_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_0_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_2_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), 2) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_2_positive_column", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_2_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), 2) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_2_negative_column", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_2_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), 2) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_2_zero_column", "sql": "SELECT ROUND(a, 2) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_2147483647_positive_literal", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_2147483647_positive_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-0.01' AS DECIMAL(38,2)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_2147483647_negative_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('-0.01' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_2_2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,2)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_2_2147483647_zero_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(CAST('0' AS DECIMAL(38,2))) t(a)", "category": "target", "batch_size": 2}
+{"id": "all_null_2", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,2))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_2", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST('0.01' AS DECIMAL(38,2))) t(a) WHERE false", "category": "target", "batch_size": 2}
+{"id": "zero_null_2", "sql": "SELECT ROUND(a, -2147483646) AS r FROM VALUES (CAST(0 AS DECIMAL(38,2))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "null_scale_2", "sql": "SELECT ROUND(CAST('0.01' AS DECIMAL(38,2)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483648_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483648_positive_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483648_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483648_negative_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483648_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483648_zero_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483645_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483645_positive_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483645_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483645_negative_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483645_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), -2147483645) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483645_zero_column", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-2147483644_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), -2147483644) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483644_positive_column", "sql": "SELECT ROUND(a, -2147483644) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483644_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), -2147483644) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483644_negative_column", "sql": "SELECT ROUND(a, -2147483644) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483644_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), -2147483644) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483644_zero_column", "sql": "SELECT ROUND(a, -2147483644) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483643_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), -2147483643) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483643_positive_column", "sql": "SELECT ROUND(a, -2147483643) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483643_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), -2147483643) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483643_negative_column", "sql": "SELECT ROUND(a, -2147483643) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483643_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), -2147483643) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-2147483643_zero_column", "sql": "SELECT ROUND(a, -2147483643) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_3_-1000_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1000_positive_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1000_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1000_negative_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1000_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1000_zero_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-39_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-39_positive_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-39_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-39_negative_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-39_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-39_zero_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1_positive_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_-1_zero_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_0_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_0_positive_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_0_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_0_negative_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_0_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_0_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_3_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), 3) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_3_positive_column", "sql": "SELECT ROUND(a, 3) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_3_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), 3) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_3_negative_column", "sql": "SELECT ROUND(a, 3) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_3_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), 3) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_3_zero_column", "sql": "SELECT ROUND(a, 3) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_2147483647_positive_literal", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_2147483647_positive_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-0.001' AS DECIMAL(38,3)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_2147483647_negative_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('-0.001' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_3_2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,3)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_3_2147483647_zero_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(CAST('0' AS DECIMAL(38,3))) t(a)", "category": "target", "batch_size": 2}
+{"id": "all_null_3", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,3))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_3", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST('0.001' AS DECIMAL(38,3))) t(a) WHERE false", "category": "target", "batch_size": 2}
+{"id": "zero_null_3", "sql": "SELECT ROUND(a, -2147483645) AS r FROM VALUES (CAST(0 AS DECIMAL(38,3))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "null_scale_3", "sql": "SELECT ROUND(CAST('0.001' AS DECIMAL(38,3)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483648_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483648_positive_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483648_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483648_negative_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483648_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483648_zero_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483630_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), -2147483630) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483630_positive_column", "sql": "SELECT ROUND(a, -2147483630) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483630_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), -2147483630) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483630_negative_column", "sql": "SELECT ROUND(a, -2147483630) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483630_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), -2147483630) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483630_zero_column", "sql": "SELECT ROUND(a, -2147483630) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-2147483629_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), -2147483629) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483629_positive_column", "sql": "SELECT ROUND(a, -2147483629) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483629_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), -2147483629) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483629_negative_column", "sql": "SELECT ROUND(a, -2147483629) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483629_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), -2147483629) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483629_zero_column", "sql": "SELECT ROUND(a, -2147483629) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483628_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), -2147483628) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483628_positive_column", "sql": "SELECT ROUND(a, -2147483628) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483628_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), -2147483628) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483628_negative_column", "sql": "SELECT ROUND(a, -2147483628) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483628_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), -2147483628) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-2147483628_zero_column", "sql": "SELECT ROUND(a, -2147483628) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_18_-1000_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1000_positive_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1000_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1000_negative_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1000_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1000_zero_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-39_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-39_positive_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-39_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-39_negative_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-39_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-39_zero_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1_positive_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_-1_zero_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_0_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_0_positive_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_0_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_0_negative_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_0_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_0_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_18_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), 18) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_18_positive_column", "sql": "SELECT ROUND(a, 18) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_18_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), 18) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_18_negative_column", "sql": "SELECT ROUND(a, 18) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_18_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), 18) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_18_zero_column", "sql": "SELECT ROUND(a, 18) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_2147483647_positive_literal", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_2147483647_positive_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-0.000000000000000001' AS DECIMAL(38,18)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_2147483647_negative_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('-0.000000000000000001' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_18_2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,18)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_18_2147483647_zero_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(CAST('0' AS DECIMAL(38,18))) t(a)", "category": "target", "batch_size": 2}
+{"id": "all_null_18", "sql": "SELECT ROUND(a, -2147483630) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,18))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_18", "sql": "SELECT ROUND(a, -2147483630) AS r FROM VALUES (CAST('0.000000000000000001' AS DECIMAL(38,18))) t(a) WHERE false", "category": "target", "batch_size": 2}
+{"id": "zero_null_18", "sql": "SELECT ROUND(a, -2147483630) AS r FROM VALUES (CAST(0 AS DECIMAL(38,18))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "null_scale_18", "sql": "SELECT ROUND(CAST('0.000000000000000001' AS DECIMAL(38,18)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483648_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483648_positive_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483648_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483648_negative_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483648_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483648_zero_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483620_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), -2147483620) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483620_positive_column", "sql": "SELECT ROUND(a, -2147483620) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483620_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), -2147483620) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483620_negative_column", "sql": "SELECT ROUND(a, -2147483620) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483620_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), -2147483620) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483620_zero_column", "sql": "SELECT ROUND(a, -2147483620) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-2147483619_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), -2147483619) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483619_positive_column", "sql": "SELECT ROUND(a, -2147483619) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483619_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), -2147483619) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483619_negative_column", "sql": "SELECT ROUND(a, -2147483619) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483619_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), -2147483619) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483619_zero_column", "sql": "SELECT ROUND(a, -2147483619) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483618_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), -2147483618) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483618_positive_column", "sql": "SELECT ROUND(a, -2147483618) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483618_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), -2147483618) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483618_negative_column", "sql": "SELECT ROUND(a, -2147483618) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483618_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), -2147483618) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-2147483618_zero_column", "sql": "SELECT ROUND(a, -2147483618) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_28_-1000_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1000_positive_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1000_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1000_negative_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1000_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1000_zero_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-39_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-39_positive_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-39_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-39_negative_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-39_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-39_zero_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1_positive_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_-1_zero_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_0_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_0_positive_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_0_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_0_negative_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_0_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_0_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_28_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), 28) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_28_positive_column", "sql": "SELECT ROUND(a, 28) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_28_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), 28) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_28_negative_column", "sql": "SELECT ROUND(a, 28) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_28_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), 28) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_28_zero_column", "sql": "SELECT ROUND(a, 28) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_2147483647_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_2147483647_positive_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_2147483647_negative_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('-0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_28_2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,28)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_28_2147483647_zero_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(CAST('0' AS DECIMAL(38,28))) t(a)", "category": "target", "batch_size": 2}
+{"id": "all_null_28", "sql": "SELECT ROUND(a, -2147483620) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,28))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_28", "sql": "SELECT ROUND(a, -2147483620) AS r FROM VALUES (CAST('0.0000000000000000000000000001' AS DECIMAL(38,28))) t(a) WHERE false", "category": "target", "batch_size": 2}
+{"id": "zero_null_28", "sql": "SELECT ROUND(a, -2147483620) AS r FROM VALUES (CAST(0 AS DECIMAL(38,28))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "null_scale_28", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000001' AS DECIMAL(38,28)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483648_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483648_positive_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483648_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483648_negative_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483648_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483648_zero_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483611_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -2147483611) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483611_positive_column", "sql": "SELECT ROUND(a, -2147483611) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483611_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -2147483611) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483611_negative_column", "sql": "SELECT ROUND(a, -2147483611) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483611_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), -2147483611) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483611_zero_column", "sql": "SELECT ROUND(a, -2147483611) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-2147483610_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -2147483610) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483610_positive_column", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483610_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -2147483610) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483610_negative_column", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483610_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), -2147483610) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483610_zero_column", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483609_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -2147483609) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483609_positive_column", "sql": "SELECT ROUND(a, -2147483609) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483609_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -2147483609) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483609_negative_column", "sql": "SELECT ROUND(a, -2147483609) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483609_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), -2147483609) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-2147483609_zero_column", "sql": "SELECT ROUND(a, -2147483609) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_37_-1000_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1000_positive_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1000_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1000_negative_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1000_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1000_zero_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-39_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-39_positive_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-39_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-39_negative_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-39_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-39_zero_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1_positive_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_-1_zero_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_0_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_0_positive_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_0_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_0_negative_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_0_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_0_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_37_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), 37) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_37_positive_column", "sql": "SELECT ROUND(a, 37) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_37_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), 37) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_37_negative_column", "sql": "SELECT ROUND(a, 37) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_37_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), 37) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_37_zero_column", "sql": "SELECT ROUND(a, 37) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_2147483647_positive_literal", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_2147483647_positive_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_2147483647_negative_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('-0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_37_2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,37)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_37_2147483647_zero_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(CAST('0' AS DECIMAL(38,37))) t(a)", "category": "target", "batch_size": 2}
+{"id": "all_null_37", "sql": "SELECT ROUND(a, -2147483611) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,37))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_37", "sql": "SELECT ROUND(a, -2147483611) AS r FROM VALUES (CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37))) t(a) WHERE false", "category": "target", "batch_size": 2}
+{"id": "zero_null_37", "sql": "SELECT ROUND(a, -2147483611) AS r FROM VALUES (CAST(0 AS DECIMAL(38,37))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "null_scale_37", "sql": "SELECT ROUND(CAST('0.0000000000000000000000000000000000001' AS DECIMAL(38,37)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483648_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483648_positive_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483648_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483648_negative_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483648_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), -2147483648) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483648_zero_column", "sql": "SELECT ROUND(a, -2147483648) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483610_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -2147483610) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483610_positive_column", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483610_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -2147483610) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483610_negative_column", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483610_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), -2147483610) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483610_zero_column", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-2147483609_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -2147483609) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483609_positive_column", "sql": "SELECT ROUND(a, -2147483609) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483609_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -2147483609) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483609_negative_column", "sql": "SELECT ROUND(a, -2147483609) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483609_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), -2147483609) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483609_zero_column", "sql": "SELECT ROUND(a, -2147483609) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483608_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -2147483608) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483608_positive_column", "sql": "SELECT ROUND(a, -2147483608) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483608_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -2147483608) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483608_negative_column", "sql": "SELECT ROUND(a, -2147483608) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483608_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), -2147483608) AS r", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-2147483608_zero_column", "sql": "SELECT ROUND(a, -2147483608) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "reference_review", "batch_size": 2}
+{"id": "scale_38_-1000_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1000_positive_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1000_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1000_negative_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1000_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), -1000) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1000_zero_column", "sql": "SELECT ROUND(a, -1000) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-39_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-39_positive_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-39_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-39_negative_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-39_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), -39) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-39_zero_column", "sql": "SELECT ROUND(a, -39) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1_positive_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1_negative_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_-1_zero_column", "sql": "SELECT ROUND(a, -1) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_0_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_0_positive_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_0_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_0_negative_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_0_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), 0) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_0_zero_column", "sql": "SELECT ROUND(a, 0) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_38_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), 38) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_38_positive_column", "sql": "SELECT ROUND(a, 38) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_38_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), 38) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_38_negative_column", "sql": "SELECT ROUND(a, 38) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_38_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), 38) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_38_zero_column", "sql": "SELECT ROUND(a, 38) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_2147483647_positive_literal", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_2147483647_positive_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_2147483647_negative_literal", "sql": "SELECT ROUND(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_2147483647_negative_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('-0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "scale_38_2147483647_zero_literal", "sql": "SELECT ROUND(CAST('0' AS DECIMAL(38,38)), 2147483647) AS r", "category": "target", "batch_size": 2}
+{"id": "scale_38_2147483647_zero_column", "sql": "SELECT ROUND(a, 2147483647) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))) t(a)", "category": "target", "batch_size": 2}
+{"id": "all_null_38", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST(NULL AS DECIMAL(38,38))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "empty_38", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))) t(a) WHERE false", "category": "target", "batch_size": 2}
+{"id": "zero_null_38", "sql": "SELECT ROUND(a, -2147483610) AS r FROM VALUES (CAST(0 AS DECIMAL(38,38))),(NULL) t(a)", "category": "target", "batch_size": 2}
+{"id": "null_scale_38", "sql": "SELECT ROUND(CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "wrapped_long", "sql": "SELECT ROUND(CAST(1.255 AS DECIMAL(10,3)), 2147483648L) AS r", "category": "target", "batch_size": 2}
+{"id": "ordinary_overflow", "sql": "SELECT ROUND(CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)), -1) AS r", "category": "target", "batch_size": 2}
+{"id": "half_up_positive", "sql": "SELECT ROUND(CAST(2.345 AS DECIMAL(6,3)), 2) AS r", "category": "target", "batch_size": 2}
+{"id": "half_up_negative", "sql": "SELECT ROUND(CAST(-2.345 AS DECIMAL(6,3)), 2) AS r", "category": "target", "batch_size": 2}
+{"id": "null_skips_bad_input", "sql": "SELECT ROUND(CAST('bad' AS DECIMAL(10,2)), NULL) AS r", "category": "target", "batch_size": 2}
+{"id": "control_float", "sql": "SELECT ROUND(2.675F, 2) AS r", "category": "control", "batch_size": 2}
+{"id": "control_integer", "sql": "SELECT ROUND(9007199254740993L, 2) AS r", "category": "control", "batch_size": 2}
+{"id": "control_double", "sql": "SELECT ROUND(CAST(2.5 AS DOUBLE), 0) AS r", "category": "control", "batch_size": 2}
+{"id": "control_bround", "sql": "SELECT BROUND(CAST(2.345 AS DECIMAL(6,3)), 2) AS r", "category": "control", "batch_size": 2}
