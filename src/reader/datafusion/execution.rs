@@ -43,7 +43,7 @@ use datafusion::{
         filter_pushdown::{
             ChildPushdownResult, FilterPushdownPhase, FilterPushdownPropagation, PushedDown,
         },
-        stream::RecordBatchStreamAdapter,
+        stream::{EmptyRecordBatchStream, RecordBatchStreamAdapter},
     },
 };
 use futures_util::{StreamExt, stream};
@@ -412,11 +412,12 @@ impl DeltaScanExec {
     }
 }
 
-fn scan_properties(schema: &SchemaRef, partition_count: usize) -> Arc<PlanProperties> {
+fn scan_properties(schema: &SchemaRef, file_partition_count: usize) -> Arc<PlanProperties> {
     Arc::new(
         PlanProperties::new(
             EquivalenceProperties::new(Arc::clone(schema)),
-            Partitioning::UnknownPartitioning(partition_count),
+            // DataFusion requires an executable partition even when there are no file tasks.
+            Partitioning::UnknownPartitioning(file_partition_count.max(1)),
             EmissionType::Incremental,
             Boundedness::Bounded,
         )
@@ -544,7 +545,10 @@ impl fmt::Debug for DeltaScanExec {
         formatter
             .debug_struct("DeltaScanExec")
             .field("snapshot_version", &self.reader_plan.snapshot_version)
-            .field("partition_count", &self.reader_plan.partitions.len())
+            .field(
+                "partition_count",
+                &self.properties.output_partitioning().partition_count(),
+            )
             .field("dynamic_filter_count", &self.dynamic_filters.len())
             .finish_non_exhaustive()
     }
@@ -561,7 +565,7 @@ impl DisplayAs for DeltaScanExec {
                 formatter,
                 "DeltaScanExec: snapshot_version={}, partitions={}",
                 self.reader_plan.snapshot_version,
-                self.reader_plan.partitions.len()
+                self.properties.output_partitioning().partition_count()
             ),
             DisplayFormatType::TreeRender => write!(formatter, "DeltaScanExec"),
         }
@@ -626,8 +630,13 @@ impl ExecutionPlan for DeltaScanExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> DataFusionResult<SendableRecordBatchStream> {
-        if partition >= self.reader_plan.partitions.len() {
+        if partition >= self.properties.output_partitioning().partition_count() {
             return Err(adapter_error("scan_partition_index_out_of_range"));
+        }
+        if self.reader_plan.partitions.is_empty() {
+            return Ok(Box::pin(EmptyRecordBatchStream::new(Arc::clone(
+                &self.schema,
+            ))));
         }
 
         let configured_batch_size_rows = context.session_config().batch_size();
@@ -1621,7 +1630,7 @@ mod tests {
                 .properties()
                 .output_partitioning()
                 .partition_count(),
-            0
+            1
         );
         assert!(
             datafusion::physical_plan::collect(empty_plan, SessionContext::new().task_ctx(),)
