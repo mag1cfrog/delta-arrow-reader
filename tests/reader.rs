@@ -13,6 +13,8 @@ mod empty_projection;
 mod execution_capacities;
 #[path = "reader/external_writer.rs"]
 mod external_writer;
+#[path = "reader/https.rs"]
+mod https;
 #[path = "reader/legacy_lists.rs"]
 mod legacy_lists;
 #[path = "reader/nested_nullability.rs"]

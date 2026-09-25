@@ -45,3 +45,24 @@ Cargo features.
 
 Both APIs run on your application's Tokio runtime. Delta Arrow Reader does not
 create a separate runtime.
+
+## HTTPS and build prerequisites
+
+The reader selects rustls for both object-store access and Kernel's HTTPS
+reads. Its default and `datafusion` dependency graphs do not require OpenSSL
+development libraries. Native build tools are still needed: Kernel's rustls
+feature uses AWS-LC, which builds native cryptographic code.
+
+HTTPS connections verify the server's certificate and hostname. Install your
+organization's CA in the platform trust store when accessing private endpoints.
+On Linux, both HTTP clients load system CA certificates and also honor
+`SSL_CERT_FILE` and `SSL_CERT_DIR`. Minimal container images need a CA bundle
+such as the distribution's `ca-certificates` package.
+
+Kernel's HTTPS client uses `rustls-platform-verifier`: certificate validation
+uses WebPKI on Linux and the platform verifier on macOS and Windows. The
+object-store client uses rustls with native root certificates. This replaces
+Kernel's previous native-tls/OpenSSL validation on Linux, so certificates must
+also satisfy WebPKI's validation rules. Kernel HTTPS connections use TLS 1.2
+or 1.3. Storage options and proxy configuration continue to use the underlying
+clients' existing interfaces.
