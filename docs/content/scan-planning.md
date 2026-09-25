@@ -55,8 +55,27 @@ parallelism. It then caps that number with the values it can determine cheaply:
 - available memory, allowing 256 MiB per partition
 
 The result is always at least one. If a host signal is unavailable, the reader
-leaves out that cap instead of failing the query. It does not run network,
-storage, or stress probes while planning a scan.
+leaves out that cap instead of failing the query. It does not run network or
+storage performance probes while planning a scan.
+
+On Linux, the memory hint is the smaller of host availability from
+`/proc/meminfo` and the process's remaining cgroup memory allowance. The reader
+supports cgroup v1 and v2, discovers the process's group and its mounted path,
+and checks accessible ancestor limits. Each remaining allowance is the hard
+limit minus that group's current usage, floored at zero. An ancestor's usage
+also accounts for sibling groups. A v1 ancestor contributes only when
+hierarchical accounting is enabled.
+
+Unlimited limits, unreadable or malformed files, and unsupported layouts add no
+cgroup hint. The reader uses any remaining readable hints and falls back to
+host availability when no cgroup hint is usable. Ancestors hidden by the cgroup
+namespace or mount are not observable. Swap allowance is excluded. The local
+environment diagnostic reports the effective available-memory hint; its total
+memory field still describes host physical memory.
+
+These values are sampled during planning and can change as other processes
+allocate memory. The partition cap is a planning heuristic: it does not reserve
+memory, enforce a process memory limit, or guarantee that a scan avoids OOM.
 
 ## Select the files
 

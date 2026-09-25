@@ -40,7 +40,7 @@ adapter.
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `execution_options` | `DeltaScanExecutionOptions::default()` | Reader settings used by each provider scan. |
-| `target_partitions` | `None` | Explicit scan partition target. `None` uses the automatic policy. |
+| `target_partitions` | `None` | Explicit scan partition target. `None` uses the [automatic policy](../scan-planning.md#choose-a-partition-target), including readable Linux cgroup memory limits. |
 | `intra_file_repartitioning` | `WhenBelowTarget` | Allows ranged file tasks only when whole-file planning falls short of the target. Use `Always` to allow them at any partition count. |
 | `use_arrow_view_types` | `true` | Decode string and binary data-file columns as Arrow view arrays. |
 
