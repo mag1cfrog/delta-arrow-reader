@@ -21,6 +21,7 @@ use datafusion::{
     logical_expr::{Expr, TableProviderFilterPushDown},
     physical_plan::ExecutionPlan,
 };
+use snafu::ResultExt;
 
 use self::{
     execution::create_datafusion_execution_plan,
@@ -30,6 +31,7 @@ use self::{
 use crate::{
     DeltaReaderError, DeltaScanExecutionOptions, DeltaTable, ParquetReaderBackend,
     delta::kernel::kernel_pruning_predicate,
+    error::ScanPlanningSnafu,
     reader::{
         backend::direct_parquet::ParquetRangeReadEstimator,
         planning::{DeltaScanPartitionTargetOptions, build_physical_row_predicate, plan_scan},
@@ -153,7 +155,7 @@ impl DeltaTableProvider {
 
     fn plan(
         &self,
-        state: &dyn Session,
+        session_target_partitions: usize,
         projection: Option<&[usize]>,
         filters: &[Expr],
     ) -> Result<(Arc<dyn ExecutionPlan>, usize), DeltaReaderError> {
@@ -226,7 +228,7 @@ impl DeltaTableProvider {
             self.options.execution_options,
             DeltaScanPartitionTargetOptions {
                 explicit_target_partitions: self.options.target_partitions,
-                datafusion_target_partitions: Some(state.config().target_partitions()),
+                datafusion_target_partitions: Some(session_target_partitions),
             },
         )?;
         reader_plan.logical_schema = build_provider_schema(
@@ -340,7 +342,29 @@ impl TableProvider for DeltaTableProvider {
         filters: &[Expr],
         _limit: Option<usize>,
     ) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
-        match self.plan(state, projection.map(Vec::as_slice), filters) {
+        let session_target_partitions = state.config().target_partitions();
+        let provider = self.clone();
+        let projection = projection.cloned();
+        let filters = filters.to_vec();
+        // Kernel planning is synchronous, even with cached metadata. Carry both
+        // the caller's subscriber and parent span onto the blocking pool.
+        let dispatch = tracing::dispatcher::get_default(Clone::clone);
+        let span = tracing::Span::current();
+        let result = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&dispatch, || {
+                span.in_scope(|| {
+                    provider.plan(session_target_partitions, projection.as_deref(), &filters)
+                })
+            })
+        })
+        .await
+        .boxed()
+        .context(ScanPlanningSnafu {
+            reason: "datafusion_scan_planning_task_failed",
+        })
+        .and_then(|result| result);
+
+        match result {
             Ok((plan, partition_count)) => {
                 tracing::debug!(
                     target: TRACING_TARGET,

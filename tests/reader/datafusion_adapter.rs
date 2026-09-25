@@ -48,6 +48,9 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 #[path = "datafusion_empty.rs"]
 mod empty_scans;
 
+#[path = "planning_runtime.rs"]
+mod planning_runtime;
+
 struct TestTable(PathBuf);
 
 impl TestTable {

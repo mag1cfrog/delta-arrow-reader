@@ -841,6 +841,7 @@ mod tests {
     use datafusion::physical_plan::filter::FilterExec;
     use datafusion::{
         common::config::ConfigOptions,
+        datasource::TableProvider,
         logical_expr::{Operator, col, lit},
         physical_expr::expressions::{
             BinaryExpr, Column, DynamicFilterPhysicalExpr, lit as physical_lit,
@@ -1112,9 +1113,11 @@ mod tests {
         let separate_provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
         let context = SessionContext::new();
 
-        let first = provider.plan(&context.state(), None, &[])?.0;
-        let second = provider.plan(&context.state(), None, &[])?.0;
-        let separate = separate_provider.plan(&context.state(), None, &[])?.0;
+        let first = provider.scan(&context.state(), None, &[], None).await?;
+        let second = provider.scan(&context.state(), None, &[], None).await?;
+        let separate = separate_provider
+            .scan(&context.state(), None, &[], None)
+            .await?;
         let first = first
             .as_ref()
             .downcast_ref::<DeltaScanExec>()
