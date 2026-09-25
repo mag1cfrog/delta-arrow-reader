@@ -7,6 +7,8 @@ mod data_file_location;
 mod datafusion_adapter;
 #[path = "reader/empty_projection.rs"]
 mod empty_projection;
+#[path = "reader/execution_capacities.rs"]
+mod execution_capacities;
 #[path = "reader/legacy_lists.rs"]
 mod legacy_lists;
 #[path = "reader/nested_nullability.rs"]
