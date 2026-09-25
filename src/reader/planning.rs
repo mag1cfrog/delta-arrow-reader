@@ -4289,7 +4289,9 @@ mod tests {
         DeltaComparison, DeltaPredicate, DeltaReaderPhase, DeltaScalar, DeltaSnapshotSelection,
         DeltaStorageOptions,
         delta::{
-            kernel::{KernelScanFileMetadata, kernel_pruning_predicate},
+            kernel::{
+                KernelDeletionVectorHandle, KernelScanFileMetadata, kernel_pruning_predicate,
+            },
             snapshot::load_delta_table_snapshot_blocking,
         },
         reader::{
@@ -4472,7 +4474,11 @@ mod tests {
     }
 
     fn task(file: ScanFile) -> Result<DeltaScanFileTask, crate::DeltaReaderError> {
-        DeltaScanFileTask::try_from_kernel(KernelScanFileMetadata::from_scan_file(file))
+        assert!(
+            !file.dv_info.has_vector(),
+            "DV fixtures must also pass their descriptor"
+        );
+        DeltaScanFileTask::try_from_kernel(KernelScanFileMetadata::from_scan_file(file, None))
     }
 
     fn grouping_task(
@@ -4582,19 +4588,22 @@ mod tests {
     fn file_task_preserves_kernel_metadata_without_execution()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut file = kernel_file("part-00000.parquet");
-        file.dv_info = DeletionVectorDescriptor::try_new(
+        let descriptor = DeletionVectorDescriptor::try_new(
             DeletionVectorStorageType::Inline,
             "inline-payload",
             None,
             14,
             2,
-        )?
-        .into();
+        )?;
+        file.dv_info = descriptor.clone().into();
         file.transform = Some(Arc::new(Expression::Column(ColumnName::new([
             "physical_id",
         ]))));
 
-        let task = task(file)?;
+        let task = DeltaScanFileTask::try_from_kernel(KernelScanFileMetadata::from_scan_file(
+            file,
+            Some(KernelDeletionVectorHandle(descriptor)),
+        ))?;
 
         assert_eq!(task.path, "part-00000.parquet");
         assert_eq!(task.file_size, Some(123));
@@ -5460,18 +5469,22 @@ mod tests {
     #[test]
     fn grouped_tasks_preserve_delta_metadata() -> Result<(), Box<dyn std::error::Error>> {
         let mut file = kernel_file("part-with-delta-metadata.parquet");
-        file.dv_info = DeletionVectorDescriptor::try_new(
+        let descriptor = DeletionVectorDescriptor::try_new(
             DeletionVectorStorageType::Inline,
             "inline-payload",
             None,
             14,
             2,
-        )?
-        .into();
+        )?;
+        file.dv_info = descriptor.clone().into();
         file.transform = Some(Arc::new(Expression::Column(ColumnName::new([
             "physical_id",
         ]))));
-        let partitions = group_scan_file_tasks(vec![task(file)?], 1)?;
+        let task = DeltaScanFileTask::try_from_kernel(KernelScanFileMetadata::from_scan_file(
+            file,
+            Some(KernelDeletionVectorHandle(descriptor)),
+        ))?;
+        let partitions = group_scan_file_tasks(vec![task], 1)?;
         let grouped = &partitions[0].file_tasks[0];
 
         assert_eq!(grouped.path, "part-with-delta-metadata.parquet");

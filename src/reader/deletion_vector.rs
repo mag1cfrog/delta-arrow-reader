@@ -3,10 +3,12 @@
 use std::sync::{Arc, Weak};
 
 use arrow::{
-    array::{Array, BooleanArray, Int64Array},
+    array::{Array, BooleanArray, BooleanBufferBuilder, Int64Array},
+    buffer::BooleanBuffer,
     compute::filter_record_batch,
     record_batch::RecordBatch,
 };
+use roaring::RoaringTreemap;
 use snafu::{IntoError, ResultExt};
 
 use crate::{
@@ -25,17 +27,128 @@ pub(crate) struct DeletionVectorMetadata {
     cached_rows: Arc<tokio::sync::Mutex<Option<Weak<DeletionVectorRows>>>>,
 }
 
-struct DeletionVectorRows {
-    indexes: Box<[u64]>,
+enum DeletionVectorRows {
+    Bitmap { first: u64, bits: BooleanBuffer },
+    Indexes(Box<[u64]>),
 }
 
 impl DeletionVectorRows {
-    fn new(mut indexes: Vec<u64>) -> Self {
-        indexes.sort_unstable();
-        indexes.dedup();
-        Self {
-            indexes: indexes.into_boxed_slice(),
+    fn from_bitmap(indexes: RoaringTreemap) -> Self {
+        let first = indexes.min().unwrap_or(0);
+        let span = indexes
+            .max()
+            .and_then(|last| (last - first).checked_add(1))
+            .filter(|len| len.div_ceil(8) <= indexes.len().saturating_mul(8))
+            .and_then(|len| usize::try_from(len).ok());
+        // Use a bitmap only when its payload is no larger than a u64 list.
+        // Offsetting by the first deletion also keeps high but nearby rows compact.
+        if let Some(len) = span {
+            let mut bits = BooleanBufferBuilder::new(len);
+            bits.resize(len);
+            for (key, bitmap) in indexes.bitmaps() {
+                let base = u64::from(key) << 32;
+                bitmap
+                    .iter()
+                    .for_each(|row| bits.set_bit(((base | u64::from(row)) - first) as usize, true));
+            }
+            Self::Bitmap {
+                first,
+                bits: bits.finish(),
+            }
+        } else {
+            Self::Indexes(indexes.into_iter().collect::<Vec<_>>().into_boxed_slice())
         }
+    }
+
+    #[cfg(test)]
+    fn new(indexes: Vec<u64>) -> Self {
+        Self::from_bitmap(indexes.into_iter().collect())
+    }
+
+    #[cfg(test)]
+    fn all_indexes(&self) -> Vec<u64> {
+        match self {
+            Self::Bitmap { first, bits } => {
+                bits.set_indices().map(|row| first + row as u64).collect()
+            }
+            Self::Indexes(indexes) => indexes.to_vec(),
+        }
+    }
+
+    fn contains(&self, row: u64) -> bool {
+        match self {
+            Self::Bitmap { first, bits } => row
+                .checked_sub(*first)
+                .and_then(|row| usize::try_from(row).ok())
+                .is_some_and(|row| row < bits.len() && bits.value(row)),
+            Self::Indexes(indexes) => indexes.binary_search(&row).is_ok(),
+        }
+    }
+
+    fn max(&self) -> Option<u64> {
+        match self {
+            Self::Bitmap { first, bits } => Some(first + (bits.len() as u64 - 1)),
+            Self::Indexes(indexes) => indexes.last().copied(),
+        }
+    }
+
+    // The caller has checked that start + keep.len() fits in u64.
+    fn mask_ordered(&self, start: u64, keep: &mut [bool]) {
+        if keep.is_empty() {
+            return;
+        }
+        let end = start + keep.len() as u64 - 1;
+        match self {
+            Self::Indexes(indexes) => {
+                let first = indexes.partition_point(|row| *row < start);
+                let last = indexes.partition_point(|row| *row <= end);
+                for row in &indexes[first..last] {
+                    keep[(*row - start) as usize] = false;
+                }
+            }
+            Self::Bitmap { first, bits } => {
+                let lower = start.max(*first);
+                let upper = end.min(first + (bits.len() as u64 - 1));
+                if lower <= upper {
+                    let values = bits.slice((lower - first) as usize, (upper - lower + 1) as usize);
+                    let offset = (lower - start) as usize;
+                    if values.count_set_bits() == values.len() {
+                        keep[offset..offset + values.len()].fill(false);
+                    } else {
+                        for index in values.set_indices() {
+                            keep[offset + index] = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn mask_original(&self, rows: &[u64], sorted: bool) -> Vec<bool> {
+        if !sorted {
+            return rows.iter().map(|row| !self.contains(*row)).collect();
+        }
+        let mut keep = vec![true; rows.len()];
+        let Some(&first) = rows.first() else {
+            return keep;
+        };
+        match self {
+            Self::Indexes(indexes) => {
+                let mut cursor = indexes.partition_point(|row| *row < first);
+                for (row, keep) in rows.iter().zip(&mut keep) {
+                    while indexes.get(cursor).is_some_and(|deleted| deleted < row) {
+                        cursor += 1;
+                    }
+                    *keep = indexes.get(cursor) != Some(row);
+                }
+            }
+            Self::Bitmap { .. } => {
+                for (row, keep) in rows.iter().zip(&mut keep) {
+                    *keep = !self.contains(*row);
+                }
+            }
+        }
+        keep
     }
 }
 
@@ -77,11 +190,7 @@ pub(crate) async fn load_deletion_vector_masker(
             let engine_context = Arc::clone(engine_context);
             let metrics_for_task = metrics.clone();
             let rows = match tokio::task::spawn_blocking(move || {
-                load_deletion_vector_row_indexes(
-                    engine_context.as_ref(),
-                    &handle,
-                    &metrics_for_task,
-                )
+                load_deletion_vector_rows(engine_context.as_ref(), &handle, &metrics_for_task)
             })
             .await
             {
@@ -110,19 +219,19 @@ pub(crate) fn load_deletion_vector_masker_blocking(
     let Some(handle) = metadata.handle else {
         return Ok(None);
     };
-    let row_indexes = load_deletion_vector_row_indexes(engine_context, &handle, metrics)?;
+    let row_indexes = load_deletion_vector_rows(engine_context, &handle, metrics)?;
     Ok(Some(DeletionVectorMasker::from_shared(
         row_indexes,
         metrics.clone(),
     )))
 }
 
-fn load_deletion_vector_row_indexes(
+fn load_deletion_vector_rows(
     engine_context: &DeltaKernelEngineContext,
     handle: &KernelDeletionVectorHandle,
     metrics: &DeltaScanMetrics,
 ) -> Result<Arc<DeletionVectorRows>, DeltaReaderError> {
-    let row_indexes = match engine_context.load_deletion_vector_row_indexes(handle) {
+    let row_indexes = match engine_context.load_deletion_vector_rows(handle) {
         Ok(row_indexes) => row_indexes,
         Err(source) => {
             metrics.record_deletion_vector_failure();
@@ -134,15 +243,13 @@ fn load_deletion_vector_row_indexes(
     };
 
     metrics.record_deletion_vector_payload_loaded();
-    Ok(Arc::new(DeletionVectorRows::new(row_indexes)))
+    Ok(Arc::new(DeletionVectorRows::from_bitmap(row_indexes)))
 }
 
 #[allow(dead_code)]
 pub(crate) struct DeletionVectorMasker {
     deleted_rows: Arc<DeletionVectorRows>,
     consumed_row_count: u64,
-    original_row_index_deleted_cursor: Option<usize>,
-    last_original_row_index: Option<u64>,
     access_mode: DeletionVectorAccessMode,
     metrics: DeltaScanMetrics,
     applied: bool,
@@ -159,6 +266,7 @@ enum DeletionVectorAccessMode {
 
 #[allow(dead_code)]
 impl DeletionVectorMasker {
+    #[cfg(test)]
     pub(crate) fn try_new(
         deleted_row_indexes: Vec<u64>,
         metrics: DeltaScanMetrics,
@@ -173,8 +281,6 @@ impl DeletionVectorMasker {
         Self {
             deleted_rows,
             consumed_row_count: 0,
-            original_row_index_deleted_cursor: Some(0),
-            last_original_row_index: None,
             access_mode: DeletionVectorAccessMode::Unused,
             metrics,
             applied: false,
@@ -239,26 +345,8 @@ impl DeletionVectorMasker {
             }
         };
         let mut keep_mask = vec![true; batch_len];
-        let deleted_start = self
-            .deleted_rows
-            .indexes
-            .partition_point(|row_index| *row_index < self.consumed_row_count);
-        let deleted_end = self
-            .deleted_rows
-            .indexes
-            .partition_point(|row_index| *row_index < requested_end);
-        for deleted_row_index in &self.deleted_rows.indexes[deleted_start..deleted_end] {
-            let batch_index = match usize::try_from(*deleted_row_index - self.consumed_row_count) {
-                Ok(batch_index) => batch_index,
-                Err(_) => {
-                    return self.reject(
-                        "invalid_deletion_vector_coordinates",
-                        "deleted row index does not fit the host index type",
-                    );
-                }
-            };
-            keep_mask[batch_index] = false;
-        }
+        self.deleted_rows
+            .mask_ordered(self.consumed_row_count, &mut keep_mask);
         self.consumed_row_count = requested_end;
 
         Ok(keep_mask)
@@ -270,6 +358,7 @@ impl DeletionVectorMasker {
     ) -> Result<Vec<bool>, DeltaReaderError> {
         self.require_open()?;
         let mut validated_row_indexes = Vec::with_capacity(row_indexes.len());
+        let mut sorted = true;
         for index in 0..row_indexes.len() {
             if row_indexes.is_null(index) {
                 return self.reject(
@@ -283,50 +372,16 @@ impl DeletionVectorMasker {
                     "original row index is negative",
                 );
             };
+            sorted &= validated_row_indexes
+                .last()
+                .is_none_or(|last| *last <= row_index);
             validated_row_indexes.push(row_index);
         }
         self.select_mode(DeletionVectorAccessMode::OriginalRowIndex)?;
 
-        let mut keep_mask = Vec::with_capacity(validated_row_indexes.len());
-        let mut cursor = self.original_row_index_deleted_cursor.unwrap_or(0);
-        let mut last_row_index = self.last_original_row_index;
-        let mut cursor_is_valid = self.original_row_index_deleted_cursor.is_some();
-        for row_index in validated_row_indexes {
-            if cursor_is_valid
-                && last_row_index.is_some_and(|last_row_index| row_index < last_row_index)
-            {
-                cursor_is_valid = false;
-            }
-
-            let keep = if cursor_is_valid {
-                while self
-                    .deleted_rows
-                    .indexes
-                    .get(cursor)
-                    .is_some_and(|deleted_row_index| *deleted_row_index < row_index)
-                {
-                    cursor += 1;
-                }
-                self.deleted_rows
-                    .indexes
-                    .get(cursor)
-                    .is_none_or(|deleted_row_index| *deleted_row_index != row_index)
-            } else {
-                self.deleted_rows.indexes.binary_search(&row_index).is_err()
-            };
-            keep_mask.push(keep);
-            last_row_index = Some(row_index);
-        }
-
-        if cursor_is_valid {
-            self.original_row_index_deleted_cursor = Some(cursor);
-            self.last_original_row_index = last_row_index;
-        } else {
-            self.original_row_index_deleted_cursor = None;
-            self.last_original_row_index = None;
-        }
-
-        Ok(keep_mask)
+        Ok(self
+            .deleted_rows
+            .mask_original(&validated_row_indexes, sorted))
     }
 
     fn apply_keep_mask(
@@ -372,11 +427,11 @@ impl DeletionVectorMasker {
             return Ok(());
         }
 
-        let consumed_deleted = self
+        if self
             .deleted_rows
-            .indexes
-            .partition_point(|row_index| *row_index < self.consumed_row_count);
-        if consumed_deleted < self.deleted_rows.indexes.len() {
+            .max()
+            .is_some_and(|row| row >= self.consumed_row_count)
+        {
             return self.reject(
                 "invalid_deletion_vector_coordinates",
                 "deletion-vector entries remain after physical file completion",
@@ -455,7 +510,6 @@ mod tests {
     use delta_kernel::actions::deletion_vector_writer::{
         KernelDeletionVector, StreamingDeletionVectorWriter,
     };
-    use delta_kernel::scan::state::DvInfo;
 
     use super::{
         DeletionVectorMasker, DeletionVectorMetadata, DeletionVectorRows,
@@ -465,7 +519,7 @@ mod tests {
         DeltaReaderError, DeltaReaderPhase, DeltaScanMetrics, DeltaSnapshotSelection,
         DeltaStorageOptions, ParquetReaderBackend,
         delta::{
-            kernel::{deletion_vector_handle, is_kernel_error},
+            kernel::{KernelDeletionVectorHandle, is_kernel_error},
             snapshot::{ArrowTableSnapshot, load_delta_table_snapshot_blocking},
         },
         reader::metrics::DeltaScanMetricsConfig,
@@ -514,7 +568,7 @@ mod tests {
     }
 
     fn metadata(descriptor: DeletionVectorDescriptor) -> DeletionVectorMetadata {
-        DeletionVectorMetadata::from_kernel(deletion_vector_handle(descriptor.into()))
+        DeletionVectorMetadata::from_kernel(Some(KernelDeletionVectorHandle(descriptor)))
     }
 
     fn inline_metadata() -> Result<DeletionVectorMetadata, delta_kernel::Error> {
@@ -565,7 +619,7 @@ mod tests {
         let rows = Arc::new(DeletionVectorRows::new(vec![3, 1, 3]));
         let cached_rows = Arc::downgrade(&rows);
 
-        assert_eq!(rows.indexes.as_ref(), [1, 3]);
+        assert_eq!(rows.all_indexes(), [1, 3]);
         drop(rows);
 
         assert!(cached_rows.upgrade().is_none());
@@ -579,8 +633,7 @@ mod tests {
         let engine_context = Arc::clone(snapshot.engine_context());
 
         let absent_metrics = metrics();
-        let absent_metadata =
-            DeletionVectorMetadata::from_kernel(deletion_vector_handle(DvInfo::default()));
+        let absent_metadata = DeletionVectorMetadata::default();
         let absent = load_deletion_vector_masker(
             snapshot.engine_context(),
             absent_metadata,
@@ -611,7 +664,7 @@ mod tests {
         let second_masker = second_masker?.expect("inline descriptor must produce a second masker");
         for masker in [&masker, &second_masker] {
             assert_eq!(
-                masker.deleted_rows.indexes.as_ref(),
+                masker.deleted_rows.all_indexes(),
                 INLINE_DV_DELETED_ROW_INDEXES
             );
         }
@@ -646,7 +699,7 @@ mod tests {
         .await?
         .expect("released inline payload must reload");
         assert_eq!(
-            reloaded.deleted_rows.indexes.as_ref(),
+            reloaded.deleted_rows.all_indexes(),
             INLINE_DV_DELETED_ROW_INDEXES
         );
         let metrics = inline_metrics.snapshot();
@@ -675,7 +728,7 @@ mod tests {
                 &relative_metrics,
             ))?
             .expect("relative descriptor must produce a masker");
-        assert_eq!(masker.deleted_rows.indexes.as_ref(), [0, 9]);
+        assert_eq!(masker.deleted_rows.all_indexes(), [0, 9]);
         assert_eq!(
             relative_metrics.snapshot().deletion_vector_payloads_loaded,
             1
@@ -690,7 +743,7 @@ mod tests {
                 &empty_metrics,
             ))?
             .expect("empty present descriptor must produce a masker");
-        assert!(empty.deleted_rows.indexes.is_empty());
+        assert!(empty.deleted_rows.max().is_none());
         empty.finish()?;
         let metrics = empty_metrics.snapshot();
         assert_eq!(metrics.deletion_vector_payloads_loaded, 1);
@@ -830,7 +883,7 @@ mod tests {
         let metrics = metrics();
         let mut masker = DeletionVectorMasker::try_new(vec![3, 1, 3], metrics.clone())?;
 
-        assert_eq!(masker.deleted_rows.indexes.as_ref(), [1, 3]);
+        assert_eq!(masker.deleted_rows.all_indexes(), [1, 3]);
         assert_eq!(
             masker.select_original_row_indexes(&row_indexes(&[0, 1, 2, 3, 4]))?,
             [true, false, true, false, true]
@@ -920,7 +973,6 @@ mod tests {
             masker.select_original_row_indexes(&row_indexes(&[3, 1, 1, 4]))?,
             [false, false, false, true]
         );
-        assert_eq!(masker.original_row_index_deleted_cursor, None);
         assert_eq!(
             masker.select_original_row_indexes(&row_indexes(&[1, 2]))?,
             [false, true]
@@ -1093,9 +1145,116 @@ mod tests {
     }
 
     #[test]
+    fn compact_coordinates_bound_memory_and_handle_the_full_u64_range()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for first in [0, 1_u64 << 32, u64::MAX - 99_999] {
+            let rows = DeletionVectorRows::new((first..=first + 99_999).collect());
+            let DeletionVectorRows::Bitmap { bits, .. } = &rows else {
+                return Err("dense coordinates should use a compact bitmap".into());
+            };
+            assert_eq!(bits.values().len(), 12_500);
+            assert_eq!(rows.max(), Some(first + 99_999));
+            assert!(rows.contains(first));
+            assert!(rows.contains(first + 99_999));
+            let mut ordered = DeletionVectorMasker::from_shared(Arc::new(rows), metrics());
+            ordered.consumed_row_count = first;
+            assert_eq!(ordered.consume_ordered_batch(127)?, vec![false; 127]);
+            assert!(ordered.finish().is_err());
+        }
+        for deleted in [vec![], vec![0, u64::MAX], vec![0, 1_u64 << 40, 2_u64 << 40]] {
+            let rows = DeletionVectorRows::new(deleted.clone());
+            assert!(matches!(rows, DeletionVectorRows::Indexes(_)));
+            assert_eq!(rows.all_indexes(), deleted);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn coordinates_match_membership_across_bitmap_boundaries() -> Result<(), DeltaReaderError> {
+        let boundary = 1_u64 << 32;
+        let cases = [
+            Vec::new(),
+            vec![
+                0,
+                65_535,
+                65_536,
+                boundary - 1,
+                boundary,
+                boundary + 1,
+                3 * boundary + 2,
+                i64::MAX as u64,
+            ],
+            (65_520..65_570).collect(),
+            (boundary - 20..boundary + 20).collect(),
+            vec![boundary, 3 * boundary],
+            (0..4096).step_by(2).collect(),
+            (0..4096).map(|row| i64::MAX as u64 - 4095 + row).collect(),
+            (boundary..boundary + 512)
+                .chain(3 * boundary..3 * boundary + 512)
+                .collect(),
+        ];
+        for deleted in cases {
+            let mut original = masker(deleted.clone())?;
+            for indexes in [
+                vec![0, 1, 65_534, 65_535, 65_536, 65_537],
+                vec![],
+                vec![
+                    boundary - 1,
+                    boundary,
+                    boundary + 1,
+                    3 * boundary,
+                    3 * boundary + 2,
+                ],
+                vec![i64::MAX as u64, boundary, 0, boundary, 65_535],
+            ] {
+                let expected: Vec<_> = indexes.iter().map(|row| !deleted.contains(row)).collect();
+                let indexes = Int64Array::from(
+                    indexes
+                        .into_iter()
+                        .map(|row| row as i64)
+                        .collect::<Vec<_>>(),
+                );
+                assert_eq!(
+                    original.select_original_row_indexes(&indexes)?,
+                    expected,
+                    "{deleted:?}"
+                );
+            }
+            original.finish()?;
+            for start in [
+                0,
+                65_520,
+                boundary - 20,
+                boundary,
+                2 * boundary + 1,
+                3 * boundary,
+            ] {
+                let mut ordered = masker(deleted.clone())?;
+                ordered.consumed_row_count = start;
+                for len in [0, 1, 19, 20] {
+                    let start = ordered.consumed_row_count;
+                    let expected: Vec<_> = (start..start + len)
+                        .map(|row| !deleted.contains(&row))
+                        .collect();
+                    assert_eq!(
+                        ordered.consume_ordered_batch(len as usize)?,
+                        expected,
+                        "{deleted:?} at {start}"
+                    );
+                }
+                assert_eq!(
+                    ordered.finish().is_err(),
+                    deleted.iter().any(|row| *row >= ordered.consumed_row_count)
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn production_boundary_reuses_kernel_context_without_an_extra_decoder_or_runtime() {
         let deletion_vector_source = include_str!("deletion_vector.rs")
-            .split("#[cfg(test)]")
+            .split("#[cfg(test)]\nmod tests {")
             .next()
             .expect("production source");
         let kernel_source = include_str!("../delta/kernel.rs");
@@ -1104,7 +1263,6 @@ mod tests {
             "DefaultEngineBuilder",
             "store_from_url_opts",
             "Runtime::",
-            "Roaring",
             "z85",
             "datafusion",
             "tracing::",
@@ -1116,6 +1274,6 @@ mod tests {
             1
         );
         assert_eq!(kernel_source.matches("store_from_url_opts(").count(), 1);
-        assert_eq!(kernel_source.matches("get_row_indexes(").count(), 1);
+        assert_eq!(kernel_source.matches("get_row_indexes(").count(), 0);
     }
 }

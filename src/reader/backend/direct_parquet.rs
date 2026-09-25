@@ -1223,8 +1223,8 @@ mod tests {
             .transpose()
             .map_err(|error| data_file_error("test_file_size_overflow", error))?
             .unwrap_or(1);
-        let mut task =
-            DeltaScanFileTask::try_from_kernel(KernelScanFileMetadata::from_scan_file(ScanFile {
+        let mut task = DeltaScanFileTask::try_from_kernel(KernelScanFileMetadata::from_scan_file(
+            ScanFile {
                 path: path.to_owned(),
                 size,
                 modification_time: 0,
@@ -1232,7 +1232,9 @@ mod tests {
                 dv_info: DvInfo::default(),
                 transform: None,
                 partition_values: HashMap::new(),
-            }))?;
+            },
+            None,
+        ))?;
         task.file_size = file_size;
         Ok(task)
     }

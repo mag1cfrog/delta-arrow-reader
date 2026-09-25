@@ -1,5 +1,9 @@
 //! Private boundary for stability-sensitive `delta_kernel` APIs.
 
+mod deletion_vector;
+
+pub(crate) use deletion_vector::KernelDeletionVectorHandle;
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use arrow::{
@@ -16,7 +20,7 @@ use delta_kernel::{
     },
     expressions::{ColumnName, Expression, ExpressionRef, Predicate, PredicateRef, Scalar},
     scan::ScanMetadata,
-    scan::state::{DvInfo, ScanFile, transform_to_logical},
+    scan::state::{ScanFile, transform_to_logical},
     scan::{Scan as DeltaKernelScan, StatsOptions},
     schema::SchemaRef as KernelSchemaRef,
     table_features::{TABLE_FEATURES_MIN_READER_VERSION, TableFeature},
@@ -51,10 +55,6 @@ pub(crate) struct DeltaKernelEngineContext {
     object_store: Arc<dyn ObjectStore>,
     engine: Arc<dyn Engine + Send + Sync>,
 }
-
-#[allow(dead_code)]
-#[derive(Clone)]
-pub(crate) struct KernelDeletionVectorHandle(DvInfo);
 
 #[allow(dead_code)]
 pub(crate) struct KernelScanFileMetadata {
@@ -233,10 +233,6 @@ fn materialize_scan_metadata(
 fn collect_scan_files(
     metadata: impl Iterator<Item = delta_kernel::DeltaResult<ScanMetadata>>,
 ) -> delta_kernel::DeltaResult<KernelScanFileCollection> {
-    fn collect(files: &mut Vec<KernelScanFileMetadata>, file: ScanFile) {
-        files.push(KernelScanFileMetadata::from_scan_file(file));
-    }
-
     let mut files = Vec::new();
     let mut excluded_add_actions = Some(0_u64);
     let mut saw_batch = false;
@@ -246,7 +242,27 @@ fn collect_scan_files(
         excluded_add_actions = excluded_add_actions.and_then(|total| {
             excluded_add_action_count(&metadata).and_then(|count| total.checked_add(count))
         });
-        files = metadata.visit_scan_files(files, collect)?;
+        let scan_files = metadata.visit_scan_files(Vec::new(), |files, file| files.push(file))?;
+        let mut descriptors = if scan_files.iter().any(|file| file.dv_info.has_vector()) {
+            let descriptors = deletion_vector::scan_deletion_vectors(&metadata)?;
+            if descriptors.len() != scan_files.len() {
+                return Err(delta_kernel::Error::internal_error(
+                    "deletion-vector descriptors do not match visited scan files",
+                ));
+            }
+            Some(descriptors.into_iter())
+        } else {
+            None
+        };
+        for file in scan_files {
+            let descriptor = descriptors.as_mut().and_then(Iterator::next).flatten();
+            if file.dv_info.has_vector() != descriptor.is_some() {
+                return Err(delta_kernel::Error::internal_error(
+                    "deletion-vector presence does not match the visited scan file",
+                ));
+            }
+            files.push(KernelScanFileMetadata::from_scan_file(file, descriptor));
+        }
     }
     Ok(KernelScanFileCollection {
         files,
@@ -289,21 +305,17 @@ impl DeltaKernelPredicate {
 }
 
 #[allow(dead_code)]
-pub(crate) fn deletion_vector_handle(dv_info: DvInfo) -> Option<KernelDeletionVectorHandle> {
-    dv_info
-        .has_vector()
-        .then_some(KernelDeletionVectorHandle(dv_info))
-}
-
-#[allow(dead_code)]
 impl KernelScanFileMetadata {
-    pub(crate) fn from_scan_file(file: ScanFile) -> Self {
+    pub(crate) fn from_scan_file(
+        file: ScanFile,
+        deletion_vector: Option<KernelDeletionVectorHandle>,
+    ) -> Self {
         let ScanFile {
             path,
             size,
             modification_time,
             stats,
-            dv_info,
+            dv_info: _,
             transform,
             partition_values,
         } = file;
@@ -314,7 +326,7 @@ impl KernelScanFileMetadata {
             modification_time_ms: Some(modification_time),
             estimated_rows: stats.map(|stats| stats.num_records),
             partition_values: partition_values.into_iter().collect(),
-            deletion_vector: deletion_vector_handle(dv_info),
+            deletion_vector,
             transform: KernelPhysicalToLogicalTransform(transform),
         }
     }
@@ -559,14 +571,13 @@ impl DeltaKernelEngineContext {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn load_deletion_vector_row_indexes(
+    pub(crate) fn load_deletion_vector_rows(
         &self,
         deletion_vector: &KernelDeletionVectorHandle,
-    ) -> delta_kernel::DeltaResult<Vec<u64>> {
+    ) -> delta_kernel::DeltaResult<roaring::RoaringTreemap> {
         deletion_vector
             .0
-            .get_row_indexes(self.engine.as_ref(), &self.table_url)
-            .map(Option::unwrap_or_default)
+            .read(self.engine.storage_handler(), &self.table_url)
     }
 }
 

@@ -1,5 +1,7 @@
 //! Public reader integration tests.
 
+#[path = "reader/compact_deletion_vectors.rs"]
+mod compact_deletion_vectors;
 #[path = "reader/data_file_location.rs"]
 mod data_file_location;
 #[cfg(feature = "datafusion")]
