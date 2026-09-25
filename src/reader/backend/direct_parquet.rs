@@ -430,7 +430,7 @@ impl DirectParquetReader {
         let predicate = ArrowPredicateFn::new(projection, move |batch| {
             let batch = schema_alignment
                 .reshape_batch_to_target_schema(batch)
-                .map_err(|error| arrow::error::ArrowError::ComputeError(error.to_string()))?;
+                .map_err(|error| arrow::error::ArrowError::ExternalError(Box::new(error)))?;
             engine_context
                 .evaluate_predicate(&kernel_schemas, &predicate, batch)
                 .map_err(|error| arrow::error::ArrowError::ExternalError(Box::new(error)))
@@ -2647,6 +2647,130 @@ mod tests {
             let metrics = metrics.snapshot();
             assert_eq!(metrics.scheduler_rows_emitted, u64::try_from(ids.len())?);
             assert_eq!(metrics.deletion_vector_rows_deleted, expected_deleted);
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn nested_nullability_row_filter_preserves_schema_error_source()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use arrow::{array::StructArray, error::ArrowError};
+        use std::error::Error;
+
+        for invalid in [false, true] {
+            let root = TestDir::new("nested-nullability-row-filter")?;
+            let fields = vec![Field::new("zip", DataType::Int32, true)].into();
+            let file_schema = Arc::new(Schema::new(vec![Field::new(
+                "v",
+                DataType::Struct(fields),
+                false,
+            )]));
+            let DataType::Struct(fields) = file_schema.field(0).data_type() else {
+                return Err("expected struct schema".into());
+            };
+            let values = StructArray::try_new(
+                fields.clone(),
+                vec![Arc::new(Int32Array::from(vec![
+                    Some(10),
+                    if invalid { None } else { Some(20) },
+                ]))],
+                None,
+            )?;
+            let bytes = parquet_bytes_for(file_schema, vec![Arc::new(values)])?;
+            fs::write(root.path().join("part.parquet"), &bytes)?;
+            fs::create_dir(root.path().join("_delta_log"))?;
+            let schema = serde_json::json!({"type":"struct", "fields":[{
+                "name":"v", "nullable":false, "metadata":{}, "type":{"type":"struct", "fields":[{
+                    "name":"zip", "type":"integer", "nullable":false, "metadata":{}
+                }]}
+            }]});
+            let protocol =
+                serde_json::json!({"protocol":{"minReaderVersion":1,"minWriterVersion":2}});
+            let metadata = serde_json::json!({"metaData":{
+                "id":"nested-nullability", "format":{"provider":"parquet","options":{}},
+                "schemaString":schema.to_string(), "partitionColumns":[], "configuration":{}
+            }});
+            let add = serde_json::json!({"add":{"path":"part.parquet", "size":bytes.len(), "partitionValues":{}, "modificationTime":0,"dataChange":true}});
+            fs::write(
+                root.path().join("_delta_log/00000000000000000000.json"),
+                format!("{protocol}\n{metadata}\n{add}\n"),
+            )?;
+            let target = Arc::new(Schema::new(vec![Field::new(
+                "v",
+                DataType::Struct(vec![Field::new("zip", DataType::Int32, false)].into()),
+                false,
+            )]));
+            let predicate = DeltaKernelPredicate::from_test_predicate(Predicate::eq(
+                Expression::Column(ColumnName::new(["v", "zip"])),
+                Expression::Literal(Scalar::Integer(10)),
+            ));
+            let snapshot = load_delta_table_snapshot_blocking(
+                &root.path().to_string_lossy(),
+                &DeltaStorageOptions::new(),
+                DeltaSnapshotSelection::Latest,
+            )?;
+            let schemas =
+                crate::reader::planning::build_kernel_scan(&snapshot, None, None, false)?.schemas();
+            let reader = reader(&root, DeltaScanExecutionOptions::new(), metrics())?;
+            let task = task("part.parquet", Some(u64::try_from(bytes.len())?))?;
+            let result = async {
+                let mut stream = reader
+                    .open_physical_parquet_stream(
+                        &task,
+                        &target,
+                        PhysicalParquetStreamOptions {
+                            row_filter: Some(RowFilterInput {
+                                predicate: &predicate,
+                                kernel_schemas: &schemas,
+                            }),
+                            ..Default::default()
+                        },
+                    )
+                    .await?;
+                let mut batches = Vec::new();
+                while let Some(batch) = stream.next_batch().await? {
+                    batches.push(batch);
+                }
+                Ok::<_, DeltaReaderError>(batches)
+            }
+            .await;
+            if invalid {
+                let error = result.err().ok_or("invalid predicate input was accepted")?;
+                let reader_error = &error;
+                assert_eq!(reader_error.code(), "data_file_read");
+                assert_eq!(
+                    reader_error.to_string(),
+                    "delta reader error: phase=data_file_read code=data_file_read reason=parquet_batch_read_failed"
+                );
+                let mut source = reader_error.source();
+                let mut found_arrow = false;
+                while let Some(error) = source {
+                    if let Some(delta_kernel::Error::Arrow(ArrowError::InvalidArgumentError(
+                        message,
+                    ))) = error.downcast_ref::<delta_kernel::Error>()
+                    {
+                        assert!(message.contains("unmasked nulls"), "{message}");
+                        found_arrow = true;
+                    }
+                    source = error.source();
+                }
+                assert!(
+                    found_arrow,
+                    "predicate error lost its Arrow source: {error:?}"
+                );
+            } else {
+                let batches = result?;
+                assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 1);
+                let v = batches[0]
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<StructArray>()
+                    .ok_or("expected struct")?;
+                assert_eq!(
+                    v.column(0).as_ref(),
+                    &Int32Array::from(vec![10]) as &dyn Array
+                );
+            }
         }
         Ok(())
     }

@@ -747,11 +747,11 @@ fn reshape_array_to_target_field(
                     }
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Arc::new(StructArray::new(
+            Ok(Arc::new(StructArray::try_new(
                 target_fields.clone(),
                 columns,
                 struct_array.nulls().cloned(),
-            )))
+            )?))
         }
         FieldPlan::List { element_plan } => {
             let DataType::List(target_element) = target_field.data_type() else {
@@ -808,11 +808,11 @@ fn reshape_array_to_target_field(
                 target_value,
                 value_plan,
             )?;
-            let entries = StructArray::new(
+            let entries = StructArray::try_new(
                 vec![Arc::new(target_key.clone()), Arc::new(target_value.clone())].into(),
                 vec![keys, values],
                 map_array.entries().nulls().cloned(),
-            );
+            )?;
             MapArray::try_new(
                 Arc::clone(target_entries),
                 map_array.offsets().clone(),
@@ -1625,6 +1625,164 @@ mod tests {
                     items.values().as_ref(),
                     &TimestampMicrosecondArray::from(vec![0]).with_timezone("UTC") as &dyn Array
                 );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn nested_nullability_rejects_nulls_created_by_casts() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use arrow::array::TimestampMillisecondArray;
+
+        for layout in ["struct", "map_key", "map_value"] {
+            for overflow in [false, true] {
+                let values = Arc::new(TimestampMillisecondArray::from(vec![
+                    0,
+                    if overflow { i64::MAX } else { 1 },
+                ])) as ArrayRef;
+                let file_type = values.data_type().clone();
+                let target_type = DataType::Timestamp(TimeUnit::Microsecond, None);
+                let ids = Arc::new(Int32Array::from(vec![1, 2])) as ArrayRef;
+                let (array, target) = match layout {
+                    "struct" => (
+                        struct_array(vec![Field::new("value", file_type, false)], vec![values]),
+                        Field::new(
+                            "v",
+                            DataType::Struct(vec![Field::new("value", target_type, false)].into()),
+                            true,
+                        ),
+                    ),
+                    "map_key" => (
+                        map_array(
+                            Field::new("key", file_type, false),
+                            Field::new("value", DataType::Int32, false),
+                            vec![0, 2],
+                            values,
+                            ids,
+                            None,
+                        )?,
+                        map_field(
+                            "v",
+                            Field::new("key", target_type, false),
+                            Field::new("value", DataType::Int32, false),
+                            true,
+                        ),
+                    ),
+                    "map_value" => (
+                        map_array(
+                            Field::new("key", DataType::Int32, false),
+                            Field::new("value", file_type, false),
+                            vec![0, 2],
+                            ids,
+                            values,
+                            None,
+                        )?,
+                        map_field(
+                            "v",
+                            Field::new("key", DataType::Int32, false),
+                            Field::new("value", target_type, false),
+                            true,
+                        ),
+                    ),
+                    _ => return Err("unknown nested layout".into()),
+                };
+                let result = project_parquet_batch_to_target_schema(
+                    "nested-nullability-cast",
+                    Arc::new(Schema::new(vec![Field::new(
+                        "v",
+                        array.data_type().clone(),
+                        true,
+                    )])),
+                    vec![array],
+                    Arc::new(Schema::new(vec![target])),
+                );
+                if overflow {
+                    let error = result.err().ok_or("required cast NULL was accepted")?;
+                    assert!(
+                        error.to_string().contains("unmasked nulls"),
+                        "{layout}: {error}"
+                    );
+                } else {
+                    let batch = result?;
+                    assert_eq!(batch.num_rows(), if layout == "struct" { 2 } else { 1 });
+                    let values = if layout == "struct" {
+                        batch
+                            .column(0)
+                            .as_any()
+                            .downcast_ref::<StructArray>()
+                            .ok_or("expected struct")?
+                            .column(0)
+                    } else {
+                        let map = batch
+                            .column(0)
+                            .as_any()
+                            .downcast_ref::<MapArray>()
+                            .ok_or("expected map")?;
+                        if layout == "map_key" {
+                            map.keys()
+                        } else {
+                            map.values()
+                        }
+                    };
+                    assert_eq!(
+                        values.as_ref(),
+                        &TimestampMicrosecondArray::from(vec![0, 1000]) as &dyn Array
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn nested_nullability_preserves_sliced_parent_masks() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let source = struct_array_with_nulls(
+            vec![Field::new("zip", DataType::Int32, true)],
+            vec![Arc::new(Int32Array::from(vec![
+                Some(5),
+                None,
+                Some(10),
+                None,
+            ]))],
+            Some(NullBuffer::from(vec![true, false, true, true])),
+        );
+        let target = Field::new(
+            "v",
+            DataType::Struct(vec![Field::new("zip", DataType::Int32, false)].into()),
+            true,
+        );
+        let plan = super::FieldPlan::Struct {
+            child_plans: vec![super::StructChildPlan::ProjectedChild {
+                child_index: 0,
+                field_plan: super::FieldPlan::Identity,
+            }],
+        };
+        for (offset, len, invalid) in [(1, 2, false), (1, 3, true), (2, 0, false)] {
+            let array = source.slice(offset, len);
+            let result = super::reshape_array_to_target_field(Arc::clone(&array), &target, &plan);
+            if invalid {
+                let error = result.err().ok_or("unmasked child NULL was accepted")?;
+                assert!(error.to_string().contains("unmasked nulls"), "{error}");
+            } else {
+                let result = result?;
+                assert_eq!(result.len(), len);
+                // Arrow can omit an empty or all-valid bitmap.
+                assert_eq!(result.null_count(), array.null_count());
+                for row in 0..len {
+                    assert_eq!(result.is_valid(row), array.is_valid(row));
+                }
+                assert_eq!(result.data_type(), target.data_type());
+                let actual = result
+                    .as_any()
+                    .downcast_ref::<StructArray>()
+                    .ok_or("expected struct")?;
+                let original = array
+                    .as_any()
+                    .downcast_ref::<StructArray>()
+                    .ok_or("expected struct")?;
+                assert_eq!(actual.column(0).to_data(), original.column(0).to_data());
             }
         }
         Ok(())
