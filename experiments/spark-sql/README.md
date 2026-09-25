@@ -22,6 +22,8 @@ The [Decimal ROUND scale guard](DECIMAL_ROUND_EXTREME.md) preserves Underflow fo
 
 The [NULL-aware modulo guard](MODULO_NULL_GUARD.md) checks both operands before rejecting a zero divisor. It reuses native integer/Decimal remainder and the existing floating validity check; CAST, schema and final performance acceptance retain their own owners.
 
+The [legacy BIGINT DIV fix](BIGINT_DIV_OVERFLOW.md) preserves the wrapped MIN / -1 result only in non-ANSI mode, reusing the existing integer kernel. ANSI overflow, query-mode isolation and earlier arithmetic checks are retained; CAST and measured cost questions remain tracked separately.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.

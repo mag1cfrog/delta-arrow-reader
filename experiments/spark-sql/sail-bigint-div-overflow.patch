@@ -1,0 +1,319 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -47,7 +47,7 @@
+ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
+ 
+ use super::conditional::SparkNullIfZero;
+-use super::small_int_divide::SparkSmallIntDivide;
++use super::small_int_divide::SparkIntegerDivide;
+ use crate::error::{PlanError, PlanResult};
+ use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
+ 
+@@ -1170,7 +1170,7 @@
+     schema: &DFSchemaRef,
+ ) -> Option<(&'a Expr, &'a Expr)> {
+     match expr {
+-        Expr::ScalarFunction(f) if f.func.inner().is::<SparkSmallIntDivide>() => {
++        Expr::ScalarFunction(f) if f.func.inner().is::<SparkIntegerDivide>() => {
+             Some((&f.args[0], &f.args[1]))
+         }
+         Expr::BinaryExpr(binary)
+@@ -1236,7 +1236,7 @@
+             // Keep NULLIF at the input width; an Int32 zero would widen Int8/Int16.
+             expr_fn::nullif(divisor, lit(ScalarValue::new_zero(right)?))
+         };
+-        return Ok(ScalarUDF::from(SparkSmallIntDivide {
++        return Ok(ScalarUDF::from(SparkIntegerDivide {
+             signature: datafusion_expr::Signature::exact(
+                 vec![left.clone(); 2],
+                 datafusion_expr::Volatility::Immutable,
+@@ -1266,6 +1266,18 @@
+     } else {
+         make_safe_divisor(divisor, &effective_divisor_type, ansi_mode, "Division by zero")
+     };
++
++    // Only a BIGINT dividend can overflow after integer widening. Keep the
++    // checked ANSI expression; legacy BIGINT uses the existing integer kernel.
++    if !ansi_mode && integer_operands && matches!(dividend_type, Ok(DataType::Int64)) {
++        return Ok(ScalarUDF::from(SparkIntegerDivide {
++            signature: datafusion_expr::Signature::exact(
++                vec![DataType::Int64; 2],
++                datafusion_expr::Volatility::Immutable,
++            ),
++        })
++        .call(vec![dividend, divisor]));
++    }
+ 
+     let div_expr = match (&dividend_type, &divisor_type) {
+         // TODO: Casting DataType::Interval(_) to DataType::Int64 is not supported yet.
+@@ -2100,6 +2112,96 @@
+     }
+ 
+     #[tokio::test]
++    async fn legacy_bigint_divide_is_query_scoped() {
++        use datafusion::prelude::SessionConfig;
++        for host_ansi in [false, true] {
++            let mut settings = SessionConfig::new();
++            settings.options_mut().execution.enable_ansi_mode = host_ansi;
++            let ctx = SessionContext::new_with_config(settings);
++            let schema = Arc::new(Schema::new(vec![
++                Field::new("a", DataType::Int64, true),
++                Field::new("b", DataType::Int64, true),
++            ]));
++            let batch = RecordBatch::try_new(
++                schema.clone(),
++                vec![
++                    Arc::new(Int64Array::from(vec![
++                        Some(i64::MIN),
++                        Some(i64::MIN + 1),
++                        None,
++                        Some(7),
++                    ])),
++                    Arc::new(Int64Array::from(vec![Some(-1), Some(-1), Some(0), Some(2)])),
++                ],
++            )
++            .unwrap();
++            ctx.register_table(
++                "bounds",
++                Arc::new(
++                    MemTable::try_new(
++                        schema.clone(),
++                        vec![vec![RecordBatch::new_empty(schema), batch]],
++                    )
++                    .unwrap(),
++                ),
++            )
++            .unwrap();
++            for sql in [
++                "SELECT a DIV b AS q FROM bounds",
++                "SELECT div(a,b) AS q FROM bounds",
++            ] {
++                for _ in 0..2 {
++                    let ansi = frame(&ctx, true, sql).await;
++                    let legacy = frame(&ctx, false, sql).await;
++                    let (error, result) = tokio::join!(ansi.collect(), legacy.collect());
++                    assert!(
++                        error
++                            .unwrap_err()
++                            .to_string()
++                            .contains("Overflow happened on: -9223372036854775808 / -1")
++                    );
++                    let values = result
++                        .unwrap()
++                        .iter()
++                        .flat_map(|batch| {
++                            batch
++                                .column(0)
++                                .as_any()
++                                .downcast_ref::<Int64Array>()
++                                .unwrap()
++                                .iter()
++                        })
++                        .collect::<Vec<_>>();
++                    assert_eq!(values, vec![Some(i64::MIN), Some(i64::MAX), None, Some(3)]);
++                    assert_eq!(
++                        ctx.state().config_options().execution.enable_ansi_mode,
++                        host_ansi
++                    );
++                }
++            }
++            let plan = frame(&ctx, false, "SELECT a DIV 2L AS q FROM bounds")
++                .await
++                .into_optimized_plan()
++                .unwrap();
++            assert!(
++                !plan
++                    .display_indent()
++                    .to_string()
++                    .contains("spark_integer_divide")
++            );
++            for query_ansi in [false, true] {
++                for sql in [
++                    "SELECT a DIV b AS q FROM bounds WHERE a=7",
++                    "SELECT CASE WHEN a=7 THEN a DIV b ELSE 0L END AS q FROM bounds",
++                    "SELECT a DIV b AS q FROM bounds WHERE false",
++                ] {
++                    frame(&ctx, query_ansi, sql).await.collect().await.unwrap();
++                }
++            }
++        }
++    }
++
++    #[tokio::test]
+     async fn checked_integer_columns_and_query_isolation() {
+         let ctx = SessionContext::new_with_state(
+             datafusion::execution::SessionStateBuilder::new()
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/small_int_divide.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/small_int_divide.rs
+@@ -1,4 +1,4 @@
+-// Local small-integer DIV optimization for the Delta reader Spark SQL experiment.
++// Local integer DIV kernel for the Delta reader Spark SQL experiment.
+ use std::sync::Arc;
+ 
+ use datafusion::arrow::datatypes::DataType;
+@@ -7,15 +7,15 @@
+ use datafusion_expr::{Expr, cast, lit};
+ use sail_common_datafusion::utils::items::ItemTaker;
+ 
+-// Widen values inside Arrow's traversal, without materializing Int64 inputs.
++// Widen small integers in Arrow's traversal; BIGINT is used only in legacy mode.
+ #[derive(Debug, PartialEq, Eq, Hash)]
+-pub(super) struct SparkSmallIntDivide {
++pub(super) struct SparkIntegerDivide {
+     pub(super) signature: datafusion_expr::Signature,
+ }
+ 
+-impl datafusion_expr::ScalarUDFImpl for SparkSmallIntDivide {
++impl datafusion_expr::ScalarUDFImpl for SparkIntegerDivide {
+     fn name(&self) -> &str {
+-        "spark_small_int_divide"
++        "spark_integer_divide"
+     }
+ 
+     fn signature(&self) -> &datafusion_expr::Signature {
+@@ -32,7 +32,7 @@
+     ) -> datafusion_common::Result<datafusion::arrow::datatypes::FieldRef> {
+         // Match the native binary expression after guards and constants simplify.
+         Ok(Arc::new(datafusion::arrow::datatypes::Field::new(
+-            "spark_small_int_divide",
++            "spark_integer_divide",
+             DataType::Int64,
+             args.arg_fields.iter().any(|field| field.is_nullable()),
+         )))
+@@ -60,6 +60,7 @@
+                 ScalarValue::Int8(Some(v)) => *v != 0 && *v != -1,
+                 ScalarValue::Int16(Some(v)) => *v != 0 && *v != -1,
+                 ScalarValue::Int32(Some(v)) => *v != 0 && *v != -1,
++                ScalarValue::Int64(Some(v)) => *v != 0 && *v != -1,
+                 _ => false,
+             };
+             if safe {
+@@ -79,7 +80,9 @@
+     ) -> datafusion_common::Result<datafusion_expr::ColumnarValue> {
+         use datafusion::arrow::array::{Array, AsArray, Int64Array, PrimitiveArray};
+         use datafusion::arrow::compute::kernels::arity::try_binary;
+-        use datafusion::arrow::datatypes::{ArrowPrimitiveType, Int8Type, Int16Type, Int32Type};
++        use datafusion::arrow::datatypes::{
++            ArrowPrimitiveType, Int8Type, Int16Type, Int32Type, Int64Type,
++        };
+         use datafusion::physical_expr_common::datum::apply;
+ 
+         fn divide<T: ArrowPrimitiveType>(
+@@ -91,20 +94,23 @@
+         where
+             i64: From<T::Native>,
+         {
+-            // T is Int8, Int16 or Int32, so the widened quotient cannot overflow.
++            // Small integers widen without overflow. Legacy BIGINT wraps MIN / -1.
++            // Zero still errors here; the legacy SQL builder supplies NULLIF.
+             let op = |a, b| {
+                 let b = i64::from(b);
+                 if b == 0 {
+                     Err(ArrowError::DivideByZero)
+                 } else {
+-                    Ok(i64::from(a) / b)
++                    Ok(i64::from(a).wrapping_div(b))
+                 }
+             };
+             match (a_scalar, b_scalar) {
+                 (true, false) if a.is_null(0) => Ok(Int64Array::new_null(b.len())),
+                 (false, true) if b.is_null(0) => Ok(Int64Array::new_null(a.len())),
+-                // Widen before negation so MIN / -1 stays valid without per-row division.
+-                (false, true) if i64::from(b.value(0)) == -1 => Ok(a.unary(|a| -i64::from(a))),
++                // Widen before negation; legacy BIGINT MIN retains its wrapped value.
++                (false, true) if i64::from(b.value(0)) == -1 => {
++                    Ok(a.unary(|a| i64::from(a).wrapping_neg()))
++                }
+                 (true, false) => b.try_unary(|b| op(a.value(0), b)),
+                 (false, true) => a.try_unary(|a| op(a, b.value(0))),
+                 _ => try_binary(a, b, op),
+@@ -112,9 +118,7 @@
+         }
+ 
+         let [left, right] = input.args.as_slice() else {
+-            return datafusion_common::internal_err!(
+-                "spark_small_int_divide requires two arguments"
+-            );
++            return datafusion_common::internal_err!("spark_integer_divide requires two arguments");
+         };
+         apply(left, right, |left, right| {
+             let (a, a_scalar) = left.get();
+@@ -138,8 +142,14 @@
+                     b.as_primitive::<Int32Type>(),
+                     b_scalar,
+                 ),
++                (DataType::Int64, DataType::Int64) => divide(
++                    a.as_primitive::<Int64Type>(),
++                    a_scalar,
++                    b.as_primitive::<Int64Type>(),
++                    b_scalar,
++                ),
+                 _ => Err(ArrowError::ComputeError(
+-                    "expected matching small signed integer types".into(),
++                    "expected matching signed integer types".into(),
+                 )),
+             }?;
+             Ok(Arc::new(result))
+@@ -148,7 +158,7 @@
+ }
+ 
+ #[test]
+-fn small_int_divide_masks_and_scalars() -> datafusion_common::Result<()> {
++fn integer_divide_masks_and_scalars() -> datafusion_common::Result<()> {
+     use datafusion::arrow::array::{ArrayRef, AsArray, Int64Array};
+     use datafusion::arrow::datatypes::{Field, Int64Type};
+     use datafusion_common::config::ConfigOptions;
+@@ -158,8 +168,9 @@
+         (DataType::Int8, i8::MIN as i64, i8::MAX as i64),
+         (DataType::Int16, i16::MIN as i64, i16::MAX as i64),
+         (DataType::Int32, i32::MIN as i64, i32::MAX as i64),
++        (DataType::Int64, i64::MIN, i64::MAX),
+     ] {
+-        let udf = SparkSmallIntDivide {
++        let udf = SparkIntegerDivide {
+             signature: datafusion_expr::Signature::exact(
+                 vec![data_type.clone(); 2],
+                 datafusion_expr::Volatility::Immutable,
+@@ -218,7 +229,14 @@
+                 .as_primitive::<Int64Type>()
+                 .iter()
+                 .collect::<Vec<_>>(),
+-            vec![Some(-min), None, Some(-3), None, Some(0), Some(max)]
++            vec![
++                Some(min.wrapping_neg()),
++                None,
++                Some(-3),
++                None,
++                Some(0),
++                Some(max)
++            ]
+         );
+         for divisor in [-3, -2, -1, 1, 2, 3] {
+             let scalar = ScalarValue::try_from_array(&array(vec![Some(divisor)]), 0)?;
+@@ -229,7 +247,7 @@
+             )?
+             .into_array(6)?;
+             let expected = [Some(min), None, Some(-7), Some(7), Some(0), Some(max)]
+-                .map(|a| a.map(|a| a / divisor));
++                .map(|a| a.map(|a| a.wrapping_div(divisor)));
+             assert_eq!(
+                 output
+                     .as_primitive::<Int64Type>()
+@@ -247,7 +265,7 @@
+                 .as_primitive::<Int64Type>()
+                 .iter()
+                 .collect::<Vec<_>>(),
+-            vec![Some(-min), None, Some(min / 2)]
++            vec![Some(min.wrapping_neg()), None, Some(min / 2)]
+         );
+         for (left, right, rows) in [
+             (scalar(None), ColumnarValue::Array(b), 3),
+@@ -257,7 +275,7 @@
+             assert_eq!(output.null_count(), output.len());
+         }
+         assert!(
+-            matches!(run(scalar(Some(min)),scalar(Some(-1)),1)?,ColumnarValue::Scalar(ScalarValue::Int64(Some(v))) if v == -min)
++            matches!(run(scalar(Some(min)),scalar(Some(-1)),1)?,ColumnarValue::Scalar(ScalarValue::Int64(Some(v))) if v == min.wrapping_neg())
+         );
+         assert!(matches!(
+             run(scalar(None), scalar(Some(0)), 1)?,
