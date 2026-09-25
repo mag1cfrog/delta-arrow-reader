@@ -1,0 +1,243 @@
+--- a/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
++++ b/experiments/spark-sql/vendor/sail/crates/sail-plan/src/function/scalar/math.rs
+@@ -104,13 +104,14 @@
+ 
+ // Keep the existing binary coercion and non-integer routes. ANSI is captured in
+ // the expression, so multiple query configurations can share a SessionContext.
+-fn spark_integer_arithmetic(
++fn spark_arithmetic(
+     left: Expr,
+     right: Expr,
+     left_type: &DataType,
+     right_type: &DataType,
+     op: Operator,
+     ansi_mode: bool,
++    schema: &DFSchemaRef,
+ ) -> Expr {
+     if ansi_mode
+         && (left_type.is_signed_integer() || *left_type == DataType::Null)
+@@ -118,12 +119,53 @@
+         && (left_type.is_signed_integer() || right_type.is_signed_integer())
+     {
+         ScalarUDF::from(SparkCheckedArithmetic::new(op)).call(vec![left, right])
++    } else if is_decimal_type(left_type) || is_decimal_type(right_type) {
++        let (left, right) = coerce_decimal_peer_operand(left, right, schema);
++        spark_decimal_arithmetic(left, right, op, schema, ansi_mode)
+     } else {
+         Expr::BinaryExpr(datafusion_expr::BinaryExpr::new(
+             Box::new(left),
+             op,
+             Box::new(right),
+         ))
++    }
++}
++
++// Spark keeps the exact intermediate value, then rounds HALF_UP to its
++// adjusted result type. Arrow's native Decimal256 arithmetic and Decimal CAST
++// already implement these steps. Widen only when declared input bounds need it.
++fn spark_decimal_arithmetic(
++    mut left: Expr,
++    mut right: Expr,
++    op: Operator,
++    schema: &DFSchemaRef,
++    ansi_mode: bool,
++) -> Expr {
++    let binary = |left, right| Expr::BinaryExpr(BinaryExpr::new(Box::new(left), op, Box::new(right)));
++    let (Ok(DataType::Decimal128(p1, s1)), Ok(DataType::Decimal128(p2, s2))) =
++        (left.get_type(schema), right.get_type(schema))
++    else {
++        return binary(left, right);
++    };
++    let scale = i32::from(max(s1, s2));
++    let aligned_precision = max(i32::from(p1) - i32::from(s1), i32::from(p2) - i32::from(s2)) + scale;
++    let (precision, scale, intermediate_precision) = match op {
++        Operator::Plus | Operator::Minus => (aligned_precision + 1, scale, aligned_precision + 1),
++        Operator::Multiply => (i32::from(p1) + i32::from(p2) + 1, i32::from(s1) + i32::from(s2), i32::from(p1) + i32::from(p2) + 1),
++        Operator::Modulo => (min(i32::from(p1) - i32::from(s1), i32::from(p2) - i32::from(s2)) + scale, scale, aligned_precision),
++        _ => return binary(left, right),
++    };
++    if intermediate_precision <= i32::from(DECIMAL128_MAX_PRECISION) {
++        return binary(left, right);
++    }
++    left = cast(left, DataType::Decimal256(p1, s1));
++    right = cast(right, DataType::Decimal256(p2, s2));
++    let (precision, scale) = adjust_precision_scale(precision, scale);
++    let data_type = DataType::Decimal128(precision, scale);
++    if ansi_mode {
++        cast(binary(left, right), data_type)
++    } else {
++        try_cast(binary(left, right), data_type)
+     }
+ }
+ 
+@@ -194,9 +236,10 @@
+                     left, right, &left_type, &right_type,
+                     function_context.plan_config.ansi_mode,
+                 );
+-                spark_integer_arithmetic(
++                spark_arithmetic(
+                     left, right, &left_type, &right_type, Operator::Plus,
+                     function_context.plan_config.ansi_mode,
++                    function_context.schema,
+                 )
+             }
+             (Err(_), _) | (_, Err(_)) => left + right,
+@@ -255,9 +298,10 @@
+                     left, right, &left_type, &right_type,
+                     function_context.plan_config.ansi_mode,
+                 );
+-                spark_integer_arithmetic(
++                spark_arithmetic(
+                     left, right, &left_type, &right_type, Operator::Minus,
+                     function_context.plan_config.ansi_mode,
++                    function_context.schema,
+                 )
+             }
+             (Err(_), _) | (_, Err(_)) => left - right,
+@@ -315,9 +359,10 @@
+                     left, right, &left_type, &right_type,
+                     function_context.plan_config.ansi_mode,
+                 );
+-                spark_integer_arithmetic(
++                spark_arithmetic(
+                     left, right, &left_type, &right_type, Operator::Multiply,
+                     function_context.plan_config.ansi_mode,
++                    function_context.schema,
+                 )
+             }
+             (Err(_), _) | (_, Err(_)) => left * right,
+@@ -402,7 +447,12 @@
+     } else if divisor_type.is_floating() {
+         ScalarUDF::from(SparkNullIfZero::default()).call(vec![divisor])
+     } else {
+-        expr_fn::nullif(divisor, lit(0))
++        let zero = match divisor_type {
++            DataType::Decimal128(p, s) => lit(ScalarValue::Decimal128(Some(0), *p, *s)),
++            DataType::Decimal256(p, s) => lit(ScalarValue::Decimal256(Some(i256::ZERO), *p, *s)),
++            _ => lit(0),
++        };
++        expr_fn::nullif(divisor, zero)
+     }
+ }
+ 
+@@ -1733,16 +1783,17 @@
+         divisor.get_type(function_context.schema),
+     ) {
+         (Ok(left_type), Ok(right_type)) => {
+-            coerce_spark_arithmetic_operands(dividend, divisor, &left_type, &right_type, ansi_mode)
++            let (dividend, divisor) = coerce_spark_arithmetic_operands(dividend, divisor, &left_type, &right_type, ansi_mode);
++            if is_decimal_type(&left_type) || is_decimal_type(&right_type) {
++                coerce_decimal_peer_operand(dividend, divisor, function_context.schema)
++            } else {
++                (dividend, divisor)
++            }
+         }
+         _ => (dividend, divisor),
+     };
+     let modulo = |left, right| {
+-        Expr::BinaryExpr(BinaryExpr::new(
+-            Box::new(left),
+-            Operator::Modulo,
+-            Box::new(right),
+-        ))
++        spark_decimal_arithmetic(left, right, Operator::Modulo, function_context.schema, ansi_mode)
+     };
+     let data_type = modulo(dividend.clone(), divisor.clone()).get_type(function_context.schema)?;
+     if !ansi_mode && is_zero_literal(&divisor) {
+@@ -2127,12 +2178,7 @@
+                 assert_eq!(batch.column(0).as_any().downcast_ref::<Float64Array>().unwrap().value(0), expected);
+             }
+             let decimal = batch.column(1).as_any().downcast_ref::<Decimal128Array>().unwrap();
+-            // Native Decimal remainder result precision is a separate known gap;
+-            // the frozen Spark corpus retains that mismatch. Check operand
+-            // coercion and values here without claiming its schema is repaired.
+-            if operator != "%" {
+-                assert_eq!(decimal.data_type(), &decimal_type);
+-            }
++            assert_eq!(decimal.data_type(), &decimal_type);
+             assert_eq!(decimal.value(0), coefficient);
+             assert!(decimal.is_null(1) && batch.column(0).is_null(1));
+             for (index, expected) in mixed.into_iter().enumerate() {
+@@ -2735,3 +2781,82 @@
+     }
+     Ok(())
+ }
++
++#[cfg(test)]
++#[tokio::test]
++async fn decimal_arithmetic_keeps_exact_intermediates_and_spark_result_types() -> PlanResult<()> {
++    use crate::config::PlanConfig;
++    use crate::resolver::PlanResolver;
++    use datafusion::arrow::array::{Array, AsArray};
++    use datafusion::arrow::datatypes::Decimal128Type;
++    use datafusion::prelude::SessionContext;
++    for ansi in [true, false] {
++        let ctx = SessionContext::new();
++        let mut config = PlanConfig::default();
++        config.ansi_mode = ansi;
++        let resolver = PlanResolver::new(&ctx, Arc::new(config));
++        for (a, b, op, precision, scale, expected) in [
++            ("CAST(0.123456789012345675 AS DECIMAL(38,18))", "1", "+", 38, 17, "112345678901234568"),
++            ("CAST(0.123456789012345675 AS DECIMAL(38,18))", "1", "-", 38, 17, "-87654321098765433"),
++            ("CAST(0.123456789012345675 AS DECIMAL(38,18))", "1", "*", 38, 7, "1234568"),
++            ("CAST(0.99999999999999999999999999999999999999 AS DECIMAL(38,38))", "CAST(0.99999999999999999999999999999999999999 AS DECIMAL(38,38))", "*", 38, 37, "10000000000000000000000000000000000000"),
++            ("CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0))", "CAST(0.12345678901234567890123456789012345678 AS DECIMAL(38,38))", "%", 38, 38, "8271507798827209828883258328793215726"),
++            ("CAST(2.25 AS DECIMAL(8,2))", "CAST(1 AS DECIMAL(1,0))", "%", 3, 2, "25"),
++        ] {
++            let sql = format!("SELECT a {op} b AS r FROM VALUES ({a},{b}),(NULL,NULL) t(a,b)");
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let named = resolver.resolve_named_plan(spec).await?;
++            assert_eq!(named.plan.schema().field(0).data_type(), &DataType::Decimal128(precision, scale), "{sql}");
++            let batches = ctx.execute_logical_plan(named.plan).await?.collect().await?;
++            let values = batches[0].column(0).as_primitive::<Decimal128Type>();
++            assert_eq!(values.data_type(), &DataType::Decimal128(precision, scale));
++            assert_eq!(values.value(0), expected.parse::<i128>().unwrap(), "{sql}");
++            assert!(values.is_null(1), "{sql}");
++        }
++        for op in ["+", "-", "*"] {
++            let b = if op == "-" { "-2" } else { "2" };
++            let sql = format!("SELECT a {op} b AS r FROM VALUES (CAST('99999999999999999999999999999999999999' AS DECIMAL(38,0)),{b}),(NULL,NULL) t(a,b)");
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let named = resolver.resolve_named_plan(spec).await?;
++            let result = ctx.execute_logical_plan(named.plan).await?.collect().await;
++            if ansi {
++                assert!(result.is_err(), "{sql}");
++            } else {
++                let batches = result?;
++                assert_eq!(batches[0].column(0).data_type(), &DataType::Decimal128(38, 0));
++                assert_eq!(batches[0].column(0).null_count(), 2);
++            }
++        }
++    }
++    Ok(())
++}
++
++#[cfg(test)]
++#[test]
++fn modulo_one_simplifies_only_integer_operands() -> datafusion_common::Result<()> {
++    use datafusion::arrow::datatypes::{Field, Schema};
++    use datafusion_common::ToDFSchema;
++    use datafusion_expr::{col, simplify::SimplifyContext};
++    for data_type in [
++        DataType::Decimal32(8, 2),
++        DataType::Decimal64(12, 2),
++        DataType::Decimal128(18, 4),
++        DataType::Decimal256(39, 4),
++        DataType::Float32,
++        DataType::Float64,
++        DataType::Int64,
++    ] {
++        let schema = Schema::new(vec![Field::new("a", data_type.clone(), false)]).to_dfschema_ref()?;
++        let simplifier = ExprSimplifier::new(SimplifyContext::builder().with_schema(schema).build());
++        let expression = col("a") % lit(ScalarValue::new_one(&data_type)?);
++        let simplified = simplifier.simplify(expression.clone())?;
++        if data_type.is_integer() {
++            assert_eq!(simplified, lit(0_i64));
++        } else {
++            assert_eq!(simplified, expression, "{data_type:?}");
++        }
++    }
++    Ok(())
++}
