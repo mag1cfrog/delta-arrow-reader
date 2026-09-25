@@ -76,13 +76,10 @@ impl RealParquetDeltaTable {
         protocol: &serde_json::Value,
         metadata: &serde_json::Value,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        static NEXT_RAW_FIXTURE: std::sync::atomic::AtomicUsize =
-            std::sync::atomic::AtomicUsize::new(0);
-        let sequence = NEXT_RAW_FIXTURE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let fixture = Self {
             path: Path::new("target")
                 .join("delta-funnel-real-parquet-fixtures")
-                .join(unique_name(&format!("{name}-{sequence}"))?),
+                .join(unique_name(name)?),
             rows,
             data_file_size: u64::try_from(parquet.len())?,
         };
@@ -2576,6 +2573,20 @@ fn deletion_vector_fixture(
 
 fn unique_name(name: &str) -> Result<String, Box<dyn std::error::Error>> {
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    Ok(unique_name_at(name, nanos))
+}
 
-    Ok(format!("{}-{name}-{nanos}", std::process::id()))
+fn unique_name_at(name: &str, nanos: u128) -> String {
+    // Concurrent fixtures can observe the same clock tick, particularly on macOS.
+    static NEXT_FIXTURE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let sequence = NEXT_FIXTURE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("{}-{name}-{nanos}-{sequence}", std::process::id())
+}
+
+#[test]
+fn fixture_names_differ_when_the_clock_does_not_advance() {
+    assert_ne!(
+        unique_name_at("same-name", 0),
+        unique_name_at("same-name", 0)
+    );
 }
