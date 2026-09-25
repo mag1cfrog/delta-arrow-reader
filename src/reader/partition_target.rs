@@ -1,7 +1,10 @@
 //! Scan partition target selection and diagnostics.
 
 #[cfg(target_os = "linux")]
-use std::fs;
+mod linux_memory;
+
+#[cfg(target_os = "linux")]
+use self::linux_memory::local_memory_hint;
 #[cfg(windows)]
 use std::mem;
 #[cfg(unix)]
@@ -82,7 +85,7 @@ pub struct DeltaScanPartitionTargetLocalEnvironmentDiagnostic {
     pub policy_input: DeltaScanPartitionTargetDiagnosticInput,
     /// Total physical memory in bytes, when available.
     pub memory_total_bytes: Option<u64>,
-    /// Available memory in bytes, when available.
+    /// Available memory in bytes, capped by readable cgroup headroom on Linux.
     pub memory_available_bytes: Option<u64>,
     /// Unix soft file descriptor limit, when finite and available.
     pub unix_soft_file_descriptor_limit: Option<u64>,
@@ -215,7 +218,7 @@ pub fn derive_delta_scan_partition_target_diagnostic(
     })
 }
 
-/// Collects cheap local host signals for scan partition target diagnostics.
+/// Collects local host and process resource hints for scan partition target diagnostics.
 #[doc(hidden)]
 pub fn delta_scan_partition_target_local_environment_diagnostic()
 -> DeltaScanPartitionTargetLocalEnvironmentDiagnostic {
@@ -251,13 +254,6 @@ struct MemoryHint {
 enum UnixResourceLimit {
     Finite(u64),
     Unlimited,
-}
-
-#[cfg(target_os = "linux")]
-fn local_memory_hint() -> Option<MemoryHint> {
-    fs::read_to_string("/proc/meminfo")
-        .ok()
-        .and_then(|contents| parse_linux_meminfo(&contents))
 }
 
 #[cfg(windows)]

@@ -14,7 +14,7 @@ use super::{
     deletion_vector::DeletionVectorMetadata,
     metrics::DeltaScanMetricsConfig,
     partition_target::{
-        DeltaScanPartitionTargetDiagnosticOutput,
+        DeltaScanPartitionTargetDiagnosticInput, DeltaScanPartitionTargetDiagnosticOutput,
         delta_scan_partition_target_local_environment_diagnostic,
         derive_delta_scan_partition_target_diagnostic,
     },
@@ -265,7 +265,12 @@ fn resolve_partition_target(
         "Delta partition target selection"
     )
     .entered();
-    let mut input = delta_scan_partition_target_local_environment_diagnostic().policy_input;
+    // Explicit targets do not use host or cgroup limits.
+    let mut input = if options.explicit_target_partitions.is_some() {
+        DeltaScanPartitionTargetDiagnosticInput::default()
+    } else {
+        delta_scan_partition_target_local_environment_diagnostic().policy_input
+    };
     input.explicit_target_partitions = options.explicit_target_partitions;
     if options.datafusion_target_partitions.is_some() {
         input.datafusion_target_partitions = options.datafusion_target_partitions;
@@ -5543,6 +5548,7 @@ mod tests {
         assert_eq!(plan.snapshot_version, snapshot.version());
         assert!(Arc::ptr_eq(&plan.engine_context, snapshot.engine_context()));
         assert_eq!(plan.partition_target_diagnostic.target_partitions, 2);
+        assert_eq!(plan.partition_target_diagnostic.available_parallelism, None);
         assert_eq!(
             plan.partition_target_diagnostic.source,
             crate::diagnostics::partition_target::Source::ExplicitOverride
