@@ -1,0 +1,281 @@
+{"id": "tinyint_0", "target": "TINYINT", "value": null, "form": "literal", "sql": "SELECT CAST(CAST(NULL AS STRING) AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_1", "target": "TINYINT", "value": "", "form": "literal", "sql": "SELECT CAST('' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_2", "target": "TINYINT", "value": "bad", "form": "literal", "sql": "SELECT CAST('bad' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_3", "target": "TINYINT", "value": "0", "form": "literal", "sql": "SELECT CAST('0' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_4", "target": "TINYINT", "value": "-0", "form": "literal", "sql": "SELECT CAST('-0' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_5", "target": "TINYINT", "value": "+7", "form": "literal", "sql": "SELECT CAST('+7' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_6", "target": "TINYINT", "value": " 7 ", "form": "literal", "sql": "SELECT CAST(' 7 ' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_7", "target": "TINYINT", "value": "\t-7\n", "form": "literal", "sql": "SELECT CAST('\t-7\n' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_8", "target": "TINYINT", "value": "\u001f7\u001f", "form": "literal", "sql": "SELECT CAST('\u001f7\u001f' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_9", "target": "TINYINT", "value": "\u007f7\u007f", "form": "literal", "sql": "SELECT CAST('\u007f7\u007f' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_10", "target": "TINYINT", "value": "1.25", "form": "literal", "sql": "SELECT CAST('1.25' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_11", "target": "TINYINT", "value": "-1.25", "form": "literal", "sql": "SELECT CAST('-1.25' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_12", "target": "TINYINT", "value": ".9", "form": "literal", "sql": "SELECT CAST('.9' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_13", "target": "TINYINT", "value": ".", "form": "literal", "sql": "SELECT CAST('.' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_14", "target": "TINYINT", "value": "+.", "form": "literal", "sql": "SELECT CAST('+.' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_15", "target": "TINYINT", "value": "1.", "form": "literal", "sql": "SELECT CAST('1.' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_16", "target": "TINYINT", "value": "1e2", "form": "literal", "sql": "SELECT CAST('1e2' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_17", "target": "TINYINT", "value": "1.2.3", "form": "literal", "sql": "SELECT CAST('1.2.3' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_18", "target": "TINYINT", "value": "NaN", "form": "literal", "sql": "SELECT CAST('NaN' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_19", "target": "TINYINT", "value": "+NaN", "form": "literal", "sql": "SELECT CAST('+NaN' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_20", "target": "TINYINT", "value": "nAn", "form": "literal", "sql": "SELECT CAST('nAn' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_21", "target": "TINYINT", "value": "Infinity", "form": "literal", "sql": "SELECT CAST('Infinity' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_22", "target": "TINYINT", "value": "-inf", "form": "literal", "sql": "SELECT CAST('-inf' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_23", "target": "TINYINT", "value": "1e400", "form": "literal", "sql": "SELECT CAST('1e400' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_24", "target": "TINYINT", "value": "-128", "form": "literal", "sql": "SELECT CAST('-128' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_25", "target": "TINYINT", "value": "127", "form": "literal", "sql": "SELECT CAST('127' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_26", "target": "TINYINT", "value": "-129", "form": "literal", "sql": "SELECT CAST('-129' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_27", "target": "TINYINT", "value": "128", "form": "literal", "sql": "SELECT CAST('128' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_28", "target": "TINYINT", "value": "-128.9", "form": "literal", "sql": "SELECT CAST('-128.9' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_29", "target": "TINYINT", "value": "127.9", "form": "literal", "sql": "SELECT CAST('127.9' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_30", "target": "TINYINT", "value": "9223372036854775808", "form": "literal", "sql": "SELECT CAST('9223372036854775808' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_31", "target": "TINYINT", "value": "999999999999999999999999999999999999", "form": "literal", "sql": "SELECT CAST('999999999999999999999999999999999999' AS TINYINT) AS r", "batch_size": 2}
+{"id": "tinyint_cast_column", "target": "TINYINT", "form": "column", "sql": "SELECT CAST(v AS TINYINT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'-128'),(25,'127'),(26,'-129'),(27,'128'),(28,'-128.9'),(29,'127.9'),(30,'9223372036854775808'),(31,'999999999999999999999999999999999999') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "tinyint_cast_bad", "target": "TINYINT", "form": "column_one", "sql": "SELECT CAST(v AS TINYINT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "tinyint_cast_fraction", "target": "TINYINT", "form": "column_one", "sql": "SELECT CAST(v AS TINYINT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "tinyint_cast_space", "target": "TINYINT", "form": "column_one", "sql": "SELECT CAST(v AS TINYINT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "tinyint_cast_null", "target": "TINYINT", "form": "column_one", "sql": "SELECT CAST(v AS TINYINT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "tinyint_try_cast_column", "target": "TINYINT", "form": "column", "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'-128'),(25,'127'),(26,'-129'),(27,'128'),(28,'-128.9'),(29,'127.9'),(30,'9223372036854775808'),(31,'999999999999999999999999999999999999') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "tinyint_try_cast_bad", "target": "TINYINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "tinyint_try_cast_fraction", "target": "TINYINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "tinyint_try_cast_space", "target": "TINYINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "tinyint_try_cast_null", "target": "TINYINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS TINYINT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "smallint_0", "target": "SMALLINT", "value": null, "form": "literal", "sql": "SELECT CAST(CAST(NULL AS STRING) AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_1", "target": "SMALLINT", "value": "", "form": "literal", "sql": "SELECT CAST('' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_2", "target": "SMALLINT", "value": "bad", "form": "literal", "sql": "SELECT CAST('bad' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_3", "target": "SMALLINT", "value": "0", "form": "literal", "sql": "SELECT CAST('0' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_4", "target": "SMALLINT", "value": "-0", "form": "literal", "sql": "SELECT CAST('-0' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_5", "target": "SMALLINT", "value": "+7", "form": "literal", "sql": "SELECT CAST('+7' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_6", "target": "SMALLINT", "value": " 7 ", "form": "literal", "sql": "SELECT CAST(' 7 ' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_7", "target": "SMALLINT", "value": "\t-7\n", "form": "literal", "sql": "SELECT CAST('\t-7\n' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_8", "target": "SMALLINT", "value": "\u001f7\u001f", "form": "literal", "sql": "SELECT CAST('\u001f7\u001f' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_9", "target": "SMALLINT", "value": "\u007f7\u007f", "form": "literal", "sql": "SELECT CAST('\u007f7\u007f' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_10", "target": "SMALLINT", "value": "1.25", "form": "literal", "sql": "SELECT CAST('1.25' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_11", "target": "SMALLINT", "value": "-1.25", "form": "literal", "sql": "SELECT CAST('-1.25' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_12", "target": "SMALLINT", "value": ".9", "form": "literal", "sql": "SELECT CAST('.9' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_13", "target": "SMALLINT", "value": ".", "form": "literal", "sql": "SELECT CAST('.' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_14", "target": "SMALLINT", "value": "+.", "form": "literal", "sql": "SELECT CAST('+.' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_15", "target": "SMALLINT", "value": "1.", "form": "literal", "sql": "SELECT CAST('1.' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_16", "target": "SMALLINT", "value": "1e2", "form": "literal", "sql": "SELECT CAST('1e2' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_17", "target": "SMALLINT", "value": "1.2.3", "form": "literal", "sql": "SELECT CAST('1.2.3' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_18", "target": "SMALLINT", "value": "NaN", "form": "literal", "sql": "SELECT CAST('NaN' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_19", "target": "SMALLINT", "value": "+NaN", "form": "literal", "sql": "SELECT CAST('+NaN' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_20", "target": "SMALLINT", "value": "nAn", "form": "literal", "sql": "SELECT CAST('nAn' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_21", "target": "SMALLINT", "value": "Infinity", "form": "literal", "sql": "SELECT CAST('Infinity' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_22", "target": "SMALLINT", "value": "-inf", "form": "literal", "sql": "SELECT CAST('-inf' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_23", "target": "SMALLINT", "value": "1e400", "form": "literal", "sql": "SELECT CAST('1e400' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_24", "target": "SMALLINT", "value": "-32768", "form": "literal", "sql": "SELECT CAST('-32768' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_25", "target": "SMALLINT", "value": "32767", "form": "literal", "sql": "SELECT CAST('32767' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_26", "target": "SMALLINT", "value": "-32769", "form": "literal", "sql": "SELECT CAST('-32769' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_27", "target": "SMALLINT", "value": "32768", "form": "literal", "sql": "SELECT CAST('32768' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_28", "target": "SMALLINT", "value": "-32768.9", "form": "literal", "sql": "SELECT CAST('-32768.9' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_29", "target": "SMALLINT", "value": "32767.9", "form": "literal", "sql": "SELECT CAST('32767.9' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_30", "target": "SMALLINT", "value": "9223372036854775808", "form": "literal", "sql": "SELECT CAST('9223372036854775808' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_31", "target": "SMALLINT", "value": "999999999999999999999999999999999999", "form": "literal", "sql": "SELECT CAST('999999999999999999999999999999999999' AS SMALLINT) AS r", "batch_size": 2}
+{"id": "smallint_cast_column", "target": "SMALLINT", "form": "column", "sql": "SELECT CAST(v AS SMALLINT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'-32768'),(25,'32767'),(26,'-32769'),(27,'32768'),(28,'-32768.9'),(29,'32767.9'),(30,'9223372036854775808'),(31,'999999999999999999999999999999999999') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "smallint_cast_bad", "target": "SMALLINT", "form": "column_one", "sql": "SELECT CAST(v AS SMALLINT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "smallint_cast_fraction", "target": "SMALLINT", "form": "column_one", "sql": "SELECT CAST(v AS SMALLINT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "smallint_cast_space", "target": "SMALLINT", "form": "column_one", "sql": "SELECT CAST(v AS SMALLINT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "smallint_cast_null", "target": "SMALLINT", "form": "column_one", "sql": "SELECT CAST(v AS SMALLINT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "smallint_try_cast_column", "target": "SMALLINT", "form": "column", "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'-32768'),(25,'32767'),(26,'-32769'),(27,'32768'),(28,'-32768.9'),(29,'32767.9'),(30,'9223372036854775808'),(31,'999999999999999999999999999999999999') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "smallint_try_cast_bad", "target": "SMALLINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "smallint_try_cast_fraction", "target": "SMALLINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "smallint_try_cast_space", "target": "SMALLINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "smallint_try_cast_null", "target": "SMALLINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS SMALLINT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "int_0", "target": "INT", "value": null, "form": "literal", "sql": "SELECT CAST(CAST(NULL AS STRING) AS INT) AS r", "batch_size": 2}
+{"id": "int_1", "target": "INT", "value": "", "form": "literal", "sql": "SELECT CAST('' AS INT) AS r", "batch_size": 2}
+{"id": "int_2", "target": "INT", "value": "bad", "form": "literal", "sql": "SELECT CAST('bad' AS INT) AS r", "batch_size": 2}
+{"id": "int_3", "target": "INT", "value": "0", "form": "literal", "sql": "SELECT CAST('0' AS INT) AS r", "batch_size": 2}
+{"id": "int_4", "target": "INT", "value": "-0", "form": "literal", "sql": "SELECT CAST('-0' AS INT) AS r", "batch_size": 2}
+{"id": "int_5", "target": "INT", "value": "+7", "form": "literal", "sql": "SELECT CAST('+7' AS INT) AS r", "batch_size": 2}
+{"id": "int_6", "target": "INT", "value": " 7 ", "form": "literal", "sql": "SELECT CAST(' 7 ' AS INT) AS r", "batch_size": 2}
+{"id": "int_7", "target": "INT", "value": "\t-7\n", "form": "literal", "sql": "SELECT CAST('\t-7\n' AS INT) AS r", "batch_size": 2}
+{"id": "int_8", "target": "INT", "value": "\u001f7\u001f", "form": "literal", "sql": "SELECT CAST('\u001f7\u001f' AS INT) AS r", "batch_size": 2}
+{"id": "int_9", "target": "INT", "value": "\u007f7\u007f", "form": "literal", "sql": "SELECT CAST('\u007f7\u007f' AS INT) AS r", "batch_size": 2}
+{"id": "int_10", "target": "INT", "value": "1.25", "form": "literal", "sql": "SELECT CAST('1.25' AS INT) AS r", "batch_size": 2}
+{"id": "int_11", "target": "INT", "value": "-1.25", "form": "literal", "sql": "SELECT CAST('-1.25' AS INT) AS r", "batch_size": 2}
+{"id": "int_12", "target": "INT", "value": ".9", "form": "literal", "sql": "SELECT CAST('.9' AS INT) AS r", "batch_size": 2}
+{"id": "int_13", "target": "INT", "value": ".", "form": "literal", "sql": "SELECT CAST('.' AS INT) AS r", "batch_size": 2}
+{"id": "int_14", "target": "INT", "value": "+.", "form": "literal", "sql": "SELECT CAST('+.' AS INT) AS r", "batch_size": 2}
+{"id": "int_15", "target": "INT", "value": "1.", "form": "literal", "sql": "SELECT CAST('1.' AS INT) AS r", "batch_size": 2}
+{"id": "int_16", "target": "INT", "value": "1e2", "form": "literal", "sql": "SELECT CAST('1e2' AS INT) AS r", "batch_size": 2}
+{"id": "int_17", "target": "INT", "value": "1.2.3", "form": "literal", "sql": "SELECT CAST('1.2.3' AS INT) AS r", "batch_size": 2}
+{"id": "int_18", "target": "INT", "value": "NaN", "form": "literal", "sql": "SELECT CAST('NaN' AS INT) AS r", "batch_size": 2}
+{"id": "int_19", "target": "INT", "value": "+NaN", "form": "literal", "sql": "SELECT CAST('+NaN' AS INT) AS r", "batch_size": 2}
+{"id": "int_20", "target": "INT", "value": "nAn", "form": "literal", "sql": "SELECT CAST('nAn' AS INT) AS r", "batch_size": 2}
+{"id": "int_21", "target": "INT", "value": "Infinity", "form": "literal", "sql": "SELECT CAST('Infinity' AS INT) AS r", "batch_size": 2}
+{"id": "int_22", "target": "INT", "value": "-inf", "form": "literal", "sql": "SELECT CAST('-inf' AS INT) AS r", "batch_size": 2}
+{"id": "int_23", "target": "INT", "value": "1e400", "form": "literal", "sql": "SELECT CAST('1e400' AS INT) AS r", "batch_size": 2}
+{"id": "int_24", "target": "INT", "value": "-2147483648", "form": "literal", "sql": "SELECT CAST('-2147483648' AS INT) AS r", "batch_size": 2}
+{"id": "int_25", "target": "INT", "value": "2147483647", "form": "literal", "sql": "SELECT CAST('2147483647' AS INT) AS r", "batch_size": 2}
+{"id": "int_26", "target": "INT", "value": "-2147483649", "form": "literal", "sql": "SELECT CAST('-2147483649' AS INT) AS r", "batch_size": 2}
+{"id": "int_27", "target": "INT", "value": "2147483648", "form": "literal", "sql": "SELECT CAST('2147483648' AS INT) AS r", "batch_size": 2}
+{"id": "int_28", "target": "INT", "value": "-2147483648.9", "form": "literal", "sql": "SELECT CAST('-2147483648.9' AS INT) AS r", "batch_size": 2}
+{"id": "int_29", "target": "INT", "value": "2147483647.9", "form": "literal", "sql": "SELECT CAST('2147483647.9' AS INT) AS r", "batch_size": 2}
+{"id": "int_30", "target": "INT", "value": "9223372036854775808", "form": "literal", "sql": "SELECT CAST('9223372036854775808' AS INT) AS r", "batch_size": 2}
+{"id": "int_31", "target": "INT", "value": "999999999999999999999999999999999999", "form": "literal", "sql": "SELECT CAST('999999999999999999999999999999999999' AS INT) AS r", "batch_size": 2}
+{"id": "int_cast_column", "target": "INT", "form": "column", "sql": "SELECT CAST(v AS INT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'-2147483648'),(25,'2147483647'),(26,'-2147483649'),(27,'2147483648'),(28,'-2147483648.9'),(29,'2147483647.9'),(30,'9223372036854775808'),(31,'999999999999999999999999999999999999') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "int_cast_bad", "target": "INT", "form": "column_one", "sql": "SELECT CAST(v AS INT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "int_cast_fraction", "target": "INT", "form": "column_one", "sql": "SELECT CAST(v AS INT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "int_cast_space", "target": "INT", "form": "column_one", "sql": "SELECT CAST(v AS INT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "int_cast_null", "target": "INT", "form": "column_one", "sql": "SELECT CAST(v AS INT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "int_try_cast_column", "target": "INT", "form": "column", "sql": "SELECT TRY_CAST(v AS INT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'-2147483648'),(25,'2147483647'),(26,'-2147483649'),(27,'2147483648'),(28,'-2147483648.9'),(29,'2147483647.9'),(30,'9223372036854775808'),(31,'999999999999999999999999999999999999') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "int_try_cast_bad", "target": "INT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS INT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "int_try_cast_fraction", "target": "INT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS INT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "int_try_cast_space", "target": "INT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS INT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "int_try_cast_null", "target": "INT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS INT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "bigint_0", "target": "BIGINT", "value": null, "form": "literal", "sql": "SELECT CAST(CAST(NULL AS STRING) AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_1", "target": "BIGINT", "value": "", "form": "literal", "sql": "SELECT CAST('' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_2", "target": "BIGINT", "value": "bad", "form": "literal", "sql": "SELECT CAST('bad' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_3", "target": "BIGINT", "value": "0", "form": "literal", "sql": "SELECT CAST('0' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_4", "target": "BIGINT", "value": "-0", "form": "literal", "sql": "SELECT CAST('-0' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_5", "target": "BIGINT", "value": "+7", "form": "literal", "sql": "SELECT CAST('+7' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_6", "target": "BIGINT", "value": " 7 ", "form": "literal", "sql": "SELECT CAST(' 7 ' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_7", "target": "BIGINT", "value": "\t-7\n", "form": "literal", "sql": "SELECT CAST('\t-7\n' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_8", "target": "BIGINT", "value": "\u001f7\u001f", "form": "literal", "sql": "SELECT CAST('\u001f7\u001f' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_9", "target": "BIGINT", "value": "\u007f7\u007f", "form": "literal", "sql": "SELECT CAST('\u007f7\u007f' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_10", "target": "BIGINT", "value": "1.25", "form": "literal", "sql": "SELECT CAST('1.25' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_11", "target": "BIGINT", "value": "-1.25", "form": "literal", "sql": "SELECT CAST('-1.25' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_12", "target": "BIGINT", "value": ".9", "form": "literal", "sql": "SELECT CAST('.9' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_13", "target": "BIGINT", "value": ".", "form": "literal", "sql": "SELECT CAST('.' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_14", "target": "BIGINT", "value": "+.", "form": "literal", "sql": "SELECT CAST('+.' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_15", "target": "BIGINT", "value": "1.", "form": "literal", "sql": "SELECT CAST('1.' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_16", "target": "BIGINT", "value": "1e2", "form": "literal", "sql": "SELECT CAST('1e2' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_17", "target": "BIGINT", "value": "1.2.3", "form": "literal", "sql": "SELECT CAST('1.2.3' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_18", "target": "BIGINT", "value": "NaN", "form": "literal", "sql": "SELECT CAST('NaN' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_19", "target": "BIGINT", "value": "+NaN", "form": "literal", "sql": "SELECT CAST('+NaN' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_20", "target": "BIGINT", "value": "nAn", "form": "literal", "sql": "SELECT CAST('nAn' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_21", "target": "BIGINT", "value": "Infinity", "form": "literal", "sql": "SELECT CAST('Infinity' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_22", "target": "BIGINT", "value": "-inf", "form": "literal", "sql": "SELECT CAST('-inf' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_23", "target": "BIGINT", "value": "1e400", "form": "literal", "sql": "SELECT CAST('1e400' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_24", "target": "BIGINT", "value": "-9223372036854775808", "form": "literal", "sql": "SELECT CAST('-9223372036854775808' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_25", "target": "BIGINT", "value": "9223372036854775807", "form": "literal", "sql": "SELECT CAST('9223372036854775807' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_26", "target": "BIGINT", "value": "-9223372036854775809", "form": "literal", "sql": "SELECT CAST('-9223372036854775809' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_27", "target": "BIGINT", "value": "9223372036854775808", "form": "literal", "sql": "SELECT CAST('9223372036854775808' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_28", "target": "BIGINT", "value": "-9223372036854775808.9", "form": "literal", "sql": "SELECT CAST('-9223372036854775808.9' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_29", "target": "BIGINT", "value": "9223372036854775807.9", "form": "literal", "sql": "SELECT CAST('9223372036854775807.9' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_30", "target": "BIGINT", "value": "999999999999999999999999999999999999", "form": "literal", "sql": "SELECT CAST('999999999999999999999999999999999999' AS BIGINT) AS r", "batch_size": 2}
+{"id": "bigint_cast_column", "target": "BIGINT", "form": "column", "sql": "SELECT CAST(v AS BIGINT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'-9223372036854775808'),(25,'9223372036854775807'),(26,'-9223372036854775809'),(27,'9223372036854775808'),(28,'-9223372036854775808.9'),(29,'9223372036854775807.9'),(30,'999999999999999999999999999999999999') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "bigint_cast_bad", "target": "BIGINT", "form": "column_one", "sql": "SELECT CAST(v AS BIGINT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "bigint_cast_fraction", "target": "BIGINT", "form": "column_one", "sql": "SELECT CAST(v AS BIGINT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "bigint_cast_space", "target": "BIGINT", "form": "column_one", "sql": "SELECT CAST(v AS BIGINT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "bigint_cast_null", "target": "BIGINT", "form": "column_one", "sql": "SELECT CAST(v AS BIGINT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "bigint_try_cast_column", "target": "BIGINT", "form": "column", "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'-9223372036854775808'),(25,'9223372036854775807'),(26,'-9223372036854775809'),(27,'9223372036854775808'),(28,'-9223372036854775808.9'),(29,'9223372036854775807.9'),(30,'999999999999999999999999999999999999') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "bigint_try_cast_bad", "target": "BIGINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "bigint_try_cast_fraction", "target": "BIGINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "bigint_try_cast_space", "target": "BIGINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "bigint_try_cast_null", "target": "BIGINT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS BIGINT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "float_0", "target": "FLOAT", "value": null, "form": "literal", "sql": "SELECT CAST(CAST(NULL AS STRING) AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_1", "target": "FLOAT", "value": "", "form": "literal", "sql": "SELECT CAST('' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_2", "target": "FLOAT", "value": "bad", "form": "literal", "sql": "SELECT CAST('bad' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_3", "target": "FLOAT", "value": "0", "form": "literal", "sql": "SELECT CAST('0' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_4", "target": "FLOAT", "value": "-0", "form": "literal", "sql": "SELECT CAST('-0' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_5", "target": "FLOAT", "value": "+7", "form": "literal", "sql": "SELECT CAST('+7' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_6", "target": "FLOAT", "value": " 7 ", "form": "literal", "sql": "SELECT CAST(' 7 ' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_7", "target": "FLOAT", "value": "\t-7\n", "form": "literal", "sql": "SELECT CAST('\t-7\n' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_8", "target": "FLOAT", "value": "\u001f7\u001f", "form": "literal", "sql": "SELECT CAST('\u001f7\u001f' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_9", "target": "FLOAT", "value": "\u007f7\u007f", "form": "literal", "sql": "SELECT CAST('\u007f7\u007f' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_10", "target": "FLOAT", "value": "1.25", "form": "literal", "sql": "SELECT CAST('1.25' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_11", "target": "FLOAT", "value": "-1.25", "form": "literal", "sql": "SELECT CAST('-1.25' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_12", "target": "FLOAT", "value": ".9", "form": "literal", "sql": "SELECT CAST('.9' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_13", "target": "FLOAT", "value": ".", "form": "literal", "sql": "SELECT CAST('.' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_14", "target": "FLOAT", "value": "+.", "form": "literal", "sql": "SELECT CAST('+.' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_15", "target": "FLOAT", "value": "1.", "form": "literal", "sql": "SELECT CAST('1.' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_16", "target": "FLOAT", "value": "1e2", "form": "literal", "sql": "SELECT CAST('1e2' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_17", "target": "FLOAT", "value": "1.2.3", "form": "literal", "sql": "SELECT CAST('1.2.3' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_18", "target": "FLOAT", "value": "NaN", "form": "literal", "sql": "SELECT CAST('NaN' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_19", "target": "FLOAT", "value": "+NaN", "form": "literal", "sql": "SELECT CAST('+NaN' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_20", "target": "FLOAT", "value": "nAn", "form": "literal", "sql": "SELECT CAST('nAn' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_21", "target": "FLOAT", "value": "Infinity", "form": "literal", "sql": "SELECT CAST('Infinity' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_22", "target": "FLOAT", "value": "-inf", "form": "literal", "sql": "SELECT CAST('-inf' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_23", "target": "FLOAT", "value": "1e400", "form": "literal", "sql": "SELECT CAST('1e400' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_24", "target": "FLOAT", "value": "1.25f", "form": "literal", "sql": "SELECT CAST('1.25f' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_25", "target": "FLOAT", "value": "1.25D", "form": "literal", "sql": "SELECT CAST('1.25D' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_26", "target": "FLOAT", "value": "0x1.8p2", "form": "literal", "sql": "SELECT CAST('0x1.8p2' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_27", "target": "FLOAT", "value": "0x1p128", "form": "literal", "sql": "SELECT CAST('0x1p128' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_28", "target": "FLOAT", "value": "-0.0", "form": "literal", "sql": "SELECT CAST('-0.0' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_29", "target": "FLOAT", "value": "1e-400", "form": "literal", "sql": "SELECT CAST('1e-400' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_30", "target": "FLOAT", "value": "3.4028235e38", "form": "literal", "sql": "SELECT CAST('3.4028235e38' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_31", "target": "FLOAT", "value": "1.7976931348623157e308", "form": "literal", "sql": "SELECT CAST('1.7976931348623157e308' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_32", "target": "FLOAT", "value": "9007199254740993", "form": "literal", "sql": "SELECT CAST('9007199254740993' AS FLOAT) AS r", "batch_size": 2}
+{"id": "float_cast_column", "target": "FLOAT", "form": "column", "sql": "SELECT CAST(v AS FLOAT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'1.25f'),(25,'1.25D'),(26,'0x1.8p2'),(27,'0x1p128'),(28,'-0.0'),(29,'1e-400'),(30,'3.4028235e38'),(31,'1.7976931348623157e308'),(32,'9007199254740993') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "float_cast_bad", "target": "FLOAT", "form": "column_one", "sql": "SELECT CAST(v AS FLOAT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "float_cast_fraction", "target": "FLOAT", "form": "column_one", "sql": "SELECT CAST(v AS FLOAT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "float_cast_space", "target": "FLOAT", "form": "column_one", "sql": "SELECT CAST(v AS FLOAT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "float_cast_null", "target": "FLOAT", "form": "column_one", "sql": "SELECT CAST(v AS FLOAT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "float_try_cast_column", "target": "FLOAT", "form": "column", "sql": "SELECT TRY_CAST(v AS FLOAT) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'1.25f'),(25,'1.25D'),(26,'0x1.8p2'),(27,'0x1p128'),(28,'-0.0'),(29,'1e-400'),(30,'3.4028235e38'),(31,'1.7976931348623157e308'),(32,'9007199254740993') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "float_try_cast_bad", "target": "FLOAT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS FLOAT) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "float_try_cast_fraction", "target": "FLOAT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS FLOAT) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "float_try_cast_space", "target": "FLOAT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS FLOAT) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "float_try_cast_null", "target": "FLOAT", "form": "column_one", "sql": "SELECT TRY_CAST(v AS FLOAT) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "double_0", "target": "DOUBLE", "value": null, "form": "literal", "sql": "SELECT CAST(CAST(NULL AS STRING) AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_1", "target": "DOUBLE", "value": "", "form": "literal", "sql": "SELECT CAST('' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_2", "target": "DOUBLE", "value": "bad", "form": "literal", "sql": "SELECT CAST('bad' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_3", "target": "DOUBLE", "value": "0", "form": "literal", "sql": "SELECT CAST('0' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_4", "target": "DOUBLE", "value": "-0", "form": "literal", "sql": "SELECT CAST('-0' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_5", "target": "DOUBLE", "value": "+7", "form": "literal", "sql": "SELECT CAST('+7' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_6", "target": "DOUBLE", "value": " 7 ", "form": "literal", "sql": "SELECT CAST(' 7 ' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_7", "target": "DOUBLE", "value": "\t-7\n", "form": "literal", "sql": "SELECT CAST('\t-7\n' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_8", "target": "DOUBLE", "value": "\u001f7\u001f", "form": "literal", "sql": "SELECT CAST('\u001f7\u001f' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_9", "target": "DOUBLE", "value": "\u007f7\u007f", "form": "literal", "sql": "SELECT CAST('\u007f7\u007f' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_10", "target": "DOUBLE", "value": "1.25", "form": "literal", "sql": "SELECT CAST('1.25' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_11", "target": "DOUBLE", "value": "-1.25", "form": "literal", "sql": "SELECT CAST('-1.25' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_12", "target": "DOUBLE", "value": ".9", "form": "literal", "sql": "SELECT CAST('.9' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_13", "target": "DOUBLE", "value": ".", "form": "literal", "sql": "SELECT CAST('.' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_14", "target": "DOUBLE", "value": "+.", "form": "literal", "sql": "SELECT CAST('+.' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_15", "target": "DOUBLE", "value": "1.", "form": "literal", "sql": "SELECT CAST('1.' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_16", "target": "DOUBLE", "value": "1e2", "form": "literal", "sql": "SELECT CAST('1e2' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_17", "target": "DOUBLE", "value": "1.2.3", "form": "literal", "sql": "SELECT CAST('1.2.3' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_18", "target": "DOUBLE", "value": "NaN", "form": "literal", "sql": "SELECT CAST('NaN' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_19", "target": "DOUBLE", "value": "+NaN", "form": "literal", "sql": "SELECT CAST('+NaN' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_20", "target": "DOUBLE", "value": "nAn", "form": "literal", "sql": "SELECT CAST('nAn' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_21", "target": "DOUBLE", "value": "Infinity", "form": "literal", "sql": "SELECT CAST('Infinity' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_22", "target": "DOUBLE", "value": "-inf", "form": "literal", "sql": "SELECT CAST('-inf' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_23", "target": "DOUBLE", "value": "1e400", "form": "literal", "sql": "SELECT CAST('1e400' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_24", "target": "DOUBLE", "value": "1.25f", "form": "literal", "sql": "SELECT CAST('1.25f' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_25", "target": "DOUBLE", "value": "1.25D", "form": "literal", "sql": "SELECT CAST('1.25D' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_26", "target": "DOUBLE", "value": "0x1.8p2", "form": "literal", "sql": "SELECT CAST('0x1.8p2' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_27", "target": "DOUBLE", "value": "0x1p128", "form": "literal", "sql": "SELECT CAST('0x1p128' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_28", "target": "DOUBLE", "value": "-0.0", "form": "literal", "sql": "SELECT CAST('-0.0' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_29", "target": "DOUBLE", "value": "1e-400", "form": "literal", "sql": "SELECT CAST('1e-400' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_30", "target": "DOUBLE", "value": "3.4028235e38", "form": "literal", "sql": "SELECT CAST('3.4028235e38' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_31", "target": "DOUBLE", "value": "1.7976931348623157e308", "form": "literal", "sql": "SELECT CAST('1.7976931348623157e308' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_32", "target": "DOUBLE", "value": "9007199254740993", "form": "literal", "sql": "SELECT CAST('9007199254740993' AS DOUBLE) AS r", "batch_size": 2}
+{"id": "double_cast_column", "target": "DOUBLE", "form": "column", "sql": "SELECT CAST(v AS DOUBLE) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'1.25f'),(25,'1.25D'),(26,'0x1.8p2'),(27,'0x1p128'),(28,'-0.0'),(29,'1e-400'),(30,'3.4028235e38'),(31,'1.7976931348623157e308'),(32,'9007199254740993') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "double_cast_bad", "target": "DOUBLE", "form": "column_one", "sql": "SELECT CAST(v AS DOUBLE) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "double_cast_fraction", "target": "DOUBLE", "form": "column_one", "sql": "SELECT CAST(v AS DOUBLE) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "double_cast_space", "target": "DOUBLE", "form": "column_one", "sql": "SELECT CAST(v AS DOUBLE) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "double_cast_null", "target": "DOUBLE", "form": "column_one", "sql": "SELECT CAST(v AS DOUBLE) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "double_try_cast_column", "target": "DOUBLE", "form": "column", "sql": "SELECT TRY_CAST(v AS DOUBLE) AS r FROM VALUES (0,CAST(NULL AS STRING)),(1,''),(2,'bad'),(3,'0'),(4,'-0'),(5,'+7'),(6,' 7 '),(7,'\t-7\n'),(8,'\u001f7\u001f'),(9,'\u007f7\u007f'),(10,'1.25'),(11,'-1.25'),(12,'.9'),(13,'.'),(14,'+.'),(15,'1.'),(16,'1e2'),(17,'1.2.3'),(18,'NaN'),(19,'+NaN'),(20,'nAn'),(21,'Infinity'),(22,'-inf'),(23,'1e400'),(24,'1.25f'),(25,'1.25D'),(26,'0x1.8p2'),(27,'0x1p128'),(28,'-0.0'),(29,'1e-400'),(30,'3.4028235e38'),(31,'1.7976931348623157e308'),(32,'9007199254740993') t(id,v) ORDER BY id", "batch_size": 2}
+{"id": "double_try_cast_bad", "target": "DOUBLE", "form": "column_one", "sql": "SELECT TRY_CAST(v AS DOUBLE) AS r FROM VALUES ('bad') t(v)", "batch_size": 1}
+{"id": "double_try_cast_fraction", "target": "DOUBLE", "form": "column_one", "sql": "SELECT TRY_CAST(v AS DOUBLE) AS r FROM VALUES ('1.25') t(v)", "batch_size": 1}
+{"id": "double_try_cast_space", "target": "DOUBLE", "form": "column_one", "sql": "SELECT TRY_CAST(v AS DOUBLE) AS r FROM VALUES (' 7 ') t(v)", "batch_size": 1}
+{"id": "double_try_cast_null", "target": "DOUBLE", "form": "column_one", "sql": "SELECT TRY_CAST(v AS DOUBLE) AS r FROM VALUES (CAST(NULL AS STRING)) t(v)", "batch_size": 1}
+{"id": "tinyint_empty", "target": "TINYINT", "form": "empty", "sql": "SELECT CAST(v AS TINYINT) AS r FROM VALUES ('7') t(v) WHERE false", "batch_size": 2}
+{"id": "tinyint_all_null", "target": "TINYINT", "form": "all_null", "sql": "SELECT CAST(v AS TINYINT) AS r FROM VALUES (CAST(NULL AS STRING)),(NULL) t(v)", "batch_size": 2}
+{"id": "tinyint_range_column", "target": "TINYINT", "form": "range_column", "sql": "SELECT CAST(CAST(id AS STRING) AS TINYINT) AS r FROM range(5) ORDER BY id", "batch_size": 2}
+{"id": "tinyint_numeric_peer", "target": "TINYINT", "form": "numeric_peer", "sql": "SELECT CAST(v AS TINYINT) AS r FROM VALUES (12.5),(NULL) t(v)", "batch_size": 2}
+{"id": "smallint_empty", "target": "SMALLINT", "form": "empty", "sql": "SELECT CAST(v AS SMALLINT) AS r FROM VALUES ('7') t(v) WHERE false", "batch_size": 2}
+{"id": "smallint_all_null", "target": "SMALLINT", "form": "all_null", "sql": "SELECT CAST(v AS SMALLINT) AS r FROM VALUES (CAST(NULL AS STRING)),(NULL) t(v)", "batch_size": 2}
+{"id": "smallint_range_column", "target": "SMALLINT", "form": "range_column", "sql": "SELECT CAST(CAST(id AS STRING) AS SMALLINT) AS r FROM range(5) ORDER BY id", "batch_size": 2}
+{"id": "smallint_numeric_peer", "target": "SMALLINT", "form": "numeric_peer", "sql": "SELECT CAST(v AS SMALLINT) AS r FROM VALUES (12.5),(NULL) t(v)", "batch_size": 2}
+{"id": "int_empty", "target": "INT", "form": "empty", "sql": "SELECT CAST(v AS INT) AS r FROM VALUES ('7') t(v) WHERE false", "batch_size": 2}
+{"id": "int_all_null", "target": "INT", "form": "all_null", "sql": "SELECT CAST(v AS INT) AS r FROM VALUES (CAST(NULL AS STRING)),(NULL) t(v)", "batch_size": 2}
+{"id": "int_range_column", "target": "INT", "form": "range_column", "sql": "SELECT CAST(CAST(id AS STRING) AS INT) AS r FROM range(5) ORDER BY id", "batch_size": 2}
+{"id": "int_numeric_peer", "target": "INT", "form": "numeric_peer", "sql": "SELECT CAST(v AS INT) AS r FROM VALUES (12.5),(NULL) t(v)", "batch_size": 2}
+{"id": "bigint_empty", "target": "BIGINT", "form": "empty", "sql": "SELECT CAST(v AS BIGINT) AS r FROM VALUES ('7') t(v) WHERE false", "batch_size": 2}
+{"id": "bigint_all_null", "target": "BIGINT", "form": "all_null", "sql": "SELECT CAST(v AS BIGINT) AS r FROM VALUES (CAST(NULL AS STRING)),(NULL) t(v)", "batch_size": 2}
+{"id": "bigint_range_column", "target": "BIGINT", "form": "range_column", "sql": "SELECT CAST(CAST(id AS STRING) AS BIGINT) AS r FROM range(5) ORDER BY id", "batch_size": 2}
+{"id": "bigint_numeric_peer", "target": "BIGINT", "form": "numeric_peer", "sql": "SELECT CAST(v AS BIGINT) AS r FROM VALUES (12.5),(NULL) t(v)", "batch_size": 2}
+{"id": "float_empty", "target": "FLOAT", "form": "empty", "sql": "SELECT CAST(v AS FLOAT) AS r FROM VALUES ('7') t(v) WHERE false", "batch_size": 2}
+{"id": "float_all_null", "target": "FLOAT", "form": "all_null", "sql": "SELECT CAST(v AS FLOAT) AS r FROM VALUES (CAST(NULL AS STRING)),(NULL) t(v)", "batch_size": 2}
+{"id": "float_range_column", "target": "FLOAT", "form": "range_column", "sql": "SELECT CAST(CAST(id AS STRING) AS FLOAT) AS r FROM range(5) ORDER BY id", "batch_size": 2}
+{"id": "float_numeric_peer", "target": "FLOAT", "form": "numeric_peer", "sql": "SELECT CAST(v AS FLOAT) AS r FROM VALUES (12.5),(NULL) t(v)", "batch_size": 2}
+{"id": "double_empty", "target": "DOUBLE", "form": "empty", "sql": "SELECT CAST(v AS DOUBLE) AS r FROM VALUES ('7') t(v) WHERE false", "batch_size": 2}
+{"id": "double_all_null", "target": "DOUBLE", "form": "all_null", "sql": "SELECT CAST(v AS DOUBLE) AS r FROM VALUES (CAST(NULL AS STRING)),(NULL) t(v)", "batch_size": 2}
+{"id": "double_range_column", "target": "DOUBLE", "form": "range_column", "sql": "SELECT CAST(CAST(id AS STRING) AS DOUBLE) AS r FROM range(5) ORDER BY id", "batch_size": 2}
+{"id": "double_numeric_peer", "target": "DOUBLE", "form": "numeric_peer", "sql": "SELECT CAST(v AS DOUBLE) AS r FROM VALUES (12.5),(NULL) t(v)", "batch_size": 2}
+{"id": "decimal", "target": "control", "form": "decimal", "sql": "SELECT CAST(v AS DECIMAL(18,4)) AS r FROM VALUES (' +7.125 '),('bad'),(NULL) t(v)", "batch_size": 2}
+{"id": "decimal_try", "target": "control", "form": "decimal_try", "sql": "SELECT TRY_CAST(v AS DECIMAL(18,4)) AS r FROM VALUES (' +7.125 '),('bad'),(NULL) t(v)", "batch_size": 2}
+{"id": "integer_null_guard", "target": "control", "form": "integer_null_guard", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES ('bad'),('1.25'),(NULL) t(v)", "batch_size": 2}
+{"id": "float_null_guard", "target": "control", "form": "float_null_guard", "sql": "SELECT CAST(v AS DOUBLE) / CAST(NULL AS DOUBLE) AS r FROM VALUES ('bad'),('1.25'),(NULL) t(v)", "batch_size": 2}

@@ -30,6 +30,8 @@ The [Decimal arithmetic fix](DECIMAL_ARITHMETIC_TYPES.md) preserves remainder pr
 
 The [division/CAST classification](DIVISION_CAST_CLASSIFICATION.md) accounts for all 156 original evaluation observations, adds reduced queries and separates five implementation causes. It preserves unresolved error reporting and NULLIF controls with their existing owners. The diagnostic changes no runtime code.
 
+The [legacy numeric-string CAST repair](LEGACY_NUMERIC_CAST.md) resolves all 63 assigned non-ANSI observations and preserves prior agreements. Its expanded corpus keeps strict/TRY integer whitespace and floating-string grammar with separate implementation owners. Integer-parser and floating trim/conversion costs are recorded with the existing CAST performance owner.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
