@@ -1,0 +1,19 @@
+--- a/src/simplify_expressions/expr_simplifier.rs
++++ b/src/simplify_expressions/expr_simplifier.rs
+@@ -1157,13 +1157,14 @@
+             // Rules for Modulo
+             //
+ 
+-            // A % 1 --> 0 (if A is not nullable and not floating, since NAN % 1 --> NAN)
++            // Only integral A satisfies A % 1 == 0. Decimal fractions survive.
++            // Floating NaN/infinity also require the native remainder kernel.
+             Expr::BinaryExpr(BinaryExpr {
+                 left,
+                 op: Modulo,
+                 right,
+             }) if !info.nullable(&left)?
+-                && !info.get_data_type(&left)?.is_floating()
++                && info.get_data_type(&left)?.is_integer()
+                 && is_one(&right) =>
+             {
+                 Transformed::yes(Expr::Literal(
