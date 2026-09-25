@@ -14,6 +14,13 @@ use super::support::RealParquetDeltaTable;
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 const ROWS: u64 = 6 * 16_384;
 
+fn error_chain(error: &dyn Error) -> String {
+    std::iter::successors(Some(error), |&error| error.source())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
 fn fixtures() -> TestResult<Vec<(RealParquetDeltaTable, Vec<u64>)>> {
     [
         ("empty", Vec::new()),
@@ -86,7 +93,13 @@ async fn streaming_compact_vectors_match_row_membership() -> TestResult {
                         .await?;
                     let stream = scan.into_stream();
                     let metrics = stream.metrics();
-                    let batches = stream.try_collect::<Vec<_>>().await?;
+                    let batches = stream.try_collect::<Vec<_>>().await.map_err(|error| {
+                        format!(
+                            "{}: {warmup:?}, {backend:?}, id > {lower}: {}",
+                            fixture.path().display(),
+                            error_chain(&error)
+                        )
+                    })?;
                     assert_ids(&batches, &deleted, lower)?;
                     assert_eq!(metrics.snapshot().deletion_vector_failures, 0);
                     assert_eq!(metrics.snapshot().deletion_vector_coordinate_rejections, 0);
@@ -144,7 +157,13 @@ async fn datafusion_compact_vectors_match_row_membership_after_repartitioning() 
                         .await?;
                     let metrics = collect_scan_metrics(plan.as_ref());
                     assert_eq!(metrics.len(), 1);
-                    let batches = collect(plan, context.task_ctx()).await?;
+                    let batches = collect(plan, context.task_ctx()).await.map_err(|error| {
+                        format!(
+                            "{}: {warmup:?}, {backend:?}, id > {lower}: {}",
+                            fixture.path().display(),
+                            error_chain(&error)
+                        )
+                    })?;
                     assert_ids(&batches, &deleted, lower)?;
                     let snapshot = metrics[0].snapshot().reader_metrics;
                     if backend == ParquetReaderBackend::Direct {
