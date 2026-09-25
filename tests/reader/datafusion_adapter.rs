@@ -45,6 +45,9 @@ use super::support::RealParquetDeltaTable;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
+#[path = "datafusion_empty.rs"]
+mod empty_scans;
+
 struct TestTable(PathBuf);
 
 impl TestTable {
@@ -1381,18 +1384,18 @@ async fn execution_records_batch_size_and_rejects_invalid_partition() -> TestRes
 }
 
 #[tokio::test]
-async fn empty_scan_has_no_partitions_rows_or_execution_metrics() -> TestResult {
+async fn empty_scan_has_one_execution_partition_and_no_file_tasks() -> TestResult {
     let fixture = TestTable::empty("provider-empty-scan")?;
     let table = DeltaTableBuilder::new(fixture.uri()).load_table().await?;
     let context = SessionContext::new_with_config(SessionConfig::new().with_target_partitions(4));
     let provider = DeltaTableProvider::try_new(table, ScanOptions::default())?;
     let plan = provider.scan(&context.state(), None, &[], None).await?;
-    assert_eq!(plan.properties().output_partitioning().partition_count(), 0);
+    assert_eq!(plan.properties().output_partitioning().partition_count(), 1);
     assert!(
         displayable(plan.as_ref())
             .indent(true)
             .to_string()
-            .contains("partitions=0")
+            .contains("partitions=1")
     );
 
     let metrics = collect_scan_metrics(plan.as_ref());

@@ -249,7 +249,6 @@ impl DeltaTableProvider {
             &partition_columns,
             self.options.use_arrow_view_types,
         );
-        let partition_count = reader_plan.partitions.len();
         let plan = {
             let _setup = tracing::debug_span!(
                 target: "delta_arrow_reader::profile",
@@ -270,6 +269,7 @@ impl DeltaTableProvider {
                 self.options.intra_file_repartitioning,
             )
         };
+        let partition_count = plan.properties().output_partitioning().partition_count();
         Ok((plan, partition_count))
     }
 }
