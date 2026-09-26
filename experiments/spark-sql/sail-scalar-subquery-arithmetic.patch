@@ -1,0 +1,241 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -158,26 +158,24 @@
+         } else {
+             plan
+         };
+-        // Local VALUES are evaluated before column pruning and LIMIT 0.
+-        // Successful constants need no extra copy, simplification or pruning.
+-        if check_arithmetic && prepare.check_arithmetic_expressions(&plan, true)? {
+-            let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
+-            // NULL parents and unused columns disappear before constant folding,
+-            // but Boolean/filter simplification must not erase arithmetic failures.
+-            let pruned = plan
+-                .clone()
+-                .transform_up(|node| {
+-                    let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
+-                    let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+-                    node.map_expressions(|expr| {
+-                        let name = names.save(&expr);
+-                        let expr = prepare.precheck_expression(expr, &schema, false)?;
+-                        Ok(Transformed::yes(name.restore(expr)))
++        if check_arithmetic {
++            // Spark prepares subqueries before pruning their outer expressions.
++            // Keep each plan's own local conversion and LIMIT 0 boundary.
++            plan.apply_with_subqueries(|node| {
++                node.apply_expressions(|expr| {
++                    expr.apply(|expr| {
++                        if let Expr::ScalarSubquery(subquery) = expr
++                            // OneRowRelation is inlined before subquery preparation;
++                            // its arithmetic still follows the outer NULL/CASE rules.
++                            && one_row_exprs(&subquery.subquery)?.is_none()
++                        {
++                            prepare.check_arithmetic_plan(&subquery.subquery, options)?;
++                        }
++                        Ok(TreeNodeRecursion::Continue)
+                     })
+-                })?
+-                .data;
+-            let pruned = OptimizeProjections::new().rewrite(pruned, &config)?.data;
+-            prepare.check_arithmetic_expressions(&pruned, false)?;
++                })
++            })?;
++            prepare.check_arithmetic_plan(&plan, options)?;
+         }
+ 
+         let plan = if check_cast {
+@@ -576,6 +574,31 @@
+                 Ok(Transformed::no(expr))
+             })?
+             .data)
++    }
++
++    fn check_arithmetic_plan(&self, plan: &LogicalPlan, options: &ConfigOptions) -> Result<()> {
++        // Local VALUES are evaluated before column pruning and LIMIT 0.
++        // Successful constants need no extra copy, simplification or pruning.
++        if self.check_arithmetic_expressions(plan, true)? {
++            let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
++            // NULL parents and unused columns disappear before constant folding,
++            // but Boolean/filter simplification must not erase arithmetic failures.
++            let pruned = plan
++                .clone()
++                .transform_up(|node| {
++                    let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
++                    let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
++                    node.map_expressions(|expr| {
++                        let name = names.save(&expr);
++                        let expr = self.precheck_expression(expr, &schema, false)?;
++                        Ok(Transformed::yes(name.restore(expr)))
++                    })
++                })?
++                .data;
++            let pruned = OptimizeProjections::new().rewrite(pruned, &config)?.data;
++            self.check_arithmetic_expressions(&pruned, false)?;
++        }
++        Ok(())
+     }
+ 
+     fn check_arithmetic_expressions(&self, plan: &LogicalPlan, local: bool) -> Result<bool> {
+@@ -1406,3 +1429,162 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn scalar_subquery_arithmetic_precedes_outer_pruning()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for data_type in ["TINYINT", "SMALLINT", "INT", "BIGINT"] {
++        let div = format!("CAST(7 AS {data_type}) DIV CAST(0 AS {data_type})");
++        let sq = format!("(SELECT {div} FROM range(3) WHERE false)");
++        for ansi_mode in [true, false] {
++            for (sql, fails, rows, nulls) in [
++                (
++                    format!("SELECT CAST(NULL AS BIGINT) + (SELECT {div}) AS r"),
++                    false,
++                    1,
++                    1,
++                ),
++                (
++                    format!("SELECT CASE WHEN false THEN (SELECT {div}) ELSE 7L END AS r"),
++                    false,
++                    1,
++                    0,
++                ),
++                (
++                    format!("SELECT COALESCE(7L,(SELECT {div})) AS r"),
++                    false,
++                    1,
++                    0,
++                ),
++                (format!("SELECT {sq} AS r"), true, 1, 1),
++                (format!("SELECT (SELECT {sq}) AS r"), true, 1, 1),
++                (
++                    format!("SELECT (SELECT {div} FROM range(0)) AS r"),
++                    true,
++                    1,
++                    1,
++                ),
++                (
++                    format!("SELECT (SELECT {div} FROM range(3) LIMIT 0) AS r"),
++                    false,
++                    1,
++                    1,
++                ),
++                (
++                    format!("SELECT (SELECT {div} FROM range(3) WHERE false LIMIT 0) AS r"),
++                    true,
++                    1,
++                    1,
++                ),
++                (
++                    format!("SELECT (SELECT {div} FROM VALUES (1) t(k) WHERE false) AS r"),
++                    false,
++                    1,
++                    1,
++                ),
++                (
++                    format!("SELECT (SELECT {div} FROM VALUES (1) t(k) LIMIT 0) AS r"),
++                    true,
++                    1,
++                    1,
++                ),
++                (
++                    format!("SELECT CASE WHEN false THEN {sq} ELSE 7L END AS r"),
++                    true,
++                    1,
++                    0,
++                ),
++                (format!("SELECT COALESCE(7L,{sq}) AS r"), true, 1, 0),
++                (
++                    format!("SELECT CAST(NULL AS BIGINT) + {sq} AS r"),
++                    true,
++                    1,
++                    1,
++                ),
++                (format!("SELECT ROUND({sq},NULL) AS r"), true, 1, 1),
++                (
++                    format!("SELECT {sq} AS r FROM range(3) LIMIT 0"),
++                    true,
++                    0,
++                    0,
++                ),
++                (
++                    format!("SELECT id FROM (SELECT id,{sq} AS unused FROM range(2)) t"),
++                    true,
++                    2,
++                    0,
++                ),
++                (
++                    format!(
++                        "SELECT (SELECT CASE WHEN false THEN {div} ELSE 7L END FROM range(1)) AS r"
++                    ),
++                    false,
++                    1,
++                    0,
++                ),
++                (
++                    format!("SELECT (SELECT COALESCE(7L,{div}) FROM range(1)) AS r"),
++                    false,
++                    1,
++                    0,
++                ),
++                (
++                    format!(
++                        "SELECT (SELECT id FROM (SELECT id,{div} AS unused FROM range(1)) t) AS r"
++                    ),
++                    false,
++                    1,
++                    0,
++                ),
++                (format!("SELECT EXISTS {sq} AS r"), false, 1, 0),
++            ] {
++                let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let named = PlanResolver::new(
++                    &ctx,
++                    Arc::new(PlanConfig {
++                        ansi_mode,
++                        ..Default::default()
++                    }),
++                )
++                .resolve_named_plan(spec)
++                .await?;
++                let result =
++                    async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
++                if ansi_mode && fails {
++                    assert!(
++                        result.unwrap_err().to_string().contains("Divide by zero"),
++                        "{sql}"
++                    );
++                } else {
++                    let batches = result?;
++                    assert_eq!(
++                        batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
++                        rows,
++                        "{sql}, ANSI={ansi_mode}"
++                    );
++                    assert_eq!(
++                        batches
++                            .iter()
++                            .map(|b| b.column(0).null_count())
++                            .sum::<usize>(),
++                        nulls,
++                        "{sql}, ANSI={ansi_mode}"
++                    );
++                }
++            }
++        }
++    }
++    Ok(())
++}

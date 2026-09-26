@@ -1,0 +1,293 @@
+{"id": "tinyint_one_row", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ) AS r", "category": "scalar_one_row", "batch_size": 1}
+{"id": "tinyint_range_false", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false) AS r", "category": "scalar_range_false", "batch_size": 1}
+{"id": "tinyint_range_limit0", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) LIMIT 0) AS r", "category": "scalar_range_limit0", "batch_size": 1}
+{"id": "tinyint_range_false_limit0", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false LIMIT 0) AS r", "category": "scalar_range_false_limit0", "batch_size": 1}
+{"id": "tinyint_range_empty", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(0)) AS r", "category": "scalar_range_empty", "batch_size": 1}
+{"id": "tinyint_values_false", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "scalar_values_false", "batch_size": 1}
+{"id": "tinyint_values_limit0", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "scalar_values_limit0", "batch_size": 1}
+{"id": "tinyint_range_one", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(1)) AS r", "category": "scalar_range_one", "batch_size": 1}
+{"id": "tinyint_values_one", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k)) AS r", "category": "scalar_values_one", "batch_size": 1}
+{"id": "tinyint_range_false_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "tinyint_range_false_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "tinyint_range_false_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false)) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "tinyint_range_false_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "tinyint_range_false_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "tinyint_range_false_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false)) AS r", "category": "nested", "batch_size": 1}
+{"id": "tinyint_range_false_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "tinyint_range_false_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM range(3) WHERE false) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "tinyint_values_one_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k)) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "tinyint_values_one_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k)) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "tinyint_values_one_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k))) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "tinyint_values_one_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k)) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "tinyint_values_one_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k)),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "tinyint_values_one_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k))) AS r", "category": "nested", "batch_size": 1}
+{"id": "tinyint_values_one_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k)) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "tinyint_values_one_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) FROM VALUES (1) t(k)) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "tinyint_one_row_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "tinyint_one_row_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "tinyint_one_row_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) )) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "tinyint_one_row_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "tinyint_one_row_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "tinyint_one_row_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) )) AS r", "category": "nested", "batch_size": 1}
+{"id": "tinyint_one_row_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "tinyint_one_row_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "smallint_one_row", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ) AS r", "category": "scalar_one_row", "batch_size": 1}
+{"id": "smallint_range_false", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false) AS r", "category": "scalar_range_false", "batch_size": 1}
+{"id": "smallint_range_limit0", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) LIMIT 0) AS r", "category": "scalar_range_limit0", "batch_size": 1}
+{"id": "smallint_range_false_limit0", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false LIMIT 0) AS r", "category": "scalar_range_false_limit0", "batch_size": 1}
+{"id": "smallint_range_empty", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(0)) AS r", "category": "scalar_range_empty", "batch_size": 1}
+{"id": "smallint_values_false", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "scalar_values_false", "batch_size": 1}
+{"id": "smallint_values_limit0", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "scalar_values_limit0", "batch_size": 1}
+{"id": "smallint_range_one", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(1)) AS r", "category": "scalar_range_one", "batch_size": 1}
+{"id": "smallint_values_one", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k)) AS r", "category": "scalar_values_one", "batch_size": 1}
+{"id": "smallint_range_false_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "smallint_range_false_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "smallint_range_false_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false)) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "smallint_range_false_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "smallint_range_false_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "smallint_range_false_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false)) AS r", "category": "nested", "batch_size": 1}
+{"id": "smallint_range_false_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "smallint_range_false_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM range(3) WHERE false) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "smallint_values_one_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k)) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "smallint_values_one_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k)) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "smallint_values_one_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k))) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "smallint_values_one_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k)) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "smallint_values_one_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k)),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "smallint_values_one_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k))) AS r", "category": "nested", "batch_size": 1}
+{"id": "smallint_values_one_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k)) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "smallint_values_one_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) FROM VALUES (1) t(k)) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "smallint_one_row_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "smallint_one_row_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "smallint_one_row_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) )) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "smallint_one_row_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "smallint_one_row_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "smallint_one_row_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) )) AS r", "category": "nested", "batch_size": 1}
+{"id": "smallint_one_row_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "smallint_one_row_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "int_one_row", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) ) AS r", "category": "scalar_one_row", "batch_size": 1}
+{"id": "int_range_false", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "scalar_range_false", "batch_size": 1}
+{"id": "int_range_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) LIMIT 0) AS r", "category": "scalar_range_limit0", "batch_size": 1}
+{"id": "int_range_false_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false LIMIT 0) AS r", "category": "scalar_range_false_limit0", "batch_size": 1}
+{"id": "int_range_empty", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(0)) AS r", "category": "scalar_range_empty", "batch_size": 1}
+{"id": "int_values_false", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "scalar_values_false", "batch_size": 1}
+{"id": "int_values_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "scalar_values_limit0", "batch_size": 1}
+{"id": "int_range_one", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(1)) AS r", "category": "scalar_range_one", "batch_size": 1}
+{"id": "int_values_one", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)) AS r", "category": "scalar_values_one", "batch_size": 1}
+{"id": "int_range_false_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "int_range_false_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "int_range_false_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "int_range_false_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "int_range_false_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "int_range_false_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "nested", "batch_size": 1}
+{"id": "int_range_false_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "int_range_false_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "int_values_one_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "int_values_one_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "int_values_one_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k))) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "int_values_one_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "int_values_one_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "int_values_one_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k))) AS r", "category": "nested", "batch_size": 1}
+{"id": "int_values_one_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "int_values_one_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "int_one_row_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) ) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "int_one_row_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) ) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "int_one_row_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) )) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "int_one_row_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) ) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "int_one_row_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS INT) DIV CAST(0 AS INT) ),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "int_one_row_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) )) AS r", "category": "nested", "batch_size": 1}
+{"id": "int_one_row_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) ) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "int_one_row_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) ) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "bigint_one_row", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ) AS r", "category": "scalar_one_row", "batch_size": 1}
+{"id": "bigint_range_false", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false) AS r", "category": "scalar_range_false", "batch_size": 1}
+{"id": "bigint_range_limit0", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) LIMIT 0) AS r", "category": "scalar_range_limit0", "batch_size": 1}
+{"id": "bigint_range_false_limit0", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false LIMIT 0) AS r", "category": "scalar_range_false_limit0", "batch_size": 1}
+{"id": "bigint_range_empty", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(0)) AS r", "category": "scalar_range_empty", "batch_size": 1}
+{"id": "bigint_values_false", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "scalar_values_false", "batch_size": 1}
+{"id": "bigint_values_limit0", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "scalar_values_limit0", "batch_size": 1}
+{"id": "bigint_range_one", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(1)) AS r", "category": "scalar_range_one", "batch_size": 1}
+{"id": "bigint_values_one", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k)) AS r", "category": "scalar_values_one", "batch_size": 1}
+{"id": "bigint_range_false_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "bigint_range_false_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "bigint_range_false_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false)) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "bigint_range_false_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "bigint_range_false_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "bigint_range_false_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false)) AS r", "category": "nested", "batch_size": 1}
+{"id": "bigint_range_false_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "bigint_range_false_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM range(3) WHERE false) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "bigint_values_one_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k)) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "bigint_values_one_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k)) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "bigint_values_one_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k))) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "bigint_values_one_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k)) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "bigint_values_one_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k)),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "bigint_values_one_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k))) AS r", "category": "nested", "batch_size": 1}
+{"id": "bigint_values_one_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k)) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "bigint_values_one_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) FROM VALUES (1) t(k)) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "bigint_one_row_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "bigint_one_row_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ) ELSE CAST(7 AS BIGINT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "bigint_one_row_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS BIGINT),(SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) )) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "bigint_one_row_null_parent", "sql": "SELECT CAST(NULL AS BIGINT) + (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "bigint_one_row_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "bigint_one_row_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) )) AS r", "category": "nested", "batch_size": 1}
+{"id": "bigint_one_row_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "bigint_one_row_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "overflow_one_row", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) ) AS r", "category": "scalar_one_row", "batch_size": 1}
+{"id": "overflow_range_false", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false) AS r", "category": "scalar_range_false", "batch_size": 1}
+{"id": "overflow_range_limit0", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) LIMIT 0) AS r", "category": "scalar_range_limit0", "batch_size": 1}
+{"id": "overflow_range_false_limit0", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false LIMIT 0) AS r", "category": "scalar_range_false_limit0", "batch_size": 1}
+{"id": "overflow_range_empty", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(0)) AS r", "category": "scalar_range_empty", "batch_size": 1}
+{"id": "overflow_values_false", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "scalar_values_false", "batch_size": 1}
+{"id": "overflow_values_limit0", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "scalar_values_limit0", "batch_size": 1}
+{"id": "overflow_range_one", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(1)) AS r", "category": "scalar_range_one", "batch_size": 1}
+{"id": "overflow_values_one", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k)) AS r", "category": "scalar_values_one", "batch_size": 1}
+{"id": "overflow_range_false_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false) ELSE CAST(7 AS INT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "overflow_range_false_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false) ELSE CAST(7 AS INT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "overflow_range_false_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS INT),(SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false)) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "overflow_range_false_null_parent", "sql": "SELECT CAST(NULL AS INT) + (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "overflow_range_false_round_null", "sql": "SELECT ROUND((SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "overflow_range_false_nested", "sql": "SELECT (SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false)) AS r", "category": "nested", "batch_size": 1}
+{"id": "overflow_range_false_outer_limit0", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "overflow_range_false_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM range(3) WHERE false) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "overflow_values_one_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k)) ELSE CAST(7 AS INT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "overflow_values_one_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k)) ELSE CAST(7 AS INT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "overflow_values_one_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS INT),(SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k))) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "overflow_values_one_null_parent", "sql": "SELECT CAST(NULL AS INT) + (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k)) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "overflow_values_one_round_null", "sql": "SELECT ROUND((SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k)),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "overflow_values_one_nested", "sql": "SELECT (SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k))) AS r", "category": "nested", "batch_size": 1}
+{"id": "overflow_values_one_outer_limit0", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k)) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "overflow_values_one_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) FROM VALUES (1) t(k)) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "overflow_one_row_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) ) ELSE CAST(7 AS INT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "overflow_one_row_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) ) ELSE CAST(7 AS INT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "overflow_one_row_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS INT),(SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) )) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "overflow_one_row_null_parent", "sql": "SELECT CAST(NULL AS INT) + (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) ) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "overflow_one_row_round_null", "sql": "SELECT ROUND((SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) ),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "overflow_one_row_nested", "sql": "SELECT (SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) )) AS r", "category": "nested", "batch_size": 1}
+{"id": "overflow_one_row_outer_limit0", "sql": "SELECT (SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) ) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "overflow_one_row_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(2147483647 AS INT) + CAST(1 AS INT) ) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "modulo_one_row", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) ) AS r", "category": "scalar_one_row", "batch_size": 1}
+{"id": "modulo_range_false", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "scalar_range_false", "batch_size": 1}
+{"id": "modulo_range_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) LIMIT 0) AS r", "category": "scalar_range_limit0", "batch_size": 1}
+{"id": "modulo_range_false_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false LIMIT 0) AS r", "category": "scalar_range_false_limit0", "batch_size": 1}
+{"id": "modulo_range_empty", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(0)) AS r", "category": "scalar_range_empty", "batch_size": 1}
+{"id": "modulo_values_false", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "scalar_values_false", "batch_size": 1}
+{"id": "modulo_values_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "scalar_values_limit0", "batch_size": 1}
+{"id": "modulo_range_one", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(1)) AS r", "category": "scalar_range_one", "batch_size": 1}
+{"id": "modulo_values_one", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)) AS r", "category": "scalar_values_one", "batch_size": 1}
+{"id": "modulo_range_false_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) ELSE CAST(7 AS INT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "modulo_range_false_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) ELSE CAST(7 AS INT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "modulo_range_false_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS INT),(SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "modulo_range_false_null_parent", "sql": "SELECT CAST(NULL AS INT) + (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "modulo_range_false_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "modulo_range_false_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "nested", "batch_size": 1}
+{"id": "modulo_range_false_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "modulo_range_false_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "modulo_values_one_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)) ELSE CAST(7 AS INT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "modulo_values_one_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)) ELSE CAST(7 AS INT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "modulo_values_one_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS INT),(SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k))) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "modulo_values_one_null_parent", "sql": "SELECT CAST(NULL AS INT) + (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "modulo_values_one_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "modulo_values_one_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k))) AS r", "category": "nested", "batch_size": 1}
+{"id": "modulo_values_one_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "modulo_values_one_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "modulo_one_row_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS INT) % CAST(0 AS INT) ) ELSE CAST(7 AS INT) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "modulo_one_row_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS INT) % CAST(0 AS INT) ) ELSE CAST(7 AS INT) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "modulo_one_row_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS INT),(SELECT CAST(7 AS INT) % CAST(0 AS INT) )) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "modulo_one_row_null_parent", "sql": "SELECT CAST(NULL AS INT) + (SELECT CAST(7 AS INT) % CAST(0 AS INT) ) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "modulo_one_row_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS INT) % CAST(0 AS INT) ),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "modulo_one_row_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) )) AS r", "category": "nested", "batch_size": 1}
+{"id": "modulo_one_row_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) % CAST(0 AS INT) ) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "modulo_one_row_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS INT) % CAST(0 AS INT) ) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "double_one_row", "sql": "SELECT (SELECT 7D / 0D ) AS r", "category": "scalar_one_row", "batch_size": 1}
+{"id": "double_range_false", "sql": "SELECT (SELECT 7D / 0D FROM range(3) WHERE false) AS r", "category": "scalar_range_false", "batch_size": 1}
+{"id": "double_range_limit0", "sql": "SELECT (SELECT 7D / 0D FROM range(3) LIMIT 0) AS r", "category": "scalar_range_limit0", "batch_size": 1}
+{"id": "double_range_false_limit0", "sql": "SELECT (SELECT 7D / 0D FROM range(3) WHERE false LIMIT 0) AS r", "category": "scalar_range_false_limit0", "batch_size": 1}
+{"id": "double_range_empty", "sql": "SELECT (SELECT 7D / 0D FROM range(0)) AS r", "category": "scalar_range_empty", "batch_size": 1}
+{"id": "double_values_false", "sql": "SELECT (SELECT 7D / 0D FROM VALUES (1) t(k) WHERE false) AS r", "category": "scalar_values_false", "batch_size": 1}
+{"id": "double_values_limit0", "sql": "SELECT (SELECT 7D / 0D FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "scalar_values_limit0", "batch_size": 1}
+{"id": "double_range_one", "sql": "SELECT (SELECT 7D / 0D FROM range(1)) AS r", "category": "scalar_range_one", "batch_size": 1}
+{"id": "double_values_one", "sql": "SELECT (SELECT 7D / 0D FROM VALUES (1) t(k)) AS r", "category": "scalar_values_one", "batch_size": 1}
+{"id": "double_range_false_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT 7D / 0D FROM range(3) WHERE false) ELSE CAST(7 AS DOUBLE) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "double_range_false_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT 7D / 0D FROM range(3) WHERE false) ELSE CAST(7 AS DOUBLE) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "double_range_false_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DOUBLE),(SELECT 7D / 0D FROM range(3) WHERE false)) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "double_range_false_null_parent", "sql": "SELECT CAST(NULL AS DOUBLE) + (SELECT 7D / 0D FROM range(3) WHERE false) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "double_range_false_round_null", "sql": "SELECT ROUND((SELECT 7D / 0D FROM range(3) WHERE false),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "double_range_false_nested", "sql": "SELECT (SELECT (SELECT 7D / 0D FROM range(3) WHERE false)) AS r", "category": "nested", "batch_size": 1}
+{"id": "double_range_false_outer_limit0", "sql": "SELECT (SELECT 7D / 0D FROM range(3) WHERE false) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "double_range_false_unused", "sql": "SELECT id FROM (SELECT id,(SELECT 7D / 0D FROM range(3) WHERE false) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "double_values_one_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT 7D / 0D FROM VALUES (1) t(k)) ELSE CAST(7 AS DOUBLE) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "double_values_one_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT 7D / 0D FROM VALUES (1) t(k)) ELSE CAST(7 AS DOUBLE) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "double_values_one_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DOUBLE),(SELECT 7D / 0D FROM VALUES (1) t(k))) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "double_values_one_null_parent", "sql": "SELECT CAST(NULL AS DOUBLE) + (SELECT 7D / 0D FROM VALUES (1) t(k)) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "double_values_one_round_null", "sql": "SELECT ROUND((SELECT 7D / 0D FROM VALUES (1) t(k)),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "double_values_one_nested", "sql": "SELECT (SELECT (SELECT 7D / 0D FROM VALUES (1) t(k))) AS r", "category": "nested", "batch_size": 1}
+{"id": "double_values_one_outer_limit0", "sql": "SELECT (SELECT 7D / 0D FROM VALUES (1) t(k)) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "double_values_one_unused", "sql": "SELECT id FROM (SELECT id,(SELECT 7D / 0D FROM VALUES (1) t(k)) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "double_one_row_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT 7D / 0D ) ELSE CAST(7 AS DOUBLE) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "double_one_row_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT 7D / 0D ) ELSE CAST(7 AS DOUBLE) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "double_one_row_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DOUBLE),(SELECT 7D / 0D )) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "double_one_row_null_parent", "sql": "SELECT CAST(NULL AS DOUBLE) + (SELECT 7D / 0D ) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "double_one_row_round_null", "sql": "SELECT ROUND((SELECT 7D / 0D ),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "double_one_row_nested", "sql": "SELECT (SELECT (SELECT 7D / 0D )) AS r", "category": "nested", "batch_size": 1}
+{"id": "double_one_row_outer_limit0", "sql": "SELECT (SELECT 7D / 0D ) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "double_one_row_unused", "sql": "SELECT id FROM (SELECT id,(SELECT 7D / 0D ) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "decimal_one_row", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) ) AS r", "category": "scalar_one_row", "batch_size": 1}
+{"id": "decimal_range_false", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false) AS r", "category": "scalar_range_false", "batch_size": 1}
+{"id": "decimal_range_limit0", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) LIMIT 0) AS r", "category": "scalar_range_limit0", "batch_size": 1}
+{"id": "decimal_range_false_limit0", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false LIMIT 0) AS r", "category": "scalar_range_false_limit0", "batch_size": 1}
+{"id": "decimal_range_empty", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(0)) AS r", "category": "scalar_range_empty", "batch_size": 1}
+{"id": "decimal_values_false", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k) WHERE false) AS r", "category": "scalar_values_false", "batch_size": 1}
+{"id": "decimal_values_limit0", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "scalar_values_limit0", "batch_size": 1}
+{"id": "decimal_range_one", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(1)) AS r", "category": "scalar_range_one", "batch_size": 1}
+{"id": "decimal_values_one", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k)) AS r", "category": "scalar_values_one", "batch_size": 1}
+{"id": "decimal_range_false_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false) ELSE CAST(7 AS DECIMAL(23,13)) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "decimal_range_false_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false) ELSE CAST(7 AS DECIMAL(23,13)) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "decimal_range_false_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DECIMAL(23,13)),(SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false)) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "decimal_range_false_null_parent", "sql": "SELECT CAST(NULL AS DECIMAL(23,13)) + (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "decimal_range_false_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "decimal_range_false_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false)) AS r", "category": "nested", "batch_size": 1}
+{"id": "decimal_range_false_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "decimal_range_false_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM range(3) WHERE false) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "decimal_values_one_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k)) ELSE CAST(7 AS DECIMAL(23,13)) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "decimal_values_one_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k)) ELSE CAST(7 AS DECIMAL(23,13)) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "decimal_values_one_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DECIMAL(23,13)),(SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k))) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "decimal_values_one_null_parent", "sql": "SELECT CAST(NULL AS DECIMAL(23,13)) + (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k)) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "decimal_values_one_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k)),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "decimal_values_one_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k))) AS r", "category": "nested", "batch_size": 1}
+{"id": "decimal_values_one_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k)) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "decimal_values_one_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) FROM VALUES (1) t(k)) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "decimal_one_row_case_dead", "sql": "SELECT CASE WHEN false THEN (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) ) ELSE CAST(7 AS DECIMAL(23,13)) END AS r", "category": "case_dead", "batch_size": 1}
+{"id": "decimal_one_row_case_null", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) ) ELSE CAST(7 AS DECIMAL(23,13)) END AS r", "category": "case_null", "batch_size": 1}
+{"id": "decimal_one_row_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DECIMAL(23,13)),(SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) )) AS r", "category": "coalesce_dead", "batch_size": 1}
+{"id": "decimal_one_row_null_parent", "sql": "SELECT CAST(NULL AS DECIMAL(23,13)) + (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) ) AS r", "category": "null_parent", "batch_size": 1}
+{"id": "decimal_one_row_round_null", "sql": "SELECT ROUND((SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) ),NULL) AS r", "category": "round_null", "batch_size": 1}
+{"id": "decimal_one_row_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) )) AS r", "category": "nested", "batch_size": 1}
+{"id": "decimal_one_row_outer_limit0", "sql": "SELECT (SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) ) AS r FROM range(3) LIMIT 0", "category": "outer_limit0", "batch_size": 1}
+{"id": "decimal_one_row_unused", "sql": "SELECT id FROM (SELECT id,(SELECT CAST(7 AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) ) AS unused FROM range(2)) t ORDER BY id", "category": "unused", "batch_size": 1}
+{"id": "cardinality_0", "sql": "SELECT (SELECT id FROM range(0)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "cardinality_1", "sql": "SELECT (SELECT id FROM range(1)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "cardinality_2", "sql": "SELECT (SELECT id FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "correlated_column", "sql": "SELECT id,(SELECT MAX(v) FROM VALUES (1),(2) t(v) WHERE v = a.id) AS r FROM range(3) a ORDER BY id", "category": "correlated_control", "batch_size": 1}
+{"id": "projected_in_null", "sql": "SELECT 3 IN (SELECT v FROM VALUES (1),(NULL) t(v)) AS r", "category": "accepted_in_policy", "batch_size": 1}
+{"id": "range_false_case_live", "sql": "SELECT CASE WHEN true THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) ELSE 7L END AS r", "category": "shared_case_live", "batch_size": 1}
+{"id": "range_false_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "shared_coalesce_live", "batch_size": 1}
+{"id": "range_false_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "shared_exists", "batch_size": 1}
+{"id": "range_false_in", "sql": "SELECT 7L IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "shared_in", "batch_size": 1}
+{"id": "range_limit0_case_live", "sql": "SELECT CASE WHEN true THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) LIMIT 0) ELSE 7L END AS r", "category": "shared_case_live", "batch_size": 1}
+{"id": "range_limit0_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) LIMIT 0)) AS r", "category": "shared_coalesce_live", "batch_size": 1}
+{"id": "range_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) LIMIT 0) AS r", "category": "shared_exists", "batch_size": 1}
+{"id": "range_limit0_in", "sql": "SELECT 7L IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) LIMIT 0) AS r", "category": "shared_in", "batch_size": 1}
+{"id": "values_false_case_live", "sql": "SELECT CASE WHEN true THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) ELSE 7L END AS r", "category": "shared_case_live", "batch_size": 1}
+{"id": "values_false_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false)) AS r", "category": "shared_coalesce_live", "batch_size": 1}
+{"id": "values_false_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "shared_exists", "batch_size": 1}
+{"id": "values_false_in", "sql": "SELECT 7L IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "shared_in", "batch_size": 1}
+{"id": "values_limit0_case_live", "sql": "SELECT CASE WHEN true THEN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) ELSE 7L END AS r", "category": "shared_case_live", "batch_size": 1}
+{"id": "values_limit0_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),(SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0)) AS r", "category": "shared_coalesce_live", "batch_size": 1}
+{"id": "values_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "shared_exists", "batch_size": 1}
+{"id": "values_limit0_in", "sql": "SELECT 7L IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "shared_in", "batch_size": 1}
+{"id": "column_division", "sql": "SELECT (SELECT id DIV 2 FROM range(1)) AS r", "category": "preserved_control", "batch_size": 1}
+{"id": "ordinary_constant", "sql": "SELECT (SELECT 7 DIV 2 FROM range(1)) AS r", "category": "preserved_control", "batch_size": 1}
+{"id": "null_constant", "sql": "SELECT (SELECT CAST(NULL AS INT) DIV 0 FROM range(1)) AS r", "category": "preserved_control", "batch_size": 1}
+{"id": "inner_dead_case", "sql": "SELECT (SELECT CASE WHEN false THEN 7 DIV 0 ELSE 5L END FROM range(1)) AS r", "category": "preserved_control", "batch_size": 1}
+{"id": "inner_dead_coalesce", "sql": "SELECT (SELECT COALESCE(5L,7 DIV 0) FROM range(1)) AS r", "category": "preserved_control", "batch_size": 1}
+{"id": "inner_null_parent", "sql": "SELECT (SELECT CAST(NULL AS BIGINT) + (7 DIV 0) FROM range(1)) AS r", "category": "preserved_control", "batch_size": 1}
+{"id": "inner_unused_column", "sql": "SELECT (SELECT id FROM (SELECT id,7 DIV 0 AS unused FROM range(1)) t) AS r", "category": "preserved_control", "batch_size": 1}
+{"id": "nested_limit0", "sql": "SELECT (SELECT (SELECT 7 DIV 0 FROM range(3) LIMIT 0)) AS r", "category": "preserved_control", "batch_size": 1}
