@@ -1,0 +1,18 @@
+{"id": "ROUND_case_dead", "sql": "SELECT ROUND(CASE WHEN false THEN (SELECT v FROM VALUES (2D),(3D) t(v)) ELSE 1D END,NULL) AS r", "batch_size": 2}
+{"id": "ROUND_case_live", "sql": "SELECT ROUND(CASE WHEN true THEN (SELECT v FROM VALUES (2D),(3D) t(v)) ELSE 1D END,NULL) AS r", "batch_size": 2}
+{"id": "ROUND_case_bad_scalar", "sql": "SELECT ROUND(CASE WHEN true THEN CAST('bad' AS DOUBLE) ELSE (SELECT v FROM VALUES (2D),(3D) t(v)) END,NULL) AS r", "batch_size": 2}
+{"id": "ROUND_case_bad_subquery", "sql": "SELECT ROUND(CASE WHEN false THEN (SELECT CAST(v AS DOUBLE) FROM VALUES ('bad') t(v)) ELSE 1D END,NULL) AS r", "batch_size": 2}
+{"id": "ROUND_coalesce_dead", "sql": "SELECT ROUND(COALESCE(1D,(SELECT v FROM VALUES (2D),(3D) t(v))),NULL) AS r", "batch_size": 2}
+{"id": "ROUND_coalesce_live", "sql": "SELECT ROUND(COALESCE(CAST(NULL AS DOUBLE),(SELECT v FROM VALUES (2D),(3D) t(v))),NULL) AS r", "batch_size": 2}
+{"id": "ROUND_null_parent", "sql": "SELECT ROUND(CAST(NULL AS DOUBLE)+(SELECT v FROM VALUES (2D),(3D) t(v)),NULL) AS r", "batch_size": 2}
+{"id": "ROUND_null_parent_bad", "sql": "SELECT ROUND(CAST(NULL AS DOUBLE)+(SELECT CAST(v AS DOUBLE) FROM VALUES ('bad') t(v)),NULL) AS r", "batch_size": 2}
+{"id": "ROUND_nested_round", "sql": "SELECT ROUND(ROUND((SELECT v FROM VALUES (2D),(3D) t(v)),NULL),NULL) AS r", "batch_size": 2}
+{"id": "BROUND_case_dead", "sql": "SELECT BROUND(CASE WHEN false THEN (SELECT v FROM VALUES (2D),(3D) t(v)) ELSE 1D END,NULL) AS r", "batch_size": 2}
+{"id": "BROUND_case_live", "sql": "SELECT BROUND(CASE WHEN true THEN (SELECT v FROM VALUES (2D),(3D) t(v)) ELSE 1D END,NULL) AS r", "batch_size": 2}
+{"id": "BROUND_case_bad_scalar", "sql": "SELECT BROUND(CASE WHEN true THEN CAST('bad' AS DOUBLE) ELSE (SELECT v FROM VALUES (2D),(3D) t(v)) END,NULL) AS r", "batch_size": 2}
+{"id": "BROUND_case_bad_subquery", "sql": "SELECT BROUND(CASE WHEN false THEN (SELECT CAST(v AS DOUBLE) FROM VALUES ('bad') t(v)) ELSE 1D END,NULL) AS r", "batch_size": 2}
+{"id": "BROUND_coalesce_dead", "sql": "SELECT BROUND(COALESCE(1D,(SELECT v FROM VALUES (2D),(3D) t(v))),NULL) AS r", "batch_size": 2}
+{"id": "BROUND_coalesce_live", "sql": "SELECT BROUND(COALESCE(CAST(NULL AS DOUBLE),(SELECT v FROM VALUES (2D),(3D) t(v))),NULL) AS r", "batch_size": 2}
+{"id": "BROUND_null_parent", "sql": "SELECT BROUND(CAST(NULL AS DOUBLE)+(SELECT v FROM VALUES (2D),(3D) t(v)),NULL) AS r", "batch_size": 2}
+{"id": "BROUND_null_parent_bad", "sql": "SELECT BROUND(CAST(NULL AS DOUBLE)+(SELECT CAST(v AS DOUBLE) FROM VALUES ('bad') t(v)),NULL) AS r", "batch_size": 2}
+{"id": "BROUND_nested_round", "sql": "SELECT BROUND(ROUND((SELECT v FROM VALUES (2D),(3D) t(v)),NULL),NULL) AS r", "batch_size": 2}
