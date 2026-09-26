@@ -1,0 +1,148 @@
+{"id": "int_limit0", "sql": "SELECT (SELECT CAST(7 AS INT) FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 1}
+{"id": "int_range0", "sql": "SELECT (SELECT CAST(7 AS INT) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "int_range_filter", "sql": "SELECT (SELECT CAST(7 AS INT) FROM range(3) WHERE id < 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "int_values_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(7 AS INT)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "int_nullable_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(7 AS INT)), (CAST(NULL AS INT)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "int_nullable_limit0", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(7 AS INT) ELSE CAST(NULL AS INT) END FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "int_offset", "sql": "SELECT (SELECT CAST(7 AS INT) FROM range(1) LIMIT 1 OFFSET 1) AS r", "category": "empty", "batch_size": 2}
+{"id": "int_one", "sql": "SELECT (SELECT CAST(7 AS INT) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "int_one_null", "sql": "SELECT (SELECT CAST(NULL AS INT) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "int_one_values", "sql": "SELECT (SELECT v FROM VALUES (CAST(7 AS INT)) t(v)) AS r", "category": "control", "batch_size": 1}
+{"id": "int_two", "sql": "SELECT (SELECT CAST(7 AS INT) FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "int_two_batches", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(7 AS INT) ELSE CAST(NULL AS INT) END FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "int_aggregate_empty", "sql": "SELECT (SELECT FIRST(v) FROM (SELECT CAST(7 AS INT) AS v FROM range(0)) t) AS r", "category": "control", "batch_size": 1}
+{"id": "int_isnull", "sql": "SELECT (SELECT CAST(7 AS INT) FROM range(0)) IS NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "int_notnull", "sql": "SELECT (SELECT CAST(7 AS INT) FROM range(0)) IS NOT NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "int_coalesce", "sql": "SELECT COALESCE((SELECT CAST(7 AS INT) FROM range(0)),CAST(7 AS INT)) AS r", "category": "coalesce", "batch_size": 2}
+{"id": "int_case", "sql": "SELECT CASE WHEN (SELECT CAST(7 AS INT) FROM range(0)) IS NULL THEN CAST(7 AS INT) ELSE CAST(NULL AS INT) END AS r", "category": "case", "batch_size": 2}
+{"id": "int_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS INT) FROM range(0))) AS r", "category": "empty", "batch_size": 2}
+{"id": "int_outer_rows", "sql": "SELECT id, (SELECT CAST(7 AS INT) FROM range(0)) AS r FROM range(3) ORDER BY id", "category": "empty_projection", "batch_size": 1}
+{"id": "bigint_limit0", "sql": "SELECT (SELECT CAST(7 AS BIGINT) FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 1}
+{"id": "bigint_range0", "sql": "SELECT (SELECT CAST(7 AS BIGINT) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "bigint_range_filter", "sql": "SELECT (SELECT CAST(7 AS BIGINT) FROM range(3) WHERE id < 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "bigint_values_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(7 AS BIGINT)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "bigint_nullable_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(7 AS BIGINT)), (CAST(NULL AS BIGINT)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "bigint_nullable_limit0", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(7 AS BIGINT) ELSE CAST(NULL AS BIGINT) END FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "bigint_offset", "sql": "SELECT (SELECT CAST(7 AS BIGINT) FROM range(1) LIMIT 1 OFFSET 1) AS r", "category": "empty", "batch_size": 2}
+{"id": "bigint_one", "sql": "SELECT (SELECT CAST(7 AS BIGINT) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "bigint_one_null", "sql": "SELECT (SELECT CAST(NULL AS BIGINT) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "bigint_one_values", "sql": "SELECT (SELECT v FROM VALUES (CAST(7 AS BIGINT)) t(v)) AS r", "category": "control", "batch_size": 1}
+{"id": "bigint_two", "sql": "SELECT (SELECT CAST(7 AS BIGINT) FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "bigint_two_batches", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(7 AS BIGINT) ELSE CAST(NULL AS BIGINT) END FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "bigint_aggregate_empty", "sql": "SELECT (SELECT FIRST(v) FROM (SELECT CAST(7 AS BIGINT) AS v FROM range(0)) t) AS r", "category": "control", "batch_size": 1}
+{"id": "bigint_isnull", "sql": "SELECT (SELECT CAST(7 AS BIGINT) FROM range(0)) IS NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "bigint_notnull", "sql": "SELECT (SELECT CAST(7 AS BIGINT) FROM range(0)) IS NOT NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "bigint_coalesce", "sql": "SELECT COALESCE((SELECT CAST(7 AS BIGINT) FROM range(0)),CAST(7 AS BIGINT)) AS r", "category": "coalesce", "batch_size": 2}
+{"id": "bigint_case", "sql": "SELECT CASE WHEN (SELECT CAST(7 AS BIGINT) FROM range(0)) IS NULL THEN CAST(7 AS BIGINT) ELSE CAST(NULL AS BIGINT) END AS r", "category": "case", "batch_size": 2}
+{"id": "bigint_nested", "sql": "SELECT (SELECT (SELECT CAST(7 AS BIGINT) FROM range(0))) AS r", "category": "empty", "batch_size": 2}
+{"id": "bigint_outer_rows", "sql": "SELECT id, (SELECT CAST(7 AS BIGINT) FROM range(0)) AS r FROM range(3) ORDER BY id", "category": "empty_projection", "batch_size": 1}
+{"id": "double_limit0", "sql": "SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 1}
+{"id": "double_range0", "sql": "SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "double_range_filter", "sql": "SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(3) WHERE id < 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "double_values_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.25 AS DOUBLE)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "double_nullable_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.25 AS DOUBLE)), (CAST(NULL AS DOUBLE)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "double_nullable_limit0", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(1.25 AS DOUBLE) ELSE CAST(NULL AS DOUBLE) END FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "double_offset", "sql": "SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(1) LIMIT 1 OFFSET 1) AS r", "category": "empty", "batch_size": 2}
+{"id": "double_one", "sql": "SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "double_one_null", "sql": "SELECT (SELECT CAST(NULL AS DOUBLE) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "double_one_values", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.25 AS DOUBLE)) t(v)) AS r", "category": "control", "batch_size": 1}
+{"id": "double_two", "sql": "SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "double_two_batches", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(1.25 AS DOUBLE) ELSE CAST(NULL AS DOUBLE) END FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "double_aggregate_empty", "sql": "SELECT (SELECT FIRST(v) FROM (SELECT CAST(1.25 AS DOUBLE) AS v FROM range(0)) t) AS r", "category": "control", "batch_size": 1}
+{"id": "double_isnull", "sql": "SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(0)) IS NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "double_notnull", "sql": "SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(0)) IS NOT NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "double_coalesce", "sql": "SELECT COALESCE((SELECT CAST(1.25 AS DOUBLE) FROM range(0)),CAST(1.25 AS DOUBLE)) AS r", "category": "coalesce", "batch_size": 2}
+{"id": "double_case", "sql": "SELECT CASE WHEN (SELECT CAST(1.25 AS DOUBLE) FROM range(0)) IS NULL THEN CAST(1.25 AS DOUBLE) ELSE CAST(NULL AS DOUBLE) END AS r", "category": "case", "batch_size": 2}
+{"id": "double_nested", "sql": "SELECT (SELECT (SELECT CAST(1.25 AS DOUBLE) FROM range(0))) AS r", "category": "empty", "batch_size": 2}
+{"id": "double_outer_rows", "sql": "SELECT id, (SELECT CAST(1.25 AS DOUBLE) FROM range(0)) AS r FROM range(3) ORDER BY id", "category": "empty_projection", "batch_size": 1}
+{"id": "decimal_limit0", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 1}
+{"id": "decimal_range0", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal_range_filter", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(3) WHERE id < 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal_values_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.250 AS DECIMAL(12,3))) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal_nullable_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.250 AS DECIMAL(12,3))), (CAST(NULL AS DECIMAL(12,3))) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal_nullable_limit0", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(1.250 AS DECIMAL(12,3)) ELSE CAST(NULL AS DECIMAL(12,3)) END FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal_offset", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(1) LIMIT 1 OFFSET 1) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal_one", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "decimal_one_null", "sql": "SELECT (SELECT CAST(NULL AS DECIMAL(12,3)) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "decimal_one_values", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.250 AS DECIMAL(12,3))) t(v)) AS r", "category": "control", "batch_size": 1}
+{"id": "decimal_two", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "decimal_two_batches", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(1.250 AS DECIMAL(12,3)) ELSE CAST(NULL AS DECIMAL(12,3)) END FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "decimal_aggregate_empty", "sql": "SELECT (SELECT FIRST(v) FROM (SELECT CAST(1.250 AS DECIMAL(12,3)) AS v FROM range(0)) t) AS r", "category": "control", "batch_size": 1}
+{"id": "decimal_isnull", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(0)) IS NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "decimal_notnull", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(0)) IS NOT NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "decimal_coalesce", "sql": "SELECT COALESCE((SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(0)),CAST(1.250 AS DECIMAL(12,3))) AS r", "category": "coalesce", "batch_size": 2}
+{"id": "decimal_case", "sql": "SELECT CASE WHEN (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(0)) IS NULL THEN CAST(1.250 AS DECIMAL(12,3)) ELSE CAST(NULL AS DECIMAL(12,3)) END AS r", "category": "case", "batch_size": 2}
+{"id": "decimal_nested", "sql": "SELECT (SELECT (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(0))) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal_outer_rows", "sql": "SELECT id, (SELECT CAST(1.250 AS DECIMAL(12,3)) FROM range(0)) AS r FROM range(3) ORDER BY id", "category": "empty_projection", "batch_size": 1}
+{"id": "decimal38_limit0", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 1}
+{"id": "decimal38_range0", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal38_range_filter", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(3) WHERE id < 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal38_values_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.250 AS DECIMAL(38,10))) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal38_nullable_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.250 AS DECIMAL(38,10))), (CAST(NULL AS DECIMAL(38,10))) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal38_nullable_limit0", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(1.250 AS DECIMAL(38,10)) ELSE CAST(NULL AS DECIMAL(38,10)) END FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal38_offset", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(1) LIMIT 1 OFFSET 1) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal38_one", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "decimal38_one_null", "sql": "SELECT (SELECT CAST(NULL AS DECIMAL(38,10)) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "decimal38_one_values", "sql": "SELECT (SELECT v FROM VALUES (CAST(1.250 AS DECIMAL(38,10))) t(v)) AS r", "category": "control", "batch_size": 1}
+{"id": "decimal38_two", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "decimal38_two_batches", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(1.250 AS DECIMAL(38,10)) ELSE CAST(NULL AS DECIMAL(38,10)) END FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "decimal38_aggregate_empty", "sql": "SELECT (SELECT FIRST(v) FROM (SELECT CAST(1.250 AS DECIMAL(38,10)) AS v FROM range(0)) t) AS r", "category": "control", "batch_size": 1}
+{"id": "decimal38_isnull", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(0)) IS NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "decimal38_notnull", "sql": "SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(0)) IS NOT NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "decimal38_coalesce", "sql": "SELECT COALESCE((SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(0)),CAST(1.250 AS DECIMAL(38,10))) AS r", "category": "coalesce", "batch_size": 2}
+{"id": "decimal38_case", "sql": "SELECT CASE WHEN (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(0)) IS NULL THEN CAST(1.250 AS DECIMAL(38,10)) ELSE CAST(NULL AS DECIMAL(38,10)) END AS r", "category": "case", "batch_size": 2}
+{"id": "decimal38_nested", "sql": "SELECT (SELECT (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(0))) AS r", "category": "empty", "batch_size": 2}
+{"id": "decimal38_outer_rows", "sql": "SELECT id, (SELECT CAST(1.250 AS DECIMAL(38,10)) FROM range(0)) AS r FROM range(3) ORDER BY id", "category": "empty_projection", "batch_size": 1}
+{"id": "string_limit0", "sql": "SELECT (SELECT CAST('abc' AS STRING) FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 1}
+{"id": "string_range0", "sql": "SELECT (SELECT CAST('abc' AS STRING) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "string_range_filter", "sql": "SELECT (SELECT CAST('abc' AS STRING) FROM range(3) WHERE id < 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "string_values_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST('abc' AS STRING)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "string_nullable_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST('abc' AS STRING)), (CAST(NULL AS STRING)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "string_nullable_limit0", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST('abc' AS STRING) ELSE CAST(NULL AS STRING) END FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "string_offset", "sql": "SELECT (SELECT CAST('abc' AS STRING) FROM range(1) LIMIT 1 OFFSET 1) AS r", "category": "empty", "batch_size": 2}
+{"id": "string_one", "sql": "SELECT (SELECT CAST('abc' AS STRING) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "string_one_null", "sql": "SELECT (SELECT CAST(NULL AS STRING) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "string_one_values", "sql": "SELECT (SELECT v FROM VALUES (CAST('abc' AS STRING)) t(v)) AS r", "category": "control", "batch_size": 1}
+{"id": "string_two", "sql": "SELECT (SELECT CAST('abc' AS STRING) FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "string_two_batches", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST('abc' AS STRING) ELSE CAST(NULL AS STRING) END FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "string_aggregate_empty", "sql": "SELECT (SELECT FIRST(v) FROM (SELECT CAST('abc' AS STRING) AS v FROM range(0)) t) AS r", "category": "control", "batch_size": 1}
+{"id": "string_isnull", "sql": "SELECT (SELECT CAST('abc' AS STRING) FROM range(0)) IS NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "string_notnull", "sql": "SELECT (SELECT CAST('abc' AS STRING) FROM range(0)) IS NOT NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "string_coalesce", "sql": "SELECT COALESCE((SELECT CAST('abc' AS STRING) FROM range(0)),CAST('abc' AS STRING)) AS r", "category": "coalesce", "batch_size": 2}
+{"id": "string_case", "sql": "SELECT CASE WHEN (SELECT CAST('abc' AS STRING) FROM range(0)) IS NULL THEN CAST('abc' AS STRING) ELSE CAST(NULL AS STRING) END AS r", "category": "case", "batch_size": 2}
+{"id": "string_nested", "sql": "SELECT (SELECT (SELECT CAST('abc' AS STRING) FROM range(0))) AS r", "category": "empty", "batch_size": 2}
+{"id": "string_outer_rows", "sql": "SELECT id, (SELECT CAST('abc' AS STRING) FROM range(0)) AS r FROM range(3) ORDER BY id", "category": "empty_projection", "batch_size": 1}
+{"id": "boolean_limit0", "sql": "SELECT (SELECT CAST(true AS BOOLEAN) FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 1}
+{"id": "boolean_range0", "sql": "SELECT (SELECT CAST(true AS BOOLEAN) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "boolean_range_filter", "sql": "SELECT (SELECT CAST(true AS BOOLEAN) FROM range(3) WHERE id < 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "boolean_values_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(true AS BOOLEAN)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "boolean_nullable_filter", "sql": "SELECT (SELECT v FROM VALUES (CAST(true AS BOOLEAN)), (CAST(NULL AS BOOLEAN)) t(v) WHERE false) AS r", "category": "empty", "batch_size": 2}
+{"id": "boolean_nullable_limit0", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(true AS BOOLEAN) ELSE CAST(NULL AS BOOLEAN) END FROM range(3) LIMIT 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "boolean_offset", "sql": "SELECT (SELECT CAST(true AS BOOLEAN) FROM range(1) LIMIT 1 OFFSET 1) AS r", "category": "empty", "batch_size": 2}
+{"id": "boolean_one", "sql": "SELECT (SELECT CAST(true AS BOOLEAN) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "boolean_one_null", "sql": "SELECT (SELECT CAST(NULL AS BOOLEAN) FROM range(1)) AS r", "category": "control", "batch_size": 1}
+{"id": "boolean_one_values", "sql": "SELECT (SELECT v FROM VALUES (CAST(true AS BOOLEAN)) t(v)) AS r", "category": "control", "batch_size": 1}
+{"id": "boolean_two", "sql": "SELECT (SELECT CAST(true AS BOOLEAN) FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "boolean_two_batches", "sql": "SELECT (SELECT CASE WHEN id=0 THEN CAST(true AS BOOLEAN) ELSE CAST(NULL AS BOOLEAN) END FROM range(2)) AS r", "category": "cardinality", "batch_size": 1}
+{"id": "boolean_aggregate_empty", "sql": "SELECT (SELECT FIRST(v) FROM (SELECT CAST(true AS BOOLEAN) AS v FROM range(0)) t) AS r", "category": "control", "batch_size": 1}
+{"id": "boolean_isnull", "sql": "SELECT (SELECT CAST(true AS BOOLEAN) FROM range(0)) IS NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "boolean_notnull", "sql": "SELECT (SELECT CAST(true AS BOOLEAN) FROM range(0)) IS NOT NULL AS r", "category": "null_predicate", "batch_size": 2}
+{"id": "boolean_coalesce", "sql": "SELECT COALESCE((SELECT CAST(true AS BOOLEAN) FROM range(0)),CAST(true AS BOOLEAN)) AS r", "category": "coalesce", "batch_size": 2}
+{"id": "boolean_case", "sql": "SELECT CASE WHEN (SELECT CAST(true AS BOOLEAN) FROM range(0)) IS NULL THEN CAST(true AS BOOLEAN) ELSE CAST(NULL AS BOOLEAN) END AS r", "category": "case", "batch_size": 2}
+{"id": "boolean_nested", "sql": "SELECT (SELECT (SELECT CAST(true AS BOOLEAN) FROM range(0))) AS r", "category": "empty", "batch_size": 2}
+{"id": "boolean_outer_rows", "sql": "SELECT id, (SELECT CAST(true AS BOOLEAN) FROM range(0)) AS r FROM range(3) ORDER BY id", "category": "empty_projection", "batch_size": 1}
+{"id": "count_empty", "sql": "SELECT (SELECT COUNT(*) FROM range(0)) AS r", "category": "control", "batch_size": 2}
+{"id": "count_filtered", "sql": "SELECT (SELECT COUNT(*) FROM range(3) WHERE id < 0) AS r", "category": "control", "batch_size": 2}
+{"id": "sum_empty", "sql": "SELECT (SELECT SUM(id) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "max_empty", "sql": "SELECT (SELECT MAX(id) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "count_having_empty", "sql": "SELECT (SELECT COUNT(*) FROM range(0) HAVING COUNT(*) > 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "count_limit0", "sql": "SELECT (SELECT COUNT(*) FROM range(0) LIMIT 0) AS r", "category": "empty", "batch_size": 2}
+{"id": "two_columns", "sql": "SELECT (SELECT 1,2) AS r", "category": "column_count", "batch_size": 2}
+{"id": "two_columns_empty", "sql": "SELECT (SELECT id,id FROM range(0)) AS r", "category": "column_count", "batch_size": 2}
+{"id": "in_empty", "sql": "SELECT id IN (SELECT id FROM range(0)) AS r FROM range(2) ORDER BY id", "category": "projected_in", "batch_size": 2}
+{"id": "in_null", "sql": "SELECT 3 IN (SELECT v FROM VALUES (1),(NULL) t(v)) AS r", "category": "accepted_in_policy", "batch_size": 2}
+{"id": "exists_empty", "sql": "SELECT EXISTS(SELECT id FROM range(0)) AS r", "category": "exists", "batch_size": 2}
+{"id": "exists_one", "sql": "SELECT EXISTS(SELECT id FROM range(1)) AS r", "category": "exists", "batch_size": 2}
+{"id": "empty_addition", "sql": "SELECT 7 + (SELECT CAST(id AS INT) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "empty_division", "sql": "SELECT 7 DIV (SELECT CAST(id AS INT) FROM range(0)) AS r", "category": "empty", "batch_size": 2}
+{"id": "empty_cast", "sql": "SELECT CAST((SELECT id FROM range(0)) AS DECIMAL(12,3)) AS r", "category": "empty", "batch_size": 2}

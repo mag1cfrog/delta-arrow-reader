@@ -44,6 +44,8 @@ The [STRING-peer modulo repair](STRING_MODULO_COERCION.md) reuses division coerc
 
 The [early arithmetic repair](EARLY_ARITHMETIC.md) preserves required errors across expression wrappers and LIMIT 0 while retaining dead branches and unused-column pruning. All 58 assigned cases and their opposite-mode controls pass; the report retains separate error/schema gaps and planning/execution measurements.
 
+The [empty scalar-subquery repair](EMPTY_SCALAR_SUBQUERIES.md) fixes shared logical/physical nullability, preserving typed NULL results and NULL-dependent optimizations. Its 11 assigned observations pass; broader checks retain the accepted IN policy, schema boundaries and measured costs.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.

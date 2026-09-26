@@ -1,0 +1,111 @@
+--- a/datafusion-expr/src/expr_schema.rs
++++ b/datafusion-expr/src/expr_schema.rs
+@@ -367,9 +367,8 @@
+             | Expr::Exists { .. } => Ok(false),
+             Expr::SetComparison(_) => Ok(true),
+             Expr::InSubquery(InSubquery { expr, .. }) => expr.nullable(input_schema),
+-            Expr::ScalarSubquery(subquery) => {
+-                Ok(subquery.subquery.schema().field(0).is_nullable())
+-            }
++            // No input rows still produce a scalar NULL.
++            Expr::ScalarSubquery(_) => Ok(true),
+             Expr::BinaryExpr(BinaryExpr { left, right, .. }) => {
+                 Ok(left.nullable(input_schema)? || right.nullable(input_schema)?)
+             }
+@@ -515,9 +514,9 @@
+             | Expr::Exists { .. } => {
+                 Ok(Arc::new(Field::new(&schema_name, DataType::Boolean, false)))
+             }
+-            Expr::ScalarSubquery(subquery) => {
+-                Ok(Arc::clone(&subquery.subquery.schema().fields()[0]))
+-            }
++            Expr::ScalarSubquery(subquery) => Ok(Arc::new(
++                subquery.subquery.schema().field(0).as_ref().clone().with_nullable(true),
++            )),
+             Expr::BinaryExpr(BinaryExpr { left, right, op }) => {
+                 let (left_field, right_field) =
+                     (left.to_field(schema)?.1, right.to_field(schema)?.1);
+@@ -827,6 +826,32 @@
+     }
+ 
+     #[test]
++    fn scalar_subquery_nullable_field() -> Result<()> {
++        for data_type in [DataType::Int32, DataType::Decimal128(12, 3)] {
++            for nullable in [false, true] {
++                let field = Field::new("v", data_type.clone(), nullable).with_metadata(
++                    [("source".to_owned(), "subquery".to_owned())].into(),
++                );
++                let schema = DFSchema::from_unqualified_fields(
++                    vec![Arc::new(field.clone())].into(),
++                    HashMap::new(),
++                )?;
++                let plan = LogicalPlan::EmptyRelation(crate::EmptyRelation {
++                    produce_one_row: false,
++                    schema: Arc::new(schema),
++                });
++                let expr = crate::expr_fn::scalar_subquery(Arc::new(plan));
++                assert!(expr.nullable(&DFSchema::empty())?);
++                assert_eq!(
++                    expr.to_field(&DFSchema::empty())?.1.as_ref(),
++                    &field.with_nullable(true),
++                );
++            }
++        }
++        Ok(())
++    }
++
++    #[test]
+     fn test_between_nullability() {
+         let get_schema = |nullable| {
+             MockExprSchema::new()
+--- a/datafusion-physical-expr/src/planner.rs
++++ b/datafusion-physical-expr/src/planner.rs
+@@ -413,7 +413,7 @@
+                         );
+                     }
+                     let dt = schema.field(0).data_type().clone();
+-                    let nullable = schema.field(0).is_nullable();
++                    let nullable = e.nullable(input_dfschema)?;
+                     Ok(Arc::new(ScalarSubqueryExpr::new(
+                         dt,
+                         nullable,
+@@ -643,6 +643,39 @@
+     }
+ 
+     #[test]
++    fn scalar_subquery_nullable_field() -> Result<()> {
++        use datafusion_expr::execution_props::{ScalarSubqueryResults, SubqueryIndex};
++        use datafusion_expr::{EmptyRelation, LogicalPlan, expr_fn::scalar_subquery};
++
++        for data_type in [DataType::Int32, DataType::Decimal128(12, 3)] {
++            for nullable in [false, true] {
++                let schema = Schema::new(vec![Field::new("v", data_type.clone(), nullable)]);
++                let expr = scalar_subquery(Arc::new(LogicalPlan::EmptyRelation(
++                    EmptyRelation {
++                        produce_one_row: false,
++                        schema: Arc::new(DFSchema::try_from(schema)?),
++                    },
++                )));
++                let Expr::ScalarSubquery(subquery) = &expr else {
++                    unreachable!()
++                };
++                let index = SubqueryIndex::new(0);
++                let mut props = ExecutionProps::new();
++                props.subquery_indexes.insert(subquery.clone(), index);
++                props.subquery_results = ScalarSubqueryResults::new(1);
++                let null = ScalarValue::try_from(&data_type)?;
++                props.subquery_results.set(index, null.clone())?;
++                let physical = create_physical_expr(&expr, &DFSchema::empty(), &props)?;
++                assert!(physical.nullable(&Schema::empty())?);
++                assert_eq!(physical.data_type(&Schema::empty())?, data_type);
++                let value = physical.evaluate(&RecordBatch::new_empty(Arc::new(Schema::empty())))?;
++                assert_eq!(ScalarValue::try_from_array(&value.into_array(1)?, 0)?, null);
++            }
++        }
++        Ok(())
++    }
++
++    #[test]
+     fn test_cast_lowering_preserves_target_field_metadata() -> Result<()> {
+         let schema = test_cast_schema();
+         let target_field = Arc::new(
