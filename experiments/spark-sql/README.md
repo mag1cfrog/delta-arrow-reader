@@ -48,6 +48,8 @@ The [empty scalar-subquery repair](EMPTY_SCALAR_SUBQUERIES.md) fixes shared logi
 
 The [scalar-subquery arithmetic repair](SCALAR_SUBQUERY_ARITHMETIC.md) preserves required early errors while retaining one-row inlining and LIMIT/conditional boundaries. All four assigned errors and the full 350-observation DIV group pass; remaining diagnostic, conditional and predicate-subquery findings keep their existing owners.
 
+The [NULL CASE branch repair](NULL_CASE_BRANCHES.md) extends native dead-branch simplification to literal NULL conditions. All eight assigned scalar-subquery cases pass, while required preparation errors and typed-NULL outputs remain checked.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.

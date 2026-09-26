@@ -1,0 +1,104 @@
+--- a/src/simplify_expressions/expr_simplifier.rs
++++ b/src/simplify_expressions/expr_simplifier.rs
+@@ -1573,7 +1573,7 @@
+                 mut else_expr,
+             }) if when_then_expr
+                 .iter()
+-                .any(|(when, _)| is_true(when.as_ref()) || is_false(when.as_ref())) =>
++                .any(|(when, _)| is_true(when.as_ref()) || is_false(when.as_ref()) || is_null(when.as_ref())) =>
+             {
+                 let out_type = info.get_data_type(&when_then_expr[0].1)?;
+                 let mut new_when_then_expr = Vec::with_capacity(when_then_expr.len());
+@@ -1584,10 +1584,10 @@
+                         // CASE WHEN X THEN A WHEN TRUE THEN B ... END --> CASE WHEN X THEN A ELSE B END
+                         else_expr = Some(then);
+                         break;
+-                    } else if !is_false(when.as_ref()) {
++                    } else if !is_false(when.as_ref()) && !is_null(when.as_ref()) {
+                         new_when_then_expr.push((when, then));
+                     }
+-                    // else: skip WHEN false cases
++                    // FALSE and NULL conditions cannot select a branch.
+                 }
+ 
+                 // Exclude CASE statement altogether if there are no when-then expressions left
+@@ -4161,6 +4161,79 @@
+     }
+ 
+     #[test]
++    fn simplify_case_null_conditions() -> datafusion_common::Result<()> {
++        use crate::simplify_expressions::{ExprSimplifier, SimplifyContext};
++        use arrow::datatypes::{DataType, Field, Schema};
++        use datafusion_common::{DFSchema, ScalarValue};
++        use datafusion_expr::{Case, Expr, col, lit};
++        use std::sync::Arc;
++
++        for data_type in [
++            DataType::Int64,
++            DataType::Boolean,
++            DataType::Utf8,
++            DataType::Decimal128(12, 3),
++        ] {
++            let schema = Arc::new(DFSchema::try_from(Schema::new(vec![
++                Field::new("discarded", data_type.clone(), false),
++                Field::new("value", data_type.clone(), false),
++                Field::new("flag", DataType::Boolean, true),
++            ]))?);
++            let simplifier =
++                ExprSimplifier::new(SimplifyContext::builder().with_schema(schema).build());
++            for condition in [lit(ScalarValue::Boolean(None)), lit(ScalarValue::Null)] {
++                let dead = (Box::new(condition), Box::new(col("discarded")));
++                for branches in [
++                    vec![dead.clone()],
++                    vec![
++                        (Box::new(lit(false)), Box::new(col("discarded"))),
++                        dead.clone(),
++                    ],
++                ] {
++                    let with_else = Expr::Case(Case::new(
++                        None,
++                        branches.clone(),
++                        Some(Box::new(col("value"))),
++                    ));
++                    assert_eq!(
++                        simplifier.simplify_algebraic_once(with_else.clone())?.data,
++                        col("value")
++                    );
++                    assert_eq!(simplifier.simplify(with_else)?, col("value"));
++                    let without_else = Expr::Case(Case::new(None, branches, None));
++                    assert_eq!(
++                        simplifier.simplify_algebraic_once(without_else)?.data,
++                        lit(ScalarValue::try_new_null(&data_type)?)
++                    );
++                }
++                // A nullable column can be true. Keep its position and branch.
++                if data_type == DataType::Int64 {
++                    let live = (Box::new(col("flag")), Box::new(col("discarded")));
++                    for branches in [
++                        vec![dead.clone(), live.clone()],
++                        vec![live.clone(), dead.clone()],
++                    ] {
++                        let expr = Expr::Case(Case::new(None, branches, Some(Box::new(col("value")))));
++                        let expected = Expr::Case(Case::new(
++                            None,
++                            vec![live.clone()],
++                            Some(Box::new(col("value"))),
++                        ));
++                        assert_eq!(simplifier.simplify_algebraic_once(expr)?.data, expected);
++                    }
++                    let expr = Expr::Case(Case::new(
++                        Some(Box::new(col("value"))),
++                        vec![dead],
++                        Some(Box::new(col("value"))),
++                    ));
++                    assert_eq!(simplifier.simplify_algebraic_once(expr.clone())?.data, expr);
++                }
++            }
++        }
++        Ok(())
++    }
++
++    #[test]
+     fn simplify_expr_case_when_first_true() {
+         // CASE WHEN true THEN 1 ELSE c1 END --> 1
+         assert_eq!(
