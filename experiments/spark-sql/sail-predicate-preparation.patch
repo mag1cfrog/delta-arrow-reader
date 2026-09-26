@@ -1,0 +1,257 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -134,7 +134,7 @@
+         let mut props = ExecutionProps::new();
+         props.config_options = Some(Arc::new(options.clone()));
+         let prepare = Prepare { props };
+-        let plan = if check_cast {
++        let plan = if check_cast || check_arithmetic {
+             plan.transform_up_with_subqueries(|node| {
+                 let schema = if !node.inputs().is_empty() {
+                     Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()))
+@@ -150,10 +150,79 @@
+                 node.map_expressions(|expr| {
+                     let name = names.save(&expr);
+                     Ok(expr
+-                        .transform_up(|expr| {
++                        .transform_up(|mut expr| {
++                            // EXISTS needs only row presence. Keep local VALUES
++                            // checks before pruning its unused output expressions.
++                            let predicate = match &mut expr {
++                                Expr::Exists(exists)
++                                    if exists.subquery.outer_ref_columns.is_empty() =>
++                                {
++                                    // Remaining scalar subqueries are prepared even
++                                    // when EXISTS will discard their parent projection.
++                                    exists.subquery.subquery.apply_with_subqueries(|node| {
++                                        node.apply_expressions(|expr| {
++                                            expr.apply(|expr| {
++                                                if let Expr::ScalarSubquery(scalar) = expr {
++                                                    prepare.check_subquery(&scalar.subquery)?;
++                                                }
++                                                Ok(TreeNodeRecursion::Continue)
++                                            })
++                                        })
++                                    })?;
++                                    exists.subquery.subquery = Arc::new(LogicalPlan::Projection(
++                                        datafusion_expr::logical_plan::Projection::try_new(
++                                            vec![lit(true)],
++                                            Arc::clone(&exists.subquery.subquery),
++                                        )?,
++                                    ));
++                                    Some(&mut exists.subquery)
++                                }
++                                Expr::InSubquery(subquery)
++                                    if subquery.subquery.outer_ref_columns.is_empty() =>
++                                {
++                                    Some(&mut subquery.subquery)
++                                }
++                                _ => None,
++                            };
++                            if let Some(subquery) = predicate {
++                                if check_arithmetic {
++                                    prepare.check_arithmetic_expressions(&subquery.subquery, true)?;
++                                }
++                                let prepared = prepare.cast_reachability(
++                                    Arc::unwrap_or_clone(Arc::clone(&subquery.subquery)),
++                                    options,
++                                )?;
++                                // LIMIT 0 may sit below a projection or alias.
++                                // Reuse native empty propagation before constant checks.
++                                let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
++                                let prepared = prepared.transform_up(|node| {
++                                    datafusion::optimizer::propagate_empty_relation::PropagateEmptyRelation::new()
++                                        .rewrite(node, &config)
++                                })?.data;
++                                if check_arithmetic {
++                                    prepare.check_arithmetic_plan(&prepared, options)?;
++                                }
++                                subquery.subquery = Arc::new(prepared);
++                                if let Expr::InSubquery(in_subquery) = &mut expr
++                                    && in_subquery.subquery.subquery.head_output_expr()?.is_none()
++                                    && let LogicalPlan::EmptyRelation(empty) = in_subquery.subquery.subquery.as_ref()
++                                    && !empty.produce_one_row
++                                {
++                                    // Predicate lowering still requires a head expression.
++                                    // A typed NULL projection over zero rows preserves it.
++                                    let field = empty.schema.field(0);
++                                    in_subquery.subquery.subquery = Arc::new(LogicalPlan::Projection(
++                                        datafusion_expr::logical_plan::Projection::try_new(
++                                            vec![lit(ScalarValue::try_new_null(field.data_type())?).alias(field.name())],
++                                            Arc::clone(&in_subquery.subquery.subquery),
++                                        )?,
++                                    ));
++                                }
++                                return Ok(Transformed::yes(expr));
++                            }
+                             // One-row scalar expressions follow their parent's
+                             // reachability before standalone subquery folding.
+-                            if let Expr::ScalarSubquery(mut subquery) = expr {
++                            if check_cast && let Expr::ScalarSubquery(mut subquery) = expr {
+                                 if let Some(mut expressions) = one_row_exprs(&subquery.subquery)?
+                                     && expressions.len() == 1
+                                     && row_expression(&expressions[0], true)?
+@@ -171,7 +240,11 @@
+                                 )?);
+                                 return Ok(Transformed::yes(Expr::ScalarSubquery(subquery)));
+                             }
+-                            guard_cast_arithmetic(expr, &schema)
++                            if check_cast {
++                                guard_cast_arithmetic(expr, &schema)
++                            } else {
++                                Ok(Transformed::no(expr))
++                            }
+                         })?
+                         .update_data(|expr| name.restore(expr)))
+                 })
+@@ -1761,3 +1834,150 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn predicate_preparation_preserves_live_errors_and_unused_outputs()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false, true] {
++        for (sql, error, expected) in [
++            (
++                "SELECT 7L IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r",
++                Some("Divide by zero"),
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 FROM VALUES(1) t(k) LIMIT 0) AS r",
++                Some("Divide by zero"),
++                Some(false),
++            ),
++            (
++                "SELECT 7 IN(SELECT 7 DIV 0 FROM VALUES(1) t(k) LIMIT 0) AS r",
++                Some("Divide by zero"),
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(1)) AS r",
++                None,
++                Some(true),
++            ),
++            (
++                "SELECT NOT EXISTS(SELECT CAST('bad' AS INT) FROM range(1)) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM VALUES(1) t(k)) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST(s AS INT) FROM VALUES('bad') t(s) LIMIT 0) AS r",
++                Some("Cannot cast"),
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 FROM range(3) WHERE false) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 FROM range(3) LIMIT 0) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT 7 IN(SELECT 7 DIV 0 FROM range(3) LIMIT 0) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT 7 IN(SELECT 7 DIV 0 FROM (SELECT id FROM range(3) LIMIT 0) t) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT 7 IN(SELECT CAST('bad' AS INT) FROM VALUES(1) t(k) WHERE false) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT NULL IN(SELECT id FROM range(3) LIMIT 0) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT NULL NOT IN(SELECT id FROM range(3) LIMIT 0) AS r",
++                None,
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT (SELECT CAST('bad' AS INT) FROM range(1)) FROM range(1)) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT CASE WHEN false THEN 7 IN(SELECT 7 DIV 0 FROM range(3) WHERE false) ELSE true END AS r",
++                Some("Divide by zero"),
++                Some(true),
++            ),
++            (
++                "SELECT CASE WHEN false THEN EXISTS(SELECT 7 DIV 0 FROM range(3) WHERE false) ELSE true END AS r",
++                None,
++                Some(true),
++            ),
++            // The approved three-valued IN policy intentionally differs from Spark.
++            (
++                "SELECT 3 IN(SELECT k FROM VALUES(1),(CAST(NULL AS INT)) t(k)) AS r",
++                None,
++                None,
++            ),
++        ] {
++            let result = async {
++                let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode: ansi,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
++                    ctx.execute_logical_plan(named.plan)
++                        .await?
++                        .collect()
++                        .await?,
++                )
++            }
++            .await;
++            if ansi && let Some(error) = error {
++                let actual = result.expect_err(sql).to_string();
++                assert!(actual.contains(error), "ANSI {ansi}: {sql}: {actual}");
++                continue;
++            }
++            let mut actual = Vec::new();
++            for batch in result? {
++                for row in 0..batch.num_rows() {
++                    let ScalarValue::Boolean(value) =
++                        ScalarValue::try_from_array(batch.column(0), row)?
++                    else {
++                        panic!("{sql}: expected Boolean");
++                    };
++                    actual.push(value);
++                }
++            }
++            assert_eq!(actual, vec![expected], "ANSI {ansi}: {sql}");
++        }
++    }
++    Ok(())
++}
