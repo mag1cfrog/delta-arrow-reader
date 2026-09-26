@@ -1,0 +1,425 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -19,10 +19,15 @@
+ use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, Operator, lit};
+ 
+ use crate::function::scalar::math::{
+-    FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, guard_cast_arithmetic,
+-    integer_divide_args,
++    FusedDecimalDivide, SparkCheckedDivide, SparkCheckedModulo, SparkIntegerDivide,
++    SparkNullIfZero, guard_cast_arithmetic, integer_divide_args,
+ };
++use datafusion::functions::math::round::RoundFunc;
+ use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
++use sail_function::scalar::math::{
++    spark_bround::SparkBRound, spark_decimal_round::SparkDecimalRound,
++    spark_float_round::SparkFloatRound, spark_integer_round::SparkIntegerRound,
++};
+ use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+ 
+ /// Preserve early expression errors before NULL and empty-result rewrites.
+@@ -35,18 +40,55 @@
+         Expr::Cast(cast) => null_literal(&cast.expr),
+         Expr::TryCast(cast) => null_literal(&cast.expr),
+         Expr::Alias(alias) => null_literal(&alias.expr),
++        Expr::ScalarFunction(f)
++            if (f.func.inner().is::<SparkNullIfZero>()
++                || f.func
++                    .inner()
++                    .is::<datafusion::functions::core::nullif::NullIfFunc>()) =>
++        {
++            f.args.first().is_some_and(null_literal)
++        }
+         _ => false,
+     }
+ }
+ 
+-fn null_divide(expr: &Expr) -> bool {
+-    matches!(expr, Expr::ScalarFunction(f)
+-        if (f.func.inner().is::<FusedDecimalDivide>() || f.func.inner().is::<SparkCheckedDivide>())
+-            && f.args.iter().any(null_literal))
++fn null_round(expr: &Expr) -> bool {
++    let Expr::ScalarFunction(f) = expr else {
++        return false;
++    };
++    let inner = f.func.inner();
++    ((inner.is::<SparkDecimalRound>() || inner.is::<RoundFunc>() || inner.is::<SparkBRound>())
++        && f.args.get(1).is_some_and(null_literal))
++        || inner
++            .downcast_ref::<SparkFloatRound>()
++            .is_some_and(SparkFloatRound::is_null_scale)
++        || inner
++            .downcast_ref::<SparkIntegerRound>()
++            .is_some_and(SparkIntegerRound::is_null_scale)
++}
++
++fn null_discarded(expr: &Expr) -> bool {
++    match expr {
++        Expr::BinaryExpr(binary) => {
++            binary.op.returns_null_on_null()
++                && (null_literal(&binary.left) || null_literal(&binary.right))
++        }
++        Expr::ScalarFunction(f) => {
++            let inner = f.func.inner();
++            ((inner.is::<FusedDecimalDivide>()
++                || inner.is::<SparkCheckedDivide>()
++                || inner.is::<SparkCheckedModulo>()
++                || inner.is::<SparkCheckedArithmetic>()
++                || inner.is::<SparkIntegerDivide>())
++                && f.args.iter().any(null_literal))
++                || null_round(expr)
++        }
++        _ => false,
++    }
+ }
+ 
+ fn candidate(expr: &Expr) -> bool {
+-    null_divide(expr) && expr.contains_scalar_subquery()
++    null_discarded(expr) && expr.contains_scalar_subquery()
+ }
+ 
+ // Check whole parent expressions so CASE and COALESCE retain their own
+@@ -148,24 +190,124 @@
+         }
+         Ok(plan
+             .transform_down_with_subqueries(|node| {
++                let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
+                 node.map_expressions(|expr| {
+                     expr.transform_down(|expr| {
+                         if !candidate(&expr) {
+                             return Ok(Transformed::no(expr));
+                         }
+-                        let Expr::ScalarFunction(f) = &expr else {
+-                            unreachable!()
+-                        };
+-                        for arg in &f.args {
+-                            prepare.check_expr(arg, false)?;
++                        prepare.check_expr(&expr, false)?;
++                        let data_type = expr.get_type(&schema)?;
++                        if null_round(&expr) {
++                            let mut subqueries = Vec::new();
++                            round_subqueries(&expr, &mut subqueries, &prepare, &schema)?;
++                            if !subqueries.is_empty() {
++                                return Ok(Transformed::yes(
++                                    datafusion_expr::ScalarUDF::from(NullAfterSubqueries {
++                                        signature: datafusion_expr::Signature::variadic_any(
++                                            datafusion_expr::Volatility::Immutable,
++                                        ),
++                                        data_type,
++                                    })
++                                    .call(subqueries),
++                                ));
++                            }
+                         }
+                         Ok(Transformed::yes(lit(ScalarValue::try_new_null(
+-                            &f.func.return_type(&[])?,
++                            &data_type,
+                         )?)))
+                     })
+                 })
+             })?
+             .data)
++    }
++}
++
++// ROUND's NULL scale skips its value expression, but Spark still executes any
++// remaining scalar subqueries. Keep only those arguments for the native scalar
++// subquery executor; one-row subqueries have already become scalar expressions.
++fn round_subqueries(
++    expr: &Expr,
++    out: &mut Vec<Expr>,
++    prepare: &Prepare,
++    schema: &DFSchemaRef,
++) -> Result<()> {
++    if null_discarded(expr) && !null_round(expr) {
++        return Ok(());
++    }
++    if let Expr::ScalarSubquery(subquery) = expr {
++        if let Some(expressions) = one_row_exprs(&subquery.subquery)? {
++            return round_subqueries(&expressions[0], out, prepare, schema);
++        }
++        if !prepare
++            .local_batch(&subquery.subquery)?
++            .is_some_and(|batch| batch.num_rows() == 0)
++        {
++            // Empty local input has already discarded its projection. Do not
++            // expose those dead expressions to another constant-folding pass.
++            out.push(expr.clone());
++        }
++        return Ok(());
++    }
++    if matches!(expr, Expr::Case(_))
++        || matches!(expr, Expr::ScalarFunction(f) if f.func.short_circuits())
++    {
++        let info = datafusion_expr::simplify::SimplifyContext::builder()
++            .with_schema(Arc::clone(schema))
++            .with_config_options(Arc::clone(prepare.props.config_options.as_ref().unwrap()))
++            .build();
++        let simplifier = ExprSimplifier::new(info);
++        let mut conditional = expr.clone();
++        if let Expr::Case(case) = &mut conditional {
++            for condition in case
++                .expr
++                .iter_mut()
++                .chain(case.when_then_expr.iter_mut().map(|(when, _)| when))
++            {
++                if let Ok(folded) = simplifier.simplify(*condition.clone()) {
++                    **condition = folded;
++                }
++            }
++        }
++        // Reuse native CASE/COALESCE pruning, without folding a selected scalar
++        // CAST that ROUND's NULL scale will never evaluate. Failed conditions
++        // stay opaque; only their surviving subqueries require execution.
++        if let Ok(simplified) = simplifier.simplify_algebraic_once(conditional)
++            && simplified.data != *expr
++        {
++            return round_subqueries(&simplified.data, out, prepare, schema);
++        }
++    }
++    expr.apply_children(|child| {
++        round_subqueries(child, out, prepare, schema)?;
++        Ok(TreeNodeRecursion::Continue)
++    })
++    .map(|_| ())
++}
++
++#[derive(Debug, PartialEq, Eq, Hash)]
++struct NullAfterSubqueries {
++    signature: datafusion_expr::Signature,
++    data_type: DataType,
++}
++
++impl datafusion_expr::ScalarUDFImpl for NullAfterSubqueries {
++    fn name(&self) -> &str {
++        "spark_null_after_subqueries"
++    }
++    fn signature(&self) -> &datafusion_expr::Signature {
++        &self.signature
++    }
++    fn return_type(&self, _types: &[DataType]) -> Result<DataType> {
++        Ok(self.data_type.clone())
++    }
++    fn invoke_with_args(
++        &self,
++        _args: datafusion_expr::ScalarFunctionArgs,
++    ) -> Result<ColumnarValue> {
++        Ok(ColumnarValue::Scalar(ScalarValue::try_new_null(
++            &self.data_type,
++        )?))
+     }
+ }
+ 
+@@ -544,7 +686,7 @@
+         }
+         // NULL propagation precedes constant folding. Only subquery planning
+         // work survives the discarded branch, not its ordinary scalar errors.
+-        if null_divide(expr) {
++        if null_discarded(expr) {
+             return expr
+                 .apply_children(|child| {
+                     self.check_expr(child, false)?;
+@@ -1144,3 +1286,123 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn null_scale_retains_subquery_execution_without_dead_scalar_work()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::{execution::SessionStateBuilder, prelude::SessionContext};
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi_mode in [true, false, true] {
++        for typ in ["INT", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL(10,3)"] {
++            for function in ["ROUND", "BROUND"] {
++                for (sql, error, rows) in [
++                    (
++                        format!(
++                            "SELECT {function}(CASE WHEN false THEN (SELECT CAST(v AS {typ}) FROM VALUES (2),(3) t(v)) ELSE CAST(1 AS {typ}) END,NULL) AS r"
++                        ),
++                        None,
++                        1,
++                    ),
++                    (
++                        format!(
++                            "SELECT {function}(COALESCE(CAST(1 AS {typ}),(SELECT CAST(v AS {typ}) FROM VALUES (2),(3) t(v))),NULL) AS r"
++                        ),
++                        None,
++                        1,
++                    ),
++                    (
++                        format!(
++                            "SELECT {function}(CASE WHEN true THEN CAST('bad' AS {typ}) ELSE (SELECT CAST(v AS {typ}) FROM VALUES (2),(3) t(v)) END,NULL) AS r"
++                        ),
++                        None,
++                        1,
++                    ),
++                    (
++                        format!(
++                            "SELECT {function}(CAST((SELECT v FROM VALUES ('bad') t(v)) AS {typ}), NULL) AS r"
++                        ),
++                        None,
++                        1,
++                    ),
++                    (
++                        format!(
++                            "SELECT {function}((SELECT CAST(v AS {typ}) FROM VALUES ('bad') t(v)), NULL) AS r"
++                        ),
++                        ansi_mode.then_some("Cannot cast"),
++                        1,
++                    ),
++                    (
++                        format!(
++                            "SELECT {function}((SELECT CAST(v AS {typ}) FROM VALUES (2),(3) t(v)), NULL) AS r"
++                        ),
++                        Some("Scalar subquery returned more than one row"),
++                        1,
++                    ),
++                    (
++                        format!(
++                            "SELECT {function}((SELECT CAST('bad' AS {typ}) FROM VALUES (0) t(k) WHERE false ORDER BY k), NULL) AS r"
++                        ),
++                        None,
++                        1,
++                    ),
++                    (
++                        format!("SELECT {function}((SELECT 1,2), NULL) AS r"),
++                        Some("Scalar subquery must return exactly one column"),
++                        1,
++                    ),
++                    (
++                        format!(
++                            "SELECT (SELECT CAST(id AS {typ}) FROM range(4) WHERE id>=o.k)/CAST(NULL AS {typ}) AS r FROM VALUES (1),(2) o(k) ORDER BY k"
++                        ),
++                        None,
++                        2,
++                    ),
++                ] {
++                    let result = async {
++                        let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                        let config = PlanConfig {
++                            ansi_mode,
++                            ..Default::default()
++                        };
++                        let named = PlanResolver::new(&ctx, Arc::new(config))
++                            .resolve_named_plan(spec)
++                            .await?;
++                        let data_type = named.plan.schema().field(0).data_type().clone();
++                        let batches = ctx
++                            .execute_logical_plan(named.plan)
++                            .await?
++                            .collect()
++                            .await?;
++                        Ok::<_, Box<dyn std::error::Error + Send + Sync>>((data_type, batches))
++                    }
++                    .await;
++                    if let Some(error) = error {
++                        let actual = result.unwrap_err().to_string();
++                        assert!(actual.contains(error), "{sql}, ANSI={ansi_mode}: {actual}");
++                    } else {
++                        let (data_type, batches) = result?;
++                        assert_eq!(
++                            batches.iter().map(RecordBatch::num_rows).sum::<usize>(),
++                            rows,
++                            "{sql}"
++                        );
++                        assert!(
++                            batches.iter().all(|b| b.column(0).data_type() == &data_type
++                                && b.column(0).null_count() == b.num_rows()),
++                            "{sql}"
++                        );
++                    }
++                }
++            }
++        }
++    }
++    Ok(())
++}
+--- a/crates/sail-plan/src/function/scalar/math.rs
++++ b/crates/sail-plan/src/function/scalar/math.rs
+@@ -46,8 +46,8 @@
+ use sail_function::scalar::misc::raise_error::RaiseError;
+ use sail_function::scalar::spark_to_string::{SparkToLargeUtf8, SparkToUtf8, SparkToUtf8View};
+ 
+-use super::conditional::SparkNullIfZero;
+-use super::small_int_divide::SparkIntegerDivide;
++pub(crate) use super::conditional::SparkNullIfZero;
++pub(crate) use super::small_int_divide::SparkIntegerDivide;
+ use crate::error::{PlanError, PlanResult};
+ use crate::function::common::{FunctionContextInput, ScalarFunction, ScalarFunctionInput};
+ 
+@@ -2102,7 +2102,7 @@
+     let target = spark_round_scale("BROUND", target, &function_context)?;
+     let null_scale = target.is_null();
+     let call = udf.call(vec![arguments.remove(0), lit(target)]);
+-    if null_scale {
++    if null_scale && !call.contains_scalar_subquery() {
+         // Spark checks NULL scale before evaluating the input, even when it would fail.
+         return Ok(lit(ScalarValue::try_from(
+             &call.get_type(function_context.schema)?,
+@@ -2138,8 +2138,7 @@
+     let ScalarValue::Int32(scale) = target else {
+         return Err(PlanError::internal("ROUND scale was not resolved to INT"));
+     };
+-    // ponytail: retain subquery inputs until eager subqueries can be separated
+-    // from outer CAST evaluation; the evaluation-order leaf owns that limit.
++    // The analyzer prepares subqueries before discarding the outer value at NULL scale.
+     let has_subquery = value.contains_scalar_subquery();
+     if value_type.is_string() {
+         value = if function_context.plan_config.ansi_mode {
+--- a/crates/sail-function/src/scalar/math/spark_integer_round.rs
++++ b/crates/sail-function/src/scalar/math/spark_integer_round.rs
+@@ -34,6 +34,10 @@
+ }
+ 
+ impl SparkIntegerRound {
++    pub fn is_null_scale(&self) -> bool {
++        self.scale.is_none()
++    }
++
+     pub fn new(scale: Option<i32>, ansi: bool) -> Self {
+         Self {
+             signature: Signature::uniform(
+--- a/crates/sail-function/src/scalar/math/spark_float_round.rs
++++ b/crates/sail-function/src/scalar/math/spark_float_round.rs
+@@ -14,6 +14,10 @@
+ }
+ 
+ impl SparkFloatRound {
++    pub fn is_null_scale(&self) -> bool {
++        self.scale.is_none()
++    }
++
+     pub fn new(scale: Option<i32>) -> Self {
+         Self {
+             signature: Signature::exact(vec![DataType::Float32], Volatility::Immutable),
+--- a/crates/sail-plan/src/function/scalar/conditional.rs
++++ b/crates/sail-plan/src/function/scalar/conditional.rs
+@@ -221,7 +221,7 @@
+ 
+ // Reuse native zero detection and change validity only, preserving the input type.
+ #[derive(Debug, Default, PartialEq, Eq, Hash)]
+-pub(super) struct SparkNullIfZero(IsZeroFunc);
++pub(crate) struct SparkNullIfZero(IsZeroFunc);
+ 
+ impl ScalarUDFImpl for SparkNullIfZero {
+     fn name(&self) -> &str {
+--- a/crates/sail-plan/src/function/scalar/small_int_divide.rs
++++ b/crates/sail-plan/src/function/scalar/small_int_divide.rs
+@@ -9,7 +9,7 @@
+ 
+ // Widen small integers in Arrow's traversal; BIGINT is used only in legacy mode.
+ #[derive(Debug, PartialEq, Eq, Hash)]
+-pub(super) struct SparkIntegerDivide {
++pub(crate) struct SparkIntegerDivide {
+     pub(super) signature: datafusion_expr::Signature,
+     pub(super) ansi: bool,
+ }
