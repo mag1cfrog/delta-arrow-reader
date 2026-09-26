@@ -1,0 +1,361 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -115,25 +115,38 @@
+         let mut found = false;
+         let mut check_arithmetic = false;
+         let mut check_cast = false;
++        let mut check_groups = false;
+         plan.apply_with_subqueries(|node| {
++            if let LogicalPlan::Aggregate(aggregate) = node
++                && !aggregate.group_expr.iter().any(|expr| matches!(expr, Expr::GroupingSet(_)))
++            {
++                for expr in &aggregate.group_expr {
++                    check_groups |= row_expression(expr, false)?;
++                }
++            }
+             node.apply_expressions(|expr| {
+                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
+                 check_cast |= has_cast(expr)?;
+                 check_arithmetic |= arithmetic_candidate(expr, node.schema())?;
+                 Ok(TreeNodeRecursion::Continue)
+             })?;
+-            Ok(if found && check_arithmetic && check_cast {
++            Ok(if found && check_arithmetic && check_cast && check_groups {
+                 TreeNodeRecursion::Stop
+             } else {
+                 TreeNodeRecursion::Continue
+             })
+         })?;
+-        if !found && !check_arithmetic && !check_cast {
++        if !found && !check_arithmetic && !check_cast && !check_groups {
+             return Ok(plan);
+         }
+         let mut props = ExecutionProps::new();
+         props.config_options = Some(Arc::new(options.clone()));
+         let prepare = Prepare { props };
++        let plan = if check_groups {
++            plan.transform_up_with_subqueries(prepare_foldable_groups)?.data
++        } else {
++            plan
++        };
+         let plan = if check_cast || check_arithmetic {
+             plan.transform_up_with_subqueries(|node| {
+                 let schema = if !node.inputs().is_empty() {
+@@ -414,6 +427,79 @@
+     }
+ }
+ 
++// Keep foldable outputs available for live uses, but do not evaluate them
++// merely to form groups. A real key column preserves zero groups on empty input.
++fn prepare_foldable_groups(plan: LogicalPlan) -> Result<Transformed<LogicalPlan>> {
++    use datafusion_expr::{Aggregate, Projection};
++    let LogicalPlan::Aggregate(aggregate) = plan else {
++        return Ok(Transformed::no(plan));
++    };
++    if aggregate
++        .group_expr
++        .iter()
++        .any(|expr| matches!(expr, Expr::GroupingSet(_)))
++    {
++        return Ok(Transformed::no(LogicalPlan::Aggregate(aggregate)));
++    }
++    let foldable = aggregate
++        .group_expr
++        .iter()
++        .map(|expr| row_expression(expr, false))
++        .collect::<Result<Vec<_>>>()?;
++    if !foldable.contains(&true) {
++        return Ok(Transformed::no(LogicalPlan::Aggregate(aggregate)));
++    }
++    let mut required = aggregate
++        .group_expr
++        .iter()
++        .zip(&foldable)
++        .filter(|(_, constant)| !**constant)
++        .map(|(expr, _)| expr.clone())
++        .collect::<Vec<_>>();
++    let mut input = aggregate.input;
++    if required.is_empty() {
++        // A literal directly in Aggregate would be removed by DataFusion's
++        // EliminateGroupByConstant, changing empty grouped input into one row.
++        let mut name = "__spark_grouping_key".to_owned();
++        while input
++            .schema()
++            .fields()
++            .iter()
++            .any(|field| field.name() == &name)
++        {
++            name.push('_');
++        }
++        let mut expr = input
++            .schema()
++            .columns()
++            .into_iter()
++            .map(Expr::Column)
++            .collect::<Vec<_>>();
++        expr.push(lit(0_i32).alias(&name));
++        input = Arc::new(LogicalPlan::Projection(Projection::try_new(expr, input)?));
++        required.push(Expr::Column(datafusion_common::Column::new_unqualified(
++            name,
++        )));
++    }
++    let mut output = Vec::with_capacity(aggregate.schema.fields().len());
++    for (i, column) in aggregate.schema.columns().into_iter().enumerate() {
++        if i < foldable.len() && foldable[i] {
++            output.push(
++                aggregate.group_expr[i]
++                    .clone()
++                    .unalias()
++                    .alias_qualified(column.relation, column.name),
++            );
++        } else {
++            output.push(Expr::Column(column));
++        }
++    }
++    let input = LogicalPlan::Aggregate(Aggregate::try_new(input, required, aggregate.aggr_expr)?);
++    Ok(Transformed::yes(LogicalPlan::Projection(
++        Projection::try_new_with_schema(output, Arc::new(input), aggregate.schema)?,
++    )))
++}
++
+ struct Prepare {
+     props: ExecutionProps,
+ }
+@@ -2674,3 +2760,237 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn foldable_grouping_keeps_empty_and_live_boundaries()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false, true] {
++        for (sql, strict, legacy) in [
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM range(3) GROUP BY CAST('bad' AS INT)) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT CAST('bad' AS INT) AS v FROM range(3) GROUP BY CAST('bad' AS INT)) u",
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT count(*) AS v FROM range(3) GROUP BY CAST('bad' AS INT)) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM range(3) GROUP BY CAST('bad' AS INT) HAVING count(*)>0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM range(3) GROUP BY CAST('bad' AS INT) HAVING CAST('bad' AS INT)>0) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT sum(CAST('bad' AS INT)) AS v FROM range(3) GROUP BY id) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM range(0) GROUP BY CAST('bad' AS INT)) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT CAST('bad' AS INT) AS v FROM range(0) GROUP BY CAST('bad' AS INT)) u",
++                Ok(vec![ScalarValue::Int64(Some(0))]),
++                Ok(vec![ScalarValue::Int64(Some(0))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT count(*) AS v FROM range(0) GROUP BY CAST('bad' AS INT)) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM range(0) GROUP BY CAST('bad' AS INT) HAVING count(*)>0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM range(0) GROUP BY CAST('bad' AS INT) HAVING CAST('bad' AS INT)>0) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT sum(CAST('bad' AS INT)) AS v FROM range(0) GROUP BY id) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM VALUES(0),(1) t(id) GROUP BY CAST('bad' AS INT)) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT CAST('bad' AS INT) AS v FROM VALUES(0),(1) t(id) GROUP BY CAST('bad' AS INT)) u",
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT count(*) AS v FROM VALUES(0),(1) t(id) GROUP BY CAST('bad' AS INT)) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM VALUES(0),(1) t(id) GROUP BY CAST('bad' AS INT) HAVING count(*)>0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM VALUES(0),(1) t(id) GROUP BY CAST('bad' AS INT) HAVING CAST('bad' AS INT)>0) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT sum(CAST('bad' AS INT)) AS v FROM VALUES(0),(1) t(id) GROUP BY id) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM range(3) GROUP BY 7 DIV 0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT 7 DIV 0 AS v FROM range(3) GROUP BY 7 DIV 0) u",
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT count(*) AS v FROM range(3) GROUP BY 7 DIV 0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM range(3) GROUP BY 7 DIV 0 HAVING count(*)>0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM range(3) GROUP BY 7 DIV 0 HAVING 7 DIV 0>0) AS r",
++                Err("Divide by zero"),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT sum(7 DIV 0) AS v FROM range(3) GROUP BY id) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM range(0) GROUP BY 7 DIV 0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT 7 DIV 0 AS v FROM range(0) GROUP BY 7 DIV 0) u",
++                Ok(vec![ScalarValue::Int64(Some(0))]),
++                Ok(vec![ScalarValue::Int64(Some(0))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT count(*) AS v FROM range(0) GROUP BY 7 DIV 0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM range(0) GROUP BY 7 DIV 0 HAVING count(*)>0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM range(0) GROUP BY 7 DIV 0 HAVING 7 DIV 0>0) AS r",
++                Err("Divide by zero"),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT sum(7 DIV 0) AS v FROM range(0) GROUP BY id) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM VALUES(0),(1) t(id) GROUP BY 7 DIV 0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT 7 DIV 0 AS v FROM VALUES(0),(1) t(id) GROUP BY 7 DIV 0) u",
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT count(*) AS v FROM VALUES(0),(1) t(id) GROUP BY 7 DIV 0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM VALUES(0),(1) t(id) GROUP BY 7 DIV 0 HAVING count(*)>0) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM VALUES(0),(1) t(id) GROUP BY 7 DIV 0 HAVING 7 DIV 0>0) AS r",
++                Err("Divide by zero"),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT sum(7 DIV 0) AS v FROM VALUES(0),(1) t(id) GROUP BY id) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++        ] {
++            let result = async {
++                let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode: ansi,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
++                    ctx.execute_logical_plan(named.plan)
++                        .await?
++                        .collect()
++                        .await?,
++                )
++            }
++            .await;
++            match if ansi { strict } else { legacy } {
++                Err(fragment) => {
++                    let error = result.expect_err(sql).to_string();
++                    assert!(error.contains(fragment), "ANSI {ansi}: {sql}: {error}");
++                }
++                Ok(expected) => {
++                    let mut actual = Vec::new();
++                    for batch in result? {
++                        for row in 0..batch.num_rows() {
++                            actual.push(ScalarValue::try_from_array(batch.column(0), row)?);
++                        }
++                    }
++                    assert_eq!(actual, expected, "ANSI {ansi}: {sql}");
++                }
++            }
++        }
++    }
++    Ok(())
++}
