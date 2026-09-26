@@ -42,6 +42,8 @@ The [Decimal CAST error repair](DECIMAL_CAST_ERRORS.md) preserves all six assign
 
 The [STRING-peer modulo repair](STRING_MODULO_COERCION.md) reuses division coercion for `%` and `MOD`, passing all 24 assigned observations. Its report preserves remaining error/evaluation differences, the existing variable DIV error order and measured conversion/planning costs.
 
+The [early arithmetic repair](EARLY_ARITHMETIC.md) preserves required errors across expression wrappers and LIMIT 0 while retaining dead branches and unused-column pruning. All 58 assigned cases and their opposite-mode controls pass; the report retains separate error/schema gaps and planning/execution measurements.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
