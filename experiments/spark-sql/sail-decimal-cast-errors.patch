@@ -1,0 +1,217 @@
+--- a/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs
++++ b/crates/sail-function/src/scalar/spark_cast_string_to_decimal.rs
+@@ -5,9 +5,10 @@
+ use arrow::datatypes::{DataType, Field, FieldRef, is_validate_decimal_precision};
+ use bigdecimal::{BigDecimal, RoundingMode, ToPrimitive, Zero};
+ use datafusion_common::cast::{as_large_string_array, as_string_array, as_string_view_array};
+-use datafusion_common::{Result, exec_err};
++use datafusion_common::{Result, ScalarValue, exec_err};
++use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyContext};
+ use datafusion_expr::{
+-    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
++    ColumnarValue, Expr, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDFImpl, Signature, Volatility,
+ };
+ 
+ use crate::functions_utils::make_scalar_function;
+@@ -79,6 +80,23 @@
+ 
+     fn return_type(&self, _: &[DataType]) -> Result<DataType> {
+         Ok(DataType::Decimal128(self.precision, self.scale))
++    }
++
++    fn simplify(&self, args: Vec<Expr>, _info: &SimplifyContext) -> Result<ExprSimplifyResult> {
++        // Preserve literal CAST errors before empty-plan pruning. Conditional
++        // reachability is handled by the shared expression simplifier.
++        if let [Expr::Literal(
++            ScalarValue::Utf8(value) | ScalarValue::LargeUtf8(value) | ScalarValue::Utf8View(value),
++            _,
++        )] = args.as_slice()
++        {
++            let array = self.convert(std::iter::once(value.as_deref()))?;
++            return Ok(ExprSimplifyResult::Simplified(Expr::Literal(
++                ScalarValue::try_from_array(&array, 0)?,
++                None,
++            )));
++        }
++        Ok(ExprSimplifyResult::Original(args))
+     }
+ 
+     fn return_field_from_args(&self, _: ReturnFieldArgs) -> Result<FieldRef> {
+@@ -249,6 +267,29 @@
+         for (value, expected) in cases {
+             assert_eq!(parse_decimal(value, 10, 2)?, expected, "{value:?}");
+         }
++        let info = SimplifyContext::builder().build();
++        for (text, _) in &cases {
++            for safe in [true, false] {
++                let udf = SparkCastStringToDecimal::new(10, 2, safe);
++                let invoked = udf.convert(std::iter::once(Some(*text)));
++                for value in [
++                    ScalarValue::Utf8(Some((*text).into())),
++                    ScalarValue::LargeUtf8(Some((*text).into())),
++                    ScalarValue::Utf8View(Some((*text).into())),
++                ] {
++                    let folded = udf.simplify(vec![Expr::Literal(value, None)], &info);
++                    match &invoked {
++                        Ok(array) => {
++                            let ExprSimplifyResult::Simplified(Expr::Literal(actual, _)) = folded? else {
++                                panic!("literal was not folded");
++                            };
++                            assert_eq!(actual, ScalarValue::try_from_array(array, 0)?);
++                        }
++                        Err(error) => assert_eq!(folded.unwrap_err().to_string(), error.to_string()),
++                    }
++                }
++            }
++        }
+         for value in ["1e2147483647", "1e-2147483647"] {
+             assert!(parse_decimal(value, 10, 2).is_err());
+             for safe in [true, false] {
+--- a/crates/sail-plan/src/function/scalar/math.rs
++++ b/crates/sail-plan/src/function/scalar/math.rs
+@@ -736,10 +736,12 @@
+         _info: &datafusion_expr::simplify::SimplifyContext,
+     ) -> datafusion_common::Result<datafusion_expr::simplify::ExprSimplifyResult> {
+         use datafusion_expr::simplify::ExprSimplifyResult;
+-        // SQL operands are already Decimal-typed. The decorrelator substitutes
+-        // untyped NULL for empty aggregates. Fold only that sentinel: folding
+-        // typed SQL NULLs can hide ANSI errors in the other operand's subquery.
+-        if args.iter().any(|arg| matches!(arg, Expr::Literal(ScalarValue::Null, _))) {
++        // Scalar NULL propagation precedes fallible CAST folding. Subqueries
++        // retain their analyzer checks; keep the decorrelator's untyped sentinel.
++        let sentinel = args.iter().any(|arg| matches!(arg, Expr::Literal(ScalarValue::Null, _)));
++        let scalar_null = args.iter().any(|arg| matches!(arg, Expr::Literal(value, _) if value.is_null()))
++            && !args.iter().any(Expr::contains_scalar_subquery);
++        if sentinel || scalar_null {
+             return Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::Decimal128(
+                 None, self.precision, self.scale,
+             ))));
+@@ -1307,7 +1309,7 @@
+             if f.func
+                 .inner()
+                 .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
+-            ) =>
++            ) || f.func.inner().is::<sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal>() =>
+         {
+             matches!(f.args.as_slice(), [Expr::Column(_)])
+         }
+@@ -1315,9 +1317,9 @@
+     }
+ }
+ 
+-// Spark evaluates a nullable divisor before a fallible numerator. Reuse native
+-// CASE selection for CAST numerators and simple, deterministic divisors.
+-pub(crate) fn guard_cast_division(
++// Division/remainder evaluate the divisor first; other arithmetic evaluates
++// the left operand first. Guard fallible column CASTs with native CASE.
++pub(crate) fn guard_cast_arithmetic(
+     expr: Expr,
+     schema: &DFSchemaRef,
+ ) -> datafusion_common::Result<datafusion_common::tree_node::Transformed<Expr>> {
+@@ -1335,8 +1337,12 @@
+         Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo) => {
+             Some((binary.left.as_ref(), binary.right.as_ref()))
+         }
++        Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Plus | Operator::Minus | Operator::Multiply) => {
++            Some((binary.right.as_ref(), binary.left.as_ref()))
++        }
+         Expr::ScalarFunction(f)
+             if f.func.inner().is::<SparkCheckedDivide>()
++                || f.func.inner().is::<FusedDecimalDivide>()
+                 || f.func.inner().is::<SparkCheckedModulo>()
+                 || f.func.inner().is::<SparkIntegerDivide>() =>
+         {
+@@ -1416,9 +1422,11 @@
+ 
+     let integer_operands = matches!((&dividend_type, &divisor_type), (Ok(left), Ok(right))
+         if [left, right].iter().all(|t| t.is_signed_integer() || **t == DataType::Null));
+-    // Integer kernels handle zero after NULL propagation and preserve BIGINT output.
+-    // Keep the existing lowering for Decimal, interval and unresolved operands.
+-    if !integer_operands && is_zero_literal(&divisor) {
++    let decimal_operands = matches!((&dividend_type, &divisor_type),
++        (Ok(DataType::Decimal128(_, _)), Ok(DataType::Decimal128(_, _))));
++    // Native integer/Decimal kernels check zero only on live rows. Keep the
++    // existing lowering for intervals and unresolved operands.
++    if !integer_operands && !decimal_operands && is_zero_literal(&divisor) {
+         if function_context.plan_config.ansi_mode {
+             return Err(PlanError::ArrowError(ArrowError::DivideByZero));
+         } else {
+@@ -1459,9 +1467,10 @@
+ 
+     let ansi_mode = function_context.plan_config.ansi_mode;
+ 
+-    // ANSI integer kernels already check live zeros; a divisor-only guard loses NULL masking.
++    // Native Decimal division, like integer division, checks only live zeros.
++    // A separate divisor CASE hides a NULL divisor from scalar CAST pruning.
+     let effective_divisor_type = divisor_type.as_ref().cloned().unwrap_or(DataType::Int32);
+-    let divisor = if ansi_mode && integer_operands {
++    let divisor = if ansi_mode && (integer_operands || decimal_operands) {
+         divisor
+     } else {
+         make_safe_divisor(divisor, &effective_divisor_type, ansi_mode, "Division by zero")
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -19,9 +19,10 @@
+ use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, lit};
+ 
+ use crate::function::scalar::math::{
+-    FusedDecimalDivide, SparkCheckedDivide, column_cast, guard_cast_division, integer_divide_args,
++    FusedDecimalDivide, SparkCheckedDivide, column_cast, guard_cast_arithmetic, integer_divide_args,
+ };
+ use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
++use sail_function::scalar::spark_cast_string_to_decimal::SparkCastStringToDecimal;
+ 
+ /// Preserve early expression errors before NULL and empty-result rewrites.
+ #[derive(Debug)]
+@@ -109,8 +110,11 @@
+                 } else {
+                     Arc::new(DFSchema::empty())
+                 };
++                let names = datafusion_expr::expr_rewriter::NamePreserver::new(&node);
+                 node.map_expressions(|expr| {
+-                    expr.transform_up(|expr| guard_cast_division(expr, &schema))
++                    let name = names.save(&expr);
++                    Ok(expr.transform_up(|expr| guard_cast_arithmetic(expr, &schema))?
++                        .update_data(|expr| name.restore(expr)))
+                 })
+             })?
+             .data
+@@ -242,7 +246,8 @@
+ 
+ fn has_cast(expr: &Expr) -> Result<bool> {
+     expr.exists(|e| Ok(matches!(e, Expr::Cast(_))
+-        || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>())))
++        || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>()
++            || f.func.inner().is::<SparkCastStringToDecimal>())))
+ }
+ 
+ // Spark removes a redundant LIMIT before replacing LIMIT 0 with an empty plan.
+@@ -257,7 +262,7 @@
+             if f.func
+                 .inner()
+                 .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
+-            ) =>
++            ) || f.func.inner().is::<SparkCastStringToDecimal>() =>
+         {
+             Ok(matches!(f.args.as_slice(), [Expr::Literal(value, _)] if !value.is_null()))
+         }
+@@ -885,6 +890,19 @@
+     );
+     for ansi in [true, false, true] {
+         for (sql, ansi_error, expected) in [
++            ("SELECT CAST(NULL AS DECIMAL(10,2)) / CAST('bad' AS DECIMAL(10,2)) AS r", false, vec![None]),
++            ("SELECT CAST('bad' AS DECIMAL(10,2)) DIV CAST(NULL AS DECIMAL(10,2)) AS r", false, vec![None]),
++            ("SELECT n + CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", false, vec![None]),
++            ("SELECT CAST(v AS DECIMAL(10,2)) / n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", false, vec![None, Some(3.5)]),
++            ("SELECT CAST('7' AS DECIMAL(10,2)) DIV CAST(0 AS DECIMAL(10,2)) AS r", true, vec![None]),
++            ("SELECT SUM(CAST(a AS DECIMAL(38,2)) / CAST(b AS DECIMAL(38,2))) AS r FROM VALUES (0,'0.5','0.3'),(1,'0.5','0.5') AS t(id,a,b)", false, vec![Some(2.666667)]),
++            ("SELECT SUM(CAST(a AS DECIMAL(38,2)) / CAST(b AS DECIMAL(38,2))) OVER (ORDER BY id) AS r FROM VALUES (0,'0.5','0.3'),(1,'0.5','0.5') AS t(id,a,b) ORDER BY id", false, vec![Some(1.666667), Some(2.666667)]),
++            ("SELECT CAST('bad' AS DECIMAL(10,2)) AS r WHERE false", true, vec![]),
++            ("SELECT CAST('bad' AS DECIMAL(10,2)) AS r WHERE false LIMIT 0", true, vec![]),
++            ("SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) LIMIT 0", true, vec![]),
++            ("SELECT 7 AS r FROM (SELECT CAST('bad' AS DECIMAL(10,2)) AS unused FROM VALUES (0) t(k)) t", true, vec![Some(7.0)]),
++            ("SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false", true, vec![]),
++            ("SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false LIMIT 0", true, vec![]),
+             (
+                 "SELECT CAST(NULL AS DOUBLE)/CAST('bad' AS DOUBLE) AS r",
+                 false,
