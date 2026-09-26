@@ -1,0 +1,2424 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/272",
+  "created_utc": "2026-09-26T22:35:24.969270+00:00",
+  "integration_base": "fcb7bc107cd0cd6061c3c728c72ba68ba074b65a",
+  "candidate_is_optional": true,
+  "runtime_change": "Prepare unused group-only LIMIT/EXISTS plans after projection pruning while preserving local/live errors and cardinality boundaries.",
+  "agreement": {
+    "before": {
+      "agreement": 3015,
+      "total": 3248
+    },
+    "after": {
+      "agreement": 3155,
+      "total": 3248
+    }
+  },
+  "owned": {
+    "ids": [
+      "group_control_row_div_key"
+    ],
+    "ansi_before": 0,
+    "ansi_after": 1,
+    "with_opposite_modes_before": 1,
+    "with_opposite_modes_after": 2
+  },
+  "remaining_by_owner": {
+    "141_relational_boundary_review": 25,
+    "142_grouping_boundary_review": 12,
+    "149_modulo_error_condition": 13,
+    "approved_in_null_policy": 43
+  },
+  "schema": {
+    "before": {
+      "logical_nullable_difference": 192,
+      "physical_nullable_difference": 100
+    },
+    "after": {
+      "logical_nullable_difference": 192,
+      "physical_nullable_difference": 104
+    }
+  },
+  "remaining_ids": {
+    "141_relational_boundary_review": [
+      "exists_correlated_cast_true",
+      "only_div_range_live_in_true",
+      "only_div_range_live_in_false",
+      "only_div_empty_live_in_true",
+      "only_div_empty_live_in_false",
+      "only_div_local_live_in_true",
+      "only_div_local_live_in_false",
+      "only_div_local_empty_live_in_true",
+      "only_div_local_empty_live_in_false",
+      "only_div_union_exists_true",
+      "only_div_union_count_true",
+      "only_int_range_live_in_true",
+      "only_int_range_live_in_false",
+      "only_int_empty_live_in_true",
+      "only_int_empty_live_in_false",
+      "only_int_local_live_in_true",
+      "only_int_local_live_in_false",
+      "only_int_local_empty_live_in_true",
+      "only_int_local_empty_live_in_false",
+      "only_int_union_exists_true",
+      "only_int_union_count_true",
+      "only_double_union_exists_true",
+      "only_double_union_count_true",
+      "only_decimal_union_exists_true",
+      "only_decimal_union_count_true"
+    ],
+    "142_grouping_boundary_review": [
+      "group_control_grouping_sets_empty_true",
+      "group_control_grouping_sets_empty_false",
+      "group_control_rollup_error_true",
+      "only_scout_div_range_having_key_exists_true",
+      "only_scout_div_range_having_key_limited_count_true",
+      "only_div_having_key_exists_true",
+      "only_double_having_key_exists_true",
+      "only_double_having_key_count_true",
+      "only_control_volatile_true",
+      "only_control_volatile_false",
+      "only_control_rollup_true",
+      "only_control_sets_true"
+    ],
+    "149_modulo_error_condition": [
+      "modulo_one_row_in_true",
+      "modulo_range_in_true",
+      "modulo_range0_in_true",
+      "modulo_range_false_in_true",
+      "modulo_values_exists_true",
+      "modulo_values_in_true",
+      "modulo_values_limit0_exists_true",
+      "modulo_values_limit0_in_true",
+      "modulo_alias_range_in_true",
+      "modulo_in_dead_case_true",
+      "modulo_in_null_case_true",
+      "modulo_in_coalesce_true",
+      "modulo_in_not_true"
+    ],
+    "approved_in_null_policy": [
+      "int_cast_one_row_in_false",
+      "int_cast_range_in_false",
+      "int_cast_values_in_false",
+      "int_cast_alias_range_in_false",
+      "double_cast_one_row_in_false",
+      "double_cast_range_in_false",
+      "double_cast_values_in_false",
+      "double_cast_alias_range_in_false",
+      "decimal_cast_one_row_in_false",
+      "decimal_cast_range_in_false",
+      "decimal_cast_values_in_false",
+      "decimal_cast_alias_range_in_false",
+      "div_one_row_in_false",
+      "div_range_in_false",
+      "div_values_in_false",
+      "div_alias_range_in_false",
+      "divide_one_row_in_false",
+      "divide_range_in_false",
+      "divide_values_in_false",
+      "divide_alias_range_in_false",
+      "modulo_one_row_in_false",
+      "modulo_range_in_false",
+      "modulo_values_in_false",
+      "modulo_alias_range_in_false",
+      "projected_in_null_true",
+      "projected_in_null_false",
+      "projected_not_in_null_true",
+      "projected_not_in_null_false",
+      "not_in_empty_false",
+      "null_in_empty_false",
+      "bad_left_in_empty_false",
+      "distinct_int_in_control_false",
+      "distinct_double_in_control_false",
+      "distinct_decimal_in_control_false",
+      "distinct_div_in_control_false",
+      "group_int_in_false",
+      "group_double_in_false",
+      "group_decimal_in_false",
+      "group_div_in_false",
+      "only_double_range_live_in_false",
+      "only_double_local_live_in_false",
+      "only_decimal_range_live_in_false",
+      "only_decimal_local_live_in_false"
+    ]
+  },
+  "corpus": {
+    "queries": 1624,
+    "retained": 1227,
+    "added": 397,
+    "ordered_new_controls": 49,
+    "fresh_retained_observations": 2454
+  },
+  "provider_fixture": {
+    "queries": 2,
+    "ansi_observations": 4,
+    "native_input": "Float64 RecordBatch",
+    "reference_input": "Spark DataFrame LogicalRDD"
+  },
+  "new_successful_observations": 140,
+  "shared_success_nullable_changes": 0,
+  "changed_main_error_payloads": 0,
+  "retained_casts": {
+    "early-arithmetic": {
+      "before": 842,
+      "after": 842,
+      "total": 844,
+      "lost": []
+    },
+    "null-subquery": {
+      "before": 816,
+      "after": 816,
+      "total": 862,
+      "lost": []
+    },
+    "null-conditional": {
+      "before": 36,
+      "after": 36,
+      "total": 36,
+      "lost": []
+    },
+    "string-modulo": {
+      "before": 638,
+      "after": 638,
+      "total": 646,
+      "lost": []
+    },
+    "decimal": {
+      "before": 445,
+      "after": 445,
+      "total": 454,
+      "lost": []
+    },
+    "dead": {
+      "before": 340,
+      "after": 340,
+      "total": 346,
+      "lost": []
+    },
+    "strict": {
+      "before": 496,
+      "after": 496,
+      "total": 496,
+      "lost": []
+    },
+    "float": {
+      "before": 488,
+      "after": 488,
+      "total": 488,
+      "lost": []
+    },
+    "legacy": {
+      "before": 562,
+      "after": 562,
+      "total": 562,
+      "lost": []
+    },
+    "previous-owned": {
+      "before": 126,
+      "after": 126,
+      "total": 126,
+      "lost": []
+    },
+    "classification": {
+      "before": 125,
+      "after": 125,
+      "total": 128,
+      "lost": []
+    },
+    "empty-scalar": {
+      "before": 294,
+      "after": 294,
+      "total": 296,
+      "lost": []
+    },
+    "scalar-arithmetic": {
+      "before": 536,
+      "after": 536,
+      "total": 586,
+      "lost": []
+    },
+    "scalar-cast": {
+      "before": 731,
+      "after": 731,
+      "total": 750,
+      "lost": []
+    },
+    "predicate": {
+      "before": 371,
+      "after": 371,
+      "total": 416,
+      "lost": []
+    },
+    "grouping-preparation": {
+      "before": 2397,
+      "after": 2398,
+      "total": 2454,
+      "lost": []
+    }
+  },
+  "historical": {
+    "groups": 37,
+    "total": 6784,
+    "before_agreement": 6603,
+    "after_agreement": 6603,
+    "changed_outcomes": 0,
+    "lost": 0,
+    "retained_errors": 911,
+    "changed_error_payloads": 1,
+    "changed_error_texts": 1
+  },
+  "strict_div": {
+    "before": 350,
+    "after": 350,
+    "total": 350
+  },
+  "integer": {
+    "agreement": 616,
+    "total": 616,
+    "unchanged_full_errors": 131
+  },
+  "tests": {
+    "function": 314,
+    "planner": 58,
+    "runner": 28
+  },
+  "native_regression": {
+    "same_embedded_test": true,
+    "baseline_exit": 101,
+    "candidate_exit": 0,
+    "queries": 43
+  },
+  "delta": {
+    "before_after": {
+      "match": 116
+    },
+    "spark": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    },
+    "adapters": 18
+  },
+  "performance": {
+    "owner": 161,
+    "equivalent_pairs": 28,
+    "candidate_only": 4,
+    "physical_plans": {
+      "equal": [
+        "ordinary_numeric_nullsfalse",
+        "ordinary_cast_nullsfalse",
+        "exists_cast_nullsfalse",
+        "in_local_cast_nullsfalse",
+        "native_numeric_nullsfalse",
+        "native_cast_nullsfalse",
+        "group_having_nullsfalse",
+        "group_local_nullsfalse",
+        "group_selected_nullsfalse",
+        "previous_group_count_nullsfalse",
+        "ordinary_numeric_nullstrue",
+        "ordinary_cast_nullstrue",
+        "exists_cast_nullstrue",
+        "in_local_cast_nullstrue",
+        "native_numeric_nullstrue",
+        "native_cast_nullstrue",
+        "group_having_nullstrue",
+        "group_local_nullstrue",
+        "group_selected_nullstrue",
+        "previous_group_count_nullstrue"
+      ],
+      "changed": [
+        "group_only_nullsfalse",
+        "group_limited_count_nullsfalse",
+        "group_nested_nullsfalse",
+        "previous_foldable_nullsfalse",
+        "group_only_nullstrue",
+        "group_limited_count_nullstrue",
+        "group_nested_nullstrue",
+        "previous_foldable_nullstrue"
+      ],
+      "candidate_only": [
+        "bad_group_nullsfalse",
+        "bad_cast_nullsfalse",
+        "bad_group_nullstrue",
+        "bad_cast_nullstrue"
+      ]
+    },
+    "protocol": {
+      "order": [
+        "before",
+        "after",
+        "after",
+        "before",
+        "after",
+        "before",
+        "before",
+        "after"
+      ],
+      "cpu": 2,
+      "platform": "Linux-6.19.14-200.fc43.x86_64-x86_64-with-glibc2.42",
+      "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.50\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rows": 262144,
+      "batch_size": 8192,
+      "warmups": 4,
+      "samples": 21,
+      "reference_sha256": "309532d00bfe8fa2f7b9d472467ec68528c61a6556287febab2e492dcbd43d3f",
+      "ansi_mode": "ANSI true; group-only LIMIT/EXISTS, nested/local/selected/HAVING groups and previous constant-group controls, ordinary numeric/CAST and native SQL controls; Spark analyzer enabled only for Spark queries",
+      "scope": "Focused compatibility-PR cost check, not final performance acceptance.",
+      "binaries": {
+        "before": "e9307e36e956e682510b52ec163d6e9e062ac5e479b9caa13e44098b50e4efd8",
+        "after": "2b814b11d91a93a979d82b9874f6b9b3351bfc2d5e98795dda233fd1d2e12a88"
+      }
+    },
+    "plan_state_reset": "DataFusion reset_plan_states before repeats, outside execution timing; reuse the corrected accepted harness.",
+    "same_binary_calibration": false,
+    "instructions_allocations_memory_measured": false,
+    "measurements": [
+      {
+        "id": "ordinary_numeric_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 10541556853442269111,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.3122,
+              0.308472,
+              0.318041,
+              0.310587
+            ],
+            "median_ms": 0.3113935
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.113351,
+              0.114472,
+              0.128609,
+              0.135011
+            ],
+            "median_ms": 0.1215405
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 10541556853442269111,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.313432,
+              0.31249,
+              0.315937,
+              0.311699
+            ],
+            "median_ms": 0.312961
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.113841,
+              0.114212,
+              0.138047,
+              0.137886
+            ],
+            "median_ms": 0.126049
+          }
+        },
+        "ratios": {
+          "planning": 1.0050338237631806,
+          "execution": 1.037094631007771
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_cast_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 17667364451227745099,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.298995,
+              0.295478,
+              0.298334,
+              0.293986
+            ],
+            "median_ms": 0.296906
+          },
+          "execution": {
+            "process_medians_ms": [
+              4.255293,
+              4.245184,
+              4.274119,
+              4.222233
+            ],
+            "median_ms": 4.2502385
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 17667364451227745099,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.299035,
+              0.296682,
+              0.297633,
+              0.297252
+            ],
+            "median_ms": 0.2974425
+          },
+          "execution": {
+            "process_medians_ms": [
+              4.221751,
+              4.232622,
+              4.24227,
+              4.235627
+            ],
+            "median_ms": 4.2341245
+          }
+        },
+        "ratios": {
+          "planning": 1.0018069692091098,
+          "execution": 0.996208683348005
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "exists_cast_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.485071,
+              0.481404,
+              0.482897,
+              0.479861
+            ],
+            "median_ms": 0.48215050000000004
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.301119,
+              0.301229,
+              0.300508,
+              0.296932
+            ],
+            "median_ms": 0.3008135
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.480864,
+              0.477206,
+              0.481715,
+              0.482537
+            ],
+            "median_ms": 0.48128950000000004
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.299667,
+              0.300548,
+              0.299286,
+              0.301991
+            ],
+            "median_ms": 0.30010749999999997
+          }
+        },
+        "ratios": {
+          "planning": 0.9982142505296583,
+          "execution": 0.9976530308646386
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "in_local_cast_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11628025427715203818,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              1.393809,
+              1.400451,
+              1.406112,
+              1.399048
+            ],
+            "median_ms": 1.3997495
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.282254,
+              0.283577,
+              0.284799,
+              0.282254
+            ],
+            "median_ms": 0.2829155
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11628025427715203818,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              1.403306,
+              1.380665,
+              1.403567,
+              1.411311
+            ],
+            "median_ms": 1.4034365
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.280842,
+              0.281593,
+              0.283647,
+              0.284669
+            ],
+            "median_ms": 0.28262
+          }
+        },
+        "ratios": {
+          "planning": 1.002634042734075,
+          "execution": 0.9989555185205476
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "native_numeric_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 10541556853442269111,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.175296,
+              0.169825,
+              0.174143,
+              0.171699
+            ],
+            "median_ms": 0.172921
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.086891,
+              0.098854,
+              0.09681,
+              0.099946
+            ],
+            "median_ms": 0.097832
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 10541556853442269111,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.172431,
+              0.172631,
+              0.179924,
+              0.175997
+            ],
+            "median_ms": 0.174314
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.09721,
+              0.100396,
+              0.097251,
+              0.097902
+            ],
+            "median_ms": 0.09757650000000001
+          }
+        },
+        "ratios": {
+          "planning": 1.0080557017366312,
+          "execution": 0.9973883800801374
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "native_cast_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 17667364451227745099,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.156961,
+              0.156301,
+              0.157803,
+              0.15609
+            ],
+            "median_ms": 0.156631
+          },
+          "execution": {
+            "process_medians_ms": [
+              1.175043,
+              1.171366,
+              1.177467,
+              1.174331
+            ],
+            "median_ms": 1.174687
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 17667364451227745099,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.160609,
+              0.157823,
+              0.158945,
+              0.160518
+            ],
+            "median_ms": 0.1597315
+          },
+          "execution": {
+            "process_medians_ms": [
+              1.168761,
+              1.193377,
+              1.171916,
+              1.176314
+            ],
+            "median_ms": 1.174115
+          }
+        },
+        "ratios": {
+          "planning": 1.0197949320377193,
+          "execution": 0.9995130617773075
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_only_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.681856,
+              0.6783,
+              0.691906,
+              0.684852
+            ],
+            "median_ms": 0.683354
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.321487,
+              0.3229,
+              0.327107,
+              0.321457
+            ],
+            "median_ms": 0.3221935
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.584797,
+              0.575269,
+              0.586049,
+              0.587962
+            ],
+            "median_ms": 0.585423
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.309845,
+              0.302953,
+              0.30152,
+              0.302622
+            ],
+            "median_ms": 0.3027875
+          }
+        },
+        "ratios": {
+          "planning": 0.8566906756966375,
+          "execution": 0.9397691139020494
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_limited_count_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.789266,
+              0.78587,
+              0.796599,
+              0.789596
+            ],
+            "median_ms": 0.789431
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.076442,
+              0.077734,
+              0.078015,
+              0.076552
+            ],
+            "median_ms": 0.07714299999999999
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.692046,
+              0.684391,
+              0.688669,
+              0.693408
+            ],
+            "median_ms": 0.6903575
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.058289,
+              0.058499,
+              0.058538,
+              0.058288
+            ],
+            "median_ms": 0.058394
+          }
+        },
+        "ratios": {
+          "planning": 0.8745001146395315,
+          "execution": 0.7569578574854492
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_having_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.977987,
+              0.967517,
+              0.987114,
+              0.975252
+            ],
+            "median_ms": 0.9766195
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.327118,
+              0.327068,
+              0.328209,
+              0.328139
+            ],
+            "median_ms": 0.3276285
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.976323,
+              0.971104,
+              0.973649,
+              0.977936
+            ],
+            "median_ms": 0.974986
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.328791,
+              0.326577,
+              0.331306,
+              0.32847
+            ],
+            "median_ms": 0.3286305
+          }
+        },
+        "ratios": {
+          "planning": 0.9983273936266889,
+          "execution": 1.0030583419940573
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_local_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.853345,
+              0.851953,
+              0.862762,
+              0.85085
+            ],
+            "median_ms": 0.852649
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.30713,
+              0.307251,
+              0.31214,
+              0.307882
+            ],
+            "median_ms": 0.30756649999999996
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.862231,
+              0.848916,
+              0.86147,
+              0.866459
+            ],
+            "median_ms": 0.8618505
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.309224,
+              0.307822,
+              0.311579,
+              0.310326
+            ],
+            "median_ms": 0.309775
+          }
+        },
+        "ratios": {
+          "planning": 1.010791662219741,
+          "execution": 1.0071805609518594
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_selected_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.686976,
+              0.69449,
+              0.69968,
+              0.691414
+            ],
+            "median_ms": 0.692952
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.045515,
+              0.046716,
+              0.046016,
+              0.045675
+            ],
+            "median_ms": 0.0458455
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.691294,
+              0.687336,
+              0.691153,
+              0.698096
+            ],
+            "median_ms": 0.6912235
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.045995,
+              0.046226,
+              0.046827,
+              0.045825
+            ],
+            "median_ms": 0.0461105
+          }
+        },
+        "ratios": {
+          "planning": 0.9975055992334245,
+          "execution": 1.005780283779215
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_nested_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.858274,
+              0.862131,
+              0.87189,
+              0.865798
+            ],
+            "median_ms": 0.8639645
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.076942,
+              0.077504,
+              0.077464,
+              0.076543
+            ],
+            "median_ms": 0.077203
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.762807,
+              0.756646,
+              0.75882,
+              0.763178
+            ],
+            "median_ms": 0.7608135
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.059371,
+              0.058819,
+              0.058438,
+              0.058719
+            ],
+            "median_ms": 0.058769
+          }
+        },
+        "ratios": {
+          "planning": 0.880607362918268,
+          "execution": 0.7612268953279019
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "bad_group_nullsfalse",
+        "before": {
+          "error": "Arrow error: Divide by zero error",
+          "phase": "execution"
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.609282,
+              0.599133,
+              0.611936,
+              0.611847
+            ],
+            "median_ms": 0.6105645
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.30158,
+              0.309294,
+              0.299697,
+              0.302672
+            ],
+            "median_ms": 0.302126
+          }
+        },
+        "ratios": {},
+        "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+      },
+      {
+        "id": "bad_cast_nullsfalse",
+        "before": {
+          "error": "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+          "phase": "execution"
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.787693,
+              0.777254,
+              0.788245,
+              0.792832
+            ],
+            "median_ms": 0.7879689999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.302822,
+              0.30173,
+              0.302031,
+              0.303072
+            ],
+            "median_ms": 0.3024265
+          }
+        },
+        "ratios": {},
+        "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+      },
+      {
+        "id": "previous_foldable_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.709438,
+              0.704859,
+              0.710279,
+              0.709668
+            ],
+            "median_ms": 0.709553
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.315305,
+              0.310567,
+              0.311929,
+              0.319043
+            ],
+            "median_ms": 0.31361700000000003
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.596357,
+              0.589444,
+              0.597099,
+              0.59755
+            ],
+            "median_ms": 0.596728
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.300808,
+              0.310116,
+              0.300879,
+              0.305949
+            ],
+            "median_ms": 0.303414
+          }
+        },
+        "ratios": {
+          "planning": 0.8409914410903767,
+          "execution": 0.9674666870737236
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "previous_group_count_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 7275049480977681831,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.556284,
+              0.545743,
+              0.560831,
+              0.556864
+            ],
+            "median_ms": 0.556574
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.065922,
+              0.065662,
+              0.065151,
+              0.065532
+            ],
+            "median_ms": 0.065597
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 7275049480977681831,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.562003,
+              0.546195,
+              0.555622,
+              0.561413
+            ],
+            "median_ms": 0.5585175
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.065131,
+              0.066072,
+              0.065442,
+              0.065963
+            ],
+            "median_ms": 0.0657025
+          }
+        },
+        "ratios": {
+          "planning": 1.0034918986513923,
+          "execution": 1.0016083052578624
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_numeric_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 12374517144315239167,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.310937,
+              0.311428,
+              0.310767,
+              0.307782
+            ],
+            "median_ms": 0.310852
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.176318,
+              0.186506,
+              0.191997,
+              0.18813
+            ],
+            "median_ms": 0.18731799999999998
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 12374517144315239167,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.310837,
+              0.308473,
+              0.308193,
+              0.313983
+            ],
+            "median_ms": 0.309655
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.198849,
+              0.17781,
+              0.178612,
+              0.194942
+            ],
+            "median_ms": 0.186777
+          }
+        },
+        "ratios": {
+          "planning": 0.996149292911096,
+          "execution": 0.9971118632485934
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_cast_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 17667364451227745099,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.282374,
+              0.282314,
+              0.278798,
+              0.2795
+            ],
+            "median_ms": 0.280907
+          },
+          "execution": {
+            "process_medians_ms": [
+              4.309454,
+              4.255935,
+              4.325625,
+              4.251146
+            ],
+            "median_ms": 4.2826945
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 17667364451227745099,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.284609,
+              0.275982,
+              0.282855,
+              0.281844
+            ],
+            "median_ms": 0.28234950000000003
+          },
+          "execution": {
+            "process_medians_ms": [
+              4.274389,
+              4.254402,
+              4.300778,
+              4.311167
+            ],
+            "median_ms": 4.2875835
+          }
+        },
+        "ratios": {
+          "planning": 1.0051351514914189,
+          "execution": 1.0011415710366454
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "exists_cast_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.478449,
+              0.456648,
+              0.459634,
+              0.455997
+            ],
+            "median_ms": 0.458141
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.303584,
+              0.300749,
+              0.304475,
+              0.302031
+            ],
+            "median_ms": 0.3028075
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.458802,
+              0.455456,
+              0.460535,
+              0.463541
+            ],
+            "median_ms": 0.45966850000000004
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.300689,
+              0.300458,
+              0.305187,
+              0.302212
+            ],
+            "median_ms": 0.30145049999999995
+          }
+        },
+        "ratios": {
+          "planning": 1.003334126393403,
+          "execution": 0.9955186050543661
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "in_local_cast_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11628025427715203818,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              1.491651,
+              1.380574,
+              1.382588,
+              1.395662
+            ],
+            "median_ms": 1.389125
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.288004,
+              0.28545,
+              0.28558,
+              0.287363
+            ],
+            "median_ms": 0.2864715
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11628025427715203818,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              1.385723,
+              1.360297,
+              1.37842,
+              1.387818
+            ],
+            "median_ms": 1.3820715
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.283907,
+              0.281112,
+              0.285771,
+              0.28527
+            ],
+            "median_ms": 0.2845885
+          }
+        },
+        "ratios": {
+          "planning": 0.9949223432016557,
+          "execution": 0.9934269203044632
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "native_numeric_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 12374517144315239167,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.18306,
+              0.175246,
+              0.174544,
+              0.179754
+            ],
+            "median_ms": 0.1775
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.119913,
+              0.099024,
+              0.10206,
+              0.086791
+            ],
+            "median_ms": 0.10054199999999999
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 12374517144315239167,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.177199,
+              0.175566,
+              0.176908,
+              0.17778
+            ],
+            "median_ms": 0.1770535
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.098573,
+              0.086501,
+              0.103803,
+              0.099605
+            ],
+            "median_ms": 0.099089
+          }
+        },
+        "ratios": {
+          "planning": 0.9974845070422536,
+          "execution": 0.9855483280619045
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "native_cast_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 17667364451227745099,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.165067,
+              0.159106,
+              0.161249,
+              0.160128
+            ],
+            "median_ms": 0.1606885
+          },
+          "execution": {
+            "process_medians_ms": [
+              1.214636,
+              1.192615,
+              1.185491,
+              1.191062
+            ],
+            "median_ms": 1.1918385
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 17667364451227745099,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.160868,
+              0.156501,
+              0.159907,
+              0.158785
+            ],
+            "median_ms": 0.159346
+          },
+          "execution": {
+            "process_medians_ms": [
+              1.185202,
+              1.181494,
+              1.182116,
+              1.188177
+            ],
+            "median_ms": 1.183659
+          }
+        },
+        "ratios": {
+          "planning": 0.991645326205671,
+          "execution": 0.9931370735212867
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_only_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.677649,
+              0.6676,
+              0.663592,
+              0.660988
+            ],
+            "median_ms": 0.665596
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.327709,
+              0.326767,
+              0.323401,
+              0.327468
+            ],
+            "median_ms": 0.32711749999999995
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.560762,
+              0.554169,
+              0.562284,
+              0.560832
+            ],
+            "median_ms": 0.560797
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.301319,
+              0.30149,
+              0.305217,
+              0.304987
+            ],
+            "median_ms": 0.30323849999999997
+          }
+        },
+        "ratios": {
+          "planning": 0.8425486331047662,
+          "execution": 0.9270017654206822
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_limited_count_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.946408,
+              0.765602,
+              0.773066,
+              0.763669
+            ],
+            "median_ms": 0.769334
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.078827,
+              0.078195,
+              0.078666,
+              0.078095
+            ],
+            "median_ms": 0.0784305
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.665637,
+              0.653554,
+              0.665636,
+              0.668121
+            ],
+            "median_ms": 0.6656365
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.059029,
+              0.058919,
+              0.062026,
+              0.062206
+            ],
+            "median_ms": 0.0605275
+          }
+        },
+        "ratios": {
+          "planning": 0.8652113386383548,
+          "execution": 0.7717342105430922
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_having_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              1.07657,
+              0.942871,
+              0.957969,
+              0.946207
+            ],
+            "median_ms": 0.952088
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.335453,
+              0.330153,
+              0.334421,
+              0.331636
+            ],
+            "median_ms": 0.3330285
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.948572,
+              0.934916,
+              0.944003,
+              0.950626
+            ],
+            "median_ms": 0.9462875
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.332086,
+              0.329992,
+              0.328851,
+              0.332978
+            ],
+            "median_ms": 0.33103899999999997
+          }
+        },
+        "ratios": {
+          "planning": 0.9939076009780607,
+          "execution": 0.9940260368106633
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_local_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.835982,
+              0.820794,
+              0.833408,
+              0.82903
+            ],
+            "median_ms": 0.831219
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.310807,
+              0.308263,
+              0.310446,
+              0.310096
+            ],
+            "median_ms": 0.31027099999999996
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.846793,
+              0.830292,
+              0.832266,
+              0.837735
+            ],
+            "median_ms": 0.8350005
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.343467,
+              0.307481,
+              0.310376,
+              0.307842
+            ],
+            "median_ms": 0.30910899999999997
+          }
+        },
+        "ratios": {
+          "planning": 1.0045493425920244,
+          "execution": 0.9962548868569734
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_selected_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.687357,
+              0.686175,
+              0.692236,
+              0.695521
+            ],
+            "median_ms": 0.6897964999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.046246,
+              0.046496,
+              0.045905,
+              0.046286
+            ],
+            "median_ms": 0.046266
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 8035131314995475557,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.988706,
+              0.686395,
+              0.687798,
+              0.693638
+            ],
+            "median_ms": 0.6907179999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.045845,
+              0.045535,
+              0.045574,
+              0.046196
+            ],
+            "median_ms": 0.0457095
+          }
+        },
+        "ratios": {
+          "planning": 1.0013359012404384,
+          "execution": 0.9879717286992608
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "group_nested_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.863273,
+              0.862231,
+              0.870076,
+              0.860739
+            ],
+            "median_ms": 0.862752
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.077033,
+              0.077594,
+              0.077814,
+              0.077474
+            ],
+            "median_ms": 0.07753399999999999
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.765361,
+              0.749613,
+              0.761404,
+              0.766113
+            ],
+            "median_ms": 0.7633825
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.05899,
+              0.05905,
+              0.058689,
+              0.05882
+            ],
+            "median_ms": 0.058905
+          }
+        },
+        "ratios": {
+          "planning": 0.8848226373279923,
+          "execution": 0.7597312146929089
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "bad_group_nullstrue",
+        "before": {
+          "error": "Arrow error: Divide by zero error",
+          "phase": "execution"
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.615032,
+              0.603171,
+              0.614051,
+              0.612036
+            ],
+            "median_ms": 0.6130435000000001
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.299807,
+              0.301931,
+              0.302672,
+              0.303163
+            ],
+            "median_ms": 0.3023015
+          }
+        },
+        "ratios": {},
+        "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+      },
+      {
+        "id": "bad_cast_nullstrue",
+        "before": {
+          "error": "Arrow error: Cast error: Cannot cast string 'bad' to value of Int32 type",
+          "phase": "execution"
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.788966,
+              0.778056,
+              0.787132,
+              0.788094
+            ],
+            "median_ms": 0.787613
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.303885,
+              0.302482,
+              0.302001,
+              0.302452
+            ],
+            "median_ms": 0.302467
+          }
+        },
+        "ratios": {},
+        "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+      },
+      {
+        "id": "previous_foldable_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.709437,
+              0.708286,
+              0.709057,
+              0.714848
+            ],
+            "median_ms": 0.709247
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.311358,
+              0.311609,
+              0.313012,
+              0.311148
+            ],
+            "median_ms": 0.3114835
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 301353882005273981,
+            "data_type": "Boolean"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.59758,
+              0.59217,
+              0.599263,
+              0.600445
+            ],
+            "median_ms": 0.5984214999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.305437,
+              0.303213,
+              0.302973,
+              0.303453
+            ],
+            "median_ms": 0.30333299999999996
+          }
+        },
+        "ratios": {
+          "planning": 0.8437420249927035,
+          "execution": 0.9738332849091523
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      },
+      {
+        "id": "previous_group_count_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 7275049480977681831,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.55437,
+              0.550142,
+              0.561183,
+              0.5549
+            ],
+            "median_ms": 0.554635
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.065822,
+              0.066313,
+              0.065192,
+              0.065722
+            ],
+            "median_ms": 0.065772
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 7275049480977681831,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.558116,
+              0.545723,
+              0.553548,
+              0.557185
+            ],
+            "median_ms": 0.5553665000000001
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.065792,
+              0.065893,
+              0.066003,
+              0.066013
+            ],
+            "median_ms": 0.065948
+          }
+        },
+        "ratios": {
+          "planning": 1.0013188853930965,
+          "execution": 1.0026759107218879
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+      }
+    ],
+    "status": "Bounded comparison; prior costs, attribution and final performance acceptance remain open."
+  },
+  "provenance": {
+    "build": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/group-only-limit-fcb7bc1/override.toml",
+        "-j",
+        "3",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json"
+      ],
+      "sources": {
+        "math.rs": "580a2838b15e6e280e209076936df3a37870014f9275a99cd1eb97ea4e4089d4",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "30f3ae9e61a7b0af2aeed023e562662e330866134d9cce0281a0f88dd33af8de",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "17aabfe61876632a6b26a4dffb3b0dcd603a5344e023b66e58bcb85b61b7871b",
+        "scalar-mod.rs": "cfaa4c666296ef5553deb7dfbe8b98cc562267b4ff9d346c2c6f34a10c800776",
+        "Cargo.lock": "273c79133f7f724ccd25039958ee4fd76f83f75efafca9936248fab6ab0527ba",
+        "decimal_bench.rs": "8292aed9e59abdf8453139ec63a3984c265be1af777bd1611ecd00a8072ff208",
+        "string-cast.rs": "8747f822bffa967aac7c4eb5231c94afc471a7b8a65a37ce931453d53aeac78c",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "67b5dfdc2968f8524ebee27d9083e61694058a7aec38cd80af275d7228f5ae2c",
+        "decimal-null.rs": "64037db6601d7a33b86f33f7e6a0a2a890da1f44475180697024da674c31a3e6",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "a6aa195940c3d52f9f8b706f8309194cb917462e27efd8f2c43d667dedd7d043",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "2ced18332150ae4059513f27f5e78a5b16bb7a8a2f9970053b5ff5f4a14183f8",
+        "conditional.rs": "b32379a2f19e82602633640ffb51fb322cb3d710b413afe3ca67f97f49acbda4",
+        "small-int-divide.rs": "700a3b1799999b57761155ec04448c3c64c090cc7168ec067b194cc1b30cd131",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "f334d9e21c70da2b919e02385225b33c96b2dbecc8607a59795b671f7b651c42",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "native-aggregates.rs": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+        "resolver-sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "native-binary": "66ba58d025ab8127b8232b85028a0c93d96e224f2c92e9a11b8e7ff0a5c8f088",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180",
+        "checked.rs": "6a6d15a2255937a3d4a48b1a2d7b59040bc57588bf1b1f32e593f8e5edbacb19",
+        "native-scalar-function.rs": "c3853b994aa861c5d7f0b30fd777d878c0b7300b2848de6b913f437289366c21",
+        "udf.rs": "b7f05300615df5c0f87495f5dbcee8974b6e36f027b070d05f79c147044ef0ed",
+        "expression-mod.rs": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+        "overflow-bench.rs": "971ad5fe8fb00a9640585c66de320ba4fa1125b82ca9f2fa5a13cd4029b60256",
+        "native-column.rs": "75d22bef42f5dcd487ac06d1c0e0505407d9480d95b0423278e8ca693a3c9660",
+        "arrow-arithmetic.rs": "008110fe975edfc942333d2e3bcb94af5f2de9b1e456d7d5cf696a4da7b4fc50",
+        "arrow-arity.rs": "5be993560d41ad908accd1324b1529614accd0af859dd0d886c109052270e360",
+        "scatter-utils.rs": "aec739c4df4c1a01a1f09a16efddabd69e5f283e4490c3a2570504f10cfcbcf8",
+        "filter.rs": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d",
+        "bround.rs": "a61cbf4c2e43ef954cadfc2b34de95b0c7fa7fd4d09e50cf263f0be3b9ba6f87",
+        "integer-round.rs": "e6dc484a88cd2d0b38756ecda79a76c69ea8e6e85984cea1107166a8c7b424b7",
+        "float-round.rs": "c62f0456753a6aa55f32c18a48576a01318b7336d61cc7c412adc91ad17b9cce",
+        "integer-cast.rs": "963b9ac541b0057933461fb76356803f80d6b01b70f511b9cb068389997045e6",
+        "floating-cast.rs": "c0970aa7b4b52e86dae57e6d1b8b41ee0e86d71adcaba3f36ea86a7db032164d",
+        "lexical-number.rs": "7d6b9673a13cf3ff9420b1efef8d8e4216727091ff07f701c0dbbbf9a044e4c8",
+        "lexical-binary.rs": "73cae5e3d170e2f6e088b15d013f75b90c8d1de2ee38f8d2567114cd85fa26f9",
+        "expr-schema.rs": "a998dfb16d880b92738f90f151ddfe95f8f2645922c3f0b552cad5ad4cd585f7",
+        "physical-planner.rs": "79ccdee0dc51999227c7fbb3f9d110a8d7a724b5bf6616302c957fe895bc5e2c",
+        "physical-scalar.rs": "7a904c657b01cdff372da9f6458672433df046fdb329b6bf4ec4c53f5289d180",
+        "physical-subquery.rs": "2a5aa2a04747a5159fbca4a4087d11330ba49f5482c949f369f7ab37f653617a"
+      },
+      "binaries": {
+        "probe": "51f720a241c371d9caee6917516650a51bb834e164a40f3023490e8f2b33b7ad",
+        "runner": "10a8baa043f72cdb4a3fd3fe17697c7ffb5e12d23532c5419bd7f59ad94b1fa8"
+      },
+      "baseline_archives": {
+        "grouping-preparation": {
+          "path": "grouping-preparation-runs.json.gz",
+          "sha256": "57880a736dd423154f683e9638ea01bffcf082437eb74d4b72e2a952c428323f",
+          "files": 631,
+          "compressed_bytes": 4521224
+        }
+      },
+      "integration_base": "fcb7bc107cd0cd6061c3c728c72ba68ba074b65a",
+      "changed_runtime_sources": [
+        "decimal-null.rs"
+      ]
+    },
+    "libraries": {
+      "artifacts_per_build": [
+        505,
+        505
+      ],
+      "named_libraries": [
+        414,
+        414
+      ],
+      "same_package_feature_signatures": true,
+      "changed": [
+        "sail_plan"
+      ]
+    },
+    "baseline_binaries": {
+      "probe": "b4a8e7a8760c23db23fed89cca36dfda6299730c238a1eb725cbf8c6e5075ce9",
+      "runner": "fb6a2a6b73f46f5dc60e065e5c4d841d945dca92e0affa5d6395be028b04623e"
+    },
+    "spark": "4.2.0",
+    "sail": "0.7.1",
+    "datafusion": "54.1.0",
+    "arrow": "58.4.0",
+    "java": "21",
+    "timezone": "UTC",
+    "allowPrecisionLoss": true,
+    "correctness_ansi": [
+      true,
+      false
+    ],
+    "native_partitions": 2,
+    "native_batch_size": 2
+  },
+  "repository_files": {
+    "GROUP_ONLY_LIMIT.md": "d507cfc906439943120a1180066f7ce616b4ecd31a08490731e3c09ddcc1bfc3",
+    "README.md": "52497f84de442f7590d3c26dab41ba9867f3dc3fd05e05ba8b749d8b74f20838",
+    "bigint_div_overflow.py": "fbd40d0634454ee8b744e7df8951d406a1b4ca2c65d78c824dd5189521e965f3",
+    "decimal_arithmetic_types.py": "f355276a7660aba73f528e5b1fb959ef439332e66913f952ef0c70be633de317",
+    "decimal_bround.py": "90f12456275c926ddf64e17453912c75243c8a348b7db8bb570796e2af6a74d4",
+    "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec",
+    "division_cast_classification.py": "049f9c0e9a4d8002584b3af5036afa032189896eea8567c60b4f581a8308e27d",
+    "early_arithmetic.py": "38a5663f408c844c13629bfac01ab0ae9a94a3d83d11292b8e4b1413160fe762",
+    "float_bround.py": "80d227e9b16391fa193990c40d9560ec3368cbfb545dd1f0343c1edfc5e643ce",
+    "group-only-limit.jsonl": "1cbc9df1abf45896c4de50a2eb24b81cb09d2327714f5c3eee85ce0217e2adcf",
+    "grouping-preparation-results.json": "4fab60ab238b7042f630126f0414c9792be5456f7cd2db7d7eec0c0e6f374c50",
+    "integer_overflow.py": "2364a1ea92dc5d55a424e1049f3c657a6821c6350eb355f48f99b834bd593c76",
+    "integer_round.py": "88ccca74ef38a616cbe3137dca5d41880a0d33a966c7087da534f0592d111271",
+    "modulo_null_guard.py": "1de2534e63053b48cf71f3845226eb21c8ff2868cf94cfba6416d5ca046b7e2f",
+    "oracle.py": "ff7e117a861e47b10c38dcd2cf47ae581acf91f12542b453746df01b20e9ec68",
+    "reference.py": "41e799f66e70378dd7a5f87139c1815cd029ff011bf61eb2fec0c54a338dee2e",
+    "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
+    "sail-group-only-limit.patch": "b1e1685b1227ce55ed0734d5587bd20c53b9740df2670c7c3ef8a2dae9a3b337",
+    "string_division_coercion.py": "675bd82b1371f53eac368e46a67a26ef3e7ff97b91b9c80a86efd137a90a688d",
+    "string_modulo_coercion.py": "77602db3b22da6a98e7b978f9b9b89a4250d270a0d542b3002229cf67fd97069"
+  },
+  "archive": {
+    "path": "group-only-limit-runs.json.gz",
+    "sha256": "e2e799e82d145969720f27de015dfacfdaabb9868552423fa702bc349614da84",
+    "files": 676,
+    "compressed_bytes": 5901974
+  }
+}
