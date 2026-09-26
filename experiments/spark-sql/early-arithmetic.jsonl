@@ -1,0 +1,422 @@
+{"id": "owned_0", "sql": "SELECT CAST(a AS DOUBLE) / CAST(0 AS DOUBLE) AS r FROM VALUES (1) t(a) LIMIT 0", "batch_size": 3, "category": "early_arithmetic"}
+{"id": "owned_1", "sql": "SELECT CAST(a AS FLOAT) / CAST(b AS FLOAT) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3, "category": "early_arithmetic"}
+{"id": "owned_2", "sql": "SELECT CAST(a AS FLOAT) % CAST(b AS FLOAT) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3, "category": "early_arithmetic"}
+{"id": "owned_3", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3, "category": "early_arithmetic"}
+{"id": "owned_4", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('2','-0.0') t(a,b) LIMIT 0", "batch_size": 3, "category": "early_arithmetic"}
+{"id": "owned_5", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3) WHERE false LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_6", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3) WHERE false LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_7", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3) WHERE false LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_8", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3) WHERE false LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_9", "sql": "SELECT CASE WHEN true THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_10", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT), CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_11", "sql": "SELECT id AS q FROM range(3) WHERE false AND id > (CAST(7 AS INT) DIV CAST(0 AS INT))", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_12", "sql": "SELECT id AS q FROM range(3) WHERE id > (CAST(7 AS INT) DIV CAST(0 AS INT)) AND false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_13", "sql": "SELECT id AS q FROM range(3) WHERE false ORDER BY CAST(7 AS INT) DIV CAST(0 AS INT)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_14", "sql": "SELECT SUM(CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_15", "sql": "SELECT CASE WHEN true THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_16", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT), CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_17", "sql": "SELECT id AS q FROM range(3) WHERE false AND id > (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT))", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_18", "sql": "SELECT id AS q FROM range(3) WHERE id > (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AND false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_19", "sql": "SELECT id AS q FROM range(3) WHERE false ORDER BY CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_20", "sql": "SELECT SUM(CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_21", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT) > 0) AND false AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_22", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT) > 0) OR true AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_23", "sql": "SELECT CASE WHEN id = 0 THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS q FROM VALUES (0) t(id) LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_24", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT), CAST(7 AS INT) DIV CAST(0 AS INT)) AS q FROM VALUES (0) t(id) LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_25", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) > 0) AND false AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_26", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) > 0) OR true AS q FROM range(3) WHERE false", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_27", "sql": "SELECT CASE WHEN id = 0 THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS q FROM VALUES (0) t(id) LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_28", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT), CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS q FROM VALUES (0) t(id) LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_29", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_30", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS q, CAST('bad' AS TINYINT) DIV CAST(NULL AS TINYINT) AS other FROM VALUES ('2') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_31", "sql": "SELECT CAST(NULL AS TINYINT) DIV NULLIF(CAST(v AS TINYINT), CAST(0 AS TINYINT)) AS q FROM VALUES ('bad') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_32", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_33", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS q, CAST('bad' AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS other FROM VALUES ('2') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_34", "sql": "SELECT CAST(NULL AS SMALLINT) DIV NULLIF(CAST(v AS SMALLINT), CAST(0 AS SMALLINT)) AS q FROM VALUES ('bad') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_35", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS q FROM VALUES ('bad') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_36", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS q, CAST('bad' AS INT) DIV CAST(NULL AS INT) AS other FROM VALUES ('2') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_37", "sql": "SELECT CAST(NULL AS INT) DIV NULLIF(CAST(v AS INT), CAST(0 AS INT)) AS q FROM VALUES ('bad') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_38", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS q FROM VALUES ('bad') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_39", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS q, CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS other FROM VALUES ('2') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_40", "sql": "SELECT CAST(NULL AS BIGINT) DIV NULLIF(CAST(v AS BIGINT), CAST(0 AS BIGINT)) AS q FROM VALUES ('bad') t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_41", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_42", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_43", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_44", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS q FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "owned_45", "sql": "SELECT CAST(NULL AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('bad') t(b)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_46", "sql": "SELECT a DIV b AS r FROM VALUES (7,0) t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_47", "sql": "SELECT CASE WHEN k=0 THEN 7 DIV 0 ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_48", "sql": "SELECT 7 DIV 0 AS r FROM range(3) WHERE false LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_49", "sql": "SELECT CASE WHEN true THEN 7 DIV 0 ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_50", "sql": "SELECT id AS r FROM range(3) WHERE false AND id > (7 DIV 0)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_51", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES ('bad') t(v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_52", "sql": "SELECT CAST(NULL AS INT) DIV NULLIF(CAST(v AS INT),0) AS r FROM VALUES ('bad') t(v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_53", "sql": "SELECT CASE WHEN true THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (CAST('NaN' AS DOUBLE)) t(v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_54", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS r,CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS other FROM VALUES ('2') t(v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_55", "sql": "SELECT (7 DIV 0 > 0) AND false AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_56", "sql": "SELECT a % b AS r FROM VALUES ('bad',2L) t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "owned_57", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',2L) t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_direct_range", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_direct_range_limit", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_direct_local_limit", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_direct_local_empty", "sql": "SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_live_range", "sql": "SELECT CASE WHEN true THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_live_range_limit", "sql": "SELECT CASE WHEN true THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE 5 END AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_live_local_limit", "sql": "SELECT CASE WHEN true THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_live_local_empty", "sql": "SELECT CASE WHEN true THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE 5 END AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_dead_range", "sql": "SELECT CASE WHEN false THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_dead_range_limit", "sql": "SELECT CASE WHEN false THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE 5 END AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_dead_local_limit", "sql": "SELECT CASE WHEN false THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_dead_local_empty", "sql": "SELECT CASE WHEN false THEN CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) ELSE 5 END AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_coalesce_live_range", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_coalesce_live_range_limit", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_coalesce_live_local_limit", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_coalesce_live_local_empty", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_coalesce_dead_range", "sql": "SELECT COALESCE(5L,CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_coalesce_dead_range_limit", "sql": "SELECT COALESCE(5L,CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_coalesce_dead_local_limit", "sql": "SELECT COALESCE(5L,CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_coalesce_dead_local_empty", "sql": "SELECT COALESCE(5L,CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_and_right_range", "sql": "SELECT false AND (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_and_right_range_limit", "sql": "SELECT false AND (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_and_right_local_limit", "sql": "SELECT false AND (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_and_right_local_empty", "sql": "SELECT false AND (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_and_left_range", "sql": "SELECT (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AND false AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_and_left_range_limit", "sql": "SELECT (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AND false AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_and_left_local_limit", "sql": "SELECT (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AND false AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_and_left_local_empty", "sql": "SELECT (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AND false AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_or_right_range", "sql": "SELECT true OR (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_or_right_range_limit", "sql": "SELECT true OR (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_or_right_local_limit", "sql": "SELECT true OR (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_or_right_local_empty", "sql": "SELECT true OR (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_or_left_range", "sql": "SELECT (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) OR true AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_or_left_range_limit", "sql": "SELECT (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) OR true AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_or_left_local_limit", "sql": "SELECT (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) OR true AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_or_left_local_empty", "sql": "SELECT (CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)>0) OR true AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_filter", "sql": "SELECT id FROM range(3) WHERE false AND id>(CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT))", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_sort", "sql": "SELECT id FROM range(3) WHERE false ORDER BY CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_sum", "sql": "SELECT SUM(CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_unused_range", "sql": "SELECT id FROM (SELECT id,CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS unused FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_unused_local", "sql": "SELECT k FROM (SELECT k,CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS unused FROM VALUES (0) t(k)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_null_parent", "sql": "SELECT q*CAST(NULL AS BIGINT) AS r FROM (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_cast_bad", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_cast_bad_limit", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_cast_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_cast_valid", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_bad", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_bad_limit", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_empty", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_case_valid", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_dead_case_bad", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_dead_case_bad_limit", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_dead_case_empty", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_dead_case_valid", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS TINYINT) DIV CAST(v AS TINYINT) ELSE 5 END AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_nullif_bad", "sql": "SELECT CAST(NULL AS TINYINT) DIV NULLIF(CAST(v AS TINYINT),CAST(0 AS TINYINT)) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_nullif_bad_limit", "sql": "SELECT CAST(NULL AS TINYINT) DIV NULLIF(CAST(v AS TINYINT),CAST(0 AS TINYINT)) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_nullif_empty", "sql": "SELECT CAST(NULL AS TINYINT) DIV NULLIF(CAST(v AS TINYINT),CAST(0 AS TINYINT)) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_nullif_valid", "sql": "SELECT CAST(NULL AS TINYINT) DIV NULLIF(CAST(v AS TINYINT),CAST(0 AS TINYINT)) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_right_null_bad", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_right_null_bad_limit", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_right_null_empty", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_right_null_valid", "sql": "SELECT CAST(v AS TINYINT) DIV CAST(NULL AS TINYINT) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_literal_left_null_120", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST('bad' AS TINYINT) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_literal_right_null_121", "sql": "SELECT CAST('bad' AS TINYINT) DIV CAST(NULL AS TINYINT) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_literal_left_null_122", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST('bad' AS TINYINT) AS r FROM range(3)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_literal_right_null_123", "sql": "SELECT CAST('bad' AS TINYINT) DIV CAST(NULL AS TINYINT) AS r FROM range(3)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_literal_left_null_124", "sql": "SELECT CAST(NULL AS TINYINT) DIV CAST('bad' AS TINYINT) AS r ", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_literal_right_null_125", "sql": "SELECT CAST('bad' AS TINYINT) DIV CAST(NULL AS TINYINT) AS r ", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_direct_range", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_direct_range_limit", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_direct_local_limit", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_direct_local_empty", "sql": "SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_live_range", "sql": "SELECT CASE WHEN true THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_live_range_limit", "sql": "SELECT CASE WHEN true THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE 5 END AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_live_local_limit", "sql": "SELECT CASE WHEN true THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_live_local_empty", "sql": "SELECT CASE WHEN true THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE 5 END AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_dead_range", "sql": "SELECT CASE WHEN false THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_dead_range_limit", "sql": "SELECT CASE WHEN false THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE 5 END AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_dead_local_limit", "sql": "SELECT CASE WHEN false THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_dead_local_empty", "sql": "SELECT CASE WHEN false THEN CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) ELSE 5 END AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_coalesce_live_range", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_coalesce_live_range_limit", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_coalesce_live_local_limit", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_coalesce_live_local_empty", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_coalesce_dead_range", "sql": "SELECT COALESCE(5L,CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_coalesce_dead_range_limit", "sql": "SELECT COALESCE(5L,CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_coalesce_dead_local_limit", "sql": "SELECT COALESCE(5L,CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_coalesce_dead_local_empty", "sql": "SELECT COALESCE(5L,CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_and_right_range", "sql": "SELECT false AND (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_and_right_range_limit", "sql": "SELECT false AND (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_and_right_local_limit", "sql": "SELECT false AND (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_and_right_local_empty", "sql": "SELECT false AND (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_and_left_range", "sql": "SELECT (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AND false AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_and_left_range_limit", "sql": "SELECT (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AND false AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_and_left_local_limit", "sql": "SELECT (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AND false AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_and_left_local_empty", "sql": "SELECT (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AND false AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_or_right_range", "sql": "SELECT true OR (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_or_right_range_limit", "sql": "SELECT true OR (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_or_right_local_limit", "sql": "SELECT true OR (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_or_right_local_empty", "sql": "SELECT true OR (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_or_left_range", "sql": "SELECT (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) OR true AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_or_left_range_limit", "sql": "SELECT (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) OR true AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_or_left_local_limit", "sql": "SELECT (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) OR true AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_or_left_local_empty", "sql": "SELECT (CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)>0) OR true AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_filter", "sql": "SELECT id FROM range(3) WHERE false AND id>(CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT))", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_sort", "sql": "SELECT id FROM range(3) WHERE false ORDER BY CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_sum", "sql": "SELECT SUM(CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_unused_range", "sql": "SELECT id FROM (SELECT id,CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS unused FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_unused_local", "sql": "SELECT k FROM (SELECT k,CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS unused FROM VALUES (0) t(k)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_null_parent", "sql": "SELECT q*CAST(NULL AS BIGINT) AS r FROM (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_cast_bad", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_cast_bad_limit", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_cast_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_cast_valid", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_bad", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_bad_limit", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_empty", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_case_valid", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_dead_case_bad", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_dead_case_bad_limit", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_dead_case_empty", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_dead_case_valid", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS SMALLINT) DIV CAST(v AS SMALLINT) ELSE 5 END AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_nullif_bad", "sql": "SELECT CAST(NULL AS SMALLINT) DIV NULLIF(CAST(v AS SMALLINT),CAST(0 AS SMALLINT)) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_nullif_bad_limit", "sql": "SELECT CAST(NULL AS SMALLINT) DIV NULLIF(CAST(v AS SMALLINT),CAST(0 AS SMALLINT)) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_nullif_empty", "sql": "SELECT CAST(NULL AS SMALLINT) DIV NULLIF(CAST(v AS SMALLINT),CAST(0 AS SMALLINT)) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_nullif_valid", "sql": "SELECT CAST(NULL AS SMALLINT) DIV NULLIF(CAST(v AS SMALLINT),CAST(0 AS SMALLINT)) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_right_null_bad", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_right_null_bad_limit", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_right_null_empty", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_right_null_valid", "sql": "SELECT CAST(v AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_literal_left_null_188", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST('bad' AS SMALLINT) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_literal_right_null_189", "sql": "SELECT CAST('bad' AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_literal_left_null_190", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST('bad' AS SMALLINT) AS r FROM range(3)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_literal_right_null_191", "sql": "SELECT CAST('bad' AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS r FROM range(3)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_literal_left_null_192", "sql": "SELECT CAST(NULL AS SMALLINT) DIV CAST('bad' AS SMALLINT) AS r ", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_literal_right_null_193", "sql": "SELECT CAST('bad' AS SMALLINT) DIV CAST(NULL AS SMALLINT) AS r ", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_direct_range", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_direct_range_limit", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_direct_local_limit", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_direct_local_empty", "sql": "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_live_range", "sql": "SELECT CASE WHEN true THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_live_range_limit", "sql": "SELECT CASE WHEN true THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_live_local_limit", "sql": "SELECT CASE WHEN true THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_live_local_empty", "sql": "SELECT CASE WHEN true THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_dead_range", "sql": "SELECT CASE WHEN false THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_dead_range_limit", "sql": "SELECT CASE WHEN false THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_dead_local_limit", "sql": "SELECT CASE WHEN false THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_dead_local_empty", "sql": "SELECT CASE WHEN false THEN CAST(7 AS INT) DIV CAST(0 AS INT) ELSE 5 END AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_coalesce_live_range", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_coalesce_live_range_limit", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_coalesce_live_local_limit", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_coalesce_live_local_empty", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_coalesce_dead_range", "sql": "SELECT COALESCE(5L,CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_coalesce_dead_range_limit", "sql": "SELECT COALESCE(5L,CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_coalesce_dead_local_limit", "sql": "SELECT COALESCE(5L,CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_coalesce_dead_local_empty", "sql": "SELECT COALESCE(5L,CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_and_right_range", "sql": "SELECT false AND (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_and_right_range_limit", "sql": "SELECT false AND (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_and_right_local_limit", "sql": "SELECT false AND (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_and_right_local_empty", "sql": "SELECT false AND (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_and_left_range", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AND false AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_and_left_range_limit", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AND false AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_and_left_local_limit", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AND false AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_and_left_local_empty", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AND false AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_or_right_range", "sql": "SELECT true OR (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_or_right_range_limit", "sql": "SELECT true OR (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_or_right_local_limit", "sql": "SELECT true OR (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_or_right_local_empty", "sql": "SELECT true OR (CAST(7 AS INT) DIV CAST(0 AS INT)>0) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_or_left_range", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)>0) OR true AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_or_left_range_limit", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)>0) OR true AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_or_left_local_limit", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)>0) OR true AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_or_left_local_empty", "sql": "SELECT (CAST(7 AS INT) DIV CAST(0 AS INT)>0) OR true AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_filter", "sql": "SELECT id FROM range(3) WHERE false AND id>(CAST(7 AS INT) DIV CAST(0 AS INT))", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_sort", "sql": "SELECT id FROM range(3) WHERE false ORDER BY CAST(7 AS INT) DIV CAST(0 AS INT)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_sum", "sql": "SELECT SUM(CAST(7 AS INT) DIV CAST(0 AS INT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_unused_range", "sql": "SELECT id FROM (SELECT id,CAST(7 AS INT) DIV CAST(0 AS INT) AS unused FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_unused_local", "sql": "SELECT k FROM (SELECT k,CAST(7 AS INT) DIV CAST(0 AS INT) AS unused FROM VALUES (0) t(k)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_null_parent", "sql": "SELECT q*CAST(NULL AS BIGINT) AS r FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_cast_bad", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_cast_bad_limit", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_cast_empty", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_cast_valid", "sql": "SELECT CAST(NULL AS INT) DIV CAST(v AS INT) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_bad", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_bad_limit", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_empty", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_case_valid", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_dead_case_bad", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_dead_case_bad_limit", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_dead_case_empty", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_dead_case_valid", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS INT) DIV CAST(v AS INT) ELSE 5 END AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_nullif_bad", "sql": "SELECT CAST(NULL AS INT) DIV NULLIF(CAST(v AS INT),CAST(0 AS INT)) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_nullif_bad_limit", "sql": "SELECT CAST(NULL AS INT) DIV NULLIF(CAST(v AS INT),CAST(0 AS INT)) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_nullif_empty", "sql": "SELECT CAST(NULL AS INT) DIV NULLIF(CAST(v AS INT),CAST(0 AS INT)) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_nullif_valid", "sql": "SELECT CAST(NULL AS INT) DIV NULLIF(CAST(v AS INT),CAST(0 AS INT)) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_right_null_bad", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_right_null_bad_limit", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_right_null_empty", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_right_null_valid", "sql": "SELECT CAST(v AS INT) DIV CAST(NULL AS INT) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_literal_left_null_256", "sql": "SELECT CAST(NULL AS INT) DIV CAST('bad' AS INT) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_literal_right_null_257", "sql": "SELECT CAST('bad' AS INT) DIV CAST(NULL AS INT) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_literal_left_null_258", "sql": "SELECT CAST(NULL AS INT) DIV CAST('bad' AS INT) AS r FROM range(3)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_literal_right_null_259", "sql": "SELECT CAST('bad' AS INT) DIV CAST(NULL AS INT) AS r FROM range(3)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_literal_left_null_260", "sql": "SELECT CAST(NULL AS INT) DIV CAST('bad' AS INT) AS r ", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_literal_right_null_261", "sql": "SELECT CAST('bad' AS INT) DIV CAST(NULL AS INT) AS r ", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_direct_range", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_direct_range_limit", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_direct_local_limit", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_direct_local_empty", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_live_range", "sql": "SELECT CASE WHEN true THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_live_range_limit", "sql": "SELECT CASE WHEN true THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_live_local_limit", "sql": "SELECT CASE WHEN true THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_live_local_empty", "sql": "SELECT CASE WHEN true THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_dead_range", "sql": "SELECT CASE WHEN false THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_dead_range_limit", "sql": "SELECT CASE WHEN false THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_dead_local_limit", "sql": "SELECT CASE WHEN false THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_dead_local_empty", "sql": "SELECT CASE WHEN false THEN CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) ELSE 5 END AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_coalesce_live_range", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_coalesce_live_range_limit", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_coalesce_live_local_limit", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_coalesce_live_local_empty", "sql": "SELECT COALESCE(CAST(NULL AS BIGINT),CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_coalesce_dead_range", "sql": "SELECT COALESCE(5L,CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_coalesce_dead_range_limit", "sql": "SELECT COALESCE(5L,CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_coalesce_dead_local_limit", "sql": "SELECT COALESCE(5L,CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_coalesce_dead_local_empty", "sql": "SELECT COALESCE(5L,CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_and_right_range", "sql": "SELECT false AND (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_and_right_range_limit", "sql": "SELECT false AND (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_and_right_local_limit", "sql": "SELECT false AND (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_and_right_local_empty", "sql": "SELECT false AND (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_and_left_range", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AND false AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_and_left_range_limit", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AND false AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_and_left_local_limit", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AND false AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_and_left_local_empty", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AND false AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_or_right_range", "sql": "SELECT true OR (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_or_right_range_limit", "sql": "SELECT true OR (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_or_right_local_limit", "sql": "SELECT true OR (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_or_right_local_empty", "sql": "SELECT true OR (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_or_left_range", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) OR true AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_or_left_range_limit", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) OR true AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_or_left_local_limit", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) OR true AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_or_left_local_empty", "sql": "SELECT (CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)>0) OR true AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_filter", "sql": "SELECT id FROM range(3) WHERE false AND id>(CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT))", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_sort", "sql": "SELECT id FROM range(3) WHERE false ORDER BY CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_sum", "sql": "SELECT SUM(CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_unused_range", "sql": "SELECT id FROM (SELECT id,CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS unused FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_unused_local", "sql": "SELECT k FROM (SELECT k,CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS unused FROM VALUES (0) t(k)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_null_parent", "sql": "SELECT q*CAST(NULL AS BIGINT) AS r FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_cast_bad", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_cast_bad_limit", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_cast_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_cast_valid", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_bad", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_bad_limit", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_empty", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_case_valid", "sql": "SELECT CASE WHEN k=0 THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_dead_case_bad", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_dead_case_bad_limit", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_dead_case_empty", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_dead_case_valid", "sql": "SELECT CASE WHEN k=1 THEN CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) ELSE 5 END AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_nullif_bad", "sql": "SELECT CAST(NULL AS BIGINT) DIV NULLIF(CAST(v AS BIGINT),CAST(0 AS BIGINT)) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_nullif_bad_limit", "sql": "SELECT CAST(NULL AS BIGINT) DIV NULLIF(CAST(v AS BIGINT),CAST(0 AS BIGINT)) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_nullif_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV NULLIF(CAST(v AS BIGINT),CAST(0 AS BIGINT)) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_nullif_valid", "sql": "SELECT CAST(NULL AS BIGINT) DIV NULLIF(CAST(v AS BIGINT),CAST(0 AS BIGINT)) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_right_null_bad", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES (0,'bad') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_right_null_bad_limit", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES (0,'bad') t(k,v) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_right_null_empty", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES (0,'bad') t(k,v) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_right_null_valid", "sql": "SELECT CAST(v AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES (0,' 2 ') t(k,v)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_literal_left_null_324", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST('bad' AS BIGINT) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_literal_right_null_325", "sql": "SELECT CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_literal_left_null_326", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST('bad' AS BIGINT) AS r FROM range(3)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_literal_right_null_327", "sql": "SELECT CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM range(3)", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_literal_left_null_328", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST('bad' AS BIGINT) AS r ", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_literal_right_null_329", "sql": "SELECT CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS r ", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_live_zero", "sql": "SELECT CAST(a AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_live_invalid", "sql": "SELECT CAST(a AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_live_empty", "sql": "SELECT CAST(a AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_null_left_zero", "sql": "SELECT CAST(NULL AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_null_left_invalid", "sql": "SELECT CAST(NULL AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_null_left_empty", "sql": "SELECT CAST(NULL AS BIGINT) / CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_null_right_zero", "sql": "SELECT CAST(a AS BIGINT) / CAST(NULL AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_null_right_invalid", "sql": "SELECT CAST(a AS BIGINT) / CAST(NULL AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_BIGINT_null_right_empty", "sql": "SELECT CAST(a AS BIGINT) / CAST(NULL AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_live_zero", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_live_invalid", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_live_empty", "sql": "SELECT CAST(a AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_null_left_zero", "sql": "SELECT CAST(NULL AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_null_left_invalid", "sql": "SELECT CAST(NULL AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_null_left_empty", "sql": "SELECT CAST(NULL AS DOUBLE) / CAST(b AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_null_right_zero", "sql": "SELECT CAST(a AS DOUBLE) / CAST(NULL AS DOUBLE) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_null_right_invalid", "sql": "SELECT CAST(a AS DOUBLE) / CAST(NULL AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DOUBLE_null_right_empty", "sql": "SELECT CAST(a AS DOUBLE) / CAST(NULL AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_live_zero", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_live_invalid", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_live_empty", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_null_left_zero", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_null_left_invalid", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_null_left_empty", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_null_right_zero", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_null_right_invalid", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "/_DECIMAL(10,2)_null_right_empty", "sql": "SELECT CAST(a AS DECIMAL(10,2)) / CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_live_zero", "sql": "SELECT CAST(a AS BIGINT) % CAST(b AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_live_invalid", "sql": "SELECT CAST(a AS BIGINT) % CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_live_empty", "sql": "SELECT CAST(a AS BIGINT) % CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_null_left_zero", "sql": "SELECT CAST(NULL AS BIGINT) % CAST(b AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_null_left_invalid", "sql": "SELECT CAST(NULL AS BIGINT) % CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_null_left_empty", "sql": "SELECT CAST(NULL AS BIGINT) % CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_null_right_zero", "sql": "SELECT CAST(a AS BIGINT) % CAST(NULL AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_null_right_invalid", "sql": "SELECT CAST(a AS BIGINT) % CAST(NULL AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_BIGINT_null_right_empty", "sql": "SELECT CAST(a AS BIGINT) % CAST(NULL AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_live_zero", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_live_invalid", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_live_empty", "sql": "SELECT CAST(a AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_null_left_zero", "sql": "SELECT CAST(NULL AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_null_left_invalid", "sql": "SELECT CAST(NULL AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_null_left_empty", "sql": "SELECT CAST(NULL AS DOUBLE) % CAST(b AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_null_right_zero", "sql": "SELECT CAST(a AS DOUBLE) % CAST(NULL AS DOUBLE) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_null_right_invalid", "sql": "SELECT CAST(a AS DOUBLE) % CAST(NULL AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DOUBLE_null_right_empty", "sql": "SELECT CAST(a AS DOUBLE) % CAST(NULL AS DOUBLE) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_live_zero", "sql": "SELECT CAST(a AS DECIMAL(10,2)) % CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_live_invalid", "sql": "SELECT CAST(a AS DECIMAL(10,2)) % CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_live_empty", "sql": "SELECT CAST(a AS DECIMAL(10,2)) % CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_null_left_zero", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) % CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_null_left_invalid", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) % CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_null_left_empty", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) % CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_null_right_zero", "sql": "SELECT CAST(a AS DECIMAL(10,2)) % CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_null_right_invalid", "sql": "SELECT CAST(a AS DECIMAL(10,2)) % CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "%_DECIMAL(10,2)_null_right_empty", "sql": "SELECT CAST(a AS DECIMAL(10,2)) % CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_live_zero", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_live_invalid", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_live_empty", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_null_left_zero", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(b AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_null_left_invalid", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_null_left_empty", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(b AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_null_right_zero", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_null_right_invalid", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_BIGINT_null_right_empty", "sql": "SELECT CAST(a AS BIGINT) DIV CAST(NULL AS BIGINT) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_live_zero", "sql": "SELECT CAST(a AS DECIMAL(10,2)) DIV CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_live_invalid", "sql": "SELECT CAST(a AS DECIMAL(10,2)) DIV CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_live_empty", "sql": "SELECT CAST(a AS DECIMAL(10,2)) DIV CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_null_left_zero", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) DIV CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_null_left_invalid", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) DIV CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_null_left_empty", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) DIV CAST(b AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_null_right_zero", "sql": "SELECT CAST(a AS DECIMAL(10,2)) DIV CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('7','0') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_null_right_invalid", "sql": "SELECT CAST(a AS DECIMAL(10,2)) DIV CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "DIV_DECIMAL(10,2)_null_right_empty", "sql": "SELECT CAST(a AS DECIMAL(10,2)) DIV CAST(NULL AS DECIMAL(10,2)) AS r FROM VALUES ('bad','bad') t(a,b) WHERE false", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "case_live_batch1", "sql": "SELECT CASE WHEN k=0 THEN 7 DIV 0 ELSE 5 END AS r FROM VALUES (0),(1) t(k) LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "case_dead_batch1", "sql": "SELECT CASE WHEN k=0 THEN 5 ELSE 7 DIV 0 END AS r FROM VALUES (0),(0) t(k) LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "coalesce_live_batch1", "sql": "SELECT COALESCE(k,7 DIV 0) AS r FROM VALUES (0),(NULL) t(k) LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "coalesce_dead_batch1", "sql": "SELECT COALESCE(k,7 DIV 0) AS r FROM VALUES (0),(1) t(k) LIMIT 0", "batch_size": 1, "category": "early_arithmetic"}
+{"id": "case_live_batch2", "sql": "SELECT CASE WHEN k=0 THEN 7 DIV 0 ELSE 5 END AS r FROM VALUES (0),(1) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "case_dead_batch2", "sql": "SELECT CASE WHEN k=0 THEN 5 ELSE 7 DIV 0 END AS r FROM VALUES (0),(0) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "coalesce_live_batch2", "sql": "SELECT COALESCE(k,7 DIV 0) AS r FROM VALUES (0),(NULL) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "coalesce_dead_batch2", "sql": "SELECT COALESCE(k,7 DIV 0) AS r FROM VALUES (0),(1) t(k) LIMIT 0", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "case_live_batch64", "sql": "SELECT CASE WHEN k=0 THEN 7 DIV 0 ELSE 5 END AS r FROM VALUES (0),(1) t(k) LIMIT 0", "batch_size": 64, "category": "early_arithmetic"}
+{"id": "case_dead_batch64", "sql": "SELECT CASE WHEN k=0 THEN 5 ELSE 7 DIV 0 END AS r FROM VALUES (0),(0) t(k) LIMIT 0", "batch_size": 64, "category": "early_arithmetic"}
+{"id": "coalesce_live_batch64", "sql": "SELECT COALESCE(k,7 DIV 0) AS r FROM VALUES (0),(NULL) t(k) LIMIT 0", "batch_size": 64, "category": "early_arithmetic"}
+{"id": "coalesce_dead_batch64", "sql": "SELECT COALESCE(k,7 DIV 0) AS r FROM VALUES (0),(1) t(k) LIMIT 0", "batch_size": 64, "category": "early_arithmetic"}
+{"id": "TINYINT_derived_dead_case", "sql": "SELECT CASE WHEN false THEN q ELSE 5 END AS r FROM (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "TINYINT_derived_dead_coalesce", "sql": "SELECT COALESCE(5L,q) AS r FROM (SELECT CAST(7 AS TINYINT) DIV CAST(0 AS TINYINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_derived_dead_case", "sql": "SELECT CASE WHEN false THEN q ELSE 5 END AS r FROM (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "SMALLINT_derived_dead_coalesce", "sql": "SELECT COALESCE(5L,q) AS r FROM (SELECT CAST(7 AS SMALLINT) DIV CAST(0 AS SMALLINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_derived_dead_case", "sql": "SELECT CASE WHEN false THEN q ELSE 5 END AS r FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "INT_derived_dead_coalesce", "sql": "SELECT COALESCE(5L,q) AS r FROM (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_derived_dead_case", "sql": "SELECT CASE WHEN false THEN q ELSE 5 END AS r FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}
+{"id": "BIGINT_derived_dead_coalesce", "sql": "SELECT COALESCE(5L,q) AS r FROM (SELECT CAST(7 AS BIGINT) DIV CAST(0 AS BIGINT) AS q FROM range(3)) t", "batch_size": 2, "category": "early_arithmetic"}

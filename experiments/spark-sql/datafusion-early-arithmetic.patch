@@ -1,0 +1,11 @@
+--- a/src/simplify_expressions/expr_simplifier.rs
++++ b/src/simplify_expressions/expr_simplifier.rs
+@@ -787,7 +787,7 @@
+ 
+ // Discard a NULL-propagating parent before trying to fold its fallible children.
+ // Scalar subqueries retain their separate planning/error checks.
+-fn prune_null(expr: Expr, info: &SimplifyContext) -> Result<Transformed<Expr>> {
++pub fn prune_null(expr: Expr, info: &SimplifyContext) -> Result<Transformed<Expr>> {
+     fn null(expr: &Expr) -> bool {
+         match expr {
+             Expr::Literal(value, _) => value.is_null(),
