@@ -1,0 +1,399 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -276,7 +276,7 @@
+         let plan = if check_cast {
+             prepare.cast_reachability(plan, options, false)?
+         } else if check_arithmetic {
+-            let prepared = prepare.prepare_distinct_limits(plan)?;
++            let prepared = prepare.prepare_distinct_limits(plan, 0)?;
+             if prepared.transformed {
+                 let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
+                 OptimizeProjections::new().rewrite(prepared.data, &config)?.data
+@@ -533,50 +533,95 @@
+ }
+ 
+ impl Prepare {
+-    // Shared with implicit EXISTS row presence and explicit LIMIT 1.
+-    fn prune_first_distinct(&self, plan: LogicalPlan) -> Result<Transformed<LogicalPlan>> {
++    fn identity_projection(project: &datafusion_expr::logical_plan::Projection) -> bool {
++        project.expr.len() == project.input.schema().fields().len()
++            && project.expr.iter().zip(project.input.schema().iter()).all(|(expr, (qualifier, field))| {
++                // Sail adds one output alias; a SQL rename is another alias.
++                let expr = if let Expr::Alias(alias) = expr { alias.expr.as_ref() } else { expr };
++                matches!(expr, Expr::Column(column) if column.relation.as_ref() == qualifier && column.name == *field.name())
++            })
++    }
++
++    // Spark's early LIMIT 1 rule crosses at most one nonidentity projection.
++    fn prune_first_distinct(
++        &self,
++        plan: LogicalPlan,
++        mut projections: usize,
++    ) -> Result<Transformed<LogicalPlan>> {
+         plan.transform_down(|node| {
+-            if let LogicalPlan::Distinct(datafusion_expr::logical_plan::Distinct::All(input)) = node {
+-                // Spark's early LIMIT 1 rule removes one grouping
+-                // layer, before nested DISTINCT expressions fold.
+-                return Ok(Transformed::new(self.prepare_distinct_limits(Arc::unwrap_or_clone(input))?.data, true, TreeNodeRecursion::Jump));
++            if let LogicalPlan::Distinct(datafusion_expr::logical_plan::Distinct::All(input)) = node
++            {
++                return Ok(Transformed::new(
++                    self.prepare_distinct_limits(Arc::unwrap_or_clone(input), 0)?
++                        .data,
++                    true,
++                    TreeNodeRecursion::Jump,
++                ));
+             }
+             let recurse = match &node {
+-                LogicalPlan::Projection(project) if project.expr.len() == project.input.schema().fields().len()
+-                    && project.expr.iter().zip(project.input.schema().iter()).all(|(expr, (qualifier, field))| {
+-                        // Sail adds one output-name alias. A SQL
+-                        // rename is another alias and is not an identity.
+-                        let expr = if let Expr::Alias(alias) = expr { alias.expr.as_ref() } else { expr };
+-                        matches!(expr, Expr::Column(column) if column.relation.as_ref() == qualifier && column.name == *field.name())
+-                    }) => TreeNodeRecursion::Continue,
++                LogicalPlan::Projection(project) if Self::identity_projection(project) => {
++                    TreeNodeRecursion::Continue
++                }
++                LogicalPlan::Projection(_) if projections > 0 => {
++                    projections -= 1;
++                    TreeNodeRecursion::Continue
++                }
+                 LogicalPlan::SubqueryAlias(_) => TreeNodeRecursion::Continue,
+-                LogicalPlan::Limit(limit) if limit.skip.is_none()
+-                    && self.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(1) => TreeNodeRecursion::Continue,
+-                // Constants, sorting, UNION and other limits keep
+-                // their own preparation/error boundary.
++                LogicalPlan::Limit(limit)
++                    if limit.skip.is_none()
++                        && self.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(1) =>
++                {
++                    TreeNodeRecursion::Continue
++                }
+                 _ => TreeNodeRecursion::Jump,
+             };
+             Ok(Transformed::new(node, false, recurse))
+         })
+     }
+ 
+-    fn prepare_distinct_limits(&self, plan: LogicalPlan) -> Result<Transformed<LogicalPlan>> {
+-        plan.transform_down(|node| match node {
+-            LogicalPlan::Limit(mut limit) if limit.skip.is_none()
+-                && matches!(limit.fetch.as_deref(),
+-                    Some(Expr::Literal(ScalarValue::Int32(Some(1)) | ScalarValue::Int64(Some(1)), _)))
+-                || limit.skip.is_none() && matches!(limit.fetch.as_deref(), Some(Expr::Cast(cast))
+-                    if cast.field.data_type() == &DataType::Int64
+-                        && matches!(cast.expr.as_ref(), Expr::Literal(ScalarValue::Int32(Some(1)), _))) => {
+-                // Keep this before folding: an expression that later becomes 1
+-                // does not have Spark's early literal-limit preparation order.
+-                let pruned = self.prune_first_distinct(Arc::unwrap_or_clone(limit.input))?;
++    fn prepare_distinct_limits(
++        &self,
++        plan: LogicalPlan,
++        projections: usize,
++    ) -> Result<Transformed<LogicalPlan>> {
++        // Spark pushes deterministic parent projections below LIMIT before
++        // checking the one-projection pattern, without collapsing them yet.
++        let projections = match &plan {
++            LogicalPlan::Projection(project) if Self::identity_projection(project) => projections,
++            LogicalPlan::Projection(project)
++                if project.expr.iter().all(|expr| !expr.is_volatile()) =>
++            {
++                projections + 1
++            }
++            LogicalPlan::SubqueryAlias(_) | LogicalPlan::Limit(_) => projections,
++            _ => 0,
++        };
++        let plan = match plan {
++            LogicalPlan::Limit(mut limit)
++                if projections <= 1
++                    && limit.skip.is_none()
++                    && (matches!(
++                        limit.fetch.as_deref(),
++                        Some(Expr::Literal(
++                            ScalarValue::Int32(Some(1)) | ScalarValue::Int64(Some(1)),
++                            _
++                        ))
++                    ) || matches!(limit.fetch.as_deref(), Some(Expr::Cast(cast))
++                        if cast.field.data_type() == &DataType::Int64
++                            && matches!(cast.expr.as_ref(), Expr::Literal(ScalarValue::Int32(Some(1)), _)))) =>
++            {
++                let pruned =
++                    self.prune_first_distinct(Arc::unwrap_or_clone(limit.input), 1 - projections)?;
+                 limit.input = Arc::new(pruned.data);
+-                Ok(Transformed::new(LogicalPlan::Limit(limit), pruned.transformed,
+-                    if pruned.transformed { TreeNodeRecursion::Jump } else { TreeNodeRecursion::Continue }))
+-            }
+-            _ => Ok(Transformed::no(node)),
+-        })
++                if pruned.transformed {
++                    // The consumed DISTINCT prepares its own descendants once.
++                    return Ok(Transformed::yes(LogicalPlan::Limit(limit)));
++                }
++                LogicalPlan::Limit(limit)
++            }
++            plan => plan,
++        };
++        plan.map_children(|child| self.prepare_distinct_limits(child, projections))
+     }
+ 
+     fn cast_reachability(
+@@ -629,18 +674,18 @@
+             .data;
+         let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
+         let plan = if exists {
+-            let pruned = self.prune_first_distinct(plan)?;
++            let pruned = self.prune_first_distinct(plan, 0)?;
+             let input = if pruned.transformed {
+                 pruned.data
+             } else {
+-                self.prepare_distinct_limits(pruned.data)?.data
++                self.prepare_distinct_limits(pruned.data, 1)?.data
+             };
+             LogicalPlan::Projection(datafusion_expr::logical_plan::Projection::try_new(
+                 vec![lit(true)],
+                 Arc::new(input),
+             )?)
+         } else {
+-            self.prepare_distinct_limits(plan)?.data
++            self.prepare_distinct_limits(plan, 0)?.data
+         };
+         let plan = OptimizeProjections::new().rewrite(plan, &config)?.data;
+         Ok(plan
+@@ -772,7 +817,7 @@
+                     })
+                 })?
+                 .data;
+-            let pruned = if limits_prepared { pruned } else { self.prepare_distinct_limits(pruned)?.data };
++            let pruned = if limits_prepared { pruned } else { self.prepare_distinct_limits(pruned, 0)?.data };
+             let pruned = OptimizeProjections::new().rewrite(pruned, &config)?.data;
+             self.check_arithmetic_expressions(&pruned, false)?;
+         }
+@@ -2405,3 +2450,227 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn projection_limit_keeps_preparation_boundaries()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false, true] {
++        for (sql, strict, legacy) in [
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT 7 AS v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT 7 AS v FROM (SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT 7 AS v FROM (SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT 7 AS v FROM (SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT v AS w0 FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w1 FROM (SELECT w0 AS w1 FROM (SELECT v AS w0 FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) t LIMIT 1) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT 7 AS w0 FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) u",
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT 7 AS w1 FROM (SELECT 7 AS w0 FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) t LIMIT 1) u",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w0 FROM (SELECT v+1 AS w0 FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT v FROM (SELECT v FROM (SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) t) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v, id AS k FROM VALUES(0),(1) t(id)) t LIMIT 1) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v, id AS k FROM VALUES(0),(1) t(id) WHERE false) t LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT w IS NULL AS r FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v, id AS k FROM range(3)) t LIMIT 1) u",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v, id AS k FROM range(3)) t LIMIT 1) u WHERE w IS NULL) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 2-1) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT CAST(1 AS INT)) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t ORDER BY w LIMIT 1) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) ORDER BY v) t LIMIT 1) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1 OFFSET 0) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1 OFFSET 1) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 0) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++                Ok(vec![ScalarValue::Boolean(Some(false))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 2) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) u LIMIT 1) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT w FROM (SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) u LIMIT 1) u) AS r",
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT (SELECT CAST('bad' AS INT) FROM range(1)) AS v FROM range(3)) t LIMIT 1) u) AS r",
++                Err("Cannot cast"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT w IS NULL AS r FROM (SELECT v AS w FROM (SELECT DISTINCT 7 DIV 0 AS v, id AS k FROM range(3)) t LIMIT 1) u",
++                Err("Divide by zero"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT w FROM (SELECT v AS w FROM (SELECT DISTINCT 7 DIV 0 AS v, id AS k FROM VALUES(0),(1) t(id)) t LIMIT 1) u) AS r",
++                Err("Divide by zero"),
++                Ok(vec![ScalarValue::Boolean(Some(true))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT v AS w FROM (SELECT DISTINCT CAST(id%2 AS INT) AS v FROM range(5)) t LIMIT 1 OFFSET 2) u",
++                Ok(vec![ScalarValue::Int64(Some(0))]),
++                Ok(vec![ScalarValue::Int64(Some(0))]),
++            ),
++            (
++                "SELECT count(*) AS r FROM (SELECT v AS w FROM (SELECT DISTINCT CAST(id%2 AS INT) AS v FROM range(5)) t LIMIT 1 OFFSET 1) u",
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++                Ok(vec![ScalarValue::Int64(Some(1))]),
++            ),
++            (
++                "SELECT 7 AS r FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1",
++                Ok(vec![ScalarValue::Int32(Some(7))]),
++                Ok(vec![ScalarValue::Int32(Some(7))]),
++            ),
++        ] {
++            let result = async {
++                let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode: ansi,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
++                    ctx.execute_logical_plan(named.plan)
++                        .await?
++                        .collect()
++                        .await?,
++                )
++            }
++            .await;
++            match if ansi { strict } else { legacy } {
++                Err(fragment) => {
++                    let error = result.expect_err(sql).to_string();
++                    assert!(error.contains(fragment), "ANSI {ansi}: {sql}: {error}");
++                }
++                Ok(expected) => {
++                    let mut actual = Vec::new();
++                    for batch in result? {
++                        for row in 0..batch.num_rows() {
++                            actual.push(ScalarValue::try_from_array(batch.column(0), row)?);
++                        }
++                    }
++                    assert_eq!(actual, expected, "ANSI {ansi}: {sql}");
++                }
++            }
++        }
++    }
++    Ok(())
++}
