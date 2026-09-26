@@ -1,0 +1,323 @@
+{"id": "owned_0", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('worse',NULL) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "owned_1", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "owned_2", "sql": "SELECT 'bad' % CAST(NULL AS BIGINT) AS r", "category": "operand_order", "batch_size": 2}
+{"id": "owned_3", "sql": "SELECT a % b AS r FROM VALUES ('bad',0L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "owned_4", "sql": "SELECT 'bad' % 0L AS r", "category": "operand_order", "batch_size": 2}
+{"id": "owned_5", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('bad',2L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "owned_6", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('7',2L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "owned_7", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad') t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "owned_8", "sql": "SELECT CAST(NULL AS BIGINT) % 'bad' AS r", "category": "operand_order", "batch_size": 2}
+{"id": "owned_9", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad'),(7L,'2') t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "owned_10", "sql": "SELECT a % b AS r FROM VALUES ('7',CAST(NULL AS BIGINT)) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "owned_11", "sql": "SELECT '7' % CAST(NULL AS BIGINT) AS r", "category": "operand_order", "batch_size": 2}
+{"id": "percent_byte_left_literal", "sql": "SELECT '7' % CAST(2 AS TINYINT) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_byte_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',CAST(2 AS TINYINT)),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_byte_right_literal", "sql": "SELECT CAST(2 AS TINYINT) % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_byte_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,CAST(2 AS TINYINT),'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_short_left_literal", "sql": "SELECT '7' % CAST(2 AS SMALLINT) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_short_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',CAST(2 AS SMALLINT)),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_short_right_literal", "sql": "SELECT CAST(2 AS SMALLINT) % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_short_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,CAST(2 AS SMALLINT),'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_int_left_literal", "sql": "SELECT '7' % 2 AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_int_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',2),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_int_right_literal", "sql": "SELECT 2 % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_int_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,2,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_long_left_literal", "sql": "SELECT '7' % 2L AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_long_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',2L),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_long_right_literal", "sql": "SELECT 2L % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_long_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,2L,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_float_left_literal", "sql": "SELECT '7' % 2F AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_float_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',2F),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_float_right_literal", "sql": "SELECT 2F % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_float_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,2F,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_double_left_literal", "sql": "SELECT '7' % 2D AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_double_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',2D),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_double_right_literal", "sql": "SELECT 2D % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_double_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,2D,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_decimal_left_literal", "sql": "SELECT '7' % CAST(2 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_decimal_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',CAST(2 AS DECIMAL(10,2))),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_decimal_right_literal", "sql": "SELECT CAST(2 AS DECIMAL(10,2)) % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_decimal_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,CAST(2 AS DECIMAL(10,2)),'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_string_left_literal", "sql": "SELECT '7' % '2' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_string_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7','2'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_string_right_literal", "sql": "SELECT '2' % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_string_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,'2','-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_null_left_literal", "sql": "SELECT '7' % NULL AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_null_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',NULL),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_null_right_literal", "sql": "SELECT NULL % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_null_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,NULL,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_typed_null_left_literal", "sql": "SELECT '7' % CAST(NULL AS BIGINT) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_typed_null_left_column", "sql": "SELECT a % b AS r FROM VALUES (0,'7',CAST(NULL AS BIGINT)),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_typed_null_right_literal", "sql": "SELECT CAST(NULL AS BIGINT) % '-7' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_typed_null_right_column", "sql": "SELECT a % b AS r FROM VALUES (0,CAST(NULL AS BIGINT),'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_bad_null_literal", "sql": "SELECT 'bad' % CAST(NULL AS BIGINT) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_bad_null_column", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_null_bad_literal", "sql": "SELECT CAST(NULL AS BIGINT) % 'bad' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_null_bad_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_bad_zero_literal", "sql": "SELECT 'bad' % CAST(0 AS BIGINT) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_bad_zero_column", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_valid_zero_literal", "sql": "SELECT '7' % CAST(0 AS BIGINT) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_valid_zero_column", "sql": "SELECT a % b AS r FROM VALUES ('7',CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_zero_string_literal", "sql": "SELECT CAST(7 AS BIGINT) % '-0' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_zero_string_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(7 AS BIGINT),'-0') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_null_zero_literal", "sql": "SELECT CAST(NULL AS STRING) % CAST(0 AS BIGINT) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_null_zero_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_safe_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'-7',CAST(2 AS BIGINT)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_BIGINT_live_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'bad',CAST(2 AS BIGINT)) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_BIGINT_all_null_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_BIGINT_safe_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'-7',CAST(2 AS BIGINT)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_live_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'bad',CAST(2 AS BIGINT)) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_all_null_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_BIGINT_safe_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'-7',CAST(2 AS BIGINT)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_BIGINT_live_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'bad',CAST(2 AS BIGINT)) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_BIGINT_all_null_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_DOUBLE_bad_null_literal", "sql": "SELECT 'bad' % CAST(NULL AS DOUBLE) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_bad_null_column", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS DOUBLE)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_null_bad_literal", "sql": "SELECT CAST(NULL AS DOUBLE) % 'bad' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_null_bad_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_bad_zero_literal", "sql": "SELECT 'bad' % CAST(0 AS DOUBLE) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_bad_zero_column", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(0 AS DOUBLE)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_valid_zero_literal", "sql": "SELECT '7' % CAST(0 AS DOUBLE) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_valid_zero_column", "sql": "SELECT a % b AS r FROM VALUES ('7',CAST(0 AS DOUBLE)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_zero_string_literal", "sql": "SELECT CAST(7 AS DOUBLE) % '-0' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_zero_string_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(7 AS DOUBLE),'-0') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_null_zero_literal", "sql": "SELECT CAST(NULL AS STRING) % CAST(0 AS DOUBLE) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_null_zero_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS DOUBLE)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_safe_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'-7',CAST(2 AS DOUBLE)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_DOUBLE_live_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'bad',CAST(2 AS DOUBLE)) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_DOUBLE_all_null_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_DOUBLE_safe_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'-7',CAST(2 AS DOUBLE)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_live_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'bad',CAST(2 AS DOUBLE)) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_all_null_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DOUBLE_safe_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'-7',CAST(2 AS DOUBLE)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_DOUBLE_live_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'bad',CAST(2 AS DOUBLE)) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_DOUBLE_all_null_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_bad_null_literal", "sql": "SELECT 'bad' % CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_bad_null_column", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_null_bad_literal", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) % 'bad' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_null_bad_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS DECIMAL(10,2)),'bad') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_bad_zero_literal", "sql": "SELECT 'bad' % CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_bad_zero_column", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(0 AS DECIMAL(10,2))) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_valid_zero_literal", "sql": "SELECT '7' % CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_valid_zero_column", "sql": "SELECT a % b AS r FROM VALUES ('7',CAST(0 AS DECIMAL(10,2))) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_zero_string_literal", "sql": "SELECT CAST(7 AS DECIMAL(10,2)) % '-0' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_zero_string_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(7 AS DECIMAL(10,2)),'-0') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_null_zero_literal", "sql": "SELECT CAST(NULL AS STRING) % CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_null_zero_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS DECIMAL(10,2))) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_safe_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'-7',CAST(2 AS DECIMAL(10,2))),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_live_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'bad',CAST(2 AS DECIMAL(10,2))) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_all_null_batch1", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_safe_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'-7',CAST(2 AS DECIMAL(10,2))),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_live_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'bad',CAST(2 AS DECIMAL(10,2))) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_all_null_batch2", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_safe_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'-7',CAST(2 AS DECIMAL(10,2))),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_live_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'bad',CAST(2 AS DECIMAL(10,2))) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_DECIMAL(10,2)_all_null_batch64", "sql": "SELECT a % b AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_empty", "sql": "SELECT a % b AS r FROM VALUES ('bad',2L) t(a,b) WHERE false", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_limit0", "sql": "SELECT a % b AS r FROM VALUES ('bad',2L) t(a,b) LIMIT 0", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_dead_case", "sql": "SELECT CASE WHEN false THEN 'bad' % 2L ELSE 7L END AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_range1", "sql": "SELECT CAST(id-7 AS STRING) % 3L AS r FROM range(16) ORDER BY id", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_array_scalar1", "sql": "SELECT a % 2L AS r FROM VALUES (0,'7'),(1,'-9'),(2,NULL) t(k,a) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_scalar_array1", "sql": "SELECT 7L % b AS r FROM VALUES (0,'2'),(1,'-3'),(2,NULL) t(k,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "percent_range2", "sql": "SELECT CAST(id-7 AS STRING) % 3L AS r FROM range(16) ORDER BY id", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_array_scalar2", "sql": "SELECT a % 2L AS r FROM VALUES (0,'7'),(1,'-9'),(2,NULL) t(k,a) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_scalar_array2", "sql": "SELECT 7L % b AS r FROM VALUES (0,'2'),(1,'-3'),(2,NULL) t(k,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "percent_range64", "sql": "SELECT CAST(id-7 AS STRING) % 3L AS r FROM range(16) ORDER BY id", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_array_scalar64", "sql": "SELECT a % 2L AS r FROM VALUES (0,'7'),(1,'-9'),(2,NULL) t(k,a) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "percent_scalar_array64", "sql": "SELECT 7L % b AS r FROM VALUES (0,'2'),(1,'-3'),(2,NULL) t(k,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_byte_left_literal", "sql": "SELECT MOD('7',CAST(2 AS TINYINT)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_byte_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',CAST(2 AS TINYINT)),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_byte_right_literal", "sql": "SELECT MOD(CAST(2 AS TINYINT),'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_byte_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,CAST(2 AS TINYINT),'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_short_left_literal", "sql": "SELECT MOD('7',CAST(2 AS SMALLINT)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_short_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',CAST(2 AS SMALLINT)),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_short_right_literal", "sql": "SELECT MOD(CAST(2 AS SMALLINT),'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_short_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,CAST(2 AS SMALLINT),'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_int_left_literal", "sql": "SELECT MOD('7',2) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_int_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',2),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_int_right_literal", "sql": "SELECT MOD(2,'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_int_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,2,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_long_left_literal", "sql": "SELECT MOD('7',2L) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_long_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',2L),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_long_right_literal", "sql": "SELECT MOD(2L,'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_long_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,2L,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_float_left_literal", "sql": "SELECT MOD('7',2F) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_float_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',2F),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_float_right_literal", "sql": "SELECT MOD(2F,'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_float_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,2F,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_double_left_literal", "sql": "SELECT MOD('7',2D) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_double_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',2D),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_double_right_literal", "sql": "SELECT MOD(2D,'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_double_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,2D,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_decimal_left_literal", "sql": "SELECT MOD('7',CAST(2 AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_decimal_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',CAST(2 AS DECIMAL(10,2))),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_decimal_right_literal", "sql": "SELECT MOD(CAST(2 AS DECIMAL(10,2)),'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_decimal_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,CAST(2 AS DECIMAL(10,2)),'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_string_left_literal", "sql": "SELECT MOD('7','2') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_string_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7','2'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_string_right_literal", "sql": "SELECT MOD('2','-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_string_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'2','-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_null_left_literal", "sql": "SELECT MOD('7',NULL) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_null_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',NULL),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_null_right_literal", "sql": "SELECT MOD(NULL,'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_null_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,NULL,'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_typed_null_left_literal", "sql": "SELECT MOD('7',CAST(NULL AS BIGINT)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_typed_null_left_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'7',CAST(NULL AS BIGINT)),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_typed_null_right_literal", "sql": "SELECT MOD(CAST(NULL AS BIGINT),'-7') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_typed_null_right_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,CAST(NULL AS BIGINT),'-7'),(1,NULL,NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_bad_null_literal", "sql": "SELECT MOD('bad',CAST(NULL AS BIGINT)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_bad_null_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_null_bad_literal", "sql": "SELECT MOD(CAST(NULL AS BIGINT),'bad') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_null_bad_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(NULL AS BIGINT),'bad') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_bad_zero_literal", "sql": "SELECT MOD('bad',CAST(0 AS BIGINT)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_bad_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_valid_zero_literal", "sql": "SELECT MOD('7',CAST(0 AS BIGINT)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_valid_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('7',CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_zero_string_literal", "sql": "SELECT MOD(CAST(7 AS BIGINT),'-0') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_zero_string_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(7 AS BIGINT),'-0') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_null_zero_literal", "sql": "SELECT MOD(CAST(NULL AS STRING),CAST(0 AS BIGINT)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_null_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS BIGINT)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_safe_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'-7',CAST(2 AS BIGINT)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_BIGINT_live_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'bad',CAST(2 AS BIGINT)) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_BIGINT_all_null_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_BIGINT_safe_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'-7',CAST(2 AS BIGINT)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_live_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'bad',CAST(2 AS BIGINT)) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_all_null_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_BIGINT_safe_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'-7',CAST(2 AS BIGINT)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_BIGINT_live_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'bad',CAST(2 AS BIGINT)) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_BIGINT_all_null_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS BIGINT)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_DOUBLE_bad_null_literal", "sql": "SELECT MOD('bad',CAST(NULL AS DOUBLE)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_bad_null_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',CAST(NULL AS DOUBLE)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_null_bad_literal", "sql": "SELECT MOD(CAST(NULL AS DOUBLE),'bad') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_null_bad_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(NULL AS DOUBLE),'bad') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_bad_zero_literal", "sql": "SELECT MOD('bad',CAST(0 AS DOUBLE)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_bad_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',CAST(0 AS DOUBLE)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_valid_zero_literal", "sql": "SELECT MOD('7',CAST(0 AS DOUBLE)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_valid_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('7',CAST(0 AS DOUBLE)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_zero_string_literal", "sql": "SELECT MOD(CAST(7 AS DOUBLE),'-0') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_zero_string_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(7 AS DOUBLE),'-0') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_null_zero_literal", "sql": "SELECT MOD(CAST(NULL AS STRING),CAST(0 AS DOUBLE)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_null_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS DOUBLE)) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_safe_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'-7',CAST(2 AS DOUBLE)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_DOUBLE_live_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'bad',CAST(2 AS DOUBLE)) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_DOUBLE_all_null_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_DOUBLE_safe_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'-7',CAST(2 AS DOUBLE)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_live_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'bad',CAST(2 AS DOUBLE)) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_all_null_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DOUBLE_safe_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'-7',CAST(2 AS DOUBLE)),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_DOUBLE_live_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'bad',CAST(2 AS DOUBLE)) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_DOUBLE_all_null_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DOUBLE)),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_bad_null_literal", "sql": "SELECT MOD('bad',CAST(NULL AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_bad_null_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_null_bad_literal", "sql": "SELECT MOD(CAST(NULL AS DECIMAL(10,2)),'bad') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_null_bad_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(NULL AS DECIMAL(10,2)),'bad') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_bad_zero_literal", "sql": "SELECT MOD('bad',CAST(0 AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_bad_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',CAST(0 AS DECIMAL(10,2))) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_valid_zero_literal", "sql": "SELECT MOD('7',CAST(0 AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_valid_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('7',CAST(0 AS DECIMAL(10,2))) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_zero_string_literal", "sql": "SELECT MOD(CAST(7 AS DECIMAL(10,2)),'-0') AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_zero_string_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(7 AS DECIMAL(10,2)),'-0') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_null_zero_literal", "sql": "SELECT MOD(CAST(NULL AS STRING),CAST(0 AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_null_zero_column", "sql": "SELECT MOD(a,b) AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS DECIMAL(10,2))) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_safe_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'-7',CAST(2 AS DECIMAL(10,2))),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_live_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'bad',CAST(2 AS DECIMAL(10,2))) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_all_null_batch1", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_safe_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'-7',CAST(2 AS DECIMAL(10,2))),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_live_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'bad',CAST(2 AS DECIMAL(10,2))) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_all_null_batch2", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_safe_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'-7',CAST(2 AS DECIMAL(10,2))),(2,NULL,0) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_live_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'bad',CAST(2 AS DECIMAL(10,2))) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_DECIMAL(10,2)_all_null_batch64", "sql": "SELECT MOD(a,b) AS r FROM VALUES (0,'bad',CAST(NULL AS DECIMAL(10,2))),(1,'worse',NULL) t(k,a,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_empty", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',2L) t(a,b) WHERE false", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_limit0", "sql": "SELECT MOD(a,b) AS r FROM VALUES ('bad',2L) t(a,b) LIMIT 0", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_dead_case", "sql": "SELECT CASE WHEN false THEN MOD('bad',2L) ELSE 7L END AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_range1", "sql": "SELECT MOD(CAST(id-7 AS STRING),3L) AS r FROM range(16) ORDER BY id", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_array_scalar1", "sql": "SELECT MOD(a,2L) AS r FROM VALUES (0,'7'),(1,'-9'),(2,NULL) t(k,a) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_scalar_array1", "sql": "SELECT MOD(7L,b) AS r FROM VALUES (0,'2'),(1,'-3'),(2,NULL) t(k,b) ORDER BY k", "batch_size": 1, "category": "string_modulo"}
+{"id": "mod_range2", "sql": "SELECT MOD(CAST(id-7 AS STRING),3L) AS r FROM range(16) ORDER BY id", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_array_scalar2", "sql": "SELECT MOD(a,2L) AS r FROM VALUES (0,'7'),(1,'-9'),(2,NULL) t(k,a) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_scalar_array2", "sql": "SELECT MOD(7L,b) AS r FROM VALUES (0,'2'),(1,'-3'),(2,NULL) t(k,b) ORDER BY k", "batch_size": 2, "category": "string_modulo"}
+{"id": "mod_range64", "sql": "SELECT MOD(CAST(id-7 AS STRING),3L) AS r FROM range(16) ORDER BY id", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_array_scalar64", "sql": "SELECT MOD(a,2L) AS r FROM VALUES (0,'7'),(1,'-9'),(2,NULL) t(k,a) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "mod_scalar_array64", "sql": "SELECT MOD(7L,b) AS r FROM VALUES (0,'2'),(1,'-3'),(2,NULL) t(k,b) ORDER BY k", "batch_size": 64, "category": "string_modulo"}
+{"id": "grammar_fraction_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('7.5',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_fraction_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'7.5') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_fraction_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('7.5',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_fraction_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'7.5') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_negative_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('-7',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_negative_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'-7') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_negative_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('-7',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_negative_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'-7') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_spaces_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('  +7  ',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_spaces_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'  +7  ') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_spaces_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('  +7  ',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_spaces_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'  +7  ') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_tabs_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('\t-7\n',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_tabs_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'\t-7\n') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_tabs_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('\t-7\n',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_tabs_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'\t-7\n') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_control_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('\u00017\u001f',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_control_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'\u00017\u001f') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_control_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('\u00017\u001f',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_control_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'\u00017\u001f') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_del_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('\u007f7\u007f',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_del_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'\u007f7\u007f') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_del_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('\u007f7\u007f',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_del_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'\u007f7\u007f') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_exponent_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('7e1',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_exponent_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'7e1') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_exponent_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('7e1',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_exponent_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'7e1') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_empty_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_empty_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_empty_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_empty_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_spaces_only_2L_left", "sql": "SELECT a % b AS r FROM VALUES (' ',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_spaces_only_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,' ') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_spaces_only_2D_left", "sql": "SELECT a % b AS r FROM VALUES (' ',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_spaces_only_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,' ') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_bad_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('bad',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_bad_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'bad') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_bad_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('bad',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_bad_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'bad') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_too_large_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('9223372036854775808',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_too_large_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'9223372036854775808') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_too_large_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('9223372036854775808',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_too_large_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'9223372036854775808') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_too_small_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('-9223372036854775809',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_too_small_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'-9223372036854775809') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_too_small_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('-9223372036854775809',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_too_small_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'-9223372036854775809') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_min_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('-9223372036854775808',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_min_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'-9223372036854775808') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_min_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('-9223372036854775808',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_min_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'-9223372036854775808') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_max_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('9223372036854775807',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_max_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'9223372036854775807') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_max_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('9223372036854775807',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_max_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'9223372036854775807') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_above_double_integer_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('9007199254740993',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_above_double_integer_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'9007199254740993') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_above_double_integer_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('9007199254740993',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_above_double_integer_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'9007199254740993') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_float_overflow_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('1e309',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_float_overflow_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'1e309') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_float_overflow_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('1e309',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_float_overflow_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'1e309') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_nan_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('NaN',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_nan_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'NaN') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_nan_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('NaN',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_nan_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'NaN') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_infinity_2L_left", "sql": "SELECT a % b AS r FROM VALUES ('-Infinity',2L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_infinity_2L_right", "sql": "SELECT a % b AS r FROM VALUES (2L,'-Infinity') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_infinity_2D_left", "sql": "SELECT a % b AS r FROM VALUES ('-Infinity',2D) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "grammar_infinity_2D_right", "sql": "SELECT a % b AS r FROM VALUES (2D,'-Infinity') t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_numeric_long", "sql": "SELECT a % b AS r FROM VALUES (7L,2L),(-7L,-2L),(NULL,0L) t(a,b)", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_numeric_float", "sql": "SELECT 7D % 2D AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_numeric_decimal", "sql": "SELECT CAST(7 AS DECIMAL(10,2)) % CAST(2 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_string_divide", "sql": "SELECT '7' / 2L AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_string_div", "sql": "SELECT '7' DIV 2L AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_string_both", "sql": "SELECT '7' / '2' AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_explicit_cast", "sql": "SELECT CAST('7' AS BIGINT) % 2L AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_strict_cast", "sql": "SELECT CAST('bad' AS BIGINT) AS r", "batch_size": 2, "category": "string_modulo"}
+{"id": "control_overflow_mod", "sql": "SELECT '-9223372036854775808' % -1L AS r", "batch_size": 2, "category": "string_modulo"}

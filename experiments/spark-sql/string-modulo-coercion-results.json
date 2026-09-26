@@ -1,0 +1,2808 @@
+{
+  "issue": "https://github.com/mag1cfrog/delta-arrow-reader/issues/247",
+  "created_utc": "2026-09-26T03:29:01.552626+00:00",
+  "integration_base": "6f29c0a05a614a843f12bb995cbf4831a4b4ed7b",
+  "runtime_change": "Apply existing STRING division coercion to remainder and recognize trimmed floating column casts in the shared NULL guard.",
+  "candidate_is_optional": true,
+  "checks": {
+    "before": {
+      "agreement": 16,
+      "total": 646
+    },
+    "after": {
+      "agreement": 636,
+      "total": 646
+    }
+  },
+  "assigned": {
+    "before": {
+      "agreement": 0,
+      "total": 24
+    },
+    "after": {
+      "agreement": 24,
+      "total": 24
+    }
+  },
+  "remaining": {
+    "percent_BIGINT_valid_zero_literal_true": {
+      "owner": 149,
+      "differences": [
+        "error_cause"
+      ],
+      "error_causes": [
+        "REMAINDER_BY_ZERO",
+        "DIVIDE_BY_ZERO"
+      ]
+    },
+    "percent_BIGINT_valid_zero_column_true": {
+      "owner": 149,
+      "differences": [
+        "error_cause"
+      ],
+      "error_causes": [
+        "REMAINDER_BY_ZERO",
+        "DIVIDE_BY_ZERO"
+      ]
+    },
+    "percent_BIGINT_zero_string_literal_true": {
+      "owner": 149,
+      "differences": [
+        "error_cause"
+      ],
+      "error_causes": [
+        "REMAINDER_BY_ZERO",
+        "DIVIDE_BY_ZERO"
+      ]
+    },
+    "percent_BIGINT_zero_string_column_true": {
+      "owner": 149,
+      "differences": [
+        "error_cause"
+      ],
+      "error_causes": [
+        "REMAINDER_BY_ZERO",
+        "DIVIDE_BY_ZERO"
+      ]
+    },
+    "percent_limit0_true": {
+      "owner": 232,
+      "differences": [
+        "status"
+      ],
+      "error_causes": [
+        "CAST_INVALID_INPUT",
+        null
+      ]
+    },
+    "mod_BIGINT_valid_zero_literal_true": {
+      "owner": 149,
+      "differences": [
+        "error_cause"
+      ],
+      "error_causes": [
+        "REMAINDER_BY_ZERO",
+        "DIVIDE_BY_ZERO"
+      ]
+    },
+    "mod_BIGINT_valid_zero_column_true": {
+      "owner": 149,
+      "differences": [
+        "error_cause"
+      ],
+      "error_causes": [
+        "REMAINDER_BY_ZERO",
+        "DIVIDE_BY_ZERO"
+      ]
+    },
+    "mod_BIGINT_zero_string_literal_true": {
+      "owner": 149,
+      "differences": [
+        "error_cause"
+      ],
+      "error_causes": [
+        "REMAINDER_BY_ZERO",
+        "DIVIDE_BY_ZERO"
+      ]
+    },
+    "mod_BIGINT_zero_string_column_true": {
+      "owner": 149,
+      "differences": [
+        "error_cause"
+      ],
+      "error_causes": [
+        "REMAINDER_BY_ZERO",
+        "DIVIDE_BY_ZERO"
+      ]
+    },
+    "mod_limit0_true": {
+      "owner": 232,
+      "differences": [
+        "status"
+      ],
+      "error_causes": [
+        "CAST_INVALID_INPUT",
+        null
+      ]
+    }
+  },
+  "schema": {
+    "before": {
+      "logical_nullable_difference": 1,
+      "physical_nullable_difference": 10
+    },
+    "after": {
+      "logical_nullable_difference": 1,
+      "physical_nullable_difference": 76
+    }
+  },
+  "phase_labels": {
+    "before": 614,
+    "after": 2
+  },
+  "ownership": {
+    "schema_and_error_reporting": 149,
+    "early_arithmetic_evaluation": 232,
+    "performance": 159,
+    "default_build": 165
+  },
+  "retained_casts": {
+    "decimal": {
+      "before": 445,
+      "after": 445,
+      "total": 454,
+      "lost": []
+    },
+    "dead": {
+      "before": 316,
+      "after": 340,
+      "total": 346,
+      "lost": []
+    },
+    "strict": {
+      "before": 496,
+      "after": 496,
+      "total": 496,
+      "lost": []
+    },
+    "float": {
+      "before": 488,
+      "after": 488,
+      "total": 488,
+      "lost": []
+    },
+    "legacy": {
+      "before": 562,
+      "after": 562,
+      "total": 562,
+      "lost": []
+    },
+    "previous-owned": {
+      "before": 122,
+      "after": 122,
+      "total": 126,
+      "lost": []
+    },
+    "classification": {
+      "before": 107,
+      "after": 107,
+      "total": 128,
+      "lost": []
+    }
+  },
+  "competing_div_errors": {
+    "original_case": {
+      "id": "scalar_array_-9223372036854775808",
+      "sql": "SELECT CAST(-9223372036854775808 AS BIGINT) DIV b AS q FROM VALUES (0,CAST(-3 AS BIGINT)),(1,CAST(-1 AS BIGINT)),(2,CAST(0 AS BIGINT)),(3,CAST(1 AS BIGINT)),(4,CAST(2 AS BIGINT)),(5,CAST(NULL AS BIGINT)) t(id,b) ORDER BY id",
+      "category": "target",
+      "integer_divide": true,
+      "batch_size": 2
+    },
+    "order": [
+      "before",
+      "after",
+      "after",
+      "before"
+    ],
+    "counts": {
+      "0-before.json": {
+        "DIVIDE_BY_ZERO": 3,
+        "ARITHMETIC_OVERFLOW": 13
+      },
+      "1-after.json": {
+        "ARITHMETIC_OVERFLOW": 14,
+        "DIVIDE_BY_ZERO": 2
+      },
+      "2-after.json": {
+        "DIVIDE_BY_ZERO": 3,
+        "ARITHMETIC_OVERFLOW": 13
+      },
+      "3-before.json": {
+        "ARITHMETIC_OVERFLOW": 15,
+        "DIVIDE_BY_ZERO": 1
+      }
+    },
+    "plans_equal": true,
+    "controls": {
+      "0-before.json": {
+        "overflow_only_true": {
+          "status": "execution_error",
+          "cause": "ARITHMETIC_OVERFLOW"
+        },
+        "overflow_only_false": {
+          "status": "ok",
+          "cause": null
+        },
+        "zero_only_true": {
+          "status": "execution_error",
+          "cause": "DIVIDE_BY_ZERO"
+        },
+        "zero_only_false": {
+          "status": "ok",
+          "cause": null
+        }
+      },
+      "1-after.json": {
+        "overflow_only_true": {
+          "status": "execution_error",
+          "cause": "ARITHMETIC_OVERFLOW"
+        },
+        "overflow_only_false": {
+          "status": "ok",
+          "cause": null
+        },
+        "zero_only_true": {
+          "status": "execution_error",
+          "cause": "DIVIDE_BY_ZERO"
+        },
+        "zero_only_false": {
+          "status": "ok",
+          "cause": null
+        }
+      },
+      "2-after.json": {
+        "overflow_only_true": {
+          "status": "execution_error",
+          "cause": "ARITHMETIC_OVERFLOW"
+        },
+        "overflow_only_false": {
+          "status": "ok",
+          "cause": null
+        },
+        "zero_only_true": {
+          "status": "execution_error",
+          "cause": "DIVIDE_BY_ZERO"
+        },
+        "zero_only_false": {
+          "status": "ok",
+          "cause": null
+        }
+      },
+      "3-before.json": {
+        "overflow_only_true": {
+          "status": "execution_error",
+          "cause": "ARITHMETIC_OVERFLOW"
+        },
+        "overflow_only_false": {
+          "status": "ok",
+          "cause": null
+        },
+        "zero_only_true": {
+          "status": "execution_error",
+          "cause": "DIVIDE_BY_ZERO"
+        },
+        "zero_only_false": {
+          "status": "ok",
+          "cause": null
+        }
+      }
+    },
+    "unique_plans_per_build": {
+      "before": 2,
+      "after": 2
+    }
+  },
+  "prior_controls": {
+    "arithmetic-check": {
+      "agreement": 575,
+      "total": 578
+    },
+    "string-check": {
+      "agreement": 480,
+      "total": 480
+    },
+    "bigint-check": {
+      "agreement": 233,
+      "total": 234
+    },
+    "modulo-check": {
+      "agreement": 429,
+      "total": 442
+    },
+    "extreme-check": {
+      "agreement": 1194,
+      "total": 1322
+    },
+    "float-round-check": {
+      "summary": {
+        "target": {
+          "total": 398,
+          "agreement": 398
+        },
+        "control": {
+          "total": 18,
+          "agreement": 16
+        },
+        "boundary": {
+          "total": 0,
+          "agreement": 0
+        }
+      }
+    },
+    "arguments-check": {
+      "agreement": 388,
+      "total": 388
+    },
+    "integer-check": {
+      "agreement": 1254,
+      "total": 1254
+    },
+    "legacy-check": {
+      "agreement": 234,
+      "total": 234
+    },
+    "boundaries-check": {
+      "summary": {
+        "target": {
+          "total": 246,
+          "agreement": 246
+        },
+        "control": {
+          "total": 8,
+          "agreement": 8
+        },
+        "boundary": {
+          "total": 0,
+          "agreement": 0
+        }
+      }
+    },
+    "float-check": {
+      "summary": {
+        "target": {
+          "total": 80,
+          "agreement": 80
+        },
+        "control": {
+          "total": 8,
+          "agreement": 8
+        },
+        "boundary": {
+          "total": 10,
+          "agreement": 10
+        }
+      }
+    },
+    "decimal-check": {
+      "agreement": 506,
+      "total": 506
+    }
+  },
+  "regression": {
+    "groups": 37,
+    "observations": 6784,
+    "before_agreements": 6542,
+    "after_agreements": 6542,
+    "changed_outcomes": 0,
+    "comparison_limit": "Historical Decimal-text and coarse-stage comparison; exact errors and schemas remain separate.",
+    "integer_agreements": 616,
+    "integer_error_payloads": {
+      "focused_error_payloads_equal": 131,
+      "changed_error_payloads": 0
+    }
+  },
+  "error_audit": {
+    "combined_changed_payloads": 111,
+    "combined_changed_texts": 111,
+    "historical_retained_errors": 890,
+    "historical_changed_payloads": 12,
+    "historical_changed_texts": 12
+  },
+  "delta": {
+    "before_after": {
+      "match": 116
+    },
+    "spark": {
+      "match": 47,
+      "difference": 58,
+      "pending_host_adapter": 11
+    },
+    "adapters": 18
+  },
+  "tests": {
+    "function": 314,
+    "planner": 49,
+    "runner": 28,
+    "comparator": 2
+  },
+  "performance": {
+    "owner": 159,
+    "status": "Bounded check; implicit floating conversion cost and planning increases remain open with earlier CAST costs.",
+    "same_binary_calibration": false,
+    "instructions_allocations_memory_measured": false,
+    "equivalent_pairs": 18,
+    "candidate_only": 14,
+    "equivalent_expressions": [
+      {
+        "implicit": "implicit_long_nullsfalse",
+        "explicit": "explicit_long_nullsfalse",
+        "equal_outputs": true,
+        "implicit_execution_ms": 4.523752,
+        "explicit_execution_ms": 4.5355194999999995,
+        "ratio": 0.9974054791297888
+      },
+      {
+        "implicit": "implicit_long_nullstrue",
+        "explicit": "explicit_long_nullstrue",
+        "equal_outputs": true,
+        "implicit_execution_ms": 6.034889,
+        "explicit_execution_ms": 6.023383,
+        "ratio": 1.0019102222123348
+      },
+      {
+        "implicit": "implicit_long_legacy_nullsfalse",
+        "explicit": "explicit_long_legacy_nullsfalse",
+        "equal_outputs": true,
+        "implicit_execution_ms": 5.9116155,
+        "explicit_execution_ms": 5.278033,
+        "ratio": 1.120041405576661
+      },
+      {
+        "implicit": "implicit_long_legacy_nullstrue",
+        "explicit": "explicit_long_legacy_nullstrue",
+        "equal_outputs": true,
+        "implicit_execution_ms": 5.931587,
+        "explicit_execution_ms": 5.284846,
+        "ratio": 1.1223765082274868
+      },
+      {
+        "implicit": "implicit_double_nullsfalse",
+        "explicit": "explicit_double_nullsfalse",
+        "equal_outputs": true,
+        "implicit_execution_ms": 6.796098499999999,
+        "explicit_execution_ms": 5.781814499999999,
+        "ratio": 1.1754265896977498
+      },
+      {
+        "implicit": "implicit_double_nullstrue",
+        "explicit": "explicit_double_nullstrue",
+        "equal_outputs": true,
+        "implicit_execution_ms": 8.3321565,
+        "explicit_execution_ms": 7.2028085,
+        "ratio": 1.156792728836259
+      },
+      {
+        "implicit": "implicit_reverse_nullsfalse",
+        "explicit": "explicit_reverse_nullsfalse",
+        "equal_outputs": true,
+        "implicit_execution_ms": 5.2881125,
+        "explicit_execution_ms": 4.692937000000001,
+        "ratio": 1.1268236714023647
+      },
+      {
+        "implicit": "implicit_reverse_nullstrue",
+        "explicit": "explicit_reverse_nullstrue",
+        "equal_outputs": true,
+        "implicit_execution_ms": 5.3863645,
+        "explicit_execution_ms": 4.7563145,
+        "ratio": 1.1324660091337526
+      },
+      {
+        "implicit": "implicit_guarded_nullsfalse",
+        "explicit": "explicit_guarded_nullsfalse",
+        "equal_outputs": true,
+        "implicit_execution_ms": 4.5126465,
+        "explicit_execution_ms": 4.5076374999999995,
+        "ratio": 1.001111225115152
+      },
+      {
+        "implicit": "implicit_guarded_nullstrue",
+        "explicit": "explicit_guarded_nullstrue",
+        "equal_outputs": true,
+        "implicit_execution_ms": 5.9885635,
+        "explicit_execution_ms": 5.982692,
+        "ratio": 1.0009814143867009
+      },
+      {
+        "implicit": "implicit_alias_nullsfalse",
+        "explicit": "explicit_long_nullsfalse",
+        "equal_outputs": true,
+        "implicit_execution_ms": 4.521358,
+        "explicit_execution_ms": 4.5355194999999995,
+        "ratio": 0.9968776454384114
+      },
+      {
+        "implicit": "implicit_alias_nullstrue",
+        "explicit": "explicit_long_nullstrue",
+        "equal_outputs": true,
+        "implicit_execution_ms": 5.995296,
+        "explicit_execution_ms": 6.023383,
+        "ratio": 0.9953370057989007
+      }
+    ],
+    "measurements": {
+      "protocol": {
+        "order": [
+          "before",
+          "after",
+          "after",
+          "before",
+          "after",
+          "before",
+          "before",
+          "after"
+        ],
+        "cpu": 2,
+        "platform": "Linux-6.19.14-200.fc43.x86_64-x86_64-with-glibc2.42",
+        "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 2084.999\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.50\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+        "rows": 262144,
+        "batch_size": 8192,
+        "warmups": 4,
+        "samples": 21,
+        "reference_sha256": "0d112b444f17b852f0484ce6910f6b8b2c59aa27cacab2745d7d0b11206aea0f",
+        "ansi_mode": "per-query; STRING modulo, explicit CAST equivalents, numeric and native SQL controls; Spark analyzer enabled only for Spark queries",
+        "scope": "Focused compatibility-PR cost check, not final performance acceptance.",
+        "binaries": {
+          "before": "31fdb847f22a6e55429df27a4e0c5e53dea9e7a84be7ac0d638ded3237c3f19d",
+          "after": "bd58c6d67d3e1af6fa51d530769a731e7f45c601848029462393c55a6f2d9dd9"
+        }
+      },
+      "records": [
+        {
+          "variant": "before",
+          "path": "timing-0-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/timing-0-before.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-expressions.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-reference.json",
+            "before"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-1-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/timing-1-after.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-expressions.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-reference.json",
+            "after"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-2-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/timing-2-after.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-expressions.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-reference.json",
+            "after"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-3-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/timing-3-before.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-expressions.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-reference.json",
+            "before"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-4-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/timing-4-after.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-expressions.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-reference.json",
+            "after"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-5-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/timing-5-before.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-expressions.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-reference.json",
+            "before"
+          ]
+        },
+        {
+          "variant": "before",
+          "path": "timing-6-before.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/before-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/timing-6-before.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-expressions.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-reference.json",
+            "before"
+          ]
+        },
+        {
+          "variant": "after",
+          "path": "timing-7-after.json",
+          "command": [
+            "taskset",
+            "-c",
+            "2",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/after-bench",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/timing-7-after.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-expressions.json",
+            "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/bench-reference.json",
+            "after"
+          ]
+        }
+      ],
+      "results": [
+        {
+          "id": "implicit_long_nullsfalse",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Int64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.324954,
+                0.324052,
+                0.325876,
+                0.321407
+              ],
+              "median_ms": 0.324503
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.518753,
+                4.541476,
+                4.528751,
+                4.514515
+              ],
+              "median_ms": 4.523752
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_long_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.341465,
+                0.348057,
+                0.33915,
+                0.339741
+              ],
+              "median_ms": 0.340603
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.535545,
+                4.524975,
+                4.506581,
+                4.56038
+              ],
+              "median_ms": 4.53026
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.35532,
+                0.346324,
+                0.351503,
+                0.349309
+              ],
+              "median_ms": 0.350406
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.528572,
+                4.550983,
+                4.542467,
+                4.494849
+              ],
+              "median_ms": 4.5355194999999995
+            }
+          },
+          "ratios": {
+            "planning": 1.0287813084441417,
+            "execution": 1.0011609708935028
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_long_legacy_nullsfalse",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Int64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 11139041173107184239,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.364908,
+                0.358676,
+                0.363425,
+                0.356582
+              ],
+              "median_ms": 0.3610505
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.931297,
+                5.925166,
+                5.888738,
+                5.898065
+              ],
+              "median_ms": 5.9116155
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_long_legacy_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 11139041173107184239,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.362694,
+                0.364557,
+                0.350581,
+                0.358115
+              ],
+              "median_ms": 0.3604045
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.302188,
+                5.263607,
+                5.253017,
+                5.29251
+              ],
+              "median_ms": 5.2780585
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 11139041173107184239,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.363055,
+                0.361101,
+                0.367573,
+                0.360529
+              ],
+              "median_ms": 0.362078
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.327646,
+                5.275498,
+                5.257686,
+                5.280568
+              ],
+              "median_ms": 5.278033
+            }
+          },
+          "ratios": {
+            "planning": 1.004643393742309,
+            "execution": 0.9999951686780281
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_double_nullsfalse",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Float64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 12211941310851903907,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.377682,
+                0.374205,
+                0.382771,
+                0.375748
+              ],
+              "median_ms": 0.376715
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.817774,
+                6.76212,
+                6.774423,
+                6.846818
+              ],
+              "median_ms": 6.796098499999999
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_double_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 12211941310851903907,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.350501,
+                0.34954,
+                0.341364,
+                0.347556
+              ],
+              "median_ms": 0.34854799999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.779575,
+                5.76632,
+                5.766381,
+                5.747766
+              ],
+              "median_ms": 5.7663505
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 12211941310851903907,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.351533,
+                0.350951,
+                0.35575,
+                0.348998
+              ],
+              "median_ms": 0.351242
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.812816,
+                5.786648,
+                5.776981,
+                5.716518
+              ],
+              "median_ms": 5.781814499999999
+            }
+          },
+          "ratios": {
+            "planning": 1.0077292080287363,
+            "execution": 1.0026817655291678
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_decimal_nullsfalse",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Decimal128(10, 2) to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 12211941310851903907,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.394432,
+                0.377631,
+                0.389994,
+                0.379475
+              ],
+              "median_ms": 0.3847345
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.192887,
+                8.154977,
+                8.147454,
+                8.171789
+              ],
+              "median_ms": 8.163383
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "implicit_reverse_nullsfalse",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Int64 % Utf8 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 1311,
+              "digest": 11477829932213628698,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.385365,
+                0.375698,
+                0.38237,
+                0.374756
+              ],
+              "median_ms": 0.379034
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.318879,
+                5.299854,
+                5.276371,
+                5.255682
+              ],
+              "median_ms": 5.2881125
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_reverse_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 1311,
+              "digest": 11477829932213628698,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.368003,
+                0.362703,
+                0.35543,
+                0.360479
+              ],
+              "median_ms": 0.361591
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.662871,
+                4.664845,
+                4.675194,
+                4.630581
+              ],
+              "median_ms": 4.663857999999999
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 1311,
+              "digest": 11477829932213628698,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.375929,
+                0.362623,
+                0.374085,
+                0.363966
+              ],
+              "median_ms": 0.3690255
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.688329,
+                4.724425,
+                4.697545,
+                4.682296
+              ],
+              "median_ms": 4.692937000000001
+            }
+          },
+          "ratios": {
+            "planning": 1.020560522800623,
+            "execution": 1.0062349668450457
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_alias_nullsfalse",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Int64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.352745,
+                0.34439,
+                0.349869,
+                0.343398
+              ],
+              "median_ms": 0.3471295
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.521077,
+                4.528622,
+                4.521639,
+                4.482345
+              ],
+              "median_ms": 4.521358
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "implicit_guarded_nullsfalse",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Int64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.337136,
+                0.333309,
+                0.33365,
+                0.334191
+              ],
+              "median_ms": 0.3339205
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.503054,
+                4.522239,
+                4.526628,
+                4.494288
+              ],
+              "median_ms": 4.5126465
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_guarded_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.349569,
+                0.348507,
+                0.345461,
+                0.349329
+              ],
+              "median_ms": 0.348918
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.523532,
+                4.530055,
+                4.594314,
+                4.462619
+              ],
+              "median_ms": 4.5267935
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.353747,
+                0.345632,
+                0.353747,
+                0.352445
+              ],
+              "median_ms": 0.35309599999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.502493,
+                4.535094,
+                4.512782,
+                4.496852
+              ],
+              "median_ms": 4.5076374999999995
+            }
+          },
+          "ratios": {
+            "planning": 1.01197416011785,
+            "execution": 0.9957683070809392
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "division_control_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 16024752240371513355,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.321928,
+                0.319794,
+                0.317028,
+                0.323361
+              ],
+              "median_ms": 0.320861
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.559879,
+                4.550251,
+                4.554821,
+                4.566883
+              ],
+              "median_ms": 4.55735
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 16024752240371513355,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.331886,
+                0.32325,
+                0.327979,
+                0.327618
+              ],
+              "median_ms": 0.3277985
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.627084,
+                4.548929,
+                4.557075,
+                4.514184
+              ],
+              "median_ms": 4.553002
+            }
+          },
+          "ratios": {
+            "planning": 1.021621512118955,
+            "execution": 0.9990459367834379
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "numeric_modulo_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.292563,
+                0.294978,
+                0.290088,
+                0.292793
+              ],
+              "median_ms": 0.292678
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.38797,
+                0.385726,
+                0.384755,
+                0.385015
+              ],
+              "median_ms": 0.3853705
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 17400780145492915513,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.300118,
+                0.293334,
+                0.299065,
+                0.294276
+              ],
+              "median_ms": 0.2966705
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.387099,
+                0.387991,
+                0.386558,
+                0.386398
+              ],
+              "median_ms": 0.3868285
+            }
+          },
+          "ratios": {
+            "planning": 1.0136412712947336,
+            "execution": 1.0037833721055451
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "numeric_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 982960622093096485,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.316708,
+                0.319724,
+                0.316908,
+                0.318452
+              ],
+              "median_ms": 0.31768
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.159777,
+                0.159286,
+                0.159847,
+                0.159266
+              ],
+              "median_ms": 0.1595315
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 982960622093096485,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.319423,
+                0.316718,
+                0.321468,
+                0.317389
+              ],
+              "median_ms": 0.31840599999999997
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.159747,
+                0.159356,
+                0.158325,
+                0.159065
+              ],
+              "median_ms": 0.1592105
+            }
+          },
+          "ratios": {
+            "planning": 1.0022853185595566,
+            "execution": 0.997987858197284
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "native_numeric_nullsfalse",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 982960622093096485,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.176848,
+                0.175827,
+                0.176248,
+                0.177089
+              ],
+              "median_ms": 0.17654799999999998
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.070461,
+                0.070551,
+                0.07004,
+                0.06977
+              ],
+              "median_ms": 0.0702505
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 982960622093096485,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.181908,
+                0.178803,
+                0.17776,
+                0.179403
+              ],
+              "median_ms": 0.179103
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.069509,
+                0.06962,
+                0.06985,
+                0.06985
+              ],
+              "median_ms": 0.06973499999999999
+            }
+          },
+          "ratios": {
+            "planning": 1.014471984955933,
+            "execution": 0.9926619739361285
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_long_nullstrue",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Int64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.338138,
+                0.330704,
+                0.338038,
+                0.329762
+              ],
+              "median_ms": 0.334371
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.06196,
+                6.034338,
+                6.03544,
+                5.978584
+              ],
+              "median_ms": 6.034889
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_long_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.350732,
+                0.358726,
+                0.349399,
+                0.347436
+              ],
+              "median_ms": 0.35006550000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.077548,
+                6.001357,
+                6.009402,
+                6.005495
+              ],
+              "median_ms": 6.0074485
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.3553,
+                0.349028,
+                0.353426,
+                0.35543
+              ],
+              "median_ms": 0.354363
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.023859,
+                6.022907,
+                6.058283,
+                5.980318
+              ],
+              "median_ms": 6.023383
+            }
+          },
+          "ratios": {
+            "planning": 1.0122762740115776,
+            "execution": 1.00265245719543
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_long_legacy_nullstrue",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Int64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 11543009900955376614,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.339501,
+                0.332779,
+                0.339952,
+                0.337817
+              ],
+              "median_ms": 0.338659
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.947777,
+                5.942878,
+                5.920296,
+                5.896232
+              ],
+              "median_ms": 5.931587
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_long_legacy_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 11543009900955376614,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.338159,
+                0.336835,
+                0.334772,
+                0.33405
+              ],
+              "median_ms": 0.33580350000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.326063,
+                5.354936,
+                5.284816,
+                5.32457
+              ],
+              "median_ms": 5.3253165
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 11543009900955376614,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.342807,
+                0.33365,
+                0.339771,
+                0.333299
+              ],
+              "median_ms": 0.3367105
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.350879,
+                5.278685,
+                5.291007,
+                5.243319
+              ],
+              "median_ms": 5.284846
+            }
+          },
+          "ratios": {
+            "planning": 1.002700984355434,
+            "execution": 0.9924003578003299
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_double_nullstrue",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Float64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 14743803664421719480,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.552757,
+                0.476255,
+                0.481805,
+                0.479851
+              ],
+              "median_ms": 0.48082800000000003
+            },
+            "execution": {
+              "process_medians_ms": [
+                8.204319,
+                8.187718,
+                8.459994,
+                8.494178
+              ],
+              "median_ms": 8.3321565
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_double_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 14743803664421719480,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.44723,
+                0.448744,
+                0.445888,
+                0.447591
+              ],
+              "median_ms": 0.44741050000000004
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.224379,
+                7.208018,
+                7.204812,
+                7.145573
+              ],
+              "median_ms": 7.206415
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 14743803664421719480,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.459824,
+                0.451749,
+                0.462349,
+                0.453232
+              ],
+              "median_ms": 0.45652800000000004
+            },
+            "execution": {
+              "process_medians_ms": [
+                7.242552,
+                7.213128,
+                7.192489,
+                7.166221
+              ],
+              "median_ms": 7.2028085
+            }
+          },
+          "ratios": {
+            "planning": 1.0203783773514479,
+            "execution": 0.9994995431154048
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_decimal_nullstrue",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Decimal128(10, 2) to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 14743803664421719480,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.504377,
+                0.492896,
+                0.497594,
+                0.503896
+              ],
+              "median_ms": 0.500745
+            },
+            "execution": {
+              "process_medians_ms": [
+                9.43243,
+                9.615931,
+                9.476522,
+                9.748326
+              ],
+              "median_ms": 9.5462265
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "implicit_reverse_nullstrue",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Int64 % Utf8 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 27262,
+              "digest": 6318066596843732495,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.365629,
+                0.354118,
+                0.373885,
+                0.358836
+              ],
+              "median_ms": 0.36223249999999996
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.380564,
+                5.439072,
+                5.392165,
+                5.344387
+              ],
+              "median_ms": 5.3863645
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_reverse_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 27262,
+              "digest": 6318066596843732495,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.343999,
+                0.346945,
+                0.341093,
+                0.338018
+              ],
+              "median_ms": 0.342546
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.752838,
+                4.762616,
+                4.734284,
+                4.72653
+              ],
+              "median_ms": 4.743561
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 27262,
+              "digest": 6318066596843732495,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.371791,
+                0.377752,
+                0.369406,
+                0.36097
+              ],
+              "median_ms": 0.3705985
+            },
+            "execution": {
+              "process_medians_ms": [
+                4.763508,
+                4.975732,
+                4.719486,
+                4.749121
+              ],
+              "median_ms": 4.7563145
+            }
+          },
+          "ratios": {
+            "planning": 1.0818941105720108,
+            "execution": 1.0026885919670898
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "implicit_alias_nullstrue",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Int64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.379816,
+                0.46282,
+                0.381289,
+                0.376159
+              ],
+              "median_ms": 0.38055249999999996
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.977343,
+                6.013249,
+                6.044387,
+                5.912562
+              ],
+              "median_ms": 5.995296
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "implicit_guarded_nullstrue",
+          "before": {
+            "error": "error in DataFusion: Error during planning: Cannot coerce arithmetic expression Utf8 % Int64 to valid types",
+            "phase": "planning"
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.367382,
+                0.361471,
+                0.362964,
+                0.362052
+              ],
+              "median_ms": 0.362508
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.99214,
+                6.020633,
+                5.984987,
+                5.954751
+              ],
+              "median_ms": 5.9885635
+            }
+          },
+          "ratios": {},
+          "comparison": "Baseline raises; candidate timing only. All candidate rows match Spark."
+        },
+        {
+          "id": "explicit_guarded_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.353507,
+                0.358666,
+                0.355481,
+                0.355982
+              ],
+              "median_ms": 0.3557315
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.999394,
+                5.989575,
+                5.921839,
+                5.971071
+              ],
+              "median_ms": 5.980323
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.377411,
+                0.375457,
+                0.381369,
+                0.376449
+              ],
+              "median_ms": 0.37693
+            },
+            "execution": {
+              "process_medians_ms": [
+                5.995636,
+                6.064615,
+                5.969748,
+                5.936877
+              ],
+              "median_ms": 5.982692
+            }
+          },
+          "ratios": {
+            "planning": 1.0595912928711684,
+            "execution": 1.0003961324497022
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "division_control_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 1246826133762173556,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.419278,
+                0.427575,
+                0.4144,
+                0.418176
+              ],
+              "median_ms": 0.41872699999999996
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.087276,
+                6.087707,
+                6.05173,
+                6.052191
+              ],
+              "median_ms": 6.0697335
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 1246826133762173556,
+              "data_type": "Float64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.450416,
+                0.441631,
+                0.445468,
+                0.442592
+              ],
+              "median_ms": 0.44403
+            },
+            "execution": {
+              "process_medians_ms": [
+                6.086144,
+                6.04599,
+                6.049255,
+                6.032605
+              ],
+              "median_ms": 6.047622499999999
+            }
+          },
+          "ratios": {
+            "planning": 1.0604283936789365,
+            "execution": 0.99635717120035
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "numeric_modulo_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.267998,
+                0.273258,
+                0.266986,
+                0.270353
+              ],
+              "median_ms": 0.2691755
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.368685,
+                0.373774,
+                0.369205,
+                0.369487
+              ],
+              "median_ms": 0.369346
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 26214,
+              "digest": 6236772760779867657,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.29601,
+                0.299777,
+                0.294898,
+                0.294517
+              ],
+              "median_ms": 0.295454
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.369857,
+                0.37116,
+                0.369146,
+                0.368715
+              ],
+              "median_ms": 0.3695015
+            }
+          },
+          "ratios": {
+            "planning": 1.0976258983451317,
+            "execution": 1.000421014441743
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "numeric_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 982960622093096485,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.290409,
+                0.294888,
+                0.29038,
+                0.293385
+              ],
+              "median_ms": 0.29189699999999996
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.159717,
+                0.160087,
+                0.160538,
+                0.159346
+              ],
+              "median_ms": 0.159902
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 982960622093096485,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.323872,
+                0.316979,
+                0.322659,
+                0.318101
+              ],
+              "median_ms": 0.32038
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.158374,
+                0.160308,
+                0.159166,
+                0.158905
+              ],
+              "median_ms": 0.1590355
+            }
+          },
+          "ratios": {
+            "planning": 1.0975789405166891,
+            "execution": 0.9945810558967368
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        },
+        {
+          "id": "native_numeric_nullstrue",
+          "before": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 982960622093096485,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.174695,
+                0.178141,
+                0.173613,
+                0.175235
+              ],
+              "median_ms": 0.17496499999999998
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.07021,
+                0.070721,
+                0.070531,
+                0.06971
+              ],
+              "median_ms": 0.0703705
+            }
+          },
+          "after": {
+            "check": {
+              "rows": 262144,
+              "nulls": 0,
+              "digest": 982960622093096485,
+              "data_type": "Int64"
+            },
+            "planning": {
+              "process_medians_ms": [
+                0.181878,
+                0.179103,
+                0.176548,
+                0.178792
+              ],
+              "median_ms": 0.1789475
+            },
+            "execution": {
+              "process_medians_ms": [
+                0.06981,
+                0.069199,
+                0.06982,
+                0.06986
+              ],
+              "median_ms": 0.06981499999999999
+            }
+          },
+          "ratios": {
+            "planning": 1.0227616951961822,
+            "execution": 0.992106067173034
+          },
+          "equivalent_outputs": true,
+          "comparison": "Every row matches the same Spark reference; full output digests/types agree."
+        }
+      ]
+    }
+  },
+  "provenance": {
+    "build": {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "--config",
+        "/home/hanbo/.cache/delta-reader-spark-planning/string-modulo-6f29c0a/override.toml",
+        "-j",
+        "3",
+        "--example",
+        "decimal_probe",
+        "--bin",
+        "delta-reader-sail-extraction-probe",
+        "--message-format=json"
+      ],
+      "sources": {
+        "math.rs": "ef1fe89741dc34bda40f03588557bdab75bde155c2d52839e1984f89f6bdefb9",
+        "lateral.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "cast.rs": "30f3ae9e61a7b0af2aeed023e562662e330866134d9cce0281a0f88dd33af8de",
+        "common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "function-Cargo.toml": "17aabfe61876632a6b26a4dffb3b0dcd603a5344e023b66e58bcb85b61b7871b",
+        "scalar-mod.rs": "cfaa4c666296ef5553deb7dfbe8b98cc562267b4ff9d346c2c6f34a10c800776",
+        "Cargo.lock": "273c79133f7f724ccd25039958ee4fd76f83f75efafca9936248fab6ab0527ba",
+        "decimal_bench.rs": "8292aed9e59abdf8453139ec63a3984c265be1af777bd1611ecd00a8072ff208",
+        "string-cast.rs": "8747f822bffa967aac7c4eb5231c94afc471a7b8a65a37ce931453d53aeac78c",
+        "float-cast.rs": "55a7685ecb1ebd8e618ee36d9450ca5c04cf1e59f0c3fec74a5d7ea702301f49",
+        "lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "main.rs": "5fe8cfee49f51245e1c909333150f74817fff432f77178ebfe28f07393fef353",
+        "decimal_probe.rs": "67b5dfdc2968f8524ebee27d9083e61694058a7aec38cd80af275d7228f5ae2c",
+        "decimal-null.rs": "e554bbbcbcc10ca2002471a92eb34331d0ef14c1ba3d586c7cc88c60d8740379",
+        "function-mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "function-scalar-mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "delta_lifecycle.rs": "40c810540be9a6917152d002bf9a99f552e15793a927b270c1fc756386fa3ff8",
+        "resolver-subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "analyzer-expression.rs": "9ed9520375854bfd7efa2eb32fc648367d47f3b29418d62cc3822906695956b9",
+        "analyzer-parser.rs": "c63265070fb332d7a118e14c9ff0c31b618269b6edbe76c578ee4d764a53a1a4",
+        "math-mod.rs": "a6aa195940c3d52f9f8b706f8309194cb917462e27efd8f2c43d667dedd7d043",
+        "decimal-utils.rs": "57fc7be75785d2a531ee8cbf85fabd5a364f76eddab9654ca1ad08943b03ed12",
+        "decimal-round.rs": "2ced18332150ae4059513f27f5e78a5b16bb7a8a2f9970053b5ff5f4a14183f8",
+        "conditional.rs": "59703fa8bc49516d30d51c246a3d3a3387ba33388d9ad60c42c5097d40257d1c",
+        "small-int-divide.rs": "0c42106505312d109f9059f537f36e3d7e1f1b60921919b425013239f4fbf6b5",
+        "resolver-predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "function-predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "arrow-mod": "dc7ac7e9f2da115db7d69d42f35278eca0e07f279afb9d383e02d3e012758a25",
+        "arrow-decimal": "c6e92ec74227110b992b8f56d12c2ab7cac02e51381d86554067f2ab68949a3f",
+        "join-selection": "b038353506545b8ccbe550a3ec35b98cde772466203f48d725e64d6462db5b2c",
+        "unwrap-cast": "7cbbb654de8021c3da5d5498242b2781b20ae00406f412aa33dfa2d068a98592",
+        "expr-simplifier": "5ab0dfc70cd70401d06ea835f1c55f0832433d935ae5fd8eac78fd7778a5e1a1",
+        "optimizer-test-lock": "d74d91345b6e24e5a818023d8ca5ccc5870129c1d383f807c4041771022cf608",
+        "decorrelate": "14bbd497aec3a0ad5094374e4428c5e76f808d9e86048b3a6b2302a6306fa32f",
+        "nested-loop": "a547bd004d5fbe8a4818911cd07b201e4679bda931f57781ca652b603dd63630",
+        "physical-test-lock": null,
+        "parser-keywords": "00ea0489fd6db80e88e6aa32e01c1a7744d68b26aefe52c10706fb97add0f8e9",
+        "native-in-list": "05531b629e19d0888b1a9ef9a59a095342724c3957d7634078888294bff1361a",
+        "native-test-lock": "51432c96e8b720035d6728d9f1ea7d183c7d310897a01232caf91ca3e632144e",
+        "native-primitive-filter": "7e425346b65c117d35884f726ab6d4698ee51adbc764f429f13d17adb99d14b1",
+        "native-strategy": "012a6734cf493cd04e5d45e04a7c8e709c7e4c9907d80f001f7d51dcf04b7954",
+        "native-array-filter": "bd40f11b951d917a6da7837b668799d18938ce495cf3e92397891d2ff2225e35",
+        "native-case": "afb733aeedf8b68365fa42440af2a0e416d1e234135248d9cdd7b28b3169cad7",
+        "expr-common": "239912fa400ab30a58d49b6917cb2d3877eb302ff5d852fe5d06ab24c6cab461",
+        "resolver-state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "restored-build-source-0": "d82b879e435a166345b9b8dff15e6006e6a511ef25fbd90d36e72d1b38d959cd",
+        "restored-build-source-1": "ce76887ea29110bf8d64e1a9c6418ac82611bdbc16104f2b0f50f578f81c52b6",
+        "restored-build-source-2": "5c96b63cda60489be6f572d80edcb4b6b8aa61e7719ea4842c3a2be039b1e313",
+        "restored-build-source-3": "ab418d6b0b4d4f04fb1c9ab94b4663c41eee36651ed8a0f2262042014a277cbd",
+        "restored-build-source-4": "e17934c319c72498d2c6bce2529db97170d62882737de789dfc1a1198f7b8549",
+        "restored-build-source-5": "db18791def0ca87d847e87645116ad28ea93bb837d9f00893476e6b7f2514ea1",
+        "restored-build-source-6": "8b7f22f195b1e2a907d29e5dc5679b1512a37f4bffa36422888159ec562cc9ca",
+        "native-static-filter": "3e6915494eae8a460eafc3ecdd7e8c4901fef7dcfed43408d84dfdb4953a35ce",
+        "restored-build-source-7": "d3311aeebe577921966f6206dbd304ba1f7a0c776336e6267cb05384d0507bff",
+        "restored-build-source-8": "c97a107a3bb239d0516be4e873469298fc415f416220d28c16d984fe6b3b5248",
+        "restored-build-source-9": "74288664c8a8bf9710f5230b57071131b2f6a0a82b544470732f01f00f65e760",
+        "restored-build-source-10": "98db0e41541e4b2013477447bd668b947cb0bb583379035df4b54e7eded1e65f",
+        "restored-build-source-11": "66c2e39cc6db569b9092c0e405e80127871b2fba69305a70498d93cb16dbdad8",
+        "restored-build-source-12": "7fe8f7eb544da53fc1991c559ac0094fa0f2332a87c590190da1657f288e2022",
+        "restored-build-source-13": "c1f1634be4498403b7d97496af3506085cc0a9878c348fcb8078bd05ec4754fe",
+        "restored-build-source-14": "cfbe46bd44cdcdf53af4e8d78b0c3d93e365cf80c4bddf11c653f092b306bd5a",
+        "restored-build-source-15": "e275a321a1e19dbba6531845bd9449d602104ac931af8eb78f58948de87bdbf8",
+        "restored-build-source-16": "0d2e5ec02b4b802101285e013ebac5ad6c118147e427b0d86eec75e0868d8b02",
+        "restored-build-source-17": "00081fda7b21bee3c8aad751095859fc4e745b29be19741f58903f8b05453bb9",
+        "restored-build-source-18": "b164f528907c8b5d2e84f00421442e0dfdbd62fc069d6d1258db831dddadc631",
+        "resolver-join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "resolver-attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b",
+        "resolver-project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "resolver-function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "resolver-wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "resolver-schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "scalar-struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "resolver-aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "native-aggregates.rs": "6994a655702184bba801f54fb2ea343a3ba215f723d8954b1496720ffa077eca",
+        "resolver-sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "native-binary": "66ba58d025ab8127b8232b85028a0c93d96e224f2c92e9a11b8e7ff0a5c8f088",
+        "lifecycle-support-0": "a5198533aa09d88946a7182176d0dca681e3969171dfccd152846e29f24a69cf",
+        "lifecycle-support-1": "1bf27a74912e13dfacfa38315b76be566b9b8ce7a8e7f098c44a3ebe9195f180",
+        "checked.rs": "6a6d15a2255937a3d4a48b1a2d7b59040bc57588bf1b1f32e593f8e5edbacb19",
+        "native-scalar-function.rs": "c3853b994aa861c5d7f0b30fd777d878c0b7300b2848de6b913f437289366c21",
+        "udf.rs": "b7f05300615df5c0f87495f5dbcee8974b6e36f027b070d05f79c147044ef0ed",
+        "expression-mod.rs": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+        "overflow-bench.rs": "971ad5fe8fb00a9640585c66de320ba4fa1125b82ca9f2fa5a13cd4029b60256",
+        "native-column.rs": "75d22bef42f5dcd487ac06d1c0e0505407d9480d95b0423278e8ca693a3c9660",
+        "arrow-arithmetic.rs": "008110fe975edfc942333d2e3bcb94af5f2de9b1e456d7d5cf696a4da7b4fc50",
+        "arrow-arity.rs": "5be993560d41ad908accd1324b1529614accd0af859dd0d886c109052270e360",
+        "scatter-utils.rs": "aec739c4df4c1a01a1f09a16efddabd69e5f283e4490c3a2570504f10cfcbcf8",
+        "filter.rs": "e7c12f8e8a298bdcb92c0d34fd5f1a7442ecc76416b637c06382270cc8ffea4d",
+        "bround.rs": "a61cbf4c2e43ef954cadfc2b34de95b0c7fa7fd4d09e50cf263f0be3b9ba6f87",
+        "integer-round.rs": "ec3fe37d07b79fb490abf013bb86a2953c69d26d7b865c4fd15f46875fd6c8b3",
+        "float-round.rs": "c1a7162e21856de26da9b95a3b0b7d399587bdeda3e43e20cdc10b726b4a237b",
+        "integer-cast.rs": "963b9ac541b0057933461fb76356803f80d6b01b70f511b9cb068389997045e6",
+        "floating-cast.rs": "c0970aa7b4b52e86dae57e6d1b8b41ee0e86d71adcaba3f36ea86a7db032164d",
+        "lexical-number.rs": "7d6b9673a13cf3ff9420b1efef8d8e4216727091ff07f701c0dbbbf9a044e4c8",
+        "lexical-binary.rs": "73cae5e3d170e2f6e088b15d013f75b90c8d1de2ee38f8d2567114cd85fa26f9"
+      },
+      "binaries": {
+        "probe": "af9a0dd11c2d3a72d35765d37f8d02260a9b0cd04f267de0b5eb9c53edbf9a48",
+        "runner": "8c4b5f1f0ea48032ecd9b3abe13b43b51a6b7ee4fae22a007f2c877907c577a1"
+      },
+      "baseline_archives": {
+        "decimal-bround": {
+          "path": "decimal-bround-runs.json.gz",
+          "sha256": "efc7950580211733038b6f0d50cdd6553657ae272d9242aea1d737079c357b2a",
+          "files": 353,
+          "compressed_bytes": 1862230,
+          "uncompressed_bytes": 39588746
+        },
+        "float-bround": {
+          "path": "float-bround-runs.json.gz",
+          "sha256": "b15ed6079960f83ae39ac60debf2b60ec885c9263c43d355f0c8a96b284cbee4",
+          "files": 150,
+          "compressed_bytes": 605197
+        },
+        "float-bround-boundaries": {
+          "path": "float-bround-boundaries-runs.json.gz",
+          "sha256": "da65ffe24567793625612e18061643e3d233eaa1937031536a439aa94ed744a0",
+          "files": 166,
+          "compressed_bytes": 655607
+        },
+        "round-arguments": {
+          "path": "round-arguments-runs.json.gz",
+          "sha256": "973e2d14ec1336d1a35c3a28463ac07aa955357ebeb73656fbe3e3aa9722482c",
+          "files": 200,
+          "compressed_bytes": 844977
+        },
+        "integer-round": {
+          "path": "integer-round-runs.json.gz",
+          "sha256": "06e3642dda06de137e37eb65266e7c4c64c3a702e7ed0ff45ee6c357fb6d136f",
+          "files": 196,
+          "compressed_bytes": 806079
+        },
+        "float-round": {
+          "path": "float-round-runs.json.gz",
+          "sha256": "b47ed590d36c6c7f1ca8130157968b2ecd9d8dd304b52f2352b7e3ce3536f687",
+          "files": 190,
+          "compressed_bytes": 940244
+        },
+        "decimal-round-extreme": {
+          "path": "decimal-round-extreme-runs.json.gz",
+          "sha256": "d74f39c888d987f286e759c063780840f67b1f66a477764c101f23ddda3f3fc8",
+          "files": 183,
+          "compressed_bytes": 930381
+        },
+        "modulo-null-guard": {
+          "path": "modulo-null-guard-runs.json.gz",
+          "sha256": "9f6d3d0d9477dbc34b65e78db54caf36d3b56cdb456c8049c9dde4825ef9c691",
+          "files": 194,
+          "compressed_bytes": 1097974
+        },
+        "bigint-div-overflow": {
+          "path": "bigint-div-overflow-runs.json.gz",
+          "sha256": "80ef19455a686cf236a9e0057a8da0814b50b751fe397ce2484129eb24b0fa8d",
+          "files": 203,
+          "compressed_bytes": 1161778
+        },
+        "string-division-coercion": {
+          "path": "string-division-coercion-runs.json.gz",
+          "sha256": "4d33643d1338d9c02df80cf1a04e7bdd3120c7afab7066d9961acfa3d16614ae",
+          "files": 237,
+          "compressed_bytes": 2529661
+        },
+        "decimal-arithmetic-types": {
+          "path": "decimal-arithmetic-types-runs.json.gz",
+          "sha256": "5391fc7bec1b93c769ed581ce67c4d478eb511e912ad441fc43074865c4184c2",
+          "files": 487,
+          "compressed_bytes": 3954076
+        },
+        "legacy-numeric-cast": {
+          "path": "legacy-numeric-cast-runs.json.gz",
+          "sha256": "3b82c84594333826f6eb0033b3ddee9d20027874387bf697b4906d422e3f5d0f",
+          "files": 243,
+          "compressed_bytes": 1369491
+        },
+        "strict-integer-cast": {
+          "path": "strict-integer-cast-runs.json.gz",
+          "sha256": "7d09f244dbe6b63e01d62cdfefc44d58c3aa34d12ff976a9f3a193605e562812",
+          "files": 481,
+          "compressed_bytes": 2656716
+        },
+        "floating-string-cast": {
+          "path": "floating-string-cast-runs.json.gz",
+          "sha256": "2649ff9e58b9b5e3635e6b46c87b428caddcfb2b705d9708874a811798e8c245",
+          "files": 525,
+          "compressed_bytes": 3407291
+        },
+        "dead-cast": {
+          "path": "dead-cast-runs.json.gz",
+          "sha256": "a7ac4f4e73f18082cf4d15a7c5c3b9c42c2cf0a09cd5b71080b2c8f4c04e76f8",
+          "files": 897,
+          "compressed_bytes": 5283429
+        },
+        "decimal-cast-errors": {
+          "path": "decimal-cast-errors-runs.json.gz",
+          "sha256": "5d261cbece586eb4e16616b2f0679f929aa2a99950ac88b62449f1ea4cd3ee9c",
+          "files": 783,
+          "compressed_bytes": 3998686
+        }
+      },
+      "integration_base": "6f29c0a05a614a843f12bb995cbf4831a4b4ed7b",
+      "changed_runtime_sources": [
+        "math.rs"
+      ]
+    },
+    "libraries": {
+      "artifacts_per_build": [
+        505,
+        505
+      ],
+      "named_libraries": [
+        414,
+        414
+      ],
+      "same_package_feature_signatures": true,
+      "changed": [
+        "sail_plan"
+      ]
+    },
+    "baseline_binaries": {
+      "probe": "0499dae7e9a1615eb828d96801d2a3b51a10ab63b91ddff18fe48d814c25df81",
+      "runner": "10dcd7bd986fd64ac4b2f3b7c3f3feba5171ebc2764b18849661f8fb6c626c79"
+    },
+    "versions": {
+      "spark": "4.2.0",
+      "sail": "0.7.1",
+      "datafusion": "54.1.0",
+      "arrow": "58.4.0"
+    },
+    "native_settings": {
+      "target_partitions": 2,
+      "default_batch_size": 1,
+      "case_batch_size": "stored per query",
+      "ansi_modes": [
+        true,
+        false
+      ]
+    },
+    "spark_settings": {
+      "spark.ui.enabled": "false",
+      "spark.driver.bindAddress": "127.0.0.1",
+      "spark.driver.host": "127.0.0.1",
+      "spark.sql.shuffle.partitions": "2",
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.decimalOperations.allowPrecisionLoss": "true"
+    },
+    "reference_python": "/home/hanbo/.cache/delta-reader-spark-oracle-4.2.0/venv/bin/python",
+    "java_home": "/home/hanbo/.cache/delta-reader-spark-oracle-4.2.0/java/jdk-21.0.12.1+1-jre",
+    "lexical": {
+      "crate": "lexical-parse-float",
+      "version": "1.0.6",
+      "registry_source": "/home/hanbo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/lexical-parse-float-1.0.6",
+      "license": "\"MIT/Apache-2.0\"",
+      "upstream_pr": {
+        "baseRefOid": "28985e507879c0bab4bde9179b8fae2042085a12",
+        "body": "Fix #87 on parsing hexfloats by changing the assertions to return failure (`None` and `false`).",
+        "files": [
+          {
+            "path": "lexical-core/tests/float_pow2_tests.rs",
+            "additions": 1,
+            "deletions": 0,
+            "changeType": "MODIFIED"
+          },
+          {
+            "path": "lexical-parse-float/src/number.rs",
+            "additions": 10,
+            "deletions": 9,
+            "changeType": "MODIFIED"
+          },
+          {
+            "path": "lexical-parse-float/tests/issue_87_tests.rs",
+            "additions": 16,
+            "deletions": 0,
+            "changeType": "ADDED"
+          },
+          {
+            "path": "lexical-parse-float/tests/number_tests.rs",
+            "additions": 13,
+            "deletions": 0,
+            "changeType": "MODIFIED"
+          }
+        ],
+        "headRefOid": "62e40dc16560833f11e360ae6371875c513e2038",
+        "state": "OPEN",
+        "title": "Fix #87 parsing hexfloats",
+        "url": "https://github.com/Alexhuszagh/rust-lexical/pull/172"
+      },
+      "additional_change": "Return zero before normalization and round the 64-bit-discard boundary correctly near the minimum subnormal.",
+      "unchanged_crate_files": {
+        ".cargo_vcs_info.json": "f8ebe0e61436df66785823345ca422282fd975470ceabe34b2bc895703906214",
+        "CODE_OF_CONDUCT.md": "6760f79fd0016b6c25204964c62c8a659b0c6768cfe6a4115d9cd53530632cd6",
+        "Cargo.lock": "cac7c8bb5536befd94eefbfc248dfb82dc279dbc40a5896ef4b3ccacf42d96c1",
+        "Cargo.toml": "db34a26bd4c26dadf8cec77760f433a3975cf90f58255b48392f43fd2180846b",
+        "Cargo.toml.orig": "a90e81f66983712bf2ee9ccf66a8fb1c0412192954cb2db6d9d9fb3b50fda3c0",
+        "LICENSE-APACHE": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+        "LICENSE-MIT": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "LICENSE.md": "99aab70a96f3ecab683d8a319d9070af2213ae4c1601fb053fbe85e1361e32fe",
+        "README.md": "9eb1bda170506c954431f288a2749710fbca9baf727c717d26dbd3342ca8cc29",
+        ".cargo-ok": "afbf9d0f3560b0fd7795e81c42a0a79ee6b6fc67e064f77826aee642cad28d91",
+        "src/api.rs": "a2891df2614c6400c2e9dbaf0f6f905fe947945188343a828832ac34c6ffbdd6",
+        "src/bellerophon.rs": "49f1309c02a2b792e5aa14d567bd7dfa968372107d8ed594e16b231ced4e5dda",
+        "src/bigint.rs": "aac269d0c716fb343f76e32d04220f5dc6ad692dc4242a16a65b69b0127fa9e3",
+        "src/binary.rs": "9b536b7cce82e251b58218292a28e75a2bc1ee241aa37bdba7777adeaa54de33",
+        "src/float.rs": "d5db5cce67b5d05c617620a4f91e16537f111bba488565fd0aa0f869793b99b5",
+        "src/fpu.rs": "c0edf8d061b096bfc771b904577534bfee8b8415fdfdc62e8d6ba5be7b478866",
+        "src/lemire.rs": "254e41b8442d9964511674eab5b89d0ecb3c2fd59f2b4f9e0bd5c0a400147633",
+        "src/lib.rs": "3be7092999e9526a0881fe171fdf8160411666149ec9ab5d9c49dc5bf485c0a0",
+        "src/libm.rs": "c20f93ff5506032ba75c301c60c115734e07b90f5dbf753cd8b63b37a676c385",
+        "src/limits.rs": "ee4b53585b9532270ae6d6aafa8dd99b10d10bb450b4191668c90b64b26918f1",
+        "src/mask.rs": "12cace0998e2646d4c56cfc49e302bae0e17f42f29631a5efa0197308fee9e13",
+        "src/number.rs": "87b48fbdf9cff3bfb42156e913800f63fbb77f96009c4e95a2ab14d48fe5b0be",
+        "src/options.rs": "3002d609eec12ed936833f8e87d58805e783f9e86b0bf8bcb904726d5f93ca9c",
+        "src/parse.rs": "d323f5e706e04e9bcf4d870c7453c349c9d3f6bf8565978c32e820fac85d5a85",
+        "src/shared.rs": "767eb25a7fb681184b8073ebe010ba833cf68d17e325d261c5cdea1a74f76018",
+        "src/slow.rs": "65c94200a69ed4a30c874096a6ed2fdbc50ccc6685ec3f27e60caa055212b54d",
+        "src/table.rs": "c3e24051c1172682bdec1d721c1d8618f46db6233783ee9e68392437cd978f43",
+        "src/table_bellerophon_decimal.rs": "fec4c5a2583cc8804d8fe783ea1f6c6bbbeee7a17ce54fe27b6aedaa6d7ca63d",
+        "src/table_bellerophon_radix.rs": "29013efb561e6f2c9fecd1fc6ef07e32e9484bd824efedc402f53cba77d574a2",
+        "src/table_binary.rs": "81e1401995c3340506e169e72e0f61e0925c38e47b8fd710f769c236bccfc096",
+        "src/table_decimal.rs": "169236e8e5d063bac5fbbd8bfe963b31fdb71156e55982bd249a8a483503e096",
+        "src/table_large.rs": "1ab9621a3332c1e6006876a25b2998129feec5f9eadfbea876763077bac31986",
+        "src/table_lemire.rs": "bc6f10d1c1eb661ee5929a11d712811410866775fdff6ae28574f69557d83667",
+        "src/table_radix.rs": "f803474182d232abcf3407582f7449bafc91ae70af5c96c739ea2245fd48bc1f",
+        "src/table_small.rs": "b433c3f13dbd62ccdd5de32e8eceea960b1d2b6facee3013839be5530543b50e",
+        "tests/api_tests.rs": "a0c08b827af28c2aa70aa702f9c4b04b744bd13c75956979d8538decb33f6732",
+        "tests/bellerophon.rs": "4499d8527b3c73554a79514b90cc5052b6b19587fdbd92b36ad3b17160916275",
+        "tests/bellerophon_radix_tests.rs": "184956aa39f693777ca9c6ddd93bf05ffc84871afaf4250c64e4f7e7802fe99b",
+        "tests/bellerophon_tests.rs": "f8cd002efd0b48cb2852c15215711232a3d9b4969ac7ce8369448a118733bdbf",
+        "tests/bigfloat_tests.rs": "d58c8c0c4dd72e545c3ad5fa4637ca66be6bb25b1a1d4c2137294c629b11a4dd",
+        "tests/bigint_tests.rs": "33a71076507ce1321aca3beb154ea9d425e4b564a24f0108d19142233c9910b8",
+        "tests/binary_tests.rs": "53407bd96c957154c8bc9359e3532e5d4a439fdd14fa6e4f0ce05d124a127d2c",
+        "tests/float_tests.rs": "82249c80a5bf8be6417e2d1530b9b578f5460ac635a60e0624402f318643edcf",
+        "tests/issue_96_tests.rs": "f4c6f83ad7b66dfefb2674e0ad0c7fee609e1adace4ed86a6c2f70ea594ccc47",
+        "tests/issue_98_tests.rs": "313288dae0504a20c2edc72cc6d4cb87fe9c84d638163023b47d6b5751255378",
+        "tests/lemire_tests.rs": "57fa35f7f4845008154044722d3dc1986ba5e6f5a5f861c706b066988a91a3e4",
+        "tests/libm_tests.rs": "7aafc4bd127d5cbdf12744ba6cd5f13ef064ff09b7c7f7ad5575a36876365969",
+        "tests/limits_tests.rs": "258b52fc6e579cf906deb0261af0a7f203ad380d4de05239085fbd5612e886d4",
+        "tests/mask_tests.rs": "38a82822af4062928b19609f228a61462ff7e41ba1bcd8207b1fb2399e8b540e",
+        "tests/number_tests.rs": "1fc17605cc54322713db0a09a0c4d94177629259fb56aaea4583366889074fb9",
+        "tests/options_tests.rs": "7da28960e477cc1d5f99e3cf970312cf787b4d31d4f922505f26e576eb711e39",
+        "tests/parse_tests.rs": "aec2f159908afe40e4eb982bab0ac4952e6e1b541c20877a08172b9d6ed076b5",
+        "tests/shared_tests.rs": "3eec6b22a1d53d4073ac99a5a0a562a6699fdcd0def8c49c7425ebbadaa58411",
+        "tests/slow_tests.rs": "c86983a4de71bb0bfbb802fba0eb6be95667a7a5fbab087c2ddb6dcff95039a1",
+        "tests/stackvec.rs": "205d0742ab925c99b9d240f8777bf1562e6a8983ede765781e92e339223d476c",
+        "tests/stackvec_tests.rs": "b6d9113bbd5876b402fcdeb46df07cfbea2e9da43c7832c600686b834c13d366"
+      }
+    },
+    "package_feature_signatures_unchanged": true
+  },
+  "repository_files": {
+    "legacy_numeric_cast.py": "11fe9b735c2db3a0e4f5e58a729fb4b72a1704ea9f61d35e8c77b4d13d72b491",
+    "legacy-numeric-cast.jsonl": "9a2dee36077fd4e3f12e01224657d00ce12e96addbb43c75547b69911f4438c8",
+    "sail-legacy-numeric-cast.patch": "8a2dbfa959e1921fec0dba7a0eb9d66cd61ceea9c89e17a03ad1891dd0f88f35",
+    "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec",
+    "division_cast_classification.py": "049f9c0e9a4d8002584b3af5036afa032189896eea8567c60b4f581a8308e27d",
+    "test_division_cast_classification.py": "6526b38132fae216ec5d63e92ee8563b8495f0ca2fe208a147414d1202daee0d",
+    "decimal_arithmetic_types.py": "f355276a7660aba73f528e5b1fb959ef439332e66913f952ef0c70be633de317",
+    "string_division_coercion.py": "675bd82b1371f53eac368e46a67a26ef3e7ff97b91b9c80a86efd137a90a688d",
+    "bigint_div_overflow.py": "fbd40d0634454ee8b744e7df8951d406a1b4ca2c65d78c824dd5189521e965f3",
+    "modulo_null_guard.py": "1de2534e63053b48cf71f3845226eb21c8ff2868cf94cfba6416d5ca046b7e2f",
+    "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
+    "integer_round.py": "88ccca74ef38a616cbe3137dca5d41880a0d33a966c7087da534f0592d111271",
+    "float_bround.py": "80d227e9b16391fa193990c40d9560ec3368cbfb545dd1f0343c1edfc5e643ce",
+    "decimal_bround.py": "90f12456275c926ddf64e17453912c75243c8a348b7db8bb570796e2af6a74d4",
+    "integer_overflow.py": "2364a1ea92dc5d55a424e1049f3c657a6821c6350eb355f48f99b834bd593c76",
+    "oracle.py": "ff7e117a861e47b10c38dcd2cf47ae581acf91f12542b453746df01b20e9ec68",
+    "reference.py": "41e799f66e70378dd7a5f87139c1815cd029ff011bf61eb2fec0c54a338dee2e",
+    "extracted.py": "1386974b4fbfff0bf1713fab4b06a63aa4114caa0298c0dd92bb5d2e9b1901dc",
+    "inputs.json": "c9f64793df9198d5fdfb1f66e2393ac4f004f9a75e76148d4727401b31461ee3",
+    "queries.jsonl": "1b2a601c39379ad23488e07acf7496f8a69d81dea29df3e77dbc7483bacb3603",
+    "spark-oracle.json": "220ad53f828e307a75f1fc5b075477b3c2b1cefc5847e0161916c225e3e408ed",
+    "extracted-baseline.json": "90cc1a65c635d911f96f0ba60b7aacdf3efac3dfadf4a21d21c709a8c0053ec5",
+    "decimal-round-types.jsonl": "1c2b7aaef9032fc1fb134dc5e013d35e43ef07da821c4a4c431c00b4919f59a0",
+    "examples/decimal_probe.rs": "7f8d142623db9e1b30b400c2afdf507a48329eeee2180775141b448e28f0f9d0",
+    "decimal-arithmetic-types.jsonl": "511ba2fad902d94d6ff5b3f0b0558c2aaec807492b0ba1e45f1b1b86606fdabd",
+    "string-division-coercion.jsonl": "7a8140c093de3a7165eba5ad73e2d2c3eed2f22feaa4c26fec65dfb5cff3bb74",
+    "bigint-div-overflow.jsonl": "4dd7c7cf73b41576d5f46f3014adf879c10f823428727463f6ba1257baa06981",
+    "modulo-null-guard.jsonl": "30c16d7d9d03eee2009beeb76253afbc22552da92e383bc65802fde4119715bd",
+    "decimal-round-extreme.jsonl": "4ba78f714516e1a376378640d9f4bf40b0bf04e2094ebcdc8e3bf9c77cd88104",
+    "float-round.jsonl": "0c9b1869f1565d8e241be0327e2ecf6239eac1dcf81704e8a8f2a3ebbacf28b1",
+    "round-arguments.jsonl": "d485408ebd7f927642c8c5a9029ce1993ed976e6b0b317c29a2e5121037daf2a",
+    "integer-round.jsonl": "539ab3a27261708d83515876c1b3d9cf3257119f12edc8419cece357a2d4ffaf",
+    "float-bround-boundaries.jsonl": "40551b6b83e4d2bdb5e0c1b5ada0f84cd12b1366349cb67df2346c7c0cc06b8f",
+    "float-bround.jsonl": "b7dff7210eff43ee0d805b620a37ace1e8652da259b985ce8f65e85a9e8ebca6",
+    "decimal-bround.jsonl": "c13bb97b7bf5cb36aaae12a7b14b58cff394f423c6bd2b571252f8cab5f238ec",
+    "integer-overflow.jsonl": "c692c28758d273fc3022057e77b5baf344481dc075553d2d5428d39b1a34065a",
+    "strict_integer_cast.py": "fa9234ea51ffab97d8d64aa884fa05d30e776acdf7d27300073c4ce3a0884724",
+    "strict-integer-cast.jsonl": "85010e7d22199bc24bf26d939ccdf4139f361d2f15ae1a9154a41273de752281",
+    "sail-strict-integer-cast.patch": "2a64c1880ccbbab74592e71a493b523ee00ca6d595c43be001e9b72f243ac0a5",
+    "floating_string_cast.py": "f53565f37f82568a289488ee20c9433f105dffced211348c5953aa1c1b814853",
+    "floating-string-cast.jsonl": "607c2f4d6874b0d6d6574c352ae0643654296a689c956aab1b326a3ab2b4e7a9",
+    "sail-floating-string-cast.patch": "473c6a0fc9583a5bfde4ebc55afe607c5cd2de859da7043c55d82e96e35f6e31",
+    "lexical-hex-float.patch": "81319aaef1ff94890e4284fb20052847d45345261684e64f30b2edfacfdb2c00",
+    "dead_cast.py": "6f904f22586742b8ee6450cc14fcc265d8f2acce82fe7207648b35c5236735ef",
+    "dead-cast.jsonl": "64f007501eaefefa4fbf533f5c9daae755a2ebbdbafac84a8e0f51a7d2fa49d0",
+    "sail-dead-cast.patch": "b8c9f48cbde26626d4a375cba194b4ffe554a5626467caf99f4f168f1ea39240",
+    "datafusion-dead-cast.patch": "312d0d54f68a35ec7843cd06b6137f9f54491e0721d79594cde028d2c714a1a6",
+    "DEAD_CAST.md": "3f8a4bed69a39980a970019cf6d8632d9985e821b03645ef199473bf3e104946",
+    "division-cast-classification-results.json": "56ccb5ec9f4ea767077a618f95d5b554b716cef0b4a0d4ceaffba1a16132d66d",
+    "decimal_cast_errors.py": "40cb468ecb6377db2070ac2ff5ab7d33f827bb9a0fc91d283e008c4a7a9eb301",
+    "decimal-cast-errors.jsonl": "7c91504b6eed25c67649a8d7133b92d9d47ea8446aa8990a3316414422ad372e",
+    "sail-decimal-cast-errors.patch": "3445efba651497d5c0529b1d3b4a674a511be9e15a400ca984d31c1dde3414c8",
+    "DECIMAL_CAST_ERRORS.md": "30cee2f4ad435506c199e89d06184c71111a3ea6fb26dc7b6cff2b327d9e0a3d",
+    "dead-cast-results.json": "2a656f6208bc0f0457775af1855b4be5d0b4f4ab5cd99a4638bc360c68325f5e",
+    "division-cast-classification.jsonl": "b20ec43a47377f9dc5991db01c0be2ab23fffe8cfaa0c2a14062193fe2f8dcfc",
+    "string_modulo_coercion.py": "77602db3b22da6a98e7b978f9b9b89a4250d270a0d542b3002229cf67fd97069",
+    "test_string_modulo_coercion.py": "c106a382ad20bf6dd45163caf46b8fe2f3bf83f112864f602370dbbe3d8d1c50",
+    "string-modulo-coercion.jsonl": "b04a5f9b2f016d6f87c66cc567a638e99698a2096e4e01f7834282761f05101a",
+    "sail-string-modulo-coercion.patch": "4b52e9282d7ab791c4b16b5d2ac3e4689761d73b6613e86a05fbe9d4def6a0d5",
+    "STRING_MODULO_COERCION.md": "68bcd530a45fc2e2964a18b0536dcf228347a3f9ccf0168a8c238f16a833c9cb",
+    "decimal-cast-errors-results.json": "0f280e67597233009a48bb7acf951d1be5c38d52422c5d1a97bf4d27a455020c"
+  },
+  "baseline_archives": {
+    "decimal": {
+      "path": "decimal-bround-runs.json.gz",
+      "sha256": "efc7950580211733038b6f0d50cdd6553657ae272d9242aea1d737079c357b2a",
+      "files": 353,
+      "compressed_bytes": 1862230,
+      "uncompressed_bytes": 39588746
+    },
+    "float_type": {
+      "path": "float-bround-runs.json.gz",
+      "sha256": "b15ed6079960f83ae39ac60debf2b60ec885c9263c43d355f0c8a96b284cbee4",
+      "files": 150,
+      "compressed_bytes": 605197
+    },
+    "float_boundaries": {
+      "path": "float-bround-boundaries-runs.json.gz",
+      "sha256": "da65ffe24567793625612e18061643e3d233eaa1937031536a439aa94ed744a0",
+      "files": 166,
+      "compressed_bytes": 655607
+    },
+    "round_arguments": {
+      "path": "round-arguments-runs.json.gz",
+      "sha256": "973e2d14ec1336d1a35c3a28463ac07aa955357ebeb73656fbe3e3aa9722482c",
+      "files": 200,
+      "compressed_bytes": 844977
+    },
+    "integer_round": {
+      "path": "integer-round-runs.json.gz",
+      "sha256": "06e3642dda06de137e37eb65266e7c4c64c3a702e7ed0ff45ee6c357fb6d136f",
+      "files": 196,
+      "compressed_bytes": 806079
+    },
+    "float_round": {
+      "path": "float-round-runs.json.gz",
+      "sha256": "b47ed590d36c6c7f1ca8130157968b2ecd9d8dd304b52f2352b7e3ce3536f687",
+      "files": 190,
+      "compressed_bytes": 940244
+    },
+    "decimal_round_extreme": {
+      "path": "decimal-round-extreme-runs.json.gz",
+      "sha256": "d74f39c888d987f286e759c063780840f67b1f66a477764c101f23ddda3f3fc8",
+      "files": 183,
+      "compressed_bytes": 930381
+    },
+    "modulo_null_guard": {
+      "path": "modulo-null-guard-runs.json.gz",
+      "sha256": "9f6d3d0d9477dbc34b65e78db54caf36d3b56cdb456c8049c9dde4825ef9c691",
+      "files": 194,
+      "compressed_bytes": 1097974
+    },
+    "bigint_div_overflow": {
+      "path": "bigint-div-overflow-runs.json.gz",
+      "sha256": "80ef19455a686cf236a9e0057a8da0814b50b751fe397ce2484129eb24b0fa8d",
+      "files": 203,
+      "compressed_bytes": 1161778
+    },
+    "string_division_coercion": {
+      "path": "string-division-coercion-runs.json.gz",
+      "sha256": "4d33643d1338d9c02df80cf1a04e7bdd3120c7afab7066d9961acfa3d16614ae",
+      "files": 237,
+      "compressed_bytes": 2529661
+    },
+    "arithmetic": {
+      "path": "decimal-arithmetic-types-runs.json.gz",
+      "sha256": "5391fc7bec1b93c769ed581ce67c4d478eb511e912ad441fc43074865c4184c2",
+      "files": 487,
+      "compressed_bytes": 3954076
+    },
+    "classification": {
+      "path": "division-cast-classification-runs.json.gz",
+      "sha256": "8d9ed31b80c933b29058d0be7efb04e5f39c8a1924f171ab6e6ab5f88f081fda",
+      "files": 152,
+      "compressed_bytes": 547387
+    },
+    "legacy_cast": {
+      "path": "legacy-numeric-cast-runs.json.gz",
+      "sha256": "3b82c84594333826f6eb0033b3ddee9d20027874387bf697b4906d422e3f5d0f",
+      "files": 243,
+      "compressed_bytes": 1369491
+    },
+    "strict_cast": {
+      "path": "strict-integer-cast-runs.json.gz",
+      "sha256": "7d09f244dbe6b63e01d62cdfefc44d58c3aa34d12ff976a9f3a193605e562812",
+      "files": 481,
+      "compressed_bytes": 2656716
+    },
+    "floating_cast": {
+      "path": "floating-string-cast-runs.json.gz",
+      "sha256": "2649ff9e58b9b5e3635e6b46c87b428caddcfb2b705d9708874a811798e8c245",
+      "files": 525,
+      "compressed_bytes": 3407291
+    },
+    "dead_cast": {
+      "path": "dead-cast-runs.json.gz",
+      "sha256": "a7ac4f4e73f18082cf4d15a7c5c3b9c42c2cf0a09cd5b71080b2c8f4c04e76f8",
+      "files": 897,
+      "compressed_bytes": 5283429
+    },
+    "decimal_cast": {
+      "path": "decimal-cast-errors-runs.json.gz",
+      "sha256": "5d261cbece586eb4e16616b2f0679f929aa2a99950ac88b62449f1ea4cd3ee9c",
+      "files": 783,
+      "compressed_bytes": 3998686
+    }
+  },
+  "archive": {
+    "path": "string-modulo-coercion-runs.json.gz",
+    "sha256": "609f629b98e6d90ae63df75048cbdbab8537025df17ddd2205ddf96fafa3d96d",
+    "files": 545,
+    "compressed_bytes": 2762887
+  }
+}

@@ -1,0 +1,152 @@
+--- a/crates/sail-plan/src/function/scalar/math.rs
++++ b/crates/sail-plan/src/function/scalar/math.rs
+@@ -1086,9 +1086,9 @@
+     Ok(())
+ }
+ 
+-// Spark promotes strings before the operator-specific division coercion.
+-// Keep this local to `/` and DIV; explicit CAST and other arithmetic are separate.
+-fn coerce_string_division_operands(
++// Spark promotes strings before operator-specific division/remainder coercion.
++// Explicit CAST and other arithmetic keep their own coercion rules.
++fn coerce_string_div_rem_operands(
+     left: Expr,
+     right: Expr,
+     schema: &DFSchemaRef,
+@@ -1119,7 +1119,7 @@
+         } else {
+             "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE"
+         };
+-        return Err(PlanError::invalid(format!("[{condition}] unsupported string division operands")));
++        return Err(PlanError::invalid(format!("[{condition}] unsupported string division/remainder operands")));
+     }
+     if !(peer.is_numeric() || peer.is_string() || peer.is_null()) {
+         return Ok((left, right));
+@@ -1150,7 +1150,7 @@
+     let (dividend, divisor) = arguments.two()?;
+ 
+     let ansi_mode = function_context.plan_config.ansi_mode;
+-    let (dividend, divisor) = coerce_string_division_operands(
++    let (dividend, divisor) = coerce_string_div_rem_operands(
+         dividend, divisor, function_context.schema, ansi_mode, false,
+     )?;
+     let (dividend, divisor) =
+@@ -1292,7 +1292,8 @@
+                             ScalarValue::Utf8(Some(trim))
+                             | ScalarValue::LargeUtf8(Some(trim))
+                             | ScalarValue::Utf8View(Some(trim)), _)]
+-                            if trim.bytes().eq((0_u8..=32).chain([127]))) =>
++                            if trim.bytes().eq(0_u8..=32)
++                                || trim.bytes().eq((0_u8..=32).chain([127]))) =>
+                 {
+                     &f.args[0]
+                 }
+@@ -1404,7 +1405,7 @@
+     } = input;
+ 
+     let (dividend, divisor) = arguments.two()?;
+-    let (dividend, divisor) = coerce_string_division_operands(
++    let (dividend, divisor) = coerce_string_div_rem_operands(
+         dividend, divisor, function_context.schema, function_context.plan_config.ansi_mode, true,
+     )?;
+ 
+@@ -1876,6 +1877,9 @@
+     } = input;
+     let (dividend, divisor) = arguments.two()?;
+     let ansi_mode = function_context.plan_config.ansi_mode;
++    let (dividend, divisor) = coerce_string_div_rem_operands(
++        dividend, divisor, function_context.schema, ansi_mode, false,
++    )?;
+     let (dividend, divisor) = match (
+         dividend.get_type(function_context.schema),
+         divisor.get_type(function_context.schema),
+@@ -2958,3 +2962,89 @@
+     }
+     Ok(())
+ }
++
++#[cfg(test)]
++#[tokio::test]
++async fn string_modulo_reuses_spark_coercion_and_null_ordering() -> PlanResult<()> {
++    use crate::{
++        config::PlanConfig, decimal_null::SparkDecimalNullPropagation,
++        physical_plan::SparkQueryPlanner, resolver::PlanResolver,
++    };
++    use datafusion::{execution::SessionStateBuilder, prelude::SessionContext};
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .build(),
++    );
++    for ansi in [true, false, true] {
++        for token in ["%", "MOD"] {
++            for (peer, integral) in [
++                ("BIGINT", true),
++                ("DOUBLE", false),
++                ("DECIMAL(10,2)", false),
++            ] {
++                for (rows, cast_error, expected) in [
++                    (
++                        format!("(0,'bad',CAST(NULL AS {peer})),(1,'-7',CAST(2 AS {peer}))"),
++                        false,
++                        vec![None, Some(-1.0)],
++                    ),
++                    (format!("(0,'bad',CAST(2 AS {peer}))"), true, vec![None]),
++                    (format!("(0,CAST(NULL AS {peer}),'bad')"), true, vec![None]),
++                ] {
++                    let expr = if token == "%" { "a % b" } else { "MOD(a,b)" };
++                    let sql = format!("SELECT {expr} AS r FROM VALUES {rows} t(k,a,b) ORDER BY k");
++                    let result = async {
++                        let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                        let config = PlanConfig {
++                            ansi_mode: ansi,
++                            ..Default::default()
++                        };
++                        let named = PlanResolver::new(&ctx, Arc::new(config))
++                            .resolve_named_plan(spec)
++                            .await?;
++                        let typ = if ansi && integral {
++                            DataType::Int64
++                        } else {
++                            DataType::Float64
++                        };
++                        assert_eq!(named.plan.schema().field(0).data_type(), &typ, "{sql}");
++                        let batches = ctx
++                            .execute_logical_plan(named.plan)
++                            .await?
++                            .collect()
++                            .await?;
++                        let mut values = vec![];
++                        for batch in batches {
++                            for row in 0..batch.num_rows() {
++                                let value = ScalarValue::try_from_array(batch.column(0), row)?
++                                    .cast_to(&DataType::Float64)?;
++                                let ScalarValue::Float64(value) = value else {
++                                    unreachable!()
++                                };
++                                values.push(value);
++                            }
++                        }
++                        Ok::<_, PlanError>(values)
++                    }
++                    .await;
++                    if ansi && cast_error {
++                        assert!(
++                            result
++                                .unwrap_err()
++                                .to_string()
++                                .contains("Cannot cast string 'bad'"),
++                            "{sql}"
++                        );
++                    } else {
++                        assert_eq!(result?, expected, "ANSI {ansi}: {sql}");
++                    }
++                }
++            }
++        }
++    }
++    Ok(())
++}
