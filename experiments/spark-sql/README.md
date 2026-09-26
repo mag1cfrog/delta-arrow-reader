@@ -64,6 +64,8 @@ The [foldable GROUP BY repair](GROUPING_PREPARATION.md) removes unused constant-
 
 The [group-only LIMIT repair](GROUP_ONLY_LIMIT.md) removes unused nonconstant grouping work when only row presence matters. Its 1,624-query matrix improves 3,015/3,248 -> 3,155/3,248 with no lost agreement; live/local errors, remaining findings and measured costs remain explicit.
 
+The [IN output binding repair](IN_SUBQUERY_OUTPUT.md) binds NULL checks to the subquery's output columns. It removes all 16 assigned field-lookup failures while retaining the approved NULL semantics; the expanded comparison and remaining correctness/performance findings are recorded separately.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.

@@ -1,0 +1,118 @@
+--- a/src/decorrelate_predicate_subquery.rs
++++ b/src/decorrelate_predicate_subquery.rs
+@@ -231,7 +231,7 @@
+     let output_expr = subquery
+         .head_output_expr()?
+         .map_or(plan_err!("single expression required."), Ok)?;
+-    let in_predicate = Expr::eq(expr.clone(), output_expr.clone());
++    let in_predicate = Expr::eq(expr.clone(), output_expr);
+     let Some((matched_plan, matched)) =
+         mark_join(left, subquery, Some(&in_predicate), false, alias)?
+     else {
+@@ -239,8 +239,11 @@
+     };
+ 
+     // SQL IN needs three facts per outer row to distinguish FALSE from UNKNOWN.
++    // This filter is above the subquery, so read its output column rather
++    // than replay an expression whose input columns may have been projected away.
++    let output_column = Expr::Column(Column::from(subquery.schema().qualified_field(0)));
+     let null_subquery = LogicalPlanBuilder::from(subquery.clone())
+-        .filter(output_expr.is_null())?
++        .filter(output_column.is_null())?
+         .build()?;
+     let Some((null_plan, subquery_has_null)) =
+         mark_join(&matched_plan, &null_subquery, None, false, alias)?
+@@ -2267,3 +2270,93 @@
+         )
+     }
+ }
++
++#[cfg(test)]
++#[test]
++fn in_value_null_check_reads_projected_output() -> datafusion_common::Result<()> {
++    use crate::{
++        OptimizerContext, Optimizer, simplify_expressions::SimplifyExpressions,
++        decorrelate_predicate_subquery::DecorrelatePredicateSubquery,
++    };
++    use arrow::datatypes::{DataType, Field, Schema};
++    use datafusion_common::{
++        Column,
++        tree_node::{TreeNode, TreeNodeRecursion},
++    };
++    use datafusion_expr::{
++        Expr, LogicalPlan, LogicalPlanBuilder, builder::table_source, col, in_subquery, lit,
++        not_in_subquery,
++    };
++    use std::sync::Arc;
++
++    for grouped in [false, true] {
++        for nested_alias in [false, true] {
++            for relation_alias in [false, true] {
++                for negated in [false, true] {
++                    let mut input = LogicalPlanBuilder::scan(
++                        "t",
++                        table_source(&Schema::new(vec![Field::new(
++                            "a",
++                            DataType::Int64,
++                            true,
++                        )])),
++                        None,
++                    )?
++                    .build()?;
++                    if grouped {
++                        input = LogicalPlanBuilder::from(input)
++                            .aggregate(vec![col("t.a") + lit(1_i64)], Vec::<Expr>::new())?
++                            .build()?;
++                    }
++                    let value = Expr::Column(Column::from(input.schema().qualified_field(0)));
++                    let value = if nested_alias {
++                        value.alias("inner")
++                    } else {
++                        value
++                    };
++                    let mut subquery = LogicalPlanBuilder::from(input)
++                        .project(vec![value.alias("v")])?
++                        .sort(vec![col("v").sort(true, true)])?
++                        .limit(0, Some(1))?
++                        .build()?;
++                    if relation_alias {
++                        subquery = LogicalPlanBuilder::from(subquery)
++                            .alias("selected")?
++                            .build()?;
++                    }
++                    let subquery = Arc::new(subquery);
++                    let predicate = if negated {
++                        not_in_subquery(lit(7_i64), subquery)
++                    } else {
++                        in_subquery(lit(7_i64), subquery)
++                    };
++                    let plan = LogicalPlanBuilder::empty(true)
++                        .project(vec![predicate.alias("r")])?
++                        .build()?;
++                    let rewritten = Optimizer::with_rules(vec![
++                        Arc::new(DecorrelatePredicateSubquery::new()),
++                        Arc::new(SimplifyExpressions::new()),
++                    ]).optimize(plan, &OptimizerContext::new(), |_, _| {})?;
++                    assert_eq!(rewritten.schema().field(0).name(), "r");
++                    assert_eq!(rewritten.schema().field(0).data_type(), &DataType::Boolean);
++                    assert!(rewritten.schema().field(0).is_nullable());
++                    let mut null_checks = 0;
++                    rewritten.apply(|node| {
++                        if let LogicalPlan::Filter(filter) = node
++                            && let Expr::IsNull(value) = &filter.predicate
++                        {
++                            let Expr::Column(column) = value.as_ref() else {
++                                panic!("NULL check must read an output column: {value}");
++                            };
++                            assert!(filter.input.schema().index_of_column(column).is_ok());
++                            null_checks += 1;
++                        }
++                        Ok(TreeNodeRecursion::Continue)
++                    })?;
++                    assert_eq!(null_checks, 1);
++                }
++            }
++        }
++    }
++    Ok(())
++}
