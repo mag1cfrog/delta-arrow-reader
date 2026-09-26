@@ -38,6 +38,8 @@ The [floating-string CAST repair](FLOATING_STRING_CAST.md) resolves all 34 assig
 
 The [scalar CAST reachability repair](DEAD_CAST.md) resolves all 33 assigned observations and retains prior agreements across NULL propagation, conditional branches and empty/unused plans. Its broader corpus records separate Decimal, string-remainder and error-reporting gaps. The report retains the measured nullable-divisor costs with the existing CAST performance owner.
 
+The [Decimal CAST error repair](DECIMAL_CAST_ERRORS.md) preserves all six assigned early errors and extends the shared NULL guard to Decimal arithmetic. Aggregate/window names and earlier passing suites are retained. The report separates remaining error/CASE-type differences and the measured planning cost from this bounded repair.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.

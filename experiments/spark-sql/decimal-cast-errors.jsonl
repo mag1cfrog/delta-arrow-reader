@@ -1,0 +1,227 @@
+{"id": "owned_0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "owned_1", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "owned_2", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "owned_3", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DECIMAL(10,2)) AS unused FROM VALUES (0) t(k)) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "owned_4", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "owned_5", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "literal_10_2_CAST_valid", "sql": "SELECT CAST('1.235' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_CAST_negative", "sql": "SELECT CAST('-1.235' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_CAST_bad", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_CAST_nan", "sql": "SELECT CAST('NaN' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_CAST_null", "sql": "SELECT CAST(CAST(NULL AS STRING) AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_CAST_overflow", "sql": "SELECT CAST('99999999.995' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_CAST_wide", "sql": "SELECT CAST('1e40' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_CAST_tiny", "sql": "SELECT CAST('1e-100' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_10_2_CAST_valid_1", "sql": "SELECT CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_10_2_CAST_invalid_1", "sql": "SELECT CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_10_2_CAST_valid_2", "sql": "SELECT CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_10_2_CAST_invalid_2", "sql": "SELECT CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_10_2_CAST_valid_64", "sql": "SELECT CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "column_10_2_CAST_invalid_64", "sql": "SELECT CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "literal_10_2_TRY_CAST_valid", "sql": "SELECT TRY_CAST('1.235' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_TRY_CAST_negative", "sql": "SELECT TRY_CAST('-1.235' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_TRY_CAST_bad", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_TRY_CAST_nan", "sql": "SELECT TRY_CAST('NaN' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_TRY_CAST_null", "sql": "SELECT TRY_CAST(CAST(NULL AS STRING) AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_TRY_CAST_overflow", "sql": "SELECT TRY_CAST('99999999.995' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_TRY_CAST_wide", "sql": "SELECT TRY_CAST('1e40' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_10_2_TRY_CAST_tiny", "sql": "SELECT TRY_CAST('1e-100' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_10_2_TRY_CAST_valid_1", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_10_2_TRY_CAST_invalid_1", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_10_2_TRY_CAST_valid_2", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_10_2_TRY_CAST_invalid_2", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_10_2_TRY_CAST_valid_64", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "column_10_2_TRY_CAST_invalid_64", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "literal_5_0_CAST_valid", "sql": "SELECT CAST('1.235' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_CAST_negative", "sql": "SELECT CAST('-1.235' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_CAST_bad", "sql": "SELECT CAST('bad' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_CAST_nan", "sql": "SELECT CAST('NaN' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_CAST_null", "sql": "SELECT CAST(CAST(NULL AS STRING) AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_CAST_overflow", "sql": "SELECT CAST('99999999.995' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_CAST_wide", "sql": "SELECT CAST('1e40' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_CAST_tiny", "sql": "SELECT CAST('1e-100' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_5_0_CAST_valid_1", "sql": "SELECT CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_5_0_CAST_invalid_1", "sql": "SELECT CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_5_0_CAST_valid_2", "sql": "SELECT CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_5_0_CAST_invalid_2", "sql": "SELECT CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_5_0_CAST_valid_64", "sql": "SELECT CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "column_5_0_CAST_invalid_64", "sql": "SELECT CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "literal_5_0_TRY_CAST_valid", "sql": "SELECT TRY_CAST('1.235' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_TRY_CAST_negative", "sql": "SELECT TRY_CAST('-1.235' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_TRY_CAST_bad", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_TRY_CAST_nan", "sql": "SELECT TRY_CAST('NaN' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_TRY_CAST_null", "sql": "SELECT TRY_CAST(CAST(NULL AS STRING) AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_TRY_CAST_overflow", "sql": "SELECT TRY_CAST('99999999.995' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_TRY_CAST_wide", "sql": "SELECT TRY_CAST('1e40' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_5_0_TRY_CAST_tiny", "sql": "SELECT TRY_CAST('1e-100' AS DECIMAL(5,0)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_5_0_TRY_CAST_valid_1", "sql": "SELECT TRY_CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_5_0_TRY_CAST_invalid_1", "sql": "SELECT TRY_CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_5_0_TRY_CAST_valid_2", "sql": "SELECT TRY_CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_5_0_TRY_CAST_invalid_2", "sql": "SELECT TRY_CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_5_0_TRY_CAST_valid_64", "sql": "SELECT TRY_CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "column_5_0_TRY_CAST_invalid_64", "sql": "SELECT TRY_CAST(v AS DECIMAL(5,0)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "literal_38_18_CAST_valid", "sql": "SELECT CAST('1.235' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_CAST_negative", "sql": "SELECT CAST('-1.235' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_CAST_bad", "sql": "SELECT CAST('bad' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_CAST_nan", "sql": "SELECT CAST('NaN' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_CAST_null", "sql": "SELECT CAST(CAST(NULL AS STRING) AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_CAST_overflow", "sql": "SELECT CAST('99999999.995' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_CAST_wide", "sql": "SELECT CAST('1e40' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_CAST_tiny", "sql": "SELECT CAST('1e-100' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_38_18_CAST_valid_1", "sql": "SELECT CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_38_18_CAST_invalid_1", "sql": "SELECT CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_38_18_CAST_valid_2", "sql": "SELECT CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_38_18_CAST_invalid_2", "sql": "SELECT CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_38_18_CAST_valid_64", "sql": "SELECT CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "column_38_18_CAST_invalid_64", "sql": "SELECT CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "literal_38_18_TRY_CAST_valid", "sql": "SELECT TRY_CAST('1.235' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_TRY_CAST_negative", "sql": "SELECT TRY_CAST('-1.235' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_TRY_CAST_bad", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_TRY_CAST_nan", "sql": "SELECT TRY_CAST('NaN' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_TRY_CAST_null", "sql": "SELECT TRY_CAST(CAST(NULL AS STRING) AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_TRY_CAST_overflow", "sql": "SELECT TRY_CAST('99999999.995' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_TRY_CAST_wide", "sql": "SELECT TRY_CAST('1e40' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "literal_38_18_TRY_CAST_tiny", "sql": "SELECT TRY_CAST('1e-100' AS DECIMAL(38,18)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_38_18_TRY_CAST_valid_1", "sql": "SELECT TRY_CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_38_18_TRY_CAST_invalid_1", "sql": "SELECT TRY_CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 1, "category": "decimal_cast"}
+{"id": "column_38_18_TRY_CAST_valid_2", "sql": "SELECT TRY_CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_38_18_TRY_CAST_invalid_2", "sql": "SELECT TRY_CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 2, "category": "decimal_cast"}
+{"id": "column_38_18_TRY_CAST_valid_64", "sql": "SELECT TRY_CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'-1.235'),(2,NULL),(3,'0') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "column_38_18_TRY_CAST_invalid_64", "sql": "SELECT TRY_CAST(v AS DECIMAL(38,18)) AS r FROM VALUES (0,'1.235'),(1,'bad'),(2,NULL),(3,'99999999.995') t(k,v) ORDER BY k", "batch_size": 64, "category": "decimal_cast"}
+{"id": "context_CAST_scalar_live", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_scalar_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_scalar_false", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r WHERE false", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_scalar_false_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r WHERE false LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_scalar_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DECIMAL(10,2)) AS unused) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_values_live", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_values_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_values_false", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_values_false_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) WHERE false LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_values_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DECIMAL(10,2)) AS unused FROM VALUES (0) t(k)) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_range_live", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_range_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_range_false", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_range_false_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_CAST_range_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DECIMAL(10,2)) AS unused FROM range(3)) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_dead", "sql": "SELECT CASE WHEN false THEN CAST('bad' AS DECIMAL(10,2)) ELSE 7 END AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_live", "sql": "SELECT CASE WHEN true THEN CAST('bad' AS DECIMAL(10,2)) ELSE 7 END AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DECIMAL(10,2)),CAST('bad' AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS DECIMAL(10,2)),CAST('bad' AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_column_dead", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (0),(0) t(k)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_column_mixed", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (0),(1) t(k)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_column_live", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (1),(1) t(k)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_range_dead", "sql": "SELECT CASE WHEN id>=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE CAST('bad' AS DECIMAL(10,2)) END AS r FROM range(3)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_CAST_range_live", "sql": "SELECT CASE WHEN id=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE CAST('bad' AS DECIMAL(10,2)) END AS r FROM range(3)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_/_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_/_right_null", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) / CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_/_left_null", "sql": "SELECT n / CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_/_right_null", "sql": "SELECT CAST(v AS DECIMAL(10,2)) / n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_/_mixed_guard", "sql": "SELECT CAST(v AS DECIMAL(10,2)) / n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_DIV_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) DIV CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_DIV_right_null", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) DIV CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_DIV_left_null", "sql": "SELECT n DIV CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_DIV_right_null", "sql": "SELECT CAST(v AS DECIMAL(10,2)) DIV n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_DIV_mixed_guard", "sql": "SELECT CAST(v AS DECIMAL(10,2)) DIV n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_%_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) % CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_%_right_null", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) % CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_%_left_null", "sql": "SELECT n % CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_%_right_null", "sql": "SELECT CAST(v AS DECIMAL(10,2)) % n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_%_mixed_guard", "sql": "SELECT CAST(v AS DECIMAL(10,2)) % n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_+_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) + CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_+_right_null", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) + CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_+_left_null", "sql": "SELECT n + CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_+_right_null", "sql": "SELECT CAST(v AS DECIMAL(10,2)) + n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_+_mixed_guard", "sql": "SELECT CAST(v AS DECIMAL(10,2)) + n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_-_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) - CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_-_right_null", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) - CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_-_left_null", "sql": "SELECT n - CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_-_right_null", "sql": "SELECT CAST(v AS DECIMAL(10,2)) - n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_-_mixed_guard", "sql": "SELECT CAST(v AS DECIMAL(10,2)) - n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_*_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) * CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_CAST_*_right_null", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) * CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_*_left_null", "sql": "SELECT n * CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_*_right_null", "sql": "SELECT CAST(v AS DECIMAL(10,2)) * n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_CAST_*_mixed_guard", "sql": "SELECT CAST(v AS DECIMAL(10,2)) * n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_scalar_live", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_scalar_limit0", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_scalar_false", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r WHERE false", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_scalar_false_limit0", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r WHERE false LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_scalar_unused", "sql": "SELECT 7 AS r FROM (SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS unused) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_values_live", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_values_limit0", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_values_false", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) WHERE false", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_values_false_limit0", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) WHERE false LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_values_unused", "sql": "SELECT 7 AS r FROM (SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS unused FROM VALUES (0) t(k)) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_range_live", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_range_limit0", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_range_false", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_range_false_limit0", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "context_TRY_CAST_range_unused", "sql": "SELECT 7 AS r FROM (SELECT TRY_CAST('bad' AS DECIMAL(10,2)) AS unused FROM range(3)) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_dead", "sql": "SELECT CASE WHEN false THEN TRY_CAST('bad' AS DECIMAL(10,2)) ELSE 7 END AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_live", "sql": "SELECT CASE WHEN true THEN TRY_CAST('bad' AS DECIMAL(10,2)) ELSE 7 END AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DECIMAL(10,2)),TRY_CAST('bad' AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS DECIMAL(10,2)),TRY_CAST('bad' AS DECIMAL(10,2))) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_column_dead", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE TRY_CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (0),(0) t(k)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_column_mixed", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE TRY_CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (0),(1) t(k)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_column_live", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE TRY_CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (1),(1) t(k)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_range_dead", "sql": "SELECT CASE WHEN id>=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE TRY_CAST('bad' AS DECIMAL(10,2)) END AS r FROM range(3)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "conditional_TRY_CAST_range_live", "sql": "SELECT CASE WHEN id=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE TRY_CAST('bad' AS DECIMAL(10,2)) END AS r FROM range(3)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_/_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / TRY_CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_/_right_null", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) / CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_/_left_null", "sql": "SELECT n / TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_/_right_null", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) / n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_/_mixed_guard", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) / n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_DIV_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) DIV TRY_CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_DIV_right_null", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) DIV CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_DIV_left_null", "sql": "SELECT n DIV TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_DIV_right_null", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) DIV n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_DIV_mixed_guard", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) DIV n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_%_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) % TRY_CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_%_right_null", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) % CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_%_left_null", "sql": "SELECT n % TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_%_right_null", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) % n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_%_mixed_guard", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) % n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_+_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) + TRY_CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_+_right_null", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) + CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_+_left_null", "sql": "SELECT n + TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_+_right_null", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) + n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_+_mixed_guard", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) + n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_-_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) - TRY_CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_-_right_null", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) - CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_-_left_null", "sql": "SELECT n - TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_-_right_null", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) - n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_-_mixed_guard", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) - n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_*_left_null", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) * TRY_CAST('bad' AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_TRY_CAST_*_right_null", "sql": "SELECT TRY_CAST('bad' AS DECIMAL(10,2)) * CAST(NULL AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_*_left_null", "sql": "SELECT n * TRY_CAST(v AS DECIMAL(10,2)) AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_*_right_null", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) * n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "null_column_TRY_CAST_*_mixed_guard", "sql": "SELECT TRY_CAST(v AS DECIMAL(10,2)) * n AS r FROM VALUES ('bad',CAST(NULL AS DECIMAL(10,2))),('7',2) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "implicit_literal_valid", "sql": "SELECT DECIMAL('1.25') AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "implicit_literal_bad", "sql": "SELECT DECIMAL('bad') AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "implicit_column", "sql": "SELECT DECIMAL(v) AS r FROM VALUES ('bad') t(v)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "nested_valid", "sql": "SELECT CAST(CAST('1.235' AS DECIMAL(10,2)) AS DECIMAL(5,1)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "nested_invalid", "sql": "SELECT CAST(CAST('bad' AS DECIMAL(10,2)) AS DECIMAL(5,1)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "empty_local", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM (SELECT 1 WHERE false) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "early_zero_control", "sql": "SELECT 7 DIV 0 AS r FROM VALUES (0) t(k) LIMIT 0", "batch_size": 2, "category": "decimal_cast"}
+{"id": "native_control", "sql": "SELECT id+1 AS r FROM range(3)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_/_null_zero", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_/_bad_zero", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_/_valid_zero", "sql": "SELECT CAST('7' AS DECIMAL(10,2)) / CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_/_null_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) / n AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_/_bad_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) / n AS r FROM VALUES ('bad',CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_/_valid_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) / n AS r FROM VALUES ('7',CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "constant_bad_nullable_/", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) / n AS r FROM (SELECT CASE WHEN id%2=0 THEN CAST(NULL AS DECIMAL(10,2)) ELSE 2 END AS n FROM range(1)) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_DIV_null_zero", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) DIV CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_DIV_bad_zero", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) DIV CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_DIV_valid_zero", "sql": "SELECT CAST('7' AS DECIMAL(10,2)) DIV CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_DIV_null_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) DIV n AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_DIV_bad_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) DIV n AS r FROM VALUES ('bad',CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_DIV_valid_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) DIV n AS r FROM VALUES ('7',CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "constant_bad_nullable_DIV", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) DIV n AS r FROM (SELECT CASE WHEN id%2=0 THEN CAST(NULL AS DECIMAL(10,2)) ELSE 2 END AS n FROM range(1)) t", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_%_null_zero", "sql": "SELECT CAST(NULL AS DECIMAL(10,2)) % CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_%_bad_zero", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) % CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_literal_%_valid_zero", "sql": "SELECT CAST('7' AS DECIMAL(10,2)) % CAST(0 AS DECIMAL(10,2)) AS r", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_%_null_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) % n AS r FROM VALUES (CAST(NULL AS STRING),CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_%_bad_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) % n AS r FROM VALUES ('bad',CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "zero_column_%_valid_zero", "sql": "SELECT CAST(v AS DECIMAL(10,2)) % n AS r FROM VALUES ('7',CAST(0 AS DECIMAL(10,2))) t(v,n)", "batch_size": 2, "category": "decimal_cast"}
+{"id": "constant_bad_nullable_%", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) % n AS r FROM (SELECT CASE WHEN id%2=0 THEN CAST(NULL AS DECIMAL(10,2)) ELSE 2 END AS n FROM range(1)) t", "batch_size": 2, "category": "decimal_cast"}
