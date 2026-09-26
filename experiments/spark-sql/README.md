@@ -56,6 +56,8 @@ The [predicate subquery preparation repair](PREDICATE_PREPARATION.md) fixes four
 
 The [DISTINCT EXISTS preparation repair](EXISTS_DISTINCT.md) removes an unused first DISTINCT output while preserving error and OFFSET boundaries. Its expanded matrix improves 616/726 -> 671/726; remaining relational findings and costs stay with their existing owners.
 
+The [literal LIMIT 1 preparation repair](DISTINCT_LIMIT.md) prepares nested DISTINCT inputs across predicate, scalar and ordinary query paths. Its expanded matrix improves 891/1,000 -> 938/1,000 without losing prior agreement; remaining preparation boundaries stay explicitly tracked.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
