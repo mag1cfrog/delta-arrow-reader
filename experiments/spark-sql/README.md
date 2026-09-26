@@ -60,6 +60,8 @@ The [literal LIMIT 1 preparation repair](DISTINCT_LIMIT.md) prepares nested DIST
 
 The [projection under LIMIT 1 repair](PROJECTION_LIMIT.md) accounts for projection pushdown before DISTINCT preparation. Its expanded matrix improves 1,574/1,730 -> 1,676/1,730 without losing prior agreement; measured execution costs retain their existing performance owner.
 
+The [foldable GROUP BY repair](GROUPING_PREPARATION.md) removes unused constant-key errors while preserving empty grouped input. Its expanded matrix improves 2,099/2,454 -> 2,397/2,454 with no lost agreement; remaining grouping-set findings and measured local costs stay tracked.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
