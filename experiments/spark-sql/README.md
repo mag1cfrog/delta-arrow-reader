@@ -50,6 +50,8 @@ The [scalar-subquery arithmetic repair](SCALAR_SUBQUERY_ARITHMETIC.md) preserves
 
 The [NULL CASE branch repair](NULL_CASE_BRANCHES.md) extends native dead-branch simplification to literal NULL conditions. All eight assigned scalar-subquery cases pass, while required preparation errors and typed-NULL outputs remain checked.
 
+The [scalar CAST preparation repair](SCALAR_CAST_PREPARATION.md) preserves one-row and empty-input behavior across scalar subqueries. All 24 assigned errors are corrected; local VALUES errors, NULL-scale rounding and measured planning costs remain explicit.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
