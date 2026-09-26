@@ -36,6 +36,8 @@ The [strict integer CAST whitespace repair](STRICT_INTEGER_CAST.md) resolves all
 
 The [floating-string CAST repair](FLOATING_STRING_CAST.md) resolves all 34 assigned grammar observations and passes 488 focused checks plus 4,164 parser bit comparisons. It adds native suffix/hexadecimal parsing with a small lexical dependency patch and preserves previous passing checks. The report records conversion and shared-control performance costs, schema/error differences and a separate SQL-literal quote discrepancy.
 
+The [scalar CAST reachability repair](DEAD_CAST.md) resolves all 33 assigned observations and retains prior agreements across NULL propagation, conditional branches and empty/unused plans. Its broader corpus records separate Decimal, string-remainder and error-reporting gaps. The report retains the measured nullable-divisor costs with the existing CAST performance owner.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.

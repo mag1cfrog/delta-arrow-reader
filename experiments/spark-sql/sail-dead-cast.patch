@@ -1,0 +1,478 @@
+--- a/crates/sail-plan/src/function/scalar/math.rs
++++ b/crates/sail-plan/src/function/scalar/math.rs
+@@ -837,7 +837,7 @@
+ 
+ // Keep Arrow's vectorized float division, checking zero only on non-NULL rows.
+ #[derive(Debug, PartialEq, Eq, Hash)]
+-struct SparkCheckedDivide {
++pub(crate) struct SparkCheckedDivide {
+     signature: datafusion_expr::Signature,
+ }
+ 
+@@ -1271,6 +1271,95 @@
+     };
+ 
+     Ok(div_expr)
++}
++
++// Spark evaluates the divisor first when converting local VALUES. Restrict
++// the added check to strict string/numeric-column casts, including integer widening.
++// Non-ANSI DIV lowers its divisor through NULLIF and does not match this shape.
++pub(crate) fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
++    match expr {
++        Expr::Cast(cast) if cast.field.data_type().is_numeric() => {
++            // Preserve the same local-column boundary after the CAST resolver
++            // adds its native whitespace normalization. Do not unwrap other functions.
++            let input = match cast.expr.as_ref() {
++                Expr::ScalarFunction(f)
++                    if f.func
++                        .inner()
++                        .is::<datafusion::functions::string::btrim::BTrimFunc>()
++                        && matches!(f.args.as_slice(), [_, Expr::Literal(
++                            ScalarValue::Utf8(Some(trim))
++                            | ScalarValue::LargeUtf8(Some(trim))
++                            | ScalarValue::Utf8View(Some(trim)), _)]
++                            if trim.bytes().eq((0_u8..=32).chain([127]))) =>
++                {
++                    &f.args[0]
++                }
++                expr => expr,
++            };
++            match input {
++                Expr::Column(_) => input
++                    .get_type(schema)
++                    .is_ok_and(|t| t.is_string() || t.is_numeric()),
++                expr => column_cast(expr, schema),
++            }
++        }
++        Expr::ScalarFunction(f)
++            if f.func
++                .inner()
++                .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
++            ) =>
++        {
++            matches!(f.args.as_slice(), [Expr::Column(_)])
++        }
++        _ => false,
++    }
++}
++
++// Spark evaluates a nullable divisor before a fallible numerator. Reuse native
++// CASE selection for CAST numerators and simple, deterministic divisors.
++pub(crate) fn guard_cast_division(
++    expr: Expr,
++    schema: &DFSchemaRef,
++) -> datafusion_common::Result<datafusion_common::tree_node::Transformed<Expr>> {
++    use datafusion_common::tree_node::Transformed;
++    fn simple(expr: &Expr) -> bool {
++        match expr {
++            Expr::Column(_) | Expr::Literal(_, _) => true,
++            Expr::Cast(cast) => simple(&cast.expr),
++            Expr::TryCast(cast) => simple(&cast.expr),
++            Expr::Alias(alias) => simple(&alias.expr),
++            _ => false,
++        }
++    }
++    let args = match &expr {
++        Expr::BinaryExpr(binary) if matches!(binary.op, Operator::Divide | Operator::Modulo) => {
++            Some((binary.left.as_ref(), binary.right.as_ref()))
++        }
++        Expr::ScalarFunction(f)
++            if f.func.inner().is::<SparkCheckedDivide>()
++                || f.func.inner().is::<SparkCheckedModulo>()
++                || f.func.inner().is::<SparkIntegerDivide>() =>
++        {
++            Some((&f.args[0], &f.args[1]))
++        }
++        _ => None,
++    };
++    if let Some((left, right)) = args {
++        let cast = column_cast(left, schema);
++        if cast && (simple(right) || column_cast(right, schema)) && right.nullable(schema)? {
++            let data_type = expr.get_type(schema)?;
++            // ponytail: live rows repeat the simple divisor; a physical selection
++            // node can avoid that copy if the recorded CAST cost warrants it.
++            return Ok(Transformed::yes(
++                datafusion_expr::expr_fn::when(
++                    right.clone().is_null(),
++                    lit(ScalarValue::try_new_null(&data_type)?),
++                )
++                .otherwise(expr)?,
++            ));
++        }
++    }
++    Ok(Transformed::no(expr))
+ }
+ 
+ pub(crate) fn integer_divide_args<'a>(
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -18,7 +18,9 @@
+ use datafusion_expr::utils::{conjunction, split_conjunction_owned};
+ use datafusion_expr::{ColumnarValue, Expr, ExprSchemable, LogicalPlan, lit};
+ 
+-use crate::function::scalar::math::{FusedDecimalDivide, integer_divide_args};
++use crate::function::scalar::math::{
++    FusedDecimalDivide, SparkCheckedDivide, column_cast, guard_cast_division, integer_divide_args,
++};
+ use sail_function::scalar::math::spark_checked_arithmetic::SparkCheckedArithmetic;
+ 
+ /// Preserve early expression errors before NULL and empty-result rewrites.
+@@ -37,7 +39,8 @@
+ 
+ fn null_divide(expr: &Expr) -> bool {
+     matches!(expr, Expr::ScalarFunction(f)
+-        if f.func.inner().is::<FusedDecimalDivide>() && f.args.iter().any(null_literal))
++        if (f.func.inner().is::<FusedDecimalDivide>() || f.func.inner().is::<SparkCheckedDivide>())
++            && f.args.iter().any(null_literal))
+ }
+ 
+ fn candidate(expr: &Expr) -> bool {
+@@ -63,35 +66,6 @@
+     }
+ }
+ 
+-// Spark evaluates the divisor first when converting local VALUES. Restrict
+-// the added check to strict string/numeric-column casts, including integer widening.
+-// Non-ANSI DIV lowers its divisor through NULLIF and does not match this shape.
+-fn column_cast(expr: &Expr, schema: &DFSchemaRef) -> bool {
+-    match expr {
+-        Expr::Cast(cast) if cast.field.data_type().is_signed_integer() => {
+-            // Preserve the same local-column boundary after the CAST resolver
+-            // adds its native whitespace normalization. Do not unwrap other functions.
+-            let input = match cast.expr.as_ref() {
+-                Expr::ScalarFunction(f)
+-                    if f.func.inner().is::<datafusion::functions::string::btrim::BTrimFunc>()
+-                        && matches!(f.args.as_slice(), [_, Expr::Literal(
+-                            ScalarValue::Utf8(Some(trim))
+-                            | ScalarValue::LargeUtf8(Some(trim))
+-                            | ScalarValue::Utf8View(Some(trim)), _)]
+-                            if trim.bytes().eq((0_u8..=32).chain([127]))) => &f.args[0],
+-                expr => expr,
+-            };
+-            match input {
+-                Expr::Column(_) => input
+-                    .get_type(schema)
+-                    .is_ok_and(|t| t.is_string() || t.is_numeric()),
+-                expr => column_cast(expr, schema),
+-            }
+-        }
+-        _ => false,
+-    }
+-}
+-
+ impl AnalyzerRule for SparkDecimalNullPropagation {
+     fn name(&self) -> &str {
+         "spark_decimal_null_propagation"
+@@ -101,26 +75,48 @@
+         // Borrow first: ordinary queries require no rewritten plan or batch allocation.
+         let mut found = false;
+         let mut check_integer = false;
++        let mut check_cast = false;
+         plan.apply_with_subqueries(|node| {
+             node.apply_expressions(|expr| {
+                 found |= expr.exists(|expr| Ok(candidate(expr)))?;
++                check_cast |= has_cast(expr)?;
+                 if let LogicalPlan::Projection(project) = node {
+                     check_integer |= integer_candidate(expr, project.input.schema())?;
+                 }
+                 Ok(TreeNodeRecursion::Continue)
+             })?;
+-            Ok(if found && check_integer {
++            Ok(if found && check_integer && check_cast {
+                 TreeNodeRecursion::Stop
+             } else {
+                 TreeNodeRecursion::Continue
+             })
+         })?;
+-        if !found && !check_integer {
++        if !found && !check_integer && !check_cast {
+             return Ok(plan);
+         }
+         let mut props = ExecutionProps::new();
+         props.config_options = Some(Arc::new(options.clone()));
+         let prepare = Prepare { props };
++        let plan = if check_cast {
++            plan.transform_up(|node| {
++                let schema = if !node.inputs().is_empty() {
++                    Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()))
++                } else if let LogicalPlan::TableScan(scan) = &node {
++                    Arc::new(DFSchema::try_from_qualified_schema(
++                        scan.table_name.clone(),
++                        &scan.source.schema(),
++                    )?)
++                } else {
++                    Arc::new(DFSchema::empty())
++                };
++                node.map_expressions(|expr| {
++                    expr.transform_up(|expr| guard_cast_division(expr, &schema))
++                })
++            })?
++            .data
++        } else {
++            plan
++        };
+         // Local VALUES are evaluated before column pruning and LIMIT 0.
+         // Successful constants need no extra copy, simplification or pruning.
+         if check_integer && prepare.check_integer_projections(&plan, true)? {
+@@ -138,6 +134,11 @@
+                 prepare.check_integer_projections(&pruned, false)?;
+             }
+         }
++        let plan = if check_cast {
++            prepare.cast_reachability(plan, options)?
++        } else {
++            plan
++        };
+         if !found {
+             return Ok(plan);
+         }
+@@ -239,7 +240,114 @@
+     }
+ }
+ 
++fn has_cast(expr: &Expr) -> Result<bool> {
++    expr.exists(|e| Ok(matches!(e, Expr::Cast(_))
++        || matches!(e, Expr::ScalarFunction(f) if f.func.inner().is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>())))
++}
++
++// Spark removes a redundant LIMIT before replacing LIMIT 0 with an empty plan.
++// Preserve constant string-CAST failures before pruning, without reevaluating
++// the numeric-column cases already owned by the existing integer precheck.
++fn constant_string_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
++    expr.exists(|expr| match expr {
++        Expr::Cast(cast) => Ok(!null_literal(&cast.expr)
++            && row_expression(&cast.expr, false)?
++            && cast.expr.get_type(schema)?.is_string()),
++        Expr::ScalarFunction(f)
++            if f.func
++                .inner()
++                .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
++            ) =>
++        {
++            Ok(matches!(f.args.as_slice(), [Expr::Literal(value, _)] if !value.is_null()))
++        }
++        _ => Ok(false),
++    })
++}
++
++fn known_empty(plan: &LogicalPlan) -> bool {
++    match plan {
++        LogicalPlan::Filter(filter) => {
++            matches!(
++                filter.predicate,
++                Expr::Literal(ScalarValue::Boolean(Some(false) | None), _)
++            ) || known_empty(&filter.input)
++        }
++        LogicalPlan::Projection(project) => known_empty(&project.input),
++        LogicalPlan::SubqueryAlias(alias) => known_empty(&alias.input),
++        LogicalPlan::Sort(sort) => known_empty(&sort.input),
++        LogicalPlan::EmptyRelation(empty) => !empty.produce_one_row,
++        LogicalPlan::Values(values) => values.values.is_empty(),
++        _ => false,
++    }
++}
++
+ impl Prepare {
++    fn cast_reachability(&self, plan: LogicalPlan, options: &ConfigOptions) -> Result<LogicalPlan> {
++        use datafusion_expr::logical_plan::EmptyRelation;
++        // Local VALUES conversion precedes pruning. Empty local inputs never
++        // evaluate their projection; nonempty ones preserve live CAST failures.
++        let plan = plan
++            .transform_up(|node| {
++                if let LogicalPlan::Projection(project) = &node {
++                    let mut casts = false;
++                    let mut evaluable = true;
++                    for expr in &project.expr {
++                        casts |= constant_string_cast(expr, project.input.schema())?;
++                        evaluable &= row_expression(expr, true)?;
++                    }
++                    if casts
++                        && evaluable
++                        && let Some(batch) = self.local_batch(&project.input)?
++                    {
++                        if batch.num_rows() == 0 {
++                            return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
++                                EmptyRelation {
++                                    produce_one_row: false,
++                                    schema: Arc::clone(&project.schema),
++                                },
++                            )));
++                        }
++                        let info = datafusion_expr::simplify::SimplifyContext::builder()
++                            .with_schema(Arc::clone(project.input.schema()))
++                            .with_config_options(Arc::new(options.clone()))
++                            .build();
++                        let simplifier =
++                            datafusion::optimizer::simplify_expressions::ExprSimplifier::new(info);
++                        for expr in &project.expr {
++                            // Lower conditional UDFs such as COALESCE before physical
++                            // evaluation; their dead branches still cannot fail folding.
++                            let expr = simplifier.simplify(expr.clone())?;
++                            create_physical_expr(&expr, project.input.schema(), &self.props)?
++                                .evaluate(&batch)?;
++                        }
++                    }
++                }
++                Ok(Transformed::no(node))
++            })?
++            .data;
++        let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
++        let plan = OptimizeProjections::new().rewrite(plan, &config)?.data;
++        Ok(plan
++            .transform_down(|node| {
++                if let LogicalPlan::Limit(limit) = &node
++                    && self.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(0)
++                {
++                    if known_empty(&limit.input) {
++                        return Ok(Transformed::yes(Arc::unwrap_or_clone(limit.input.clone())));
++                    }
++                    return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
++                        EmptyRelation {
++                            produce_one_row: false,
++                            schema: Arc::clone(limit.input.schema()),
++                        },
++                    )));
++                }
++                Ok(Transformed::no(node))
++            })?
++            .data)
++    }
++
+     fn eval_constant(&self, expr: &Expr) -> Result<ColumnarValue> {
+         let batch = RecordBatch::try_new_with_options(
+             Arc::new(Schema::empty()),
+@@ -761,3 +869,133 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn cast_reachability_preserves_early_local_errors()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false, true] {
++        for (sql, ansi_error, expected) in [
++            (
++                "SELECT CAST(NULL AS DOUBLE)/CAST('bad' AS DOUBLE) AS r",
++                false,
++                vec![None],
++            ),
++            (
++                "SELECT CAST('bad' AS DOUBLE)/CAST(NULL AS DOUBLE) AS r",
++                false,
++                vec![None],
++            ),
++            (
++                "SELECT CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS r",
++                false,
++                vec![None],
++            ),
++            (
++                "SELECT CASE WHEN false THEN CAST('bad' AS INT) ELSE 7 END AS r",
++                false,
++                vec![Some(7.0)],
++            ),
++            (
++                "SELECT COALESCE(7,CAST('bad' AS INT)) AS r",
++                false,
++                vec![Some(7.0)],
++            ),
++            (
++                "SELECT CASE WHEN k=0 THEN 7D ELSE CAST('bad' AS DOUBLE) END AS r FROM VALUES (0),(0) t(k)",
++                false,
++                vec![Some(7.0), Some(7.0)],
++            ),
++            (
++                "SELECT CAST(v AS BIGINT) DIV n AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('7',2L) t(v,n)",
++                false,
++                vec![None, Some(3.0)],
++            ),
++            (
++                "SELECT CAST('bad' AS INT) AS r FROM range(3) LIMIT 0",
++                false,
++                vec![],
++            ),
++            (
++                "SELECT 7 AS r FROM (SELECT CAST('bad' AS INT) AS unused FROM range(3)) t",
++                false,
++                vec![Some(7.0); 3],
++            ),
++            (
++                "SELECT CAST('bad' AS INT) AS r FROM VALUES (0) t(k) WHERE false",
++                false,
++                vec![],
++            ),
++            (
++                "SELECT CAST('bad' AS INT) AS r FROM VALUES (0) t(k) LIMIT 0",
++                true,
++                vec![],
++            ),
++            (
++                "SELECT 7 AS r FROM (SELECT CAST('bad' AS INT) AS unused FROM VALUES (0) t(k)) t",
++                true,
++                vec![Some(7.0)],
++            ),
++            (
++                "SELECT CAST('bad' AS INT) AS r FROM range(3) WHERE false LIMIT 0",
++                true,
++                vec![],
++            ),
++            (
++                "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS r FROM VALUES ('bad') t(v)",
++                true,
++                vec![None],
++            ),
++            (
++                "SELECT CAST(7 AS INT) DIV CAST(0 AS INT) AS r FROM VALUES (0) t(k) LIMIT 0",
++                true,
++                vec![],
++            ),
++        ] {
++            let result = async {
++                let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode: ansi,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
++                    ctx.execute_logical_plan(named.plan)
++                        .await?
++                        .collect()
++                        .await?,
++                )
++            }
++            .await;
++            if ansi && ansi_error {
++                assert!(result.is_err(), "{sql}");
++                continue;
++            }
++            let mut actual = Vec::new();
++            for batch in result? {
++                for row in 0..batch.num_rows() {
++                    let value = ScalarValue::try_from_array(batch.column(0), row)?
++                        .cast_to(&DataType::Float64)?;
++                    let ScalarValue::Float64(value) = value else {
++                        unreachable!()
++                    };
++                    actual.push(value);
++                }
++            }
++            assert_eq!(actual, expected, "ANSI {ansi}: {sql}");
++        }
++    }
++    Ok(())
++}

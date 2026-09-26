@@ -1,0 +1,173 @@
+{"id": "owned_0", "sql": "SELECT CAST(NULL AS DOUBLE)/CAST('bad' AS DOUBLE) AS r", "batch_size": 3, "category": "original"}
+{"id": "owned_1", "sql": "SELECT CAST('bad' AS DOUBLE)/CAST(NULL AS DOUBLE) AS r", "batch_size": 3, "category": "original"}
+{"id": "owned_2", "sql": "SELECT CAST(7 AS INT) DIV CAST(2 AS INT) AS q FROM (SELECT id, CAST('bad' AS INT) AS unused FROM range(3)) t", "batch_size": 1, "category": "original"}
+{"id": "owned_3", "sql": "SELECT CAST(7 AS INT) DIV CAST(2 AS INT) AS q, CAST('bad' AS INT) AS unused FROM range(3) LIMIT 0", "batch_size": 1, "category": "original"}
+{"id": "owned_4", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(2 AS BIGINT) AS q FROM (SELECT id, CAST('bad' AS INT) AS unused FROM range(3)) t", "batch_size": 1, "category": "original"}
+{"id": "owned_5", "sql": "SELECT CAST(7 AS BIGINT) DIV CAST(2 AS BIGINT) AS q, CAST('bad' AS INT) AS unused FROM range(3) LIMIT 0", "batch_size": 1, "category": "original"}
+{"id": "owned_6", "sql": "SELECT CAST('bad' AS DOUBLE) % CAST(NULL AS DOUBLE) AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_7", "sql": "SELECT CAST(NULL AS DOUBLE) % CAST('bad' AS DOUBLE) AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_8", "sql": "SELECT CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS q", "batch_size": 2, "category": "supplement"}
+{"id": "owned_9", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST('bad' AS BIGINT) AS q", "batch_size": 2, "category": "supplement"}
+{"id": "owned_10", "sql": "SELECT 'bad' / CAST(NULL AS BIGINT) AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_11", "sql": "SELECT a / b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2, "category": "supplement"}
+{"id": "owned_12", "sql": "SELECT CAST(NULL AS BIGINT) / 'bad' AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_13", "sql": "SELECT CASE WHEN false THEN 'bad' / 2 ELSE 7 END AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_14", "sql": "SELECT 'bad' DIV CAST(NULL AS BIGINT) AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_15", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2, "category": "supplement"}
+{"id": "owned_16", "sql": "SELECT CAST(NULL AS BIGINT) DIV 'bad' AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_17", "sql": "SELECT CASE WHEN false THEN 'bad' DIV 2 ELSE 7 END AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_18", "sql": "SELECT CASE WHEN false THEN CAST('bad' AS BIGINT) / 2L ELSE 7 END AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_19", "sql": "SELECT CAST('bad' AS BIGINT) / CAST(NULL AS BIGINT) AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_20", "sql": "SELECT CASE WHEN false THEN CAST('bad' AS BIGINT) DIV 2L ELSE 7 END AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_21", "sql": "SELECT CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS r", "batch_size": 2, "category": "supplement"}
+{"id": "owned_22", "sql": "SELECT CAST(a AS BIGINT) / b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2, "category": "supplement"}
+{"id": "owned_23", "sql": "SELECT CAST(a AS BIGINT) DIV b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "batch_size": 2, "category": "supplement"}
+{"id": "owned_24", "sql": "SELECT CAST(NULL AS DOUBLE) / CAST('bad' AS DOUBLE) AS r", "batch_size": 2, "category": "reduction"}
+{"id": "owned_25", "sql": "SELECT CAST('bad' AS DOUBLE) / CAST(NULL AS DOUBLE) AS r", "batch_size": 2, "category": "reduction"}
+{"id": "owned_26", "sql": "SELECT CAST('bad' AS BIGINT) DIV CAST(NULL AS BIGINT) AS r", "batch_size": 2, "category": "reduction"}
+{"id": "owned_27", "sql": "SELECT CAST('bad' AS DOUBLE) % CAST(NULL AS DOUBLE) AS r", "batch_size": 2, "category": "reduction"}
+{"id": "owned_28", "sql": "SELECT CASE WHEN false THEN CAST('bad' AS DOUBLE) ELSE 7D END AS r", "batch_size": 2, "category": "reduction"}
+{"id": "owned_29", "sql": "SELECT CASE WHEN k=0 THEN 7D ELSE CAST('bad' AS DOUBLE) END AS r FROM VALUES (0) t(k)", "batch_size": 2, "category": "reduction"}
+{"id": "owned_30", "sql": "SELECT CAST(v AS BIGINT) DIV n AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(v,n)", "batch_size": 2, "category": "reduction"}
+{"id": "owned_31", "sql": "SELECT id AS r FROM (SELECT id,CAST('bad' AS INT) AS unused FROM range(3)) t ORDER BY id", "batch_size": 2, "category": "reduction"}
+{"id": "owned_32", "sql": "SELECT CAST('bad' AS INT) AS r FROM range(3) LIMIT 0", "batch_size": 2, "category": "reduction"}
+{"id": "focused_int_scalar_live", "sql": "SELECT CAST('bad' AS INT) AS r", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_scalar_limit0", "sql": "SELECT CAST('bad' AS INT) AS r LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_scalar_false", "sql": "SELECT CAST('bad' AS INT) AS r WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_scalar_false_limit0", "sql": "SELECT CAST('bad' AS INT) AS r WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_scalar_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS INT) AS unused) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_values_live", "sql": "SELECT CAST('bad' AS INT) AS r FROM VALUES (0) t(k)", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_values_limit0", "sql": "SELECT CAST('bad' AS INT) AS r FROM VALUES (0) t(k) LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_values_false", "sql": "SELECT CAST('bad' AS INT) AS r FROM VALUES (0) t(k) WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_values_false_limit0", "sql": "SELECT CAST('bad' AS INT) AS r FROM VALUES (0) t(k) WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_values_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS INT) AS unused FROM VALUES (0) t(k)) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_range_live", "sql": "SELECT CAST('bad' AS INT) AS r FROM range(3)", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_range_limit0", "sql": "SELECT CAST('bad' AS INT) AS r FROM range(3) LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_range_false", "sql": "SELECT CAST('bad' AS INT) AS r FROM range(3) WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_range_false_limit0", "sql": "SELECT CAST('bad' AS INT) AS r FROM range(3) WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_range_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS INT) AS unused FROM range(3)) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_int_dead", "sql": "SELECT CASE WHEN false THEN CAST('bad' AS INT) ELSE 7 END AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_int_live", "sql": "SELECT CASE WHEN true THEN CAST('bad' AS INT) ELSE 7 END AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_int_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS INT),CAST('bad' AS INT)) AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_int_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS INT),CAST('bad' AS INT)) AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_int_column_case_dead", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS INT) ELSE CAST('bad' AS INT) END AS r FROM VALUES (0),(0) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_int_column_case_mixed", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS INT) ELSE CAST('bad' AS INT) END AS r FROM VALUES (0),(1) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_int_column_case_live", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS INT) ELSE CAST('bad' AS INT) END AS r FROM VALUES (1),(1) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_double_scalar_live", "sql": "SELECT CAST('bad' AS DOUBLE) AS r", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_scalar_limit0", "sql": "SELECT CAST('bad' AS DOUBLE) AS r LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_scalar_false", "sql": "SELECT CAST('bad' AS DOUBLE) AS r WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_scalar_false_limit0", "sql": "SELECT CAST('bad' AS DOUBLE) AS r WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_scalar_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DOUBLE) AS unused) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_values_live", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM VALUES (0) t(k)", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_values_limit0", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM VALUES (0) t(k) LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_values_false", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM VALUES (0) t(k) WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_values_false_limit0", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM VALUES (0) t(k) WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_values_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DOUBLE) AS unused FROM VALUES (0) t(k)) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_range_live", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM range(3)", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_range_limit0", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM range(3) LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_range_false", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM range(3) WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_range_false_limit0", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM range(3) WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_range_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DOUBLE) AS unused FROM range(3)) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_double_dead", "sql": "SELECT CASE WHEN false THEN CAST('bad' AS DOUBLE) ELSE 7 END AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_double_live", "sql": "SELECT CASE WHEN true THEN CAST('bad' AS DOUBLE) ELSE 7 END AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_double_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DOUBLE),CAST('bad' AS DOUBLE)) AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_double_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS DOUBLE),CAST('bad' AS DOUBLE)) AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_double_column_case_dead", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DOUBLE) ELSE CAST('bad' AS DOUBLE) END AS r FROM VALUES (0),(0) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_double_column_case_mixed", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DOUBLE) ELSE CAST('bad' AS DOUBLE) END AS r FROM VALUES (0),(1) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_double_column_case_live", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DOUBLE) ELSE CAST('bad' AS DOUBLE) END AS r FROM VALUES (1),(1) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_decimal_scalar_live", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_scalar_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_scalar_false", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_scalar_false_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_scalar_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DECIMAL(10,2)) AS unused) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_values_live", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k)", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_values_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_values_false", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_values_false_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM VALUES (0) t(k) WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_values_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DECIMAL(10,2)) AS unused FROM VALUES (0) t(k)) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_range_live", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3)", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_range_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_range_false", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_range_false_limit0", "sql": "SELECT CAST('bad' AS DECIMAL(10,2)) AS r FROM range(3) WHERE false LIMIT 0", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_range_unused", "sql": "SELECT 7 AS r FROM (SELECT CAST('bad' AS DECIMAL(10,2)) AS unused FROM range(3)) t", "category": "cast_reachability", "batch_size": 2}
+{"id": "focused_decimal_dead", "sql": "SELECT CASE WHEN false THEN CAST('bad' AS DECIMAL(10,2)) ELSE 7 END AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_decimal_live", "sql": "SELECT CASE WHEN true THEN CAST('bad' AS DECIMAL(10,2)) ELSE 7 END AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_decimal_coalesce_dead", "sql": "SELECT COALESCE(CAST(7 AS DECIMAL(10,2)),CAST('bad' AS DECIMAL(10,2))) AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_decimal_coalesce_live", "sql": "SELECT COALESCE(CAST(NULL AS DECIMAL(10,2)),CAST('bad' AS DECIMAL(10,2))) AS r", "category": "conditional", "batch_size": 2}
+{"id": "focused_decimal_column_case_dead", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (0),(0) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_decimal_column_case_mixed", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (0),(1) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_decimal_column_case_live", "sql": "SELECT CASE WHEN k=0 THEN CAST(7 AS DECIMAL(10,2)) ELSE CAST('bad' AS DECIMAL(10,2)) END AS r FROM VALUES (1),(1) t(k)", "category": "conditional", "batch_size": 2}
+{"id": "focused_/_bad_null_literal", "sql": "SELECT 'bad' / CAST(NULL AS BIGINT) AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_bad_null_column", "sql": "SELECT a / b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_null_bad_literal", "sql": "SELECT CAST(NULL AS BIGINT) / 'bad' AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_null_bad_column", "sql": "SELECT a / b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad') t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_null_zero_literal", "sql": "SELECT CAST(NULL AS BIGINT) / 0L AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_null_zero_column", "sql": "SELECT a / b AS r FROM VALUES (CAST(NULL AS BIGINT),0L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_bad_zero_literal", "sql": "SELECT 'bad' / 0L AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_bad_zero_column", "sql": "SELECT a / b AS r FROM VALUES ('bad',0L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_valid_null_literal", "sql": "SELECT '7' / CAST(NULL AS BIGINT) AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_valid_null_column", "sql": "SELECT a / b AS r FROM VALUES ('7',CAST(NULL AS BIGINT)) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_all_null", "sql": "SELECT a / b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('worse',NULL) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_mixed_safe", "sql": "SELECT a / b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('7',2L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_mixed_live", "sql": "SELECT a / b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('bad',2L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_/_reverse_safe", "sql": "SELECT a / b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad'),(7L,'2') t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_bad_null_literal", "sql": "SELECT 'bad' DIV CAST(NULL AS BIGINT) AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_bad_null_column", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_null_bad_literal", "sql": "SELECT CAST(NULL AS BIGINT) DIV 'bad' AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_null_bad_column", "sql": "SELECT a DIV b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad') t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_null_zero_literal", "sql": "SELECT CAST(NULL AS BIGINT) DIV 0L AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_null_zero_column", "sql": "SELECT a DIV b AS r FROM VALUES (CAST(NULL AS BIGINT),0L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_bad_zero_literal", "sql": "SELECT 'bad' DIV 0L AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_bad_zero_column", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',0L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_valid_null_literal", "sql": "SELECT '7' DIV CAST(NULL AS BIGINT) AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_valid_null_column", "sql": "SELECT a DIV b AS r FROM VALUES ('7',CAST(NULL AS BIGINT)) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_all_null", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('worse',NULL) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_mixed_safe", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('7',2L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_mixed_live", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('bad',2L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_DIV_reverse_safe", "sql": "SELECT a DIV b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad'),(7L,'2') t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_bad_null_literal", "sql": "SELECT 'bad' % CAST(NULL AS BIGINT) AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_bad_null_column", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_null_bad_literal", "sql": "SELECT CAST(NULL AS BIGINT) % 'bad' AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_null_bad_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad') t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_null_zero_literal", "sql": "SELECT CAST(NULL AS BIGINT) % 0L AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_null_zero_column", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS BIGINT),0L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_bad_zero_literal", "sql": "SELECT 'bad' % 0L AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_bad_zero_column", "sql": "SELECT a % b AS r FROM VALUES ('bad',0L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_valid_null_literal", "sql": "SELECT '7' % CAST(NULL AS BIGINT) AS r", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_valid_null_column", "sql": "SELECT a % b AS r FROM VALUES ('7',CAST(NULL AS BIGINT)) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_all_null", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('worse',NULL) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_mixed_safe", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('7',2L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_mixed_live", "sql": "SELECT a % b AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)),('bad',2L) t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_%_reverse_safe", "sql": "SELECT a % b AS r FROM VALUES (CAST(NULL AS BIGINT),'bad'),(7L,'2') t(a,b)", "category": "operand_order", "batch_size": 2}
+{"id": "focused_live_zero", "sql": "SELECT 7 DIV 0 AS r", "category": "retained_control", "batch_size": 2}
+{"id": "focused_unused_local_zero", "sql": "SELECT 7 AS r FROM (SELECT 7 DIV 0 AS q FROM VALUES (0) t(k)) t", "category": "retained_control", "batch_size": 2}
+{"id": "focused_local_zero_limit0", "sql": "SELECT 7 DIV 0 AS r FROM VALUES (0) t(k) LIMIT 0", "category": "retained_control", "batch_size": 2}
+{"id": "focused_range_zero_limit0", "sql": "SELECT 7 DIV 0 AS r FROM range(3) LIMIT 0", "category": "retained_control", "batch_size": 2}
+{"id": "focused_range_zero_false", "sql": "SELECT 7 DIV 0 AS r FROM range(3) WHERE false", "category": "retained_control", "batch_size": 2}
+{"id": "focused_local_null_bad_divisor", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST(v AS BIGINT) AS r FROM VALUES ('bad') t(v)", "category": "retained_control", "batch_size": 2}
+{"id": "focused_local_bad_null_divisor", "sql": "SELECT CAST(v AS BIGINT) DIV n AS r FROM VALUES ('bad',CAST(NULL AS BIGINT)) t(v,n)", "category": "retained_control", "batch_size": 2}
+{"id": "focused_bad_type_dead", "sql": "SELECT CASE WHEN false THEN 1D DIV 2D ELSE 7 END AS r", "category": "retained_control", "batch_size": 2}
+{"id": "focused_bad_type_limit0", "sql": "SELECT 1D DIV 2D AS r FROM range(3) LIMIT 0", "category": "retained_control", "batch_size": 2}
+{"id": "focused_bad_column_dead", "sql": "SELECT CASE WHEN false THEN missing ELSE 7 END AS r", "category": "retained_control", "batch_size": 2}
+{"id": "focused_nonthrowing_native", "sql": "SELECT (id+1)*2 AS r FROM range(3)", "category": "retained_control", "batch_size": 2}
+{"id": "focused_try_live", "sql": "SELECT TRY_CAST('bad' AS BIGINT) AS r", "category": "retained_control", "batch_size": 2}
+{"id": "focused_local_empty_input", "sql": "SELECT CAST('bad' AS DOUBLE) AS r FROM (SELECT 1 AS k WHERE false) t", "category": "retained_control", "batch_size": 2}
+{"id": "focused_constant_null_guard", "sql": "SELECT CAST(NULL AS BIGINT) DIV CAST('bad' AS BIGINT) AS r", "category": "retained_control", "batch_size": 2}
+{"id": "focused_range_case_dead", "sql": "SELECT CASE WHEN id>=0 THEN 7D ELSE CAST('bad' AS DOUBLE) END AS r FROM range(3)", "category": "retained_control", "batch_size": 2}
+{"id": "focused_range_case_live", "sql": "SELECT CASE WHEN id=0 THEN 7D ELSE CAST('bad' AS DOUBLE) END AS r FROM range(3)", "category": "retained_control", "batch_size": 2}
+{"id": "guard_and_bad_left", "sql": "SELECT CAST('bad' AS DOUBLE)>0D AND false AS r", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_and_bad_right", "sql": "SELECT false AND CAST('bad' AS DOUBLE)>0D AS r", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_or_bad_left", "sql": "SELECT CAST('bad' AS DOUBLE)>0D OR true AS r", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_or_bad_right", "sql": "SELECT true OR CAST('bad' AS DOUBLE)>0D AS r", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_int_and_bad_left", "sql": "SELECT CAST('bad' AS INT)>0 AND false AS r", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_int_and_bad_right", "sql": "SELECT false AND CAST('bad' AS INT)>0 AS r", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_int_or_bad_left", "sql": "SELECT CAST('bad' AS INT)>0 OR true AS r", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_int_or_bad_right", "sql": "SELECT true OR CAST('bad' AS INT)>0 AS r", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_literal_bad_div_null_column", "sql": "SELECT CAST('bad' AS BIGINT) DIV (CASE WHEN id%2=0 THEN CAST(NULL AS BIGINT) ELSE 2L END) AS r FROM range(1)", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_literal_bad_float_null_column", "sql": "SELECT CAST('bad' AS DOUBLE) / (CASE WHEN id%2=0 THEN CAST(NULL AS BIGINT) ELSE 2L END) AS r FROM range(1)", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_literal_bad_div_null_alias", "sql": "SELECT CAST('bad' AS BIGINT) DIV n AS r FROM (SELECT CASE WHEN id%2=0 THEN CAST(NULL AS BIGINT) ELSE 2L END AS n FROM range(1)) t", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_literal_bad_float_null_alias", "sql": "SELECT CAST('bad' AS DOUBLE) / n AS r FROM (SELECT CASE WHEN id%2=0 THEN CAST(NULL AS BIGINT) ELSE 2L END AS n FROM range(1)) t", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_range_guarded_int", "sql": "SELECT CAST(v AS BIGINT) DIV n AS r FROM (SELECT id,CASE WHEN id%2=0 THEN 'bad' ELSE '7' END AS v,CASE WHEN id%2=0 THEN CAST(NULL AS BIGINT) ELSE 2L END AS n FROM range(5)) t ORDER BY id", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_range_guarded_float", "sql": "SELECT CAST(v AS DOUBLE) / n AS r FROM (SELECT id,CASE WHEN id%2=0 THEN 'bad' ELSE '7' END AS v,CASE WHEN id%2=0 THEN CAST(NULL AS BIGINT) ELSE 2L END AS n FROM range(5)) t ORDER BY id", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_string_peer_nulls", "sql": "SELECT a/b AS r FROM VALUES ('bad',CAST(NULL AS STRING)),('7','2') t(a,b)", "batch_size": 2, "category": "guard_order"}
+{"id": "guard_string_div_peer_nulls", "sql": "SELECT a DIV b AS r FROM VALUES ('bad',CAST(NULL AS STRING)),('7','2') t(a,b)", "batch_size": 2, "category": "guard_order"}
