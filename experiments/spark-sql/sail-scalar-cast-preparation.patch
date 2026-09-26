@@ -1,0 +1,285 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -135,7 +135,7 @@
+         props.config_options = Some(Arc::new(options.clone()));
+         let prepare = Prepare { props };
+         let plan = if check_cast {
+-            plan.transform_up(|node| {
++            plan.transform_up_with_subqueries(|node| {
+                 let schema = if !node.inputs().is_empty() {
+                     Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()))
+                 } else if let LogicalPlan::TableScan(scan) = &node {
+@@ -150,7 +150,29 @@
+                 node.map_expressions(|expr| {
+                     let name = names.save(&expr);
+                     Ok(expr
+-                        .transform_up(|expr| guard_cast_arithmetic(expr, &schema))?
++                        .transform_up(|expr| {
++                            // One-row scalar expressions follow their parent's
++                            // reachability before standalone subquery folding.
++                            if let Expr::ScalarSubquery(mut subquery) = expr {
++                                if let Some(mut expressions) = one_row_exprs(&subquery.subquery)?
++                                    && expressions.len() == 1
++                                    && row_expression(&expressions[0], true)?
++                                {
++                                    return Ok(Transformed::yes(expressions.remove(0)));
++                                }
++                                // Preserve local arithmetic errors before CAST
++                                // preparation removes unused or empty projections.
++                                if check_arithmetic {
++                                    prepare.check_arithmetic_plan(&subquery.subquery, options)?;
++                                }
++                                subquery.subquery = Arc::new(prepare.cast_reachability(
++                                    Arc::unwrap_or_clone(subquery.subquery),
++                                    options,
++                                )?);
++                                return Ok(Transformed::yes(Expr::ScalarSubquery(subquery)));
++                            }
++                            guard_cast_arithmetic(expr, &schema)
++                        })?
+                         .update_data(|expr| name.restore(expr)))
+                 })
+             })?
+@@ -159,22 +181,25 @@
+             plan
+         };
+         if check_arithmetic {
+-            // Spark prepares subqueries before pruning their outer expressions.
+-            // Keep each plan's own local conversion and LIMIT 0 boundary.
+-            plan.apply_with_subqueries(|node| {
+-                node.apply_expressions(|expr| {
+-                    expr.apply(|expr| {
+-                        if let Expr::ScalarSubquery(subquery) = expr
+-                            // OneRowRelation is inlined before subquery preparation;
+-                            // its arithmetic still follows the outer NULL/CASE rules.
+-                            && one_row_exprs(&subquery.subquery)?.is_none()
+-                        {
+-                            prepare.check_arithmetic_plan(&subquery.subquery, options)?;
+-                        }
+-                        Ok(TreeNodeRecursion::Continue)
++            // CAST preparation already checked these scalar plans before pruning.
++            if !check_cast {
++                // Spark prepares subqueries before pruning their outer expressions.
++                // Keep each plan's own local conversion and LIMIT 0 boundary.
++                plan.apply_with_subqueries(|node| {
++                    node.apply_expressions(|expr| {
++                        expr.apply(|expr| {
++                            if let Expr::ScalarSubquery(subquery) = expr
++                                // OneRowRelation is inlined before subquery preparation;
++                                // its arithmetic still follows the outer NULL/CASE rules.
++                                && one_row_exprs(&subquery.subquery)?.is_none()
++                            {
++                                prepare.check_arithmetic_plan(&subquery.subquery, options)?;
++                            }
++                            Ok(TreeNodeRecursion::Continue)
++                        })
+                     })
+-                })
+-            })?;
++                })?;
++            }
+             prepare.check_arithmetic_plan(&plan, options)?;
+         }
+ 
+@@ -191,7 +216,9 @@
+                 let schema = Arc::new(datafusion_expr::utils::merge_schema(&node.inputs()));
+                 node.map_expressions(|expr| {
+                     expr.transform_down(|expr| {
+-                        if !candidate(&expr) {
++                        // Inlining can remove the last scalar subquery while
++                        // its NULL parent still needs the same propagation rule.
++                        if !null_discarded(&expr) {
+                             return Ok(Transformed::no(expr));
+                         }
+                         prepare.check_expr(&expr, false)?;
+@@ -391,12 +418,12 @@
+ }
+ 
+ // Spark removes a redundant LIMIT before replacing LIMIT 0 with an empty plan.
+-// Preserve constant string-CAST failures before pruning, without reevaluating
++// Preserve string-CAST failures before pruning, without reevaluating
+ // the numeric-column cases already owned by the existing integer precheck.
+-fn constant_string_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
++fn string_cast(expr: &Expr, schema: &DFSchemaRef) -> Result<bool> {
+     expr.exists(|expr| match expr {
+         Expr::Cast(cast) => Ok(!null_literal(&cast.expr)
+-            && row_expression(&cast.expr, false)?
++            && row_expression(&cast.expr, true)?
+             && cast.expr.get_type(schema)?.is_string()),
+         Expr::ScalarFunction(f)
+             if f.func
+@@ -404,7 +431,7 @@
+                 .is::<sail_function::scalar::spark_cast_string_to_float::SparkCastStringToFloat>(
+             ) || f.func.inner().is::<SparkCastStringToDecimal>() =>
+         {
+-            Ok(matches!(f.args.as_slice(), [Expr::Literal(value, _)] if !value.is_null()))
++            Ok(matches!(f.args.as_slice(), [expr] if !null_literal(expr) && row_expression(expr, true)?))
+         }
+         _ => Ok(false),
+     })
+@@ -438,7 +465,7 @@
+                     let mut casts = false;
+                     let mut evaluable = true;
+                     for expr in &project.expr {
+-                        casts |= constant_string_cast(expr, project.input.schema())?;
++                        casts |= string_cast(expr, project.input.schema())?;
+                         evaluable &= row_expression(expr, true)?;
+                     }
+                     if casts
+@@ -550,6 +577,8 @@
+                         )?)));
+                     }
+                     expr
++                } else if null_round(&expr) && !expr.contains_scalar_subquery() {
++                    lit(ScalarValue::try_new_null(&expr.get_type(schema)?)?)
+                 } else {
+                     prune_null(expr, &info)?.data
+                 };
+@@ -1588,3 +1617,147 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn scalar_cast_preparation_respects_parent_and_empty_input()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false, true] {
++        for (typ, divide) in [("INT", "DIV"), ("DOUBLE", "/"), ("DECIMAL(10,2)", "DIV")] {
++            for (query, fails, expected) in [
++                (
++                    format!(
++                        "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN (SELECT CAST('bad' AS {typ})) ELSE CAST(7 AS {typ}) END AS r"
++                    ),
++                    false,
++                    Some(7.0),
++                ),
++                (
++                    format!(
++                        "SELECT CASE WHEN false THEN (SELECT CAST('bad' AS {typ})) ELSE CAST(7 AS {typ}) END AS r"
++                    ),
++                    false,
++                    Some(7.0),
++                ),
++                (
++                    format!("SELECT (SELECT CAST('bad' AS {typ}) FROM range(3) LIMIT 0) AS r"),
++                    false,
++                    None,
++                ),
++                (
++                    format!(
++                        "SELECT (SELECT CAST('bad' AS {typ}) FROM VALUES (1) t(k) WHERE false) AS r"
++                    ),
++                    false,
++                    None,
++                ),
++                (
++                    format!("SELECT (SELECT CAST('bad' AS {typ})) AS r"),
++                    true,
++                    None,
++                ),
++                (
++                    format!(
++                        "SELECT (SELECT CAST('bad' AS {typ}) FROM VALUES (1) t(k) LIMIT 0) AS r"
++                    ),
++                    true,
++                    None,
++                ),
++                (
++                    format!("SELECT (SELECT CAST('bad' AS {typ}) FROM range(1)) AS r"),
++                    true,
++                    None,
++                ),
++                (
++                    format!(
++                        "SELECT COALESCE(CAST(7 AS {typ}), (SELECT CAST('bad' AS {typ}))) AS r"
++                    ),
++                    false,
++                    Some(7.0),
++                ),
++                (
++                    format!("SELECT ROUND((SELECT CAST('bad' AS {typ})), NULL) AS r"),
++                    false,
++                    None,
++                ),
++                (
++                    format!(
++                        "SELECT ROUND((SELECT CAST(7 AS {typ}) {divide} CAST(0 AS {typ})), NULL) AS r"
++                    ),
++                    false,
++                    None,
++                ),
++                (
++                    format!(
++                        "SELECT BROUND((SELECT CAST(7 AS {typ}) {divide} CAST(0 AS {typ})), NULL) AS r"
++                    ),
++                    false,
++                    None,
++                ),
++                (
++                    format!(
++                        "SELECT CAST(NULL AS {typ}) + (SELECT CAST('bad' AS {typ}) FROM range(3) LIMIT 0) AS r"
++                    ),
++                    false,
++                    None,
++                ),
++                (
++                    format!(
++                        "SELECT CAST(NULL AS {typ}) + (SELECT CAST(v AS {typ}) FROM VALUES ('bad') t(v) LIMIT 0) AS r"
++                    ),
++                    true,
++                    None,
++                ),
++            ] {
++                let result = async {
++                    let ast = sail_sql_analyzer::parser::parse_one_statement(&query)?;
++                    let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                    let config = PlanConfig {
++                        ansi_mode: ansi,
++                        ..Default::default()
++                    };
++                    let named = PlanResolver::new(&ctx, Arc::new(config))
++                        .resolve_named_plan(spec)
++                        .await?;
++                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
++                        ctx.execute_logical_plan(named.plan)
++                            .await?
++                            .collect()
++                            .await?,
++                    )
++                }
++                .await;
++                if ansi && fails {
++                    let error = result.expect_err(&query).to_string();
++                    assert!(
++                        error.contains("Cannot cast") || error.contains("CAST_INVALID_INPUT"),
++                        "{query}: {error}"
++                    );
++                    continue;
++                }
++                let mut actual = Vec::new();
++                for batch in result? {
++                    for row in 0..batch.num_rows() {
++                        let value = ScalarValue::try_from_array(batch.column(0), row)?
++                            .cast_to(&DataType::Float64)?;
++                        let ScalarValue::Float64(value) = value else {
++                            unreachable!()
++                        };
++                        actual.push(value);
++                    }
++                }
++                assert_eq!(actual, vec![expected], "ANSI {ansi}: {query}");
++            }
++        }
++    }
++    Ok(())
++}
