@@ -1,0 +1,363 @@
+{"id": "range_false_in", "sql": "SELECT 7L IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "owned", "batch_size": 2}
+{"id": "values_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "owned", "batch_size": 2}
+{"id": "values_limit0_in", "sql": "SELECT 7L IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "owned", "batch_size": 2}
+{"id": "exists_cast_control", "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(1)) AS r", "category": "owned", "batch_size": 2}
+{"id": "int_cast_one_row_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_one_row_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_range_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_range_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_range0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_range0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_range_false_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_range_false_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_range_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_range_limit0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_values_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_values_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_values_false_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_values_false_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_values_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_values_limit0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_alias_range_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_alias_range_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_nested_empty_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS INT) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_nested_empty_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS INT) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_exists_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS (SELECT CAST('bad' AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_exists_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS (SELECT CAST('bad' AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_exists_coalesce", "sql": "SELECT COALESCE(true,EXISTS (SELECT CAST('bad' AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_exists_not", "sql": "SELECT NOT (EXISTS (SELECT CAST('bad' AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_in_dead_case", "sql": "SELECT CASE WHEN false THEN 7 IN (SELECT CAST('bad' AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_in_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 7 IN (SELECT CAST('bad' AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_in_coalesce", "sql": "SELECT COALESCE(true,7 IN (SELECT CAST('bad' AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "int_cast_in_not", "sql": "SELECT NOT (7 IN (SELECT CAST('bad' AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_one_row_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_one_row_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_range_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_range_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_range0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_range0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_range_false_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_range_false_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_range_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_range_limit0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_values_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_values_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_values_false_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_values_false_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_values_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_values_limit0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_alias_range_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_alias_range_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_nested_empty_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DOUBLE) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_nested_empty_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DOUBLE) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_exists_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_exists_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_exists_coalesce", "sql": "SELECT COALESCE(true,EXISTS (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_exists_not", "sql": "SELECT NOT (EXISTS (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_in_dead_case", "sql": "SELECT CASE WHEN false THEN 7 IN (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_in_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 7 IN (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_in_coalesce", "sql": "SELECT COALESCE(true,7 IN (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "double_cast_in_not", "sql": "SELECT NOT (7 IN (SELECT CAST('bad' AS DOUBLE) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_one_row_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2))) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_one_row_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2))) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_range_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_range_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_range0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_range0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_range_false_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_range_false_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_range_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_range_limit0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_values_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_values_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_values_false_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_values_false_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_values_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_values_limit0_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_alias_range_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_alias_range_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_nested_empty_exists", "sql": "SELECT EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_nested_empty_in", "sql": "SELECT 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_exists_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_exists_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_exists_coalesce", "sql": "SELECT COALESCE(true,EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_exists_not", "sql": "SELECT NOT (EXISTS (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_in_dead_case", "sql": "SELECT CASE WHEN false THEN 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_in_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_in_coalesce", "sql": "SELECT COALESCE(true,7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "decimal_cast_in_not", "sql": "SELECT NOT (7 IN (SELECT CAST('bad' AS DECIMAL(10,2)) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_one_row_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_one_row_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_range_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_range_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_range0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_range0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_range_false_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_range_false_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_range_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_range_limit0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_values_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_values_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_values_false_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_values_false_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_values_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_values_limit0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_alias_range_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_alias_range_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_nested_empty_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_nested_empty_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_exists_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_exists_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_exists_coalesce", "sql": "SELECT COALESCE(true,EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_exists_not", "sql": "SELECT NOT (EXISTS (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_in_dead_case", "sql": "SELECT CASE WHEN false THEN 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_in_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_in_coalesce", "sql": "SELECT COALESCE(true,7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "div_in_not", "sql": "SELECT NOT (7 IN (SELECT CAST(7 AS INT) DIV CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_one_row_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_one_row_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_range_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_range_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_range0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_range0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_range_false_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_range_false_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_range_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_range_limit0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_values_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_values_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_values_false_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_values_false_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_values_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_values_limit0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_alias_range_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_alias_range_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_nested_empty_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_nested_empty_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_exists_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_exists_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_exists_coalesce", "sql": "SELECT COALESCE(true,EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_exists_not", "sql": "SELECT NOT (EXISTS (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_in_dead_case", "sql": "SELECT CASE WHEN false THEN 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_in_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_in_coalesce", "sql": "SELECT COALESCE(true,7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "divide_in_not", "sql": "SELECT NOT (7 IN (SELECT CAST(7 AS DOUBLE) / CAST(0 AS DOUBLE) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_one_row_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_one_row_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_range_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_range_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_range0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_range0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(0)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_range_false_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_range_false_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_range_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_range_limit0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_values_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_values_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_values_false_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_values_false_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k) WHERE false) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_values_limit0_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_values_limit0_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM VALUES (1) t(k) LIMIT 0) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_alias_range_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_alias_range_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM (SELECT id AS k FROM range(3)) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_nested_empty_exists", "sql": "SELECT EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_nested_empty_in", "sql": "SELECT 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_exists_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_exists_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_exists_coalesce", "sql": "SELECT COALESCE(true,EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_exists_not", "sql": "SELECT NOT (EXISTS (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_in_dead_case", "sql": "SELECT CASE WHEN false THEN 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_in_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN 7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false) ELSE true END AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_in_coalesce", "sql": "SELECT COALESCE(true,7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "modulo_in_not", "sql": "SELECT NOT (7 IN (SELECT CAST(7 AS INT) % CAST(0 AS INT) FROM range(3) WHERE false)) AS r", "category": "predicate_preparation", "batch_size": 2}
+{"id": "exists_column_cast_values", "sql": "SELECT EXISTS(SELECT CAST(s AS INT) FROM VALUES ('bad') t(s)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_column_cast_values_limit0", "sql": "SELECT EXISTS(SELECT CAST(s AS INT) FROM VALUES ('bad') t(s) LIMIT 0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_column_div_values_limit0", "sql": "SELECT EXISTS(SELECT 7 DIV k FROM VALUES (0) t(k) LIMIT 0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_filter_cast", "sql": "SELECT EXISTS(SELECT 7 FROM range(3) WHERE CAST('bad' AS INT)=id) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_filter_div", "sql": "SELECT EXISTS(SELECT 7 FROM range(3) WHERE (7 DIV 0)=id) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_unused_nested_range", "sql": "SELECT EXISTS(SELECT 7 FROM (SELECT CAST('bad' AS INT) v FROM range(3)) t) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_unused_nested_values", "sql": "SELECT EXISTS(SELECT 7 FROM (SELECT CAST('bad' AS INT) v FROM VALUES(1) t(k)) s) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_distinct_cast", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) FROM range(3)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_group_cast", "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(3) GROUP BY id) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_count_cast", "sql": "SELECT EXISTS(SELECT COUNT(CAST('bad' AS INT)) FROM range(3)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_count_empty", "sql": "SELECT EXISTS(SELECT COUNT(*) FROM range(0)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_having_cast", "sql": "SELECT EXISTS(SELECT COUNT(*) FROM range(3) HAVING CAST('bad' AS INT)=0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_sort_cast", "sql": "SELECT EXISTS(SELECT id FROM range(3) ORDER BY CAST('bad' AS INT)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_sort_limit_cast", "sql": "SELECT EXISTS(SELECT id FROM range(3) ORDER BY CAST('bad' AS INT) LIMIT 1) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_union_cast", "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(3) UNION ALL SELECT 7) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_intersect_cast", "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(3) INTERSECT SELECT 7) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_correlated_cast", "sql": "SELECT k, EXISTS(SELECT CAST('bad' AS INT) FROM range(3) WHERE id=k) AS r FROM VALUES(0),(4) t(k) ORDER BY k", "category": "boundary", "batch_size": 2}
+{"id": "exists_correlated_div", "sql": "SELECT k, EXISTS(SELECT 7 DIV 0 FROM range(3) WHERE id=k) AS r FROM VALUES(0),(4) t(k) ORDER BY k", "category": "boundary", "batch_size": 2}
+{"id": "exists_correlated_live_filter", "sql": "SELECT k, EXISTS(SELECT 7 FROM range(3) WHERE CAST('bad' AS INT)=k) AS r FROM VALUES(0),(4) t(k) ORDER BY k", "category": "boundary", "batch_size": 2}
+{"id": "nested_exists", "sql": "SELECT EXISTS(SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(3)) FROM range(1)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "nested_scalar", "sql": "SELECT EXISTS(SELECT (SELECT CAST('bad' AS INT) FROM range(1)) FROM range(1)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "projected_in_null", "sql": "SELECT 3 IN (SELECT k FROM VALUES(1),(CAST(NULL AS INT)) t(k)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "projected_not_in_null", "sql": "SELECT 3 NOT IN (SELECT k FROM VALUES(1),(CAST(NULL AS INT)) t(k)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_null", "sql": "SELECT EXISTS(SELECT CAST(NULL AS INT) FROM range(3)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "in_empty", "sql": "SELECT 7 IN (SELECT CAST(NULL AS INT) FROM range(0)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_good", "sql": "SELECT EXISTS(SELECT CAST('7' AS INT) FROM range(3)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "in_good", "sql": "SELECT 7 IN (SELECT CAST('7' AS INT) FROM range(3)) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_good_values_limit0", "sql": "SELECT EXISTS(SELECT CAST('7' AS INT) FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "not_in_empty", "sql": "SELECT NULL NOT IN (SELECT id FROM range(3) LIMIT 0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "null_in_empty", "sql": "SELECT NULL IN (SELECT id FROM range(3) LIMIT 0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "bad_left_in_empty", "sql": "SELECT CAST('bad' AS INT) IN (SELECT id FROM range(3) LIMIT 0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "exists_offset_distinct", "sql": "SELECT EXISTS(SELECT DISTINCT id%2 FROM range(3) OFFSET 2) AS r", "category": "boundary", "batch_size": 2}
+{"id": "not_exists_empty", "sql": "SELECT NOT EXISTS(SELECT CAST('bad' AS INT) FROM range(3) LIMIT 0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "not_in_local_limit0", "sql": "SELECT 7 NOT IN (SELECT 7 DIV k FROM VALUES(0) t(k) LIMIT 0) AS r", "category": "boundary", "batch_size": 2}
+{"id": "filter_exists_range", "sql": "SELECT k FROM VALUES(1),(2) t(k) WHERE EXISTS(SELECT CAST('bad' AS INT) FROM range(3)) ORDER BY k", "category": "boundary", "batch_size": 2}
+{"id": "filter_in_false_range", "sql": "SELECT k FROM VALUES(1),(2) t(k) WHERE 7 IN(SELECT 7 DIV 0 FROM range(3) WHERE false) ORDER BY k", "category": "boundary", "batch_size": 2}
+{"id": "distinct_int_literal_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_literal_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_range_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_range_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_range0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(0)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_range0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(0)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_range_false_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_range_false_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_range_limit0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_range_limit0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_values_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM VALUES(1) t(k)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_values_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM VALUES(1) t(k)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_values_false_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM VALUES(1) t(k) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_values_false_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM VALUES(1) t(k) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_values_limit0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_values_limit0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_alias", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_constant_parent", "sql": "SELECT EXISTS(SELECT 7 FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_sorted", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) ORDER BY v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_limit1", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_limit2", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 2) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_offset0", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) OFFSET 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_offset1", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_limit_offset", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 1 OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_nested_distinct", "sql": "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_empty_input", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_live_filter", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t WHERE v=7) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_group_control", "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) AS v FROM range(3) GROUP BY CAST('bad' AS INT)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) ELSE true END AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) ELSE true END AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_int_in_control", "sql": "SELECT 7 IN(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_literal_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_literal_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_range_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_range_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_range0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(0)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_range0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(0)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_range_false_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_range_false_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_range_limit0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_range_limit0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_values_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM VALUES(1) t(k)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_values_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM VALUES(1) t(k)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_values_false_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM VALUES(1) t(k) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_values_false_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM VALUES(1) t(k) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_values_limit0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_values_limit0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_alias", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_constant_parent", "sql": "SELECT EXISTS(SELECT 7 FROM (SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_sorted", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) ORDER BY v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_limit1", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) LIMIT 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_limit2", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) LIMIT 2) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_offset0", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) OFFSET 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_offset1", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_limit_offset", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3) LIMIT 1 OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_nested_distinct", "sql": "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_empty_input", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_live_filter", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) t WHERE v=7) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_group_control", "sql": "SELECT EXISTS(SELECT CAST('bad' AS DOUBLE) AS v FROM range(3) GROUP BY CAST('bad' AS DOUBLE)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) ELSE true END AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) ELSE true END AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_double_in_control", "sql": "SELECT 7 IN(SELECT DISTINCT CAST('bad' AS DOUBLE) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_literal_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_literal_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_range_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_range_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_range0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(0)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_range0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(0)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_range_false_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_range_false_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_range_limit0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_range_limit0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_values_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM VALUES(1) t(k)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_values_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM VALUES(1) t(k)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_values_false_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM VALUES(1) t(k) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_values_false_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM VALUES(1) t(k) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_values_limit0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_values_limit0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_alias", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_constant_parent", "sql": "SELECT EXISTS(SELECT 7 FROM (SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_sorted", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) ORDER BY v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_limit1", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) LIMIT 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_limit2", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) LIMIT 2) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_offset0", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) OFFSET 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_offset1", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_limit_offset", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) LIMIT 1 OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_nested_distinct", "sql": "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_empty_input", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_live_filter", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) t WHERE v=7) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_group_control", "sql": "SELECT EXISTS(SELECT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3) GROUP BY CAST('bad' AS DECIMAL(10,2))) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) ELSE true END AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) ELSE true END AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_decimal_in_control", "sql": "SELECT 7 IN(SELECT DISTINCT CAST('bad' AS DECIMAL(10,2)) AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_literal_exists", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_literal_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT 7 DIV 0 AS v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_range_exists", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_range_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_range0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(0)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_range0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(0)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_range_false_exists", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_range_false_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_range_limit0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_range_limit0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_values_exists", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM VALUES(1) t(k)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_values_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM VALUES(1) t(k)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_values_false_exists", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM VALUES(1) t(k) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_values_false_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM VALUES(1) t(k) WHERE false) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_values_limit0_exists", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_values_limit0_not_exists", "sql": "SELECT NOT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM VALUES(1) t(k) LIMIT 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_alias", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_constant_parent", "sql": "SELECT EXISTS(SELECT 7 FROM (SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_sorted", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) ORDER BY v) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_limit1", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) LIMIT 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_limit2", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) LIMIT 2) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_offset0", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) OFFSET 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_offset1", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_limit_offset", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3) LIMIT 1 OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_nested_distinct", "sql": "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_empty_input", "sql": "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 FROM (SELECT id FROM range(3) LIMIT 0) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_live_filter", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) t WHERE v=7) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_group_control", "sql": "SELECT EXISTS(SELECT 7 DIV 0 AS v FROM range(3) GROUP BY 7 DIV 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_dead_case", "sql": "SELECT CASE WHEN false THEN EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) ELSE true END AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_null_case", "sql": "SELECT CASE WHEN CAST(NULL AS BOOLEAN) THEN EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) ELSE true END AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_div_in_control", "sql": "SELECT 7 IN(SELECT DISTINCT 7 DIV 0 AS v FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_offset_duplicates", "sql": "SELECT EXISTS(SELECT DISTINCT id%2 FROM range(3) OFFSET 2) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_offset_duplicates_not", "sql": "SELECT NOT EXISTS(SELECT DISTINCT id%2 FROM range(3) OFFSET 2) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_offset_one", "sql": "SELECT EXISTS(SELECT DISTINCT id%2 FROM range(3) OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_offset_nulls", "sql": "SELECT EXISTS(SELECT DISTINCT v FROM VALUES(NULL),(NULL) t(v) OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_offset0_nulls", "sql": "SELECT EXISTS(SELECT DISTINCT v FROM VALUES(NULL),(NULL) t(v) OFFSET 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_values_unused", "sql": "SELECT EXISTS(SELECT 7 FROM (SELECT DISTINCT CAST('bad' AS INT) FROM VALUES(1) t(k)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_multiple", "sql": "SELECT EXISTS(SELECT DISTINCT id,CAST('bad' AS INT) FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_column_values", "sql": "SELECT EXISTS(SELECT DISTINCT CAST(s AS INT) FROM VALUES('bad') t(s)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_correlated", "sql": "SELECT k,EXISTS(SELECT DISTINCT CAST('bad' AS INT) FROM range(3) WHERE id=k) AS r FROM VALUES(0),(4) t(k) ORDER BY k", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_correlated_good", "sql": "SELECT k,EXISTS(SELECT DISTINCT id%2 FROM range(3) WHERE id=k) AS r FROM VALUES(0),(4) t(k) ORDER BY k", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_filter_position", "sql": "SELECT k FROM VALUES(1),(2) t(k) WHERE EXISTS(SELECT DISTINCT CAST('bad' AS INT) FROM range(3)) ORDER BY k", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_live_filter_error", "sql": "SELECT EXISTS(SELECT DISTINCT 7 FROM range(3) WHERE CAST('bad' AS INT)=id) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_nested_scalar", "sql": "SELECT EXISTS(SELECT DISTINCT (SELECT CAST('bad' AS INT) FROM range(1)) FROM range(3)) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_union", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) FROM range(3) UNION ALL SELECT 7) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "distinct_union_top", "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(3) UNION SELECT 7) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_identity_twice", "sql": "SELECT EXISTS(SELECT v FROM (SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) u) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_rename", "sql": "SELECT EXISTS(SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_computed", "sql": "SELECT EXISTS(SELECT v+1 FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_constant_and_column", "sql": "SELECT EXISTS(SELECT 7,v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_literal_column", "sql": "SELECT EXISTS(SELECT 7 AS v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_limit1_offset0", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 1 OFFSET 0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_limit1_offset1", "sql": "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 1 OFFSET 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_alias_limit1", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_inner_limit1", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 1) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_alias_constant_limit1", "sql": "SELECT EXISTS(SELECT 7 FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_nested_limit1", "sql": "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t LIMIT 1) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_nested_inner_limit1", "sql": "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 1) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_column_subset", "sql": "SELECT EXISTS(SELECT id FROM (SELECT DISTINCT id,CAST('bad' AS INT) AS v FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_constant_subset", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT 7 AS v,CAST('bad' AS INT) AS w FROM range(3)) t) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_group_having", "sql": "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(3) GROUP BY CAST('bad' AS INT) HAVING count(*)>0) AS r", "category": "exists_distinct", "batch_size": 2}
+{"id": "boundary_live_filter_between", "sql": "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t WHERE v>0) AS r", "category": "exists_distinct", "batch_size": 2}

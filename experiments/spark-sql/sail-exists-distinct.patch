@@ -1,0 +1,233 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -153,6 +153,7 @@
+                         .transform_up(|mut expr| {
+                             // EXISTS needs only row presence. Keep local VALUES
+                             // checks before pruning its unused output expressions.
++                            let exists = matches!(&expr, Expr::Exists(_));
+                             let predicate = match &mut expr {
+                                 Expr::Exists(exists)
+                                     if exists.subquery.outer_ref_columns.is_empty() =>
+@@ -169,12 +170,6 @@
+                                             })
+                                         })
+                                     })?;
+-                                    exists.subquery.subquery = Arc::new(LogicalPlan::Projection(
+-                                        datafusion_expr::logical_plan::Projection::try_new(
+-                                            vec![lit(true)],
+-                                            Arc::clone(&exists.subquery.subquery),
+-                                        )?,
+-                                    ));
+                                     Some(&mut exists.subquery)
+                                 }
+                                 Expr::InSubquery(subquery)
+@@ -195,6 +190,39 @@
+                                 // LIMIT 0 may sit below a projection or alias.
+                                 // Reuse native empty propagation before constant checks.
+                                 let config = OptimizerContext::new_with_config_options(Arc::new(options.clone()));
++                                let prepared = if exists {
++                                    let pruned = prepared.transform_down(|node| {
++                                        if let LogicalPlan::Distinct(datafusion_expr::logical_plan::Distinct::All(input)) = node {
++                                            // Spark's early LIMIT 1 rule removes one grouping
++                                            // layer, before nested DISTINCT expressions fold.
++                                            return Ok(Transformed::new(Arc::unwrap_or_clone(input), true, TreeNodeRecursion::Jump));
++                                        }
++                                        let recurse = match &node {
++                                            LogicalPlan::Projection(project) if project.expr.len() == project.input.schema().fields().len()
++                                                && project.expr.iter().zip(project.input.schema().iter()).all(|(expr, (qualifier, field))| {
++                                                    // Sail adds one output-name alias. A SQL
++                                                    // rename is another alias and is not an identity.
++                                                    let expr = if let Expr::Alias(alias) = expr { alias.expr.as_ref() } else { expr };
++                                                    matches!(expr, Expr::Column(column) if column.relation.as_ref() == qualifier && column.name == *field.name())
++                                                }) => TreeNodeRecursion::Continue,
++                                            LogicalPlan::SubqueryAlias(_) => TreeNodeRecursion::Continue,
++                                            LogicalPlan::Limit(limit) if limit.skip.is_none()
++                                                && prepare.limit_count(limit.fetch.as_deref(), usize::MAX)? == Some(1) => TreeNodeRecursion::Continue,
++                                            // Constants, sorting, UNION and other limits keep
++                                            // their own preparation/error boundary.
++                                            _ => TreeNodeRecursion::Jump,
++                                        };
++                                        Ok(Transformed::new(node, false, recurse))
++                                    })?.data;
++                                    let projected = LogicalPlan::Projection(
++                                        datafusion_expr::logical_plan::Projection::try_new(
++                                            vec![lit(true)], Arc::new(pruned),
++                                        )?,
++                                    );
++                                    OptimizeProjections::new().rewrite(projected, &config)?.data
++                                } else {
++                                    prepared
++                                };
+                                 let prepared = prepared.transform_up(|node| {
+                                     datafusion::optimizer::propagate_empty_relation::PropagateEmptyRelation::new()
+                                         .rewrite(node, &config)
+@@ -1981,3 +2009,169 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn exists_distinct_keeps_preparation_boundaries()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false, true] {
++        for (sql, error, expected) in [
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) FROM range(3)) AS r",
++                None,
++                Some(true),
++            ),
++            (
++                "SELECT NOT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM VALUES(1) t(k)) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM VALUES(1) t(k) LIMIT 0) AS r",
++                Some("Cannot cast"),
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT 7 DIV 0 AS v FROM VALUES(1) t(k) LIMIT 0) AS r",
++                Some("Divide by zero"),
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 1) AS r",
++                None,
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) LIMIT 2) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) OFFSET 0) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT v AS w FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT id FROM (SELECT DISTINCT id,CAST('bad' AS INT) AS v FROM range(3)) t) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT id%2 FROM range(3) OFFSET 2) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT id%2 FROM range(3) OFFSET 1) AS r",
++                None,
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) AS r",
++                None,
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT v FROM (SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t) u) AS r",
++                None,
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) FROM range(3) UNION ALL SELECT 7) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT CAST('bad' AS INT) FROM range(3) UNION SELECT 7) AS r",
++                None,
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT (SELECT CAST('bad' AS INT) FROM range(1)) FROM range(3)) AS r",
++                Some("Cannot cast"),
++                Some(true),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT 7 FROM range(3) WHERE CAST('bad' AS INT)=id) AS r",
++                Some("Cannot cast"),
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) FROM (SELECT id FROM range(3) LIMIT 0) t) AS r",
++                None,
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT v FROM (SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3)) t WHERE v=7) AS r",
++                Some("Cannot cast"),
++                Some(false),
++            ),
++            (
++                "SELECT EXISTS(SELECT DISTINCT CAST('bad' AS INT) AS v FROM range(3) WHERE false) AS r",
++                None,
++                Some(false),
++            ),
++        ] {
++            let result = async {
++                let ast = sail_sql_analyzer::parser::parse_one_statement(sql)?;
++                let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                let config = PlanConfig {
++                    ansi_mode: ansi,
++                    ..Default::default()
++                };
++                let named = PlanResolver::new(&ctx, Arc::new(config))
++                    .resolve_named_plan(spec)
++                    .await?;
++                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
++                    ctx.execute_logical_plan(named.plan)
++                        .await?
++                        .collect()
++                        .await?,
++                )
++            }
++            .await;
++            if ansi && let Some(error) = error {
++                let actual = result.expect_err(sql).to_string();
++                assert!(actual.contains(error), "ANSI {ansi}: {sql}: {actual}");
++                continue;
++            }
++            let mut actual = Vec::new();
++            for batch in result? {
++                for row in 0..batch.num_rows() {
++                    let ScalarValue::Boolean(value) =
++                        ScalarValue::try_from_array(batch.column(0), row)?
++                    else {
++                        panic!("{sql}: expected Boolean");
++                    };
++                    actual.push(value);
++                }
++            }
++            assert_eq!(actual, vec![expected], "ANSI {ansi}: {sql}");
++        }
++    }
++    Ok(())
++}

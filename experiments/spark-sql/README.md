@@ -54,6 +54,8 @@ The [scalar CAST preparation repair](SCALAR_CAST_PREPARATION.md) preserves one-r
 
 The [predicate subquery preparation repair](PREDICATE_PREPARATION.md) fixes four recorded IN/EXISTS failures while preserving local errors and the approved NULL policy. Remaining findings and measured costs retain their existing owners.
 
+The [DISTINCT EXISTS preparation repair](EXISTS_DISTINCT.md) removes an unused first DISTINCT output while preserving error and OFFSET boundaries. Its expanded matrix improves 616/726 -> 671/726; remaining relational findings and costs stay with their existing owners.
+
 The [checked integer cost investigation](INTEGER_COST.md) separates native checking, scalar-function and NULL-selection costs. Its first candidate removes a duplicate column filter and reduces allocations; query timing remains inconclusive.
 
 The [column field reuse follow-up](COLUMN_FIELD_REUSE.md) removes four allocations per batch from checked array/array arithmetic by sharing existing field references. Whole-query timing and the other arithmetic costs remain open.
