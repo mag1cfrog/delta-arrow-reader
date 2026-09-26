@@ -1,0 +1,207 @@
+--- a/src/simplify_expressions/expr_simplifier.rs
++++ b/src/simplify_expressions/expr_simplifier.rs
+@@ -211,7 +211,7 @@
+     ) -> Result<(Transformed<Expr>, u32)> {
+         let mut simplifier = Simplifier::new(&self.info);
+         let config_options = Some(Arc::clone(self.info.config_options()));
+-        let mut const_evaluator = ConstEvaluator::try_new(config_options)?;
++        let mut const_evaluator = ConstEvaluator::try_new(config_options, &self.info)?;
+         let mut shorten_in_list_simplifier = ShortenInListSimplifier::new();
+         let guarantees_map: HashMap<&Expr, &NullableInterval> =
+             self.guarantees.iter().map(|(k, v)| (k, v)).collect();
+@@ -479,7 +479,9 @@
+ ///
+ /// Note it does not handle algebraic rewrites such as `(a or false)`
+ /// --> `a`, which is handled by [`Simplifier`]
+-struct ConstEvaluator {
++struct ConstEvaluator<'a> {
++    info: &'a SimplifyContext,
++    conditional: Vec<bool>,
+     /// `can_evaluate` is used during the depth-first-search of the
+     /// `Expr` tree to track if any siblings (or their descendants) were
+     /// non evaluatable (e.g. had a column reference or volatile
+@@ -512,10 +514,27 @@
+     SimplifyRuntimeError(DataFusionError, Expr),
+ }
+ 
+-impl TreeNodeRewriter for ConstEvaluator {
++impl TreeNodeRewriter for ConstEvaluator<'_> {
+     type Node = Expr;
+ 
+     fn f_down(&mut self, expr: Expr) -> Result<Transformed<Expr>> {
++        let mut pruned = prune_null(expr, self.info)?;
++        // Fold constant Boolean parents before their children: false AND bad()
++        // can succeed, while bad() AND false must keep the left-hand failure.
++        if matches!(&pruned.data, Expr::BinaryExpr(binary) if matches!(binary.op, Operator::And | Operator::Or))
++            && !pruned.data.exists(|expr| Ok(!Self::can_evaluate(expr)))?
++        {
++            if let ConstSimplifyResult::Simplified(value, metadata) =
++                self.evaluate_to_scalar(pruned.data.clone())
++            {
++                pruned = Transformed::yes(Expr::Literal(value, metadata));
++            }
++        }
++        let expr = pruned.data;
++        self.conditional.push(
++            self.conditional.last().copied().unwrap_or(false)
++                || (expr.short_circuits() && !matches!(&expr, Expr::BinaryExpr(_))),
++        );
+         // Default to being able to evaluate this node
+         self.can_evaluate.push(true);
+ 
+@@ -539,10 +558,11 @@
+         // NB: do not short circuit recursion even if we find a non
+         // evaluatable node (so we can fold other children, args to
+         // functions, etc.)
+-        Ok(Transformed::no(expr))
++        Ok(Transformed::new_transformed(expr, pruned.transformed))
+     }
+ 
+     fn f_up(&mut self, expr: Expr) -> Result<Transformed<Expr>> {
++        let conditional = self.conditional.pop().unwrap_or(false);
+         match self.can_evaluate.pop() {
+             // Certain expressions such as `CASE` and `COALESCE` are short-circuiting
+             // and may not evaluate all their sub expressions. Thus, if
+@@ -561,6 +581,7 @@
+                     if let Expr::Cast(Cast { ref expr, .. })
+                     | Expr::TryCast(TryCast { ref expr, .. }) = expr
+                         && matches!(expr.as_ref(), Expr::Literal(_, _))
++                        && !conditional
+                     {
+                         return Err(err);
+                     }
+@@ -587,7 +608,7 @@
+     RecordBatch::try_new(DUMMY_SCHEMA.clone(), vec![col]).unwrap()
+ });
+ 
+-impl ConstEvaluator {
++impl<'a> ConstEvaluator<'a> {
+     /// Create a new `ConstantEvaluator`.
+     ///
+     /// Note: `ConstEvaluator` filters out expressions with scalar variables
+@@ -597,7 +618,10 @@
+     ///
+     /// The `config_options` parameter is used to pass session configuration
+     /// (like timezone) to scalar functions during constant evaluation.
+-    pub fn try_new(config_options: Option<Arc<ConfigOptions>>) -> Result<Self> {
++    pub fn try_new(
++        config_options: Option<Arc<ConfigOptions>>,
++        info: &'a SimplifyContext,
++    ) -> Result<Self> {
+         // The dummy column name is unused and doesn't matter as only
+         // expressions without column references can be evaluated
+ 
+@@ -605,6 +629,8 @@
+         execution_props.config_options = config_options;
+ 
+         Ok(Self {
++            info,
++            conditional: vec![],
+             can_evaluate: vec![],
+             execution_props,
+         })
+@@ -759,6 +785,55 @@
+     }
+ }
+ 
++// Discard a NULL-propagating parent before trying to fold its fallible children.
++// Scalar subqueries retain their separate planning/error checks.
++fn prune_null(expr: Expr, info: &SimplifyContext) -> Result<Transformed<Expr>> {
++    fn null(expr: &Expr) -> bool {
++        match expr {
++            Expr::Literal(value, _) => value.is_null(),
++            Expr::Cast(cast) => null(&cast.expr),
++            Expr::TryCast(cast) => null(&cast.expr),
++            Expr::Alias(alias) => null(&alias.expr),
++            _ => false,
++        }
++    }
++    match &expr {
++        Expr::BinaryExpr(binary)
++            if binary.op.returns_null_on_null()
++                && (null(&binary.left) || null(&binary.right))
++                && !expr.contains_scalar_subquery() =>
++        {
++            return Ok(Transformed::yes(Expr::Literal(
++                ScalarValue::try_new_null(&info.get_data_type(&expr)?)?,
++                None,
++            )));
++        }
++        Expr::ScalarFunction(f) if f.args.iter().any(null) && !expr.contains_scalar_subquery() => {
++            let args = f
++                .args
++                .iter()
++                .map(|arg| {
++                    if null(arg) {
++                        Ok(Expr::Literal(
++                            ScalarValue::try_new_null(&info.get_data_type(arg)?)?,
++                            None,
++                        ))
++                    } else {
++                        Ok(arg.clone())
++                    }
++                })
++                .collect::<Result<Vec<_>>>()?;
++            if let Ok(ExprSimplifyResult::Simplified(literal)) = f.func.simplify(args, info)
++                && matches!(&literal, Expr::Literal(value, _) if value.is_null())
++            {
++                return Ok(Transformed::yes(literal));
++            }
++        }
++        _ => {}
++    }
++    Ok(Transformed::no(expr))
++}
++
+ /// Simplifies [`Expr`]s by applying algebraic transformation rules
+ ///
+ /// Example transformations that are applied:
+@@ -770,19 +845,32 @@
+ /// * `expr = null` and `expr != null` to `null`
+ struct Simplifier<'a> {
+     info: &'a SimplifyContext,
++    conditional: Vec<bool>,
+ }
+ 
+ impl<'a> Simplifier<'a> {
+     pub fn new(info: &'a SimplifyContext) -> Self {
+-        Self { info }
++        Self {
++            info,
++            conditional: vec![],
++        }
+     }
+ }
+ 
+ impl TreeNodeRewriter for Simplifier<'_> {
+     type Node = Expr;
+ 
++    fn f_down(&mut self, expr: Expr) -> Result<Transformed<Expr>> {
++        self.conditional.push(
++            self.conditional.last().copied().unwrap_or(false)
++                || (expr.short_circuits() && !matches!(&expr, Expr::BinaryExpr(_))),
++        );
++        Ok(Transformed::no(expr))
++    }
++
+     /// rewrite the expression simplifying any constant expressions
+     fn f_up(&mut self, expr: Expr) -> Result<Transformed<Expr>> {
++        let conditional = self.conditional.pop().unwrap_or(false);
+         use datafusion_expr::Operator::{
+             And, BitwiseAnd, BitwiseOr, BitwiseShiftLeft, BitwiseShiftRight, BitwiseXor,
+             Divide, Eq, Modulo, Multiply, NotEq, Or, RegexIMatch, RegexMatch,
+@@ -1610,7 +1698,13 @@
+                 )
+             }
+             Expr::ScalarFunction(ScalarFunction { func: udf, args }) => {
+-                match udf.simplify(args, info)? {
++                let original = conditional.then(|| args.clone());
++                let simplified = match udf.simplify(args, info) {
++                    Ok(result) => result,
++                    Err(_) if conditional => ExprSimplifyResult::Original(original.unwrap()),
++                    Err(error) => return Err(error),
++                };
++                match simplified {
+                     ExprSimplifyResult::Original(args) => {
+                         Transformed::no(Expr::ScalarFunction(ScalarFunction {
+                             func: udf,
