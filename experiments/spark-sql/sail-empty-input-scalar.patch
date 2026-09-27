@@ -1,0 +1,161 @@
+--- a/crates/sail-plan/src/decimal_null.rs
++++ b/crates/sail-plan/src/decimal_null.rs
+@@ -153,24 +153,41 @@
+             plan.transform_down_up_with_subqueries(|node| {
+                 // Local empty conversion precedes preparing scalar children.
+                 // Keep the existing postorder work for all remaining nodes.
+-                if let LogicalPlan::Projection(project) = &node
+-                    && project.expr.iter().any(Expr::contains_scalar_subquery)
+-                    && prepare.local_batch(&project.input)?.is_some_and(|batch| batch.num_rows() == 0)
++                let scalar_children = match &node {
++                    LogicalPlan::Projection(project) => project.expr.iter().any(Expr::contains_scalar_subquery),
++                    LogicalPlan::Filter(filter) => filter.predicate.contains_scalar_subquery(),
++                    LogicalPlan::Aggregate(aggregate) => aggregate.group_expr.iter()
++                        .chain(&aggregate.aggr_expr).any(Expr::contains_scalar_subquery),
++                    _ => false,
++                };
++                if scalar_children
++                    && prepare.local_batch(&node)?.is_some_and(|batch| batch.num_rows() == 0)
+                 {
++                    if !matches!(node, LogicalPlan::Projection(_)) {
++                        // Keep aggregate/filter field nullability. Their parent
++                        // output projection still supplies IN/scalar expressions.
++                        return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
++                            datafusion_expr::logical_plan::EmptyRelation {
++                                produce_one_row: false,
++                                schema: Arc::clone(node.schema()),
++                            },
++                        )));
++                    }
+                     // IN/scalar lowering still needs a named output expression.
+-                    let expr = project.schema.iter().map(|(qualifier, field)| {
++                    let schema = node.schema();
++                    let expr = schema.iter().map(|(qualifier, field)| {
+                         Ok(lit(ScalarValue::try_new_null(field.data_type())?)
+                             .alias_qualified(qualifier.cloned(), field.name()))
+                     }).collect::<Result<Vec<_>>>()?;
+                     let input = LogicalPlan::EmptyRelation(
+                         datafusion_expr::logical_plan::EmptyRelation {
+                             produce_one_row: false,
+-                            schema: Arc::clone(project.input.schema()),
++                            schema: Arc::clone(node.inputs()[0].schema()),
+                         },
+                     );
+                     return Ok(Transformed::yes(LogicalPlan::Projection(
+                         datafusion_expr::logical_plan::Projection::try_new_with_schema(
+-                            expr, Arc::new(input), Arc::clone(&project.schema),
++                            expr, Arc::new(input), Arc::clone(schema),
+                         )?,
+                     )));
+                 }
+@@ -1327,6 +1344,9 @@
+             }
+             LogicalPlan::Filter(filter) if input.is_some() => {
+                 let input = input.unwrap();
++                if input.num_rows() == 0 {
++                    return Ok(Some(input.clone()));
++                }
+                 // Spark pulls correlated conjuncts out before recursively
+                 // optimizing this discarded subquery. Keep local predicates.
+                 let predicate = conjunction(
+@@ -1337,9 +1357,6 @@
+                 .unwrap_or_else(|| lit(true));
+                 if !row_expression(&predicate, true)? {
+                     return Ok(None);
+-                }
+-                if input.num_rows() == 0 {
+-                    return Ok(Some(input.clone()));
+                 }
+                 let predicate = self.precheck_expression(predicate, filter.input.schema(), true)?;
+                 let mask = create_physical_expr(&predicate, filter.input.schema(), &self.props)?
+@@ -3764,3 +3781,90 @@
+     }
+     Ok(())
+ }
++
++#[tokio::test]
++async fn empty_operators_precede_scalar_children()
++-> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
++    use crate::{config::PlanConfig, physical_plan::SparkQueryPlanner, resolver::PlanResolver};
++    use datafusion::arrow::array::AsArray;
++    use datafusion::common::ScalarValue;
++    use datafusion::execution::SessionStateBuilder;
++    use datafusion::prelude::SessionContext;
++
++    let ctx = SessionContext::new_with_state(
++        SessionStateBuilder::new()
++            .with_default_features()
++            .with_analyzer_rule(Arc::new(SparkDecimalNullPropagation))
++            .with_query_planner(Arc::new(SparkQueryPlanner))
++            .build(),
++    );
++    for ansi in [true, false] {
++        for expression in [
++            "CAST('bad' AS INT)", "CAST('bad' AS DOUBLE)",
++            "CAST('bad' AS DECIMAL(10,2))", "7 DIV 0", "7.0 / 0", "7 % 0",
++        ] {
++            for (input, predicate, fails, live) in [
++                ("VALUES(0),(1),(2) t(id)", "id=k AND false", false, false),
++                ("VALUES(0),(1),(2) t(id)", "id=k", true, true),
++                ("range(3)", "id=k AND false", true, false),
++            ] {
++                let scalar = format!("(SELECT {expression} FROM range(1))");
++                for (subquery, has_groups) in [
++                    (format!("SELECT id FROM {input} WHERE {predicate} GROUP BY id HAVING {scalar}>0"), false),
++                    (format!("SELECT count({scalar}) FROM {input} WHERE {predicate} GROUP BY id"), live),
++                    (format!("SELECT id FROM (SELECT id FROM {input} WHERE {predicate}) t WHERE {scalar}>0"), false),
++                ] {
++                    for negated in [false, true] {
++                        let prefix = if negated { "NOT " } else { "" };
++                        let sql = format!(
++                            "SELECT k, {prefix}EXISTS({subquery}) AS r \
++                             FROM VALUES(0),(4),(CAST(NULL AS BIGINT)) o(k) ORDER BY k NULLS FIRST"
++                        );
++                        let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++                        let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++                        let config = PlanConfig { ansi_mode: ansi, ..Default::default() };
++                        let named = PlanResolver::new(&ctx, Arc::new(config)).resolve_named_plan(spec).await?;
++                        let result = async { ctx.execute_logical_plan(named.plan).await?.collect().await }.await;
++                        if ansi && fails {
++                            let error = result.unwrap_err().to_string().to_lowercase();
++                            let cause = if expression.starts_with("CAST") { "cast" } else { "divide by zero" };
++                            assert!(error.contains(cause), "{sql}: {error}");
++                        } else {
++                            let batches = result?;
++                            let actual: Vec<_> = batches.iter().flat_map(|batch| batch.column(1).as_boolean().iter()).collect();
++                            let expected: Vec<_> = [false, has_groups, false].into_iter().map(|v| Some(v != negated)).collect();
++                            assert_eq!(actual, expected, "{sql}, ANSI={ansi}");
++                        }
++                    }
++                }
++            }
++        }
++        for (grouping, total) in [
++            ("", true), (" GROUP BY id", false),
++            (" GROUP BY GROUPING SETS(())", true),
++            (" GROUP BY GROUPING SETS((id),())", true),
++            (" GROUP BY ROLLUP(id)", true), (" GROUP BY CUBE(id)", true),
++        ] {
++            let sql = format!(
++                "SELECT count((SELECT CAST('7' AS INT) FROM range(1))) AS n \
++                 FROM VALUES(0),(1) t(id) WHERE false{grouping}"
++            );
++            let ast = sail_sql_analyzer::parser::parse_one_statement(&sql)?;
++            let spec = sail_sql_analyzer::statement::from_ast_statement(ast)?;
++            let config = PlanConfig { ansi_mode: ansi, ..Default::default() };
++            let named = PlanResolver::new(&ctx, Arc::new(config)).resolve_named_plan(spec).await?;
++            let physical = ctx.execute_logical_plan(named.plan).await?.create_physical_plan().await?;
++            assert!(!physical.schema().field(0).is_nullable(), "{sql}: COUNT must stay nonnullable");
++            let batches = datafusion::physical_plan::collect(physical, ctx.task_ctx()).await?;
++            let mut actual = Vec::new();
++            for batch in batches {
++                for row in 0..batch.num_rows() {
++                    actual.push(ScalarValue::try_from_array(batch.column(0), row)?);
++                }
++            }
++            let expected = if total { vec![ScalarValue::Int64(Some(0))] } else { vec![] };
++            assert_eq!(actual, expected, "{sql}, ANSI={ansi}");
++        }
++    }
++    Ok(())
++}
