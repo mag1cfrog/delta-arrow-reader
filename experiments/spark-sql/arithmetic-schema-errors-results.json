@@ -1,0 +1,271 @@
+{
+  "issue": 149,
+  "status": "reviewable evidence slice; C04 acceptance remains open",
+  "integration_base": "9c748be5cca48024e882645ada654ca9d46b7af4",
+  "scope": "Full Arrow field-schema capture and separate schema/error dimensions for the retained 37 replay groups. No query-runtime library changes.",
+  "versions": {
+    "spark": "4.2.0",
+    "sail": "0.7.1",
+    "datafusion": "54.1.0",
+    "arrow": "58.4.0",
+    "pyarrow": "25.0.1"
+  },
+  "native_settings": {
+    "partitions": 2,
+    "batch_size": "per-case, default 1",
+    "timezone": "UTC",
+    "ansi": [
+      true,
+      false
+    ]
+  },
+  "spark_environment": {
+    "python": "3.13.12 (main, Feb  3 2026, 22:52:12) [Clang 21.1.4 ]",
+    "spark": "4.2.0",
+    "java": "openjdk version \"21.0.12.1\" 2026-08-18 LTS\nOpenJDK Runtime Environment Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS)\nOpenJDK 64-Bit Server VM Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS, mixed mode, sharing)\n",
+    "settings": {
+      "master": "local[2]",
+      "spark.sql.shuffle.partitions": "2",
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.decimalOperations.allowPrecisionLoss": "true",
+      "spark.sql.ansi.enabled": [
+        "true",
+        "false"
+      ]
+    },
+    "scripts": {
+      "reference.py": "41e799f66e70378dd7a5f87139c1815cd029ff011bf61eb2fec0c54a338dee2e",
+      "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec"
+    }
+  },
+  "build": {
+    "baseline_commit": "9c748be5cca48024e882645ada654ca9d46b7af4",
+    "unchanged_library_artifacts": 505,
+    "records": [
+      {
+        "command": [
+          "rustc",
+          "--edition=2024",
+          "--crate-name",
+          "arithmetic_schema_probe",
+          "-C",
+          "opt-level=3",
+          "-L",
+          "dependency=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs",
+          "/home/hanbo/.cache/delta-reader-spark-planning/c04-schema-errors-9c748be/decimal_probe.rs",
+          "--extern",
+          "arrow=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libarrow-c13000c78e819f8b.rlib",
+          "--extern",
+          "datafusion=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libdatafusion-68837880e7782399.rlib",
+          "--extern",
+          "sail_plan=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libsail_plan-f7801f5f3399c916.rlib",
+          "--extern",
+          "sail_sql_analyzer=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libsail_sql_analyzer-b3aafb8cf8b52575.rlib",
+          "--extern",
+          "serde_json=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libserde_json-116dff1f60943675.rlib",
+          "--extern",
+          "tokio=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libtokio-313e05b07d46ad64.rlib",
+          "-o",
+          "/home/hanbo/.cache/delta-reader-spark-planning/c04-schema-errors-9c748be/probe"
+        ],
+        "exit_code": 0,
+        "source_sha256": "b16afa371401d107470ca21645b88a2deb5db19f2e0215473ed697b7d06bf42b",
+        "binary_sha256": "73c0dfdd834cc3a3ccd1a078af3fbf4a30edd42b065bdb428547a96df638fa73"
+      },
+      {
+        "command": [
+          "rustc",
+          "--edition=2024",
+          "--crate-name",
+          "arithmetic_schema_probe",
+          "-C",
+          "opt-level=3",
+          "-L",
+          "dependency=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs",
+          "/home/hanbo/.cache/delta-reader-spark-planning/c04-schema-errors-9c748be/decimal_probe.rs",
+          "--extern",
+          "arrow=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libarrow-c13000c78e819f8b.rlib",
+          "--extern",
+          "datafusion=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libdatafusion-68837880e7782399.rlib",
+          "--extern",
+          "sail_plan=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libsail_plan-f7801f5f3399c916.rlib",
+          "--extern",
+          "sail_sql_analyzer=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libsail_sql_analyzer-b3aafb8cf8b52575.rlib",
+          "--extern",
+          "serde_json=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libserde_json-116dff1f60943675.rlib",
+          "--extern",
+          "tokio=/home/hanbo/.cache/delta-reader-spark-planning/empty-input-scalar-f3ed4f4/after-libs/libtokio-313e05b07d46ad64.rlib",
+          "--test",
+          "-o",
+          "/home/hanbo/.cache/delta-reader-spark-planning/c04-schema-errors-9c748be/test"
+        ],
+        "exit_code": 0,
+        "source_sha256": "b16afa371401d107470ca21645b88a2deb5db19f2e0215473ed697b7d06bf42b",
+        "binary_sha256": "0fc33c1f6d1426b693bbae314e5c9699c3b932597568ff25abd6c80062e5ec36"
+      }
+    ]
+  },
+  "accepted_probe_sha256": "097c93aabfa12e28bd6a396ca50f2be13a4ca3b63000ac157a2cf6372b0dd1d9",
+  "preservation": {
+    "groups": 37,
+    "observations": 6784,
+    "identical_prior_payloads": 6784,
+    "identical_complete_errors": 911,
+    "legacy_agreement": 6603,
+    "fresh_schema_reference_observations": 148,
+    "fresh_status_rows_types_condition_changes": 0,
+    "selected_library_artifacts_unchanged": 505,
+    "selected_named_libraries_unchanged": 414
+  },
+  "dimensions": {
+    "total": 6784,
+    "stage": {
+      "match": 6760,
+      "difference": 24
+    },
+    "error_cause": {
+      "not_applicable": 5879,
+      "match": 603,
+      "ambiguous": 82,
+      "unclassified": 220
+    },
+    "schemas": {
+      "logical": {
+        "names": {
+          "match": 6499,
+          "unobserved": 281,
+          "difference": 4
+        },
+        "types": {
+          "match": 6487,
+          "unobserved": 281,
+          "difference": 16
+        },
+        "nullability": {
+          "match": 5061,
+          "difference": 1442,
+          "unobserved": 281
+        },
+        "metadata": {
+          "match": 6499,
+          "unobserved": 281,
+          "difference": 4
+        }
+      },
+      "physical": {
+        "names": {
+          "match": 5931,
+          "unobserved": 849,
+          "difference": 4
+        },
+        "types": {
+          "match": 5931,
+          "unobserved": 849,
+          "difference": 4
+        },
+        "nullability": {
+          "match": 4104,
+          "unobserved": 849,
+          "difference": 1831
+        },
+        "metadata": {
+          "match": 5931,
+          "unobserved": 849,
+          "difference": 4
+        }
+      }
+    }
+  },
+  "historical": {
+    "original_389": {
+      "file": "float64-fused-integer-add-runs.json.gz",
+      "sha256": "747f6bcb5fd38f674400dfdb61adcf64905b3c3482aed9abed6edca79b86b4bf",
+      "bytes": 1359385
+    },
+    "prior_17": {
+      "file": "arithmetic-coercion-runs.json.gz",
+      "sha256": "3eb3eab0fec7659b32a24678fe8491024a7aae8667f30cb9e817857039d69dde",
+      "bytes": 4093451
+    },
+    "issue_migration_commit": "c221668591581f2eedf7ba54de0a360b5010d4a0",
+    "original_389_source": {
+      "report": "float64-fused-integer-add-results.json",
+      "report_sha256": "a15567f3a0a68f036c10ab3f6c8bdc203588db1761a567826451ff4b1f88123a",
+      "parent_commit": "b8ff180",
+      "accepted_runtime_parent_commit": "6ced2eb"
+    },
+    "note": "Overlapping corpora from different checkpoints/comparators. Keep them separate; no summed headline."
+  },
+  "tests": {
+    "native_probe_checks": 1,
+    "python_new_and_retained_comparator_checks": 10
+  },
+  "performance": "The same selected query-runtime libraries are linked. This changes probe capture cost only; no product-performance result is claimed. Accepted runtime cost evidence and open performance owners are unchanged.",
+  "pending": [
+    "Classify schema/nullability and diagnostic differences by cause; observation counts are not defect counts.",
+    "SQLSTATE, message parameters and four existing first-invalid-input questions remain unverified.",
+    "Newer ROUND/CAST focused corpora and the separate scalar-preparation matrix are outside this 37-group schema recapture; their evidence and owners remain.",
+    "The retained 100 scalar diagnostic observations are separate and overlapping, not added to the 6784 total.",
+    "Default-build adoption remains with issue 165. No new compatibility exception is accepted."
+  ],
+  "code_sha256": {
+    "arithmetic_schema_errors.py": "2b1d74ab424c55f1982ff19129dce729de53cd7e6c896690275ca6af5769d39b",
+    "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec",
+    "division_cast_classification.py": "049f9c0e9a4d8002584b3af5036afa032189896eea8567c60b4f581a8308e27d",
+    "early_arithmetic.py": "38a5663f408c844c13629bfac01ab0ae9a94a3d83d11292b8e4b1413160fe762",
+    "examples/decimal_probe.rs": "634355b7d25cbb66cd8e3de82ce51999839708de7a52ada724f1735f478d3028",
+    "extracted.py": "1386974b4fbfff0bf1713fab4b06a63aa4114caa0298c0dd92bb5d2e9b1901dc",
+    "float_bround.py": "80d227e9b16391fa193990c40d9560ec3368cbfb545dd1f0343c1edfc5e643ce",
+    "inventory.py": "fde3e573e73ee819f78cf38389d74d8c92fb89a3427b930362ec886763549939",
+    "modulo_null_guard.py": "1de2534e63053b48cf71f3845226eb21c8ff2868cf94cfba6416d5ca046b7e2f",
+    "oracle.py": "ff7e117a861e47b10c38dcd2cf47ae581acf91f12542b453746df01b20e9ec68",
+    "reference.py": "41e799f66e70378dd7a5f87139c1815cd029ff011bf61eb2fec0c54a338dee2e",
+    "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
+    "string_division_coercion.py": "675bd82b1371f53eac368e46a67a26ef3e7ff97b91b9c80a86efd137a90a688d",
+    "string_modulo_coercion.py": "77602db3b22da6a98e7b978f9b9b89a4250d270a0d542b3002229cf67fd97069",
+    "test_arithmetic_schema_errors.py": "b0083f32fa7aae773bb277376ac5ff4249e1318e4612925817cf25cf5c421ff8",
+    "decimal_arithmetic_types.py": "f355276a7660aba73f528e5b1fb959ef439332e66913f952ef0c70be633de317"
+  },
+  "archive": {
+    "path": "arithmetic-schema-errors-runs.json.gz",
+    "sha256": "bc8a5e5b18773ca2fe581021695741ea06a6f302192fbb382fc4c981276e9c44",
+    "files": 406,
+    "bytes": 2245523
+  },
+  "diagnostic_review": {
+    "before_head": "85c536c2b679ba1f76ec97ce9947d34cd1efd73a",
+    "before_archive": {
+      "path": "arithmetic-schema-errors-runs.json.gz",
+      "sha256": "0801da9ba29785efb3bbf3f07f93afb38f45676ffbfffde3a63081c49fba3556",
+      "files": 382,
+      "bytes": 2143306
+    },
+    "changed_observations": 122,
+    "transitions": [
+      {
+        "before": "difference",
+        "after": "ambiguous",
+        "count": 11
+      },
+      {
+        "before": "difference",
+        "after": "match",
+        "count": 2
+      },
+      {
+        "before": "match",
+        "after": "ambiguous",
+        "count": 71
+      },
+      {
+        "before": "unclassified",
+        "after": "match",
+        "count": 38
+      }
+    ],
+    "preserved_round_conditions": 8,
+    "independent_controls": 6,
+    "source_proof": "diagnostic-review/source-proof.json",
+    "note": "Ambiguous and unclassified causes receive no matching credit. No raw capture, engine, schema or stage changes."
+  }
+}
