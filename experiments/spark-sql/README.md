@@ -450,3 +450,5 @@ See [EXISTS preparation after correlation simplification](CORRELATION_FREE_EXIST
 See [empty local input before scalar preparation](EMPTY_LOCAL_SCALAR.md) for the optional Rust follow-up to PR 281, its shared SELECT/IN/EXISTS repair, complete compatibility evidence and bounded performance measurements.
 
 See [empty keyed groups before scalar preparation](EMPTY_GROUP_SCALAR.md) for the optional Rust follow-up to PR 283, its shared empty-input proof and preserved grand totals, full compatibility evidence and bounded performance measurements.
+
+See [scalar children of empty filters and aggregates](EMPTY_INPUT_SCALAR.md) for the optional Rust follow-up to PR 285, its HAVING/aggregate-argument repair and preserved COUNT fields, complete compatibility evidence and bounded performance measurements.
