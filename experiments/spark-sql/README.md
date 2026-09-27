@@ -456,3 +456,5 @@ See [empty local input before scalar preparation](EMPTY_LOCAL_SCALAR.md) for the
 See [empty keyed groups before scalar preparation](EMPTY_GROUP_SCALAR.md) for the optional Rust follow-up to PR 283, its shared empty-input proof and preserved grand totals, full compatibility evidence and bounded performance measurements.
 
 See [scalar children of empty filters and aggregates](EMPTY_INPUT_SCALAR.md) for the optional Rust follow-up to PR 285, its HAVING/aggregate-argument repair and preserved COUNT fields, complete compatibility evidence and bounded performance measurements.
+
+See [local Decimal CAST preparation](LOCAL_DECIMAL_CAST.md) for the optional Rust correction to first narrowing failures, source-order and reachability controls, retained schema/error evidence and bounded planning costs.

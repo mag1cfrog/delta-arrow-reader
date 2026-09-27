@@ -1,0 +1,3236 @@
+{
+  "integration_base": "4da6f57ecad73f95bdbb8d6c019ec48e7ba58905",
+  "issue": 289,
+  "patch": {
+    "path": "sail-local-decimal-cast.patch",
+    "sha256": "ac51c13160eb9de6145bf100a3e4baf541179d063a467df53e7672ad459e8e84"
+  },
+  "archive": {
+    "path": "local-decimal-cast-runs.json.gz",
+    "sha256": "56165fe087d176b046e026176e3bf25856da7373c8efb6423b2fa90189794e81",
+    "files": 627,
+    "compressed_bytes": 6622369
+  },
+  "base_runtime_archive": {
+    "path": "empty-input-scalar-runs.json.gz",
+    "sha256": "399c09734a73b99d9f2b0efe9c0ebf62e335fb8cd4a3ae9a1f5a7e6b1cdb1b2c",
+    "files": 689,
+    "compressed_bytes": 8744330
+  },
+  "builds": {
+    "before": {
+      "sail_plan": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/before-libs/libsail_plan-local_decimal_cast.rlib",
+        "sha256": "ea548e59f2b1ed1f8f1248ed7351cc2fe375c8dd4a272f279894486b98a1615c"
+      },
+      "probe": "866213fef0823f88aaefd6f475831ac6ce01139fba9d2fda49a2f61791ca94a5",
+      "source_manifest": {
+        "Cargo.toml": "bbe49faeff7c01b872cecf0c30e064a7bcbb18141a9ad9c8bc9883c001baf7c3",
+        "src/lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "src/formatter.rs": "8efcf4e365b63281dbd3f3f1ffc4e676e1ec725d9280aeacadad6a5832bb7659",
+        "src/error.rs": "8a80c7d7698798f78ae23d76a0be94ac7d4c2a2866de86145fdfce1e1e56b157",
+        "src/config.rs": "54ec760ce6cce021eabd13f199fbd41f306c0c8a61eba0d346e838ab3a0ad988",
+        "src/decimal_null.rs": "9143f18775151d401e11ee2381e58e223dff62fa04779bddc7f6a9c3724eec7b",
+        "src/resolver/state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "src/resolver/schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "src/resolver/plan.rs": "8ca21b1494c6533ea2557d8c3dc21ae584cd757f4be31970d2cdf2e8f2f38538",
+        "src/resolver/mod.rs": "7f52c1d59077e9b2e7129b0a199bf91d65b8cda2673a98174ed9e22379ad9fe6",
+        "src/resolver/literal.rs": "fd80458252b9f69895bf5e77aa1449660289bd410ecbea2e002043ebc9100e81",
+        "src/resolver/data_type.rs": "f64c73f4d61bc0a0c80dd60c44e000c9013dc8e428daf49a397efcc4fe3cb74f",
+        "src/function/window.rs": "d76c791011ff010aa722650b69d2d84d61adf33a53d9c3bf7c2f6581b1cafb5a",
+        "src/function/mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "src/function/generator.rs": "b1bdedbef1002459ac75c7d94962ba9249d93e31b15ba9701da7729beabd7d31",
+        "src/function/common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "src/function/aggregate.rs": "bf7069d2c39341ae9eb385ff48a144fbc9318f4b196c5d8e5231404abc37b9ce",
+        "src/physical_plan/spark_partition_id.rs": "27570b5d300dfa4e620739a2b94598301db3ea7985651b52b871c2ab9ad9984d",
+        "src/physical_plan/mod.rs": "4bbc5628f310d92eb6a1c6fcb2fc676f20c760b89412b18a87f992104241df40",
+        "src/physical_plan/monotonic_id.rs": "e352137c2b30ca11f515f648243e7347b7b828fc4b34718601e3e84fef3df983",
+        "src/function/table/range_exec.rs": "5f226ed224609bd2c1f6594e4684b3f1ca1820ca78633c7c9028ef50d5a4b1ea",
+        "src/function/table/range.rs": "8a7c5c7518af38d0ab9790e5fbfe372916337b8c10a95a97780266db7eed4a79",
+        "src/function/table/mod.rs": "17f480ed24be05eebff90c7c3415e093cdbd4332da6b5205ebc49fbf38efd0ae",
+        "src/function/scalar/xml.rs": "4c8669c5994469510cbc69d1571ad7ed125fffe233f0c7c3436e5f3379df2e6a",
+        "src/function/scalar/vector.rs": "3e0f4ae371115444e2deee4e35972602a35b58b7573aa5f8604b414ca5882722",
+        "src/function/scalar/variant.rs": "f6d9eea4e36a63ee3b6a4376ea6f24adb4a95684cbb44e7ec886b7eed0ead5a6",
+        "src/function/scalar/url.rs": "2759add1b4cbd5d052b8428fe0943befc867794d17e85fdbac3bc22c47508bba",
+        "src/function/scalar/struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "src/function/scalar/string.rs": "722555bc59227f9dc215abcad6bd176d9152e9a523e8722a1940de2766abd8d0",
+        "src/function/scalar/predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "src/function/scalar/mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "src/function/scalar/misc.rs": "8abd2e32666afd139780357658360d81ad60ef46b984a7b2a5d4a226f0ffd3f8",
+        "src/function/scalar/map.rs": "f1723ee99907f0fffd1279d0322e6e410d4c3becf5df874d391f5c6ec0783973",
+        "src/function/scalar/lambda.rs": "cd73406f6ab15d838fc9ac4e969cc27f519312c3239a07638ef44fbeb3e8efdc",
+        "src/function/scalar/json.rs": "89bf5ed178be141da338feeb1caf5d9370440fefd2d10a61c416cafcf1762f90",
+        "src/function/scalar/hash.rs": "0d8607771d87f897eac2d55139f32d435d7aa1f32fe4cb26b5c378d7b18b2037",
+        "src/function/scalar/geo.rs": "47aca245d5ff77d98602358044c1d367212d56dfc83543c3acdf4d5f1d7fcdb9",
+        "src/function/scalar/datetime.rs": "7ebd78225afb5fad4dd6cb4a2eba18267ba037a3f4077c2cd52e9bf7eb93b9f8",
+        "src/function/scalar/csv.rs": "5e1193a76b02e049246961bb0f27e8d16f88b9d14c0e2bf6bfac41b95a788b94",
+        "src/function/scalar/conversion.rs": "53a92b290a6a100e81700bd2733f32ca6478938832c56bb7502a59b5564e0642",
+        "src/function/scalar/conditional.rs": "b32379a2f19e82602633640ffb51fb322cb3d710b413afe3ca67f97f49acbda4",
+        "src/function/scalar/collection.rs": "8eeb2b8e3577349a47aa88b733150e900ee784f82dbc10f1a2d7bdc09111f5f0",
+        "src/function/scalar/bitwise.rs": "f9344aba19d948b84f34a95ba78087685e1dee4606a610c0434d460853907002",
+        "src/function/scalar/array.rs": "5dbddebfdcbec7f4ce7aed762f6eb07c91e821fe8099ce792e83cbe03fb72709",
+        "src/function/scalar/math.rs": "580a2838b15e6e280e209076936df3a37870014f9275a99cd1eb97ea4e4089d4",
+        "src/function/scalar/small_int_divide.rs": "700a3b1799999b57761155ec04448c3c64c090cc7168ec067b194cc1b30cd131",
+        "src/resolver/tree/window.rs": "0804d4895fee4521627600e3f6d65d30ab358e976d2c755795aaf98b3b5336f0",
+        "src/resolver/tree/spark_partition_id.rs": "92240c068098a432d90db095385726ffb5e8750cd02cdf147d1456caac14cafa",
+        "src/resolver/tree/monotonic_id.rs": "2f4113ef631642914af093376c7c11dc3644ad61b747ff97646de024207064e8",
+        "src/resolver/tree/mod.rs": "8b27e914b4f50b0f365c7aeeda903a217e0dacc5a22c5907bebefcc2cb7624a6",
+        "src/resolver/tree/explode.rs": "a9df888af9723438685f92d30ef5433325dac14a554691ce4868a396f5d0808d",
+        "src/resolver/query/window.rs": "48bd0ce533037082f64469e968a6a01c58bc13c53c2b7a3ec17ba20999288aec",
+        "src/resolver/query/values.rs": "9a765be414212e9d0d4371bc19c6e16058acd1d6e0a4b48b6a88227af5c4d4d4",
+        "src/resolver/query/sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "src/resolver/query/set_op.rs": "51c19582026d3eac5cbb5cf73add6f6637d20760b6001887d746f37a07fb70cc",
+        "src/resolver/query/recursion.rs": "e1ac16cb3222cbe70a0ee8984c83617553ac8d0e7d6ba0fc6619962a0fdcb72d",
+        "src/resolver/query/read.rs": "04998ab1ec470964a8b04fa661a4fcd56f920ba8f2820ec12b75208ca09992ca",
+        "src/resolver/query/project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "src/resolver/query/pivoting.rs": "3cddd62d4b1d1ec3bd032c9c1ccbd4b3c3b25a61ee0fd6c3ba28954414d31a93",
+        "src/resolver/query/mod.rs": "fdc8c28964237ef5d6b01f8fe3ef5c3259e2a728d806b3c947d4c54cf32394a8",
+        "src/resolver/query/misc.rs": "634ac7ccd9580bd033a20991ba9941684007b153040834f56f3a988660f914e1",
+        "src/resolver/query/limit.rs": "648357da0b6fe030db8df58d5002eb43a9cfede614383d05b68489bbb9f74434",
+        "src/resolver/query/lateral_join.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "src/resolver/query/lateral.rs": "777c3ae63cba87dee9f130bc712b5f8ba44ff002a9da31cce3365e7dea034810",
+        "src/resolver/query/join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "src/resolver/query/filter.rs": "ef0e0b2fa8c4c8e7b002f83e0ed3e1e49d125fd2c0529f180324cac631b952e4",
+        "src/resolver/query/dedup.rs": "c8dee00af03d41e30db96f9521987032e778fac77a0cfece26831e0fe1b157a2",
+        "src/resolver/query/cte.rs": "63959406719bb53ac825fdb9f8559fe07ab8631513f236c04bb19c9bd6499ab0",
+        "src/resolver/query/alias.rs": "7328872cbf6287e54c6f17e7da19d9d7296fa12ed2672624493340f0c2c21fef",
+        "src/resolver/query/aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "src/resolver/expression/window.rs": "4044cb8f7548a2888e71b18c7a98c91fca041f3f7fae9e5d7d0eeb8782c7d030",
+        "src/resolver/expression/wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "src/resolver/expression/subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "src/resolver/expression/sort.rs": "9bcd4cfbd327394fc812f4fdd049f6db23b0fb57c3d2419244cf1aa8db9a5cbe",
+        "src/resolver/expression/predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "src/resolver/expression/mod.rs": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+        "src/resolver/expression/misc.rs": "794caf1792f07ec1daa2a56a32fc66f5a7e961f66d51290e1604b9a6ff1ef9c9",
+        "src/resolver/expression/literal.rs": "d4c68382993e1bfd726ec97ea62c10da82038b035bd246fefae99d7c2b6e93db",
+        "src/resolver/expression/lambda.rs": "e0c51790fb66ab90b3cd7e2f4bfcee45711f139b3b413e793a1198a8e2081ed4",
+        "src/resolver/expression/grouping.rs": "c9b309a73f920c61cc9ea0599f1a9efcbd5cd2d5e5cb2e3530afd13d60cd8372",
+        "src/resolver/expression/function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "src/resolver/expression/cast.rs": "30f3ae9e61a7b0af2aeed023e562662e330866134d9cce0281a0f88dd33af8de",
+        "src/resolver/expression/attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b"
+      }
+    },
+    "after": {
+      "sail_plan": {
+        "path": "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-libs/libsail_plan-local_decimal_cast.rlib",
+        "sha256": "639bf5fd401bca0cb6fcc405d475be80e549a86a56791cf7c07829bb1f302861"
+      },
+      "probe": "c5784d5218df75f8fbf2aaf604f11a083c3163077ed7a57c2c0e1e5092be25a6",
+      "source_manifest": {
+        "Cargo.toml": "bbe49faeff7c01b872cecf0c30e064a7bcbb18141a9ad9c8bc9883c001baf7c3",
+        "src/lib.rs": "6bf466af2a8dd1d1a489dadeda579e7596a0bade27f023e1465bf831cb0f5948",
+        "src/formatter.rs": "8efcf4e365b63281dbd3f3f1ffc4e676e1ec725d9280aeacadad6a5832bb7659",
+        "src/error.rs": "8a80c7d7698798f78ae23d76a0be94ac7d4c2a2866de86145fdfce1e1e56b157",
+        "src/config.rs": "54ec760ce6cce021eabd13f199fbd41f306c0c8a61eba0d346e838ab3a0ad988",
+        "src/decimal_null.rs": "818af1a613d206840874e8a96c1c4288fec8c8c9fc21b5aec74fc2ef58b7722d",
+        "src/resolver/state.rs": "006374f931af6b6d978a7fedabc343da63c4e17e88120da9c653e1c0f1374b85",
+        "src/resolver/schema.rs": "cca179abd37b71efb60ddea11f4b003bbd7ee7ae65f3d06ea912a97902f58eba",
+        "src/resolver/plan.rs": "8ca21b1494c6533ea2557d8c3dc21ae584cd757f4be31970d2cdf2e8f2f38538",
+        "src/resolver/mod.rs": "7f52c1d59077e9b2e7129b0a199bf91d65b8cda2673a98174ed9e22379ad9fe6",
+        "src/resolver/literal.rs": "fd80458252b9f69895bf5e77aa1449660289bd410ecbea2e002043ebc9100e81",
+        "src/resolver/data_type.rs": "f64c73f4d61bc0a0c80dd60c44e000c9013dc8e428daf49a397efcc4fe3cb74f",
+        "src/function/window.rs": "d76c791011ff010aa722650b69d2d84d61adf33a53d9c3bf7c2f6581b1cafb5a",
+        "src/function/mod.rs": "9128640c3ff748fc89463409b835a5784b28003df1685633cc697625426959ea",
+        "src/function/generator.rs": "b1bdedbef1002459ac75c7d94962ba9249d93e31b15ba9701da7729beabd7d31",
+        "src/function/common.rs": "ed214fc9d84c7a0e1c680074614b4309783b9029ca862583423fa1e5c016f034",
+        "src/function/aggregate.rs": "bf7069d2c39341ae9eb385ff48a144fbc9318f4b196c5d8e5231404abc37b9ce",
+        "src/physical_plan/spark_partition_id.rs": "27570b5d300dfa4e620739a2b94598301db3ea7985651b52b871c2ab9ad9984d",
+        "src/physical_plan/mod.rs": "4bbc5628f310d92eb6a1c6fcb2fc676f20c760b89412b18a87f992104241df40",
+        "src/physical_plan/monotonic_id.rs": "e352137c2b30ca11f515f648243e7347b7b828fc4b34718601e3e84fef3df983",
+        "src/function/table/range_exec.rs": "5f226ed224609bd2c1f6594e4684b3f1ca1820ca78633c7c9028ef50d5a4b1ea",
+        "src/function/table/range.rs": "8a7c5c7518af38d0ab9790e5fbfe372916337b8c10a95a97780266db7eed4a79",
+        "src/function/table/mod.rs": "17f480ed24be05eebff90c7c3415e093cdbd4332da6b5205ebc49fbf38efd0ae",
+        "src/function/scalar/xml.rs": "4c8669c5994469510cbc69d1571ad7ed125fffe233f0c7c3436e5f3379df2e6a",
+        "src/function/scalar/vector.rs": "3e0f4ae371115444e2deee4e35972602a35b58b7573aa5f8604b414ca5882722",
+        "src/function/scalar/variant.rs": "f6d9eea4e36a63ee3b6a4376ea6f24adb4a95684cbb44e7ec886b7eed0ead5a6",
+        "src/function/scalar/url.rs": "2759add1b4cbd5d052b8428fe0943befc867794d17e85fdbac3bc22c47508bba",
+        "src/function/scalar/struct.rs": "1cd70f4e816ce6fe94c5a7f73d59f828a436fc013a75795e63d4fa96c48cc6a8",
+        "src/function/scalar/string.rs": "722555bc59227f9dc215abcad6bd176d9152e9a523e8722a1940de2766abd8d0",
+        "src/function/scalar/predicate.rs": "84ad8b51af5296ad1a70b75673929c101bd7837746dcff4b08b9a1105837af6d",
+        "src/function/scalar/mod.rs": "0959ff30b6347ebe34ab237361207ebe7066f529e108b1310e2e58c70d3fde1a",
+        "src/function/scalar/misc.rs": "8abd2e32666afd139780357658360d81ad60ef46b984a7b2a5d4a226f0ffd3f8",
+        "src/function/scalar/map.rs": "f1723ee99907f0fffd1279d0322e6e410d4c3becf5df874d391f5c6ec0783973",
+        "src/function/scalar/lambda.rs": "cd73406f6ab15d838fc9ac4e969cc27f519312c3239a07638ef44fbeb3e8efdc",
+        "src/function/scalar/json.rs": "89bf5ed178be141da338feeb1caf5d9370440fefd2d10a61c416cafcf1762f90",
+        "src/function/scalar/hash.rs": "0d8607771d87f897eac2d55139f32d435d7aa1f32fe4cb26b5c378d7b18b2037",
+        "src/function/scalar/geo.rs": "47aca245d5ff77d98602358044c1d367212d56dfc83543c3acdf4d5f1d7fcdb9",
+        "src/function/scalar/datetime.rs": "7ebd78225afb5fad4dd6cb4a2eba18267ba037a3f4077c2cd52e9bf7eb93b9f8",
+        "src/function/scalar/csv.rs": "5e1193a76b02e049246961bb0f27e8d16f88b9d14c0e2bf6bfac41b95a788b94",
+        "src/function/scalar/conversion.rs": "53a92b290a6a100e81700bd2733f32ca6478938832c56bb7502a59b5564e0642",
+        "src/function/scalar/conditional.rs": "b32379a2f19e82602633640ffb51fb322cb3d710b413afe3ca67f97f49acbda4",
+        "src/function/scalar/collection.rs": "8eeb2b8e3577349a47aa88b733150e900ee784f82dbc10f1a2d7bdc09111f5f0",
+        "src/function/scalar/bitwise.rs": "f9344aba19d948b84f34a95ba78087685e1dee4606a610c0434d460853907002",
+        "src/function/scalar/array.rs": "5dbddebfdcbec7f4ce7aed762f6eb07c91e821fe8099ce792e83cbe03fb72709",
+        "src/function/scalar/math.rs": "580a2838b15e6e280e209076936df3a37870014f9275a99cd1eb97ea4e4089d4",
+        "src/function/scalar/small_int_divide.rs": "700a3b1799999b57761155ec04448c3c64c090cc7168ec067b194cc1b30cd131",
+        "src/resolver/tree/window.rs": "0804d4895fee4521627600e3f6d65d30ab358e976d2c755795aaf98b3b5336f0",
+        "src/resolver/tree/spark_partition_id.rs": "92240c068098a432d90db095385726ffb5e8750cd02cdf147d1456caac14cafa",
+        "src/resolver/tree/monotonic_id.rs": "2f4113ef631642914af093376c7c11dc3644ad61b747ff97646de024207064e8",
+        "src/resolver/tree/mod.rs": "8b27e914b4f50b0f365c7aeeda903a217e0dacc5a22c5907bebefcc2cb7624a6",
+        "src/resolver/tree/explode.rs": "a9df888af9723438685f92d30ef5433325dac14a554691ce4868a396f5d0808d",
+        "src/resolver/query/window.rs": "48bd0ce533037082f64469e968a6a01c58bc13c53c2b7a3ec17ba20999288aec",
+        "src/resolver/query/values.rs": "9a765be414212e9d0d4371bc19c6e16058acd1d6e0a4b48b6a88227af5c4d4d4",
+        "src/resolver/query/sort.rs": "cd80b7163cd752c63bae021a5cf16954d161f53a92134bc67e4c83f053fb6d07",
+        "src/resolver/query/set_op.rs": "51c19582026d3eac5cbb5cf73add6f6637d20760b6001887d746f37a07fb70cc",
+        "src/resolver/query/recursion.rs": "e1ac16cb3222cbe70a0ee8984c83617553ac8d0e7d6ba0fc6619962a0fdcb72d",
+        "src/resolver/query/read.rs": "04998ab1ec470964a8b04fa661a4fcd56f920ba8f2820ec12b75208ca09992ca",
+        "src/resolver/query/project.rs": "b935f0b4f1613d9a99681beca4c9d86b12f59fc5811a42873e35083e4b9e388f",
+        "src/resolver/query/pivoting.rs": "3cddd62d4b1d1ec3bd032c9c1ccbd4b3c3b25a61ee0fd6c3ba28954414d31a93",
+        "src/resolver/query/mod.rs": "fdc8c28964237ef5d6b01f8fe3ef5c3259e2a728d806b3c947d4c54cf32394a8",
+        "src/resolver/query/misc.rs": "634ac7ccd9580bd033a20991ba9941684007b153040834f56f3a988660f914e1",
+        "src/resolver/query/limit.rs": "648357da0b6fe030db8df58d5002eb43a9cfede614383d05b68489bbb9f74434",
+        "src/resolver/query/lateral_join.rs": "c6d964b9c13939768314b48a591d23959f168ea3060059cc46f97e39a32dd047",
+        "src/resolver/query/lateral.rs": "777c3ae63cba87dee9f130bc712b5f8ba44ff002a9da31cce3365e7dea034810",
+        "src/resolver/query/join.rs": "d2b8a313f3a7c6e68278f7092b247a6809db812cc1a0be763cdfd8c8ed047aa1",
+        "src/resolver/query/filter.rs": "ef0e0b2fa8c4c8e7b002f83e0ed3e1e49d125fd2c0529f180324cac631b952e4",
+        "src/resolver/query/dedup.rs": "c8dee00af03d41e30db96f9521987032e778fac77a0cfece26831e0fe1b157a2",
+        "src/resolver/query/cte.rs": "63959406719bb53ac825fdb9f8559fe07ab8631513f236c04bb19c9bd6499ab0",
+        "src/resolver/query/alias.rs": "7328872cbf6287e54c6f17e7da19d9d7296fa12ed2672624493340f0c2c21fef",
+        "src/resolver/query/aggregate.rs": "1b115906b14e6889186b854107e5efd6a07955961963c4c96c16c859cf89f66e",
+        "src/resolver/expression/window.rs": "4044cb8f7548a2888e71b18c7a98c91fca041f3f7fae9e5d7d0eeb8782c7d030",
+        "src/resolver/expression/wildcard.rs": "6c0bb4f83f9fbd7e9ad6a3d462b76f15b6c118f450931b09931d07622fdbb619",
+        "src/resolver/expression/subquery.rs": "7f2d78b68f28bb6eaa1b0657498a1fcb4e56f14377bd6d4be2992202a08a9958",
+        "src/resolver/expression/sort.rs": "9bcd4cfbd327394fc812f4fdd049f6db23b0fb57c3d2419244cf1aa8db9a5cbe",
+        "src/resolver/expression/predicate.rs": "8e557784330a1ec772f5ed10f0d90487bccfc2180557d35299133f5bfbce3fe0",
+        "src/resolver/expression/mod.rs": "4849b82f17d5b10b725b976deb0c943e3b8cd48e1618de5b114e2fa07aeda36e",
+        "src/resolver/expression/misc.rs": "794caf1792f07ec1daa2a56a32fc66f5a7e961f66d51290e1604b9a6ff1ef9c9",
+        "src/resolver/expression/literal.rs": "d4c68382993e1bfd726ec97ea62c10da82038b035bd246fefae99d7c2b6e93db",
+        "src/resolver/expression/lambda.rs": "e0c51790fb66ab90b3cd7e2f4bfcee45711f139b3b413e793a1198a8e2081ed4",
+        "src/resolver/expression/grouping.rs": "c9b309a73f920c61cc9ea0599f1a9efcbd5cd2d5e5cb2e3530afd13d60cd8372",
+        "src/resolver/expression/function.rs": "9a40a9a0d5e094fca2c3a5f6d283bef6e3e2b42c5611f7b0f1927d1a04edf896",
+        "src/resolver/expression/cast.rs": "30f3ae9e61a7b0af2aeed023e562662e330866134d9cce0281a0f88dd33af8de",
+        "src/resolver/expression/attribute.rs": "72fb30467a52d0dba630d0b356fb20e64ef43626a3fc79808e7607986981852b"
+      }
+    }
+  },
+  "repository_files": {
+    "arithmetic_schema_errors.py": "2b1d74ab424c55f1982ff19129dce729de53cd7e6c896690275ca6af5769d39b",
+    "bigint_div_overflow.py": "fbd40d0634454ee8b744e7df8951d406a1b4ca2c65d78c824dd5189521e965f3",
+    "dead_cast.py": "6f904f22586742b8ee6450cc14fcc265d8f2acce82fe7207648b35c5236735ef",
+    "decimal_arithmetic_types.py": "f355276a7660aba73f528e5b1fb959ef439332e66913f952ef0c70be633de317",
+    "decimal_bround.py": "90f12456275c926ddf64e17453912c75243c8a348b7db8bb570796e2af6a74d4",
+    "decimal_cast_errors.py": "40cb468ecb6377db2070ac2ff5ab7d33f827bb9a0fc91d283e008c4a7a9eb301",
+    "decimal_division.py": "42f54687ba4ac8ff811f7c227404f0ab4bb0483bd31c4959c167b6b71935e1ec",
+    "decimal_division_properties.py": "7c542ef9e8e96a7f6315b9ed827d9254c4240ba78ef83c65bad5a3806c83f4ac",
+    "decimal_round_extreme.py": "12ab239a1ebd1d0209d629398a4207f42df58b582d46f24e9ceda82474746212",
+    "division_cast_classification.py": "049f9c0e9a4d8002584b3af5036afa032189896eea8567c60b4f581a8308e27d",
+    "early_arithmetic.py": "38a5663f408c844c13629bfac01ab0ae9a94a3d83d11292b8e4b1413160fe762",
+    "extracted.py": "1386974b4fbfff0bf1713fab4b06a63aa4114caa0298c0dd92bb5d2e9b1901dc",
+    "float_bround.py": "80d227e9b16391fa193990c40d9560ec3368cbfb545dd1f0343c1edfc5e643ce",
+    "float_bround_boundaries.py": "772959e2ec03d0a818d8a95a4eced9afc025e9c9fd5e9196ed2cce4f6d24442f",
+    "float_round.py": "c4ac5caa6872346dd53b27ef1b27e018b7e515b6497a293c051b09859203ddcc",
+    "floating_string_cast.py": "f53565f37f82568a289488ee20c9433f105dffced211348c5953aa1c1b814853",
+    "integer_overflow.py": "2364a1ea92dc5d55a424e1049f3c657a6821c6350eb355f48f99b834bd593c76",
+    "integer_round.py": "88ccca74ef38a616cbe3137dca5d41880a0d33a966c7087da534f0592d111271",
+    "inventory.py": "fde3e573e73ee819f78cf38389d74d8c92fb89a3427b930362ec886763549939",
+    "legacy_numeric_cast.py": "11fe9b735c2db3a0e4f5e58a729fb4b72a1704ea9f61d35e8c77b4d13d72b491",
+    "modulo_null_guard.py": "1de2534e63053b48cf71f3845226eb21c8ff2868cf94cfba6416d5ca046b7e2f",
+    "oracle.py": "ff7e117a861e47b10c38dcd2cf47ae581acf91f12542b453746df01b20e9ec68",
+    "prepared_phase_schedule.py": "aff18f43111b6a396fd042fc193722b790cfefc1765541bb23f74a4306cc11eb",
+    "reference.py": "41e799f66e70378dd7a5f87139c1815cd029ff011bf61eb2fec0c54a338dee2e",
+    "round_arguments.py": "9a02b260046ef32181866887021ea6cc11462f6b230614ba795cefa4c90907bb",
+    "strict_integer_cast.py": "fa9234ea51ffab97d8d64aa884fa05d30e776acdf7d27300073c4ce3a0884724",
+    "string_division_coercion.py": "675bd82b1371f53eac368e46a67a26ef3e7ff97b91b9c80a86efd137a90a688d",
+    "string_modulo_coercion.py": "77602db3b22da6a98e7b978f9b9b89a4250d270a0d542b3002229cf67fd97069",
+    "test_arithmetic_schema_errors.py": "b0083f32fa7aae773bb277376ac5ff4249e1318e4612925817cf25cf5c421ff8",
+    "test_bigint_div_overflow.py": "39bc0c5ed77f2ae7e0c09aa945069cdd6ff3205e29e393febac73f62fd7d819d",
+    "test_decimal_arithmetic_types.py": "73c76fb2606a7599251696096f22be6176460e5f794ed1a60cd0f8e85af8e7e7",
+    "test_decimal_bround.py": "3d6e6527600ef8bef69ff450d2e308303fb7c6d44c320908c0c3a9abcc4f2777",
+    "test_decimal_division.py": "fec79c42d76fa55ed6c5ec216ed4904f6ea7a3076d70396457b408f94a162068",
+    "test_division_cast_classification.py": "6526b38132fae216ec5d63e92ee8563b8495f0ca2fe208a147414d1202daee0d",
+    "test_early_arithmetic.py": "077a501236d1c15c949e3714712cca1bdff08135a63b1e200e05451604f651f0",
+    "test_extracted.py": "c1d009184adefcbad997f6a42180976d7068e9be800a1b6d1036c2c74730a941",
+    "test_float_bround.py": "188d4ac8968d9c008b01409dabf36bf33ebb858eb06000c8f7c6bfc3ef12a30a",
+    "test_integer_overflow.py": "97e505dc06b75b104eae84a69eea25f3a925a5581f5e8414c1182892e9ba4f9c",
+    "test_integer_round.py": "ae044acddb9c936825ee4a6380576679ca03d3340cc78228cedcefa1a1d40780",
+    "test_modulo_null_guard.py": "1e7728aad19d721f57be8687f232a0bbc653543bbd8f02bc2703b8f3f916a5b7",
+    "test_oracle.py": "c0a530c23f6babab2b4211581282968f47436f204efc646491679d22acf93587",
+    "test_round_arguments.py": "00e467dea34b8ce51437de0b31b5f111975b64298faff8cf63f74d5b01e6d479",
+    "test_string_division_coercion.py": "c2ac3fc2616394940cc2f351b99934d86e9aa9393fb0763caa7bbe76932f18f6",
+    "test_string_modulo_coercion.py": "c106a382ad20bf6dd45163caf46b8fe2f3bf83f112864f602370dbbe3d8d1c50",
+    "local-decimal-cast.jsonl": "784b53ff7c4da5d5b9fb72a4da9739ea2b22882442151a517daf673043e0b003",
+    "sail-local-decimal-cast.patch": "ac51c13160eb9de6145bf100a3e4baf541179d063a467df53e7672ad459e8e84",
+    "integer-round.jsonl": "539ab3a27261708d83515876c1b3d9cf3257119f12edc8419cece357a2d4ffaf",
+    "decimal-bround.jsonl": "c13bb97b7bf5cb36aaae12a7b14b58cff394f423c6bd2b571252f8cab5f238ec",
+    "integer-overflow.jsonl": "c692c28758d273fc3022057e77b5baf344481dc075553d2d5428d39b1a34065a",
+    "arithmetic-first-errors-runs.json.gz": "752b65ed27f551add080cd4196c466383e345a50dee50d6eb7043f05576d6a8f",
+    "arithmetic-schema-errors-runs.json.gz": "cfea1cd84f6cb7e7c96a8d4842f6bde5feff3276d36329191ce3f8b3a0237f25"
+  },
+  "focused": {
+    "before": {
+      "values_types_or_error_stage": {
+        "agreement": 90,
+        "total": 92
+      },
+      "dimensions": {
+        "total": 92,
+        "stage": {
+          "match": 90,
+          "difference": 2
+        },
+        "error_cause": {
+          "match": 12,
+          "not_applicable": 80
+        },
+        "schemas": {
+          "logical": {
+            "names": {
+              "match": 92
+            },
+            "types": {
+              "match": 92
+            },
+            "nullability": {
+              "match": 90,
+              "difference": 2
+            },
+            "metadata": {
+              "match": 92
+            }
+          },
+          "physical": {
+            "names": {
+              "match": 92
+            },
+            "types": {
+              "match": 92
+            },
+            "nullability": {
+              "match": 84,
+              "difference": 8
+            },
+            "metadata": {
+              "match": 92
+            }
+          }
+        }
+      }
+    },
+    "after": {
+      "values_types_or_error_stage": {
+        "agreement": 92,
+        "total": 92
+      },
+      "dimensions": {
+        "total": 92,
+        "stage": {
+          "match": 92
+        },
+        "error_cause": {
+          "match": 14,
+          "not_applicable": 78
+        },
+        "schemas": {
+          "logical": {
+            "names": {
+              "match": 92
+            },
+            "types": {
+              "match": 92
+            },
+            "nullability": {
+              "match": 90,
+              "difference": 2
+            },
+            "metadata": {
+              "match": 92
+            }
+          },
+          "physical": {
+            "names": {
+              "unobserved": 14,
+              "match": 78
+            },
+            "types": {
+              "unobserved": 14,
+              "match": 78
+            },
+            "nullability": {
+              "unobserved": 14,
+              "match": 70,
+              "difference": 8
+            },
+            "metadata": {
+              "unobserved": 14,
+              "match": 78
+            }
+          }
+        }
+      }
+    },
+    "first_invalid_inputs": {
+      "total": 14,
+      "before_matches": 10,
+      "after_matches": 14,
+      "cases": [
+        {
+          "id": "cast_order_False_batch1_true",
+          "spark_source_value": "1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_order_False_batch2_true",
+          "spark_source_value": "1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_order_False_batch4_true",
+          "spark_source_value": "1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_order_True_batch1_true",
+          "spark_source_value": "-1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "-1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": false,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "-1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_order_True_batch2_true",
+          "spark_source_value": "-1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "-1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "-1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "-1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_order_True_batch4_true",
+          "spark_source_value": "-1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "-1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "-1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "-1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_limit_zero_true",
+          "spark_source_value": "1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": null,
+            "first_value_match": false,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_live_case_true",
+          "spark_source_value": "1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_live_coalesce_true",
+          "spark_source_value": "1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_unused_true",
+          "spark_source_value": "1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": null,
+            "first_value_match": false,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_only_positive_true",
+          "spark_source_value": "1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_only_negative_true",
+          "spark_source_value": "-1",
+          "spark_precision": 38,
+          "spark_scale": 38,
+          "rounded_target_value": "-1.00000000000000000000000000000000000000",
+          "before": {
+            "reported_value": "-1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "-1.00000000000000000000000000000000000000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_rounding_carry_False_true",
+          "spark_source_value": "999.99",
+          "spark_precision": 3,
+          "spark_scale": 0,
+          "rounded_target_value": "1000",
+          "before": {
+            "reported_value": "-1000",
+            "first_value_match": false,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "1000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        },
+        {
+          "id": "cast_rounding_carry_True_true",
+          "spark_source_value": "-999.99",
+          "spark_precision": 3,
+          "spark_scale": 0,
+          "rounded_target_value": "-1000",
+          "before": {
+            "reported_value": "-1000",
+            "first_value_match": true,
+            "analyzer_error": false
+          },
+          "after": {
+            "reported_value": "-1000",
+            "first_value_match": true,
+            "analyzer_error": true
+          }
+        }
+      ]
+    },
+    "shared_success_exact_schema_and_output_preservation": [
+      "cast_order_False_batch1_false",
+      "cast_order_False_batch2_false",
+      "cast_order_False_batch4_false",
+      "cast_order_True_batch1_false",
+      "cast_order_True_batch2_false",
+      "cast_order_True_batch4_false",
+      "cast_where_false_true",
+      "cast_where_false_false",
+      "cast_limit_zero_false",
+      "cast_where_false_limit_zero_true",
+      "cast_where_false_limit_zero_false",
+      "cast_dead_case_true",
+      "cast_dead_case_false",
+      "cast_live_case_false",
+      "cast_row_case_true",
+      "cast_row_case_false",
+      "cast_null_parent_true",
+      "cast_null_parent_false",
+      "cast_dead_coalesce_true",
+      "cast_dead_coalesce_false",
+      "cast_live_coalesce_false",
+      "cast_unused_false",
+      "cast_only_positive_false",
+      "cast_only_negative_false",
+      "cast_zero_null_true",
+      "cast_zero_null_false",
+      "cast_widen_true",
+      "cast_widen_false",
+      "cast_rounding_carry_False_false",
+      "cast_rounding_carry_True_false",
+      "cast_ordinary_round_true",
+      "cast_ordinary_round_false",
+      "try_cast_order_False_batch1_true",
+      "try_cast_order_False_batch1_false",
+      "try_cast_order_False_batch2_true",
+      "try_cast_order_False_batch2_false",
+      "try_cast_order_False_batch4_true",
+      "try_cast_order_False_batch4_false",
+      "try_cast_order_True_batch1_true",
+      "try_cast_order_True_batch1_false",
+      "try_cast_order_True_batch2_true",
+      "try_cast_order_True_batch2_false",
+      "try_cast_order_True_batch4_true",
+      "try_cast_order_True_batch4_false",
+      "try_cast_where_false_true",
+      "try_cast_where_false_false",
+      "try_cast_limit_zero_true",
+      "try_cast_limit_zero_false",
+      "try_cast_where_false_limit_zero_true",
+      "try_cast_where_false_limit_zero_false",
+      "try_cast_dead_case_true",
+      "try_cast_dead_case_false",
+      "try_cast_live_case_true",
+      "try_cast_live_case_false",
+      "try_cast_row_case_true",
+      "try_cast_row_case_false",
+      "try_cast_null_parent_true",
+      "try_cast_null_parent_false",
+      "try_cast_dead_coalesce_true",
+      "try_cast_dead_coalesce_false",
+      "try_cast_live_coalesce_true",
+      "try_cast_live_coalesce_false",
+      "try_cast_unused_true",
+      "try_cast_unused_false",
+      "try_cast_only_positive_true",
+      "try_cast_only_positive_false",
+      "try_cast_only_negative_true",
+      "try_cast_only_negative_false",
+      "try_cast_zero_null_true",
+      "try_cast_zero_null_false",
+      "try_cast_widen_true",
+      "try_cast_widen_false",
+      "try_cast_rounding_carry_False_true",
+      "try_cast_rounding_carry_False_false",
+      "try_cast_rounding_carry_True_true",
+      "try_cast_rounding_carry_True_false",
+      "try_cast_ordinary_round_true",
+      "try_cast_ordinary_round_false"
+    ]
+  },
+  "retained_groups": [
+    {
+      "group": "existing-original",
+      "comparator": "decimal_division",
+      "total": 168,
+      "accepted": 168,
+      "after": 168,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-original-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-original-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-high",
+      "comparator": "decimal_division",
+      "total": 314,
+      "accepted": 314,
+      "after": 314,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-high-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-high-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-filter",
+      "comparator": "decimal_division",
+      "total": 120,
+      "accepted": 120,
+      "after": 120,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-filter-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-filter-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-subquery",
+      "comparator": "decimal_division",
+      "total": 54,
+      "accepted": 54,
+      "after": 54,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-subquery-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-subquery-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-order",
+      "comparator": "decimal_division",
+      "total": 30,
+      "accepted": 30,
+      "after": 30,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-order-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-order-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-contexts",
+      "comparator": "decimal_division",
+      "total": 28,
+      "accepted": 28,
+      "after": 28,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-contexts-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-contexts-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-lateral",
+      "comparator": "decimal_division",
+      "total": 48,
+      "accepted": 48,
+      "after": 48,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-lateral-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-lateral-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-nested",
+      "comparator": "decimal_division",
+      "total": 36,
+      "accepted": 36,
+      "after": 36,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-nested-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-nested-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-null",
+      "comparator": "decimal_division",
+      "total": 60,
+      "accepted": 60,
+      "after": 60,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-null-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-null-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-cast",
+      "comparator": "decimal_division",
+      "total": 82,
+      "accepted": 82,
+      "after": 82,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 5,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-cast-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-cast-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-string",
+      "comparator": "decimal_division",
+      "total": 180,
+      "accepted": 180,
+      "after": 180,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-string-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-string-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-unicode",
+      "comparator": "decimal_division",
+      "total": 382,
+      "accepted": 382,
+      "after": 382,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-unicode-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-unicode-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-nonfinite",
+      "comparator": "decimal_division",
+      "total": 246,
+      "accepted": 246,
+      "after": 246,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-nonfinite-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-nonfinite-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-null-order",
+      "comparator": "decimal_division",
+      "total": 52,
+      "accepted": 52,
+      "after": 52,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-null-order-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-null-order-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-null-analyzer",
+      "comparator": "decimal_division",
+      "total": 100,
+      "accepted": 100,
+      "after": 100,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-null-analyzer-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-null-analyzer-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-signed-literal",
+      "comparator": "decimal_division",
+      "total": 112,
+      "accepted": 112,
+      "after": 112,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-signed-literal-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-signed-literal-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-round-types",
+      "comparator": "decimal_division",
+      "total": 234,
+      "accepted": 232,
+      "after": 232,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-round-types-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-round-types-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-float-null",
+      "comparator": "decimal_division",
+      "total": 250,
+      "accepted": 250,
+      "after": 250,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-float-null-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-float-null-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-nonansi-zero",
+      "comparator": "decimal_division",
+      "total": 240,
+      "accepted": 238,
+      "after": 238,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-nonansi-zero-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-nonansi-zero-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-integral-types",
+      "comparator": "decimal_division",
+      "total": 152,
+      "accepted": 152,
+      "after": 152,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-integral-types-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-integral-types-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-integral-widen",
+      "comparator": "decimal_division",
+      "total": 188,
+      "accepted": 188,
+      "after": 188,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-integral-widen-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-integral-widen-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-div-zero",
+      "comparator": "decimal_division",
+      "total": 158,
+      "accepted": 158,
+      "after": 158,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-div-zero-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-div-zero-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-div-evaluation",
+      "comparator": "decimal_division",
+      "total": 350,
+      "accepted": 346,
+      "after": 346,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-div-evaluation-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-div-evaluation-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-div-null-cast",
+      "comparator": "decimal_division",
+      "total": 536,
+      "accepted": 536,
+      "after": 536,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-div-null-cast-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-div-null-cast-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-div-null-numeric",
+      "comparator": "decimal_division",
+      "total": 588,
+      "accepted": 588,
+      "after": 588,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-div-null-numeric-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-div-null-numeric-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-float-decimal-compare",
+      "comparator": "decimal_division",
+      "total": 384,
+      "accepted": 380,
+      "after": 380,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-float-decimal-compare-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-float-decimal-compare-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-new",
+      "comparator": "decimal_division",
+      "total": 278,
+      "accepted": 278,
+      "after": 278,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-new-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-new-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-new-in",
+      "comparator": "decimal_division",
+      "total": 162,
+      "accepted": 162,
+      "after": 162,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-new-in-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-new-in-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-decimal-in-unwrap",
+      "comparator": "decimal_division",
+      "total": 272,
+      "accepted": 272,
+      "after": 272,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-decimal-in-unwrap-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-decimal-in-unwrap-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "existing-projected",
+      "comparator": "decimal_division",
+      "total": 264,
+      "accepted": 133,
+      "after": 133,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-projected-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/existing-projected-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "focused-arithmetic",
+      "comparator": "decimal_division",
+      "total": 448,
+      "accepted": 438,
+      "after": 438,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-arithmetic-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-arithmetic-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "focused-literal-supplement",
+      "comparator": "decimal_division",
+      "total": 16,
+      "accepted": 16,
+      "after": 16,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-literal-supplement-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-literal-supplement-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "focused-zero-supplement",
+      "comparator": "decimal_division",
+      "total": 16,
+      "accepted": 16,
+      "after": 16,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-zero-supplement-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-zero-supplement-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "focused-canonical",
+      "comparator": "decimal_division",
+      "total": 130,
+      "accepted": 114,
+      "after": 114,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-canonical-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-canonical-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "focused-mixed",
+      "comparator": "decimal_division",
+      "total": 10,
+      "accepted": 10,
+      "after": 10,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-mixed-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-mixed-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "focused-permutation",
+      "comparator": "decimal_division",
+      "total": 86,
+      "accepted": 76,
+      "after": 76,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-permutation-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-permutation-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "focused-permutation-duplicates",
+      "comparator": "decimal_division",
+      "total": 10,
+      "accepted": 8,
+      "after": 8,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-permutation-duplicates-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/focused-permutation-duplicates-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-early-arithmetic",
+      "comparator": "early_arithmetic",
+      "total": 844,
+      "accepted": 842,
+      "after": 842,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-early-arithmetic-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-early-arithmetic-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-null-subquery",
+      "comparator": "early_arithmetic",
+      "total": 862,
+      "accepted": 816,
+      "after": 816,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-null-subquery-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-null-subquery-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-null-conditional",
+      "comparator": "early_arithmetic",
+      "total": 36,
+      "accepted": 36,
+      "after": 36,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-null-conditional-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-null-conditional-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-string-modulo",
+      "comparator": "string_modulo_coercion",
+      "total": 646,
+      "accepted": 638,
+      "after": 638,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-string-modulo-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-string-modulo-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-decimal",
+      "comparator": "division_cast_classification",
+      "total": 454,
+      "accepted": 445,
+      "after": 445,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-decimal-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-decimal-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-dead",
+      "comparator": "division_cast_classification",
+      "total": 346,
+      "accepted": 340,
+      "after": 340,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-dead-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-dead-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-strict",
+      "comparator": "division_cast_classification",
+      "total": 496,
+      "accepted": 496,
+      "after": 496,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-strict-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-strict-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-float",
+      "comparator": "division_cast_classification",
+      "total": 488,
+      "accepted": 488,
+      "after": 488,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-float-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-float-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-legacy",
+      "comparator": "division_cast_classification",
+      "total": 562,
+      "accepted": 562,
+      "after": 562,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-legacy-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-legacy-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-previous-owned",
+      "comparator": "division_cast_classification",
+      "total": 126,
+      "accepted": 126,
+      "after": 126,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-previous-owned-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-previous-owned-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-classification",
+      "comparator": "division_cast_classification",
+      "total": 128,
+      "accepted": 125,
+      "after": 125,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-classification-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-classification-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-empty-scalar",
+      "comparator": "empty_check",
+      "total": 296,
+      "accepted": 294,
+      "after": 294,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-empty-scalar-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-empty-scalar-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-scalar-arithmetic",
+      "comparator": "early_arithmetic",
+      "total": 586,
+      "accepted": 536,
+      "after": 536,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-scalar-arithmetic-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-scalar-arithmetic-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-scalar-cast",
+      "comparator": "empty_check",
+      "total": 750,
+      "accepted": 731,
+      "after": 731,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-scalar-cast-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-scalar-cast-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-predicate",
+      "comparator": "predicate_check",
+      "total": 416,
+      "accepted": 372,
+      "after": 372,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-predicate-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-predicate-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "cast-empty-group-scalar",
+      "comparator": "predicate_check",
+      "total": 5262,
+      "accepted": 4873,
+      "after": 4873,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-empty-group-scalar-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/cast-empty-group-scalar-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "empty-input-scalar",
+      "comparator": "predicate_check",
+      "total": 5986,
+      "accepted": 5513,
+      "after": 5513,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/empty-input-scalar-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/empty-input-scalar-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "integer",
+      "comparator": "integer_overflow",
+      "total": 616,
+      "accepted": 616,
+      "after": 616,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/integer-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/integer-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "arithmetic-check",
+      "comparator": "decimal_arithmetic_types",
+      "total": 578,
+      "accepted": 575,
+      "after": 575,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/arithmetic-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/arithmetic-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "string-check",
+      "comparator": "string_division_coercion",
+      "total": 480,
+      "accepted": 480,
+      "after": 480,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 3,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/string-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/string-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "bigint-check",
+      "comparator": "bigint_div_overflow",
+      "total": 234,
+      "accepted": 234,
+      "after": 234,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/bigint-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/bigint-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "modulo-check",
+      "comparator": "modulo_null_guard",
+      "total": 442,
+      "accepted": 430,
+      "after": 430,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 6,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/modulo-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/modulo-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "extreme-check",
+      "comparator": "round_arguments",
+      "total": 1322,
+      "accepted": 1194,
+      "after": 1194,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/extreme-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/extreme-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "float-round-check",
+      "comparator": "float_bround",
+      "total": 416,
+      "accepted": 414,
+      "after": 414,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 52,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/float-round-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/float-round-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "arguments-check",
+      "comparator": "round_arguments",
+      "total": 388,
+      "accepted": 388,
+      "after": 388,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/arguments-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/arguments-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "integer-check",
+      "comparator": "integer_round",
+      "total": 1254,
+      "accepted": 1254,
+      "after": 1254,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 64,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/integer-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/integer-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "legacy-check",
+      "comparator": "round_arguments",
+      "total": 234,
+      "accepted": 234,
+      "after": 234,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 0,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/legacy-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/legacy-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "boundaries-check",
+      "comparator": "float_bround",
+      "total": 254,
+      "accepted": 254,
+      "after": 254,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 33,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/boundaries-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/boundaries-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "float-check",
+      "comparator": "float_bround",
+      "total": 98,
+      "accepted": 98,
+      "after": 98,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 11,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/float-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/float-check-after.json",
+        "--physical-plans"
+      ]
+    },
+    {
+      "group": "decimal-check",
+      "comparator": "decimal_bround",
+      "total": 506,
+      "accepted": 506,
+      "after": 506,
+      "lost": [],
+      "gained": [],
+      "changed_raw_outcomes": 5,
+      "command": [
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/decimal-check-cases.jsonl",
+        "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/replay/decimal-check-after.json",
+        "--physical-plans"
+      ]
+    }
+  ],
+  "prior_first_errors": {
+    "command": [
+      "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-probe",
+      "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/prior-first/cases.jsonl",
+      "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/prior-first/after.json",
+      "--physical-plans"
+    ],
+    "total": 48,
+    "checks": {
+      "known cause match": 12,
+      "values/types match": 24,
+      "ambiguous": 12
+    },
+    "cases": [
+      {
+        "id": "cast_repeat0_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "cast_repeat0_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "cast_repeat1_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": false
+      },
+      {
+        "id": "cast_repeat1_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "cast_repeat2_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": false
+      },
+      {
+        "id": "cast_repeat2_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "cast_repeat3_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": false
+      },
+      {
+        "id": "cast_repeat3_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "string_repeat0_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "string_repeat0_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "string_repeat1_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "string_repeat1_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "string_repeat2_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "string_repeat2_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "string_repeat3_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "string_repeat3_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "unicode_repeat0_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "unicode_repeat0_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "unicode_repeat1_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "unicode_repeat1_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "unicode_repeat2_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "unicode_repeat2_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "unicode_repeat3_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "unicode_repeat3_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "bigint_repeat0_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "bigint_repeat0_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "bigint_repeat1_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "bigint_repeat1_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "bigint_repeat2_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "bigint_repeat2_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "bigint_repeat3_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "bigint_repeat3_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "high_scale_positive_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "high_scale_positive_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "high_scale_negative_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "high_scale_negative_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "max_integer_target_range_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "max_integer_target_range_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "max_integer_source_range_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "max_integer_source_range_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "unicode_positive_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "unicode_positive_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "unicode_negative_true",
+        "result": "ambiguous",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "unicode_negative_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "bigint_overflow_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "bigint_overflow_false",
+        "result": "values/types match"
+      },
+      {
+        "id": "bigint_zero_true",
+        "result": "known cause match",
+        "raw_payload_unchanged_except_analyzer_wrapper": true
+      },
+      {
+        "id": "bigint_zero_false",
+        "result": "values/types match"
+      }
+    ]
+  },
+  "cost": {
+    "protocol": {
+      "order": [
+        "before",
+        "after",
+        "after",
+        "before",
+        "after",
+        "before",
+        "before",
+        "after"
+      ],
+      "cpu": 2,
+      "platform": "Linux-6.19.14-200.fc43.x86_64-x86_64-with-glibc2.42",
+      "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 117\nmodel name\t: AMD Ryzen 7 8845HS w/ Radeon 780M Graphics\nstepping\t: 2\nmicrocode\t: 0xa705208\ncpu MHz\t\t: 1100.980\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 16\ncore id\t\t: 0\ncpu cores\t: 8\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 16\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d\nbugs\t\t: sysret_ss_attrs spectre_v1 spectre_v2 spec_store_bypass srso ibpb_no_ret spectre_v2_user tsa vmscape\nbogomips\t: 7585.50\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management: ts ttp tm hwpstate cpb eff_freq_ro [13] [14] [15]",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+      "rows": 262144,
+      "batch_size": 8192,
+      "warmups": 4,
+      "samples": 21,
+      "reference_sha256": "96f275508f7187afd44cef6e87719e855ecc2ebca8d6a218c9136e96bcccf20d",
+      "ansi_mode": "Local strict Decimal casts, TRY_CAST and legacy controls; unchanged nonlocal Decimal, numeric, string CAST and native SQL controls; Spark analyzer enabled only for Spark queries",
+      "scope": "Focused compatibility-PR cost check, not final performance acceptance.",
+      "binaries": {
+        "before": "c3f347c9ea045a216a3394ce75f9251429e63366b2501c3d091ddfdf168357c7",
+        "after": "35a619bad390b92d515c990b47687fc623eb7f945a26d1603a84a7355b23620b"
+      }
+    },
+    "records": [
+      {
+        "variant": "before",
+        "path": "timing-0-before.json",
+        "command": [
+          "taskset",
+          "-c",
+          "2",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/before-bench",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/timing-0-before.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-expressions.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-reference.json",
+          "before"
+        ]
+      },
+      {
+        "variant": "after",
+        "path": "timing-1-after.json",
+        "command": [
+          "taskset",
+          "-c",
+          "2",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-bench",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/timing-1-after.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-expressions.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-reference.json",
+          "after"
+        ]
+      },
+      {
+        "variant": "after",
+        "path": "timing-2-after.json",
+        "command": [
+          "taskset",
+          "-c",
+          "2",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-bench",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/timing-2-after.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-expressions.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-reference.json",
+          "after"
+        ]
+      },
+      {
+        "variant": "before",
+        "path": "timing-3-before.json",
+        "command": [
+          "taskset",
+          "-c",
+          "2",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/before-bench",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/timing-3-before.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-expressions.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-reference.json",
+          "before"
+        ]
+      },
+      {
+        "variant": "after",
+        "path": "timing-4-after.json",
+        "command": [
+          "taskset",
+          "-c",
+          "2",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-bench",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/timing-4-after.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-expressions.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-reference.json",
+          "after"
+        ]
+      },
+      {
+        "variant": "before",
+        "path": "timing-5-before.json",
+        "command": [
+          "taskset",
+          "-c",
+          "2",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/before-bench",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/timing-5-before.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-expressions.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-reference.json",
+          "before"
+        ]
+      },
+      {
+        "variant": "before",
+        "path": "timing-6-before.json",
+        "command": [
+          "taskset",
+          "-c",
+          "2",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/before-bench",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/timing-6-before.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-expressions.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-reference.json",
+          "before"
+        ]
+      },
+      {
+        "variant": "after",
+        "path": "timing-7-after.json",
+        "command": [
+          "taskset",
+          "-c",
+          "2",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/after-bench",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/timing-7-after.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-expressions.json",
+          "/home/hanbo/.cache/delta-reader-spark-planning/local-decimal-cast-4da6f57/bench-reference.json",
+          "after"
+        ]
+      }
+    ],
+    "results": [
+      {
+        "id": "local_zero_null_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 2,
+            "nulls": 1,
+            "digest": 11360107092273899494,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.595536,
+              0.612788,
+              0.614271,
+              0.61353
+            ],
+            "median_ms": 0.613159
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.016902,
+              0.017282,
+              0.016961,
+              0.017132
+            ],
+            "median_ms": 0.0170465
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 2,
+            "nulls": 1,
+            "digest": 11360107092273899494,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.632144,
+              0.630491,
+              0.62497,
+              0.620333
+            ],
+            "median_ms": 0.6277305
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017091,
+              0.017082,
+              0.017192,
+              0.017362
+            ],
+            "median_ms": 0.017141499999999997
+          }
+        },
+        "ratios": {
+          "planning": 1.023764635274048,
+          "execution": 1.0055729915231864
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_widen_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 4,
+            "nulls": 1,
+            "digest": 685907353630325496,
+            "data_type": "Decimal128(38, 1)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.785819,
+              0.787934,
+              0.798494,
+              0.793974
+            ],
+            "median_ms": 0.7909539999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017202,
+              0.017122,
+              0.017282,
+              0.017523
+            ],
+            "median_ms": 0.017242
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 4,
+            "nulls": 1,
+            "digest": 685907353630325496,
+            "data_type": "Decimal128(38, 1)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.809533,
+              0.812299,
+              0.808602,
+              0.806378
+            ],
+            "median_ms": 0.8090675
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017472,
+              0.016962,
+              0.017042,
+              0.017342
+            ],
+            "median_ms": 0.017192
+          }
+        },
+        "ratios": {
+          "planning": 1.0229008260910244,
+          "execution": 0.9971001043962416
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_round_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 4,
+            "nulls": 1,
+            "digest": 1583845299646055032,
+            "data_type": "Decimal128(4, 1)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.7861,
+              0.793453,
+              0.798954,
+              0.797972
+            ],
+            "median_ms": 0.7957125
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017293,
+              0.017623,
+              0.017623,
+              0.017522
+            ],
+            "median_ms": 0.017572499999999998
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 4,
+            "nulls": 1,
+            "digest": 1583845299646055032,
+            "data_type": "Decimal128(4, 1)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.815415,
+              0.81345,
+              0.808091,
+              0.812078
+            ],
+            "median_ms": 0.812764
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017653,
+              0.017322,
+              0.017913,
+              0.017513
+            ],
+            "median_ms": 0.017583
+          }
+        },
+        "ratios": {
+          "planning": 1.0214292222379313,
+          "execution": 1.0005975245411867
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_try_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 4,
+            "nulls": 3,
+            "digest": 12712474179352238481,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.787232,
+              0.787303,
+              0.792582,
+              0.794777
+            ],
+            "median_ms": 0.7899425
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017283,
+              0.017192,
+              0.017502,
+              0.017292
+            ],
+            "median_ms": 0.017287499999999997
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 4,
+            "nulls": 3,
+            "digest": 12712474179352238481,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.789285,
+              0.790929,
+              0.788384,
+              0.79146
+            ],
+            "median_ms": 0.790107
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017593,
+              0.017262,
+              0.017332,
+              0.017673
+            ],
+            "median_ms": 0.0174625
+          }
+        },
+        "ratios": {
+          "planning": 1.0002082430050288,
+          "execution": 1.010122921185828
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_legacy_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 4,
+            "nulls": 3,
+            "digest": 12712474179352238481,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.783956,
+              0.794636,
+              0.798463,
+              0.794225
+            ],
+            "median_ms": 0.7944305
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017312,
+              0.017212,
+              0.017343,
+              0.017323
+            ],
+            "median_ms": 0.0173175
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 4,
+            "nulls": 3,
+            "digest": 12712474179352238481,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.789987,
+              0.789276,
+              0.789466,
+              0.789065
+            ],
+            "median_ms": 0.789371
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017874,
+              0.017282,
+              0.017332,
+              0.017512
+            ],
+            "median_ms": 0.017422
+          }
+        },
+        "ratios": {
+          "planning": 0.9936312868148944,
+          "execution": 1.00603435830807
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_numeric_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 9459146358092476667,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.370649,
+              0.371399,
+              0.374686,
+              0.374455
+            ],
+            "median_ms": 0.372927
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.352124,
+              0.355821,
+              0.355771,
+              0.354559
+            ],
+            "median_ms": 0.355165
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 9459146358092476667,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.370498,
+              0.376429,
+              0.374375,
+              0.375387
+            ],
+            "median_ms": 0.374881
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.354408,
+              0.354979,
+              0.354258,
+              0.354098
+            ],
+            "median_ms": 0.354333
+          }
+        },
+        "ratios": {
+          "planning": 1.0052396313487626,
+          "execution": 0.9976574268297833
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_cast_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11823848471260901745,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.294016,
+              0.294477,
+              0.29623,
+              0.298334
+            ],
+            "median_ms": 0.2953535
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.787835,
+              3.79054,
+              3.823632,
+              3.797433
+            ],
+            "median_ms": 3.7939865
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11823848471260901745,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.299256,
+              0.299116,
+              0.299747,
+              0.301069
+            ],
+            "median_ms": 0.2995015
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.845933,
+              3.835884,
+              3.858096,
+              3.842036
+            ],
+            "median_ms": 3.8439845
+          }
+        },
+        "ratios": {
+          "planning": 1.0140441877275874,
+          "execution": 1.013178222958885
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "native_numeric_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 10541556853442269111,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.187137,
+              0.187077,
+              0.190704,
+              0.189411
+            ],
+            "median_ms": 0.188274
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.085409,
+              0.08584,
+              0.085118,
+              0.083716
+            ],
+            "median_ms": 0.08526349999999999
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 10541556853442269111,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.189672,
+              0.190804,
+              0.190223,
+              0.189752
+            ],
+            "median_ms": 0.1899875
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.084898,
+              0.085258,
+              0.084808,
+              0.084777
+            ],
+            "median_ms": 0.084853
+          }
+        },
+        "ratios": {
+          "planning": 1.0091010973368602,
+          "execution": 0.9951855131445461
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "nonlocal_decimal_nullsfalse",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 2417992539430987717,
+            "data_type": "Decimal128(18, 2)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.274209,
+              0.277435,
+              0.277596,
+              0.278978
+            ],
+            "median_ms": 0.2775155
+          },
+          "execution": {
+            "process_medians_ms": [
+              2.356227,
+              2.349774,
+              2.360124,
+              2.344284
+            ],
+            "median_ms": 2.3530005000000003
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 2417992539430987717,
+            "data_type": "Decimal128(18, 2)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.27997,
+              0.277065,
+              0.279809,
+              0.281833
+            ],
+            "median_ms": 0.2798895
+          },
+          "execution": {
+            "process_medians_ms": [
+              2.348572,
+              2.346568,
+              2.347831,
+              2.359673
+            ],
+            "median_ms": 2.3482015
+          }
+        },
+        "ratios": {
+          "planning": 1.008554477137313,
+          "execution": 0.9979604764214881
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_zero_null_nullstrue",
+        "before": {
+          "check": {
+            "rows": 2,
+            "nulls": 1,
+            "digest": 11360107092273899494,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.60319,
+              0.60841,
+              0.612147,
+              0.610774
+            ],
+            "median_ms": 0.609592
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017923,
+              0.017012,
+              0.017232,
+              0.017292
+            ],
+            "median_ms": 0.017262
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 2,
+            "nulls": 1,
+            "digest": 11360107092273899494,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.625542,
+              0.624961,
+              0.620202,
+              0.621354
+            ],
+            "median_ms": 0.6231575
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017242,
+              0.017482,
+              0.017162,
+              0.017312
+            ],
+            "median_ms": 0.017277
+          }
+        },
+        "ratios": {
+          "planning": 1.0222534088373862,
+          "execution": 1.0008689607229755
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_widen_nullstrue",
+        "before": {
+          "check": {
+            "rows": 4,
+            "nulls": 1,
+            "digest": 685907353630325496,
+            "data_type": "Decimal128(38, 1)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.762316,
+              0.766744,
+              0.769279,
+              0.771503
+            ],
+            "median_ms": 0.7680115000000001
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017202,
+              0.016892,
+              0.017062,
+              0.017423
+            ],
+            "median_ms": 0.017132
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 4,
+            "nulls": 1,
+            "digest": 685907353630325496,
+            "data_type": "Decimal128(38, 1)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.790198,
+              0.784557,
+              0.786701,
+              0.782043
+            ],
+            "median_ms": 0.7856289999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017382,
+              0.017503,
+              0.017322,
+              0.017142
+            ],
+            "median_ms": 0.017352
+          }
+        },
+        "ratios": {
+          "planning": 1.0229391096357279,
+          "execution": 1.0128414662619658
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_round_nullstrue",
+        "before": {
+          "check": {
+            "rows": 4,
+            "nulls": 1,
+            "digest": 1583845299646055032,
+            "data_type": "Decimal128(4, 1)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.763217,
+              0.761955,
+              0.771382,
+              0.769079
+            ],
+            "median_ms": 0.766148
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017432,
+              0.017172,
+              0.016871,
+              0.017433
+            ],
+            "median_ms": 0.017301999999999998
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 4,
+            "nulls": 1,
+            "digest": 1583845299646055032,
+            "data_type": "Decimal128(4, 1)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.787693,
+              0.791551,
+              0.785268,
+              0.783775
+            ],
+            "median_ms": 0.7864804999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017543,
+              0.017452,
+              0.017102,
+              0.017753
+            ],
+            "median_ms": 0.0174975
+          }
+        },
+        "ratios": {
+          "planning": 1.0265386061178778,
+          "execution": 1.0112992717604903
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_try_nullstrue",
+        "before": {
+          "check": {
+            "rows": 4,
+            "nulls": 3,
+            "digest": 12712474179352238481,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.765772,
+              0.770612,
+              0.773847,
+              0.778736
+            ],
+            "median_ms": 0.7722294999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017592,
+              0.017362,
+              0.017462,
+              0.017433
+            ],
+            "median_ms": 0.017447499999999998
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 4,
+            "nulls": 3,
+            "digest": 12712474179352238481,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.769129,
+              0.77507,
+              0.771523,
+              0.772895
+            ],
+            "median_ms": 0.7722089999999999
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017473,
+              0.017492,
+              0.017602,
+              0.017363
+            ],
+            "median_ms": 0.017482499999999998
+          }
+        },
+        "ratios": {
+          "planning": 0.9999734534875967,
+          "execution": 1.0020060180541626
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "local_legacy_nullstrue",
+        "before": {
+          "check": {
+            "rows": 4,
+            "nulls": 3,
+            "digest": 12712474179352238481,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.77536,
+              0.772515,
+              0.777453,
+              0.775811
+            ],
+            "median_ms": 0.7755855
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017703,
+              0.017292,
+              0.017142,
+              0.017422
+            ],
+            "median_ms": 0.017356999999999997
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 4,
+            "nulls": 3,
+            "digest": 12712474179352238481,
+            "data_type": "Decimal128(38, 38)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.774248,
+              0.776883,
+              0.772284,
+              0.773527
+            ],
+            "median_ms": 0.7738875000000001
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.017643,
+              0.017843,
+              0.017523,
+              0.017322
+            ],
+            "median_ms": 0.017583
+          }
+        },
+        "ratios": {
+          "planning": 0.9978106862492917,
+          "execution": 1.0130206832978053
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_numeric_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 6527729684995801334,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.494709,
+              0.50061,
+              0.50057,
+              0.499748
+            ],
+            "median_ms": 0.500159
+          },
+          "execution": {
+            "process_medians_ms": [
+              1.770799,
+              1.780868,
+              1.779575,
+              1.790255
+            ],
+            "median_ms": 1.7802215
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 6527729684995801334,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.498626,
+              0.499839,
+              0.500429,
+              0.50108
+            ],
+            "median_ms": 0.500134
+          },
+          "execution": {
+            "process_medians_ms": [
+              1.788552,
+              1.794382,
+              1.78781,
+              1.794173
+            ],
+            "median_ms": 1.7913625
+          }
+        },
+        "ratios": {
+          "planning": 0.9999500158949453,
+          "execution": 1.0062582100036428
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "ordinary_cast_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11823848471260901745,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.26912,
+              0.273057,
+              0.278978,
+              0.277104
+            ],
+            "median_ms": 0.2750805
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.7956,
+              3.800519,
+              3.821217,
+              3.831716
+            ],
+            "median_ms": 3.810868
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 0,
+            "digest": 11823848471260901745,
+            "data_type": "Float64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.27472,
+              0.279148,
+              0.275531,
+              0.278467
+            ],
+            "median_ms": 0.276999
+          },
+          "execution": {
+            "process_medians_ms": [
+              3.842858,
+              3.84447,
+              3.84401,
+              3.841716
+            ],
+            "median_ms": 3.8434340000000002
+          }
+        },
+        "ratios": {
+          "planning": 1.0069743220620873,
+          "execution": 1.00854555969926
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "native_numeric_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 12374517144315239167,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.187077,
+              0.189031,
+              0.190914,
+              0.190834
+            ],
+            "median_ms": 0.1899325
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.085599,
+              0.08608,
+              0.087001,
+              0.08611
+            ],
+            "median_ms": 0.086095
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 12374517144315239167,
+            "data_type": "Int64"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.189171,
+              0.190624,
+              0.189241,
+              0.190724
+            ],
+            "median_ms": 0.1899325
+          },
+          "execution": {
+            "process_medians_ms": [
+              0.087142,
+              0.086411,
+              0.08637,
+              0.086601
+            ],
+            "median_ms": 0.086506
+          }
+        },
+        "ratios": {
+          "planning": 1.0,
+          "execution": 1.0047737963877112
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      },
+      {
+        "id": "nonlocal_decimal_nullstrue",
+        "before": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 6765968072779296094,
+            "data_type": "Decimal128(18, 2)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.257699,
+              0.258069,
+              0.262107,
+              0.260343
+            ],
+            "median_ms": 0.259206
+          },
+          "execution": {
+            "process_medians_ms": [
+              2.319047,
+              2.296836,
+              2.285825,
+              2.283621
+            ],
+            "median_ms": 2.2913305
+          }
+        },
+        "after": {
+          "check": {
+            "rows": 262144,
+            "nulls": 26214,
+            "digest": 6765968072779296094,
+            "data_type": "Decimal128(18, 2)"
+          },
+          "planning": {
+            "process_medians_ms": [
+              0.25843,
+              0.261576,
+              0.261887,
+              0.262047
+            ],
+            "median_ms": 0.2617315
+          },
+          "execution": {
+            "process_medians_ms": [
+              2.278592,
+              2.28285,
+              2.291075,
+              2.29945
+            ],
+            "median_ms": 2.2869625
+          }
+        },
+        "ratios": {
+          "planning": 1.0097432158206214,
+          "execution": 0.9980936839971362
+        },
+        "equivalent_outputs": true,
+        "comparison": "Every row matches independent SQL expectations; full output digests/types agree."
+      }
+    ]
+  }
+}
