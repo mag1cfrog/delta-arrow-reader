@@ -117,10 +117,6 @@ to answer that question.
 
 These remain candidates, with their evidence and unresolved status intact:
 
-- [#223](https://github.com/mag1cfrog/delta-arrow-reader/issues/223): Parquet
-  predicate-cache reuse loses definition levels for nullable structs in the pinned
-  reproduction. The cache-disabled control and standalone reproducer remain;
-  current upstream behavior and public-path reachability need investigation.
 - [#44](https://github.com/mag1cfrog/delta-arrow-reader/issues/44): typed-statistics
   reuse for cached Delta scan metadata.
 - [#45](https://github.com/mag1cfrog/delta-arrow-reader/issues/45): structured-only
@@ -129,6 +125,17 @@ These remain candidates, with their evidence and unresolved status intact:
   [#200](https://github.com/mag1cfrog/delta-arrow-reader/issues/200): recorded Kernel
   predicate/projection limitations.
 
-No implementation or upstream submission was started for these candidates during
-closeout. Isolated Sail findings and rejected prototypes remain in the experiment;
+The Parquet predicate-cache finding
+[#223](https://github.com/mag1cfrog/delta-arrow-reader/issues/223) is closed after
+its unchanged original reproducer passed on Arrow/Parquet 59.0.0 and 60.0.0.
+The same test still panics on 58.4.0; applying only the runtime guard from
+[upstream PR #9983](https://github.com/apache/arrow-rs/pull/9983) to a private 58.4.0
+source copy makes it pass. This confirms the upstream fix for the reported case.
+The Reader remains pinned to 58.4.0 and affected; no upgrade or workaround was
+adopted. The original report, reproduction and verification remain in the closed
+issue. Any future dependency upgrade still needs normal correctness and
+performance validation.
+
+No Reader implementation or upstream submission was started for these candidates
+during closeout. Isolated Sail findings and rejected prototypes remain in the experiment;
 there is no new project to upstream the entire frontend.

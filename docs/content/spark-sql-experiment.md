@@ -205,10 +205,15 @@ tasks should also leave the active backlog. All 58 Spark issues now use GitHub
 remain intact; none is represented as completed compatibility. The 34 former
 backlog items no longer carry the `deferred` label.
 
-The 12 remaining open issues are five core/upstream investigations (#44, #45,
-#129, #200, #223), six core Reader Python tasks (#101, #102, #105, #106, #107,
-#109), and the optional DataFusion Python FFI investigation (#112). Already
-completed leaves and these retained issues were left unchanged.
+The closeout left 12 open issues. A subsequent check of the original Parquet
+reproducer closed [#223](https://github.com/mag1cfrog/delta-arrow-reader/issues/223)
+as fixed upstream in 59.0.0 and 60.0.0. The pinned 58.4.0 still fails that check;
+no dependency upgrade or local workaround was adopted.
+
+The 11 remaining open issues are four core/upstream investigations (#44, #45,
+#129, #200), six core Reader Python tasks (#101, #102, #105, #106, #107, #109),
+and the optional DataFusion Python FFI investigation (#112). Already completed
+leaves and these retained issues were left unchanged.
 
 | Issue | Retained scope | State after closeout |
 | --- | --- | --- |
